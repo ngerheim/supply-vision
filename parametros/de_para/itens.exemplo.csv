@@ -1,0 +1,29 @@
+# De-para de descrição do Qlik para item do ACORDOS.xlsx.
+#
+# ARQUIVO DE EXEMPLO. Copie para itens.csv e preencha. Valores fictícios.
+#
+# Em produção este arquivo tem ~245 mapeamentos ativos. Cada linha resolve
+# uma variação de grafia entre o vocabulário do sistema operacional e o do
+# acordo comercial: abreviação, ordem de palavras, erro de digitação, ou
+# nome comercial diferente para a mesma peça.
+#
+# item_acordo vazio = revisado, não existe equivalente no acordo. Vira o
+# motivo 'Item não comparável', que é diferente de 'ainda não mapeado'.
+#
+# ativo diferente de Sim desliga a linha sem apagá-la, preservando o
+# registro da decisão.
+#
+# Delimitador ponto-e-vírgula, UTF-8 com BOM: abre no Excel com duplo clique
+# sem estragar acento.
+descricao_qlik;item_acordo;ativo;observacao
+TROCA PASTILHA FREIO EXEMPLO;PASTILHA DE FREIO TROCA;Sim;ordem de palavras
+PASTILHA FREIO DIANT EXEMPLO;PASTILHA DE FREIO TROCA;Sim;abreviação
+FILTRO ÓLEO EXEMPLO;FILTRO ÓLEO MOTOR;Sim;nome incompleto
+FILTRO LUBRIFICANTE EXEMPLO;FILTRO ÓLEO MOTOR;Sim;nome comercial alternativo
+AMORTECEDOR DIANT L/E EXEMPLO;AMORTECEDOR DIANTEIRO;Sim;abreviação de lado
+CUBO RODA EXEMPLO;CUBO DE RODA;Sim;falta preposição
+BOBINA IGNIÇÃO EXEMPLO;BOBINA;Sim;nome estendido
+CORRENTE DO COMANDO EXEMPLO;CORRENTE DE COMANDO;Sim;preposição trocada
+REVISÃO 10000 KM EXEMPLO;MÃO DE OBRA REVISÃO;Sim;revisão por quilometragem
+SERVIÇO EXEMPLO SEM EQUIVALENTE;;Sim;revisado, não há item no acordo
+ITEM EXEMPLO DESLIGADO;ITEM QUALQUER;Não;decisão registrada, linha inativa

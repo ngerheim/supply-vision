@@ -1,0 +1,86 @@
+# ═══════════════════════════════════════════════════════════════════
+# SEGREDOS E CONFIGURACAO LOCAL — NUNCA versionar.
+# Regra: tudo em config/ fica de fora, EXCETO os modelos .exemplo.*
+# ═══════════════════════════════════════════════════════════════════
+/config/*
+!/config/*.exemplo.txt
+!/config/*.exemplo.bat
+!/config/requirements.txt
+!/config/requirements-dev.txt
+
+# ═══════════════════════════════════════════════════════════════════
+# Dados operacionais e saidas geradas.
+# ═══════════════════════════════════════════════════════════════════
+/dados/*
+!/dados/.gitkeep
+/logs/*
+!/logs/.gitkeep
+
+# ═══════════════════════════════════════════════════════════════════
+# Parametros: o CODIGO vai para o Git, os DADOS nao.
+#
+# filtros/*.txt e de_para/*.csv contem lista de fornecedores, plano de
+# contas, composicao da frota e catalogo de itens -- informacao comercial
+# da operacao, que nao pertence a um repositorio publico.
+#
+# Os modelos .exemplo vao, com nota de escala. Quem clonar copia cada um
+# para o nome real, como em config/. Sem eles o carregamento falha alto,
+# de proposito.
+# ═══════════════════════════════════════════════════════════════════
+/parametros/.contagens.json
+/parametros/filtros/*.txt
+!/parametros/filtros/*.exemplo.txt
+/parametros/de_para/*.csv
+!/parametros/de_para/*.exemplo.csv
+/reports/*
+!/reports/.gitkeep
+!/reports/com_acordo/
+/reports/com_acordo/*
+!/reports/com_acordo/.gitkeep
+!/reports/sem_acordo/
+/reports/sem_acordo/*
+!/reports/sem_acordo/.gitkeep
+!/reports/pendencias/
+/reports/pendencias/*
+!/reports/pendencias/.gitkeep
+!/reports/qualidade_acordos/
+/reports/qualidade_acordos/*
+!/reports/qualidade_acordos/.gitkeep
+
+# Relatorios do recorte historico (panorama). Ficam FORA de reports/ porque
+# o limpeza.py varre toda subpasta de reports/ com retencao pensada para o
+# diario, e arquivaria o historico junto.
+/reports_periodo/*
+!/reports_periodo/com_acordo/
+/reports_periodo/com_acordo/*
+!/reports_periodo/com_acordo/.gitkeep
+!/reports_periodo/sem_acordo/
+/reports_periodo/sem_acordo/*
+!/reports_periodo/sem_acordo/.gitkeep
+!/reports_periodo/pendencias/
+/reports_periodo/pendencias/*
+!/reports_periodo/pendencias/.gitkeep
+
+# ═══════════════════════════════════════════════════════════════════
+# Ruido de ambiente.
+# ═══════════════════════════════════════════════════════════════════
+/_aud/
+.pytest_cache/
+__pycache__/
+*.py[cod]
+*.bak
+*.bak_*
+.venv/
+venv/
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini
+~$*
+
+# Rascunho de trabalho, nao vai para o publico.
+/PENDENCIAS.md
+/resposta_revisao.md
+/handoff.md
+/atualizar_tarefas_para_C_Projetos.ps1
+/preparar_snapshot_publico.ps1

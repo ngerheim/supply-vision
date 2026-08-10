@@ -1,0 +1,18 @@
+# Fornecedores excluídos da análise.
+#
+# ARQUIVO DE EXEMPLO. Copie para excluir_fornecedores.txt e preencha.
+# Os valores abaixo são fictícios.
+#
+# Em produção esta lista tem ~18 entradas: estoque próprio, empresas do
+# mesmo grupo, e fornecedores cuja compra não passa por acordo de preço.
+#
+# Um valor por linha. Comparação por igualdade exata, como vem do Qlik.
+
+Estoque Próprio
+Fornecedor Exemplo A
+Fornecedor Exemplo B Ltda
+Fornecedor Exemplo C - Filial 2
+Oficina Exemplo Norte
+Oficina Exemplo Sul
+Concessionária Exemplo
+Transportadora Exemplo

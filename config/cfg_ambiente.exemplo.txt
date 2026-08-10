@@ -1,0 +1,37 @@
+# ===================================================================
+# MODELO — copie este arquivo para cfg_ambiente.txt e preencha.
+#
+# cfg_ambiente.txt guarda a infraestrutura especifica da instalacao e
+# NAO vai para o Git. Este modelo vai, para documentar as chaves.
+#
+# Formato: CHAVE = valor. Linhas vazias e iniciadas com # sao ignoradas.
+# Se faltar o arquivo ou qualquer chave, o pipeline falha ALTO.
+# ===================================================================
+
+# --- Qlik Cloud ---
+# Tenant: o dominio que aparece na URL do Qlik Cloud.
+QLIK_TENANT = SEU-TENANT.us.qlikcloud.com
+# App e objeto (tabela) de onde a base de OS e extraida.
+QLIK_APP_ID = 00000000-0000-0000-0000-000000000000
+QLIK_OBJ_ID = xxxx
+
+# --- SMTP / e-mail ---
+SMTP_SERVIDOR = mail.exemplo.com.br
+SMTP_PORTA = 587
+SMTP_USUARIO = usuario@exemplo.com.br
+REMETENTE = usuario@exemplo.com.br
+
+# Destinatario dos alertas do watchdog (verificar_saude.py).
+# Nao confundir com destinatarios.txt, que define quem recebe o relatorio.
+DESTINATARIO_ALERTA = usuario@exemplo.com.br
+
+# --- Caminhos externos ---
+# Planilha de acordos de preco (aba ACORDO). Fica fora do repositorio.
+ACORDO_PATH = C:\caminho\para\ACORDOS.xlsx
+
+# --- Agendador de Tarefas do Windows ---
+# Nome exato da tarefa que dispara o pipeline.
+TAREFA_RELATORIO = SupplyVision - Relatorio
+
+# Tempo máximo de cada subprocesso do pipeline, em segundos (opcional; padrão 1800).
+PIPELINE_TIMEOUT_S = 1800

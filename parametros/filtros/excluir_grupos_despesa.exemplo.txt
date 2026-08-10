@@ -1,0 +1,20 @@
+# Grupos de despesa excluídos da análise.
+#
+# ARQUIVO DE EXEMPLO. Copie para excluir_grupos_despesa.txt e preencha com os
+# grupos da sua operação. Os valores abaixo são fictícios.
+#
+# Em produção esta lista tem ~59 entradas, correspondendo aos grupos do plano
+# de contas que não entram na análise de conformidade: combustível, pedágio,
+# serviços administrativos, e afins.
+#
+# Um valor por linha. Linhas vazias e iniciadas com # são ignoradas.
+# Comparação por igualdade exata da string, como vem do Qlik.
+
+00.00.01 - Grupo Exemplo Combustível
+00.00.02 - Grupo Exemplo Pedágio
+00.00.03 - Grupo Exemplo Higienização
+00.00.04 - Grupo Exemplo Documentação
+00.00.05 - Grupo Exemplo Infrações
+00.00.06 - Grupo Exemplo Seguro
+00.00.07 - Grupo Exemplo Rastreamento
+00.00.08 - Grupo Exemplo Administrativo

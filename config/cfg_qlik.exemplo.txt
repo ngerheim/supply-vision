@@ -1,0 +1,4 @@
+# Copie para cfg_qlik.txt e cole a API Key gerada em
+# https://SEU-TENANT.us.qlikcloud.com/settings/api-keys
+# Uma unica linha, sem aspas e sem espacos.
+COLE_AQUI_A_API_KEY_DO_QLIK

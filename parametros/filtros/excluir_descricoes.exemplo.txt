@@ -1,0 +1,32 @@
+# Descrições de item excluídas da análise.
+#
+# ARQUIVO DE EXEMPLO. Copie para excluir_descricoes.txt e preencha.
+# Os valores abaixo são fictícios.
+#
+# Em produção esta lista tem ~3.600 entradas, curadas manualmente ao longo
+# de meses. É a maior e mais trabalhosa das listas: cada entrada é uma
+# decisão de que aquele item ou serviço não entra na análise de
+# conformidade de preço — por ser variável demais, por não ter acordo
+# possível, ou por já estar coberto em outro lugar.
+#
+# A curadoria é contínua: itens que caem em SEM ACORDO são triados um a um
+# e vão para esta lista ou para o de-para em de_para/itens.csv.
+#
+# Um valor por linha. Linhas vazias e iniciadas com # são ignoradas.
+# Comparação por igualdade exata da string, como vem do Qlik — então os
+# valores aqui precisam ter a mesma acentuação da origem.
+#
+# ATENÇÃO: a base real contém espaço não-quebrável (\xa0) e espaço duplo em
+# algumas descrições. Por isso o rodar.py refaz este filtro com normalização
+# depois do download — ver o comentário em processo/contrato_base.py.
+
+SERVIÇO EXEMPLO DE DIAGNÓSTICO
+SERVIÇO EXEMPLO DE GUINCHO
+TAXA EXEMPLO DE DESLOCAMENTO
+MÃO DE OBRA EXEMPLO AVULSA
+PEÇA EXEMPLO SOB ENCOMENDA
+ITEM EXEMPLO SEM PADRÃO
+HIGIENIZAÇÃO EXEMPLO SIMPLES
+COMBUSTÍVEL EXEMPLO ABASTECIMENTO
+PEDÁGIO EXEMPLO
+MANUTENÇÃO EXEMPLO PREDIAL

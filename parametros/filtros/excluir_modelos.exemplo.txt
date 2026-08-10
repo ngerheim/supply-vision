@@ -1,0 +1,18 @@
+# Modelos de veículo excluídos da análise.
+#
+# ARQUIVO DE EXEMPLO. Copie para excluir_modelos.txt e preencha.
+# Os valores abaixo são fictícios.
+#
+# Em produção esta lista tem ~63 entradas: modelos fora do escopo do
+# contrato de manutenção, veículos de terceiros, e implementos.
+#
+# Um valor por linha. Comparação por igualdade exata, como vem do Qlik.
+
+Modelo Exemplo Compacto 1.0
+Modelo Exemplo Sedã 1.6
+Modelo Exemplo Utilitário 2.0
+Modelo Exemplo Caminhão 3/4
+Modelo Exemplo Van 16 Lugares
+Implemento Exemplo Baú
+Implemento Exemplo Prancha
+Terceiro Exemplo Não Frota

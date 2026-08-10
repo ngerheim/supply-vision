@@ -1,0 +1,19 @@
+# De-para de modelo do Qlik para modelo do ACORDOS.xlsx.
+#
+# ARQUIVO DE EXEMPLO. Copie para modelos.csv e preencha. Valores fictícios.
+#
+# Em produção este arquivo tem ~29 mapeamentos. O acordo comercial agrupa
+# modelos parecidos numa faixa única de preço — carros compactos de mesma
+# plataforma, por exemplo — enquanto o sistema operacional registra cada
+# versão separadamente. Este arquivo faz a ponte.
+#
+# Delimitador ponto-e-vírgula, UTF-8 com BOM.
+modelo_qlik;modelo_acordo;ativo;observacao
+Modelo Exemplo Compacto 1.0 Flex;COMPACTOS 1.0;Sim;versão flex
+Modelo Exemplo Compacto 1.0 MT;COMPACTOS 1.0;Sim;mesma faixa do acordo
+Modelo Exemplo Compacto Plus 1.0;COMPACTOS 1.0;Sim;acabamento diferente
+Modelo Exemplo Sedã 1.6 AT;SEDÃS 1.6;Sim;câmbio automático
+Modelo Exemplo Sedã 1.6 MT;SEDÃS 1.6;Sim;câmbio manual
+Modelo Exemplo Picape 2.0 4x2;PICAPES MÉDIAS;Sim;tração 4x2
+Modelo Exemplo Picape 2.0 4x4;PICAPES MÉDIAS;Sim;tração 4x4
+Modelo Exemplo Van 16L;VANS;Sim;

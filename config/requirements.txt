@@ -1,0 +1,26 @@
+# Dependencias do Supply Vision.
+#
+#   pip install -r config/requirements.txt
+#
+# Versoes minimas correspondem ao que esta em producao hoje (06/08/2026).
+# Sem teto de versao de proposito: o projeto e pequeno e a atualizacao e
+# barata; travar versao aqui envelheceria sem ninguem revisar.
+
+# Conexao com o Qlik Cloud (websocket + JSON-RPC do Engine API)
+websocket-client>=1.9
+
+# Manipulacao da base e do acordo
+pandas>=2.2
+
+# Importado direto pelo rodar.py (np.nan nas colunas de preco sem acordo).
+# Vem junto do pandas, mas fica declarado porque o codigo o usa por nome.
+numpy>=1.26
+
+# Leitura e escrita de .xlsx pelo pandas.
+# NAO e opcional: sem openpyxl, o read_excel da base e do ACORDOS.xlsx
+# falha na primeira execucao. Ficou de fora ate 06/08/2026 e um clone novo
+# nao rodava.
+openpyxl>=3.1
+
+# Escrita dos relatorios com formatacao (cores, filtros, formato condicional)
+xlsxwriter>=3.2

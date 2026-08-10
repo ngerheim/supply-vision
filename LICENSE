@@ -1,0 +1,45 @@
+Copyright (c) 2026 Norberto Gerheim. All rights reserved.
+
+SUPPLY VISION — LICENSE
+
+This repository is published as a professional portfolio. It exists to
+demonstrate architecture, engineering and data-handling decisions. It is not a
+product, it is not general-purpose software, and it is not offered for
+adoption.
+
+The code was developed in a professional capacity and embeds business rules
+specific to a corporate fleet-management context. No license is granted
+except for the limited local evaluation permission stated below.
+
+
+PERMITTED
+
+  - Reading, studying and evaluating the code.
+  - Making a local copy and executing it solely for private evaluation of this
+    portfolio, without production use, redistribution or publication.
+  - Quoting excerpts, with attribution, for technical analysis, teaching,
+    review or professional assessment.
+
+
+NOT PERMITTED without prior written permission from the copyright holder
+
+  - Using the software, in whole or in part, outside the limited local
+    evaluation permission above, including production use.
+  - Copying, reproducing or redistributing the code.
+  - Creating derivative works, or incorporating it into another project.
+  - Commercial exploitation, direct or indirect.
+
+
+NO WARRANTY
+
+The software is provided "AS IS", without warranty of any kind, express or
+implied, including but not limited to the warranties of merchantability,
+fitness for a particular purpose and noninfringement. In no event shall the
+copyright holder be liable for any claim, damages or other liability arising
+from the software or its use.
+
+
+CONTACT
+
+For permission to use, reach out through the GitHub profile associated with
+this repository.

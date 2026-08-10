@@ -1,0 +1,17 @@
+# ═══════════════════════════════════════════════════════════════════
+# MODELO — copie para destinatarios.txt e preencha.
+#
+# [PARA] = destinatarios visiveis (relatorios E avisos)
+# [CCO]  = copia oculta — invisivel aos destinatarios; serve tambem de
+#          confirmacao de envio (o SMTP nao passa pela caixa "Enviados")
+#
+# Um e-mail por linha. Linhas vazias e iniciadas com # sao ignoradas.
+# Editar AQUI (nao no codigo). Vale a partir do PROXIMO disparo.
+# Se este arquivo sumir ou ficar invalido, o envio falha alto e o
+# watchdog avisa — proposital, para nunca enviar a relacao errada.
+# ═══════════════════════════════════════════════════════════════════
+
+[PARA]
+usuario@exemplo.com.br
+
+[CCO]
