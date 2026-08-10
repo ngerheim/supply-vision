@@ -85,13 +85,13 @@ O código interrompe a execução quando encontra, entre outros casos:
 - queda anormal na quantidade de parâmetros carregados;
 - colisão de chaves normalizadas com destinos diferentes;
 - período inválido, invertido ou futuro;
-- relatório esperado pelo pipeline, mas ausente no momento do envio.
+- relatório esperado pelo pipeline, mas ausente no momento do envio;
 - segunda execução concorrente, por lock exclusivo do sistema operacional;
 - subprocesso que excede `PIPELINE_TIMEOUT_S` (padrão: 1800 segundos).
 
 As mensagens e códigos de saída permitem diagnosticar essas falhas no log. O
-verificador local detecta algumas execuções que não concluíram, mas não é um
-monitor externo e depende do mesmo host, rede e SMTP do pipeline.
+verificador local checa se cada execução agendada registrou conclusão, mas não
+é um monitor externo: depende do mesmo host, rede e SMTP do pipeline.
 
 ## Estrutura
 
@@ -100,11 +100,26 @@ processo/          extração, regras de negócio, relatórios e execução diá
 panorama/          execução histórica sobre o mesmo motor
 parametros/        filtros e de-para; arquivos reais ficam fora do Git
 config/            modelos de configuração e credenciais
+tests/             suíte de regressão (pytest)
+docs/              guia de operação
 dados/             bases extraídas
 reports/           resultados diários
 reports_periodo/   resultados históricos
 executar.bat       entrada para execução manual
 ```
+
+## Testes
+
+A suíte cobre a normalização de texto, a validação de período, as regras de
+classificação, a quarentena de referências e o comportamento do e-mail e do
+verificador.
+
+```text
+pip install -r config/requirements-dev.txt
+python -m pytest
+```
+
+Roda também em CI a cada push, em `.github/workflows/tests.yml`.
 
 ## Execução
 

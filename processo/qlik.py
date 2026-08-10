@@ -2,9 +2,8 @@
 Acesso ao Qlik Cloud: websocket, JSON-RPC do Engine API, seleção de período e
 paginação do hipercubo.
 
-Compartilhado pelo pipeline diário e pelo recorte histórico. Antes de
-07/08/2026 cada um tinha a sua cópia, e as duas divergiram — uma correção de
-protocolo precisava ser feita duas vezes.
+Compartilhado pelo pipeline diário e pelo recorte histórico, para que uma
+correção de protocolo valha para os dois.
 
 Não conhece acordos, filtros nem relatórios; o formato dos dados é definido
 em contrato_base.py.
@@ -104,8 +103,7 @@ class Sessao:
         O Qlik empurra mensagens não solicitadas no mesmo socket: notificações
         de sessão, OnConnected, avisos de validade da chave. Devolver o
         primeiro pacote que chega faz o chamador receber um dicionário sem
-        'result' e estourar com KeyError. Em 28/07/2026 isso derrubou um
-        recorte de 546 dias a 181.600 de 229.077 linhas.
+        'result' e estourar com KeyError no meio de uma extração longa.
         """
         self._id += 1
         meu = self._id
@@ -176,16 +174,14 @@ class Sessao:
     def ler(self, h, headers, qcx, colunas_numericas, progresso_a_cada=0):
         """Lê o objeto inteiro, paginado, e devolve a lista de linhas.
 
-        As três travas vêm do mesmo dia: em 28/07/2026 uma extração gravou
-        59.474 de 229.077 linhas anunciando "Concluído".
+        Três travas contra extração incompleta, que é o pior resultado
+        possível: os números saem errados e o relatório parece normal.
 
         1. Retry por página. São ~500 chamadas numa extração grande, e uma
-           falha transitória custava tudo.
+           falha transitória custaria tudo.
         2. Página vazia antes de qcy não é fim de dados, é sessão em estado
            ruim — tipicamente após um retry. Aborta em vez de truncar.
-        3. No fim, exige len(rows) == qcy. Extração incompleta que vira
-           relatório de aparência normal é o pior resultado possível: os
-           números ficam errados e ninguém tem como desconfiar.
+        3. No fim, exige len(rows) == qcy.
         """
         qcy = self.linhas(h)
         rows = []

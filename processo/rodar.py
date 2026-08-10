@@ -2,14 +2,16 @@
 Motor de negócio do Supply Vision.
 
 Carrega a base extraída do Qlik e a planilha de acordos, normaliza os dois
-vocabulários, cruza por cidade + CNPJ + modelo + item, classifica cada linha
-e gera os dois relatórios.
+vocabulários, cruza por cidade + CNPJ + modelo + item e classifica cada linha.
+
+Gera três planilhas — com acordo, sem acordo e pendências de referência — e um
+CSV com a fila de qualidade da base de acordos.
 
 Usado pelo pipeline diário e pelo recorte histórico: as duas frentes chamam
 carregar_base, carregar_acordo, processar e gerar_* daqui, então classificam
 identicamente.
 """
-import json, re, sys, time, pathlib, pandas as pd, numpy as np, xlsxwriter
+import json, os, re, sys, time, pathlib, pandas as pd, numpy as np, xlsxwriter
 from datetime import datetime
 from xlsxwriter.utility import xl_col_to_name
 from zipfile import BadZipFile
@@ -51,10 +53,9 @@ OUTPUT_DIR  = str(sv_paths.REPORTS)
 ACORDO_TENTATIVAS  = 5
 ACORDO_INTERVALO_S = 15
 
-# Acima deste % de SEM ACORDO o pipeline grita. Serve de rede para quebra de
-# parâmetro ou de planilha: em operação normal fica na faixa de 60-70%. Em
-# 27/07/2026 uma sobrescrita do arquivo de sinônimos levou a 81,7% e passou
-# quatro execuções sem ninguém perceber, porque nada olhava para esse número.
+# Acima deste % de SEM ACORDO o pipeline alerta. Em operação normal o número
+# fica na faixa de 60-70%; um salto brusco costuma ser parâmetro quebrado, não
+# mudança de comportamento de compra.
 LIMITE_ALERTA_SEM_ACORDO = 75.0
 
 # Destino de sinônimo com menos linhas que isso no acordo é suspeito de ser
@@ -125,9 +126,8 @@ SEMPRE_OCULTAR = {"Peca Acordo", "Grupo Despesa"}
 # LEITURA — carrega e filtra a base e a planilha de acordo
 # ═══════════════════════════════════════════════════════════════════
 
-# Uma única forma canônica de comparação, compartilhada com a carga dos
-# parâmetros. Duas implementações divergiriam com o tempo — e divergiam:
-# até 10/08/2026 esta tinha tabela de acentos menor que a de lá.
+# Forma canônica de comparação, a mesma usada na carga dos parâmetros. Duas
+# implementações divergiriam com o tempo.
 _norm = normalizar
 
 
@@ -220,9 +220,8 @@ def _validar_parametros(df_acordo):
 
     O merge com o acordo é por igualdade exata de string. Se um DESTINO de
     sinônimo não existe na ACORDOS.xlsx, a linha nunca casa e cai em
-    SEM ACORDO silenciosamente — foi exatamente o que aconteceu em 27/07/2026,
-    quando o arquivo de sinônimos foi sobrescrito por uma versão antiga e o
-    SEM ACORDO saltou de ~66% para ~80% sem nenhum aviso.
+    SEM ACORDO sem nenhum sinal — o percentual sobe e parece comportamento de
+    compra.
 
     Duas checagens, ambas só avisam (não derrubam o pipeline):
       1) destino inexistente na ACORDOS.xlsx  -> sinônimo morto;
@@ -294,10 +293,8 @@ def _validar_parametros(df_acordo):
             print(f"       {chave!r} -> {destino!r} ({nv} linhas); usar {alvo!r} ({na} linhas)")
 
 
-    # Chaves com preço divergente: qual acordo se aplica é indeterminado.
-    # Até 10/08/2026 o menor preço era escolhido e a linha entrava nos
-    # indicadores como se a comparação fosse confiável. Agora ficam em
-    # quarentena — ver STATUS_AMBIGUO em processar().
+    # Chaves com preço divergente: qual acordo se aplica é indeterminado, e a
+    # linha vai para quarentena — ver STATUS_AMBIGUO em processar().
     dup = (df_acordo[df_acordo["_preco_valido"]]
                     .groupby(CHAVE_ACORDO)["PRECO"]
                     .agg(["nunique", "min", "max"]))
@@ -448,9 +445,8 @@ def processar(df_base, df_acordo):
     dif_total          = (preco_total - preco_total_acordo).round(2)
     dt                 = pd.to_datetime(m["Data Abertura"], dayfirst=True, errors="coerce")
 
-    # Data e OS saem como valor, não como texto: o Excel precisa deles
-    # tipados para ordenar, filtrar por periodo e somar corretamente.
-    # Antes de 07/08/2026 iam como string e o Excel tratava tudo como texto.
+    # Data e OS saem como valor, não como texto: o Excel precisa deles tipados
+    # para ordenar, filtrar por período e somar corretamente.
     os_col = pd.to_numeric(m.get("Codigo OS", pd.Series("", index=m.index)),
                            errors="coerce")
 
@@ -767,7 +763,7 @@ if __name__ == "__main__":
     resumo = resumir_status(df)
     imprimir_resumo(resumo)
 
-    run_id = __import__("os").environ.get("SUPPLY_VISION_RUN_ID")
+    run_id = os.environ.get("SUPPLY_VISION_RUN_ID")
     stamp = run_id or datetime.now().strftime("%Y%m%d_%H%M%S")
     base  = pathlib.Path(OUTPUT_DIR)
 
