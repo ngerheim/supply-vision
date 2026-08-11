@@ -109,6 +109,12 @@ gera alerta no log, no resumo estruturado e no corpo do e-mail.
 - `pendencias`: acordos ambíguos ou sem preço válido;
 - `qualidade_acordos`: CSV para correção da base de referência.
 
+Preço `0` na ACORDOS.xlsx é cortesia e conta como preço válido — não entra em
+`pendencias` nem em `qualidade_acordos`. Só vazio, texto não numérico e valor
+negativo são pendência. Atenção: uma chave com `0` **e** um preço positivo
+passa a ser `ACORDO AMBÍGUO`, porque os dois são válidos e não há como saber
+qual vale.
+
 `total elegível = total bruto - quarentena`. Conformidade, desvios e ausência
 de cobertura usam o total elegível. A quarentena usa o total bruto.
 

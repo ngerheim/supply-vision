@@ -197,17 +197,23 @@ def carregar_acordo(path):
     df["_preco_original"] = df["PRECO"]
     df["PRECO"]        = pd.to_numeric(df["PRECO"], errors="coerce").round(2)
 
-    # Preço nulo, zero ou negativo não serve de referência. Marcar em vez de
-    # descartar: a linha de acordo existe, e "existe acordo com preço
+    # Preço vazio, não numérico ou negativo não serve de referência. Marcar em
+    # vez de descartar: a linha de acordo existe, e "existe acordo com preço
     # inutilizável" é situação diferente de "não existe acordo". Confundir as
     # duas mandava a compra para SEM ACORDO, escondendo um erro de cadastro
     # atrás de um número de não-conformidade.
-    df["_preco_valido"] = np.isfinite(df["PRECO"]) & (df["PRECO"] > 0)
+    #
+    # ZERO É PREÇO VÁLIDO: na ACORDOS.xlsx o 0 significa cortesia — o item foi
+    # negociado para não ser cobrado. Tratá-lo como inválido mandava a linha
+    # para a fila de pendências e escondia justamente o caso que interessa:
+    # cobrança de item que era cortesia (sai como ACIMA DO ACORDO). Célula
+    # vazia continua inválida: pd.to_numeric a converte em NaN, não em 0.
+    df["_preco_valido"] = np.isfinite(df["PRECO"]) & (df["PRECO"] >= 0)
     n_inval = int((~df["_preco_valido"]).sum())
     if n_inval:
         print(f"AVISO: {n_inval} linha(s) da ACORDOS.xlsx com preço inválido "
-              f"(nulo, zero ou negativo). As compras que casarem com elas saem "
-              f"como '{STATUS_PRECO_INVALIDO}', não como sem acordo.")
+              f"(vazio, não numérico ou negativo). As compras que casarem com "
+              f"elas saem como '{STATUS_PRECO_INVALIDO}', não como sem acordo.")
     return df
 
 

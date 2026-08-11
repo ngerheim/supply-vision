@@ -70,7 +70,13 @@ Duas situações são isoladas como pendências de referência:
 | Estado | Critério |
 |---|---|
 | `ACORDO AMBÍGUO` | a chave possui mais de um preço válido e o pipeline não dispõe de uma dimensão que determine qual deve ser usado |
-| `ACORDO SEM PREÇO VÁLIDO` | a chave existe, mas todos os preços são nulos, zero ou negativos |
+| `ACORDO SEM PREÇO VÁLIDO` | a chave existe, mas todos os preços estão vazios, não são numéricos ou são negativos |
+
+O preço `0` **não** é pendência: na ACORDOS.xlsx ele significa cortesia — item
+negociado para não ser cobrado. Serve de referência como qualquer outro preço,
+inclusive no cálculo de `Menor Preco Acordo`. Compra cobrada contra uma
+cortesia sai como `ACIMA DO ACORDO`, com o valor integral como diferença.
+Célula vazia continua pendência.
 
 Esses estados indicam que a comparação é inconclusiva. A correção pode exigir
 ajuste cadastral, revisão da chave de negócio ou investigação da base de

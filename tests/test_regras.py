@@ -12,7 +12,8 @@ def acordo(precos):
             "_fornec_norm": "1", "_cidade_norm": "X", "_modelo_norm": "M",
             "_peca_norm": "ITEM", "PECA_SERVICO": "ITEM", "FORNECEDOR": "F",
             "PRECO": preco, "_preco_original": str(preco),
-            "_preco_valido": bool(pd.notna(preco) and np.isfinite(preco) and preco > 0),
+            # Espelha carregar_acordo: 0 é cortesia, portanto válido.
+            "_preco_valido": bool(pd.notna(preco) and np.isfinite(preco) and preco >= 0),
         })
     return pd.DataFrame(linhas)
 
@@ -45,7 +46,18 @@ def test_carregamento_arredonda_e_rejeita_preco_nao_finito(rodar, monkeypatch):
     monkeypatch.setattr(pd, "read_excel", lambda *args, **kwargs: bruto.copy())
     carregado = rodar.carregar_acordo("falso.xlsx")
     assert carregado.loc[0, "PRECO"] == carregado.loc[1, "PRECO"] == 10.0
-    assert carregado["_preco_valido"].tolist() == [True, True, False, False, False]
+    # 0 é cortesia, portanto preço válido; -1 e inf continuam inválidos.
+    assert carregado["_preco_valido"].tolist() == [True, True, True, False, False]
+
+
+def test_celula_vazia_de_preco_nao_vira_cortesia(rodar, monkeypatch):
+    bruto = pd.DataFrame({
+        "MODELO": ["M"], "PECA_SERVICO": ["ITEM"], "CIDADE": ["X"],
+        "CNPJ": ["1"], "PRECO": [""], "FORNECEDOR": ["F"],
+    })
+    monkeypatch.setattr(pd, "read_excel", lambda *args, **kwargs: bruto.copy())
+    carregado = rodar.carregar_acordo("falso.xlsx")
+    assert not bool(carregado.loc[0, "_preco_valido"])
 
 
 def test_ambiguo_nao_expoe_nenhuma_referencia(rodar):
@@ -58,10 +70,26 @@ def test_ambiguo_nao_expoe_nenhuma_referencia(rodar):
     assert resultado.loc[0, "Tinha acordo?"] == ""
 
 
-def test_preco_nulo_zero_negativo_gera_pendencia(rodar):
-    for preco in (np.nan, 0, -1, np.inf):
+def test_preco_nulo_negativo_ou_infinito_gera_pendencia(rodar):
+    for preco in (np.nan, -1, np.inf):
         resultado = rodar.processar(base(), acordo([preco]))
         assert resultado.loc[0, "Status"] == rodar.STATUS_PRECO_INVALIDO
+
+
+def test_cortesia_cobrada_sai_como_acima_do_acordo(rodar):
+    """Acordo com preço 0 é cortesia: compra cobrada é desvio, não pendência."""
+    resultado = rodar.processar(base(preco=30), acordo([0.0]))
+    assert resultado.loc[0, "Status"] == "ACIMA DO ACORDO"
+    assert resultado.loc[0, "Preco Acordo"] == 0.0
+    assert resultado.loc[0, "Diferenca Unit."] == 30.0
+    assert resultado.loc[0, "Diferenca Total"] == 30.0
+    assert resultado.loc[0, "Menor Preco Acordo"] == 0.0
+
+
+def test_cortesia_ao_lado_de_preco_positivo_e_ambigua(rodar):
+    """Mesma chave com 0 e preço positivo: qual vale é indeterminado."""
+    resultado = rodar.processar(base(), acordo([0.0, 50.0]))
+    assert resultado.loc[0, "Status"] == rodar.STATUS_AMBIGUO
 
 
 def test_denominador_exclui_quarentena(rodar):
