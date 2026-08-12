@@ -1,5 +1,5 @@
 {
-  "config": "{\"version\": \"5.55\", \"activeSectionIndex\": 0, \"defaultDrillFilterOtherVisuals\": true, \"settings\": {\"useStylableVisualContainerHeader\": true}}",
+  "config": "{\"version\": \"5.55\", \"themeCollection\": {}, \"activeSectionIndex\": 0, \"defaultDrillFilterOtherVisuals\": true, \"settings\": {\"useStylableVisualContainerHeader\": true}}",
   "layoutOptimization": 0,
   "publicCustomVisuals": [],
   "sections": [
