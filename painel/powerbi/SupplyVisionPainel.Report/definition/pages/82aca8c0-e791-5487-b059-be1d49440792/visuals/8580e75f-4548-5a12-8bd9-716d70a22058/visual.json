@@ -1,0 +1,137 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.9.0/schema.json",
+  "name": "8580e75f-4548-5a12-8bd9-716d70a22058",
+  "position": {
+    "x": 0,
+    "y": 428,
+    "z": 9000,
+    "height": 284,
+    "width": 800
+  },
+  "visual": {
+    "visualType": "pivotTable",
+    "query": {
+      "queryState": {
+        "Rows": {
+          "projections": [
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Painel"
+                    }
+                  },
+                  "Property": "Fornecedor"
+                }
+              },
+              "queryRef": "Painel.Fornecedor",
+              "nativeQueryRef": "Fornecedor"
+            }
+          ]
+        },
+        "Columns": {
+          "projections": [
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Painel"
+                    }
+                  },
+                  "Property": "STATUS_ACORDO"
+                }
+              },
+              "queryRef": "Painel.STATUS_ACORDO",
+              "nativeQueryRef": "STATUS_ACORDO"
+            }
+          ]
+        },
+        "Values": {
+          "projections": [
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Painel"
+                    }
+                  },
+                  "Property": "Valor Total"
+                }
+              },
+              "queryRef": "Painel.Valor Total",
+              "nativeQueryRef": "Valor Total"
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Painel"
+                    }
+                  },
+                  "Property": "Valor Fora do Acordo"
+                }
+              },
+              "queryRef": "Painel.Valor Fora do Acordo",
+              "nativeQueryRef": "Valor Fora do Acordo"
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Painel"
+                    }
+                  },
+                  "Property": "Perda Evitavel"
+                }
+              },
+              "queryRef": "Painel.Perda Evitavel",
+              "nativeQueryRef": "Perda Evitavel"
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Painel"
+                    }
+                  },
+                  "Property": "% do Fora do Acordo"
+                }
+              },
+              "queryRef": "Painel.% do Fora do Acordo",
+              "nativeQueryRef": "% do Fora do Acordo"
+            }
+          ]
+        }
+      }
+    },
+    "drillFilterOtherVisuals": true,
+    "visualContainerObjects": {
+      "title": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "text": {
+              "expr": {
+                "Literal": {
+                  "Value": "'Fornecedor x situacao do acordo'"
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

@@ -61,6 +61,13 @@
 /reports_periodo/pendencias/*
 !/reports_periodo/pendencias/.gitkeep
 
+# Caches e estado local do Power BI Desktop dentro do projeto PBIP.
+# cache.abf e a copia dos dados importados (1,6 MB e crescendo com a base);
+# localSettings/editorSettings sao preferencia de quem abriu; .platform e
+# identificador de item do Fabric, gerado por instalacao.
+/painel/powerbi/**/.pbi/
+/painel/powerbi/**/.platform
+
 # Painel do Power BI: o CODIGO vai para o Git, os SNAPSHOTS nao.
 # Os parquets sao dado operacional (centenas de milhares de linhas), e o
 # consolidado e regerado a cada execucao -- versionar isso encheria o
@@ -99,3 +106,5 @@ desktop.ini
 /handoff.md
 /atualizar_tarefas_para_C_Projetos.ps1
 /preparar_snapshot_publico.ps1
+# Snapshot embutido no painel web: e dado, nao codigo.
+/painel/web/painel_locfrotas.html

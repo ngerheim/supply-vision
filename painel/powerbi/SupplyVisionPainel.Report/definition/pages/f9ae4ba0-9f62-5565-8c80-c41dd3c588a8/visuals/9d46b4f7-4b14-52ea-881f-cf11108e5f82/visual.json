@@ -1,0 +1,37 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.9.0/schema.json",
+  "name": "9d46b4f7-4b14-52ea-881f-cf11108e5f82",
+  "position": {
+    "x": 0,
+    "y": 0,
+    "z": 5000,
+    "height": 48,
+    "width": 900
+  },
+  "visual": {
+    "visualType": "textbox",
+    "drillFilterOtherVisuals": true,
+    "objects": {
+      "general": [
+        {
+          "properties": {
+            "paragraphs": [
+              {
+                "textRuns": [
+                  {
+                    "value": "Fora do acordo — onde o gasto escapa",
+                    "textStyle": {
+                      "fontSize": "20pt",
+                      "fontWeight": "bold",
+                      "color": "#06203C"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,59 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.9.0/schema.json",
+  "name": "b967f02e-5b13-53e1-8b5b-7760309eb4d1",
+  "position": {
+    "x": 0,
+    "y": 56,
+    "z": 0,
+    "height": 90,
+    "width": 249
+  },
+  "visual": {
+    "visualType": "card",
+    "query": {
+      "queryState": {
+        "Values": {
+          "projections": [
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Painel"
+                    }
+                  },
+                  "Property": "Itens"
+                }
+              },
+              "queryRef": "Painel.Itens",
+              "nativeQueryRef": "Itens"
+            }
+          ]
+        }
+      }
+    },
+    "drillFilterOtherVisuals": true,
+    "visualContainerObjects": {
+      "title": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "text": {
+              "expr": {
+                "Literal": {
+                  "Value": "'Itens'"
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

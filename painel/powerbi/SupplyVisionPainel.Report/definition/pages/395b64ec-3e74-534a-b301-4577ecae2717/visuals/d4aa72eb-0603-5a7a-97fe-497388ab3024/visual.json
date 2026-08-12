@@ -1,0 +1,143 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.9.0/schema.json",
+  "name": "d4aa72eb-0603-5a7a-97fe-497388ab3024",
+  "position": {
+    "x": 528,
+    "y": 428,
+    "z": 11000,
+    "height": 284,
+    "width": 752
+  },
+  "visual": {
+    "visualType": "tableEx",
+    "query": {
+      "queryState": {
+        "Values": {
+          "projections": [
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Painel"
+                    }
+                  },
+                  "Property": "Cidade"
+                }
+              },
+              "queryRef": "Painel.Cidade",
+              "nativeQueryRef": "Cidade"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Painel"
+                    }
+                  },
+                  "Property": "Fornecedor"
+                }
+              },
+              "queryRef": "Painel.Fornecedor",
+              "nativeQueryRef": "Fornecedor"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Painel"
+                    }
+                  },
+                  "Property": "Modelo"
+                }
+              },
+              "queryRef": "Painel.Modelo",
+              "nativeQueryRef": "Modelo"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Painel"
+                    }
+                  },
+                  "Property": "Item"
+                }
+              },
+              "queryRef": "Painel.Item",
+              "nativeQueryRef": "Item"
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Painel"
+                    }
+                  },
+                  "Property": "Linhas Evitaveis"
+                }
+              },
+              "queryRef": "Painel.Linhas Evitaveis",
+              "nativeQueryRef": "Linhas Evitaveis"
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Painel"
+                    }
+                  },
+                  "Property": "Valor Evitavel"
+                }
+              },
+              "queryRef": "Painel.Valor Evitavel",
+              "nativeQueryRef": "Valor Evitavel"
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Painel"
+                    }
+                  },
+                  "Property": "Perda Evitavel"
+                }
+              },
+              "queryRef": "Painel.Perda Evitavel",
+              "nativeQueryRef": "Perda Evitavel"
+            }
+          ]
+        }
+      }
+    },
+    "drillFilterOtherVisuals": true,
+    "visualContainerObjects": {
+      "title": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "text": {
+              "expr": {
+                "Literal": {
+                  "Value": "'Detalhe da perda evitavel'"
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

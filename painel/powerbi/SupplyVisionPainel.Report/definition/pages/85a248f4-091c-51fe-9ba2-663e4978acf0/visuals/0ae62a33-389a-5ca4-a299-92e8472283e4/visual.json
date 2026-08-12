@@ -1,0 +1,255 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.9.0/schema.json",
+  "name": "0ae62a33-389a-5ca4-a299-92e8472283e4",
+  "position": {
+    "x": 218,
+    "y": 44,
+    "z": 4000,
+    "height": 668,
+    "width": 1062
+  },
+  "visual": {
+    "visualType": "tableEx",
+    "query": {
+      "queryState": {
+        "Values": {
+          "projections": [
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Painel"
+                    }
+                  },
+                  "Property": "Data"
+                }
+              },
+              "queryRef": "Painel.Data",
+              "nativeQueryRef": "Data"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Painel"
+                    }
+                  },
+                  "Property": "OS"
+                }
+              },
+              "queryRef": "Painel.OS",
+              "nativeQueryRef": "OS"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Painel"
+                    }
+                  },
+                  "Property": "Cidade"
+                }
+              },
+              "queryRef": "Painel.Cidade",
+              "nativeQueryRef": "Cidade"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Painel"
+                    }
+                  },
+                  "Property": "Fornecedor"
+                }
+              },
+              "queryRef": "Painel.Fornecedor",
+              "nativeQueryRef": "Fornecedor"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Painel"
+                    }
+                  },
+                  "Property": "Grupo Modelo"
+                }
+              },
+              "queryRef": "Painel.Grupo Modelo",
+              "nativeQueryRef": "Grupo Modelo"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Painel"
+                    }
+                  },
+                  "Property": "Modelo"
+                }
+              },
+              "queryRef": "Painel.Modelo",
+              "nativeQueryRef": "Modelo"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Painel"
+                    }
+                  },
+                  "Property": "Item"
+                }
+              },
+              "queryRef": "Painel.Item",
+              "nativeQueryRef": "Item"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Painel"
+                    }
+                  },
+                  "Property": "Status"
+                }
+              },
+              "queryRef": "Painel.Status",
+              "nativeQueryRef": "Status"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Painel"
+                    }
+                  },
+                  "Property": "STATUS_ACORDO"
+                }
+              },
+              "queryRef": "Painel.STATUS_ACORDO",
+              "nativeQueryRef": "STATUS_ACORDO"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Painel"
+                    }
+                  },
+                  "Property": "Tinha acordo?"
+                }
+              },
+              "queryRef": "Painel.Tinha acordo?",
+              "nativeQueryRef": "Tinha acordo?"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Painel"
+                    }
+                  },
+                  "Property": "Motivo Sem Acordo"
+                }
+              },
+              "queryRef": "Painel.Motivo Sem Acordo",
+              "nativeQueryRef": "Motivo Sem Acordo"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Painel"
+                    }
+                  },
+                  "Property": "Criador"
+                }
+              },
+              "queryRef": "Painel.Criador",
+              "nativeQueryRef": "Criador"
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Painel"
+                    }
+                  },
+                  "Property": "Valor Total"
+                }
+              },
+              "queryRef": "Painel.Valor Total",
+              "nativeQueryRef": "Valor Total"
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Painel"
+                    }
+                  },
+                  "Property": "Diferenca vs Acordo"
+                }
+              },
+              "queryRef": "Painel.Diferenca vs Acordo",
+              "nativeQueryRef": "Diferenca vs Acordo"
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Painel"
+                    }
+                  },
+                  "Property": "Perda Evitavel"
+                }
+              },
+              "queryRef": "Painel.Perda Evitavel",
+              "nativeQueryRef": "Perda Evitavel"
+            }
+          ]
+        }
+      }
+    },
+    "drillFilterOtherVisuals": true,
+    "visualContainerObjects": {
+      "title": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "text": {
+              "expr": {
+                "Literal": {
+                  "Value": "'Linhas do painel'"
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

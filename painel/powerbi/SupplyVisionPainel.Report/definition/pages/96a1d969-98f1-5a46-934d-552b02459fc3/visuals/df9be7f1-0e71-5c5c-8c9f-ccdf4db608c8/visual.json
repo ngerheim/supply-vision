@@ -1,0 +1,95 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.9.0/schema.json",
+  "name": "df9be7f1-0e71-5c5c-8c9f-ccdf4db608c8",
+  "position": {
+    "x": 0,
+    "y": 322,
+    "z": 7000,
+    "height": 98,
+    "width": 700
+  },
+  "visual": {
+    "visualType": "lineChart",
+    "query": {
+      "queryState": {
+        "Category": {
+          "projections": [
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Painel"
+                    }
+                  },
+                  "Property": "Ano-Mes"
+                }
+              },
+              "queryRef": "Painel.Ano-Mes",
+              "nativeQueryRef": "Ano-Mes",
+              "active": true
+            }
+          ]
+        },
+        "Y": {
+          "projections": [
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Painel"
+                    }
+                  },
+                  "Property": "Diferenca vs Acordo"
+                }
+              },
+              "queryRef": "Painel.Diferenca vs Acordo",
+              "nativeQueryRef": "Diferenca vs Acordo"
+            }
+          ]
+        }
+      },
+      "sortDefinition": {
+        "sort": [
+          {
+            "field": {
+              "Column": {
+                "Expression": {
+                  "SourceRef": {
+                    "Entity": "Painel"
+                  }
+                },
+                "Property": "Ano-Mes"
+              }
+            },
+            "direction": "Ascending"
+          }
+        ]
+      }
+    },
+    "drillFilterOtherVisuals": true,
+    "visualContainerObjects": {
+      "title": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "text": {
+              "expr": {
+                "Literal": {
+                  "Value": "'Diferenca de preco no mes'"
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

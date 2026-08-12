@@ -1,0 +1,59 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.9.0/schema.json",
+  "name": "2fbb8e8e-92b3-50b5-b689-8ca73357c179",
+  "position": {
+    "x": 257,
+    "y": 56,
+    "z": 1000,
+    "height": 90,
+    "width": 249
+  },
+  "visual": {
+    "visualType": "card",
+    "query": {
+      "queryState": {
+        "Values": {
+          "projections": [
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Painel"
+                    }
+                  },
+                  "Property": "Valor Evitavel"
+                }
+              },
+              "queryRef": "Painel.Valor Evitavel",
+              "nativeQueryRef": "Valor Evitavel"
+            }
+          ]
+        }
+      }
+    },
+    "drillFilterOtherVisuals": true,
+    "visualContainerObjects": {
+      "title": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "text": {
+              "expr": {
+                "Literal": {
+                  "Value": "'Valor Evitavel'"
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

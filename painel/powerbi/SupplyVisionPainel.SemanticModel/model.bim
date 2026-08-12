@@ -58,6 +58,13 @@
             "lineageTag": "4762f385-da62-521d-8569-f55a7c937199"
           },
           {
+            "name": "Grupo Modelo",
+            "dataType": "string",
+            "sourceColumn": "Grupo Modelo",
+            "summarizeBy": "none",
+            "lineageTag": "ee0a7e97-5789-5021-80e7-712f01bc1780"
+          },
+          {
             "name": "Item",
             "dataType": "string",
             "sourceColumn": "Item",
@@ -344,6 +351,12 @@
             "expression": "MAX('Painel'[DATA_EXECUCAO])",
             "formatString": "dd/mm/yyyy hh:nn",
             "lineageTag": "5ccbcb8c-caae-5d53-9548-7750f8f7dcf5"
+          },
+          {
+            "name": "% do Fora do Acordo",
+            "expression": "DIVIDE([Valor Fora do Acordo], CALCULATE([Valor Fora do Acordo], ALLSELECTED()))",
+            "formatString": "0.0%",
+            "lineageTag": "e9e270d8-661c-59f0-952e-4a32452d919f"
           }
         ],
         "partitions": [

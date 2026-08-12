@@ -1,0 +1,95 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.9.0/schema.json",
+  "name": "9357a531-36d5-513e-b2b3-a7f0746c4519",
+  "position": {
+    "x": 0,
+    "y": 428,
+    "z": 10000,
+    "height": 284,
+    "width": 760
+  },
+  "visual": {
+    "visualType": "pivotTable",
+    "query": {
+      "queryState": {
+        "Rows": {
+          "projections": [
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Painel"
+                    }
+                  },
+                  "Property": "Cidade"
+                }
+              },
+              "queryRef": "Painel.Cidade",
+              "nativeQueryRef": "Cidade"
+            }
+          ]
+        },
+        "Columns": {
+          "projections": [
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Painel"
+                    }
+                  },
+                  "Property": "Ano-Mes"
+                }
+              },
+              "queryRef": "Painel.Ano-Mes",
+              "nativeQueryRef": "Ano-Mes"
+            }
+          ]
+        },
+        "Values": {
+          "projections": [
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Painel"
+                    }
+                  },
+                  "Property": "Valor Fora do Acordo"
+                }
+              },
+              "queryRef": "Painel.Valor Fora do Acordo",
+              "nativeQueryRef": "Valor Fora do Acordo"
+            }
+          ]
+        }
+      }
+    },
+    "drillFilterOtherVisuals": true,
+    "visualContainerObjects": {
+      "title": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "text": {
+              "expr": {
+                "Literal": {
+                  "Value": "'Cidade x mes — valor fora do acordo'"
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

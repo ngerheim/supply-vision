@@ -1,0 +1,37 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.9.0/schema.json",
+  "name": "ce71acc7-1cdf-5e9a-84e5-8e2deea92ac5",
+  "position": {
+    "x": 0,
+    "y": 0,
+    "z": 5000,
+    "height": 48,
+    "width": 1000
+  },
+  "visual": {
+    "visualType": "textbox",
+    "drillFilterOtherVisuals": true,
+    "objects": {
+      "general": [
+        {
+          "properties": {
+            "paragraphs": [
+              {
+                "textRuns": [
+                  {
+                    "value": "Perda evitavel — comprou fora existindo acordo disponivel",
+                    "textStyle": {
+                      "fontSize": "20pt",
+                      "fontWeight": "bold",
+                      "color": "#06203C"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,59 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.9.0/schema.json",
+  "name": "398d49ee-4a7f-56bc-b40d-000e0f0c76f5",
+  "position": {
+    "x": 1028,
+    "y": 56,
+    "z": 4000,
+    "height": 90,
+    "width": 249
+  },
+  "visual": {
+    "visualType": "card",
+    "query": {
+      "queryState": {
+        "Values": {
+          "projections": [
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Painel"
+                    }
+                  },
+                  "Property": "OS Distintas"
+                }
+              },
+              "queryRef": "Painel.OS Distintas",
+              "nativeQueryRef": "OS Distintas"
+            }
+          ]
+        }
+      }
+    },
+    "drillFilterOtherVisuals": true,
+    "visualContainerObjects": {
+      "title": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "text": {
+              "expr": {
+                "Literal": {
+                  "Value": "'OS Distintas'"
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

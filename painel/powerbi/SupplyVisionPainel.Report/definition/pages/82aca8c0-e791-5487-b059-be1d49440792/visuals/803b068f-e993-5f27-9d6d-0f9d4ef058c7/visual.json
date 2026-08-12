@@ -1,0 +1,94 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.9.0/schema.json",
+  "name": "803b068f-e993-5f27-9d6d-0f9d4ef058c7",
+  "position": {
+    "x": 808,
+    "y": 428,
+    "z": 10000,
+    "height": 284,
+    "width": 472
+  },
+  "visual": {
+    "visualType": "treemap",
+    "query": {
+      "queryState": {
+        "Group": {
+          "projections": [
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Painel"
+                    }
+                  },
+                  "Property": "Fornecedor"
+                }
+              },
+              "queryRef": "Painel.Fornecedor",
+              "nativeQueryRef": "Fornecedor"
+            }
+          ]
+        },
+        "Values": {
+          "projections": [
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Painel"
+                    }
+                  },
+                  "Property": "Valor Fora do Acordo"
+                }
+              },
+              "queryRef": "Painel.Valor Fora do Acordo",
+              "nativeQueryRef": "Valor Fora do Acordo"
+            }
+          ]
+        }
+      },
+      "sortDefinition": {
+        "sort": [
+          {
+            "field": {
+              "Measure": {
+                "Expression": {
+                  "SourceRef": {
+                    "Entity": "Painel"
+                  }
+                },
+                "Property": "Valor Fora do Acordo"
+              }
+            },
+            "direction": "Descending"
+          }
+        ]
+      }
+    },
+    "drillFilterOtherVisuals": true,
+    "visualContainerObjects": {
+      "title": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "text": {
+              "expr": {
+                "Literal": {
+                  "Value": "'Peso de cada fornecedor no gasto fora do acordo'"
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

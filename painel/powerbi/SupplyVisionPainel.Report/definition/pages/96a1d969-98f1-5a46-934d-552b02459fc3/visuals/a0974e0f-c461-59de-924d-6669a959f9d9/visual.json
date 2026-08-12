@@ -1,0 +1,59 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.9.0/schema.json",
+  "name": "a0974e0f-c461-59de-924d-6669a959f9d9",
+  "position": {
+    "x": 771,
+    "y": 56,
+    "z": 3000,
+    "height": 90,
+    "width": 249
+  },
+  "visual": {
+    "visualType": "card",
+    "query": {
+      "queryState": {
+        "Values": {
+          "projections": [
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Painel"
+                    }
+                  },
+                  "Property": "Valor Abaixo do Acordo"
+                }
+              },
+              "queryRef": "Painel.Valor Abaixo do Acordo",
+              "nativeQueryRef": "Valor Abaixo do Acordo"
+            }
+          ]
+        }
+      }
+    },
+    "drillFilterOtherVisuals": true,
+    "visualContainerObjects": {
+      "title": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "text": {
+              "expr": {
+                "Literal": {
+                  "Value": "'Valor Abaixo do Acordo'"
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

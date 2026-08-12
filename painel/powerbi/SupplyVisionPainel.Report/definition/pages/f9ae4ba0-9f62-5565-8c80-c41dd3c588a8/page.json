@@ -1,0 +1,8 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/page/2.1.0/schema.json",
+  "name": "f9ae4ba0-9f62-5565-8c80-c41dd3c588a8",
+  "displayName": "Fora do Acordo",
+  "displayOption": "FitToPage",
+  "height": 720,
+  "width": 1280
+}

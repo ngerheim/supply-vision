@@ -1,0 +1,95 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.9.0/schema.json",
+  "name": "8bfdc866-b66b-5820-b47c-6391ec91e8da",
+  "position": {
+    "x": 856,
+    "y": 428,
+    "z": 11000,
+    "height": 284,
+    "width": 424
+  },
+  "visual": {
+    "visualType": "pivotTable",
+    "query": {
+      "queryState": {
+        "Rows": {
+          "projections": [
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Painel"
+                    }
+                  },
+                  "Property": "Cidade"
+                }
+              },
+              "queryRef": "Painel.Cidade",
+              "nativeQueryRef": "Cidade"
+            }
+          ]
+        },
+        "Columns": {
+          "projections": [
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Painel"
+                    }
+                  },
+                  "Property": "Status"
+                }
+              },
+              "queryRef": "Painel.Status",
+              "nativeQueryRef": "Status"
+            }
+          ]
+        },
+        "Values": {
+          "projections": [
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Painel"
+                    }
+                  },
+                  "Property": "Diferenca vs Acordo"
+                }
+              },
+              "queryRef": "Painel.Diferenca vs Acordo",
+              "nativeQueryRef": "Diferenca vs Acordo"
+            }
+          ]
+        }
+      }
+    },
+    "drillFilterOtherVisuals": true,
+    "visualContainerObjects": {
+      "title": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "text": {
+              "expr": {
+                "Literal": {
+                  "Value": "'Cidade x Status'"
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}
