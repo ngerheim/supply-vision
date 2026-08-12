@@ -173,6 +173,18 @@ def gerar_candidato(run_id):
 
     painel = df[painel_paths.COLUNAS_PAINEL].copy()
 
+    # Agrupa as variações do mesmo veículo (ver painel_paths.grupo_modelo).
+    painel["Grupo Modelo"] = painel["Modelo"].map(painel_paths.grupo_modelo)
+
+    # Uma exceção que passa a cobrir mais de um modelo deixou de ser exceção:
+    # avisa em vez de rotular dois veículos diferentes com o mesmo nome.
+    for grupo in set(painel_paths.GRUPO_MODELO_EXCECOES.values()):
+        modelos = painel.loc[painel["Grupo Modelo"] == grupo, "Modelo"].unique()
+        if len(modelos) > 1:
+            logging.warning(f"AVISO: o grupo '{grupo}' cobre {len(modelos)} modelos "
+                            f"({', '.join(sorted(modelos))}) — revisar "
+                            f"GRUPO_MODELO_EXCECOES em painel_paths.py")
+
     # Dentro ou fora do acordo, pela mesma régua que separa os relatórios
     # com_acordo/sem_acordo. Ver a nota em painel_paths sobre por que não sai
     # de "Tinha acordo?".

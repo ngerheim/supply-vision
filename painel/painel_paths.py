@@ -62,7 +62,32 @@ COLUNAS_PAINEL = [
 ]
 
 # Colunas acrescentadas pelo painel, além das de rodar.processar().
-COLUNAS_META = ["STATUS_ACORDO", "DATA_EXECUCAO", "RUN_ID"]
+COLUNAS_META = ["Grupo Modelo", "STATUS_ACORDO", "DATA_EXECUCAO", "RUN_ID"]
+
+# ── Agrupamento de modelos ───────────────────────────────────────────
+# A nomenclatura do Qlik detalha versão, motor e carroceria, então o mesmo
+# veículo aparece em várias linhas do ranking: "Hilux 2.8 Cd Dsl Power Pack
+# 4x4", "Hilux Cd Sr At 4x4", "Hilux Cs Dsl 4x4"... Medido em 12/08/2026: 30
+# modelos que são 11 veículos. Agrupar pela primeira palavra resolve — Hilux
+# junta 6 variações e passa a responder por 54% do gasto.
+#
+# Três casos não são nome de modelo, e a primeira palavra sozinha viraria
+# marca ("Kia") ou tipo de implemento ("Prancha"). Ficam explícitos aqui.
+# Juntos são 15 linhas de 103 mil, mas explicitar custa pouco e evita um
+# rótulo errado no painel.
+GRUPO_MODELO_EXCECOES = {
+    "Kia":      "Kia Bongo",
+    "Mercedes": "Mercedes Atego",
+    "Prancha":  "Prancha Plataforma",
+}
+
+
+def grupo_modelo(modelo):
+    """Primeira palavra do modelo, com as exceções acima aplicadas."""
+    if not modelo:
+        return ""
+    primeira = str(modelo).split()[0]
+    return GRUPO_MODELO_EXCECOES.get(primeira, primeira)
 
 # STATUS_ACORDO responde "a compra caiu dentro ou fora do acordo?" e deriva de
 # Status — a mesma divisão que rodar.py usa para separar com_acordo.xlsx de
