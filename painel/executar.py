@@ -1,7 +1,13 @@
 """
 Painel — gera o snapshot completo consumido pelo Power BI.
 
-    python painel\\executar.py
+    python painel\\executar.py                  extrai do Qlik e publica
+    python painel\\executar.py --sem-extrair    reusa dados/base_painel.xlsx
+
+--sem-extrair salta a etapa mais lenta e reprocessa a base já extraída. Serve
+para iterar em regra de classificação sem esperar a extração a cada ajuste, e
+para reprocessar depois de mudar ACORDOS.xlsx ou os parametros/. Não use para
+atualizar o painel: a base em disco é do momento em que foi extraída.
 
 Extrai do Qlik o recorte de painel_paths.INICIO_HISTORICO até hoje, roda o
 mesmo motor do pipeline diário, grava um Parquet candidato, valida, e só então
@@ -26,6 +32,7 @@ import shutil
 import sys
 from datetime import date, datetime, timedelta
 
+import numpy as np
 import pandas as pd
 
 sys.dont_write_bytecode = True   # não deixa __pycache__ em processo/
@@ -165,13 +172,23 @@ def gerar_candidato(run_id):
         raise PainelFalhou("nenhuma linha classificável sobrou")
 
     painel = df[painel_paths.COLUNAS_PAINEL].copy()
-    painel["STATUS_ACORDO"]  = painel["Tinha acordo?"].map(painel_paths.MAPA_STATUS_ACORDO)
-    painel["DATA_EXECUCAO"]  = datetime.now()
-    painel["RUN_ID"]         = run_id
 
-    if painel["STATUS_ACORDO"].isna().any():
-        raise PainelFalhou("'Tinha acordo?' trouxe valor fora de SIM/NAO — "
-                           "STATUS_ACORDO ficaria nulo")
+    # Dentro ou fora do acordo, pela mesma régua que separa os relatórios
+    # com_acordo/sem_acordo. Ver a nota em painel_paths sobre por que não sai
+    # de "Tinha acordo?".
+    dentro = painel["Status"].isin(rodar.STATUS_COM_ACORDO)
+    painel["STATUS_ACORDO"] = np.where(dentro, painel_paths.STATUS_ACORDO_DENTRO,
+                                       painel_paths.STATUS_ACORDO_FORA)
+    painel["DATA_EXECUCAO"] = datetime.now()
+    painel["RUN_ID"]        = run_id
+
+    # Status que não seja de acordo nem "SEM ACORDO" cairia em SEM_ACORDO sem
+    # ninguém ver — um valor novo no rodar.py entraria como se fosse fora do
+    # acordo, e o painel mentiria sobre o percentual.
+    inesperado = set(painel.loc[~dentro, "Status"].unique()) - {painel_paths.STATUS_FORA}
+    if inesperado:
+        raise PainelFalhou(f"Status inesperado, não classificável como dentro "
+                           f"ou fora do acordo: {sorted(inesperado)}")
 
     # Tipos explícitos, sem deixar o parquet inferir. OS e CNPJ como texto:
     # são identificadores, não números — e OS inteiro perderia o dtype entre
@@ -208,17 +225,20 @@ def validar(caminho):
     if df.empty:
         raise PainelFalhou("candidato sem nenhuma linha")
 
-    fora = set(df["STATUS_ACORDO"].dropna().unique()) - set(painel_paths.MAPA_STATUS_ACORDO.values())
-    if fora:
-        raise PainelFalhou(f"STATUS_ACORDO fora do domínio: {sorted(fora)}")
+    dominio = {painel_paths.STATUS_ACORDO_DENTRO, painel_paths.STATUS_ACORDO_FORA}
+    fora_dominio = set(df["STATUS_ACORDO"].dropna().unique()) - dominio
+    if fora_dominio:
+        raise PainelFalhou(f"STATUS_ACORDO fora do domínio: {sorted(fora_dominio)}")
 
-    # STATUS_ACORDO e "Tinha acordo?" saem do mesmo mapa na etapa 2 —
-    # divergência aqui é bug de geração, não dado de origem.
-    divergentes = (df["Tinha acordo?"].map(painel_paths.MAPA_STATUS_ACORDO)
-                   != df["STATUS_ACORDO"]).sum()
+    # STATUS_ACORDO sai de Status na etapa 2 — divergência aqui é bug de
+    # geração, não dado de origem.
+    esperado = np.where(df["Status"].isin(rodar.STATUS_COM_ACORDO),
+                        painel_paths.STATUS_ACORDO_DENTRO,
+                        painel_paths.STATUS_ACORDO_FORA)
+    divergentes = (esperado != df["STATUS_ACORDO"]).sum()
     if divergentes:
         raise PainelFalhou(f"{divergentes:,} linha(s) com STATUS_ACORDO "
-                           f"divergente de 'Tinha acordo?'")
+                           f"divergente de Status")
 
     if df["Data"].isna().all():
         raise PainelFalhou("coluna 'Data' inteiramente nula — layout do Qlik mudou?")
@@ -258,10 +278,20 @@ def main():
     run_id = f"{datetime.now():%Y%m%d_%H%M%S}_{secrets.token_hex(3)}"
     logging.info(f"RUN_ID {run_id} — log em {log_path.name}")
 
+    sem_extrair = "--sem-extrair" in sys.argv
     candidato = None
     try:
         adquirir_lock()
-        extrair()
+        if sem_extrair:
+            if not painel_paths.BASE_PAINEL_PATH.exists():
+                raise PainelFalhou(
+                    f"--sem-extrair pedido, mas {painel_paths.BASE_PAINEL_PATH.name} "
+                    f"não existe. Rode sem a opção para extrair do Qlik primeiro.")
+            idade = datetime.fromtimestamp(painel_paths.BASE_PAINEL_PATH.stat().st_mtime)
+            logging.warning(f"AVISO: --sem-extrair — reusando base extraída em "
+                            f"{idade:%d/%m/%Y %H:%M}, sem consultar o Qlik")
+        else:
+            extrair()
         candidato = gerar_candidato(run_id)
         for aviso in validar(candidato):
             logging.warning(f"AVISO: {aviso}")

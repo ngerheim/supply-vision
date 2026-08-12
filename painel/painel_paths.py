@@ -64,9 +64,23 @@ COLUNAS_PAINEL = [
 # Colunas acrescentadas pelo painel, além das de rodar.processar().
 COLUNAS_META = ["STATUS_ACORDO", "DATA_EXECUCAO", "RUN_ID"]
 
-# STATUS_ACORDO deriva de "Tinha acordo?". Pendências (Status em quarentena)
-# não têm SIM/NAO e são excluídas antes — nenhum valor sobra fora deste mapa.
-MAPA_STATUS_ACORDO = {"SIM": "COM_ACORDO", "NAO": "SEM_ACORDO"}
+# STATUS_ACORDO responde "a compra caiu dentro ou fora do acordo?" e deriva de
+# Status — a mesma divisão que rodar.py usa para separar com_acordo.xlsx de
+# sem_acordo.xlsx. NÃO deriva de "Tinha acordo?": essa coluna é a de
+# oportunidade, e responde outra pergunta ("existia acordo para este item com
+# QUALQUER fornecedor?", ignorando o fornecedor usado). Derivar dela marcaria
+# 15.696 compras feitas fora do acordo como COM_ACORDO — medido na primeira
+# execução real, 12/08/2026.
+#
+# As duas leituras seguem disponíveis no painel: STATUS_ACORDO diz se caiu
+# fora, e "Tinha acordo?" separa, dentro do que caiu fora, o que era evitável
+# (havia acordo e não foi usado) do que não tinha alternativa.
+STATUS_ACORDO_DENTRO = "COM_ACORDO"
+STATUS_ACORDO_FORA   = "SEM_ACORDO"
+
+# Status válidos no painel: os de dentro do acordo (rodar.STATUS_COM_ACORDO)
+# mais "SEM ACORDO". Os de quarentena são excluídos antes de chegar aqui.
+STATUS_FORA = "SEM ACORDO"
 
 for _dir in (CANDIDATO_DIR, CONSOLIDADO_DIR, ARQUIVADOS_DIR, LOGS_DIR):
     _dir.mkdir(parents=True, exist_ok=True)
