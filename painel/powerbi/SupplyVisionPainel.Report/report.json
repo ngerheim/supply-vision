@@ -1,0 +1,970 @@
+{
+  "config": "{\"version\": \"5.55\", \"activeSectionIndex\": 0, \"defaultDrillFilterOtherVisuals\": true, \"settings\": {\"useStylableVisualContainerHeader\": true}}",
+  "layoutOptimization": 0,
+  "publicCustomVisuals": [],
+  "sections": [
+    {
+      "name": "c116c1eb-69e5-544a-b7c1-b7da6a248e9e",
+      "displayName": "Visao Geral",
+      "displayOption": 1,
+      "height": 720.0,
+      "width": 1280.0,
+      "ordinal": 0,
+      "config": "{}",
+      "filters": "[]",
+      "visualContainers": [
+        {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "width": 900.0,
+          "height": 48.0,
+          "config": "{\"name\": \"21f2721f-f605-5d9a-a84f-ec9e2447e96b\", \"layouts\": [{\"id\": 0, \"position\": {\"x\": 0, \"y\": 0, \"z\": 0, \"width\": 900, \"height\": 48}}], \"singleVisual\": {\"visualType\": \"textbox\", \"drillFilterOtherVisuals\": true, \"objects\": {\"general\": [{\"properties\": {\"paragraphs\": [{\"textRuns\": [{\"value\": \"Supply Vision — Conformidade de Acordos\", \"textStyle\": {\"fontSize\": \"20pt\", \"fontWeight\": \"bold\", \"color\": \"#1F3B57\"}}]}]}}]}}}",
+          "filters": "[]"
+        },
+        {
+          "x": 0.0,
+          "y": 56.0,
+          "z": 0.0,
+          "width": 249.0,
+          "height": 90.0,
+          "config": "{\"name\": \"13f5e014-385e-5492-bdb7-31f802ccf72d\", \"layouts\": [{\"id\": 0, \"position\": {\"x\": 0, \"y\": 56, \"z\": 0, \"width\": 249, \"height\": 90}}], \"singleVisual\": {\"visualType\": \"card\", \"projections\": {\"Values\": [{\"queryRef\": \"Painel.Valor Total\"}]}, \"prototypeQuery\": {\"Version\": 2, \"From\": [{\"Name\": \"p\", \"Entity\": \"Painel\", \"Type\": 0}], \"Select\": [{\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Valor Total\"}, \"Name\": \"Painel.Valor Total\", \"NativeReferenceName\": \"Valor Total\"}]}, \"drillFilterOtherVisuals\": true, \"objects\": {}, \"vcObjects\": {\"title\": [{\"properties\": {\"show\": {\"expr\": {\"Literal\": {\"Value\": \"true\"}}}, \"text\": {\"expr\": {\"Literal\": {\"Value\": \"'Valor Total'\"}}}}}]}}}",
+          "filters": "[]"
+        },
+        {
+          "x": 257.0,
+          "y": 56.0,
+          "z": 0.0,
+          "width": 249.0,
+          "height": 90.0,
+          "config": "{\"name\": \"4a379cf6-4e6b-5a6a-b599-7637d337e236\", \"layouts\": [{\"id\": 0, \"position\": {\"x\": 257, \"y\": 56, \"z\": 0, \"width\": 249, \"height\": 90}}], \"singleVisual\": {\"visualType\": \"card\", \"projections\": {\"Values\": [{\"queryRef\": \"Painel.Valor Fora do Acordo\"}]}, \"prototypeQuery\": {\"Version\": 2, \"From\": [{\"Name\": \"p\", \"Entity\": \"Painel\", \"Type\": 0}], \"Select\": [{\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Valor Fora do Acordo\"}, \"Name\": \"Painel.Valor Fora do Acordo\", \"NativeReferenceName\": \"Valor Fora do Acordo\"}]}, \"drillFilterOtherVisuals\": true, \"objects\": {}, \"vcObjects\": {\"title\": [{\"properties\": {\"show\": {\"expr\": {\"Literal\": {\"Value\": \"true\"}}}, \"text\": {\"expr\": {\"Literal\": {\"Value\": \"'Valor Fora do Acordo'\"}}}}}]}}}",
+          "filters": "[]"
+        },
+        {
+          "x": 514.0,
+          "y": 56.0,
+          "z": 0.0,
+          "width": 249.0,
+          "height": 90.0,
+          "config": "{\"name\": \"dc6e19fc-b2d3-5124-9235-272033eaa338\", \"layouts\": [{\"id\": 0, \"position\": {\"x\": 514, \"y\": 56, \"z\": 0, \"width\": 249, \"height\": 90}}], \"singleVisual\": {\"visualType\": \"card\", \"projections\": {\"Values\": [{\"queryRef\": \"Painel.% Fora do Acordo\"}]}, \"prototypeQuery\": {\"Version\": 2, \"From\": [{\"Name\": \"p\", \"Entity\": \"Painel\", \"Type\": 0}], \"Select\": [{\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"% Fora do Acordo\"}, \"Name\": \"Painel.% Fora do Acordo\", \"NativeReferenceName\": \"% Fora do Acordo\"}]}, \"drillFilterOtherVisuals\": true, \"objects\": {}, \"vcObjects\": {\"title\": [{\"properties\": {\"show\": {\"expr\": {\"Literal\": {\"Value\": \"true\"}}}, \"text\": {\"expr\": {\"Literal\": {\"Value\": \"'% Fora do Acordo'\"}}}}}]}}}",
+          "filters": "[]"
+        },
+        {
+          "x": 771.0,
+          "y": 56.0,
+          "z": 0.0,
+          "width": 249.0,
+          "height": 90.0,
+          "config": "{\"name\": \"4a8c4775-ac5d-5818-a663-aae3a0f843e9\", \"layouts\": [{\"id\": 0, \"position\": {\"x\": 771, \"y\": 56, \"z\": 0, \"width\": 249, \"height\": 90}}], \"singleVisual\": {\"visualType\": \"card\", \"projections\": {\"Values\": [{\"queryRef\": \"Painel.Perda Evitavel\"}]}, \"prototypeQuery\": {\"Version\": 2, \"From\": [{\"Name\": \"p\", \"Entity\": \"Painel\", \"Type\": 0}], \"Select\": [{\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Perda Evitavel\"}, \"Name\": \"Painel.Perda Evitavel\", \"NativeReferenceName\": \"Perda Evitavel\"}]}, \"drillFilterOtherVisuals\": true, \"objects\": {}, \"vcObjects\": {\"title\": [{\"properties\": {\"show\": {\"expr\": {\"Literal\": {\"Value\": \"true\"}}}, \"text\": {\"expr\": {\"Literal\": {\"Value\": \"'Perda Evitavel'\"}}}}}]}}}",
+          "filters": "[]"
+        },
+        {
+          "x": 1028.0,
+          "y": 56.0,
+          "z": 0.0,
+          "width": 249.0,
+          "height": 90.0,
+          "config": "{\"name\": \"398d49ee-4a7f-56bc-b40d-000e0f0c76f5\", \"layouts\": [{\"id\": 0, \"position\": {\"x\": 1028, \"y\": 56, \"z\": 0, \"width\": 249, \"height\": 90}}], \"singleVisual\": {\"visualType\": \"card\", \"projections\": {\"Values\": [{\"queryRef\": \"Painel.OS Distintas\"}]}, \"prototypeQuery\": {\"Version\": 2, \"From\": [{\"Name\": \"p\", \"Entity\": \"Painel\", \"Type\": 0}], \"Select\": [{\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"OS Distintas\"}, \"Name\": \"Painel.OS Distintas\", \"NativeReferenceName\": \"OS Distintas\"}]}, \"drillFilterOtherVisuals\": true, \"objects\": {}, \"vcObjects\": {\"title\": [{\"properties\": {\"show\": {\"expr\": {\"Literal\": {\"Value\": \"true\"}}}, \"text\": {\"expr\": {\"Literal\": {\"Value\": \"'OS Distintas'\"}}}}}]}}}",
+          "filters": "[]"
+        },
+        {
+          "x": 0.0,
+          "y": 160.0,
+          "z": 0.0,
+          "width": 640.0,
+          "height": 280.0,
+          "config": "{\"name\": \"d9ea9a4e-38fe-54fa-bffb-5b942e35380a\", \"layouts\": [{\"id\": 0, \"position\": {\"x\": 0, \"y\": 160, \"z\": 0, \"width\": 640, \"height\": 280}}], \"singleVisual\": {\"visualType\": \"lineClusteredColumnComboChart\", \"projections\": {\"Category\": [{\"queryRef\": \"Painel.Ano-Mes\"}], \"Y\": [{\"queryRef\": \"Painel.Valor Total\"}], \"Y2\": [{\"queryRef\": \"Painel.Perda Evitavel\"}]}, \"prototypeQuery\": {\"Version\": 2, \"From\": [{\"Name\": \"p\", \"Entity\": \"Painel\", \"Type\": 0}], \"Select\": [{\"Column\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Ano-Mes\"}, \"Name\": \"Painel.Ano-Mes\", \"NativeReferenceName\": \"Ano-Mes\"}, {\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Valor Total\"}, \"Name\": \"Painel.Valor Total\", \"NativeReferenceName\": \"Valor Total\"}, {\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Perda Evitavel\"}, \"Name\": \"Painel.Perda Evitavel\", \"NativeReferenceName\": \"Perda Evitavel\"}], \"OrderBy\": [{\"Direction\": 1, \"Expression\": {\"Column\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Ano-Mes\"}}}]}, \"drillFilterOtherVisuals\": true, \"objects\": {}, \"vcObjects\": {\"title\": [{\"properties\": {\"show\": {\"expr\": {\"Literal\": {\"Value\": \"true\"}}}, \"text\": {\"expr\": {\"Literal\": {\"Value\": \"'Volume por mes (barras) e perda evitavel (linha)'\"}}}}}]}}}",
+          "filters": "[]"
+        },
+        {
+          "x": 648.0,
+          "y": 160.0,
+          "z": 0.0,
+          "width": 310.0,
+          "height": 280.0,
+          "config": "{\"name\": \"ae41b770-26a2-5491-9119-e43e39e5dd2b\", \"layouts\": [{\"id\": 0, \"position\": {\"x\": 648, \"y\": 160, \"z\": 0, \"width\": 310, \"height\": 280}}], \"singleVisual\": {\"visualType\": \"donutChart\", \"projections\": {\"Category\": [{\"queryRef\": \"Painel.STATUS_ACORDO\"}], \"Y\": [{\"queryRef\": \"Painel.Valor Total\"}]}, \"prototypeQuery\": {\"Version\": 2, \"From\": [{\"Name\": \"p\", \"Entity\": \"Painel\", \"Type\": 0}], \"Select\": [{\"Column\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"STATUS_ACORDO\"}, \"Name\": \"Painel.STATUS_ACORDO\", \"NativeReferenceName\": \"STATUS_ACORDO\"}, {\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Valor Total\"}, \"Name\": \"Painel.Valor Total\", \"NativeReferenceName\": \"Valor Total\"}]}, \"drillFilterOtherVisuals\": true, \"objects\": {}, \"vcObjects\": {\"title\": [{\"properties\": {\"show\": {\"expr\": {\"Literal\": {\"Value\": \"true\"}}}, \"text\": {\"expr\": {\"Literal\": {\"Value\": \"'Dentro x fora do acordo'\"}}}}}]}}}",
+          "filters": "[]"
+        },
+        {
+          "x": 966.0,
+          "y": 160.0,
+          "z": 0.0,
+          "width": 314.0,
+          "height": 280.0,
+          "config": "{\"name\": \"f0a749b1-b655-568b-8259-2de4635148f1\", \"layouts\": [{\"id\": 0, \"position\": {\"x\": 966, \"y\": 160, \"z\": 0, \"width\": 314, \"height\": 280}}], \"singleVisual\": {\"visualType\": \"barChart\", \"projections\": {\"Category\": [{\"queryRef\": \"Painel.Cidade\"}], \"Y\": [{\"queryRef\": \"Painel.Valor Total\"}]}, \"prototypeQuery\": {\"Version\": 2, \"From\": [{\"Name\": \"p\", \"Entity\": \"Painel\", \"Type\": 0}], \"Select\": [{\"Column\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Cidade\"}, \"Name\": \"Painel.Cidade\", \"NativeReferenceName\": \"Cidade\"}, {\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Valor Total\"}, \"Name\": \"Painel.Valor Total\", \"NativeReferenceName\": \"Valor Total\"}], \"OrderBy\": [{\"Direction\": 2, \"Expression\": {\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Valor Total\"}}}]}, \"drillFilterOtherVisuals\": true, \"objects\": {}, \"vcObjects\": {\"title\": [{\"properties\": {\"show\": {\"expr\": {\"Literal\": {\"Value\": \"true\"}}}, \"text\": {\"expr\": {\"Literal\": {\"Value\": \"'Cidades por valor'\"}}}}}]}}}",
+          "filters": "[]"
+        },
+        {
+          "x": 0.0,
+          "y": 448.0,
+          "z": 0.0,
+          "width": 420.0,
+          "height": 264.0,
+          "config": "{\"name\": \"9a422398-040e-5ef3-a435-d88ff6d44a61\", \"layouts\": [{\"id\": 0, \"position\": {\"x\": 0, \"y\": 448, \"z\": 0, \"width\": 420, \"height\": 264}}], \"singleVisual\": {\"visualType\": \"clusteredColumnChart\", \"projections\": {\"Category\": [{\"queryRef\": \"Painel.Status\"}], \"Y\": [{\"queryRef\": \"Painel.Valor Total\"}]}, \"prototypeQuery\": {\"Version\": 2, \"From\": [{\"Name\": \"p\", \"Entity\": \"Painel\", \"Type\": 0}], \"Select\": [{\"Column\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Status\"}, \"Name\": \"Painel.Status\", \"NativeReferenceName\": \"Status\"}, {\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Valor Total\"}, \"Name\": \"Painel.Valor Total\", \"NativeReferenceName\": \"Valor Total\"}], \"OrderBy\": [{\"Direction\": 2, \"Expression\": {\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Valor Total\"}}}]}, \"drillFilterOtherVisuals\": true, \"objects\": {}, \"vcObjects\": {\"title\": [{\"properties\": {\"show\": {\"expr\": {\"Literal\": {\"Value\": \"true\"}}}, \"text\": {\"expr\": {\"Literal\": {\"Value\": \"'Valor por Status'\"}}}}}]}}}",
+          "filters": "[]"
+        },
+        {
+          "x": 428.0,
+          "y": 448.0,
+          "z": 0.0,
+          "width": 420.0,
+          "height": 264.0,
+          "config": "{\"name\": \"40942db5-00e7-56b4-a9a9-0b64db93ff77\", \"layouts\": [{\"id\": 0, \"position\": {\"x\": 428, \"y\": 448, \"z\": 0, \"width\": 420, \"height\": 264}}], \"singleVisual\": {\"visualType\": \"treemap\", \"projections\": {\"Group\": [{\"queryRef\": \"Painel.Modelo\"}], \"Values\": [{\"queryRef\": \"Painel.Valor Total\"}]}, \"prototypeQuery\": {\"Version\": 2, \"From\": [{\"Name\": \"p\", \"Entity\": \"Painel\", \"Type\": 0}], \"Select\": [{\"Column\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Modelo\"}, \"Name\": \"Painel.Modelo\", \"NativeReferenceName\": \"Modelo\"}, {\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Valor Total\"}, \"Name\": \"Painel.Valor Total\", \"NativeReferenceName\": \"Valor Total\"}], \"OrderBy\": [{\"Direction\": 2, \"Expression\": {\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Valor Total\"}}}]}, \"drillFilterOtherVisuals\": true, \"objects\": {}, \"vcObjects\": {\"title\": [{\"properties\": {\"show\": {\"expr\": {\"Literal\": {\"Value\": \"true\"}}}, \"text\": {\"expr\": {\"Literal\": {\"Value\": \"'Modelos por valor'\"}}}}}]}}}",
+          "filters": "[]"
+        },
+        {
+          "x": 856.0,
+          "y": 448.0,
+          "z": 0.0,
+          "width": 200.0,
+          "height": 264.0,
+          "config": "{\"name\": \"7d70d577-c2fc-551d-b366-cd6b893ea6c3\", \"layouts\": [{\"id\": 0, \"position\": {\"x\": 856, \"y\": 448, \"z\": 0, \"width\": 200, \"height\": 264}}], \"singleVisual\": {\"visualType\": \"slicer\", \"projections\": {\"Values\": [{\"queryRef\": \"Painel.Ano-Mes\"}]}, \"prototypeQuery\": {\"Version\": 2, \"From\": [{\"Name\": \"p\", \"Entity\": \"Painel\", \"Type\": 0}], \"Select\": [{\"Column\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Ano-Mes\"}, \"Name\": \"Painel.Ano-Mes\", \"NativeReferenceName\": \"Ano-Mes\"}]}, \"drillFilterOtherVisuals\": true, \"objects\": {}, \"vcObjects\": {\"title\": [{\"properties\": {\"show\": {\"expr\": {\"Literal\": {\"Value\": \"true\"}}}, \"text\": {\"expr\": {\"Literal\": {\"Value\": \"'Ano-Mes'\"}}}}}]}}}",
+          "filters": "[]"
+        },
+        {
+          "x": 1064.0,
+          "y": 448.0,
+          "z": 0.0,
+          "width": 216.0,
+          "height": 264.0,
+          "config": "{\"name\": \"9e6818ca-0bad-5eb6-836c-bfaf140fdc86\", \"layouts\": [{\"id\": 0, \"position\": {\"x\": 1064, \"y\": 448, \"z\": 0, \"width\": 216, \"height\": 264}}], \"singleVisual\": {\"visualType\": \"slicer\", \"projections\": {\"Values\": [{\"queryRef\": \"Painel.STATUS_ACORDO\"}]}, \"prototypeQuery\": {\"Version\": 2, \"From\": [{\"Name\": \"p\", \"Entity\": \"Painel\", \"Type\": 0}], \"Select\": [{\"Column\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"STATUS_ACORDO\"}, \"Name\": \"Painel.STATUS_ACORDO\", \"NativeReferenceName\": \"STATUS_ACORDO\"}]}, \"drillFilterOtherVisuals\": true, \"objects\": {}, \"vcObjects\": {\"title\": [{\"properties\": {\"show\": {\"expr\": {\"Literal\": {\"Value\": \"true\"}}}, \"text\": {\"expr\": {\"Literal\": {\"Value\": \"'STATUS_ACORDO'\"}}}}}]}}}",
+          "filters": "[]"
+        }
+      ]
+    },
+    {
+      "name": "f9ae4ba0-9f62-5565-8c80-c41dd3c588a8",
+      "displayName": "Fora do Acordo",
+      "displayOption": 1,
+      "height": 720.0,
+      "width": 1280.0,
+      "ordinal": 1,
+      "config": "{}",
+      "filters": "[]",
+      "visualContainers": [
+        {
+          "x": 0.0,
+          "y": 56.0,
+          "z": 0.0,
+          "width": 249.0,
+          "height": 90.0,
+          "config": "{\"name\": \"c92a2cab-4a14-5be0-a5b6-3a2558e29ee1\", \"layouts\": [{\"id\": 0, \"position\": {\"x\": 0, \"y\": 56, \"z\": 0, \"width\": 249, \"height\": 90}}], \"singleVisual\": {\"visualType\": \"card\", \"projections\": {\"Values\": [{\"queryRef\": \"Painel.Valor Fora do Acordo\"}]}, \"prototypeQuery\": {\"Version\": 2, \"From\": [{\"Name\": \"p\", \"Entity\": \"Painel\", \"Type\": 0}], \"Select\": [{\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Valor Fora do Acordo\"}, \"Name\": \"Painel.Valor Fora do Acordo\", \"NativeReferenceName\": \"Valor Fora do Acordo\"}]}, \"drillFilterOtherVisuals\": true, \"objects\": {}, \"vcObjects\": {\"title\": [{\"properties\": {\"show\": {\"expr\": {\"Literal\": {\"Value\": \"true\"}}}, \"text\": {\"expr\": {\"Literal\": {\"Value\": \"'Valor Fora do Acordo'\"}}}}}]}}}",
+          "filters": "[]"
+        },
+        {
+          "x": 257.0,
+          "y": 56.0,
+          "z": 0.0,
+          "width": 249.0,
+          "height": 90.0,
+          "config": "{\"name\": \"c918d9ec-3da4-5f42-a575-749d28b2d179\", \"layouts\": [{\"id\": 0, \"position\": {\"x\": 257, \"y\": 56, \"z\": 0, \"width\": 249, \"height\": 90}}], \"singleVisual\": {\"visualType\": \"card\", \"projections\": {\"Values\": [{\"queryRef\": \"Painel.% Fora do Acordo\"}]}, \"prototypeQuery\": {\"Version\": 2, \"From\": [{\"Name\": \"p\", \"Entity\": \"Painel\", \"Type\": 0}], \"Select\": [{\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"% Fora do Acordo\"}, \"Name\": \"Painel.% Fora do Acordo\", \"NativeReferenceName\": \"% Fora do Acordo\"}]}, \"drillFilterOtherVisuals\": true, \"objects\": {}, \"vcObjects\": {\"title\": [{\"properties\": {\"show\": {\"expr\": {\"Literal\": {\"Value\": \"true\"}}}, \"text\": {\"expr\": {\"Literal\": {\"Value\": \"'% Fora do Acordo'\"}}}}}]}}}",
+          "filters": "[]"
+        },
+        {
+          "x": 514.0,
+          "y": 56.0,
+          "z": 0.0,
+          "width": 249.0,
+          "height": 90.0,
+          "config": "{\"name\": \"4444c353-f9c0-5c1c-b6f6-67a80ea0e58c\", \"layouts\": [{\"id\": 0, \"position\": {\"x\": 514, \"y\": 56, \"z\": 0, \"width\": 249, \"height\": 90}}], \"singleVisual\": {\"visualType\": \"card\", \"projections\": {\"Values\": [{\"queryRef\": \"Painel.Linhas Fora do Acordo\"}]}, \"prototypeQuery\": {\"Version\": 2, \"From\": [{\"Name\": \"p\", \"Entity\": \"Painel\", \"Type\": 0}], \"Select\": [{\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Linhas Fora do Acordo\"}, \"Name\": \"Painel.Linhas Fora do Acordo\", \"NativeReferenceName\": \"Linhas Fora do Acordo\"}]}, \"drillFilterOtherVisuals\": true, \"objects\": {}, \"vcObjects\": {\"title\": [{\"properties\": {\"show\": {\"expr\": {\"Literal\": {\"Value\": \"true\"}}}, \"text\": {\"expr\": {\"Literal\": {\"Value\": \"'Linhas Fora do Acordo'\"}}}}}]}}}",
+          "filters": "[]"
+        },
+        {
+          "x": 771.0,
+          "y": 56.0,
+          "z": 0.0,
+          "width": 249.0,
+          "height": 90.0,
+          "config": "{\"name\": \"628e1146-e0ac-5744-92a5-6b7b0f1c3b94\", \"layouts\": [{\"id\": 0, \"position\": {\"x\": 771, \"y\": 56, \"z\": 0, \"width\": 249, \"height\": 90}}], \"singleVisual\": {\"visualType\": \"card\", \"projections\": {\"Values\": [{\"queryRef\": \"Painel.Fornecedores\"}]}, \"prototypeQuery\": {\"Version\": 2, \"From\": [{\"Name\": \"p\", \"Entity\": \"Painel\", \"Type\": 0}], \"Select\": [{\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Fornecedores\"}, \"Name\": \"Painel.Fornecedores\", \"NativeReferenceName\": \"Fornecedores\"}]}, \"drillFilterOtherVisuals\": true, \"objects\": {}, \"vcObjects\": {\"title\": [{\"properties\": {\"show\": {\"expr\": {\"Literal\": {\"Value\": \"true\"}}}, \"text\": {\"expr\": {\"Literal\": {\"Value\": \"'Fornecedores'\"}}}}}]}}}",
+          "filters": "[]"
+        },
+        {
+          "x": 1028.0,
+          "y": 56.0,
+          "z": 0.0,
+          "width": 249.0,
+          "height": 90.0,
+          "config": "{\"name\": \"5aa5f23e-7ae9-5dcb-8e99-60d1e3664779\", \"layouts\": [{\"id\": 0, \"position\": {\"x\": 1028, \"y\": 56, \"z\": 0, \"width\": 249, \"height\": 90}}], \"singleVisual\": {\"visualType\": \"card\", \"projections\": {\"Values\": [{\"queryRef\": \"Painel.Itens\"}]}, \"prototypeQuery\": {\"Version\": 2, \"From\": [{\"Name\": \"p\", \"Entity\": \"Painel\", \"Type\": 0}], \"Select\": [{\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Itens\"}, \"Name\": \"Painel.Itens\", \"NativeReferenceName\": \"Itens\"}]}, \"drillFilterOtherVisuals\": true, \"objects\": {}, \"vcObjects\": {\"title\": [{\"properties\": {\"show\": {\"expr\": {\"Literal\": {\"Value\": \"true\"}}}, \"text\": {\"expr\": {\"Literal\": {\"Value\": \"'Itens'\"}}}}}]}}}",
+          "filters": "[]"
+        },
+        {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "width": 900.0,
+          "height": 48.0,
+          "config": "{\"name\": \"9d46b4f7-4b14-52ea-881f-cf11108e5f82\", \"layouts\": [{\"id\": 0, \"position\": {\"x\": 0, \"y\": 0, \"z\": 0, \"width\": 900, \"height\": 48}}], \"singleVisual\": {\"visualType\": \"textbox\", \"drillFilterOtherVisuals\": true, \"objects\": {\"general\": [{\"properties\": {\"paragraphs\": [{\"textRuns\": [{\"value\": \"Fora do acordo — onde o gasto escapa\", \"textStyle\": {\"fontSize\": \"20pt\", \"fontWeight\": \"bold\", \"color\": \"#1F3B57\"}}]}]}}]}}}",
+          "filters": "[]"
+        },
+        {
+          "x": 0.0,
+          "y": 160.0,
+          "z": 0.0,
+          "width": 700.0,
+          "height": 260.0,
+          "config": "{\"name\": \"99444907-eb47-5829-ac7b-582ca677e3f8\", \"layouts\": [{\"id\": 0, \"position\": {\"x\": 0, \"y\": 160, \"z\": 0, \"width\": 700, \"height\": 260}}], \"singleVisual\": {\"visualType\": \"lineClusteredColumnComboChart\", \"projections\": {\"Category\": [{\"queryRef\": \"Painel.Ano-Mes\"}], \"Y\": [{\"queryRef\": \"Painel.Valor Fora do Acordo\"}], \"Y2\": [{\"queryRef\": \"Painel.% Fora do Acordo\"}]}, \"prototypeQuery\": {\"Version\": 2, \"From\": [{\"Name\": \"p\", \"Entity\": \"Painel\", \"Type\": 0}], \"Select\": [{\"Column\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Ano-Mes\"}, \"Name\": \"Painel.Ano-Mes\", \"NativeReferenceName\": \"Ano-Mes\"}, {\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Valor Fora do Acordo\"}, \"Name\": \"Painel.Valor Fora do Acordo\", \"NativeReferenceName\": \"Valor Fora do Acordo\"}, {\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"% Fora do Acordo\"}, \"Name\": \"Painel.% Fora do Acordo\", \"NativeReferenceName\": \"% Fora do Acordo\"}], \"OrderBy\": [{\"Direction\": 1, \"Expression\": {\"Column\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Ano-Mes\"}}}]}, \"drillFilterOtherVisuals\": true, \"objects\": {}, \"vcObjects\": {\"title\": [{\"properties\": {\"show\": {\"expr\": {\"Literal\": {\"Value\": \"true\"}}}, \"text\": {\"expr\": {\"Literal\": {\"Value\": \"'Valor fora do acordo (barras) e % sobre o total (linha)'\"}}}}}]}}}",
+          "filters": "[]"
+        },
+        {
+          "x": 708.0,
+          "y": 160.0,
+          "z": 0.0,
+          "width": 286.0,
+          "height": 260.0,
+          "config": "{\"name\": \"625d0a20-509d-5db9-bf8a-3affd21ac1a4\", \"layouts\": [{\"id\": 0, \"position\": {\"x\": 708, \"y\": 160, \"z\": 0, \"width\": 286, \"height\": 260}}], \"singleVisual\": {\"visualType\": \"barChart\", \"projections\": {\"Category\": [{\"queryRef\": \"Painel.Fornecedor\"}], \"Y\": [{\"queryRef\": \"Painel.Valor Fora do Acordo\"}]}, \"prototypeQuery\": {\"Version\": 2, \"From\": [{\"Name\": \"p\", \"Entity\": \"Painel\", \"Type\": 0}], \"Select\": [{\"Column\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Fornecedor\"}, \"Name\": \"Painel.Fornecedor\", \"NativeReferenceName\": \"Fornecedor\"}, {\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Valor Fora do Acordo\"}, \"Name\": \"Painel.Valor Fora do Acordo\", \"NativeReferenceName\": \"Valor Fora do Acordo\"}], \"OrderBy\": [{\"Direction\": 2, \"Expression\": {\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Valor Fora do Acordo\"}}}]}, \"drillFilterOtherVisuals\": true, \"objects\": {}, \"vcObjects\": {\"title\": [{\"properties\": {\"show\": {\"expr\": {\"Literal\": {\"Value\": \"true\"}}}, \"text\": {\"expr\": {\"Literal\": {\"Value\": \"'Fornecedores fora do acordo'\"}}}}}]}}}",
+          "filters": "[]"
+        },
+        {
+          "x": 1002.0,
+          "y": 160.0,
+          "z": 0.0,
+          "width": 278.0,
+          "height": 260.0,
+          "config": "{\"name\": \"08742d09-48f1-57f7-a67c-ca323c24cdd3\", \"layouts\": [{\"id\": 0, \"position\": {\"x\": 1002, \"y\": 160, \"z\": 0, \"width\": 278, \"height\": 260}}], \"singleVisual\": {\"visualType\": \"barChart\", \"projections\": {\"Category\": [{\"queryRef\": \"Painel.Item\"}], \"Y\": [{\"queryRef\": \"Painel.Valor Fora do Acordo\"}]}, \"prototypeQuery\": {\"Version\": 2, \"From\": [{\"Name\": \"p\", \"Entity\": \"Painel\", \"Type\": 0}], \"Select\": [{\"Column\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Item\"}, \"Name\": \"Painel.Item\", \"NativeReferenceName\": \"Item\"}, {\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Valor Fora do Acordo\"}, \"Name\": \"Painel.Valor Fora do Acordo\", \"NativeReferenceName\": \"Valor Fora do Acordo\"}], \"OrderBy\": [{\"Direction\": 2, \"Expression\": {\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Valor Fora do Acordo\"}}}]}, \"drillFilterOtherVisuals\": true, \"objects\": {}, \"vcObjects\": {\"title\": [{\"properties\": {\"show\": {\"expr\": {\"Literal\": {\"Value\": \"true\"}}}, \"text\": {\"expr\": {\"Literal\": {\"Value\": \"'Itens fora do acordo'\"}}}}}]}}}",
+          "filters": "[]"
+        },
+        {
+          "x": 0.0,
+          "y": 428.0,
+          "z": 0.0,
+          "width": 760.0,
+          "height": 284.0,
+          "config": "{\"name\": \"9357a531-36d5-513e-b2b3-a7f0746c4519\", \"layouts\": [{\"id\": 0, \"position\": {\"x\": 0, \"y\": 428, \"z\": 0, \"width\": 760, \"height\": 284}}], \"singleVisual\": {\"visualType\": \"pivotTable\", \"projections\": {\"Rows\": [{\"queryRef\": \"Painel.Cidade\"}], \"Columns\": [{\"queryRef\": \"Painel.Ano-Mes\"}], \"Values\": [{\"queryRef\": \"Painel.Valor Fora do Acordo\"}]}, \"prototypeQuery\": {\"Version\": 2, \"From\": [{\"Name\": \"p\", \"Entity\": \"Painel\", \"Type\": 0}], \"Select\": [{\"Column\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Cidade\"}, \"Name\": \"Painel.Cidade\", \"NativeReferenceName\": \"Cidade\"}, {\"Column\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Ano-Mes\"}, \"Name\": \"Painel.Ano-Mes\", \"NativeReferenceName\": \"Ano-Mes\"}, {\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Valor Fora do Acordo\"}, \"Name\": \"Painel.Valor Fora do Acordo\", \"NativeReferenceName\": \"Valor Fora do Acordo\"}]}, \"drillFilterOtherVisuals\": true, \"objects\": {}, \"vcObjects\": {\"title\": [{\"properties\": {\"show\": {\"expr\": {\"Literal\": {\"Value\": \"true\"}}}, \"text\": {\"expr\": {\"Literal\": {\"Value\": \"'Cidade x mes — valor fora do acordo'\"}}}}}]}}}",
+          "filters": "[]"
+        },
+        {
+          "x": 768.0,
+          "y": 428.0,
+          "z": 0.0,
+          "width": 512.0,
+          "height": 284.0,
+          "config": "{\"name\": \"872605be-4f53-5ee5-a4ea-99abfc26ecb2\", \"layouts\": [{\"id\": 0, \"position\": {\"x\": 768, \"y\": 428, \"z\": 0, \"width\": 512, \"height\": 284}}], \"singleVisual\": {\"visualType\": \"clusteredColumnChart\", \"projections\": {\"Category\": [{\"queryRef\": \"Painel.Motivo Sem Acordo\"}], \"Y\": [{\"queryRef\": \"Painel.Valor Fora do Acordo\"}]}, \"prototypeQuery\": {\"Version\": 2, \"From\": [{\"Name\": \"p\", \"Entity\": \"Painel\", \"Type\": 0}], \"Select\": [{\"Column\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Motivo Sem Acordo\"}, \"Name\": \"Painel.Motivo Sem Acordo\", \"NativeReferenceName\": \"Motivo Sem Acordo\"}, {\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Valor Fora do Acordo\"}, \"Name\": \"Painel.Valor Fora do Acordo\", \"NativeReferenceName\": \"Valor Fora do Acordo\"}], \"OrderBy\": [{\"Direction\": 2, \"Expression\": {\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Valor Fora do Acordo\"}}}]}, \"drillFilterOtherVisuals\": true, \"objects\": {}, \"vcObjects\": {\"title\": [{\"properties\": {\"show\": {\"expr\": {\"Literal\": {\"Value\": \"true\"}}}, \"text\": {\"expr\": {\"Literal\": {\"Value\": \"'Motivo de nao ter acordo'\"}}}}}]}}}",
+          "filters": "[]"
+        }
+      ]
+    },
+    {
+      "name": "395b64ec-3e74-534a-b301-4577ecae2717",
+      "displayName": "Perda Evitavel",
+      "displayOption": 1,
+      "height": 720.0,
+      "width": 1280.0,
+      "ordinal": 2,
+      "config": "{}",
+      "filters": "[]",
+      "visualContainers": [
+        {
+          "x": 0.0,
+          "y": 56.0,
+          "z": 0.0,
+          "width": 249.0,
+          "height": 90.0,
+          "config": "{\"name\": \"dc4fdd43-5911-5c98-8b72-6f163c1e7039\", \"layouts\": [{\"id\": 0, \"position\": {\"x\": 0, \"y\": 56, \"z\": 0, \"width\": 249, \"height\": 90}}], \"singleVisual\": {\"visualType\": \"card\", \"projections\": {\"Values\": [{\"queryRef\": \"Painel.Perda Evitavel\"}]}, \"prototypeQuery\": {\"Version\": 2, \"From\": [{\"Name\": \"p\", \"Entity\": \"Painel\", \"Type\": 0}], \"Select\": [{\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Perda Evitavel\"}, \"Name\": \"Painel.Perda Evitavel\", \"NativeReferenceName\": \"Perda Evitavel\"}]}, \"drillFilterOtherVisuals\": true, \"objects\": {}, \"vcObjects\": {\"title\": [{\"properties\": {\"show\": {\"expr\": {\"Literal\": {\"Value\": \"true\"}}}, \"text\": {\"expr\": {\"Literal\": {\"Value\": \"'Perda Evitavel'\"}}}}}]}}}",
+          "filters": "[]"
+        },
+        {
+          "x": 257.0,
+          "y": 56.0,
+          "z": 0.0,
+          "width": 249.0,
+          "height": 90.0,
+          "config": "{\"name\": \"2fbb8e8e-92b3-50b5-b689-8ca73357c179\", \"layouts\": [{\"id\": 0, \"position\": {\"x\": 257, \"y\": 56, \"z\": 0, \"width\": 249, \"height\": 90}}], \"singleVisual\": {\"visualType\": \"card\", \"projections\": {\"Values\": [{\"queryRef\": \"Painel.Valor Evitavel\"}]}, \"prototypeQuery\": {\"Version\": 2, \"From\": [{\"Name\": \"p\", \"Entity\": \"Painel\", \"Type\": 0}], \"Select\": [{\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Valor Evitavel\"}, \"Name\": \"Painel.Valor Evitavel\", \"NativeReferenceName\": \"Valor Evitavel\"}]}, \"drillFilterOtherVisuals\": true, \"objects\": {}, \"vcObjects\": {\"title\": [{\"properties\": {\"show\": {\"expr\": {\"Literal\": {\"Value\": \"true\"}}}, \"text\": {\"expr\": {\"Literal\": {\"Value\": \"'Valor Evitavel'\"}}}}}]}}}",
+          "filters": "[]"
+        },
+        {
+          "x": 514.0,
+          "y": 56.0,
+          "z": 0.0,
+          "width": 249.0,
+          "height": 90.0,
+          "config": "{\"name\": \"849a32e1-2775-5d90-8906-45ef1e06566c\", \"layouts\": [{\"id\": 0, \"position\": {\"x\": 514, \"y\": 56, \"z\": 0, \"width\": 249, \"height\": 90}}], \"singleVisual\": {\"visualType\": \"card\", \"projections\": {\"Values\": [{\"queryRef\": \"Painel.Linhas Evitaveis\"}]}, \"prototypeQuery\": {\"Version\": 2, \"From\": [{\"Name\": \"p\", \"Entity\": \"Painel\", \"Type\": 0}], \"Select\": [{\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Linhas Evitaveis\"}, \"Name\": \"Painel.Linhas Evitaveis\", \"NativeReferenceName\": \"Linhas Evitaveis\"}]}, \"drillFilterOtherVisuals\": true, \"objects\": {}, \"vcObjects\": {\"title\": [{\"properties\": {\"show\": {\"expr\": {\"Literal\": {\"Value\": \"true\"}}}, \"text\": {\"expr\": {\"Literal\": {\"Value\": \"'Linhas Evitaveis'\"}}}}}]}}}",
+          "filters": "[]"
+        },
+        {
+          "x": 771.0,
+          "y": 56.0,
+          "z": 0.0,
+          "width": 249.0,
+          "height": 90.0,
+          "config": "{\"name\": \"2cbf3248-908e-5d1e-84e1-45daac5f81fa\", \"layouts\": [{\"id\": 0, \"position\": {\"x\": 771, \"y\": 56, \"z\": 0, \"width\": 249, \"height\": 90}}], \"singleVisual\": {\"visualType\": \"card\", \"projections\": {\"Values\": [{\"queryRef\": \"Painel.% Evitavel do Fora\"}]}, \"prototypeQuery\": {\"Version\": 2, \"From\": [{\"Name\": \"p\", \"Entity\": \"Painel\", \"Type\": 0}], \"Select\": [{\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"% Evitavel do Fora\"}, \"Name\": \"Painel.% Evitavel do Fora\", \"NativeReferenceName\": \"% Evitavel do Fora\"}]}, \"drillFilterOtherVisuals\": true, \"objects\": {}, \"vcObjects\": {\"title\": [{\"properties\": {\"show\": {\"expr\": {\"Literal\": {\"Value\": \"true\"}}}, \"text\": {\"expr\": {\"Literal\": {\"Value\": \"'% Evitavel do Fora'\"}}}}}]}}}",
+          "filters": "[]"
+        },
+        {
+          "x": 1028.0,
+          "y": 56.0,
+          "z": 0.0,
+          "width": 249.0,
+          "height": 90.0,
+          "config": "{\"name\": \"ee7cd4e7-93c2-5c22-8601-22b757780ee0\", \"layouts\": [{\"id\": 0, \"position\": {\"x\": 1028, \"y\": 56, \"z\": 0, \"width\": 249, \"height\": 90}}], \"singleVisual\": {\"visualType\": \"card\", \"projections\": {\"Values\": [{\"queryRef\": \"Painel.Ticket Medio Linha\"}]}, \"prototypeQuery\": {\"Version\": 2, \"From\": [{\"Name\": \"p\", \"Entity\": \"Painel\", \"Type\": 0}], \"Select\": [{\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Ticket Medio Linha\"}, \"Name\": \"Painel.Ticket Medio Linha\", \"NativeReferenceName\": \"Ticket Medio Linha\"}]}, \"drillFilterOtherVisuals\": true, \"objects\": {}, \"vcObjects\": {\"title\": [{\"properties\": {\"show\": {\"expr\": {\"Literal\": {\"Value\": \"true\"}}}, \"text\": {\"expr\": {\"Literal\": {\"Value\": \"'Ticket Medio Linha'\"}}}}}]}}}",
+          "filters": "[]"
+        },
+        {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "width": 1000.0,
+          "height": 48.0,
+          "config": "{\"name\": \"ce71acc7-1cdf-5e9a-84e5-8e2deea92ac5\", \"layouts\": [{\"id\": 0, \"position\": {\"x\": 0, \"y\": 0, \"z\": 0, \"width\": 1000, \"height\": 48}}], \"singleVisual\": {\"visualType\": \"textbox\", \"drillFilterOtherVisuals\": true, \"objects\": {\"general\": [{\"properties\": {\"paragraphs\": [{\"textRuns\": [{\"value\": \"Perda evitavel — comprou fora existindo acordo disponivel\", \"textStyle\": {\"fontSize\": \"20pt\", \"fontWeight\": \"bold\", \"color\": \"#1F3B57\"}}]}]}}]}}}",
+          "filters": "[]"
+        },
+        {
+          "x": 0.0,
+          "y": 160.0,
+          "z": 0.0,
+          "width": 660.0,
+          "height": 260.0,
+          "config": "{\"name\": \"19dc95d1-7269-5ec0-8fdb-317de985e502\", \"layouts\": [{\"id\": 0, \"position\": {\"x\": 0, \"y\": 160, \"z\": 0, \"width\": 660, \"height\": 260}}], \"singleVisual\": {\"visualType\": \"lineClusteredColumnComboChart\", \"projections\": {\"Category\": [{\"queryRef\": \"Painel.Ano-Mes\"}], \"Y\": [{\"queryRef\": \"Painel.Valor Evitavel\"}], \"Y2\": [{\"queryRef\": \"Painel.Perda Evitavel\"}]}, \"prototypeQuery\": {\"Version\": 2, \"From\": [{\"Name\": \"p\", \"Entity\": \"Painel\", \"Type\": 0}], \"Select\": [{\"Column\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Ano-Mes\"}, \"Name\": \"Painel.Ano-Mes\", \"NativeReferenceName\": \"Ano-Mes\"}, {\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Valor Evitavel\"}, \"Name\": \"Painel.Valor Evitavel\", \"NativeReferenceName\": \"Valor Evitavel\"}, {\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Perda Evitavel\"}, \"Name\": \"Painel.Perda Evitavel\", \"NativeReferenceName\": \"Perda Evitavel\"}], \"OrderBy\": [{\"Direction\": 1, \"Expression\": {\"Column\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Ano-Mes\"}}}]}, \"drillFilterOtherVisuals\": true, \"objects\": {}, \"vcObjects\": {\"title\": [{\"properties\": {\"show\": {\"expr\": {\"Literal\": {\"Value\": \"true\"}}}, \"text\": {\"expr\": {\"Literal\": {\"Value\": \"'Compra evitavel (barras) e diferenca vs menor acordo (linha)'\"}}}}}]}}}",
+          "filters": "[]"
+        },
+        {
+          "x": 668.0,
+          "y": 160.0,
+          "z": 0.0,
+          "width": 306.0,
+          "height": 260.0,
+          "config": "{\"name\": \"260f8aa8-88c2-594a-ac33-497b1d09069f\", \"layouts\": [{\"id\": 0, \"position\": {\"x\": 668, \"y\": 160, \"z\": 0, \"width\": 306, \"height\": 260}}], \"singleVisual\": {\"visualType\": \"barChart\", \"projections\": {\"Category\": [{\"queryRef\": \"Painel.Fornecedor\"}], \"Y\": [{\"queryRef\": \"Painel.Perda Evitavel\"}]}, \"prototypeQuery\": {\"Version\": 2, \"From\": [{\"Name\": \"p\", \"Entity\": \"Painel\", \"Type\": 0}], \"Select\": [{\"Column\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Fornecedor\"}, \"Name\": \"Painel.Fornecedor\", \"NativeReferenceName\": \"Fornecedor\"}, {\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Perda Evitavel\"}, \"Name\": \"Painel.Perda Evitavel\", \"NativeReferenceName\": \"Perda Evitavel\"}], \"OrderBy\": [{\"Direction\": 2, \"Expression\": {\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Perda Evitavel\"}}}]}, \"drillFilterOtherVisuals\": true, \"objects\": {}, \"vcObjects\": {\"title\": [{\"properties\": {\"show\": {\"expr\": {\"Literal\": {\"Value\": \"true\"}}}, \"text\": {\"expr\": {\"Literal\": {\"Value\": \"'Fornecedores — perda evitavel'\"}}}}}]}}}",
+          "filters": "[]"
+        },
+        {
+          "x": 982.0,
+          "y": 160.0,
+          "z": 0.0,
+          "width": 298.0,
+          "height": 260.0,
+          "config": "{\"name\": \"df88d514-e11e-5700-9388-e7fbe3f4e0de\", \"layouts\": [{\"id\": 0, \"position\": {\"x\": 982, \"y\": 160, \"z\": 0, \"width\": 298, \"height\": 260}}], \"singleVisual\": {\"visualType\": \"barChart\", \"projections\": {\"Category\": [{\"queryRef\": \"Painel.Item\"}], \"Y\": [{\"queryRef\": \"Painel.Perda Evitavel\"}]}, \"prototypeQuery\": {\"Version\": 2, \"From\": [{\"Name\": \"p\", \"Entity\": \"Painel\", \"Type\": 0}], \"Select\": [{\"Column\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Item\"}, \"Name\": \"Painel.Item\", \"NativeReferenceName\": \"Item\"}, {\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Perda Evitavel\"}, \"Name\": \"Painel.Perda Evitavel\", \"NativeReferenceName\": \"Perda Evitavel\"}], \"OrderBy\": [{\"Direction\": 2, \"Expression\": {\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Perda Evitavel\"}}}]}, \"drillFilterOtherVisuals\": true, \"objects\": {}, \"vcObjects\": {\"title\": [{\"properties\": {\"show\": {\"expr\": {\"Literal\": {\"Value\": \"true\"}}}, \"text\": {\"expr\": {\"Literal\": {\"Value\": \"'Itens — perda evitavel'\"}}}}}]}}}",
+          "filters": "[]"
+        },
+        {
+          "x": 0.0,
+          "y": 428.0,
+          "z": 0.0,
+          "width": 520.0,
+          "height": 284.0,
+          "config": "{\"name\": \"bc9700a2-8e63-5eed-89dd-798658a39605\", \"layouts\": [{\"id\": 0, \"position\": {\"x\": 0, \"y\": 428, \"z\": 0, \"width\": 520, \"height\": 284}}], \"singleVisual\": {\"visualType\": \"scatterChart\", \"projections\": {\"Category\": [{\"queryRef\": \"Painel.Fornecedor\"}], \"X\": [{\"queryRef\": \"Painel.Valor Evitavel\"}], \"Y\": [{\"queryRef\": \"Painel.Perda Evitavel\"}], \"Size\": [{\"queryRef\": \"Painel.Linhas Evitaveis\"}]}, \"prototypeQuery\": {\"Version\": 2, \"From\": [{\"Name\": \"p\", \"Entity\": \"Painel\", \"Type\": 0}], \"Select\": [{\"Column\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Fornecedor\"}, \"Name\": \"Painel.Fornecedor\", \"NativeReferenceName\": \"Fornecedor\"}, {\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Valor Evitavel\"}, \"Name\": \"Painel.Valor Evitavel\", \"NativeReferenceName\": \"Valor Evitavel\"}, {\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Perda Evitavel\"}, \"Name\": \"Painel.Perda Evitavel\", \"NativeReferenceName\": \"Perda Evitavel\"}, {\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Linhas Evitaveis\"}, \"Name\": \"Painel.Linhas Evitaveis\", \"NativeReferenceName\": \"Linhas Evitaveis\"}]}, \"drillFilterOtherVisuals\": true, \"objects\": {}, \"vcObjects\": {\"title\": [{\"properties\": {\"show\": {\"expr\": {\"Literal\": {\"Value\": \"true\"}}}, \"text\": {\"expr\": {\"Literal\": {\"Value\": \"'Fornecedor: valor comprado x perda evitavel'\"}}}}}]}}}",
+          "filters": "[]"
+        },
+        {
+          "x": 528.0,
+          "y": 428.0,
+          "z": 0.0,
+          "width": 752.0,
+          "height": 284.0,
+          "config": "{\"name\": \"d4aa72eb-0603-5a7a-97fe-497388ab3024\", \"layouts\": [{\"id\": 0, \"position\": {\"x\": 528, \"y\": 428, \"z\": 0, \"width\": 752, \"height\": 284}}], \"singleVisual\": {\"visualType\": \"tableEx\", \"projections\": {\"Values\": [{\"queryRef\": \"Painel.Cidade\"}, {\"queryRef\": \"Painel.Fornecedor\"}, {\"queryRef\": \"Painel.Modelo\"}, {\"queryRef\": \"Painel.Item\"}, {\"queryRef\": \"Painel.Linhas Evitaveis\"}, {\"queryRef\": \"Painel.Valor Evitavel\"}, {\"queryRef\": \"Painel.Perda Evitavel\"}]}, \"prototypeQuery\": {\"Version\": 2, \"From\": [{\"Name\": \"p\", \"Entity\": \"Painel\", \"Type\": 0}], \"Select\": [{\"Column\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Cidade\"}, \"Name\": \"Painel.Cidade\", \"NativeReferenceName\": \"Cidade\"}, {\"Column\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Fornecedor\"}, \"Name\": \"Painel.Fornecedor\", \"NativeReferenceName\": \"Fornecedor\"}, {\"Column\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Modelo\"}, \"Name\": \"Painel.Modelo\", \"NativeReferenceName\": \"Modelo\"}, {\"Column\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Item\"}, \"Name\": \"Painel.Item\", \"NativeReferenceName\": \"Item\"}, {\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Linhas Evitaveis\"}, \"Name\": \"Painel.Linhas Evitaveis\", \"NativeReferenceName\": \"Linhas Evitaveis\"}, {\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Valor Evitavel\"}, \"Name\": \"Painel.Valor Evitavel\", \"NativeReferenceName\": \"Valor Evitavel\"}, {\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Perda Evitavel\"}, \"Name\": \"Painel.Perda Evitavel\", \"NativeReferenceName\": \"Perda Evitavel\"}]}, \"drillFilterOtherVisuals\": true, \"objects\": {}, \"vcObjects\": {\"title\": [{\"properties\": {\"show\": {\"expr\": {\"Literal\": {\"Value\": \"true\"}}}, \"text\": {\"expr\": {\"Literal\": {\"Value\": \"'Detalhe da perda evitavel'\"}}}}}]}}}",
+          "filters": "[]"
+        }
+      ]
+    },
+    {
+      "name": "82aca8c0-e791-5487-b059-be1d49440792",
+      "displayName": "Fornecedores",
+      "displayOption": 1,
+      "height": 720.0,
+      "width": 1280.0,
+      "ordinal": 3,
+      "config": "{}",
+      "filters": "[]",
+      "visualContainers": [
+        {
+          "x": 0.0,
+          "y": 56.0,
+          "z": 0.0,
+          "width": 249.0,
+          "height": 90.0,
+          "config": "{\"name\": \"fc664970-3249-5d94-8a12-946ffe420b07\", \"layouts\": [{\"id\": 0, \"position\": {\"x\": 0, \"y\": 56, \"z\": 0, \"width\": 249, \"height\": 90}}], \"singleVisual\": {\"visualType\": \"card\", \"projections\": {\"Values\": [{\"queryRef\": \"Painel.Fornecedores\"}]}, \"prototypeQuery\": {\"Version\": 2, \"From\": [{\"Name\": \"p\", \"Entity\": \"Painel\", \"Type\": 0}], \"Select\": [{\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Fornecedores\"}, \"Name\": \"Painel.Fornecedores\", \"NativeReferenceName\": \"Fornecedores\"}]}, \"drillFilterOtherVisuals\": true, \"objects\": {}, \"vcObjects\": {\"title\": [{\"properties\": {\"show\": {\"expr\": {\"Literal\": {\"Value\": \"true\"}}}, \"text\": {\"expr\": {\"Literal\": {\"Value\": \"'Fornecedores'\"}}}}}]}}}",
+          "filters": "[]"
+        },
+        {
+          "x": 257.0,
+          "y": 56.0,
+          "z": 0.0,
+          "width": 249.0,
+          "height": 90.0,
+          "config": "{\"name\": \"1fb66285-27d9-562b-bac4-dbc33a045a7d\", \"layouts\": [{\"id\": 0, \"position\": {\"x\": 257, \"y\": 56, \"z\": 0, \"width\": 249, \"height\": 90}}], \"singleVisual\": {\"visualType\": \"card\", \"projections\": {\"Values\": [{\"queryRef\": \"Painel.Valor Total\"}]}, \"prototypeQuery\": {\"Version\": 2, \"From\": [{\"Name\": \"p\", \"Entity\": \"Painel\", \"Type\": 0}], \"Select\": [{\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Valor Total\"}, \"Name\": \"Painel.Valor Total\", \"NativeReferenceName\": \"Valor Total\"}]}, \"drillFilterOtherVisuals\": true, \"objects\": {}, \"vcObjects\": {\"title\": [{\"properties\": {\"show\": {\"expr\": {\"Literal\": {\"Value\": \"true\"}}}, \"text\": {\"expr\": {\"Literal\": {\"Value\": \"'Valor Total'\"}}}}}]}}}",
+          "filters": "[]"
+        },
+        {
+          "x": 514.0,
+          "y": 56.0,
+          "z": 0.0,
+          "width": 249.0,
+          "height": 90.0,
+          "config": "{\"name\": \"295bccf0-e610-5eb5-b8e0-c1565dfc54c1\", \"layouts\": [{\"id\": 0, \"position\": {\"x\": 514, \"y\": 56, \"z\": 0, \"width\": 249, \"height\": 90}}], \"singleVisual\": {\"visualType\": \"card\", \"projections\": {\"Values\": [{\"queryRef\": \"Painel.Valor Fora do Acordo\"}]}, \"prototypeQuery\": {\"Version\": 2, \"From\": [{\"Name\": \"p\", \"Entity\": \"Painel\", \"Type\": 0}], \"Select\": [{\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Valor Fora do Acordo\"}, \"Name\": \"Painel.Valor Fora do Acordo\", \"NativeReferenceName\": \"Valor Fora do Acordo\"}]}, \"drillFilterOtherVisuals\": true, \"objects\": {}, \"vcObjects\": {\"title\": [{\"properties\": {\"show\": {\"expr\": {\"Literal\": {\"Value\": \"true\"}}}, \"text\": {\"expr\": {\"Literal\": {\"Value\": \"'Valor Fora do Acordo'\"}}}}}]}}}",
+          "filters": "[]"
+        },
+        {
+          "x": 771.0,
+          "y": 56.0,
+          "z": 0.0,
+          "width": 249.0,
+          "height": 90.0,
+          "config": "{\"name\": \"4a8c4775-ac5d-5818-a663-aae3a0f843e9\", \"layouts\": [{\"id\": 0, \"position\": {\"x\": 771, \"y\": 56, \"z\": 0, \"width\": 249, \"height\": 90}}], \"singleVisual\": {\"visualType\": \"card\", \"projections\": {\"Values\": [{\"queryRef\": \"Painel.Perda Evitavel\"}]}, \"prototypeQuery\": {\"Version\": 2, \"From\": [{\"Name\": \"p\", \"Entity\": \"Painel\", \"Type\": 0}], \"Select\": [{\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Perda Evitavel\"}, \"Name\": \"Painel.Perda Evitavel\", \"NativeReferenceName\": \"Perda Evitavel\"}]}, \"drillFilterOtherVisuals\": true, \"objects\": {}, \"vcObjects\": {\"title\": [{\"properties\": {\"show\": {\"expr\": {\"Literal\": {\"Value\": \"true\"}}}, \"text\": {\"expr\": {\"Literal\": {\"Value\": \"'Perda Evitavel'\"}}}}}]}}}",
+          "filters": "[]"
+        },
+        {
+          "x": 1028.0,
+          "y": 56.0,
+          "z": 0.0,
+          "width": 249.0,
+          "height": 90.0,
+          "config": "{\"name\": \"398d49ee-4a7f-56bc-b40d-000e0f0c76f5\", \"layouts\": [{\"id\": 0, \"position\": {\"x\": 1028, \"y\": 56, \"z\": 0, \"width\": 249, \"height\": 90}}], \"singleVisual\": {\"visualType\": \"card\", \"projections\": {\"Values\": [{\"queryRef\": \"Painel.OS Distintas\"}]}, \"prototypeQuery\": {\"Version\": 2, \"From\": [{\"Name\": \"p\", \"Entity\": \"Painel\", \"Type\": 0}], \"Select\": [{\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"OS Distintas\"}, \"Name\": \"Painel.OS Distintas\", \"NativeReferenceName\": \"OS Distintas\"}]}, \"drillFilterOtherVisuals\": true, \"objects\": {}, \"vcObjects\": {\"title\": [{\"properties\": {\"show\": {\"expr\": {\"Literal\": {\"Value\": \"true\"}}}, \"text\": {\"expr\": {\"Literal\": {\"Value\": \"'OS Distintas'\"}}}}}]}}}",
+          "filters": "[]"
+        },
+        {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "width": 900.0,
+          "height": 48.0,
+          "config": "{\"name\": \"aa7de717-55e5-5923-b7b1-dff3d50abd56\", \"layouts\": [{\"id\": 0, \"position\": {\"x\": 0, \"y\": 0, \"z\": 0, \"width\": 900, \"height\": 48}}], \"singleVisual\": {\"visualType\": \"textbox\", \"drillFilterOtherVisuals\": true, \"objects\": {\"general\": [{\"properties\": {\"paragraphs\": [{\"textRuns\": [{\"value\": \"Fornecedores — historico e concentracao\", \"textStyle\": {\"fontSize\": \"20pt\", \"fontWeight\": \"bold\", \"color\": \"#1F3B57\"}}]}]}}]}}}",
+          "filters": "[]"
+        },
+        {
+          "x": 0.0,
+          "y": 160.0,
+          "z": 0.0,
+          "width": 640.0,
+          "height": 260.0,
+          "config": "{\"name\": \"5736cbde-d3f3-59a4-9368-0d71bda20dde\", \"layouts\": [{\"id\": 0, \"position\": {\"x\": 0, \"y\": 160, \"z\": 0, \"width\": 640, \"height\": 260}}], \"singleVisual\": {\"visualType\": \"lineChart\", \"projections\": {\"Category\": [{\"queryRef\": \"Painel.Ano-Mes\"}], \"Y\": [{\"queryRef\": \"Painel.Valor Total\"}], \"Series\": [{\"queryRef\": \"Painel.Fornecedor\"}]}, \"prototypeQuery\": {\"Version\": 2, \"From\": [{\"Name\": \"p\", \"Entity\": \"Painel\", \"Type\": 0}], \"Select\": [{\"Column\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Ano-Mes\"}, \"Name\": \"Painel.Ano-Mes\", \"NativeReferenceName\": \"Ano-Mes\"}, {\"Column\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Fornecedor\"}, \"Name\": \"Painel.Fornecedor\", \"NativeReferenceName\": \"Fornecedor\"}, {\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Valor Total\"}, \"Name\": \"Painel.Valor Total\", \"NativeReferenceName\": \"Valor Total\"}], \"OrderBy\": [{\"Direction\": 1, \"Expression\": {\"Column\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Ano-Mes\"}}}]}, \"drillFilterOtherVisuals\": true, \"objects\": {}, \"vcObjects\": {\"title\": [{\"properties\": {\"show\": {\"expr\": {\"Literal\": {\"Value\": \"true\"}}}, \"text\": {\"expr\": {\"Literal\": {\"Value\": \"'Historico por mes — top Fornecedor (use o filtro)'\"}}}}}]}}}",
+          "filters": "[]"
+        },
+        {
+          "x": 648.0,
+          "y": 160.0,
+          "z": 0.0,
+          "width": 320.0,
+          "height": 260.0,
+          "config": "{\"name\": \"0f10fe3b-a9cf-519e-b9fe-2761d849e410\", \"layouts\": [{\"id\": 0, \"position\": {\"x\": 648, \"y\": 160, \"z\": 0, \"width\": 320, \"height\": 260}}], \"singleVisual\": {\"visualType\": \"barChart\", \"projections\": {\"Category\": [{\"queryRef\": \"Painel.Fornecedor\"}], \"Y\": [{\"queryRef\": \"Painel.Valor Total\"}]}, \"prototypeQuery\": {\"Version\": 2, \"From\": [{\"Name\": \"p\", \"Entity\": \"Painel\", \"Type\": 0}], \"Select\": [{\"Column\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Fornecedor\"}, \"Name\": \"Painel.Fornecedor\", \"NativeReferenceName\": \"Fornecedor\"}, {\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Valor Total\"}, \"Name\": \"Painel.Valor Total\", \"NativeReferenceName\": \"Valor Total\"}], \"OrderBy\": [{\"Direction\": 2, \"Expression\": {\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Valor Total\"}}}]}, \"drillFilterOtherVisuals\": true, \"objects\": {}, \"vcObjects\": {\"title\": [{\"properties\": {\"show\": {\"expr\": {\"Literal\": {\"Value\": \"true\"}}}, \"text\": {\"expr\": {\"Literal\": {\"Value\": \"'Fornecedor por valor total'\"}}}}}]}}}",
+          "filters": "[]"
+        },
+        {
+          "x": 976.0,
+          "y": 160.0,
+          "z": 0.0,
+          "width": 304.0,
+          "height": 260.0,
+          "config": "{\"name\": \"e2c8a826-fe05-597a-ba6e-14fd047effc8\", \"layouts\": [{\"id\": 0, \"position\": {\"x\": 976, \"y\": 160, \"z\": 0, \"width\": 304, \"height\": 260}}], \"singleVisual\": {\"visualType\": \"barChart\", \"projections\": {\"Category\": [{\"queryRef\": \"Painel.Fornecedor\"}], \"Y\": [{\"queryRef\": \"Painel.Valor Fora do Acordo\"}]}, \"prototypeQuery\": {\"Version\": 2, \"From\": [{\"Name\": \"p\", \"Entity\": \"Painel\", \"Type\": 0}], \"Select\": [{\"Column\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Fornecedor\"}, \"Name\": \"Painel.Fornecedor\", \"NativeReferenceName\": \"Fornecedor\"}, {\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Valor Fora do Acordo\"}, \"Name\": \"Painel.Valor Fora do Acordo\", \"NativeReferenceName\": \"Valor Fora do Acordo\"}], \"OrderBy\": [{\"Direction\": 2, \"Expression\": {\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Valor Fora do Acordo\"}}}]}, \"drillFilterOtherVisuals\": true, \"objects\": {}, \"vcObjects\": {\"title\": [{\"properties\": {\"show\": {\"expr\": {\"Literal\": {\"Value\": \"true\"}}}, \"text\": {\"expr\": {\"Literal\": {\"Value\": \"'Fornecedor fora do acordo'\"}}}}}]}}}",
+          "filters": "[]"
+        },
+        {
+          "x": 0.0,
+          "y": 428.0,
+          "z": 0.0,
+          "width": 800.0,
+          "height": 284.0,
+          "config": "{\"name\": \"8580e75f-4548-5a12-8bd9-716d70a22058\", \"layouts\": [{\"id\": 0, \"position\": {\"x\": 0, \"y\": 428, \"z\": 0, \"width\": 800, \"height\": 284}}], \"singleVisual\": {\"visualType\": \"pivotTable\", \"projections\": {\"Rows\": [{\"queryRef\": \"Painel.Fornecedor\"}], \"Columns\": [{\"queryRef\": \"Painel.STATUS_ACORDO\"}], \"Values\": [{\"queryRef\": \"Painel.Valor Total\"}, {\"queryRef\": \"Painel.Valor Fora do Acordo\"}, {\"queryRef\": \"Painel.Perda Evitavel\"}]}, \"prototypeQuery\": {\"Version\": 2, \"From\": [{\"Name\": \"p\", \"Entity\": \"Painel\", \"Type\": 0}], \"Select\": [{\"Column\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Fornecedor\"}, \"Name\": \"Painel.Fornecedor\", \"NativeReferenceName\": \"Fornecedor\"}, {\"Column\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"STATUS_ACORDO\"}, \"Name\": \"Painel.STATUS_ACORDO\", \"NativeReferenceName\": \"STATUS_ACORDO\"}, {\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Valor Total\"}, \"Name\": \"Painel.Valor Total\", \"NativeReferenceName\": \"Valor Total\"}, {\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Valor Fora do Acordo\"}, \"Name\": \"Painel.Valor Fora do Acordo\", \"NativeReferenceName\": \"Valor Fora do Acordo\"}, {\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Perda Evitavel\"}, \"Name\": \"Painel.Perda Evitavel\", \"NativeReferenceName\": \"Perda Evitavel\"}]}, \"drillFilterOtherVisuals\": true, \"objects\": {}, \"vcObjects\": {\"title\": [{\"properties\": {\"show\": {\"expr\": {\"Literal\": {\"Value\": \"true\"}}}, \"text\": {\"expr\": {\"Literal\": {\"Value\": \"'Fornecedor x situacao do acordo'\"}}}}}]}}}",
+          "filters": "[]"
+        },
+        {
+          "x": 808.0,
+          "y": 428.0,
+          "z": 0.0,
+          "width": 472.0,
+          "height": 284.0,
+          "config": "{\"name\": \"9bb34044-4eee-5460-a056-e1e2e75db937\", \"layouts\": [{\"id\": 0, \"position\": {\"x\": 808, \"y\": 428, \"z\": 0, \"width\": 472, \"height\": 284}}], \"singleVisual\": {\"visualType\": \"ribbonChart\", \"projections\": {\"Category\": [{\"queryRef\": \"Painel.Ano-Mes\"}], \"Y\": [{\"queryRef\": \"Painel.Valor Total\"}], \"Series\": [{\"queryRef\": \"Painel.Fornecedor\"}]}, \"prototypeQuery\": {\"Version\": 2, \"From\": [{\"Name\": \"p\", \"Entity\": \"Painel\", \"Type\": 0}], \"Select\": [{\"Column\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Ano-Mes\"}, \"Name\": \"Painel.Ano-Mes\", \"NativeReferenceName\": \"Ano-Mes\"}, {\"Column\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Fornecedor\"}, \"Name\": \"Painel.Fornecedor\", \"NativeReferenceName\": \"Fornecedor\"}, {\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Valor Total\"}, \"Name\": \"Painel.Valor Total\", \"NativeReferenceName\": \"Valor Total\"}], \"OrderBy\": [{\"Direction\": 1, \"Expression\": {\"Column\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Ano-Mes\"}}}]}, \"drillFilterOtherVisuals\": true, \"objects\": {}, \"vcObjects\": {\"title\": [{\"properties\": {\"show\": {\"expr\": {\"Literal\": {\"Value\": \"true\"}}}, \"text\": {\"expr\": {\"Literal\": {\"Value\": \"'Mudanca de posicao — Fornecedor'\"}}}}}]}}}",
+          "filters": "[]"
+        }
+      ]
+    },
+    {
+      "name": "c5e332de-3a67-5bb6-ba55-6ca565556e73",
+      "displayName": "Itens",
+      "displayOption": 1,
+      "height": 720.0,
+      "width": 1280.0,
+      "ordinal": 4,
+      "config": "{}",
+      "filters": "[]",
+      "visualContainers": [
+        {
+          "x": 0.0,
+          "y": 56.0,
+          "z": 0.0,
+          "width": 249.0,
+          "height": 90.0,
+          "config": "{\"name\": \"b967f02e-5b13-53e1-8b5b-7760309eb4d1\", \"layouts\": [{\"id\": 0, \"position\": {\"x\": 0, \"y\": 56, \"z\": 0, \"width\": 249, \"height\": 90}}], \"singleVisual\": {\"visualType\": \"card\", \"projections\": {\"Values\": [{\"queryRef\": \"Painel.Itens\"}]}, \"prototypeQuery\": {\"Version\": 2, \"From\": [{\"Name\": \"p\", \"Entity\": \"Painel\", \"Type\": 0}], \"Select\": [{\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Itens\"}, \"Name\": \"Painel.Itens\", \"NativeReferenceName\": \"Itens\"}]}, \"drillFilterOtherVisuals\": true, \"objects\": {}, \"vcObjects\": {\"title\": [{\"properties\": {\"show\": {\"expr\": {\"Literal\": {\"Value\": \"true\"}}}, \"text\": {\"expr\": {\"Literal\": {\"Value\": \"'Itens'\"}}}}}]}}}",
+          "filters": "[]"
+        },
+        {
+          "x": 257.0,
+          "y": 56.0,
+          "z": 0.0,
+          "width": 249.0,
+          "height": 90.0,
+          "config": "{\"name\": \"1fb66285-27d9-562b-bac4-dbc33a045a7d\", \"layouts\": [{\"id\": 0, \"position\": {\"x\": 257, \"y\": 56, \"z\": 0, \"width\": 249, \"height\": 90}}], \"singleVisual\": {\"visualType\": \"card\", \"projections\": {\"Values\": [{\"queryRef\": \"Painel.Valor Total\"}]}, \"prototypeQuery\": {\"Version\": 2, \"From\": [{\"Name\": \"p\", \"Entity\": \"Painel\", \"Type\": 0}], \"Select\": [{\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Valor Total\"}, \"Name\": \"Painel.Valor Total\", \"NativeReferenceName\": \"Valor Total\"}]}, \"drillFilterOtherVisuals\": true, \"objects\": {}, \"vcObjects\": {\"title\": [{\"properties\": {\"show\": {\"expr\": {\"Literal\": {\"Value\": \"true\"}}}, \"text\": {\"expr\": {\"Literal\": {\"Value\": \"'Valor Total'\"}}}}}]}}}",
+          "filters": "[]"
+        },
+        {
+          "x": 514.0,
+          "y": 56.0,
+          "z": 0.0,
+          "width": 249.0,
+          "height": 90.0,
+          "config": "{\"name\": \"295bccf0-e610-5eb5-b8e0-c1565dfc54c1\", \"layouts\": [{\"id\": 0, \"position\": {\"x\": 514, \"y\": 56, \"z\": 0, \"width\": 249, \"height\": 90}}], \"singleVisual\": {\"visualType\": \"card\", \"projections\": {\"Values\": [{\"queryRef\": \"Painel.Valor Fora do Acordo\"}]}, \"prototypeQuery\": {\"Version\": 2, \"From\": [{\"Name\": \"p\", \"Entity\": \"Painel\", \"Type\": 0}], \"Select\": [{\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Valor Fora do Acordo\"}, \"Name\": \"Painel.Valor Fora do Acordo\", \"NativeReferenceName\": \"Valor Fora do Acordo\"}]}, \"drillFilterOtherVisuals\": true, \"objects\": {}, \"vcObjects\": {\"title\": [{\"properties\": {\"show\": {\"expr\": {\"Literal\": {\"Value\": \"true\"}}}, \"text\": {\"expr\": {\"Literal\": {\"Value\": \"'Valor Fora do Acordo'\"}}}}}]}}}",
+          "filters": "[]"
+        },
+        {
+          "x": 771.0,
+          "y": 56.0,
+          "z": 0.0,
+          "width": 249.0,
+          "height": 90.0,
+          "config": "{\"name\": \"4a8c4775-ac5d-5818-a663-aae3a0f843e9\", \"layouts\": [{\"id\": 0, \"position\": {\"x\": 771, \"y\": 56, \"z\": 0, \"width\": 249, \"height\": 90}}], \"singleVisual\": {\"visualType\": \"card\", \"projections\": {\"Values\": [{\"queryRef\": \"Painel.Perda Evitavel\"}]}, \"prototypeQuery\": {\"Version\": 2, \"From\": [{\"Name\": \"p\", \"Entity\": \"Painel\", \"Type\": 0}], \"Select\": [{\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Perda Evitavel\"}, \"Name\": \"Painel.Perda Evitavel\", \"NativeReferenceName\": \"Perda Evitavel\"}]}, \"drillFilterOtherVisuals\": true, \"objects\": {}, \"vcObjects\": {\"title\": [{\"properties\": {\"show\": {\"expr\": {\"Literal\": {\"Value\": \"true\"}}}, \"text\": {\"expr\": {\"Literal\": {\"Value\": \"'Perda Evitavel'\"}}}}}]}}}",
+          "filters": "[]"
+        },
+        {
+          "x": 1028.0,
+          "y": 56.0,
+          "z": 0.0,
+          "width": 249.0,
+          "height": 90.0,
+          "config": "{\"name\": \"ee7cd4e7-93c2-5c22-8601-22b757780ee0\", \"layouts\": [{\"id\": 0, \"position\": {\"x\": 1028, \"y\": 56, \"z\": 0, \"width\": 249, \"height\": 90}}], \"singleVisual\": {\"visualType\": \"card\", \"projections\": {\"Values\": [{\"queryRef\": \"Painel.Ticket Medio Linha\"}]}, \"prototypeQuery\": {\"Version\": 2, \"From\": [{\"Name\": \"p\", \"Entity\": \"Painel\", \"Type\": 0}], \"Select\": [{\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Ticket Medio Linha\"}, \"Name\": \"Painel.Ticket Medio Linha\", \"NativeReferenceName\": \"Ticket Medio Linha\"}]}, \"drillFilterOtherVisuals\": true, \"objects\": {}, \"vcObjects\": {\"title\": [{\"properties\": {\"show\": {\"expr\": {\"Literal\": {\"Value\": \"true\"}}}, \"text\": {\"expr\": {\"Literal\": {\"Value\": \"'Ticket Medio Linha'\"}}}}}]}}}",
+          "filters": "[]"
+        },
+        {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "width": 900.0,
+          "height": 48.0,
+          "config": "{\"name\": \"ea2112f5-06fe-5126-9e58-dd3481d9627e\", \"layouts\": [{\"id\": 0, \"position\": {\"x\": 0, \"y\": 0, \"z\": 0, \"width\": 900, \"height\": 48}}], \"singleVisual\": {\"visualType\": \"textbox\", \"drillFilterOtherVisuals\": true, \"objects\": {\"general\": [{\"properties\": {\"paragraphs\": [{\"textRuns\": [{\"value\": \"Itens — historico e concentracao\", \"textStyle\": {\"fontSize\": \"20pt\", \"fontWeight\": \"bold\", \"color\": \"#1F3B57\"}}]}]}}]}}}",
+          "filters": "[]"
+        },
+        {
+          "x": 0.0,
+          "y": 160.0,
+          "z": 0.0,
+          "width": 640.0,
+          "height": 260.0,
+          "config": "{\"name\": \"abcd8257-70c3-5bfc-974c-cb0d5bd2d9b5\", \"layouts\": [{\"id\": 0, \"position\": {\"x\": 0, \"y\": 160, \"z\": 0, \"width\": 640, \"height\": 260}}], \"singleVisual\": {\"visualType\": \"lineChart\", \"projections\": {\"Category\": [{\"queryRef\": \"Painel.Ano-Mes\"}], \"Y\": [{\"queryRef\": \"Painel.Valor Total\"}], \"Series\": [{\"queryRef\": \"Painel.Item\"}]}, \"prototypeQuery\": {\"Version\": 2, \"From\": [{\"Name\": \"p\", \"Entity\": \"Painel\", \"Type\": 0}], \"Select\": [{\"Column\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Ano-Mes\"}, \"Name\": \"Painel.Ano-Mes\", \"NativeReferenceName\": \"Ano-Mes\"}, {\"Column\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Item\"}, \"Name\": \"Painel.Item\", \"NativeReferenceName\": \"Item\"}, {\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Valor Total\"}, \"Name\": \"Painel.Valor Total\", \"NativeReferenceName\": \"Valor Total\"}], \"OrderBy\": [{\"Direction\": 1, \"Expression\": {\"Column\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Ano-Mes\"}}}]}, \"drillFilterOtherVisuals\": true, \"objects\": {}, \"vcObjects\": {\"title\": [{\"properties\": {\"show\": {\"expr\": {\"Literal\": {\"Value\": \"true\"}}}, \"text\": {\"expr\": {\"Literal\": {\"Value\": \"'Historico por mes — top Item (use o filtro)'\"}}}}}]}}}",
+          "filters": "[]"
+        },
+        {
+          "x": 648.0,
+          "y": 160.0,
+          "z": 0.0,
+          "width": 320.0,
+          "height": 260.0,
+          "config": "{\"name\": \"625dd454-25cc-5565-b091-182c31184a6e\", \"layouts\": [{\"id\": 0, \"position\": {\"x\": 648, \"y\": 160, \"z\": 0, \"width\": 320, \"height\": 260}}], \"singleVisual\": {\"visualType\": \"barChart\", \"projections\": {\"Category\": [{\"queryRef\": \"Painel.Item\"}], \"Y\": [{\"queryRef\": \"Painel.Valor Total\"}]}, \"prototypeQuery\": {\"Version\": 2, \"From\": [{\"Name\": \"p\", \"Entity\": \"Painel\", \"Type\": 0}], \"Select\": [{\"Column\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Item\"}, \"Name\": \"Painel.Item\", \"NativeReferenceName\": \"Item\"}, {\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Valor Total\"}, \"Name\": \"Painel.Valor Total\", \"NativeReferenceName\": \"Valor Total\"}], \"OrderBy\": [{\"Direction\": 2, \"Expression\": {\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Valor Total\"}}}]}, \"drillFilterOtherVisuals\": true, \"objects\": {}, \"vcObjects\": {\"title\": [{\"properties\": {\"show\": {\"expr\": {\"Literal\": {\"Value\": \"true\"}}}, \"text\": {\"expr\": {\"Literal\": {\"Value\": \"'Item por valor total'\"}}}}}]}}}",
+          "filters": "[]"
+        },
+        {
+          "x": 976.0,
+          "y": 160.0,
+          "z": 0.0,
+          "width": 304.0,
+          "height": 260.0,
+          "config": "{\"name\": \"7dad7f03-c3e5-5699-ab5f-cacf991bb02c\", \"layouts\": [{\"id\": 0, \"position\": {\"x\": 976, \"y\": 160, \"z\": 0, \"width\": 304, \"height\": 260}}], \"singleVisual\": {\"visualType\": \"barChart\", \"projections\": {\"Category\": [{\"queryRef\": \"Painel.Item\"}], \"Y\": [{\"queryRef\": \"Painel.Valor Fora do Acordo\"}]}, \"prototypeQuery\": {\"Version\": 2, \"From\": [{\"Name\": \"p\", \"Entity\": \"Painel\", \"Type\": 0}], \"Select\": [{\"Column\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Item\"}, \"Name\": \"Painel.Item\", \"NativeReferenceName\": \"Item\"}, {\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Valor Fora do Acordo\"}, \"Name\": \"Painel.Valor Fora do Acordo\", \"NativeReferenceName\": \"Valor Fora do Acordo\"}], \"OrderBy\": [{\"Direction\": 2, \"Expression\": {\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Valor Fora do Acordo\"}}}]}, \"drillFilterOtherVisuals\": true, \"objects\": {}, \"vcObjects\": {\"title\": [{\"properties\": {\"show\": {\"expr\": {\"Literal\": {\"Value\": \"true\"}}}, \"text\": {\"expr\": {\"Literal\": {\"Value\": \"'Item fora do acordo'\"}}}}}]}}}",
+          "filters": "[]"
+        },
+        {
+          "x": 0.0,
+          "y": 428.0,
+          "z": 0.0,
+          "width": 800.0,
+          "height": 284.0,
+          "config": "{\"name\": \"d06a0e1d-e482-5085-a45a-6948f80afb44\", \"layouts\": [{\"id\": 0, \"position\": {\"x\": 0, \"y\": 428, \"z\": 0, \"width\": 800, \"height\": 284}}], \"singleVisual\": {\"visualType\": \"pivotTable\", \"projections\": {\"Rows\": [{\"queryRef\": \"Painel.Item\"}], \"Columns\": [{\"queryRef\": \"Painel.STATUS_ACORDO\"}], \"Values\": [{\"queryRef\": \"Painel.Valor Total\"}, {\"queryRef\": \"Painel.Valor Fora do Acordo\"}, {\"queryRef\": \"Painel.Perda Evitavel\"}]}, \"prototypeQuery\": {\"Version\": 2, \"From\": [{\"Name\": \"p\", \"Entity\": \"Painel\", \"Type\": 0}], \"Select\": [{\"Column\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Item\"}, \"Name\": \"Painel.Item\", \"NativeReferenceName\": \"Item\"}, {\"Column\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"STATUS_ACORDO\"}, \"Name\": \"Painel.STATUS_ACORDO\", \"NativeReferenceName\": \"STATUS_ACORDO\"}, {\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Valor Total\"}, \"Name\": \"Painel.Valor Total\", \"NativeReferenceName\": \"Valor Total\"}, {\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Valor Fora do Acordo\"}, \"Name\": \"Painel.Valor Fora do Acordo\", \"NativeReferenceName\": \"Valor Fora do Acordo\"}, {\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Perda Evitavel\"}, \"Name\": \"Painel.Perda Evitavel\", \"NativeReferenceName\": \"Perda Evitavel\"}]}, \"drillFilterOtherVisuals\": true, \"objects\": {}, \"vcObjects\": {\"title\": [{\"properties\": {\"show\": {\"expr\": {\"Literal\": {\"Value\": \"true\"}}}, \"text\": {\"expr\": {\"Literal\": {\"Value\": \"'Item x situacao do acordo'\"}}}}}]}}}",
+          "filters": "[]"
+        },
+        {
+          "x": 808.0,
+          "y": 428.0,
+          "z": 0.0,
+          "width": 472.0,
+          "height": 284.0,
+          "config": "{\"name\": \"ae5a2e31-a7d5-53a9-8680-6719cc47fdd1\", \"layouts\": [{\"id\": 0, \"position\": {\"x\": 808, \"y\": 428, \"z\": 0, \"width\": 472, \"height\": 284}}], \"singleVisual\": {\"visualType\": \"ribbonChart\", \"projections\": {\"Category\": [{\"queryRef\": \"Painel.Ano-Mes\"}], \"Y\": [{\"queryRef\": \"Painel.Valor Total\"}], \"Series\": [{\"queryRef\": \"Painel.Item\"}]}, \"prototypeQuery\": {\"Version\": 2, \"From\": [{\"Name\": \"p\", \"Entity\": \"Painel\", \"Type\": 0}], \"Select\": [{\"Column\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Ano-Mes\"}, \"Name\": \"Painel.Ano-Mes\", \"NativeReferenceName\": \"Ano-Mes\"}, {\"Column\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Item\"}, \"Name\": \"Painel.Item\", \"NativeReferenceName\": \"Item\"}, {\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Valor Total\"}, \"Name\": \"Painel.Valor Total\", \"NativeReferenceName\": \"Valor Total\"}], \"OrderBy\": [{\"Direction\": 1, \"Expression\": {\"Column\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Ano-Mes\"}}}]}, \"drillFilterOtherVisuals\": true, \"objects\": {}, \"vcObjects\": {\"title\": [{\"properties\": {\"show\": {\"expr\": {\"Literal\": {\"Value\": \"true\"}}}, \"text\": {\"expr\": {\"Literal\": {\"Value\": \"'Mudanca de posicao — Item'\"}}}}}]}}}",
+          "filters": "[]"
+        }
+      ]
+    },
+    {
+      "name": "3a9be564-dd8e-5371-ae05-3fdaea235930",
+      "displayName": "Modelos",
+      "displayOption": 1,
+      "height": 720.0,
+      "width": 1280.0,
+      "ordinal": 5,
+      "config": "{}",
+      "filters": "[]",
+      "visualContainers": [
+        {
+          "x": 0.0,
+          "y": 56.0,
+          "z": 0.0,
+          "width": 249.0,
+          "height": 90.0,
+          "config": "{\"name\": \"76706e68-e1ff-5360-a568-8db751249971\", \"layouts\": [{\"id\": 0, \"position\": {\"x\": 0, \"y\": 56, \"z\": 0, \"width\": 249, \"height\": 90}}], \"singleVisual\": {\"visualType\": \"card\", \"projections\": {\"Values\": [{\"queryRef\": \"Painel.Modelos\"}]}, \"prototypeQuery\": {\"Version\": 2, \"From\": [{\"Name\": \"p\", \"Entity\": \"Painel\", \"Type\": 0}], \"Select\": [{\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Modelos\"}, \"Name\": \"Painel.Modelos\", \"NativeReferenceName\": \"Modelos\"}]}, \"drillFilterOtherVisuals\": true, \"objects\": {}, \"vcObjects\": {\"title\": [{\"properties\": {\"show\": {\"expr\": {\"Literal\": {\"Value\": \"true\"}}}, \"text\": {\"expr\": {\"Literal\": {\"Value\": \"'Modelos'\"}}}}}]}}}",
+          "filters": "[]"
+        },
+        {
+          "x": 257.0,
+          "y": 56.0,
+          "z": 0.0,
+          "width": 249.0,
+          "height": 90.0,
+          "config": "{\"name\": \"1fb66285-27d9-562b-bac4-dbc33a045a7d\", \"layouts\": [{\"id\": 0, \"position\": {\"x\": 257, \"y\": 56, \"z\": 0, \"width\": 249, \"height\": 90}}], \"singleVisual\": {\"visualType\": \"card\", \"projections\": {\"Values\": [{\"queryRef\": \"Painel.Valor Total\"}]}, \"prototypeQuery\": {\"Version\": 2, \"From\": [{\"Name\": \"p\", \"Entity\": \"Painel\", \"Type\": 0}], \"Select\": [{\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Valor Total\"}, \"Name\": \"Painel.Valor Total\", \"NativeReferenceName\": \"Valor Total\"}]}, \"drillFilterOtherVisuals\": true, \"objects\": {}, \"vcObjects\": {\"title\": [{\"properties\": {\"show\": {\"expr\": {\"Literal\": {\"Value\": \"true\"}}}, \"text\": {\"expr\": {\"Literal\": {\"Value\": \"'Valor Total'\"}}}}}]}}}",
+          "filters": "[]"
+        },
+        {
+          "x": 514.0,
+          "y": 56.0,
+          "z": 0.0,
+          "width": 249.0,
+          "height": 90.0,
+          "config": "{\"name\": \"295bccf0-e610-5eb5-b8e0-c1565dfc54c1\", \"layouts\": [{\"id\": 0, \"position\": {\"x\": 514, \"y\": 56, \"z\": 0, \"width\": 249, \"height\": 90}}], \"singleVisual\": {\"visualType\": \"card\", \"projections\": {\"Values\": [{\"queryRef\": \"Painel.Valor Fora do Acordo\"}]}, \"prototypeQuery\": {\"Version\": 2, \"From\": [{\"Name\": \"p\", \"Entity\": \"Painel\", \"Type\": 0}], \"Select\": [{\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Valor Fora do Acordo\"}, \"Name\": \"Painel.Valor Fora do Acordo\", \"NativeReferenceName\": \"Valor Fora do Acordo\"}]}, \"drillFilterOtherVisuals\": true, \"objects\": {}, \"vcObjects\": {\"title\": [{\"properties\": {\"show\": {\"expr\": {\"Literal\": {\"Value\": \"true\"}}}, \"text\": {\"expr\": {\"Literal\": {\"Value\": \"'Valor Fora do Acordo'\"}}}}}]}}}",
+          "filters": "[]"
+        },
+        {
+          "x": 771.0,
+          "y": 56.0,
+          "z": 0.0,
+          "width": 249.0,
+          "height": 90.0,
+          "config": "{\"name\": \"4a8c4775-ac5d-5818-a663-aae3a0f843e9\", \"layouts\": [{\"id\": 0, \"position\": {\"x\": 771, \"y\": 56, \"z\": 0, \"width\": 249, \"height\": 90}}], \"singleVisual\": {\"visualType\": \"card\", \"projections\": {\"Values\": [{\"queryRef\": \"Painel.Perda Evitavel\"}]}, \"prototypeQuery\": {\"Version\": 2, \"From\": [{\"Name\": \"p\", \"Entity\": \"Painel\", \"Type\": 0}], \"Select\": [{\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Perda Evitavel\"}, \"Name\": \"Painel.Perda Evitavel\", \"NativeReferenceName\": \"Perda Evitavel\"}]}, \"drillFilterOtherVisuals\": true, \"objects\": {}, \"vcObjects\": {\"title\": [{\"properties\": {\"show\": {\"expr\": {\"Literal\": {\"Value\": \"true\"}}}, \"text\": {\"expr\": {\"Literal\": {\"Value\": \"'Perda Evitavel'\"}}}}}]}}}",
+          "filters": "[]"
+        },
+        {
+          "x": 1028.0,
+          "y": 56.0,
+          "z": 0.0,
+          "width": 249.0,
+          "height": 90.0,
+          "config": "{\"name\": \"1452fcea-a5b8-52e1-a892-e5b23424da45\", \"layouts\": [{\"id\": 0, \"position\": {\"x\": 1028, \"y\": 56, \"z\": 0, \"width\": 249, \"height\": 90}}], \"singleVisual\": {\"visualType\": \"card\", \"projections\": {\"Values\": [{\"queryRef\": \"Painel.Linhas\"}]}, \"prototypeQuery\": {\"Version\": 2, \"From\": [{\"Name\": \"p\", \"Entity\": \"Painel\", \"Type\": 0}], \"Select\": [{\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Linhas\"}, \"Name\": \"Painel.Linhas\", \"NativeReferenceName\": \"Linhas\"}]}, \"drillFilterOtherVisuals\": true, \"objects\": {}, \"vcObjects\": {\"title\": [{\"properties\": {\"show\": {\"expr\": {\"Literal\": {\"Value\": \"true\"}}}, \"text\": {\"expr\": {\"Literal\": {\"Value\": \"'Linhas'\"}}}}}]}}}",
+          "filters": "[]"
+        },
+        {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "width": 900.0,
+          "height": 48.0,
+          "config": "{\"name\": \"3c680ec1-68f1-575c-88ab-794259865a88\", \"layouts\": [{\"id\": 0, \"position\": {\"x\": 0, \"y\": 0, \"z\": 0, \"width\": 900, \"height\": 48}}], \"singleVisual\": {\"visualType\": \"textbox\", \"drillFilterOtherVisuals\": true, \"objects\": {\"general\": [{\"properties\": {\"paragraphs\": [{\"textRuns\": [{\"value\": \"Modelos — historico e concentracao\", \"textStyle\": {\"fontSize\": \"20pt\", \"fontWeight\": \"bold\", \"color\": \"#1F3B57\"}}]}]}}]}}}",
+          "filters": "[]"
+        },
+        {
+          "x": 0.0,
+          "y": 160.0,
+          "z": 0.0,
+          "width": 640.0,
+          "height": 260.0,
+          "config": "{\"name\": \"6d1ed9ae-9929-5253-b127-8e369cc6d4b7\", \"layouts\": [{\"id\": 0, \"position\": {\"x\": 0, \"y\": 160, \"z\": 0, \"width\": 640, \"height\": 260}}], \"singleVisual\": {\"visualType\": \"lineChart\", \"projections\": {\"Category\": [{\"queryRef\": \"Painel.Ano-Mes\"}], \"Y\": [{\"queryRef\": \"Painel.Valor Total\"}], \"Series\": [{\"queryRef\": \"Painel.Modelo\"}]}, \"prototypeQuery\": {\"Version\": 2, \"From\": [{\"Name\": \"p\", \"Entity\": \"Painel\", \"Type\": 0}], \"Select\": [{\"Column\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Ano-Mes\"}, \"Name\": \"Painel.Ano-Mes\", \"NativeReferenceName\": \"Ano-Mes\"}, {\"Column\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Modelo\"}, \"Name\": \"Painel.Modelo\", \"NativeReferenceName\": \"Modelo\"}, {\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Valor Total\"}, \"Name\": \"Painel.Valor Total\", \"NativeReferenceName\": \"Valor Total\"}], \"OrderBy\": [{\"Direction\": 1, \"Expression\": {\"Column\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Ano-Mes\"}}}]}, \"drillFilterOtherVisuals\": true, \"objects\": {}, \"vcObjects\": {\"title\": [{\"properties\": {\"show\": {\"expr\": {\"Literal\": {\"Value\": \"true\"}}}, \"text\": {\"expr\": {\"Literal\": {\"Value\": \"'Historico por mes — top Modelo (use o filtro)'\"}}}}}]}}}",
+          "filters": "[]"
+        },
+        {
+          "x": 648.0,
+          "y": 160.0,
+          "z": 0.0,
+          "width": 320.0,
+          "height": 260.0,
+          "config": "{\"name\": \"49cec452-f218-5b0f-92d6-b049ffb8add6\", \"layouts\": [{\"id\": 0, \"position\": {\"x\": 648, \"y\": 160, \"z\": 0, \"width\": 320, \"height\": 260}}], \"singleVisual\": {\"visualType\": \"barChart\", \"projections\": {\"Category\": [{\"queryRef\": \"Painel.Modelo\"}], \"Y\": [{\"queryRef\": \"Painel.Valor Total\"}]}, \"prototypeQuery\": {\"Version\": 2, \"From\": [{\"Name\": \"p\", \"Entity\": \"Painel\", \"Type\": 0}], \"Select\": [{\"Column\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Modelo\"}, \"Name\": \"Painel.Modelo\", \"NativeReferenceName\": \"Modelo\"}, {\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Valor Total\"}, \"Name\": \"Painel.Valor Total\", \"NativeReferenceName\": \"Valor Total\"}], \"OrderBy\": [{\"Direction\": 2, \"Expression\": {\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Valor Total\"}}}]}, \"drillFilterOtherVisuals\": true, \"objects\": {}, \"vcObjects\": {\"title\": [{\"properties\": {\"show\": {\"expr\": {\"Literal\": {\"Value\": \"true\"}}}, \"text\": {\"expr\": {\"Literal\": {\"Value\": \"'Modelo por valor total'\"}}}}}]}}}",
+          "filters": "[]"
+        },
+        {
+          "x": 976.0,
+          "y": 160.0,
+          "z": 0.0,
+          "width": 304.0,
+          "height": 260.0,
+          "config": "{\"name\": \"748feac7-ba38-5e19-b1db-c96924cf53ed\", \"layouts\": [{\"id\": 0, \"position\": {\"x\": 976, \"y\": 160, \"z\": 0, \"width\": 304, \"height\": 260}}], \"singleVisual\": {\"visualType\": \"barChart\", \"projections\": {\"Category\": [{\"queryRef\": \"Painel.Modelo\"}], \"Y\": [{\"queryRef\": \"Painel.Valor Fora do Acordo\"}]}, \"prototypeQuery\": {\"Version\": 2, \"From\": [{\"Name\": \"p\", \"Entity\": \"Painel\", \"Type\": 0}], \"Select\": [{\"Column\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Modelo\"}, \"Name\": \"Painel.Modelo\", \"NativeReferenceName\": \"Modelo\"}, {\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Valor Fora do Acordo\"}, \"Name\": \"Painel.Valor Fora do Acordo\", \"NativeReferenceName\": \"Valor Fora do Acordo\"}], \"OrderBy\": [{\"Direction\": 2, \"Expression\": {\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Valor Fora do Acordo\"}}}]}, \"drillFilterOtherVisuals\": true, \"objects\": {}, \"vcObjects\": {\"title\": [{\"properties\": {\"show\": {\"expr\": {\"Literal\": {\"Value\": \"true\"}}}, \"text\": {\"expr\": {\"Literal\": {\"Value\": \"'Modelo fora do acordo'\"}}}}}]}}}",
+          "filters": "[]"
+        },
+        {
+          "x": 0.0,
+          "y": 428.0,
+          "z": 0.0,
+          "width": 800.0,
+          "height": 284.0,
+          "config": "{\"name\": \"2977e8a5-1cad-541b-bfda-3e400bd68577\", \"layouts\": [{\"id\": 0, \"position\": {\"x\": 0, \"y\": 428, \"z\": 0, \"width\": 800, \"height\": 284}}], \"singleVisual\": {\"visualType\": \"pivotTable\", \"projections\": {\"Rows\": [{\"queryRef\": \"Painel.Modelo\"}], \"Columns\": [{\"queryRef\": \"Painel.STATUS_ACORDO\"}], \"Values\": [{\"queryRef\": \"Painel.Valor Total\"}, {\"queryRef\": \"Painel.Valor Fora do Acordo\"}, {\"queryRef\": \"Painel.Perda Evitavel\"}]}, \"prototypeQuery\": {\"Version\": 2, \"From\": [{\"Name\": \"p\", \"Entity\": \"Painel\", \"Type\": 0}], \"Select\": [{\"Column\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Modelo\"}, \"Name\": \"Painel.Modelo\", \"NativeReferenceName\": \"Modelo\"}, {\"Column\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"STATUS_ACORDO\"}, \"Name\": \"Painel.STATUS_ACORDO\", \"NativeReferenceName\": \"STATUS_ACORDO\"}, {\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Valor Total\"}, \"Name\": \"Painel.Valor Total\", \"NativeReferenceName\": \"Valor Total\"}, {\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Valor Fora do Acordo\"}, \"Name\": \"Painel.Valor Fora do Acordo\", \"NativeReferenceName\": \"Valor Fora do Acordo\"}, {\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Perda Evitavel\"}, \"Name\": \"Painel.Perda Evitavel\", \"NativeReferenceName\": \"Perda Evitavel\"}]}, \"drillFilterOtherVisuals\": true, \"objects\": {}, \"vcObjects\": {\"title\": [{\"properties\": {\"show\": {\"expr\": {\"Literal\": {\"Value\": \"true\"}}}, \"text\": {\"expr\": {\"Literal\": {\"Value\": \"'Modelo x situacao do acordo'\"}}}}}]}}}",
+          "filters": "[]"
+        },
+        {
+          "x": 808.0,
+          "y": 428.0,
+          "z": 0.0,
+          "width": 472.0,
+          "height": 284.0,
+          "config": "{\"name\": \"0101a4cf-a8bd-58c2-9de5-2f522ad6d3c0\", \"layouts\": [{\"id\": 0, \"position\": {\"x\": 808, \"y\": 428, \"z\": 0, \"width\": 472, \"height\": 284}}], \"singleVisual\": {\"visualType\": \"ribbonChart\", \"projections\": {\"Category\": [{\"queryRef\": \"Painel.Ano-Mes\"}], \"Y\": [{\"queryRef\": \"Painel.Valor Total\"}], \"Series\": [{\"queryRef\": \"Painel.Modelo\"}]}, \"prototypeQuery\": {\"Version\": 2, \"From\": [{\"Name\": \"p\", \"Entity\": \"Painel\", \"Type\": 0}], \"Select\": [{\"Column\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Ano-Mes\"}, \"Name\": \"Painel.Ano-Mes\", \"NativeReferenceName\": \"Ano-Mes\"}, {\"Column\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Modelo\"}, \"Name\": \"Painel.Modelo\", \"NativeReferenceName\": \"Modelo\"}, {\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Valor Total\"}, \"Name\": \"Painel.Valor Total\", \"NativeReferenceName\": \"Valor Total\"}], \"OrderBy\": [{\"Direction\": 1, \"Expression\": {\"Column\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Ano-Mes\"}}}]}, \"drillFilterOtherVisuals\": true, \"objects\": {}, \"vcObjects\": {\"title\": [{\"properties\": {\"show\": {\"expr\": {\"Literal\": {\"Value\": \"true\"}}}, \"text\": {\"expr\": {\"Literal\": {\"Value\": \"'Mudanca de posicao — Modelo'\"}}}}}]}}}",
+          "filters": "[]"
+        }
+      ]
+    },
+    {
+      "name": "c440296e-33e6-51cd-ba62-c7fa43af8d26",
+      "displayName": "Cidades",
+      "displayOption": 1,
+      "height": 720.0,
+      "width": 1280.0,
+      "ordinal": 6,
+      "config": "{}",
+      "filters": "[]",
+      "visualContainers": [
+        {
+          "x": 0.0,
+          "y": 56.0,
+          "z": 0.0,
+          "width": 249.0,
+          "height": 90.0,
+          "config": "{\"name\": \"d74cc297-7bfc-54a9-a151-64b1c2c2bb9e\", \"layouts\": [{\"id\": 0, \"position\": {\"x\": 0, \"y\": 56, \"z\": 0, \"width\": 249, \"height\": 90}}], \"singleVisual\": {\"visualType\": \"card\", \"projections\": {\"Values\": [{\"queryRef\": \"Painel.Cidades\"}]}, \"prototypeQuery\": {\"Version\": 2, \"From\": [{\"Name\": \"p\", \"Entity\": \"Painel\", \"Type\": 0}], \"Select\": [{\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Cidades\"}, \"Name\": \"Painel.Cidades\", \"NativeReferenceName\": \"Cidades\"}]}, \"drillFilterOtherVisuals\": true, \"objects\": {}, \"vcObjects\": {\"title\": [{\"properties\": {\"show\": {\"expr\": {\"Literal\": {\"Value\": \"true\"}}}, \"text\": {\"expr\": {\"Literal\": {\"Value\": \"'Cidades'\"}}}}}]}}}",
+          "filters": "[]"
+        },
+        {
+          "x": 257.0,
+          "y": 56.0,
+          "z": 0.0,
+          "width": 249.0,
+          "height": 90.0,
+          "config": "{\"name\": \"1fb66285-27d9-562b-bac4-dbc33a045a7d\", \"layouts\": [{\"id\": 0, \"position\": {\"x\": 257, \"y\": 56, \"z\": 0, \"width\": 249, \"height\": 90}}], \"singleVisual\": {\"visualType\": \"card\", \"projections\": {\"Values\": [{\"queryRef\": \"Painel.Valor Total\"}]}, \"prototypeQuery\": {\"Version\": 2, \"From\": [{\"Name\": \"p\", \"Entity\": \"Painel\", \"Type\": 0}], \"Select\": [{\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Valor Total\"}, \"Name\": \"Painel.Valor Total\", \"NativeReferenceName\": \"Valor Total\"}]}, \"drillFilterOtherVisuals\": true, \"objects\": {}, \"vcObjects\": {\"title\": [{\"properties\": {\"show\": {\"expr\": {\"Literal\": {\"Value\": \"true\"}}}, \"text\": {\"expr\": {\"Literal\": {\"Value\": \"'Valor Total'\"}}}}}]}}}",
+          "filters": "[]"
+        },
+        {
+          "x": 514.0,
+          "y": 56.0,
+          "z": 0.0,
+          "width": 249.0,
+          "height": 90.0,
+          "config": "{\"name\": \"295bccf0-e610-5eb5-b8e0-c1565dfc54c1\", \"layouts\": [{\"id\": 0, \"position\": {\"x\": 514, \"y\": 56, \"z\": 0, \"width\": 249, \"height\": 90}}], \"singleVisual\": {\"visualType\": \"card\", \"projections\": {\"Values\": [{\"queryRef\": \"Painel.Valor Fora do Acordo\"}]}, \"prototypeQuery\": {\"Version\": 2, \"From\": [{\"Name\": \"p\", \"Entity\": \"Painel\", \"Type\": 0}], \"Select\": [{\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Valor Fora do Acordo\"}, \"Name\": \"Painel.Valor Fora do Acordo\", \"NativeReferenceName\": \"Valor Fora do Acordo\"}]}, \"drillFilterOtherVisuals\": true, \"objects\": {}, \"vcObjects\": {\"title\": [{\"properties\": {\"show\": {\"expr\": {\"Literal\": {\"Value\": \"true\"}}}, \"text\": {\"expr\": {\"Literal\": {\"Value\": \"'Valor Fora do Acordo'\"}}}}}]}}}",
+          "filters": "[]"
+        },
+        {
+          "x": 771.0,
+          "y": 56.0,
+          "z": 0.0,
+          "width": 249.0,
+          "height": 90.0,
+          "config": "{\"name\": \"4a8c4775-ac5d-5818-a663-aae3a0f843e9\", \"layouts\": [{\"id\": 0, \"position\": {\"x\": 771, \"y\": 56, \"z\": 0, \"width\": 249, \"height\": 90}}], \"singleVisual\": {\"visualType\": \"card\", \"projections\": {\"Values\": [{\"queryRef\": \"Painel.Perda Evitavel\"}]}, \"prototypeQuery\": {\"Version\": 2, \"From\": [{\"Name\": \"p\", \"Entity\": \"Painel\", \"Type\": 0}], \"Select\": [{\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Perda Evitavel\"}, \"Name\": \"Painel.Perda Evitavel\", \"NativeReferenceName\": \"Perda Evitavel\"}]}, \"drillFilterOtherVisuals\": true, \"objects\": {}, \"vcObjects\": {\"title\": [{\"properties\": {\"show\": {\"expr\": {\"Literal\": {\"Value\": \"true\"}}}, \"text\": {\"expr\": {\"Literal\": {\"Value\": \"'Perda Evitavel'\"}}}}}]}}}",
+          "filters": "[]"
+        },
+        {
+          "x": 1028.0,
+          "y": 56.0,
+          "z": 0.0,
+          "width": 249.0,
+          "height": 90.0,
+          "config": "{\"name\": \"1452fcea-a5b8-52e1-a892-e5b23424da45\", \"layouts\": [{\"id\": 0, \"position\": {\"x\": 1028, \"y\": 56, \"z\": 0, \"width\": 249, \"height\": 90}}], \"singleVisual\": {\"visualType\": \"card\", \"projections\": {\"Values\": [{\"queryRef\": \"Painel.Linhas\"}]}, \"prototypeQuery\": {\"Version\": 2, \"From\": [{\"Name\": \"p\", \"Entity\": \"Painel\", \"Type\": 0}], \"Select\": [{\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Linhas\"}, \"Name\": \"Painel.Linhas\", \"NativeReferenceName\": \"Linhas\"}]}, \"drillFilterOtherVisuals\": true, \"objects\": {}, \"vcObjects\": {\"title\": [{\"properties\": {\"show\": {\"expr\": {\"Literal\": {\"Value\": \"true\"}}}, \"text\": {\"expr\": {\"Literal\": {\"Value\": \"'Linhas'\"}}}}}]}}}",
+          "filters": "[]"
+        },
+        {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "width": 900.0,
+          "height": 48.0,
+          "config": "{\"name\": \"bed823b0-7869-5560-84d2-4225bf3b8aa0\", \"layouts\": [{\"id\": 0, \"position\": {\"x\": 0, \"y\": 0, \"z\": 0, \"width\": 900, \"height\": 48}}], \"singleVisual\": {\"visualType\": \"textbox\", \"drillFilterOtherVisuals\": true, \"objects\": {\"general\": [{\"properties\": {\"paragraphs\": [{\"textRuns\": [{\"value\": \"Cidades — historico e concentracao\", \"textStyle\": {\"fontSize\": \"20pt\", \"fontWeight\": \"bold\", \"color\": \"#1F3B57\"}}]}]}}]}}}",
+          "filters": "[]"
+        },
+        {
+          "x": 0.0,
+          "y": 160.0,
+          "z": 0.0,
+          "width": 640.0,
+          "height": 260.0,
+          "config": "{\"name\": \"a786e1a7-a29e-518f-87fd-5a11a37086d8\", \"layouts\": [{\"id\": 0, \"position\": {\"x\": 0, \"y\": 160, \"z\": 0, \"width\": 640, \"height\": 260}}], \"singleVisual\": {\"visualType\": \"lineChart\", \"projections\": {\"Category\": [{\"queryRef\": \"Painel.Ano-Mes\"}], \"Y\": [{\"queryRef\": \"Painel.Valor Total\"}], \"Series\": [{\"queryRef\": \"Painel.Cidade\"}]}, \"prototypeQuery\": {\"Version\": 2, \"From\": [{\"Name\": \"p\", \"Entity\": \"Painel\", \"Type\": 0}], \"Select\": [{\"Column\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Ano-Mes\"}, \"Name\": \"Painel.Ano-Mes\", \"NativeReferenceName\": \"Ano-Mes\"}, {\"Column\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Cidade\"}, \"Name\": \"Painel.Cidade\", \"NativeReferenceName\": \"Cidade\"}, {\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Valor Total\"}, \"Name\": \"Painel.Valor Total\", \"NativeReferenceName\": \"Valor Total\"}], \"OrderBy\": [{\"Direction\": 1, \"Expression\": {\"Column\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Ano-Mes\"}}}]}, \"drillFilterOtherVisuals\": true, \"objects\": {}, \"vcObjects\": {\"title\": [{\"properties\": {\"show\": {\"expr\": {\"Literal\": {\"Value\": \"true\"}}}, \"text\": {\"expr\": {\"Literal\": {\"Value\": \"'Historico por mes — top Cidade (use o filtro)'\"}}}}}]}}}",
+          "filters": "[]"
+        },
+        {
+          "x": 648.0,
+          "y": 160.0,
+          "z": 0.0,
+          "width": 320.0,
+          "height": 260.0,
+          "config": "{\"name\": \"65d3faba-dfb7-5d91-9913-590b11c53ebc\", \"layouts\": [{\"id\": 0, \"position\": {\"x\": 648, \"y\": 160, \"z\": 0, \"width\": 320, \"height\": 260}}], \"singleVisual\": {\"visualType\": \"barChart\", \"projections\": {\"Category\": [{\"queryRef\": \"Painel.Cidade\"}], \"Y\": [{\"queryRef\": \"Painel.Valor Total\"}]}, \"prototypeQuery\": {\"Version\": 2, \"From\": [{\"Name\": \"p\", \"Entity\": \"Painel\", \"Type\": 0}], \"Select\": [{\"Column\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Cidade\"}, \"Name\": \"Painel.Cidade\", \"NativeReferenceName\": \"Cidade\"}, {\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Valor Total\"}, \"Name\": \"Painel.Valor Total\", \"NativeReferenceName\": \"Valor Total\"}], \"OrderBy\": [{\"Direction\": 2, \"Expression\": {\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Valor Total\"}}}]}, \"drillFilterOtherVisuals\": true, \"objects\": {}, \"vcObjects\": {\"title\": [{\"properties\": {\"show\": {\"expr\": {\"Literal\": {\"Value\": \"true\"}}}, \"text\": {\"expr\": {\"Literal\": {\"Value\": \"'Cidade por valor total'\"}}}}}]}}}",
+          "filters": "[]"
+        },
+        {
+          "x": 976.0,
+          "y": 160.0,
+          "z": 0.0,
+          "width": 304.0,
+          "height": 260.0,
+          "config": "{\"name\": \"625757dc-2b29-5619-8dd4-32aff5b65c0f\", \"layouts\": [{\"id\": 0, \"position\": {\"x\": 976, \"y\": 160, \"z\": 0, \"width\": 304, \"height\": 260}}], \"singleVisual\": {\"visualType\": \"barChart\", \"projections\": {\"Category\": [{\"queryRef\": \"Painel.Cidade\"}], \"Y\": [{\"queryRef\": \"Painel.Valor Fora do Acordo\"}]}, \"prototypeQuery\": {\"Version\": 2, \"From\": [{\"Name\": \"p\", \"Entity\": \"Painel\", \"Type\": 0}], \"Select\": [{\"Column\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Cidade\"}, \"Name\": \"Painel.Cidade\", \"NativeReferenceName\": \"Cidade\"}, {\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Valor Fora do Acordo\"}, \"Name\": \"Painel.Valor Fora do Acordo\", \"NativeReferenceName\": \"Valor Fora do Acordo\"}], \"OrderBy\": [{\"Direction\": 2, \"Expression\": {\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Valor Fora do Acordo\"}}}]}, \"drillFilterOtherVisuals\": true, \"objects\": {}, \"vcObjects\": {\"title\": [{\"properties\": {\"show\": {\"expr\": {\"Literal\": {\"Value\": \"true\"}}}, \"text\": {\"expr\": {\"Literal\": {\"Value\": \"'Cidade fora do acordo'\"}}}}}]}}}",
+          "filters": "[]"
+        },
+        {
+          "x": 0.0,
+          "y": 428.0,
+          "z": 0.0,
+          "width": 800.0,
+          "height": 284.0,
+          "config": "{\"name\": \"15b7b89f-4195-5f7c-943d-c7432619d347\", \"layouts\": [{\"id\": 0, \"position\": {\"x\": 0, \"y\": 428, \"z\": 0, \"width\": 800, \"height\": 284}}], \"singleVisual\": {\"visualType\": \"pivotTable\", \"projections\": {\"Rows\": [{\"queryRef\": \"Painel.Cidade\"}], \"Columns\": [{\"queryRef\": \"Painel.STATUS_ACORDO\"}], \"Values\": [{\"queryRef\": \"Painel.Valor Total\"}, {\"queryRef\": \"Painel.Valor Fora do Acordo\"}, {\"queryRef\": \"Painel.Perda Evitavel\"}]}, \"prototypeQuery\": {\"Version\": 2, \"From\": [{\"Name\": \"p\", \"Entity\": \"Painel\", \"Type\": 0}], \"Select\": [{\"Column\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Cidade\"}, \"Name\": \"Painel.Cidade\", \"NativeReferenceName\": \"Cidade\"}, {\"Column\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"STATUS_ACORDO\"}, \"Name\": \"Painel.STATUS_ACORDO\", \"NativeReferenceName\": \"STATUS_ACORDO\"}, {\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Valor Total\"}, \"Name\": \"Painel.Valor Total\", \"NativeReferenceName\": \"Valor Total\"}, {\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Valor Fora do Acordo\"}, \"Name\": \"Painel.Valor Fora do Acordo\", \"NativeReferenceName\": \"Valor Fora do Acordo\"}, {\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Perda Evitavel\"}, \"Name\": \"Painel.Perda Evitavel\", \"NativeReferenceName\": \"Perda Evitavel\"}]}, \"drillFilterOtherVisuals\": true, \"objects\": {}, \"vcObjects\": {\"title\": [{\"properties\": {\"show\": {\"expr\": {\"Literal\": {\"Value\": \"true\"}}}, \"text\": {\"expr\": {\"Literal\": {\"Value\": \"'Cidade x situacao do acordo'\"}}}}}]}}}",
+          "filters": "[]"
+        },
+        {
+          "x": 808.0,
+          "y": 428.0,
+          "z": 0.0,
+          "width": 472.0,
+          "height": 284.0,
+          "config": "{\"name\": \"54d94cb7-0888-571b-a69c-977a6ebc7dc6\", \"layouts\": [{\"id\": 0, \"position\": {\"x\": 808, \"y\": 428, \"z\": 0, \"width\": 472, \"height\": 284}}], \"singleVisual\": {\"visualType\": \"ribbonChart\", \"projections\": {\"Category\": [{\"queryRef\": \"Painel.Ano-Mes\"}], \"Y\": [{\"queryRef\": \"Painel.Valor Total\"}], \"Series\": [{\"queryRef\": \"Painel.Cidade\"}]}, \"prototypeQuery\": {\"Version\": 2, \"From\": [{\"Name\": \"p\", \"Entity\": \"Painel\", \"Type\": 0}], \"Select\": [{\"Column\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Ano-Mes\"}, \"Name\": \"Painel.Ano-Mes\", \"NativeReferenceName\": \"Ano-Mes\"}, {\"Column\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Cidade\"}, \"Name\": \"Painel.Cidade\", \"NativeReferenceName\": \"Cidade\"}, {\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Valor Total\"}, \"Name\": \"Painel.Valor Total\", \"NativeReferenceName\": \"Valor Total\"}], \"OrderBy\": [{\"Direction\": 1, \"Expression\": {\"Column\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Ano-Mes\"}}}]}, \"drillFilterOtherVisuals\": true, \"objects\": {}, \"vcObjects\": {\"title\": [{\"properties\": {\"show\": {\"expr\": {\"Literal\": {\"Value\": \"true\"}}}, \"text\": {\"expr\": {\"Literal\": {\"Value\": \"'Mudanca de posicao — Cidade'\"}}}}}]}}}",
+          "filters": "[]"
+        }
+      ]
+    },
+    {
+      "name": "96a1d969-98f1-5a46-934d-552b02459fc3",
+      "displayName": "Conformidade de Preco",
+      "displayOption": 1,
+      "height": 720.0,
+      "width": 1280.0,
+      "ordinal": 7,
+      "config": "{}",
+      "filters": "[]",
+      "visualContainers": [
+        {
+          "x": 0.0,
+          "y": 56.0,
+          "z": 0.0,
+          "width": 249.0,
+          "height": 90.0,
+          "config": "{\"name\": \"42cf34ac-26b6-5d88-a7fc-f8f235110658\", \"layouts\": [{\"id\": 0, \"position\": {\"x\": 0, \"y\": 56, \"z\": 0, \"width\": 249, \"height\": 90}}], \"singleVisual\": {\"visualType\": \"card\", \"projections\": {\"Values\": [{\"queryRef\": \"Painel.Valor Dentro do Acordo\"}]}, \"prototypeQuery\": {\"Version\": 2, \"From\": [{\"Name\": \"p\", \"Entity\": \"Painel\", \"Type\": 0}], \"Select\": [{\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Valor Dentro do Acordo\"}, \"Name\": \"Painel.Valor Dentro do Acordo\", \"NativeReferenceName\": \"Valor Dentro do Acordo\"}]}, \"drillFilterOtherVisuals\": true, \"objects\": {}, \"vcObjects\": {\"title\": [{\"properties\": {\"show\": {\"expr\": {\"Literal\": {\"Value\": \"true\"}}}, \"text\": {\"expr\": {\"Literal\": {\"Value\": \"'Valor Dentro do Acordo'\"}}}}}]}}}",
+          "filters": "[]"
+        },
+        {
+          "x": 257.0,
+          "y": 56.0,
+          "z": 0.0,
+          "width": 249.0,
+          "height": 90.0,
+          "config": "{\"name\": \"bb069ad6-fb9a-5c92-a685-0dada65272c9\", \"layouts\": [{\"id\": 0, \"position\": {\"x\": 257, \"y\": 56, \"z\": 0, \"width\": 249, \"height\": 90}}], \"singleVisual\": {\"visualType\": \"card\", \"projections\": {\"Values\": [{\"queryRef\": \"Painel.Diferenca vs Acordo\"}]}, \"prototypeQuery\": {\"Version\": 2, \"From\": [{\"Name\": \"p\", \"Entity\": \"Painel\", \"Type\": 0}], \"Select\": [{\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Diferenca vs Acordo\"}, \"Name\": \"Painel.Diferenca vs Acordo\", \"NativeReferenceName\": \"Diferenca vs Acordo\"}]}, \"drillFilterOtherVisuals\": true, \"objects\": {}, \"vcObjects\": {\"title\": [{\"properties\": {\"show\": {\"expr\": {\"Literal\": {\"Value\": \"true\"}}}, \"text\": {\"expr\": {\"Literal\": {\"Value\": \"'Diferenca vs Acordo'\"}}}}}]}}}",
+          "filters": "[]"
+        },
+        {
+          "x": 514.0,
+          "y": 56.0,
+          "z": 0.0,
+          "width": 249.0,
+          "height": 90.0,
+          "config": "{\"name\": \"b96877ce-2b63-50c0-b3a3-0aa1fdf4bffa\", \"layouts\": [{\"id\": 0, \"position\": {\"x\": 514, \"y\": 56, \"z\": 0, \"width\": 249, \"height\": 90}}], \"singleVisual\": {\"visualType\": \"card\", \"projections\": {\"Values\": [{\"queryRef\": \"Painel.Valor Acima do Acordo\"}]}, \"prototypeQuery\": {\"Version\": 2, \"From\": [{\"Name\": \"p\", \"Entity\": \"Painel\", \"Type\": 0}], \"Select\": [{\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Valor Acima do Acordo\"}, \"Name\": \"Painel.Valor Acima do Acordo\", \"NativeReferenceName\": \"Valor Acima do Acordo\"}]}, \"drillFilterOtherVisuals\": true, \"objects\": {}, \"vcObjects\": {\"title\": [{\"properties\": {\"show\": {\"expr\": {\"Literal\": {\"Value\": \"true\"}}}, \"text\": {\"expr\": {\"Literal\": {\"Value\": \"'Valor Acima do Acordo'\"}}}}}]}}}",
+          "filters": "[]"
+        },
+        {
+          "x": 771.0,
+          "y": 56.0,
+          "z": 0.0,
+          "width": 249.0,
+          "height": 90.0,
+          "config": "{\"name\": \"a0974e0f-c461-59de-924d-6669a959f9d9\", \"layouts\": [{\"id\": 0, \"position\": {\"x\": 771, \"y\": 56, \"z\": 0, \"width\": 249, \"height\": 90}}], \"singleVisual\": {\"visualType\": \"card\", \"projections\": {\"Values\": [{\"queryRef\": \"Painel.Valor Abaixo do Acordo\"}]}, \"prototypeQuery\": {\"Version\": 2, \"From\": [{\"Name\": \"p\", \"Entity\": \"Painel\", \"Type\": 0}], \"Select\": [{\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Valor Abaixo do Acordo\"}, \"Name\": \"Painel.Valor Abaixo do Acordo\", \"NativeReferenceName\": \"Valor Abaixo do Acordo\"}]}, \"drillFilterOtherVisuals\": true, \"objects\": {}, \"vcObjects\": {\"title\": [{\"properties\": {\"show\": {\"expr\": {\"Literal\": {\"Value\": \"true\"}}}, \"text\": {\"expr\": {\"Literal\": {\"Value\": \"'Valor Abaixo do Acordo'\"}}}}}]}}}",
+          "filters": "[]"
+        },
+        {
+          "x": 1028.0,
+          "y": 56.0,
+          "z": 0.0,
+          "width": 249.0,
+          "height": 90.0,
+          "config": "{\"name\": \"1452fcea-a5b8-52e1-a892-e5b23424da45\", \"layouts\": [{\"id\": 0, \"position\": {\"x\": 1028, \"y\": 56, \"z\": 0, \"width\": 249, \"height\": 90}}], \"singleVisual\": {\"visualType\": \"card\", \"projections\": {\"Values\": [{\"queryRef\": \"Painel.Linhas\"}]}, \"prototypeQuery\": {\"Version\": 2, \"From\": [{\"Name\": \"p\", \"Entity\": \"Painel\", \"Type\": 0}], \"Select\": [{\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Linhas\"}, \"Name\": \"Painel.Linhas\", \"NativeReferenceName\": \"Linhas\"}]}, \"drillFilterOtherVisuals\": true, \"objects\": {}, \"vcObjects\": {\"title\": [{\"properties\": {\"show\": {\"expr\": {\"Literal\": {\"Value\": \"true\"}}}, \"text\": {\"expr\": {\"Literal\": {\"Value\": \"'Linhas'\"}}}}}]}}}",
+          "filters": "[]"
+        },
+        {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "width": 1000.0,
+          "height": 48.0,
+          "config": "{\"name\": \"6758beb3-83a4-5404-b8a4-380ce97ad1cf\", \"layouts\": [{\"id\": 0, \"position\": {\"x\": 0, \"y\": 0, \"z\": 0, \"width\": 1000, \"height\": 48}}], \"singleVisual\": {\"visualType\": \"textbox\", \"drillFilterOtherVisuals\": true, \"objects\": {\"general\": [{\"properties\": {\"paragraphs\": [{\"textRuns\": [{\"value\": \"Dentro do acordo — pagou o preco acordado?\", \"textStyle\": {\"fontSize\": \"20pt\", \"fontWeight\": \"bold\", \"color\": \"#1F3B57\"}}]}]}}]}}}",
+          "filters": "[]"
+        },
+        {
+          "x": 0.0,
+          "y": 160.0,
+          "z": 0.0,
+          "width": 700.0,
+          "height": 260.0,
+          "config": "{\"name\": \"aa695377-e9f1-5fad-ac0d-3e6063470553\", \"layouts\": [{\"id\": 0, \"position\": {\"x\": 0, \"y\": 160, \"z\": 0, \"width\": 700, \"height\": 260}}], \"singleVisual\": {\"visualType\": \"lineClusteredColumnComboChart\", \"projections\": {\"Category\": [{\"queryRef\": \"Painel.Ano-Mes\"}], \"Y\": [{\"queryRef\": \"Painel.Valor Dentro do Acordo\"}], \"Y2\": [{\"queryRef\": \"Painel.Diferenca vs Acordo\"}]}, \"prototypeQuery\": {\"Version\": 2, \"From\": [{\"Name\": \"p\", \"Entity\": \"Painel\", \"Type\": 0}], \"Select\": [{\"Column\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Ano-Mes\"}, \"Name\": \"Painel.Ano-Mes\", \"NativeReferenceName\": \"Ano-Mes\"}, {\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Valor Dentro do Acordo\"}, \"Name\": \"Painel.Valor Dentro do Acordo\", \"NativeReferenceName\": \"Valor Dentro do Acordo\"}, {\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Diferenca vs Acordo\"}, \"Name\": \"Painel.Diferenca vs Acordo\", \"NativeReferenceName\": \"Diferenca vs Acordo\"}], \"OrderBy\": [{\"Direction\": 1, \"Expression\": {\"Column\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Ano-Mes\"}}}]}, \"drillFilterOtherVisuals\": true, \"objects\": {}, \"vcObjects\": {\"title\": [{\"properties\": {\"show\": {\"expr\": {\"Literal\": {\"Value\": \"true\"}}}, \"text\": {\"expr\": {\"Literal\": {\"Value\": \"'Valor dentro do acordo (barras) e diferenca de preco (linha)'\"}}}}}]}}}",
+          "filters": "[]"
+        },
+        {
+          "x": 708.0,
+          "y": 160.0,
+          "z": 0.0,
+          "width": 572.0,
+          "height": 260.0,
+          "config": "{\"name\": \"2e10f289-17ff-5cfa-9193-33f8cf74088a\", \"layouts\": [{\"id\": 0, \"position\": {\"x\": 708, \"y\": 160, \"z\": 0, \"width\": 572, \"height\": 260}}], \"singleVisual\": {\"visualType\": \"waterfallChart\", \"projections\": {\"Category\": [{\"queryRef\": \"Painel.Status\"}], \"Y\": [{\"queryRef\": \"Painel.Diferenca vs Acordo\"}]}, \"prototypeQuery\": {\"Version\": 2, \"From\": [{\"Name\": \"p\", \"Entity\": \"Painel\", \"Type\": 0}], \"Select\": [{\"Column\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Status\"}, \"Name\": \"Painel.Status\", \"NativeReferenceName\": \"Status\"}, {\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Diferenca vs Acordo\"}, \"Name\": \"Painel.Diferenca vs Acordo\", \"NativeReferenceName\": \"Diferenca vs Acordo\"}]}, \"drillFilterOtherVisuals\": true, \"objects\": {}, \"vcObjects\": {\"title\": [{\"properties\": {\"show\": {\"expr\": {\"Literal\": {\"Value\": \"true\"}}}, \"text\": {\"expr\": {\"Literal\": {\"Value\": \"'Composicao da diferenca'\"}}}}}]}}}",
+          "filters": "[]"
+        },
+        {
+          "x": 0.0,
+          "y": 428.0,
+          "z": 0.0,
+          "width": 420.0,
+          "height": 284.0,
+          "config": "{\"name\": \"17ef4c5a-4649-599c-968a-6033c603c8b7\", \"layouts\": [{\"id\": 0, \"position\": {\"x\": 0, \"y\": 428, \"z\": 0, \"width\": 420, \"height\": 284}}], \"singleVisual\": {\"visualType\": \"barChart\", \"projections\": {\"Category\": [{\"queryRef\": \"Painel.Fornecedor\"}], \"Y\": [{\"queryRef\": \"Painel.Valor Acima do Acordo\"}]}, \"prototypeQuery\": {\"Version\": 2, \"From\": [{\"Name\": \"p\", \"Entity\": \"Painel\", \"Type\": 0}], \"Select\": [{\"Column\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Fornecedor\"}, \"Name\": \"Painel.Fornecedor\", \"NativeReferenceName\": \"Fornecedor\"}, {\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Valor Acima do Acordo\"}, \"Name\": \"Painel.Valor Acima do Acordo\", \"NativeReferenceName\": \"Valor Acima do Acordo\"}], \"OrderBy\": [{\"Direction\": 2, \"Expression\": {\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Valor Acima do Acordo\"}}}]}, \"drillFilterOtherVisuals\": true, \"objects\": {}, \"vcObjects\": {\"title\": [{\"properties\": {\"show\": {\"expr\": {\"Literal\": {\"Value\": \"true\"}}}, \"text\": {\"expr\": {\"Literal\": {\"Value\": \"'Fornecedores acima do acordo'\"}}}}}]}}}",
+          "filters": "[]"
+        },
+        {
+          "x": 428.0,
+          "y": 428.0,
+          "z": 0.0,
+          "width": 420.0,
+          "height": 284.0,
+          "config": "{\"name\": \"9255aa25-b2cf-5830-a608-7a61950089ed\", \"layouts\": [{\"id\": 0, \"position\": {\"x\": 428, \"y\": 428, \"z\": 0, \"width\": 420, \"height\": 284}}], \"singleVisual\": {\"visualType\": \"barChart\", \"projections\": {\"Category\": [{\"queryRef\": \"Painel.Item\"}], \"Y\": [{\"queryRef\": \"Painel.Valor Acima do Acordo\"}]}, \"prototypeQuery\": {\"Version\": 2, \"From\": [{\"Name\": \"p\", \"Entity\": \"Painel\", \"Type\": 0}], \"Select\": [{\"Column\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Item\"}, \"Name\": \"Painel.Item\", \"NativeReferenceName\": \"Item\"}, {\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Valor Acima do Acordo\"}, \"Name\": \"Painel.Valor Acima do Acordo\", \"NativeReferenceName\": \"Valor Acima do Acordo\"}], \"OrderBy\": [{\"Direction\": 2, \"Expression\": {\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Valor Acima do Acordo\"}}}]}, \"drillFilterOtherVisuals\": true, \"objects\": {}, \"vcObjects\": {\"title\": [{\"properties\": {\"show\": {\"expr\": {\"Literal\": {\"Value\": \"true\"}}}, \"text\": {\"expr\": {\"Literal\": {\"Value\": \"'Itens acima do acordo'\"}}}}}]}}}",
+          "filters": "[]"
+        },
+        {
+          "x": 856.0,
+          "y": 428.0,
+          "z": 0.0,
+          "width": 424.0,
+          "height": 284.0,
+          "config": "{\"name\": \"8bfdc866-b66b-5820-b47c-6391ec91e8da\", \"layouts\": [{\"id\": 0, \"position\": {\"x\": 856, \"y\": 428, \"z\": 0, \"width\": 424, \"height\": 284}}], \"singleVisual\": {\"visualType\": \"pivotTable\", \"projections\": {\"Rows\": [{\"queryRef\": \"Painel.Cidade\"}], \"Columns\": [{\"queryRef\": \"Painel.Status\"}], \"Values\": [{\"queryRef\": \"Painel.Diferenca vs Acordo\"}]}, \"prototypeQuery\": {\"Version\": 2, \"From\": [{\"Name\": \"p\", \"Entity\": \"Painel\", \"Type\": 0}], \"Select\": [{\"Column\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Cidade\"}, \"Name\": \"Painel.Cidade\", \"NativeReferenceName\": \"Cidade\"}, {\"Column\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Status\"}, \"Name\": \"Painel.Status\", \"NativeReferenceName\": \"Status\"}, {\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Diferenca vs Acordo\"}, \"Name\": \"Painel.Diferenca vs Acordo\", \"NativeReferenceName\": \"Diferenca vs Acordo\"}]}, \"drillFilterOtherVisuals\": true, \"objects\": {}, \"vcObjects\": {\"title\": [{\"properties\": {\"show\": {\"expr\": {\"Literal\": {\"Value\": \"true\"}}}, \"text\": {\"expr\": {\"Literal\": {\"Value\": \"'Cidade x Status'\"}}}}}]}}}",
+          "filters": "[]"
+        }
+      ]
+    },
+    {
+      "name": "85a248f4-091c-51fe-9ba2-663e4978acf0",
+      "displayName": "Detalhe",
+      "displayOption": 1,
+      "height": 720.0,
+      "width": 1280.0,
+      "ordinal": 8,
+      "config": "{}",
+      "filters": "[]",
+      "visualContainers": [
+        {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "width": 900.0,
+          "height": 40.0,
+          "config": "{\"name\": \"1f0b267c-efd0-57a6-a233-09f28cfd8d02\", \"layouts\": [{\"id\": 0, \"position\": {\"x\": 0, \"y\": 0, \"z\": 0, \"width\": 900, \"height\": 40}}], \"singleVisual\": {\"visualType\": \"textbox\", \"drillFilterOtherVisuals\": true, \"objects\": {\"general\": [{\"properties\": {\"paragraphs\": [{\"textRuns\": [{\"value\": \"Detalhe — linha a linha\", \"textStyle\": {\"fontSize\": \"16pt\", \"fontWeight\": \"bold\", \"color\": \"#1F3B57\"}}]}]}}]}}}",
+          "filters": "[]"
+        },
+        {
+          "x": 0.0,
+          "y": 44.0,
+          "z": 0.0,
+          "width": 210.0,
+          "height": 320.0,
+          "config": "{\"name\": \"f86d7788-080b-5b46-8c15-219f234ddd44\", \"layouts\": [{\"id\": 0, \"position\": {\"x\": 0, \"y\": 44, \"z\": 0, \"width\": 210, \"height\": 320}}], \"singleVisual\": {\"visualType\": \"slicer\", \"projections\": {\"Values\": [{\"queryRef\": \"Painel.Ano-Mes\"}]}, \"prototypeQuery\": {\"Version\": 2, \"From\": [{\"Name\": \"p\", \"Entity\": \"Painel\", \"Type\": 0}], \"Select\": [{\"Column\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Ano-Mes\"}, \"Name\": \"Painel.Ano-Mes\", \"NativeReferenceName\": \"Ano-Mes\"}]}, \"drillFilterOtherVisuals\": true, \"objects\": {}, \"vcObjects\": {\"title\": [{\"properties\": {\"show\": {\"expr\": {\"Literal\": {\"Value\": \"true\"}}}, \"text\": {\"expr\": {\"Literal\": {\"Value\": \"'Ano-Mes'\"}}}}}]}}}",
+          "filters": "[]"
+        },
+        {
+          "x": 0.0,
+          "y": 372.0,
+          "z": 0.0,
+          "width": 210.0,
+          "height": 160.0,
+          "config": "{\"name\": \"1f7f8aa7-3069-5b10-916b-9472a4c8b5cf\", \"layouts\": [{\"id\": 0, \"position\": {\"x\": 0, \"y\": 372, \"z\": 0, \"width\": 210, \"height\": 160}}], \"singleVisual\": {\"visualType\": \"slicer\", \"projections\": {\"Values\": [{\"queryRef\": \"Painel.STATUS_ACORDO\"}]}, \"prototypeQuery\": {\"Version\": 2, \"From\": [{\"Name\": \"p\", \"Entity\": \"Painel\", \"Type\": 0}], \"Select\": [{\"Column\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"STATUS_ACORDO\"}, \"Name\": \"Painel.STATUS_ACORDO\", \"NativeReferenceName\": \"STATUS_ACORDO\"}]}, \"drillFilterOtherVisuals\": true, \"objects\": {}, \"vcObjects\": {\"title\": [{\"properties\": {\"show\": {\"expr\": {\"Literal\": {\"Value\": \"true\"}}}, \"text\": {\"expr\": {\"Literal\": {\"Value\": \"'STATUS_ACORDO'\"}}}}}]}}}",
+          "filters": "[]"
+        },
+        {
+          "x": 0.0,
+          "y": 540.0,
+          "z": 0.0,
+          "width": 210.0,
+          "height": 172.0,
+          "config": "{\"name\": \"112a4e5d-d0ea-5c7f-9a4c-e8fa5c203cd3\", \"layouts\": [{\"id\": 0, \"position\": {\"x\": 0, \"y\": 540, \"z\": 0, \"width\": 210, \"height\": 172}}], \"singleVisual\": {\"visualType\": \"slicer\", \"projections\": {\"Values\": [{\"queryRef\": \"Painel.Status\"}]}, \"prototypeQuery\": {\"Version\": 2, \"From\": [{\"Name\": \"p\", \"Entity\": \"Painel\", \"Type\": 0}], \"Select\": [{\"Column\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Status\"}, \"Name\": \"Painel.Status\", \"NativeReferenceName\": \"Status\"}]}, \"drillFilterOtherVisuals\": true, \"objects\": {}, \"vcObjects\": {\"title\": [{\"properties\": {\"show\": {\"expr\": {\"Literal\": {\"Value\": \"true\"}}}, \"text\": {\"expr\": {\"Literal\": {\"Value\": \"'Status'\"}}}}}]}}}",
+          "filters": "[]"
+        },
+        {
+          "x": 218.0,
+          "y": 44.0,
+          "z": 0.0,
+          "width": 1062.0,
+          "height": 668.0,
+          "config": "{\"name\": \"0ae62a33-389a-5ca4-a299-92e8472283e4\", \"layouts\": [{\"id\": 0, \"position\": {\"x\": 218, \"y\": 44, \"z\": 0, \"width\": 1062, \"height\": 668}}], \"singleVisual\": {\"visualType\": \"tableEx\", \"projections\": {\"Values\": [{\"queryRef\": \"Painel.Data\"}, {\"queryRef\": \"Painel.OS\"}, {\"queryRef\": \"Painel.Cidade\"}, {\"queryRef\": \"Painel.Fornecedor\"}, {\"queryRef\": \"Painel.Modelo\"}, {\"queryRef\": \"Painel.Item\"}, {\"queryRef\": \"Painel.Status\"}, {\"queryRef\": \"Painel.STATUS_ACORDO\"}, {\"queryRef\": \"Painel.Tinha acordo?\"}, {\"queryRef\": \"Painel.Motivo Sem Acordo\"}, {\"queryRef\": \"Painel.Criador\"}, {\"queryRef\": \"Painel.Valor Total\"}, {\"queryRef\": \"Painel.Diferenca vs Acordo\"}, {\"queryRef\": \"Painel.Perda Evitavel\"}]}, \"prototypeQuery\": {\"Version\": 2, \"From\": [{\"Name\": \"p\", \"Entity\": \"Painel\", \"Type\": 0}], \"Select\": [{\"Column\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Data\"}, \"Name\": \"Painel.Data\", \"NativeReferenceName\": \"Data\"}, {\"Column\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"OS\"}, \"Name\": \"Painel.OS\", \"NativeReferenceName\": \"OS\"}, {\"Column\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Cidade\"}, \"Name\": \"Painel.Cidade\", \"NativeReferenceName\": \"Cidade\"}, {\"Column\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Fornecedor\"}, \"Name\": \"Painel.Fornecedor\", \"NativeReferenceName\": \"Fornecedor\"}, {\"Column\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Modelo\"}, \"Name\": \"Painel.Modelo\", \"NativeReferenceName\": \"Modelo\"}, {\"Column\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Item\"}, \"Name\": \"Painel.Item\", \"NativeReferenceName\": \"Item\"}, {\"Column\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Status\"}, \"Name\": \"Painel.Status\", \"NativeReferenceName\": \"Status\"}, {\"Column\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"STATUS_ACORDO\"}, \"Name\": \"Painel.STATUS_ACORDO\", \"NativeReferenceName\": \"STATUS_ACORDO\"}, {\"Column\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Tinha acordo?\"}, \"Name\": \"Painel.Tinha acordo?\", \"NativeReferenceName\": \"Tinha acordo?\"}, {\"Column\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Motivo Sem Acordo\"}, \"Name\": \"Painel.Motivo Sem Acordo\", \"NativeReferenceName\": \"Motivo Sem Acordo\"}, {\"Column\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Criador\"}, \"Name\": \"Painel.Criador\", \"NativeReferenceName\": \"Criador\"}, {\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Valor Total\"}, \"Name\": \"Painel.Valor Total\", \"NativeReferenceName\": \"Valor Total\"}, {\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Diferenca vs Acordo\"}, \"Name\": \"Painel.Diferenca vs Acordo\", \"NativeReferenceName\": \"Diferenca vs Acordo\"}, {\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"p\"}}, \"Property\": \"Perda Evitavel\"}, \"Name\": \"Painel.Perda Evitavel\", \"NativeReferenceName\": \"Perda Evitavel\"}]}, \"drillFilterOtherVisuals\": true, \"objects\": {}, \"vcObjects\": {\"title\": [{\"properties\": {\"show\": {\"expr\": {\"Literal\": {\"Value\": \"true\"}}}, \"text\": {\"expr\": {\"Literal\": {\"Value\": \"'Linhas do painel'\"}}}}}]}}}",
+          "filters": "[]"
+        }
+      ]
+    }
+  ]
+}
