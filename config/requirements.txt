@@ -24,3 +24,7 @@ openpyxl>=3.1
 
 # Escrita dos relatorios com formatacao (cores, filtros, formato condicional)
 xlsxwriter>=3.2
+
+# Leitura e escrita de Parquet pelo pandas (to_parquet/read_parquet), usado
+# pelo painel/ para gerar e validar o snapshot consumido pelo Power BI.
+pyarrow>=15.0

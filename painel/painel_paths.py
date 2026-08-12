@@ -1,0 +1,72 @@
+"""
+Caminhos, configuração e contrato de colunas do Painel — snapshot completo
+para o Power BI.
+
+Mesma convenção de panorama/svp_paths.py: tudo deriva de RAIZ, então mover o
+projeto não exige editar nada aqui.
+
+Fase 1 (ver docs/desenho_painel_sv.md): sem CHAVE_REGISTRO, sem merge entre
+execuções, sem rotação de N backups, disparo manual. Evolui quando a
+necessidade aparecer, não antes.
+"""
+from pathlib import Path
+
+PAINEL = Path(__file__).resolve().parent   # supply-vision/painel
+RAIZ   = PAINEL.parent                     # supply-vision
+
+# Motor de negócio, compartilhado com o pipeline diário e o panorama. Não
+# duplica lógica: importa carregar_base, carregar_acordo, processar e
+# STATUS_QUARENTENA direto de processo/rodar.py.
+SUPPLY_VISION_SRC = RAIZ / "processo"
+
+CHAVE_QLIK_PATH = RAIZ / "config" / "cfg_qlik.txt"
+
+CANDIDATO_DIR    = PAINEL / "candidato"
+CONSOLIDADO_DIR  = PAINEL / "consolidado"
+ARQUIVADOS_DIR   = PAINEL / "arquivados"
+LOGS_DIR         = PAINEL / "logs"
+
+CONSOLIDADO_PATH = CONSOLIDADO_DIR / "supply_vision_painel.parquet"
+BACKUP_PATH      = ARQUIVADOS_DIR / "supply_vision_painel_anterior.parquet"
+LOCK_PATH        = PAINEL / ".lock"
+
+# Base intermediária da extração, no mesmo espírito de dados/base.xlsx
+# (diário) e dados/base_periodo.xlsx (panorama). Arquivo próprio: usar o do
+# panorama faria uma execução do painel sobrescrever o recorte que o
+# gerar_relatorios.py ainda vai ler, e vice-versa.
+BASE_PAINEL_PATH = RAIZ / "dados" / "base_painel.xlsx"
+
+# Início do recorte do painel. Os dados no Qlik começam em 2021, e a análise
+# do negócio começa em 01/2025 — não é indiferente esticar para trás:
+# selecionar_datas() envia um valor por dia corrido ao Qlik, então cada ano
+# extra são ~365 valores inúteis na seleção.
+INICIO_HISTORICO = "01/01/2025"
+
+# Queda de linhas entre execuções acima deste percentual gera aviso no log.
+# Não bloqueia: a decisão foi "o painel espelha o Qlik" (seção 9 do desenho).
+LIMIAR_QUEDA_PCT = 10
+
+# ── Contrato de colunas do snapshot ──────────────────────────────────
+# Vive aqui, não no gerador: o validador precisa da lista sem arrastar
+# rodar.py (e a conexão com o Qlik) só para conferir um cabeçalho.
+#
+# São as 21 colunas de saída de rodar.processar(). "Grupo Despesa" e
+# "Peca Acordo", que ele também devolve, ficam fora — já não entram no
+# relatório do pipeline diário (SEMPRE_OCULTAR em rodar.py).
+COLUNAS_PAINEL = [
+    "Data", "OS", "Criador", "Cidade", "Fornecedor", "Modelo", "Item",
+    "Motivo Sem Acordo", "Qtd", "Preco OS", "Preco Acordo", "Preco Total OS",
+    "Preco Total Acordo", "Diferenca Unit.", "Diferenca Total",
+    "Tinha acordo?", "Menor Preco Acordo", "Fornecedor do Acordo",
+    "Dif. p/ Menor Acordo", "Status", "CNPJ",
+]
+
+# Colunas acrescentadas pelo painel, além das de rodar.processar().
+COLUNAS_META = ["STATUS_ACORDO", "DATA_EXECUCAO", "RUN_ID"]
+
+# STATUS_ACORDO deriva de "Tinha acordo?". Pendências (Status em quarentena)
+# não têm SIM/NAO e são excluídas antes — nenhum valor sobra fora deste mapa.
+MAPA_STATUS_ACORDO = {"SIM": "COM_ACORDO", "NAO": "SEM_ACORDO"}
+
+for _dir in (CANDIDATO_DIR, CONSOLIDADO_DIR, ARQUIVADOS_DIR, LOGS_DIR):
+    _dir.mkdir(parents=True, exist_ok=True)

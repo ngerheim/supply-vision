@@ -61,6 +61,20 @@
 /reports_periodo/pendencias/*
 !/reports_periodo/pendencias/.gitkeep
 
+# Painel do Power BI: o CODIGO vai para o Git, os SNAPSHOTS nao.
+# Os parquets sao dado operacional (centenas de milhares de linhas), e o
+# consolidado e regerado a cada execucao -- versionar isso encheria o
+# repositorio de copias da mesma base.
+/painel/candidato/*
+!/painel/candidato/.gitkeep
+/painel/consolidado/*
+!/painel/consolidado/.gitkeep
+/painel/arquivados/*
+!/painel/arquivados/.gitkeep
+/painel/logs/*
+!/painel/logs/.gitkeep
+/painel/.lock
+
 # ═══════════════════════════════════════════════════════════════════
 # Ruido de ambiente.
 # ═══════════════════════════════════════════════════════════════════
