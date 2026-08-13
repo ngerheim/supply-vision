@@ -1,12 +1,12 @@
 {
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.9.0/schema.json",
-  "name": "66bf3288-9b14-5ba2-ae27-571b25f07413",
+  "name": "6c0d77e1-cb33-562c-b6fb-9efe809d44e6",
   "position": {
-    "x": 644,
+    "x": 422,
     "y": 148,
-    "z": 7000,
-    "height": 260,
-    "width": 636
+    "z": 6000,
+    "height": 560,
+    "width": 414
   },
   "visual": {
     "visualType": "barChart",
@@ -41,11 +41,27 @@
                       "Entity": "Painel"
                     }
                   },
-                  "Property": "Valor Acima do Acordo"
+                  "Property": "Valor Dentro do Acordo"
                 }
               },
-              "queryRef": "Painel.Valor Acima do Acordo",
-              "nativeQueryRef": "Valor Acima do Acordo"
+              "queryRef": "Painel.Valor Dentro do Acordo",
+              "nativeQueryRef": "Valor Dentro do Acordo",
+              "displayName": "Dentro"
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Painel"
+                    }
+                  },
+                  "Property": "Valor Fora do Acordo"
+                }
+              },
+              "queryRef": "Painel.Valor Fora do Acordo",
+              "nativeQueryRef": "Valor Fora do Acordo",
+              "displayName": "Fora"
             }
           ]
         }
@@ -60,7 +76,7 @@
                     "Entity": "Painel"
                   }
                 },
-                "Property": "Valor Acima do Acordo"
+                "Property": "Valor Dentro do Acordo"
               }
             },
             "direction": "Descending"
@@ -76,7 +92,7 @@
             "show": {
               "expr": {
                 "Literal": {
-                  "Value": "true"
+                  "Value": "false"
                 }
               }
             },
@@ -90,10 +106,48 @@
             "labelDisplayUnits": {
               "expr": {
                 "Literal": {
-                  "Value": "1000D"
+                  "Value": "0D"
                 }
               }
             }
+          }
+        }
+      ],
+      "dataPoint": [
+        {
+          "properties": {
+            "fill": {
+              "solid": {
+                "color": {
+                  "expr": {
+                    "Literal": {
+                      "Value": "'#1C5CAB'"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "selector": {
+            "metadata": "Painel.Valor Dentro do Acordo"
+          }
+        },
+        {
+          "properties": {
+            "fill": {
+              "solid": {
+                "color": {
+                  "expr": {
+                    "Literal": {
+                      "Value": "'#E39502'"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "selector": {
+            "metadata": "Painel.Valor Fora do Acordo"
           }
         }
       ]
@@ -112,7 +166,7 @@
             "text": {
               "expr": {
                 "Literal": {
-                  "Value": "'Fornecedores que cobraram acima do acordo'"
+                  "Value": "'Top 20 fornecedores — 36,8%'"
                 }
               }
             }

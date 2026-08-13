@@ -22,50 +22,17 @@
                       "Entity": "Painel"
                     }
                   },
-                  "Property": "Valor em Fuga"
+                  "Property": "Valor Total 365d"
                 }
               },
-              "queryRef": "Painel.Valor em Fuga",
-              "nativeQueryRef": "Valor em Fuga"
+              "queryRef": "Painel.Valor Total 365d",
+              "nativeQueryRef": "Valor Total 365d"
             }
           ]
         }
       }
     },
     "drillFilterOtherVisuals": true,
-    "objects": {
-      "background": [
-        {
-          "properties": {
-            "show": {
-              "expr": {
-                "Literal": {
-                  "Value": "true"
-                }
-              }
-            },
-            "color": {
-              "solid": {
-                "color": {
-                  "expr": {
-                    "Literal": {
-                      "Value": "'#FDF3E0'"
-                    }
-                  }
-                }
-              }
-            },
-            "transparency": {
-              "expr": {
-                "Literal": {
-                  "Value": "0D"
-                }
-              }
-            }
-          }
-        }
-      ]
-    },
     "visualContainerObjects": {
       "title": [
         {

@@ -30,9 +30,21 @@ M = f'''let
     // 365 dias para a fuga de contrato: sem vigencia na ACORDOS.xlsx, uma
     // compra de 2025 que hoje casa com um acordo pode nao ter tido acordo
     // naquela data. Um ano limita o quanto o catalogo de acordos mudou.
-    ComJanelaAno = Table.AddColumn(ComJanela, "Ultimos 365 dias", each [Data] >= Date.AddDays(Fim, -364), type logical)
+    ComJanelaAno = Table.AddColumn(ComJanela, "Ultimos 365 dias", each [Data] >= Date.AddDays(Fim, -364), type logical),
+    // O mes corrente esta sempre incompleto: em 13/08/2026 agosto tem 12 dias,
+    // e a coluna cai a ~40% das outras em qualquer grafico mensal. Isso le como
+    // queda de gasto, que nao houve. Todo grafico com Ano-Mes no eixo filtra por
+    // "Mes Fechado" para nao mostrar um mes que ainda esta acontecendo.
+    InicioMesFim = Date.StartOfMonth(Fim),
+    ComMesFechado = Table.AddColumn(ComJanelaAno, "Mes Fechado", each [Data] < InicioMesFim, type logical),
+    // Doze meses fechados: a janela de 365 dias corta o mes inicial no meio
+    // (comeca em 13/08/2025), entao o primeiro mes do grafico tambem aparecia
+    // pela metade. Esta coluna pega meses inteiros nas duas pontas.
+    Inicio12 = Date.AddMonths(InicioMesFim, -12),
+    Com12Meses = Table.AddColumn(ComMesFechado, "Ultimos 12 meses fechados",
+        each [Data] >= Inicio12 and [Data] < InicioMesFim, type logical)
 in
-    ComJanelaAno'''
+    Com12Meses'''
 
 def col(nome, tipo, fmt=None, summarize="none", oculta=False):
     c = {"name": nome, "dataType": tipo, "sourceColumn": nome,
@@ -47,7 +59,8 @@ colunas += [col("Ano-Mes","string"), col("Mes","string"), col("Trimestre","strin
 _mes_nome = col("Mes Nome","string"); _mes_nome["sortByColumn"] = "Mes Num"
 colunas += [_mes_nome]
 colunas += [col("Ano", "int64", "0"), col("Mes Num", "int64", "0", oculta=True)]
-colunas += [col("Ultimos 30 dias", "boolean"), col("Ultimos 365 dias", "boolean")]
+colunas += [col("Ultimos 30 dias", "boolean"), col("Ultimos 365 dias", "boolean"),
+            col("Mes Fechado", "boolean"), col("Ultimos 12 meses fechados", "boolean")]
 colunas += [col("Qtd", "double", "#,0.##", "sum")]
 colunas += [col(c, "double", '"R$" #,0.00', "sum") for c in MOEDA]
 colunas += [col("DATA_EXECUCAO", "dateTime", "dd/mm/yyyy hh:nn", oculta=True)]
@@ -106,9 +119,27 @@ MEDIDAS = [
                                f"'{T}'[Data] >= Fim - 29, '{T}'[Data] <= Fim, "
                                f"'{T}'[Status] = \"ACIMA DO ACORDO\")", MOEDA_FMT),
 
-    # ── ano anterior, para a aba de analises mensais e anuais ──────
-    ("Valor Total Ano Anterior", f"VAR A = MAX('{T}'[Ano]) "
-                                 f"RETURN CALCULATE([Valor Total], ALL('{T}'[Ano]), '{T}'[Ano] = A - 1)", MOEDA_FMT),
+    # ── Denominadores das janelas. Cada aba restrita a um recorte precisa
+    # dizer sobre QUAL total o seu percentual foi calculado -- sem isso o
+    # leitor compara "R$ 1,8 mi em fuga" com os R$ 17,1 mi do historico
+    # inteiro e conclui 10%, quando na janela e 12,6%.
+    ("Valor Total 30d",        f"VAR Fim = CALCULATE(MAX('{T}'[Data]), ALL('{T}')) "
+                               f"RETURN CALCULATE([Valor Total], ALL('{T}'), "
+                               f"'{T}'[Data] >= Fim - 29, '{T}'[Data] <= Fim)", MOEDA_FMT),
+    ("Valor Total 365d",       f"VAR Fim = CALCULATE(MAX('{T}'[Data]), ALL('{T}')) "
+                               f"RETURN CALCULATE([Valor Total], ALL('{T}'), "
+                               f"'{T}'[Data] >= Fim - 364, '{T}'[Data] <= Fim)", MOEDA_FMT),
+    ("Valor Fora do Acordo 30d", f"VAR Fim = CALCULATE(MAX('{T}'[Data]), ALL('{T}')) "
+                               f"RETURN CALCULATE([Valor Total], ALL('{T}'), "
+                               f"'{T}'[Data] >= Fim - 29, '{T}'[Data] <= Fim, "
+                               f"'{T}'[STATUS_ACORDO] = \"SEM_ACORDO\")", MOEDA_FMT),
+    ("% Fora do Acordo 30d",   "DIVIDE([Valor Fora do Acordo 30d], [Valor Total 30d])", "0.0%"),
+    ("Valor em Fuga 365d",     f"VAR Fim = CALCULATE(MAX('{T}'[Data]), ALL('{T}')) "
+                               f"RETURN CALCULATE([Valor Total], ALL('{T}'), "
+                               f"'{T}'[Data] >= Fim - 364, '{T}'[Data] <= Fim, "
+                               f"'{T}'[STATUS_ACORDO] = \"SEM_ACORDO\", "
+                               f"'{T}'[Tinha acordo?] = \"SIM\")", MOEDA_FMT),
+    ("% em Fuga 365d",         "DIVIDE([Valor em Fuga 365d], [Valor Total 365d])", "0.0%"),
 
     ("Fornecedores",           f"DISTINCTCOUNT('{T}'[Fornecedor])", "#,0"),
     ("Cidades",                f"DISTINCTCOUNT('{T}'[Cidade])", "#,0"),

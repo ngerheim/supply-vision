@@ -4,7 +4,7 @@
   "position": {
     "x": 844,
     "y": 148,
-    "z": 9000,
+    "z": 7000,
     "height": 340,
     "width": 436
   },
@@ -86,6 +86,33 @@
     },
     "drillFilterOtherVisuals": true,
     "objects": {
+      "labels": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "false"
+                }
+              }
+            },
+            "labelPrecision": {
+              "expr": {
+                "Literal": {
+                  "Value": "0D"
+                }
+              }
+            },
+            "labelDisplayUnits": {
+              "expr": {
+                "Literal": {
+                  "Value": "0D"
+                }
+              }
+            }
+          }
+        }
+      ],
       "dataPoint": [
         {
           "properties": {

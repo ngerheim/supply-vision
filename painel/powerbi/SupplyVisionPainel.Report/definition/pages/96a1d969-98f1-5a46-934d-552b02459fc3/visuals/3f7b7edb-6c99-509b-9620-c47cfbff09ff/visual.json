@@ -1,12 +1,12 @@
 {
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.9.0/schema.json",
-  "name": "85bb6018-c358-561e-9f6e-636237db822b",
+  "name": "3f7b7edb-6c99-509b-9620-c47cfbff09ff",
   "position": {
-    "x": 314,
+    "x": 1048,
     "y": 60,
-    "z": 2000,
+    "z": 5000,
     "height": 80,
-    "width": 306
+    "width": 254
   },
   "visual": {
     "visualType": "card",
@@ -22,11 +22,11 @@
                       "Entity": "Painel"
                     }
                   },
-                  "Property": "Valor Fora do Acordo 30d"
+                  "Property": "% Abaixo"
                 }
               },
-              "queryRef": "Painel.Valor Fora do Acordo 30d",
-              "nativeQueryRef": "Valor Fora do Acordo 30d"
+              "queryRef": "Painel.% Abaixo",
+              "nativeQueryRef": "% Abaixo"
             }
           ]
         }

@@ -29,6 +29,15 @@ APELIDOS = {"Valor Dentro do Acordo":     "Dentro",
             "Valor em Fuga":              "Fuga",
             "Valor Fora do Acordo":       "Fora"}
 
+# Unidade escolhida por visual, nao automatica. O "Auto" do Power BI olha o
+# maior valor do grafico: num ranking cujo topo e R$ 9,3 mi ele fixa milhoes, e
+# a cauda inteira imprime "R$ 0,0 Mi". Nos rankings a cauda e justamente o que
+# se compara, entao vao em milhares.
+ROT_MIL = rotulos(True, casas=0, unidades=1000)
+ROT_MI  = rotulos(True, casas=1, unidades=1000000)
+SEM_ROT = rotulos(False)
+
+
 def faixa_cards(medidas, y=CARD_Y, fontes=None, destaque=None, larg=None):
     """Cartoes em faixa. Sem larg=, dividem a largura da pagina.
 
@@ -47,52 +56,55 @@ def pagina(nome, visuais, filtros=None):
     return p
 
 # ═══ 1. Visao Geral ══════════════════════════════════════════════
-# Tres rankings em top 20 na mesma linha: 372px de altura dao ~18px por barra.
-# O grafico mensal cedeu altura (240 -> 180) para isso caber sem rolagem.
+# Sem segmentadores e sem serie temporal: a aba responde "onde esta o dinheiro",
+# nao "como evoluiu". Os dois segmentadores no topo cortavam por Ano-Mes e
+# STATUS_ACORDO uma pagina que existe para ser o retrato do total, e o cartao
+# "% Acima 30d" trazia para ca um numero que e o assunto da aba de conformidade.
+#
+# Com o grafico mensal fora, os quatro rankings ficam com 560px de altura --
+# 28px por barra no top 20, o dobro do que tinham.
 p1 = [texto(0, 0, 620, TOPO_H, "Supply Vision", 15)]
-p1 += [filtro(640, 0, 300, TOPO_H, "Ano-Mes"), filtro(948, 0, 332, TOPO_H, "STATUS_ACORDO")]
 p1 += faixa_cards(["Valor Total", "Valor Fora do Acordo", "% Fora do Acordo",
-                   "Valor em Fuga", "% Acima 30d"], destaque="% Fora do Acordo")
-# Tres rankings de 273px truncavam o nome em ~14 caracteres ("AUTO PECAS
-# SAO..."), o que anula o ranking: nao se le o que esta em primeiro. Passam a
-# ser dois de 414px na esquerda, e "Grupos de modelo" -- que tem rotulo curto e
-# poucas categorias -- desce para a coluna da direita.
+                   "Valor em Fuga"], destaque="% Fora do Acordo", larg=306)
 p1 += [
-    empilhado(0, 148, 836, 212, "Ano-Mes",
-              ["Valor Dentro do Acordo", "Valor Fora Sem Alternativa", "Valor em Fuga"],
-              "Composicao mensal em R$", cores=CORES_COBERTURA, apelidos=APELIDOS),
+    barras(0, 148, 414, 560, "Cidade", "Valor Total",
+           "Top 20 cidades — 58,7%", filtros=top_n("Cidade", 20), objetos=ROT_MIL),
+    barras_empilhadas(422, 148, 414, 560, "Fornecedor",
+                      ["Valor Dentro do Acordo", "Valor Fora do Acordo"],
+                      "Top 20 fornecedores — 36,8%",
+                      cores=CORES_DENTRO_FORA, filtros=top_n("Fornecedor", 20),
+                      apelidos=APELIDOS, objetos=SEM_ROT),
     barras_empilhadas(844, 148, 436, 340, "Grupo Item",
                       ["Valor Dentro do Acordo", "Valor Fora do Acordo"],
                       "Top 20 grupos de item — 59,3% do valor",
                       cores=CORES_DENTRO_FORA, filtros=top_n("Grupo Item", 20),
-                      apelidos=APELIDOS),
-    barras(844, 496, 436, 212, "Grupo Modelo", "Valor Total", "Grupos de modelo"),
-    barras(0, 368, 414, 340, "Cidade", "Valor Total",
-           "Top 20 cidades — 58,7%", filtros=top_n("Cidade", 20)),
-    barras_empilhadas(422, 368, 414, 340, "Fornecedor",
-                      ["Valor Dentro do Acordo", "Valor Fora do Acordo"],
-                      "Top 20 fornecedores — 36,8%",
-                      cores=CORES_DENTRO_FORA, filtros=top_n("Fornecedor", 20),
-                      apelidos=APELIDOS),
+                      apelidos=APELIDOS, objetos=SEM_ROT),
+    barras(844, 496, 436, 212, "Grupo Modelo", "Valor Total", "Grupos de modelo",
+           objetos=ROT_MIL),
 ]
 
 # ═══ 2. Fora do Acordo ═══════════════════════════════════════════
 p2 = [texto(0, 0, 900, TOPO_H, "Fora do acordo", 15)]
-p2 += faixa_cards(["Valor Fora do Acordo", "% Fora do Acordo"],
-                  destaque="Valor Fora do Acordo", larg=306)
+# Cartoes na janela de 30 dias. Os do total historico sao identicos aos da
+# Visao Geral -- dois cartoes repetindo numero nao informam nada. Em 30 dias
+# passam a responder "e agora, esta melhorando?".
+p2 += faixa_cards(["Janela 30d", "Valor Fora do Acordo 30d", "% Fora do Acordo 30d"],
+                  fontes={"Janela 30d": 12}, destaque="% Fora do Acordo 30d",
+                  larg=306)
 p2 += [
     colunas_(0, 148, 836, 240, "Ano-Mes", "Valor Fora do Acordo",
-             "Valor fora do acordo por mes", cat_asc=True),
+             "Valor fora do acordo por mes (meses fechados)", cat_asc=True,
+             objetos=ROT_MI, filtros=filtro_coluna("Mes Fechado")),
     barras(844, 148, 436, 280, "Motivo Sem Acordo", "Valor Fora do Acordo",
-           "Em qual dimensao faltou referencia"),
+           "Em qual dimensao faltou referencia", objetos=ROT_MI),
     barras(844, 436, 436, 272, "Grupo Modelo", "Valor Fora do Acordo",
-           "Grupos de modelo fora do acordo"),
+           "Grupos de modelo fora do acordo", objetos=ROT_MIL),
     barras(0, 396, 414, 312, "Fornecedor", "Valor Fora do Acordo",
            "Top 20 fornecedores — 25,9% do fora do acordo",
-           filtros=top_n("Fornecedor", 20)),
+           filtros=top_n("Fornecedor", 20), objetos=ROT_MIL),
     barras(422, 396, 414, 312, "Grupo Item", "Valor Fora do Acordo",
            "Top 20 grupos de item — 51,7% do fora do acordo",
-           filtros=top_n("Grupo Item", 20)),
+           filtros=top_n("Grupo Item", 20), objetos=ROT_MIL),
 ]
 
 # ═══ 3. Fuga de Contrato (365 dias) ══════════════════════════════
@@ -101,24 +113,35 @@ p2 += [
 # ano limita o quanto o catalogo mudou entre a OS e a tabela atual.
 # Na janela: R$ 1,77 mi em 10.986 linhas, e a fuga se concentra em 38 cidades.
 p3 = [texto(0, 0, 900, TOPO_H, "Fuga de contrato", 15)]
-p3 += faixa_cards(["Janela 365d", "Valor em Fuga"], fontes={"Janela 365d": 12},
-                  destaque="Valor em Fuga", larg=306)
+# O gasto total da janela entra ao lado da fuga: sem ele o leitor compara
+# R$ 1,8 mi de fuga com os R$ 17,1 mi do historico e conclui 10%, quando dentro
+# da janela e outro numero.
+p3 += faixa_cards(["Janela 365d", "Valor Total 365d", "Valor em Fuga 365d",
+                   "% em Fuga 365d"], fontes={"Janela 365d": 12},
+                  destaque="% em Fuga 365d", larg=306)
 p3 += [
+    # Doze meses fechados em vez de "tudo na janela de 365 dias": a janela
+    # comeca no meio de agosto/2025 e termina no meio de agosto/2026, entao as
+    # duas colunas das pontas apareciam pela metade e a serie parecia subir e
+    # depois cair.
     colunas_(0, 148, 836, 240, "Ano-Mes", "Valor em Fuga",
-             "Valor em fuga por mes", cat_asc=True),
+             "Valor em fuga nos ultimos 12 meses fechados", cat_asc=True,
+             objetos=ROT_MIL,
+             filtros=filtro_coluna("Ultimos 12 meses fechados")),
     barras(844, 148, 436, 560, "Cidade", "Valor em Fuga",
            "Top 20 cidades — 96,0% da fuga (ocorre em 38)",
-           filtros=top_n("Cidade", 20)),
+           filtros=top_n("Cidade", 20), objetos=ROT_MIL),
     barras(0, 396, 414, 312, "Fornecedor", "Valor em Fuga",
-           "Top 20 fornecedores — 56,3% da fuga", filtros=top_n("Fornecedor", 20)),
+           "Top 20 fornecedores — 56,3% da fuga", filtros=top_n("Fornecedor", 20), objetos=ROT_MIL),
     barras(422, 396, 414, 312, "Grupo Item", "Valor em Fuga",
-           "Top 20 grupos de item — 72,4% da fuga", filtros=top_n("Grupo Item", 20)),
+           "Top 20 grupos de item — 72,4% da fuga", filtros=top_n("Grupo Item", 20), objetos=ROT_MIL),
 ]
 
 # ═══ 4. Conformidade de Preco (30 dias) ══════════════════════════
 p4 = [texto(0, 0, 1000, TOPO_H, "Conformidade de preco", 15)]
-p4 += faixa_cards(["Janela 30d", "Valor Dentro do Acordo", "% Conforme", "% Acima", "% Abaixo"],
-                  fontes={"Janela 30d": 12}, destaque="% Acima")
+p4 += faixa_cards(["Janela 30d", "Valor Total 30d", "% Conforme", "% Acima",
+                   "% Abaixo"], fontes={"Janela 30d": 12}, destaque="% Acima",
+                  larg=254)
 p4 += [
     # Era "Valor coberto por acordo" por Ano-Mes: dentro de uma janela de 30
     # dias isso rende uma ou duas colunas -- um grafico para dizer um numero
@@ -130,50 +153,17 @@ p4 += [
     # pergunta da aba. Com a medida de dentro do acordo, SEM ACORDO fica vazia e
     # sai do eixo sozinha.
     barras(0, 148, 636, 260, "Status", "Valor Dentro do Acordo",
-           "Composicao por status do acordo na janela"),
+           "Composicao por status do acordo na janela", objetos=ROT_MIL),
     barras(644, 148, 636, 260, "Fornecedor", "Valor Acima do Acordo",
            "Fornecedores que cobraram acima do acordo",
-           filtros=top_n("Fornecedor", 20)),
+           filtros=top_n("Fornecedor", 20), objetos=ROT_MIL),
     barras(0, 416, 636, 292, "Grupo Item", "Valor Acima do Acordo",
-           "Grupos de item cobrados acima do acordo", filtros=top_n("Grupo Item", 20)),
+           "Grupos de item cobrados acima do acordo",
+           filtros=top_n("Grupo Item", 20), objetos=ROT_MIL),
     tabela(644, 416, 636, 292,
            ["Data", "OS", "Cidade", "Fornecedor", "Grupo Item"],
            ["Valor Total", "Valor Acima do Acordo"],
            "Linhas acima do acordo — base para cobrar o fornecedor"),
-]
-
-# ═══ 5. Analises Mensais ═════════════════════════════════════════
-p5 = [texto(0, 0, 900, 44, "Analises mensais", 15)]
-p5 += [filtro(948, 0, 332, TOPO_H, "Ano")]
-p5 += faixa_cards(["Valor Total", "% Fora do Acordo", "Valor em Fuga"],
-                  destaque="% Fora do Acordo", larg=306)
-p5 += [
-    empilhado(0, 148, 1280, 260, "Ano-Mes",
-              ["Valor Dentro do Acordo", "Valor Fora Sem Alternativa", "Valor em Fuga"],
-              "Participacao mensal — a cobertura melhora ou piora?",
-              cores=CORES_COBERTURA, cem_por_cento=True, apelidos=APELIDOS),
-    matriz(0, 416, 1280, 292, ["Ano-Mes"], [],
-           ["Valor Total", "Valor Dentro do Acordo", "Valor Fora do Acordo",
-            "% Fora do Acordo", "Valor em Fuga"],
-           "Mes a mes, em numero"),
-]
-
-# ═══ 6. Analises Anuais ══════════════════════════════════════════
-# Sem cartao de variacao anual: 2026 esta parcial (vai ate 12/08) e um YoY
-# mostraria queda que nao existe. A matriz Ano x Mes deixa a parcialidade
-# visivel em vez de esconder num percentual.
-p6 = [texto(0, 0, 900, TOPO_H, "Analises anuais", 15)]
-p6 += faixa_cards(["Valor Total", "% Fora do Acordo", "Valor em Fuga"],
-                  destaque="% Fora do Acordo", larg=306)
-p6 += [
-    empilhado(0, 148, 436, 260, "Ano",
-              ["Valor Dentro do Acordo", "Valor Fora Sem Alternativa", "Valor em Fuga"],
-              "Comparativo anual (2026 parcial, ate 12/08)", cores=CORES_COBERTURA,
-              apelidos=APELIDOS),
-    linha_(444, 148, 836, 260, "Mes Nome", "Valor Total",
-           "Sazonalidade — mesmo mes, anos diferentes", serie="Ano"),
-    matriz(0, 416, 1280, 292, ["Ano"], ["Mes Nome"], ["Valor Total"],
-           "Ano x mes — onde 2026 ainda nao fechou"),
 ]
 
 # ═══ 7. Detalhe ══════════════════════════════════════════════════
@@ -198,8 +188,6 @@ paginas = [pagina("Visao Geral", p1),
            pagina("Fora do Acordo", p2),
            pagina("Fuga de Contrato", p3, filtros=filtro_janela("Ultimos 365 dias")),
            pagina("Conformidade de Preco", p4, filtros=filtro_janela("Ultimos 30 dias")),
-           pagina("Analises Mensais", p5),
-           pagina("Analises Anuais", p6),
            pagina("Detalhe", p7)]
 
 n_pg, n_vis = escrever("out/SupplyVisionPainel.Report/definition", paginas)

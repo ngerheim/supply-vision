@@ -1,12 +1,12 @@
 {
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.9.0/schema.json",
-  "name": "66bf3288-9b14-5ba2-ae27-571b25f07413",
+  "name": "da0c528f-e5c9-50d2-9389-0b2fede77456",
   "position": {
-    "x": 644,
+    "x": 0,
     "y": 148,
-    "z": 7000,
-    "height": 260,
-    "width": 636
+    "z": 5000,
+    "height": 560,
+    "width": 414
   },
   "visual": {
     "visualType": "barChart",
@@ -22,11 +22,11 @@
                       "Entity": "Painel"
                     }
                   },
-                  "Property": "Fornecedor"
+                  "Property": "Cidade"
                 }
               },
-              "queryRef": "Painel.Fornecedor",
-              "nativeQueryRef": "Fornecedor",
+              "queryRef": "Painel.Cidade",
+              "nativeQueryRef": "Cidade",
               "active": true
             }
           ]
@@ -41,11 +41,11 @@
                       "Entity": "Painel"
                     }
                   },
-                  "Property": "Valor Acima do Acordo"
+                  "Property": "Valor Total"
                 }
               },
-              "queryRef": "Painel.Valor Acima do Acordo",
-              "nativeQueryRef": "Valor Acima do Acordo"
+              "queryRef": "Painel.Valor Total",
+              "nativeQueryRef": "Valor Total"
             }
           ]
         }
@@ -60,7 +60,7 @@
                     "Entity": "Painel"
                   }
                 },
-                "Property": "Valor Acima do Acordo"
+                "Property": "Valor Total"
               }
             },
             "direction": "Descending"
@@ -112,7 +112,7 @@
             "text": {
               "expr": {
                 "Literal": {
-                  "Value": "'Fornecedores que cobraram acima do acordo'"
+                  "Value": "'Top 20 cidades — 58,7%'"
                 }
               }
             }
@@ -124,7 +124,7 @@
   "filterConfig": {
     "filters": [
       {
-        "name": "964b3d71-2575-544f-b7dd-53150ba944a9",
+        "name": "dab92b01-23b5-5ec2-b85f-90f2c9424a20",
         "type": "VisualTopN",
         "field": {
           "Column": {
@@ -133,7 +133,7 @@
                 "Entity": "Painel"
               }
             },
-            "Property": "Fornecedor"
+            "Property": "Cidade"
           }
         },
         "filter": {
@@ -155,7 +155,7 @@
                         "Source": "p"
                       }
                     },
-                    "Property": "Fornecedor"
+                    "Property": "Cidade"
                   }
                 }
               ],

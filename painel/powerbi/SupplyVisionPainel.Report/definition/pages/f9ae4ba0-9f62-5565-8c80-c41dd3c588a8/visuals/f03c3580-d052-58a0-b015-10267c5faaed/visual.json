@@ -22,11 +22,11 @@
                       "Entity": "Painel"
                     }
                   },
-                  "Property": "Valor Fora do Acordo"
+                  "Property": "Janela 30d"
                 }
               },
-              "queryRef": "Painel.Valor Fora do Acordo",
-              "nativeQueryRef": "Valor Fora do Acordo"
+              "queryRef": "Painel.Janela 30d",
+              "nativeQueryRef": "Janela 30d"
             }
           ]
         }
@@ -34,31 +34,13 @@
     },
     "drillFilterOtherVisuals": true,
     "objects": {
-      "background": [
+      "labels": [
         {
           "properties": {
-            "show": {
+            "fontSize": {
               "expr": {
                 "Literal": {
-                  "Value": "true"
-                }
-              }
-            },
-            "color": {
-              "solid": {
-                "color": {
-                  "expr": {
-                    "Literal": {
-                      "Value": "'#FDF3E0'"
-                    }
-                  }
-                }
-              }
-            },
-            "transparency": {
-              "expr": {
-                "Literal": {
-                  "Value": "0D"
+                  "Value": "12D"
                 }
               }
             }

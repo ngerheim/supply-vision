@@ -22,11 +22,11 @@
                       "Entity": "Painel"
                     }
                   },
-                  "Property": "Valor Fora do Acordo 30d"
+                  "Property": "Valor Fora do Acordo"
                 }
               },
-              "queryRef": "Painel.Valor Fora do Acordo 30d",
-              "nativeQueryRef": "Valor Fora do Acordo 30d"
+              "queryRef": "Painel.Valor Fora do Acordo",
+              "nativeQueryRef": "Valor Fora do Acordo"
             }
           ]
         }

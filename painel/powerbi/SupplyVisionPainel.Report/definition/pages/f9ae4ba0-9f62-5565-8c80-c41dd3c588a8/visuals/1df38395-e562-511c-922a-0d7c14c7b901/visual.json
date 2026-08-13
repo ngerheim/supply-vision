@@ -1,10 +1,10 @@
 {
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.9.0/schema.json",
-  "name": "85bb6018-c358-561e-9f6e-636237db822b",
+  "name": "1df38395-e562-511c-922a-0d7c14c7b901",
   "position": {
-    "x": 314,
+    "x": 628,
     "y": 60,
-    "z": 2000,
+    "z": 3000,
     "height": 80,
     "width": 306
   },
@@ -22,17 +22,50 @@
                       "Entity": "Painel"
                     }
                   },
-                  "Property": "Valor Fora do Acordo 30d"
+                  "Property": "% Fora do Acordo 30d"
                 }
               },
-              "queryRef": "Painel.Valor Fora do Acordo 30d",
-              "nativeQueryRef": "Valor Fora do Acordo 30d"
+              "queryRef": "Painel.% Fora do Acordo 30d",
+              "nativeQueryRef": "% Fora do Acordo 30d"
             }
           ]
         }
       }
     },
     "drillFilterOtherVisuals": true,
+    "objects": {
+      "background": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "color": {
+              "solid": {
+                "color": {
+                  "expr": {
+                    "Literal": {
+                      "Value": "'#FDF3E0'"
+                    }
+                  }
+                }
+              }
+            },
+            "transparency": {
+              "expr": {
+                "Literal": {
+                  "Value": "0D"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
     "visualContainerObjects": {
       "title": [
         {

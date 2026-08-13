@@ -1,15 +1,15 @@
 {
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.9.0/schema.json",
-  "name": "66bf3288-9b14-5ba2-ae27-571b25f07413",
+  "name": "c3e5b705-1e37-5d5e-be1c-725e0bdb31bd",
   "position": {
-    "x": 644,
+    "x": 0,
     "y": 148,
-    "z": 7000,
-    "height": 260,
-    "width": 636
+    "z": 5000,
+    "height": 240,
+    "width": 836
   },
   "visual": {
-    "visualType": "barChart",
+    "visualType": "clusteredColumnChart",
     "query": {
       "queryState": {
         "Category": {
@@ -22,11 +22,11 @@
                       "Entity": "Painel"
                     }
                   },
-                  "Property": "Fornecedor"
+                  "Property": "Ano-Mes"
                 }
               },
-              "queryRef": "Painel.Fornecedor",
-              "nativeQueryRef": "Fornecedor",
+              "queryRef": "Painel.Ano-Mes",
+              "nativeQueryRef": "Ano-Mes",
               "active": true
             }
           ]
@@ -41,11 +41,11 @@
                       "Entity": "Painel"
                     }
                   },
-                  "Property": "Valor Acima do Acordo"
+                  "Property": "Valor em Fuga"
                 }
               },
-              "queryRef": "Painel.Valor Acima do Acordo",
-              "nativeQueryRef": "Valor Acima do Acordo"
+              "queryRef": "Painel.Valor em Fuga",
+              "nativeQueryRef": "Valor em Fuga"
             }
           ]
         }
@@ -54,16 +54,16 @@
         "sort": [
           {
             "field": {
-              "Measure": {
+              "Column": {
                 "Expression": {
                   "SourceRef": {
                     "Entity": "Painel"
                   }
                 },
-                "Property": "Valor Acima do Acordo"
+                "Property": "Ano-Mes"
               }
             },
-            "direction": "Descending"
+            "direction": "Ascending"
           }
         ]
       }
@@ -112,7 +112,7 @@
             "text": {
               "expr": {
                 "Literal": {
-                  "Value": "'Fornecedores que cobraram acima do acordo'"
+                  "Value": "'Valor em fuga nos ultimos 12 meses fechados'"
                 }
               }
             }
@@ -124,8 +124,8 @@
   "filterConfig": {
     "filters": [
       {
-        "name": "964b3d71-2575-544f-b7dd-53150ba944a9",
-        "type": "VisualTopN",
+        "name": "487937ce-c52d-5092-aa4f-e25d27ae40eb",
+        "type": "Categorical",
         "field": {
           "Column": {
             "Expression": {
@@ -133,7 +133,7 @@
                 "Entity": "Painel"
               }
             },
-            "Property": "Fornecedor"
+            "Property": "Ultimos 12 meses fechados"
           }
         },
         "filter": {
@@ -147,21 +147,29 @@
           ],
           "Where": [
             {
-              "Target": [
-                {
-                  "Column": {
-                    "Expression": {
-                      "SourceRef": {
-                        "Source": "p"
-                      }
-                    },
-                    "Property": "Fornecedor"
-                  }
-                }
-              ],
               "Condition": {
-                "VisualTopN": {
-                  "ItemCount": 20
+                "In": {
+                  "Expressions": [
+                    {
+                      "Column": {
+                        "Expression": {
+                          "SourceRef": {
+                            "Source": "p"
+                          }
+                        },
+                        "Property": "Ultimos 12 meses fechados"
+                      }
+                    }
+                  ],
+                  "Values": [
+                    [
+                      {
+                        "Literal": {
+                          "Value": "true"
+                        }
+                      }
+                    ]
+                  ]
                 }
               }
             }

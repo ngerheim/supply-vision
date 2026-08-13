@@ -200,6 +200,19 @@ def top_n(dim, quantos=20):
         "howCreated": "User",
     }]}
 
+def filtro_coluna(coluna):
+    """Mesma coisa que filtro_janela, mas aplicado a UM visual.
+
+    A estrutura do filtro e identica -- o que muda e onde o dicionario e
+    pendurado: em filterConfig da pagina ou do visual. Existe com nome proprio
+    porque o uso e outro: aqui serve para tirar o mes corrente de um grafico
+    mensal sem esconder o mes corrente do resto da pagina.
+    """
+    f = filtro_janela(coluna)
+    f["filters"][0]["name"] = guid("colvis/" + coluna)
+    return f
+
+
 def filtro_janela(coluna="Ultimos 30 dias"):
     """Filtro de pagina pela coluna logica calculada no M.
 
@@ -257,8 +270,10 @@ def empilhado(x, y, w, h, cat, medidas, tit, cores=None, cem_por_cento=False,
     return v
 
 def barras_empilhadas(x, y, w, h, dim, medidas, tit, cores=None, filtros=None,
-                      apelidos=None):
-    obj = cores_series(cores) if cores else None
+                      apelidos=None, objetos=None):
+    obj = dict(objetos or {})
+    if cores: obj.update(cores_series(cores))
+    obj = obj or None
     ap = apelidos or {}
     v = visual("barChart", x, y, w, h,
                {"Category": [ref(dim)], "Y": [ref(m, ap.get(m)) for m in medidas]},

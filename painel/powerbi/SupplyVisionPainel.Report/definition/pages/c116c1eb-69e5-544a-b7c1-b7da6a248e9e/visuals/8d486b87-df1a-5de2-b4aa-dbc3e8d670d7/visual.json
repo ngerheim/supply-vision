@@ -1,10 +1,10 @@
 {
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.9.0/schema.json",
-  "name": "85bb6018-c358-561e-9f6e-636237db822b",
+  "name": "8d486b87-df1a-5de2-b4aa-dbc3e8d670d7",
   "position": {
-    "x": 314,
+    "x": 942,
     "y": 60,
-    "z": 2000,
+    "z": 4000,
     "height": 80,
     "width": 306
   },
@@ -22,11 +22,11 @@
                       "Entity": "Painel"
                     }
                   },
-                  "Property": "Valor Fora do Acordo 30d"
+                  "Property": "Valor em Fuga"
                 }
               },
-              "queryRef": "Painel.Valor Fora do Acordo 30d",
-              "nativeQueryRef": "Valor Fora do Acordo 30d"
+              "queryRef": "Painel.Valor em Fuga",
+              "nativeQueryRef": "Valor em Fuga"
             }
           ]
         }
