@@ -181,6 +181,13 @@
             "lineageTag": "0299f5e3-fb15-502a-a2c4-114798d3cc90"
           },
           {
+            "name": "Ultimos 365 dias",
+            "dataType": "boolean",
+            "sourceColumn": "Ultimos 365 dias",
+            "summarizeBy": "none",
+            "lineageTag": "83519ce8-2b06-56e6-9bfc-dc0f95cc5ebb"
+          },
+          {
             "name": "Qtd",
             "dataType": "double",
             "sourceColumn": "Qtd",
@@ -276,12 +283,6 @@
             "formatString": "#,0"
           },
           {
-            "name": "OS Distintas",
-            "expression": "DISTINCTCOUNT('Painel'[OS])",
-            "lineageTag": "f1344e74-fadb-58ad-bdc9-9f56b3dfd491",
-            "formatString": "#,0"
-          },
-          {
             "name": "Valor Fora do Acordo",
             "expression": "CALCULATE([Valor Total], 'Painel'[STATUS_ACORDO] = \"SEM_ACORDO\")",
             "lineageTag": "2bfc07d4-4d03-56c2-b8bb-621d7f0a3bd9",
@@ -300,22 +301,10 @@
             "formatString": "0.0%"
           },
           {
-            "name": "Linhas Fora do Acordo",
-            "expression": "CALCULATE([Linhas], 'Painel'[STATUS_ACORDO] = \"SEM_ACORDO\")",
-            "lineageTag": "508932e7-d629-5221-b652-570cf640d518",
-            "formatString": "#,0"
-          },
-          {
             "name": "Valor em Fuga",
             "expression": "CALCULATE([Valor Total], 'Painel'[STATUS_ACORDO] = \"SEM_ACORDO\", 'Painel'[Tinha acordo?] = \"SIM\")",
             "lineageTag": "26e515fa-c653-54f4-b66a-485830781f01",
             "formatString": "\"R$\" #,0.00"
-          },
-          {
-            "name": "Linhas em Fuga",
-            "expression": "CALCULATE([Linhas], 'Painel'[STATUS_ACORDO] = \"SEM_ACORDO\", 'Painel'[Tinha acordo?] = \"SIM\")",
-            "lineageTag": "28503260-4e28-539a-98a4-af7fef297160",
-            "formatString": "#,0"
           },
           {
             "name": "Valor Fora Sem Alternativa",
@@ -357,6 +346,11 @@
             "name": "Janela 30d",
             "expression": "VAR Fim = CALCULATE(MAX('Painel'[Data]), ALL('Painel')) RETURN FORMAT(Fim - 29, \"dd/mm/yyyy\") & \" a \" & FORMAT(Fim, \"dd/mm/yyyy\")",
             "lineageTag": "0f5fda7e-98c0-5e6c-8a11-c1e7bce20def"
+          },
+          {
+            "name": "Janela 365d",
+            "expression": "VAR Fim = CALCULATE(MAX('Painel'[Data]), ALL('Painel')) RETURN FORMAT(Fim - 364, \"dd/mm/yyyy\") & \" a \" & FORMAT(Fim, \"dd/mm/yyyy\")",
+            "lineageTag": "a9f3dd5d-f445-5001-9dd7-b0fe760ab37c"
           },
           {
             "name": "Valor Coberto 30d",
@@ -419,12 +413,6 @@
             "formatString": "#,0"
           },
           {
-            "name": "Ticket Medio Linha",
-            "expression": "DIVIDE([Valor Total], [Linhas])",
-            "lineageTag": "b90f8aad-642d-5d45-91bf-3723bf225fe6",
-            "formatString": "\"R$\" #,0.00"
-          },
-          {
             "name": "% do Fora do Acordo",
             "expression": "DIVIDE([Valor Fora do Acordo], CALCULATE([Valor Fora do Acordo], ALLSELECTED()))",
             "lineageTag": "e9e270d8-661c-59f0-952e-4a32452d919f",
@@ -458,9 +446,13 @@
                 "    // dias usam exatamente o mesmo recorte, e um refresh atrasado nao esvazia",
                 "    // a pagina -- ela passa a mostrar os ultimos 30 dias que existem no dado.",
                 "    Fim = List.Max(ComTrimestre[Data]),",
-                "    ComJanela = Table.AddColumn(ComTrimestre, \"Ultimos 30 dias\", each [Data] >= Date.AddDays(Fim, -29), type logical)",
+                "    ComJanela = Table.AddColumn(ComTrimestre, \"Ultimos 30 dias\", each [Data] >= Date.AddDays(Fim, -29), type logical),",
+                "    // 365 dias para a fuga de contrato: sem vigencia na ACORDOS.xlsx, uma",
+                "    // compra de 2025 que hoje casa com um acordo pode nao ter tido acordo",
+                "    // naquela data. Um ano limita o quanto o catalogo de acordos mudou.",
+                "    ComJanelaAno = Table.AddColumn(ComJanela, \"Ultimos 365 dias\", each [Data] >= Date.AddDays(Fim, -364), type logical)",
                 "in",
-                "    ComJanela"
+                "    ComJanelaAno"
               ]
             }
           }

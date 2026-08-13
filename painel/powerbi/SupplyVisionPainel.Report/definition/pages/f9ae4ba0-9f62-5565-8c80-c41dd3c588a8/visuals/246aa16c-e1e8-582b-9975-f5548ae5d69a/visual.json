@@ -1,11 +1,11 @@
 {
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.9.0/schema.json",
-  "name": "fe0836c7-6aea-52f8-bc9a-b1ffe50b0dc3",
+  "name": "246aa16c-e1e8-582b-9975-f5548ae5d69a",
   "position": {
     "x": 844,
-    "y": 436,
-    "z": 5000,
-    "height": 272,
+    "y": 148,
+    "z": 4000,
+    "height": 280,
     "width": 436
   },
   "visual": {
@@ -22,11 +22,11 @@
                       "Entity": "Painel"
                     }
                   },
-                  "Property": "Grupo Modelo"
+                  "Property": "Motivo Sem Acordo"
                 }
               },
-              "queryRef": "Painel.Grupo Modelo",
-              "nativeQueryRef": "Grupo Modelo",
+              "queryRef": "Painel.Motivo Sem Acordo",
+              "nativeQueryRef": "Motivo Sem Acordo",
               "active": true
             }
           ]
@@ -83,7 +83,7 @@
             "text": {
               "expr": {
                 "Literal": {
-                  "Value": "'Grupos de modelo fora do acordo'"
+                  "Value": "'Em qual dimensao faltou referencia'"
                 }
               }
             }

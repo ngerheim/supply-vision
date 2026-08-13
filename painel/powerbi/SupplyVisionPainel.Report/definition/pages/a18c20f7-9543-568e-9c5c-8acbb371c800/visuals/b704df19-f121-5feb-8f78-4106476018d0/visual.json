@@ -1,18 +1,18 @@
 {
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.9.0/schema.json",
-  "name": "fe0836c7-6aea-52f8-bc9a-b1ffe50b0dc3",
+  "name": "b704df19-f121-5feb-8f78-4106476018d0",
   "position": {
-    "x": 844,
-    "y": 436,
-    "z": 5000,
-    "height": 272,
-    "width": 436
+    "x": 0,
+    "y": 416,
+    "z": 6000,
+    "height": 292,
+    "width": 1280
   },
   "visual": {
-    "visualType": "barChart",
+    "visualType": "pivotTable",
     "query": {
       "queryState": {
-        "Category": {
+        "Rows": {
           "projections": [
             {
               "field": {
@@ -22,16 +22,33 @@
                       "Entity": "Painel"
                     }
                   },
-                  "Property": "Grupo Modelo"
+                  "Property": "Ano"
                 }
               },
-              "queryRef": "Painel.Grupo Modelo",
-              "nativeQueryRef": "Grupo Modelo",
-              "active": true
+              "queryRef": "Painel.Ano",
+              "nativeQueryRef": "Ano"
             }
           ]
         },
-        "Y": {
+        "Columns": {
+          "projections": [
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Painel"
+                    }
+                  },
+                  "Property": "Mes Nome"
+                }
+              },
+              "queryRef": "Painel.Mes Nome",
+              "nativeQueryRef": "Mes Nome"
+            }
+          ]
+        },
+        "Values": {
           "projections": [
             {
               "field": {
@@ -41,31 +58,14 @@
                       "Entity": "Painel"
                     }
                   },
-                  "Property": "Valor Fora do Acordo"
+                  "Property": "Valor Total"
                 }
               },
-              "queryRef": "Painel.Valor Fora do Acordo",
-              "nativeQueryRef": "Valor Fora do Acordo"
+              "queryRef": "Painel.Valor Total",
+              "nativeQueryRef": "Valor Total"
             }
           ]
         }
-      },
-      "sortDefinition": {
-        "sort": [
-          {
-            "field": {
-              "Measure": {
-                "Expression": {
-                  "SourceRef": {
-                    "Entity": "Painel"
-                  }
-                },
-                "Property": "Valor Fora do Acordo"
-              }
-            },
-            "direction": "Descending"
-          }
-        ]
       }
     },
     "drillFilterOtherVisuals": true,
@@ -83,7 +83,7 @@
             "text": {
               "expr": {
                 "Literal": {
-                  "Value": "'Grupos de modelo fora do acordo'"
+                  "Value": "'Ano x mes — onde 2026 ainda nao fechou'"
                 }
               }
             }

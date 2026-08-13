@@ -318,12 +318,19 @@ def _validar_parametros(df_acordo):
         print("  Parâmetros de universo: sem inconsistências contra a ACORDOS.xlsx.")
 
 
-MOTIVO_NAO_COMPARAVEL = "Item não comparável"
-MOTIVO_FORNECEDOR     = "Fornecedor sem acordo"
-MOTIVO_CIDADE         = "Cidade sem acordo"
-MOTIVO_MODELO         = "Modelo sem acordo"
-MOTIVO_ITEM_MAPEAR    = "Possível item a mapear"
-MOTIVO_ITEM           = "Item sem acordo"
+# Nome curto de propósito: o motivo é rótulo de eixo e de coluna, lido dezenas
+# de vezes por quem usa o relatório e o painel. "Fornecedor sem acordo" repetia
+# "sem acordo" em toda linha de uma coluna que só existe para linhas sem acordo,
+# e o texto longo forçava o eixo a truncar. O que o motivo responde é: em qual
+# dimensão a combinação deixou de encontrar referência.
+#
+# A hierarquia (ORDEM_MOTIVOS) não mudou — só o texto.
+MOTIVO_NAO_COMPARAVEL = "Sem equivalente"
+MOTIVO_FORNECEDOR     = "Fornecedor"
+MOTIVO_CIDADE         = "Cidade"
+MOTIVO_MODELO         = "Modelo"
+MOTIVO_ITEM_MAPEAR    = "Sinonimo"
+MOTIVO_ITEM           = "Item"
 
 # Quarentena: há acordo, mas ele não serve de referência. Não são "sem
 # acordo" — o problema está no cadastro, não na compra.

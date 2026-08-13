@@ -1,12 +1,12 @@
 {
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.9.0/schema.json",
-  "name": "cb2d585e-cc88-5254-905b-a9b8de118e40",
+  "name": "2b39510c-5af9-5637-b1b7-07849530a482",
   "position": {
-    "x": 422,
-    "y": 396,
-    "z": 7000,
-    "height": 312,
-    "width": 414
+    "x": 844,
+    "y": 148,
+    "z": 9000,
+    "height": 560,
+    "width": 436
   },
   "visual": {
     "visualType": "barChart",
@@ -41,6 +41,20 @@
                       "Entity": "Painel"
                     }
                   },
+                  "Property": "Valor Dentro do Acordo"
+                }
+              },
+              "queryRef": "Painel.Valor Dentro do Acordo",
+              "nativeQueryRef": "Valor Dentro do Acordo"
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Painel"
+                    }
+                  },
                   "Property": "Valor Fora do Acordo"
                 }
               },
@@ -60,7 +74,7 @@
                     "Entity": "Painel"
                   }
                 },
-                "Property": "Valor Fora do Acordo"
+                "Property": "Valor Dentro do Acordo"
               }
             },
             "direction": "Descending"
@@ -69,6 +83,46 @@
       }
     },
     "drillFilterOtherVisuals": true,
+    "objects": {
+      "dataPoint": [
+        {
+          "properties": {
+            "fill": {
+              "solid": {
+                "color": {
+                  "expr": {
+                    "Literal": {
+                      "Value": "'#1C5CAB'"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "selector": {
+            "metadata": "Painel.Valor Dentro do Acordo"
+          }
+        },
+        {
+          "properties": {
+            "fill": {
+              "solid": {
+                "color": {
+                  "expr": {
+                    "Literal": {
+                      "Value": "'#E39502'"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "selector": {
+            "metadata": "Painel.Valor Fora do Acordo"
+          }
+        }
+      ]
+    },
     "visualContainerObjects": {
       "title": [
         {
@@ -83,7 +137,7 @@
             "text": {
               "expr": {
                 "Literal": {
-                  "Value": "'Top 20 grupos de item — 51,7% do fora do acordo'"
+                  "Value": "'Top 20 grupos de item — 59,3% do valor'"
                 }
               }
             }

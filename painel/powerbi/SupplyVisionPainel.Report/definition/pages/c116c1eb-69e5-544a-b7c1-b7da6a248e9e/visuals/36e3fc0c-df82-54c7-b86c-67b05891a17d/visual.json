@@ -1,12 +1,12 @@
 {
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.9.0/schema.json",
-  "name": "fe0836c7-6aea-52f8-bc9a-b1ffe50b0dc3",
+  "name": "36e3fc0c-df82-54c7-b86c-67b05891a17d",
   "position": {
-    "x": 844,
-    "y": 436,
-    "z": 5000,
-    "height": 272,
-    "width": 436
+    "x": 562,
+    "y": 336,
+    "z": 12000,
+    "height": 372,
+    "width": 274
   },
   "visual": {
     "visualType": "barChart",
@@ -41,11 +41,11 @@
                       "Entity": "Painel"
                     }
                   },
-                  "Property": "Valor Fora do Acordo"
+                  "Property": "Valor Total"
                 }
               },
-              "queryRef": "Painel.Valor Fora do Acordo",
-              "nativeQueryRef": "Valor Fora do Acordo"
+              "queryRef": "Painel.Valor Total",
+              "nativeQueryRef": "Valor Total"
             }
           ]
         }
@@ -60,7 +60,7 @@
                     "Entity": "Painel"
                   }
                 },
-                "Property": "Valor Fora do Acordo"
+                "Property": "Valor Total"
               }
             },
             "direction": "Descending"
@@ -83,7 +83,7 @@
             "text": {
               "expr": {
                 "Literal": {
-                  "Value": "'Grupos de modelo fora do acordo'"
+                  "Value": "'Grupos de modelo'"
                 }
               }
             }

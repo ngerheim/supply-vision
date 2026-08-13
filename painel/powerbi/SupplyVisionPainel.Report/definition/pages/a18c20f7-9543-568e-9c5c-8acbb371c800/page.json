@@ -1,0 +1,8 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/page/2.1.0/schema.json",
+  "name": "a18c20f7-9543-568e-9c5c-8acbb371c800",
+  "displayName": "Analises Anuais",
+  "displayOption": "FitToPage",
+  "height": 720,
+  "width": 1280
+}

@@ -1,12 +1,12 @@
 {
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.9.0/schema.json",
-  "name": "cb2d585e-cc88-5254-905b-a9b8de118e40",
+  "name": "97aff5a1-1d4e-5699-b3b7-baf0a9d95657",
   "position": {
-    "x": 422,
-    "y": 396,
-    "z": 7000,
-    "height": 312,
-    "width": 414
+    "x": 281,
+    "y": 336,
+    "z": 11000,
+    "height": 372,
+    "width": 273
   },
   "visual": {
     "visualType": "barChart",
@@ -22,17 +22,31 @@
                       "Entity": "Painel"
                     }
                   },
-                  "Property": "Grupo Item"
+                  "Property": "Fornecedor"
                 }
               },
-              "queryRef": "Painel.Grupo Item",
-              "nativeQueryRef": "Grupo Item",
+              "queryRef": "Painel.Fornecedor",
+              "nativeQueryRef": "Fornecedor",
               "active": true
             }
           ]
         },
         "Y": {
           "projections": [
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Painel"
+                    }
+                  },
+                  "Property": "Valor Dentro do Acordo"
+                }
+              },
+              "queryRef": "Painel.Valor Dentro do Acordo",
+              "nativeQueryRef": "Valor Dentro do Acordo"
+            },
             {
               "field": {
                 "Measure": {
@@ -60,7 +74,7 @@
                     "Entity": "Painel"
                   }
                 },
-                "Property": "Valor Fora do Acordo"
+                "Property": "Valor Dentro do Acordo"
               }
             },
             "direction": "Descending"
@@ -69,6 +83,46 @@
       }
     },
     "drillFilterOtherVisuals": true,
+    "objects": {
+      "dataPoint": [
+        {
+          "properties": {
+            "fill": {
+              "solid": {
+                "color": {
+                  "expr": {
+                    "Literal": {
+                      "Value": "'#1C5CAB'"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "selector": {
+            "metadata": "Painel.Valor Dentro do Acordo"
+          }
+        },
+        {
+          "properties": {
+            "fill": {
+              "solid": {
+                "color": {
+                  "expr": {
+                    "Literal": {
+                      "Value": "'#E39502'"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "selector": {
+            "metadata": "Painel.Valor Fora do Acordo"
+          }
+        }
+      ]
+    },
     "visualContainerObjects": {
       "title": [
         {
@@ -83,7 +137,7 @@
             "text": {
               "expr": {
                 "Literal": {
-                  "Value": "'Top 20 grupos de item — 51,7% do fora do acordo'"
+                  "Value": "'Top 20 fornecedores — 36,8%'"
                 }
               }
             }
@@ -95,7 +149,7 @@
   "filterConfig": {
     "filters": [
       {
-        "name": "efbdfd05-d509-5f01-a4d0-268642fc834d",
+        "name": "964b3d71-2575-544f-b7dd-53150ba944a9",
         "type": "VisualTopN",
         "field": {
           "Column": {
@@ -104,7 +158,7 @@
                 "Entity": "Painel"
               }
             },
-            "Property": "Grupo Item"
+            "Property": "Fornecedor"
           }
         },
         "filter": {
@@ -126,7 +180,7 @@
                         "Source": "p"
                       }
                     },
-                    "Property": "Grupo Item"
+                    "Property": "Fornecedor"
                   }
                 }
               ],

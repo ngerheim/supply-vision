@@ -1,15 +1,15 @@
 {
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.9.0/schema.json",
-  "name": "fe0836c7-6aea-52f8-bc9a-b1ffe50b0dc3",
+  "name": "e0fafab4-4877-567c-ae68-48763dbd924c",
   "position": {
-    "x": 844,
-    "y": 436,
-    "z": 5000,
-    "height": 272,
-    "width": 436
+    "x": 0,
+    "y": 148,
+    "z": 3000,
+    "height": 240,
+    "width": 836
   },
   "visual": {
-    "visualType": "barChart",
+    "visualType": "clusteredColumnChart",
     "query": {
       "queryState": {
         "Category": {
@@ -22,11 +22,11 @@
                       "Entity": "Painel"
                     }
                   },
-                  "Property": "Grupo Modelo"
+                  "Property": "Ano-Mes"
                 }
               },
-              "queryRef": "Painel.Grupo Modelo",
-              "nativeQueryRef": "Grupo Modelo",
+              "queryRef": "Painel.Ano-Mes",
+              "nativeQueryRef": "Ano-Mes",
               "active": true
             }
           ]
@@ -54,21 +54,50 @@
         "sort": [
           {
             "field": {
-              "Measure": {
+              "Column": {
                 "Expression": {
                   "SourceRef": {
                     "Entity": "Painel"
                   }
                 },
-                "Property": "Valor Fora do Acordo"
+                "Property": "Ano-Mes"
               }
             },
-            "direction": "Descending"
+            "direction": "Ascending"
           }
         ]
       }
     },
     "drillFilterOtherVisuals": true,
+    "objects": {
+      "labels": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "labelPrecision": {
+              "expr": {
+                "Literal": {
+                  "Value": "0D"
+                }
+              }
+            },
+            "labelDisplayUnits": {
+              "expr": {
+                "Literal": {
+                  "Value": "0D"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
     "visualContainerObjects": {
       "title": [
         {
@@ -83,7 +112,7 @@
             "text": {
               "expr": {
                 "Literal": {
-                  "Value": "'Grupos de modelo fora do acordo'"
+                  "Value": "'Valor fora do acordo por mes'"
                 }
               }
             }

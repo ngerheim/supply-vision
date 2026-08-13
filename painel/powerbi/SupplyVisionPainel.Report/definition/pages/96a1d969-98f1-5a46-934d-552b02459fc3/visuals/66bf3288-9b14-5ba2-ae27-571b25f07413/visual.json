@@ -1,12 +1,12 @@
 {
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.9.0/schema.json",
-  "name": "fe0836c7-6aea-52f8-bc9a-b1ffe50b0dc3",
+  "name": "66bf3288-9b14-5ba2-ae27-571b25f07413",
   "position": {
-    "x": 844,
-    "y": 436,
-    "z": 5000,
-    "height": 272,
-    "width": 436
+    "x": 644,
+    "y": 148,
+    "z": 7000,
+    "height": 260,
+    "width": 636
   },
   "visual": {
     "visualType": "barChart",
@@ -22,11 +22,11 @@
                       "Entity": "Painel"
                     }
                   },
-                  "Property": "Grupo Modelo"
+                  "Property": "Fornecedor"
                 }
               },
-              "queryRef": "Painel.Grupo Modelo",
-              "nativeQueryRef": "Grupo Modelo",
+              "queryRef": "Painel.Fornecedor",
+              "nativeQueryRef": "Fornecedor",
               "active": true
             }
           ]
@@ -41,11 +41,11 @@
                       "Entity": "Painel"
                     }
                   },
-                  "Property": "Valor Fora do Acordo"
+                  "Property": "Valor Acima do Acordo"
                 }
               },
-              "queryRef": "Painel.Valor Fora do Acordo",
-              "nativeQueryRef": "Valor Fora do Acordo"
+              "queryRef": "Painel.Valor Acima do Acordo",
+              "nativeQueryRef": "Valor Acima do Acordo"
             }
           ]
         }
@@ -60,7 +60,7 @@
                     "Entity": "Painel"
                   }
                 },
-                "Property": "Valor Fora do Acordo"
+                "Property": "Valor Acima do Acordo"
               }
             },
             "direction": "Descending"
@@ -83,7 +83,7 @@
             "text": {
               "expr": {
                 "Literal": {
-                  "Value": "'Grupos de modelo fora do acordo'"
+                  "Value": "'Fornecedores que cobraram acima do acordo'"
                 }
               }
             }
@@ -91,5 +91,55 @@
         }
       ]
     }
+  },
+  "filterConfig": {
+    "filters": [
+      {
+        "name": "964b3d71-2575-544f-b7dd-53150ba944a9",
+        "type": "VisualTopN",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "Painel"
+              }
+            },
+            "Property": "Fornecedor"
+          }
+        },
+        "filter": {
+          "Version": 2,
+          "From": [
+            {
+              "Name": "p",
+              "Entity": "Painel",
+              "Type": 0
+            }
+          ],
+          "Where": [
+            {
+              "Target": [
+                {
+                  "Column": {
+                    "Expression": {
+                      "SourceRef": {
+                        "Source": "p"
+                      }
+                    },
+                    "Property": "Fornecedor"
+                  }
+                }
+              ],
+              "Condition": {
+                "VisualTopN": {
+                  "ItemCount": 20
+                }
+              }
+            }
+          ]
+        },
+        "howCreated": "User"
+      }
+    ]
   }
 }

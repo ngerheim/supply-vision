@@ -1,0 +1,241 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.9.0/schema.json",
+  "name": "9b446b20-b68d-5c9a-8b42-58b3a61064cf",
+  "position": {
+    "x": 428,
+    "y": 44,
+    "z": 14000,
+    "height": 668,
+    "width": 852
+  },
+  "visual": {
+    "visualType": "tableEx",
+    "query": {
+      "queryState": {
+        "Values": {
+          "projections": [
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Painel"
+                    }
+                  },
+                  "Property": "Data"
+                }
+              },
+              "queryRef": "Painel.Data",
+              "nativeQueryRef": "Data"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Painel"
+                    }
+                  },
+                  "Property": "OS"
+                }
+              },
+              "queryRef": "Painel.OS",
+              "nativeQueryRef": "OS"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Painel"
+                    }
+                  },
+                  "Property": "Cidade"
+                }
+              },
+              "queryRef": "Painel.Cidade",
+              "nativeQueryRef": "Cidade"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Painel"
+                    }
+                  },
+                  "Property": "Fornecedor"
+                }
+              },
+              "queryRef": "Painel.Fornecedor",
+              "nativeQueryRef": "Fornecedor"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Painel"
+                    }
+                  },
+                  "Property": "Grupo Modelo"
+                }
+              },
+              "queryRef": "Painel.Grupo Modelo",
+              "nativeQueryRef": "Grupo Modelo"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Painel"
+                    }
+                  },
+                  "Property": "Modelo"
+                }
+              },
+              "queryRef": "Painel.Modelo",
+              "nativeQueryRef": "Modelo"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Painel"
+                    }
+                  },
+                  "Property": "Grupo Item"
+                }
+              },
+              "queryRef": "Painel.Grupo Item",
+              "nativeQueryRef": "Grupo Item"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Painel"
+                    }
+                  },
+                  "Property": "Item"
+                }
+              },
+              "queryRef": "Painel.Item",
+              "nativeQueryRef": "Item"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Painel"
+                    }
+                  },
+                  "Property": "Status"
+                }
+              },
+              "queryRef": "Painel.Status",
+              "nativeQueryRef": "Status"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Painel"
+                    }
+                  },
+                  "Property": "STATUS_ACORDO"
+                }
+              },
+              "queryRef": "Painel.STATUS_ACORDO",
+              "nativeQueryRef": "STATUS_ACORDO"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Painel"
+                    }
+                  },
+                  "Property": "Tinha acordo?"
+                }
+              },
+              "queryRef": "Painel.Tinha acordo?",
+              "nativeQueryRef": "Tinha acordo?"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Painel"
+                    }
+                  },
+                  "Property": "Motivo Sem Acordo"
+                }
+              },
+              "queryRef": "Painel.Motivo Sem Acordo",
+              "nativeQueryRef": "Motivo Sem Acordo"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Painel"
+                    }
+                  },
+                  "Property": "Criador"
+                }
+              },
+              "queryRef": "Painel.Criador",
+              "nativeQueryRef": "Criador"
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Painel"
+                    }
+                  },
+                  "Property": "Valor Total"
+                }
+              },
+              "queryRef": "Painel.Valor Total",
+              "nativeQueryRef": "Valor Total"
+            }
+          ]
+        }
+      }
+    },
+    "drillFilterOtherVisuals": true,
+    "visualContainerObjects": {
+      "title": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "text": {
+              "expr": {
+                "Literal": {
+                  "Value": "'Linhas do painel'"
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

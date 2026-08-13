@@ -1,12 +1,12 @@
 {
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.9.0/schema.json",
-  "name": "fe0836c7-6aea-52f8-bc9a-b1ffe50b0dc3",
+  "name": "b4b27e9a-64d2-585e-8d26-32a5bad54f14",
   "position": {
-    "x": 844,
-    "y": 436,
-    "z": 5000,
-    "height": 272,
-    "width": 436
+    "x": 0,
+    "y": 336,
+    "z": 10000,
+    "height": 372,
+    "width": 273
   },
   "visual": {
     "visualType": "barChart",
@@ -22,11 +22,11 @@
                       "Entity": "Painel"
                     }
                   },
-                  "Property": "Grupo Modelo"
+                  "Property": "Cidade"
                 }
               },
-              "queryRef": "Painel.Grupo Modelo",
-              "nativeQueryRef": "Grupo Modelo",
+              "queryRef": "Painel.Cidade",
+              "nativeQueryRef": "Cidade",
               "active": true
             }
           ]
@@ -41,11 +41,11 @@
                       "Entity": "Painel"
                     }
                   },
-                  "Property": "Valor Fora do Acordo"
+                  "Property": "Valor Total"
                 }
               },
-              "queryRef": "Painel.Valor Fora do Acordo",
-              "nativeQueryRef": "Valor Fora do Acordo"
+              "queryRef": "Painel.Valor Total",
+              "nativeQueryRef": "Valor Total"
             }
           ]
         }
@@ -60,7 +60,7 @@
                     "Entity": "Painel"
                   }
                 },
-                "Property": "Valor Fora do Acordo"
+                "Property": "Valor Total"
               }
             },
             "direction": "Descending"
@@ -83,7 +83,7 @@
             "text": {
               "expr": {
                 "Literal": {
-                  "Value": "'Grupos de modelo fora do acordo'"
+                  "Value": "'Top 20 cidades — 58,7%'"
                 }
               }
             }
@@ -91,5 +91,55 @@
         }
       ]
     }
+  },
+  "filterConfig": {
+    "filters": [
+      {
+        "name": "dab92b01-23b5-5ec2-b85f-90f2c9424a20",
+        "type": "VisualTopN",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "Painel"
+              }
+            },
+            "Property": "Cidade"
+          }
+        },
+        "filter": {
+          "Version": 2,
+          "From": [
+            {
+              "Name": "p",
+              "Entity": "Painel",
+              "Type": 0
+            }
+          ],
+          "Where": [
+            {
+              "Target": [
+                {
+                  "Column": {
+                    "Expression": {
+                      "SourceRef": {
+                        "Source": "p"
+                      }
+                    },
+                    "Property": "Cidade"
+                  }
+                }
+              ],
+              "Condition": {
+                "VisualTopN": {
+                  "ItemCount": 20
+                }
+              }
+            }
+          ]
+        },
+        "howCreated": "User"
+      }
+    ]
   }
 }
