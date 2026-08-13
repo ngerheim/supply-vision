@@ -98,11 +98,18 @@ tema = {
             # faixa superior do tile.
             "visualHeader": [{"show": False}],
         }},
-        # Barras: rotulo de dado ligado (o ranking e para ler valor, nao estimar)
+        # Barras sem rotulo de dado, com eixo de valor. O rotulo por barra nao
+        # sobrevive a um ranking: qualquer unidade fixa quebra numa das pontas
+        # -- em milhoes a cauda imprime "R$ 0,0 Mi", em milhares o topo imprime
+        # "R$ 9.320 Mil". Um eixo com tres ou quatro marcas da a escala sem
+        # repetir vinte vezes o mesmo texto, e devolve ~70px de largura para o
+        # nome do fornecedor, que e o que estava truncando.
         "barChart": {"*": {
-            "labels": [{"show": True, "fontSize": 9, "color": {"solid": {"color": TINTA2}},
-                        "labelDisplayUnits": 0, "labelPrecision": 1}],
-            "valueAxis": [{"show": False}],
+            "labels": [{"show": False}],
+            "valueAxis": [{"show": True, "fontSize": 9, "showAxisTitle": False,
+                           "labelColor": {"solid": {"color": MUDO}},
+                           "gridlineShow": True,
+                           "gridlineColor": {"solid": {"color": "#EEF1F4"}}}],
             "categoryAxis": [{"show": True, "fontSize": 10, "showAxisTitle": False,
                               "labelColor": {"solid": {"color": TINTA2}}}],
         }},

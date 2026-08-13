@@ -1,0 +1,24 @@
+Troca rotulo de barra por eixo de valor e iguala os rankings
+
+O rotulo por barra nao sobrevive a um ranking, e os prints provaram nas duas
+direcoes: em milhoes a cauda imprimia "R$ 0,0 Mi", e em milhares o topo virou
+"R$ 9.320 Mil" e a aba de conformidade ficou com uma coluna de "R$ 1 Mil" e
+"R$ 0 Mil" -- a magnitude ali e de quatro mil reais, entao milhares com zero
+casa colapsa tudo. Nao existe unidade fixa que sirva as duas pontas.
+
+Barras passam a ter eixo de valor com grade fina e nenhum rotulo. Tres ou
+quatro marcas dao a escala sem repetir vinte vezes o mesmo texto, e o espaco
+que o rotulo ocupava (~70px) volta para o nome do fornecedor, que era o que
+estava truncando.
+
+Isso tambem corrige uma regressao que eu havia introduzido: as barras
+empilhadas estavam sem rotulo E sem eixo, ou seja, sem nenhuma referencia
+quantitativa -- so proporcao.
+
+Visao Geral com quatro rankings de 314px e altura igual. "Grupos de item"
+tinha 340px para vinte barras e mostrava treze com barra de rolagem: um top 20
+que esconde sete nao e um top 20. Sem rotulo, 314px de largura comportam mais
+texto de categoria do que os 414px comportavam com rotulo.
+
+Titulo das paginas ocupa a faixa inteira. Em 620px sobrava meia pagina de
+plano cinza ao lado de um retangulo branco, que lia como visual quebrado.

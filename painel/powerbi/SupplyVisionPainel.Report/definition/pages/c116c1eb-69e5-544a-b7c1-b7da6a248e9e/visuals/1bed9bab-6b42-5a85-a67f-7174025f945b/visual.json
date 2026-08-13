@@ -1,12 +1,12 @@
 {
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.9.0/schema.json",
-  "name": "c83e4ebc-4dfc-5079-acd3-d794722f59c3",
+  "name": "1bed9bab-6b42-5a85-a67f-7174025f945b",
   "position": {
-    "x": 844,
-    "y": 496,
+    "x": 966,
+    "y": 148,
     "z": 8000,
-    "height": 212,
-    "width": 436
+    "height": 560,
+    "width": 314
   },
   "visual": {
     "visualType": "barChart",
@@ -69,35 +69,6 @@
       }
     },
     "drillFilterOtherVisuals": true,
-    "objects": {
-      "labels": [
-        {
-          "properties": {
-            "show": {
-              "expr": {
-                "Literal": {
-                  "Value": "true"
-                }
-              }
-            },
-            "labelPrecision": {
-              "expr": {
-                "Literal": {
-                  "Value": "0D"
-                }
-              }
-            },
-            "labelDisplayUnits": {
-              "expr": {
-                "Literal": {
-                  "Value": "1000D"
-                }
-              }
-            }
-          }
-        }
-      ]
-    },
     "visualContainerObjects": {
       "title": [
         {

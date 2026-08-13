@@ -1,12 +1,12 @@
 {
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.9.0/schema.json",
-  "name": "2b39510c-5af9-5637-b1b7-07849530a482",
+  "name": "a1a20b90-8c88-5ac8-9e89-283cdca4dcc8",
   "position": {
-    "x": 844,
+    "x": 322,
     "y": 148,
-    "z": 7000,
-    "height": 340,
-    "width": 436
+    "z": 6000,
+    "height": 560,
+    "width": 314
   },
   "visual": {
     "visualType": "barChart",
@@ -22,11 +22,11 @@
                       "Entity": "Painel"
                     }
                   },
-                  "Property": "Grupo Item"
+                  "Property": "Fornecedor"
                 }
               },
-              "queryRef": "Painel.Grupo Item",
-              "nativeQueryRef": "Grupo Item",
+              "queryRef": "Painel.Fornecedor",
+              "nativeQueryRef": "Fornecedor",
               "active": true
             }
           ]
@@ -86,33 +86,6 @@
     },
     "drillFilterOtherVisuals": true,
     "objects": {
-      "labels": [
-        {
-          "properties": {
-            "show": {
-              "expr": {
-                "Literal": {
-                  "Value": "false"
-                }
-              }
-            },
-            "labelPrecision": {
-              "expr": {
-                "Literal": {
-                  "Value": "0D"
-                }
-              }
-            },
-            "labelDisplayUnits": {
-              "expr": {
-                "Literal": {
-                  "Value": "0D"
-                }
-              }
-            }
-          }
-        }
-      ],
       "dataPoint": [
         {
           "properties": {
@@ -166,7 +139,7 @@
             "text": {
               "expr": {
                 "Literal": {
-                  "Value": "'Top 20 grupos de item — 59,3% do valor'"
+                  "Value": "'Top 20 fornecedores — 36,8%'"
                 }
               }
             }
@@ -178,7 +151,7 @@
   "filterConfig": {
     "filters": [
       {
-        "name": "efbdfd05-d509-5f01-a4d0-268642fc834d",
+        "name": "964b3d71-2575-544f-b7dd-53150ba944a9",
         "type": "VisualTopN",
         "field": {
           "Column": {
@@ -187,7 +160,7 @@
                 "Entity": "Painel"
               }
             },
-            "Property": "Grupo Item"
+            "Property": "Fornecedor"
           }
         },
         "filter": {
@@ -209,7 +182,7 @@
                         "Source": "p"
                       }
                     },
-                    "Property": "Grupo Item"
+                    "Property": "Fornecedor"
                   }
                 }
               ],

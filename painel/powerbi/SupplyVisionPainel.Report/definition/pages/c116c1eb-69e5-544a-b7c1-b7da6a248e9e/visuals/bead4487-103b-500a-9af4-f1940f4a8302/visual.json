@@ -1,12 +1,12 @@
 {
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.9.0/schema.json",
-  "name": "6c0d77e1-cb33-562c-b6fb-9efe809d44e6",
+  "name": "bead4487-103b-500a-9af4-f1940f4a8302",
   "position": {
-    "x": 422,
+    "x": 644,
     "y": 148,
-    "z": 6000,
+    "z": 7000,
     "height": 560,
-    "width": 414
+    "width": 314
   },
   "visual": {
     "visualType": "barChart",
@@ -22,11 +22,11 @@
                       "Entity": "Painel"
                     }
                   },
-                  "Property": "Fornecedor"
+                  "Property": "Grupo Item"
                 }
               },
-              "queryRef": "Painel.Fornecedor",
-              "nativeQueryRef": "Fornecedor",
+              "queryRef": "Painel.Grupo Item",
+              "nativeQueryRef": "Grupo Item",
               "active": true
             }
           ]
@@ -86,33 +86,6 @@
     },
     "drillFilterOtherVisuals": true,
     "objects": {
-      "labels": [
-        {
-          "properties": {
-            "show": {
-              "expr": {
-                "Literal": {
-                  "Value": "false"
-                }
-              }
-            },
-            "labelPrecision": {
-              "expr": {
-                "Literal": {
-                  "Value": "0D"
-                }
-              }
-            },
-            "labelDisplayUnits": {
-              "expr": {
-                "Literal": {
-                  "Value": "0D"
-                }
-              }
-            }
-          }
-        }
-      ],
       "dataPoint": [
         {
           "properties": {
@@ -166,7 +139,7 @@
             "text": {
               "expr": {
                 "Literal": {
-                  "Value": "'Top 20 fornecedores — 36,8%'"
+                  "Value": "'Top 20 grupos de item — 59,3%'"
                 }
               }
             }
@@ -178,7 +151,7 @@
   "filterConfig": {
     "filters": [
       {
-        "name": "964b3d71-2575-544f-b7dd-53150ba944a9",
+        "name": "efbdfd05-d509-5f01-a4d0-268642fc834d",
         "type": "VisualTopN",
         "field": {
           "Column": {
@@ -187,7 +160,7 @@
                 "Entity": "Painel"
               }
             },
-            "Property": "Fornecedor"
+            "Property": "Grupo Item"
           }
         },
         "filter": {
@@ -209,7 +182,7 @@
                         "Source": "p"
                       }
                     },
-                    "Property": "Fornecedor"
+                    "Property": "Grupo Item"
                   }
                 }
               ],

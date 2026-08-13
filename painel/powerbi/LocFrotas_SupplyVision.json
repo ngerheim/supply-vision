@@ -225,20 +225,25 @@
       "*": {
         "labels": [
           {
-            "show": true,
-            "fontSize": 9,
-            "color": {
-              "solid": {
-                "color": "#4A5568"
-              }
-            },
-            "labelDisplayUnits": 0,
-            "labelPrecision": 1
+            "show": false
           }
         ],
         "valueAxis": [
           {
-            "show": false
+            "show": true,
+            "fontSize": 9,
+            "showAxisTitle": false,
+            "labelColor": {
+              "solid": {
+                "color": "#8A94A6"
+              }
+            },
+            "gridlineShow": true,
+            "gridlineColor": {
+              "solid": {
+                "color": "#EEF1F4"
+              }
+            }
           }
         ],
         "categoryAxis": [
