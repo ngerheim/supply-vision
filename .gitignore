@@ -68,6 +68,11 @@
 /painel/powerbi/**/.pbi/
 /painel/powerbi/**/.platform
 
+# Saida dos geradores do relatorio. O definition/ que vale e o de dentro do
+# SupplyVisionPainel.Report; o out/ e a copia intermediaria de onde ele foi
+# copiado, e versionar as duas garantiria que divergissem.
+/painel/powerbi/gerador/out/
+
 # Painel do Power BI: o CODIGO vai para o Git, os SNAPSHOTS nao.
 # Os parquets sao dado operacional (centenas de milhares de linhas), e o
 # consolidado e regerado a cada execucao -- versionar isso encheria o

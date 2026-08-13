@@ -1,15 +1,15 @@
 {
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.9.0/schema.json",
-  "name": "2ec23237-b219-51a5-b7ab-64a011eaa4a4",
+  "name": "cb07dd6f-2c02-5b73-8834-1edd27e11d76",
   "position": {
-    "x": 0,
-    "y": 148,
-    "z": 8000,
-    "height": 212,
-    "width": 836
+    "x": 422,
+    "y": 368,
+    "z": 12000,
+    "height": 340,
+    "width": 414
   },
   "visual": {
-    "visualType": "columnChart",
+    "visualType": "barChart",
     "query": {
       "queryState": {
         "Category": {
@@ -22,11 +22,11 @@
                       "Entity": "Painel"
                     }
                   },
-                  "Property": "Ano-Mes"
+                  "Property": "Fornecedor"
                 }
               },
-              "queryRef": "Painel.Ano-Mes",
-              "nativeQueryRef": "Ano-Mes",
+              "queryRef": "Painel.Fornecedor",
+              "nativeQueryRef": "Fornecedor",
               "active": true
             }
           ]
@@ -56,27 +56,12 @@
                       "Entity": "Painel"
                     }
                   },
-                  "Property": "Valor Fora Sem Alternativa"
+                  "Property": "Valor Fora do Acordo"
                 }
               },
-              "queryRef": "Painel.Valor Fora Sem Alternativa",
-              "nativeQueryRef": "Valor Fora Sem Alternativa",
-              "displayName": "Sem alternativa"
-            },
-            {
-              "field": {
-                "Measure": {
-                  "Expression": {
-                    "SourceRef": {
-                      "Entity": "Painel"
-                    }
-                  },
-                  "Property": "Valor em Fuga"
-                }
-              },
-              "queryRef": "Painel.Valor em Fuga",
-              "nativeQueryRef": "Valor em Fuga",
-              "displayName": "Fuga"
+              "queryRef": "Painel.Valor Fora do Acordo",
+              "nativeQueryRef": "Valor Fora do Acordo",
+              "displayName": "Fora"
             }
           ]
         }
@@ -85,16 +70,16 @@
         "sort": [
           {
             "field": {
-              "Column": {
+              "Measure": {
                 "Expression": {
                   "SourceRef": {
                     "Entity": "Painel"
                   }
                 },
-                "Property": "Ano-Mes"
+                "Property": "Valor Dentro do Acordo"
               }
             },
-            "direction": "Ascending"
+            "direction": "Descending"
           }
         ]
       }
@@ -127,24 +112,6 @@
                 "color": {
                   "expr": {
                     "Literal": {
-                      "Value": "'#8A94A6'"
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "selector": {
-            "metadata": "Painel.Valor Fora Sem Alternativa"
-          }
-        },
-        {
-          "properties": {
-            "fill": {
-              "solid": {
-                "color": {
-                  "expr": {
-                    "Literal": {
                       "Value": "'#E39502'"
                     }
                   }
@@ -153,7 +120,7 @@
             }
           },
           "selector": {
-            "metadata": "Painel.Valor em Fuga"
+            "metadata": "Painel.Valor Fora do Acordo"
           }
         }
       ]
@@ -172,7 +139,7 @@
             "text": {
               "expr": {
                 "Literal": {
-                  "Value": "'Composicao mensal em R$'"
+                  "Value": "'Top 20 fornecedores — 36,8%'"
                 }
               }
             }
@@ -180,5 +147,55 @@
         }
       ]
     }
+  },
+  "filterConfig": {
+    "filters": [
+      {
+        "name": "964b3d71-2575-544f-b7dd-53150ba944a9",
+        "type": "VisualTopN",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "Painel"
+              }
+            },
+            "Property": "Fornecedor"
+          }
+        },
+        "filter": {
+          "Version": 2,
+          "From": [
+            {
+              "Name": "p",
+              "Entity": "Painel",
+              "Type": 0
+            }
+          ],
+          "Where": [
+            {
+              "Target": [
+                {
+                  "Column": {
+                    "Expression": {
+                      "SourceRef": {
+                        "Source": "p"
+                      }
+                    },
+                    "Property": "Fornecedor"
+                  }
+                }
+              ],
+              "Condition": {
+                "VisualTopN": {
+                  "ItemCount": 20
+                }
+              }
+            }
+          ]
+        },
+        "howCreated": "User"
+      }
+    ]
   }
 }

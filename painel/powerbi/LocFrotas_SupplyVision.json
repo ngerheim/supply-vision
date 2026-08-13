@@ -63,24 +63,15 @@
             "show": true,
             "color": {
               "solid": {
-                "color": "#E4E7EC"
+                "color": "#E8EBEF"
               }
             },
-            "radius": 10
+            "radius": 8
           }
         ],
         "dropShadow": [
           {
-            "show": true,
-            "color": {
-              "solid": {
-                "color": "#0B1B2E"
-              }
-            },
-            "position": "Outer",
-            "preset": "BottomRight",
-            "shadowSpread": 6,
-            "transparency": 92
+            "show": false
           }
         ],
         "title": [
@@ -91,35 +82,14 @@
                 "color": "#0B1B2E"
               }
             },
-            "fontSize": 12,
+            "fontSize": 11,
             "fontFamily": "Segoe UI Semibold",
-            "background": {
-              "solid": {
-                "color": "#FFFFFF"
-              }
-            },
             "alignment": "left"
           }
         ],
         "visualHeader": [
           {
-            "show": true,
-            "background": {
-              "solid": {
-                "color": "#FFFFFF"
-              }
-            },
-            "foreground": {
-              "solid": {
-                "color": "#8A94A6"
-              }
-            },
-            "transparency": 0,
-            "border": {
-              "solid": {
-                "color": "#FFFFFF"
-              }
-            }
+            "show": false
           }
         ],
         "categoryAxis": [
@@ -458,6 +428,17 @@
     },
     "slicer": {
       "*": {
+        "*": [
+          {
+            "mode": "Dropdown",
+            "textSize": 9,
+            "fontColor": {
+              "solid": {
+                "color": "#0B1B2E"
+              }
+            }
+          }
+        ],
         "header": [
           {
             "show": true,
@@ -481,7 +462,7 @@
                 "color": "#0B1B2E"
               }
             },
-            "fontSize": 10,
+            "fontSize": 9,
             "background": {
               "solid": {
                 "color": "#FFFFFF"

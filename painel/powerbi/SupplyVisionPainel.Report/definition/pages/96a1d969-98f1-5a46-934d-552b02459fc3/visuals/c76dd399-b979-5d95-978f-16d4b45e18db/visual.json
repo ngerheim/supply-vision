@@ -1,15 +1,15 @@
 {
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.9.0/schema.json",
-  "name": "495c8704-c7a1-585b-8820-78a47fa1b737",
+  "name": "c76dd399-b979-5d95-978f-16d4b45e18db",
   "position": {
     "x": 0,
     "y": 148,
-    "z": 3000,
-    "height": 240,
-    "width": 836
+    "z": 6000,
+    "height": 260,
+    "width": 636
   },
   "visual": {
-    "visualType": "clusteredColumnChart",
+    "visualType": "barChart",
     "query": {
       "queryState": {
         "Category": {
@@ -22,11 +22,11 @@
                       "Entity": "Painel"
                     }
                   },
-                  "Property": "Ano-Mes"
+                  "Property": "Status"
                 }
               },
-              "queryRef": "Painel.Ano-Mes",
-              "nativeQueryRef": "Ano-Mes",
+              "queryRef": "Painel.Status",
+              "nativeQueryRef": "Status",
               "active": true
             }
           ]
@@ -41,11 +41,11 @@
                       "Entity": "Painel"
                     }
                   },
-                  "Property": "Valor em Fuga"
+                  "Property": "Valor Total"
                 }
               },
-              "queryRef": "Painel.Valor em Fuga",
-              "nativeQueryRef": "Valor em Fuga"
+              "queryRef": "Painel.Valor Total",
+              "nativeQueryRef": "Valor Total"
             }
           ]
         }
@@ -54,16 +54,16 @@
         "sort": [
           {
             "field": {
-              "Column": {
+              "Measure": {
                 "Expression": {
                   "SourceRef": {
                     "Entity": "Painel"
                   }
                 },
-                "Property": "Ano-Mes"
+                "Property": "Valor Total"
               }
             },
-            "direction": "Ascending"
+            "direction": "Descending"
           }
         ]
       }
@@ -83,7 +83,7 @@
             "text": {
               "expr": {
                 "Literal": {
-                  "Value": "'Valor em fuga por mes'"
+                  "Value": "'Composicao por status na janela'"
                 }
               }
             }

@@ -1,12 +1,12 @@
 {
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.9.0/schema.json",
-  "name": "2b39510c-5af9-5637-b1b7-07849530a482",
+  "name": "3bd97bbf-226e-5aab-97f6-5befe3aeb58c",
   "position": {
-    "x": 844,
-    "y": 148,
-    "z": 9000,
+    "x": 0,
+    "y": 368,
+    "z": 11000,
     "height": 340,
-    "width": 436
+    "width": 414
   },
   "visual": {
     "visualType": "barChart",
@@ -22,11 +22,11 @@
                       "Entity": "Painel"
                     }
                   },
-                  "Property": "Grupo Item"
+                  "Property": "Cidade"
                 }
               },
-              "queryRef": "Painel.Grupo Item",
-              "nativeQueryRef": "Grupo Item",
+              "queryRef": "Painel.Cidade",
+              "nativeQueryRef": "Cidade",
               "active": true
             }
           ]
@@ -41,27 +41,11 @@
                       "Entity": "Painel"
                     }
                   },
-                  "Property": "Valor Dentro do Acordo"
+                  "Property": "Valor Total"
                 }
               },
-              "queryRef": "Painel.Valor Dentro do Acordo",
-              "nativeQueryRef": "Valor Dentro do Acordo",
-              "displayName": "Dentro"
-            },
-            {
-              "field": {
-                "Measure": {
-                  "Expression": {
-                    "SourceRef": {
-                      "Entity": "Painel"
-                    }
-                  },
-                  "Property": "Valor Fora do Acordo"
-                }
-              },
-              "queryRef": "Painel.Valor Fora do Acordo",
-              "nativeQueryRef": "Valor Fora do Acordo",
-              "displayName": "Fora"
+              "queryRef": "Painel.Valor Total",
+              "nativeQueryRef": "Valor Total"
             }
           ]
         }
@@ -76,7 +60,7 @@
                     "Entity": "Painel"
                   }
                 },
-                "Property": "Valor Dentro do Acordo"
+                "Property": "Valor Total"
               }
             },
             "direction": "Descending"
@@ -85,46 +69,6 @@
       }
     },
     "drillFilterOtherVisuals": true,
-    "objects": {
-      "dataPoint": [
-        {
-          "properties": {
-            "fill": {
-              "solid": {
-                "color": {
-                  "expr": {
-                    "Literal": {
-                      "Value": "'#1C5CAB'"
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "selector": {
-            "metadata": "Painel.Valor Dentro do Acordo"
-          }
-        },
-        {
-          "properties": {
-            "fill": {
-              "solid": {
-                "color": {
-                  "expr": {
-                    "Literal": {
-                      "Value": "'#E39502'"
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "selector": {
-            "metadata": "Painel.Valor Fora do Acordo"
-          }
-        }
-      ]
-    },
     "visualContainerObjects": {
       "title": [
         {
@@ -139,7 +83,7 @@
             "text": {
               "expr": {
                 "Literal": {
-                  "Value": "'Top 20 grupos de item — 59,3% do valor'"
+                  "Value": "'Top 20 cidades — 58,7%'"
                 }
               }
             }
@@ -151,7 +95,7 @@
   "filterConfig": {
     "filters": [
       {
-        "name": "efbdfd05-d509-5f01-a4d0-268642fc834d",
+        "name": "dab92b01-23b5-5ec2-b85f-90f2c9424a20",
         "type": "VisualTopN",
         "field": {
           "Column": {
@@ -160,7 +104,7 @@
                 "Entity": "Painel"
               }
             },
-            "Property": "Grupo Item"
+            "Property": "Cidade"
           }
         },
         "filter": {
@@ -182,7 +126,7 @@
                         "Source": "p"
                       }
                     },
-                    "Property": "Grupo Item"
+                    "Property": "Cidade"
                   }
                 }
               ],
