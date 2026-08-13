@@ -1,32 +1,32 @@
 {
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.9.0/schema.json",
-  "name": "bef10b86-d980-5955-abf3-1ed35309efbc",
+  "name": "b9994e27-e27b-51dd-8bcb-714010c36e1f",
   "position": {
-    "x": 214,
-    "y": 380,
-    "z": 13000,
-    "height": 56,
-    "width": 206
+    "x": 514,
+    "y": 60,
+    "z": 3000,
+    "height": 80,
+    "width": 249
   },
   "visual": {
-    "visualType": "slicer",
+    "visualType": "card",
     "query": {
       "queryState": {
         "Values": {
           "projections": [
             {
               "field": {
-                "Column": {
+                "Measure": {
                   "Expression": {
                     "SourceRef": {
                       "Entity": "Painel"
                     }
                   },
-                  "Property": "Motivo Sem Acordo"
+                  "Property": "% Conforme"
                 }
               },
-              "queryRef": "Painel.Motivo Sem Acordo",
-              "nativeQueryRef": "Motivo Sem Acordo"
+              "queryRef": "Painel.% Conforme",
+              "nativeQueryRef": "% Conforme"
             }
           ]
         }

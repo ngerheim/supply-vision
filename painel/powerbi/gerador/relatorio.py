@@ -8,7 +8,7 @@ antes de entregar em vez de descobrir requisito por requisito.
 As versoes de schema abaixo sao as que o proprio Desktop 2.156 (julho/2026)
 gravou neste projeto -- copiadas de la, nao escolhidas por mim.
 """
-import json, uuid, pathlib
+import json, uuid, pathlib, shutil
 
 T = "Painel"
 S_VC   = "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.9.0/schema.json"
@@ -269,8 +269,17 @@ def barras_empilhadas(x, y, w, h, dim, medidas, tit, cores=None, filtros=None,
 
 # ── escrita da arvore de pastas ─────────────────────────────────────
 def escrever(destino, paginas):
-    """Grava definition/ no formato PBIR. Devolve (n_paginas, n_visuais)."""
-    d = pathlib.Path(destino); d.mkdir(parents=True, exist_ok=True)
+    """Grava definition/ no formato PBIR. Devolve (n_paginas, n_visuais).
+
+    Apaga o destino antes de escrever. Sem isso, um visual que muda de posicao
+    ganha GUID novo e o antigo fica na pasta -- o Power BI carrega os dois, e o
+    painel mostra o mesmo ranking duas vezes, um deles espremido no tamanho
+    velho. Foi exatamente o que aconteceu em 13/08/2026: 73 visual.json para 67
+    visuais.
+    """
+    d = pathlib.Path(destino)
+    if d.exists(): shutil.rmtree(d)
+    d.mkdir(parents=True, exist_ok=True)
     esc = lambda p, o: p.write_text(json.dumps(o, indent=2, ensure_ascii=False), encoding="utf-8")
     esc(d / "version.json", {"$schema": S_VER, "version": "2.0.0"})
     esc(d / "report.json", {"$schema": S_REP, "themeCollection": {},

@@ -45,7 +45,8 @@
                 }
               },
               "queryRef": "Painel.Valor Dentro do Acordo",
-              "nativeQueryRef": "Valor Dentro do Acordo"
+              "nativeQueryRef": "Valor Dentro do Acordo",
+              "displayName": "Dentro"
             },
             {
               "field": {
@@ -59,7 +60,8 @@
                 }
               },
               "queryRef": "Painel.Valor Fora Sem Alternativa",
-              "nativeQueryRef": "Valor Fora Sem Alternativa"
+              "nativeQueryRef": "Valor Fora Sem Alternativa",
+              "displayName": "Sem alternativa"
             },
             {
               "field": {
@@ -73,7 +75,8 @@
                 }
               },
               "queryRef": "Painel.Valor em Fuga",
-              "nativeQueryRef": "Valor em Fuga"
+              "nativeQueryRef": "Valor em Fuga",
+              "displayName": "Fuga"
             }
           ]
         }

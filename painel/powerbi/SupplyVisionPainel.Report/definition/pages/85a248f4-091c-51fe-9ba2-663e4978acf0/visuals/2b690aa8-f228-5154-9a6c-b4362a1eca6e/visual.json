@@ -1,10 +1,10 @@
 {
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.9.0/schema.json",
-  "name": "bef10b86-d980-5955-abf3-1ed35309efbc",
+  "name": "2b690aa8-f228-5154-9a6c-b4362a1eca6e",
   "position": {
     "x": 214,
-    "y": 380,
-    "z": 13000,
+    "y": 188,
+    "z": 10000,
     "height": 56,
     "width": 206
   },
@@ -22,11 +22,11 @@
                       "Entity": "Painel"
                     }
                   },
-                  "Property": "Motivo Sem Acordo"
+                  "Property": "Status"
                 }
               },
-              "queryRef": "Painel.Motivo Sem Acordo",
-              "nativeQueryRef": "Motivo Sem Acordo"
+              "queryRef": "Painel.Status",
+              "nativeQueryRef": "Status"
             }
           ]
         }

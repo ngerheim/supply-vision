@@ -8,7 +8,11 @@ import json, pathlib
 from relatorio import *
 
 W, H = 1280, 720
-CARD_H, CARD_Y = 88, 52
+# Faixa de topo de 56px: o dropdown do segmentador tem cabecalho + caixa e nao
+# cabe em 44px (nos prints de 13/08 o "Todos" saia cortado pela metade). Os
+# cartoes descem junto e perdem 8px de altura para o grafico continuar em 148.
+TOPO_H = 56
+CARD_H, CARD_Y = 80, 60
 AMBAR, AZUL, CINZA = "#E39502", "#1C5CAB", "#8A94A6"
 
 CORES_COBERTURA = {"Valor Dentro do Acordo": AZUL,
@@ -45,8 +49,8 @@ def pagina(nome, visuais, filtros=None):
 # ═══ 1. Visao Geral ══════════════════════════════════════════════
 # Tres rankings em top 20 na mesma linha: 372px de altura dao ~18px por barra.
 # O grafico mensal cedeu altura (240 -> 180) para isso caber sem rolagem.
-p1 = [texto(0, 0, 620, 44, "Supply Vision", 15)]
-p1 += [filtro(640, 0, 300, 44, "Ano-Mes"), filtro(948, 0, 332, 44, "STATUS_ACORDO")]
+p1 = [texto(0, 0, 620, TOPO_H, "Supply Vision", 15)]
+p1 += [filtro(640, 0, 300, TOPO_H, "Ano-Mes"), filtro(948, 0, 332, TOPO_H, "STATUS_ACORDO")]
 p1 += faixa_cards(["Valor Total", "Valor Fora do Acordo", "% Fora do Acordo",
                    "Valor em Fuga", "% Acima 30d"], destaque="% Fora do Acordo")
 # Tres rankings de 273px truncavam o nome em ~14 caracteres ("AUTO PECAS
@@ -73,7 +77,7 @@ p1 += [
 ]
 
 # ═══ 2. Fora do Acordo ═══════════════════════════════════════════
-p2 = [texto(0, 0, 900, 44, "Fora do acordo", 15)]
+p2 = [texto(0, 0, 900, TOPO_H, "Fora do acordo", 15)]
 p2 += faixa_cards(["Valor Fora do Acordo", "% Fora do Acordo"],
                   destaque="Valor Fora do Acordo", larg=306)
 p2 += [
@@ -96,7 +100,7 @@ p2 += [
 # 2025 que hoje casa com um acordo pode nao ter tido acordo naquela data. Um
 # ano limita o quanto o catalogo mudou entre a OS e a tabela atual.
 # Na janela: R$ 1,77 mi em 10.986 linhas, e a fuga se concentra em 38 cidades.
-p3 = [texto(0, 0, 900, 44, "Fuga de contrato", 15)]
+p3 = [texto(0, 0, 900, TOPO_H, "Fuga de contrato", 15)]
 p3 += faixa_cards(["Janela 365d", "Valor em Fuga"], fontes={"Janela 365d": 12},
                   destaque="Valor em Fuga", larg=306)
 p3 += [
@@ -112,7 +116,7 @@ p3 += [
 ]
 
 # ═══ 4. Conformidade de Preco (30 dias) ══════════════════════════
-p4 = [texto(0, 0, 1000, 44, "Conformidade de preco", 15)]
+p4 = [texto(0, 0, 1000, TOPO_H, "Conformidade de preco", 15)]
 p4 += faixa_cards(["Janela 30d", "Valor Dentro do Acordo", "% Conforme", "% Acima", "% Abaixo"],
                   fontes={"Janela 30d": 12}, destaque="% Acima")
 p4 += [
@@ -121,8 +125,12 @@ p4 += [
     # que o cartao ao lado ja diz. Trocado pela composicao por Status, que e a
     # pergunta da aba: dentro do que tem acordo, quanto vem acima, conforme e
     # abaixo.
-    barras(0, 148, 636, 260, "Status", "Valor Total",
-           "Composicao por status na janela"),
+    # Medida "Valor Dentro do Acordo", nao "Valor Total": com o total, a barra
+    # SEM ACORDO (R$ 0,6 mi) achata ACIMA e ABAIXO a zero visivel, e sao elas a
+    # pergunta da aba. Com a medida de dentro do acordo, SEM ACORDO fica vazia e
+    # sai do eixo sozinha.
+    barras(0, 148, 636, 260, "Status", "Valor Dentro do Acordo",
+           "Composicao por status do acordo na janela"),
     barras(644, 148, 636, 260, "Fornecedor", "Valor Acima do Acordo",
            "Fornecedores que cobraram acima do acordo",
            filtros=top_n("Fornecedor", 20)),
@@ -136,14 +144,14 @@ p4 += [
 
 # ═══ 5. Analises Mensais ═════════════════════════════════════════
 p5 = [texto(0, 0, 900, 44, "Analises mensais", 15)]
-p5 += [filtro(948, 0, 332, 44, "Ano")]
+p5 += [filtro(948, 0, 332, TOPO_H, "Ano")]
 p5 += faixa_cards(["Valor Total", "% Fora do Acordo", "Valor em Fuga"],
-                  destaque="% Fora do Acordo")
+                  destaque="% Fora do Acordo", larg=306)
 p5 += [
     empilhado(0, 148, 1280, 260, "Ano-Mes",
               ["Valor Dentro do Acordo", "Valor Fora Sem Alternativa", "Valor em Fuga"],
               "Participacao mensal — a cobertura melhora ou piora?",
-              cores=CORES_COBERTURA, cem_por_cento=True),
+              cores=CORES_COBERTURA, cem_por_cento=True, apelidos=APELIDOS),
     matriz(0, 416, 1280, 292, ["Ano-Mes"], [],
            ["Valor Total", "Valor Dentro do Acordo", "Valor Fora do Acordo",
             "% Fora do Acordo", "Valor em Fuga"],
@@ -154,13 +162,14 @@ p5 += [
 # Sem cartao de variacao anual: 2026 esta parcial (vai ate 12/08) e um YoY
 # mostraria queda que nao existe. A matriz Ano x Mes deixa a parcialidade
 # visivel em vez de esconder num percentual.
-p6 = [texto(0, 0, 900, 44, "Analises anuais", 15)]
+p6 = [texto(0, 0, 900, TOPO_H, "Analises anuais", 15)]
 p6 += faixa_cards(["Valor Total", "% Fora do Acordo", "Valor em Fuga"],
-                  destaque="% Fora do Acordo")
+                  destaque="% Fora do Acordo", larg=306)
 p6 += [
     empilhado(0, 148, 436, 260, "Ano",
               ["Valor Dentro do Acordo", "Valor Fora Sem Alternativa", "Valor em Fuga"],
-              "Comparativo anual (2026 parcial, ate 12/08)", cores=CORES_COBERTURA),
+              "Comparativo anual (2026 parcial, ate 12/08)", cores=CORES_COBERTURA,
+              apelidos=APELIDOS),
     linha_(444, 148, 836, 260, "Mes Nome", "Valor Total",
            "Sazonalidade — mesmo mes, anos diferentes", serie="Ano"),
     matriz(0, 416, 1280, 292, ["Ano"], ["Mes Nome"], ["Valor Total"],
@@ -172,12 +181,14 @@ p6 += [
 # pagina virou o lugar de consulta pontual ("o fornecedor X cumpre acordo?").
 FILTROS_ESQ = ["Ano", "Mes Nome", "Cidade", "Fornecedor", "Grupo Modelo", "Modelo", "Criador"]
 FILTROS_DIR = ["Grupo Item", "Item", "Status", "STATUS_ACORDO", "Tinha acordo?", "Motivo Sem Acordo"]
-p7 = [texto(0, 0, 900, 40, "Detalhe", 13)]
+# Em modo lista a caixa precisava de ~96px; o dropdown fecha em 56 e os treze
+# passam a caber em duas colunas sem sobra vazia entre eles.
+p7 = [texto(0, 0, 900, TOPO_H, "Detalhe", 13)]
 for i, dim in enumerate(FILTROS_ESQ):
-    p7.append(filtro(0, 44 + i*96, 206, 92, dim))
+    p7.append(filtro(0, 60 + i*64, 206, 56, dim))
 for i, dim in enumerate(FILTROS_DIR):
-    p7.append(filtro(214, 44 + i*112, 206, 108, dim))
-p7 += [tabela(428, 44, 852, 668,
+    p7.append(filtro(214, 60 + i*64, 206, 56, dim))
+p7 += [tabela(428, 60, 852, 648,
               ["Data", "OS", "Cidade", "Fornecedor", "Grupo Modelo", "Modelo",
                "Grupo Item", "Item", "Status", "STATUS_ACORDO", "Tinha acordo?",
                "Motivo Sem Acordo", "Criador"],
