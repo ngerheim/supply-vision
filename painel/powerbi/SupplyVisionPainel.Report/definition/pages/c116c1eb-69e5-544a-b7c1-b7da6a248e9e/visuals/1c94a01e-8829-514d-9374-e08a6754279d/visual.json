@@ -1,0 +1,59 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.9.0/schema.json",
+  "name": "1c94a01e-8829-514d-9374-e08a6754279d",
+  "position": {
+    "x": 771,
+    "y": 52,
+    "z": 6000,
+    "height": 88,
+    "width": 249
+  },
+  "visual": {
+    "visualType": "card",
+    "query": {
+      "queryState": {
+        "Values": {
+          "projections": [
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Painel"
+                    }
+                  },
+                  "Property": "Valor em Fuga"
+                }
+              },
+              "queryRef": "Painel.Valor em Fuga",
+              "nativeQueryRef": "Valor em Fuga"
+            }
+          ]
+        }
+      }
+    },
+    "drillFilterOtherVisuals": true,
+    "visualContainerObjects": {
+      "title": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "text": {
+              "expr": {
+                "Literal": {
+                  "Value": "'Valor em Fuga'"
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

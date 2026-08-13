@@ -1,12 +1,12 @@
 {
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.9.0/schema.json",
-  "name": "21f2721f-f605-5d9a-a84f-ec9e2447e96b",
+  "name": "5afb6aa0-c633-5935-8232-dd62d670e770",
   "position": {
     "x": 0,
     "y": 0,
     "z": 0,
     "height": 44,
-    "width": 620
+    "width": 1000
   },
   "visual": {
     "visualType": "textbox",
@@ -19,7 +19,7 @@
               {
                 "textRuns": [
                   {
-                    "value": "Supply Vision — Conformidade de Acordos",
+                    "value": "Conformidade de preco — ultimos 30 dias",
                     "textStyle": {
                       "fontSize": "18pt",
                       "fontWeight": "bold",

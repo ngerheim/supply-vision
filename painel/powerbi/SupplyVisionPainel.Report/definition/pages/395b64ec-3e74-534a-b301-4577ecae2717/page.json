@@ -1,8 +1,0 @@
-{
-  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/page/2.1.0/schema.json",
-  "name": "395b64ec-3e74-534a-b301-4577ecae2717",
-  "displayName": "Perda Evitavel",
-  "displayOption": "FitToPage",
-  "height": 720,
-  "width": 1280
-}

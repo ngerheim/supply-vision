@@ -176,6 +176,15 @@ def gerar_candidato(run_id):
     # Agrupa as variações do mesmo veículo (ver painel_paths.grupo_modelo).
     painel["Grupo Modelo"] = painel["Modelo"].map(painel_paths.grupo_modelo)
 
+    # Agrupa as grafias do mesmo item pelo de-para do projeto. SINONIMOS vem de
+    # parametros/, carregado com as chaves já normalizadas — é a mesma tabela
+    # que o rodar.py usa no cruzamento, não uma segunda cópia.
+    from parametros import SINONIMOS, normalizar
+    painel["Grupo Item"] = painel["Item"].map(
+        lambda d: painel_paths.grupo_item(d, SINONIMOS, normalizar))
+    logging.info(f"Itens: {painel['Item'].nunique():,} descrições → "
+                 f"{painel['Grupo Item'].nunique():,} grupos")
+
     # Uma exceção que passa a cobrir mais de um modelo deixou de ser exceção:
     # avisa em vez de rotular dois veículos diferentes com o mesmo nome.
     for grupo in set(painel_paths.GRUPO_MODELO_EXCECOES.values()):

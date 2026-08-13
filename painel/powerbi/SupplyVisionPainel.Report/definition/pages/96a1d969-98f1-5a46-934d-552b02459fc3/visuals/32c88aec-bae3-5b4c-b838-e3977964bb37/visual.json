@@ -1,0 +1,59 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.9.0/schema.json",
+  "name": "32c88aec-bae3-5b4c-b838-e3977964bb37",
+  "position": {
+    "x": 514,
+    "y": 52,
+    "z": 3000,
+    "height": 88,
+    "width": 249
+  },
+  "visual": {
+    "visualType": "card",
+    "query": {
+      "queryState": {
+        "Values": {
+          "projections": [
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Painel"
+                    }
+                  },
+                  "Property": "% Conforme"
+                }
+              },
+              "queryRef": "Painel.% Conforme",
+              "nativeQueryRef": "% Conforme"
+            }
+          ]
+        }
+      }
+    },
+    "drillFilterOtherVisuals": true,
+    "visualContainerObjects": {
+      "title": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "text": {
+              "expr": {
+                "Literal": {
+                  "Value": "'% Conforme'"
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

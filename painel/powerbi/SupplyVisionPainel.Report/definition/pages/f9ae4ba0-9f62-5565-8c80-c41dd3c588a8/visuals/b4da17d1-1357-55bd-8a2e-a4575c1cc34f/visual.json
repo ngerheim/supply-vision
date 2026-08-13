@@ -1,0 +1,59 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.9.0/schema.json",
+  "name": "b4da17d1-1357-55bd-8a2e-a4575c1cc34f",
+  "position": {
+    "x": 644,
+    "y": 52,
+    "z": 3000,
+    "height": 88,
+    "width": 314
+  },
+  "visual": {
+    "visualType": "card",
+    "query": {
+      "queryState": {
+        "Values": {
+          "projections": [
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Painel"
+                    }
+                  },
+                  "Property": "Linhas Fora do Acordo"
+                }
+              },
+              "queryRef": "Painel.Linhas Fora do Acordo",
+              "nativeQueryRef": "Linhas Fora do Acordo"
+            }
+          ]
+        }
+      }
+    },
+    "drillFilterOtherVisuals": true,
+    "visualContainerObjects": {
+      "title": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "text": {
+              "expr": {
+                "Literal": {
+                  "Value": "'Linhas Fora do Acordo'"
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

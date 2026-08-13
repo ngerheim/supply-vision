@@ -62,7 +62,7 @@ COLUNAS_PAINEL = [
 ]
 
 # Colunas acrescentadas pelo painel, além das de rodar.processar().
-COLUNAS_META = ["Grupo Modelo", "STATUS_ACORDO", "DATA_EXECUCAO", "RUN_ID"]
+COLUNAS_META = ["Grupo Modelo", "Grupo Item", "STATUS_ACORDO", "DATA_EXECUCAO", "RUN_ID"]
 
 # ── Agrupamento de modelos ───────────────────────────────────────────
 # A nomenclatura do Qlik detalha versão, motor e carroceria, então o mesmo
@@ -80,6 +80,26 @@ GRUPO_MODELO_EXCECOES = {
     "Mercedes": "Mercedes Atego",
     "Prancha":  "Prancha Plataforma",
 }
+
+
+# ── Agrupamento de itens ─────────────────────────────────────────────
+# A descricao do Qlik tem varias grafias para a mesma peca: "ARTICULACAO
+# AXIAL", "ARTICULAÇÃO", "ARTICULAÇÃO LD", "ARTICULAÇÃO LE" sao uma coisa so.
+# O de-para parametros/de_para/itens.csv ja resolve isso -- e a mesma tabela
+# que o rodar.py usa para cruzar com o ACORDOS.xlsx. Reaproveitar em vez de
+# recriar: uma segunda copia da regra divergiria na primeira manutencao.
+#
+# Medido em 13/08/2026: 595 descricoes viram 430 grupos. "MAO DE OBRA REVISAO"
+# consolida 25 grafias e R$ 601 mil.
+def grupo_item(descricao, sinonimos, normalizar):
+    """Descricao canonica do item, pelo de-para do projeto.
+
+    sinonimos e normalizar entram como argumento em vez de import no topo
+    para este modulo continuar sem dependencia de parametros/ -- ele e lido
+    tambem por quem so quer os caminhos.
+    """
+    d = normalizar(descricao)
+    return sinonimos.get(d) or d
 
 
 def grupo_modelo(modelo):

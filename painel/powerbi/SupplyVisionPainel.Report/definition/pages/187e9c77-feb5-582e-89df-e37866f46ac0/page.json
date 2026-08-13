@@ -1,0 +1,8 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/page/2.1.0/schema.json",
+  "name": "187e9c77-feb5-582e-89df-e37866f46ac0",
+  "displayName": "Fuga de Contrato",
+  "displayOption": "FitToPage",
+  "height": 720,
+  "width": 1280
+}

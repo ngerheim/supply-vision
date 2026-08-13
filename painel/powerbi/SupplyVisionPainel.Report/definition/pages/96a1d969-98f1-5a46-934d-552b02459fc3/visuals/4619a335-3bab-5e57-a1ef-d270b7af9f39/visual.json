@@ -1,12 +1,12 @@
 {
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.9.0/schema.json",
-  "name": "0ae62a33-389a-5ca4-a299-92e8472283e4",
+  "name": "4619a335-3bab-5e57-a1ef-d270b7af9f39",
   "position": {
-    "x": 218,
-    "y": 44,
-    "z": 4000,
-    "height": 668,
-    "width": 1062
+    "x": 644,
+    "y": 416,
+    "z": 9000,
+    "height": 292,
+    "width": 636
   },
   "visual": {
     "visualType": "tableEx",
@@ -78,109 +78,11 @@
                       "Entity": "Painel"
                     }
                   },
-                  "Property": "Grupo Modelo"
+                  "Property": "Grupo Item"
                 }
               },
-              "queryRef": "Painel.Grupo Modelo",
-              "nativeQueryRef": "Grupo Modelo"
-            },
-            {
-              "field": {
-                "Column": {
-                  "Expression": {
-                    "SourceRef": {
-                      "Entity": "Painel"
-                    }
-                  },
-                  "Property": "Modelo"
-                }
-              },
-              "queryRef": "Painel.Modelo",
-              "nativeQueryRef": "Modelo"
-            },
-            {
-              "field": {
-                "Column": {
-                  "Expression": {
-                    "SourceRef": {
-                      "Entity": "Painel"
-                    }
-                  },
-                  "Property": "Item"
-                }
-              },
-              "queryRef": "Painel.Item",
-              "nativeQueryRef": "Item"
-            },
-            {
-              "field": {
-                "Column": {
-                  "Expression": {
-                    "SourceRef": {
-                      "Entity": "Painel"
-                    }
-                  },
-                  "Property": "Status"
-                }
-              },
-              "queryRef": "Painel.Status",
-              "nativeQueryRef": "Status"
-            },
-            {
-              "field": {
-                "Column": {
-                  "Expression": {
-                    "SourceRef": {
-                      "Entity": "Painel"
-                    }
-                  },
-                  "Property": "STATUS_ACORDO"
-                }
-              },
-              "queryRef": "Painel.STATUS_ACORDO",
-              "nativeQueryRef": "STATUS_ACORDO"
-            },
-            {
-              "field": {
-                "Column": {
-                  "Expression": {
-                    "SourceRef": {
-                      "Entity": "Painel"
-                    }
-                  },
-                  "Property": "Tinha acordo?"
-                }
-              },
-              "queryRef": "Painel.Tinha acordo?",
-              "nativeQueryRef": "Tinha acordo?"
-            },
-            {
-              "field": {
-                "Column": {
-                  "Expression": {
-                    "SourceRef": {
-                      "Entity": "Painel"
-                    }
-                  },
-                  "Property": "Motivo Sem Acordo"
-                }
-              },
-              "queryRef": "Painel.Motivo Sem Acordo",
-              "nativeQueryRef": "Motivo Sem Acordo"
-            },
-            {
-              "field": {
-                "Column": {
-                  "Expression": {
-                    "SourceRef": {
-                      "Entity": "Painel"
-                    }
-                  },
-                  "Property": "Criador"
-                }
-              },
-              "queryRef": "Painel.Criador",
-              "nativeQueryRef": "Criador"
+              "queryRef": "Painel.Grupo Item",
+              "nativeQueryRef": "Grupo Item"
             },
             {
               "field": {
@@ -195,6 +97,20 @@
               },
               "queryRef": "Painel.Valor Total",
               "nativeQueryRef": "Valor Total"
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Painel"
+                    }
+                  },
+                  "Property": "Valor Acima do Acordo"
+                }
+              },
+              "queryRef": "Painel.Valor Acima do Acordo",
+              "nativeQueryRef": "Valor Acima do Acordo"
             }
           ]
         }
@@ -215,7 +131,7 @@
             "text": {
               "expr": {
                 "Literal": {
-                  "Value": "'Linhas do painel'"
+                  "Value": "'Linhas acima do acordo — base para cobrar o fornecedor'"
                 }
               }
             }
