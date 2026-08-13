@@ -1,0 +1,95 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.9.0/schema.json",
+  "name": "9dc4ef8e-f2fa-52f0-a0e1-b271c8da2a45",
+  "position": {
+    "x": 844,
+    "y": 146,
+    "z": 7000,
+    "height": 282,
+    "width": 436
+  },
+  "visual": {
+    "visualType": "barChart",
+    "query": {
+      "queryState": {
+        "Category": {
+          "projections": [
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Painel"
+                    }
+                  },
+                  "Property": "Motivo Sem Acordo"
+                }
+              },
+              "queryRef": "Painel.Motivo Sem Acordo",
+              "nativeQueryRef": "Motivo Sem Acordo",
+              "active": true
+            }
+          ]
+        },
+        "Y": {
+          "projections": [
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Painel"
+                    }
+                  },
+                  "Property": "Valor Sem Acordo"
+                }
+              },
+              "queryRef": "Painel.Valor Sem Acordo",
+              "nativeQueryRef": "Valor Sem Acordo"
+            }
+          ]
+        }
+      },
+      "sortDefinition": {
+        "sort": [
+          {
+            "field": {
+              "Measure": {
+                "Expression": {
+                  "SourceRef": {
+                    "Entity": "Painel"
+                  }
+                },
+                "Property": "Valor Sem Acordo"
+              }
+            },
+            "direction": "Descending"
+          }
+        ]
+      }
+    },
+    "drillFilterOtherVisuals": true,
+    "visualContainerObjects": {
+      "title": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "text": {
+              "expr": {
+                "Literal": {
+                  "Value": "'Em qual dimensão faltou referência — histórico'"
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

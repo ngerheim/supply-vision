@@ -1,0 +1,53 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.9.0/schema.json",
+  "name": "85bb6018-c358-561e-9f6e-636237db822b",
+  "position": {
+    "x": 314,
+    "y": 60,
+    "z": 2000,
+    "height": 80,
+    "width": 306
+  },
+  "visual": {
+    "visualType": "card",
+    "query": {
+      "queryState": {
+        "Values": {
+          "projections": [
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Painel"
+                    }
+                  },
+                  "Property": "Valor Sem Acordo 30d"
+                }
+              },
+              "queryRef": "Painel.Valor Sem Acordo 30d",
+              "nativeQueryRef": "Valor Sem Acordo 30d",
+              "displayName": "Sem acordo na janela"
+            }
+          ]
+        }
+      }
+    },
+    "drillFilterOtherVisuals": true,
+    "visualContainerObjects": {
+      "title": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "false"
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

@@ -94,7 +94,7 @@ def texto(x, y, w, h, conteudo, tamanho=20, negrito=True):
                            [{"textRuns": runs}]}}]}}}
 
 # ── atalhos por tipo (mesma assinatura da versao legada) ────────────
-def card(x, y, w, h, medida, fonte=None, destaque=False):
+def card(x, y, w, h, medida, fonte=None, destaque=False, rotulo=None):
     """Cartao de um numero. Sem titulo -- o rotulo da categoria ja nomeia.
 
     destaque=True pinta o fundo com o ambar mais claro da rampa da marca. Um
@@ -110,14 +110,23 @@ def card(x, y, w, h, medida, fonte=None, destaque=False):
             "color": {"solid": {"color": {"expr": {"Literal": {"Value": "'#FDF3E0'"}}}}},
             "transparency": {"expr": {"Literal": {"Value": "0D"}}}}}]
     obj = obj or None
-    v = visual("card", x, y, w, h, {"Values": [ref(medida)]}, [sel_med(medida)], None, objects=obj)
+    v = visual("card", x, y, w, h, {"Values": [ref(medida, rotulo)]},
+               [sel_med(medida)], None, objects=obj)
     v["visual"]["visualContainerObjects"] = sem_titulo()
     return v
 
-def barras(x, y, w, h, dim, medida, tit, filtros=None, objetos=None):
+def barras(x, y, w, h, dim, medida, tit, filtros=None, objetos=None, cor=None):
+    """Barras horizontais. cor= fixa a cor da serie pelo nome da medida.
+
+    Sem cor=, o Power BI usa dataColors[0] -- o ambar da marca -- em TODA serie
+    unica, entao um ranking de gasto total e um de valor fora do acordo saiam da
+    mesma cor. Ambar significa excecao neste painel; total e navy.
+    """
+    obj = dict(objetos or {})
+    if cor: obj.update(cores_series({medida: cor}))
     return visual("barChart", x, y, w, h, {"Category": [ref(dim)], "Y": [ref(medida)]},
                   [sel_col(dim), sel_med(medida)], tit, order=ordenar(medida),
-                  objects=objetos, filtros=filtros)
+                  objects=obj or None, filtros=filtros)
 
 def colunas_(x, y, w, h, dim, medida, tit, cat_asc=False, objetos=None, filtros=None):
     return visual("clusteredColumnChart", x, y, w, h,
@@ -148,10 +157,17 @@ def matriz(x, y, w, h, linhas, colunas, medidas, tit, filtros=None):
     sels = [sel_col(c) for c in linhas + colunas] + [sel_med(m) for m in medidas]
     return visual("pivotTable", x, y, w, h, proj, sels, tit, filtros=filtros)
 
-def tabela(x, y, w, h, campos, medidas, tit, filtros=None):
+def tabela(x, y, w, h, campos, medidas, tit, filtros=None, ordem=None):
+    """Tabela. ordem=(nome, e_medida) ordena decrescente por essa coluna.
+
+    Numa tabela que existe para embasar cobranca, a ordem nao e detalhe: sem
+    ela o Power BI devolve por data, e quem le comeca pela linha mais antiga em
+    vez da mais cara.
+    """
     proj = {"Values": [ref(c) for c in campos] + [ref(m) for m in medidas]}
     sels = [sel_col(c) for c in campos] + [sel_med(m) for m in medidas]
-    return visual("tableEx", x, y, w, h, proj, sels, tit, filtros=filtros)
+    o = ordenar(ordem[0], medida=ordem[1]) if ordem else None
+    return visual("tableEx", x, y, w, h, proj, sels, tit, order=o, filtros=filtros)
 
 def filtro(x, y, w, h, dim):
     """Segmentador. Sem titulo -- o cabecalho do proprio slicer nomeia o campo."""
@@ -230,6 +246,11 @@ def filtro_janela(coluna="Ultimos 30 dias"):
                        "Expressions": [_campo_col_alias(coluna)],
                        "Values": [[{"Literal": {"Value": "true"}}]]}}}]},
         "howCreated": "User",
+        # Travado no modo de leitura. Sem isto qualquer leitor pode abrir o
+        # painel de filtros e apagar a janela -- a pagina viraria historica sem
+        # aviso, e e justamente a leitura que a ausencia de vigencia no acordo
+        # torna insegura. Continua visivel, para que o recorte nao seja oculto.
+        "isLockedInViewMode": True,
     }]}
 
 # ── formatacao por serie ────────────────────────────────────────────

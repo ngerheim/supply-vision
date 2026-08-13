@@ -1,0 +1,8 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/page/2.1.0/schema.json",
+  "name": "6f7ea200-9bf7-5866-bb82-d825d047a58d",
+  "displayName": "Sem acordo",
+  "displayOption": "FitToPage",
+  "height": 720,
+  "width": 1280
+}

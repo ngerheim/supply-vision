@@ -25,7 +25,14 @@ M = f'''let
     // DateTime.LocalNow(): assim a pagina de conformidade e as medidas de 30
     // dias usam exatamente o mesmo recorte, e um refresh atrasado nao esvazia
     // a pagina -- ela passa a mostrar os ultimos 30 dias que existem no dado.
-    Fim = List.Max(ComTrimestre[Data]),
+    // Ancora no ultimo dia COMPLETO, nao no maior [Data] da base. Medido em
+    // 13/08/2026: o dia da extracao tinha 59 linhas e R$ 7,7 mil contra ~200
+    // linhas e R$ 30 a 54 mil dos dias anteriores -- a extracao roda no meio da
+    // tarde. Com o dia parcial dentro, a janela de 30 dias fechava em R$ 824,1
+    // mil em vez de R$ 850,8 mil: 3,2% a menos, e o mesmo desvio na base de
+    // conformidade. Um unico registro do dia corrente desloca a janela inteira.
+    DataExec = Date.From(List.Max(ComTrimestre[DATA_EXECUCAO])),
+    Fim = List.Max(List.Select(ComTrimestre[Data], each Date.From(_) < DataExec)),
     ComJanela = Table.AddColumn(ComTrimestre, "Ultimos 30 dias", each [Data] >= Date.AddDays(Fim, -29), type logical),
     // 365 dias para a fuga de contrato: sem vigencia na ACORDOS.xlsx, uma
     // compra de 2025 que hoje casa com um acordo pode nao ter tido acordo
@@ -66,12 +73,23 @@ colunas += [col(c, "double", '"R$" #,0.00', "sum") for c in MOEDA]
 colunas += [col("DATA_EXECUCAO", "dateTime", "dd/mm/yyyy hh:nn", oculta=True)]
 
 MOEDA_FMT = '"R$" #,0.00'
+
+# Fim da janela em DAX, espelhando a coluna Fim do M: ultimo dia anterior ao dia
+# da extracao. Todas as medidas de janela referenciam esta, em vez de cada uma
+# recalcular MAX(Data) -- assim nao existe a possibilidade de a pagina e o
+# cartao usarem recortes diferentes.
+FIM = "VAR Fim = [Data Fim Completa] "
+
 MEDIDAS = [
+    ("Data Fim Completa",      f"VAR Exec = CALCULATE(MAX('{T}'[DATA_EXECUCAO]), ALL('{T}')) "
+                               f"VAR DiaExec = DATE(YEAR(Exec), MONTH(Exec), DAY(Exec)) "
+                               f"RETURN CALCULATE(MAX('{T}'[Data]), ALL('{T}'), "
+                               f"'{T}'[Data] < DiaExec)", "dd/mm/yyyy"),
     ("Valor Total",            f"SUM('{T}'[Preco Total OS])", MOEDA_FMT),
     ("Linhas",                 f"COUNTROWS('{T}')", "#,0"),
-    ("Valor Fora do Acordo",   f'CALCULATE([Valor Total], \'{T}\'[STATUS_ACORDO] = "SEM_ACORDO")', MOEDA_FMT),
+    ("Valor Sem Acordo",   f'CALCULATE([Valor Total], \'{T}\'[STATUS_ACORDO] = "SEM_ACORDO")', MOEDA_FMT),
     ("Valor Dentro do Acordo", f'CALCULATE([Valor Total], \'{T}\'[STATUS_ACORDO] = "COM_ACORDO")', MOEDA_FMT),
-    ("% Fora do Acordo",       "DIVIDE([Valor Fora do Acordo], [Valor Total])", "0.0%"),
+    ("% Sem Acordo",       "DIVIDE([Valor Sem Acordo], [Valor Total])", "0.0%"),
 
     # ── Fuga de contrato: comprou fora existindo acordo para a combinacao.
     # Mede o VOLUME que deveria ter passado por contrato. O excedente pago
@@ -82,12 +100,16 @@ MEDIDAS = [
     # Fora do acordo que NAO era fuga: nao havia acordo disponivel. Existe para
     # as colunas empilhadas -- sem ela, empilhar "fora" com "fuga" contaria a
     # fuga duas vezes.
-    ("Valor Fora Sem Alternativa", "[Valor Fora do Acordo] - [Valor em Fuga]", MOEDA_FMT),
+    ("Valor Sem Alternativa", "[Valor Sem Acordo] - [Valor em Fuga]", MOEDA_FMT),
 
     # ── Conformidade de preco. Respeitam o filtro da pagina: usadas na aba
     # restrita aos ultimos 30 dias.
-    ("Valor Acima do Acordo",  f'CALCULATE(SUM(\'{T}\'[Diferenca Total]), \'{T}\'[Status] = "ACIMA DO ACORDO")', MOEDA_FMT),
-    ("Valor Abaixo do Acordo", f'CALCULATE(SUM(\'{T}\'[Diferenca Total]), \'{T}\'[Status] = "ABAIXO DO ACORDO")', MOEDA_FMT),
+    # Somam Diferenca Total, ou seja, o EXCEDENTE pago -- nao o valor comprado.
+    # Os nomes antigos ("Valor Acima do Acordo") colidiam com a leitura de
+    # composicao por status, onde "acima do acordo" sao os R$ 44 mil comprados,
+    # e nao os R$ 12 mil pagos a mais. Dois numeros diferentes com o mesmo nome.
+    ("Excedente Acima do Acordo",  f'CALCULATE(SUM(\'{T}\'[Diferenca Total]), \'{T}\'[Status] = "ACIMA DO ACORDO")', MOEDA_FMT),
+    ("Excedente Abaixo do Acordo", f'CALCULATE(SUM(\'{T}\'[Diferenca Total]), \'{T}\'[Status] = "ABAIXO DO ACORDO")', MOEDA_FMT),
     ("% Acima",                f'DIVIDE(CALCULATE([Valor Total], \'{T}\'[Status] = "ACIMA DO ACORDO"), [Valor Dentro do Acordo])', "0.0%"),
     ("% Conforme",             f'DIVIDE(CALCULATE([Valor Total], \'{T}\'[Status] = "CONFORME"), [Valor Dentro do Acordo])', "0.0%"),
     ("% Abaixo",               f'DIVIDE(CALCULATE([Valor Total], \'{T}\'[Status] = "ABAIXO DO ACORDO"), [Valor Dentro do Acordo])', "0.0%"),
@@ -95,26 +117,26 @@ MEDIDAS = [
     # ── Janela de 30 dias embutida no DAX, ancorada em MAX(Data) e imune aos
     # filtros da pagina (ALL). Servem para exibir conformidade atual numa
     # pagina historica sem contaminar o resto dela.
-    ("Janela 30d",             f"VAR Fim = CALCULATE(MAX('{T}'[Data]), ALL('{T}')) "
+    ("Janela 30d",             FIM +
                                'RETURN FORMAT(Fim - 29, "dd/mm/yyyy") & " a " & FORMAT(Fim, "dd/mm/yyyy")', None),
-    ("Janela 365d",            f"VAR Fim = CALCULATE(MAX('{T}'[Data]), ALL('{T}')) "
+    ("Janela 365d",            FIM +
                                'RETURN FORMAT(Fim - 364, "dd/mm/yyyy") & " a " & FORMAT(Fim, "dd/mm/yyyy")', None),
-    ("Valor Coberto 30d",      f"VAR Fim = CALCULATE(MAX('{T}'[Data]), ALL('{T}')) "
+    ("Valor Coberto 30d",      FIM +
                                f"RETURN CALCULATE([Valor Total], ALL('{T}'), '{T}'[Data] >= Fim - 29, "
                                f"'{T}'[Data] <= Fim, '{T}'[STATUS_ACORDO] = \"COM_ACORDO\")", MOEDA_FMT),
-    ("% Acima 30d",            f"VAR Fim = CALCULATE(MAX('{T}'[Data]), ALL('{T}')) "
+    ("% Acima 30d",            FIM +
                                f"VAR Acima = CALCULATE([Valor Total], ALL('{T}'), '{T}'[Data] >= Fim - 29, "
                                f"'{T}'[Data] <= Fim, '{T}'[Status] = \"ACIMA DO ACORDO\") "
                                "RETURN DIVIDE(Acima, [Valor Coberto 30d])", "0.0%"),
-    ("% Conforme 30d",         f"VAR Fim = CALCULATE(MAX('{T}'[Data]), ALL('{T}')) "
+    ("% Conforme 30d",         FIM +
                                f"VAR Conf = CALCULATE([Valor Total], ALL('{T}'), '{T}'[Data] >= Fim - 29, "
                                f"'{T}'[Data] <= Fim, '{T}'[Status] = \"CONFORME\") "
                                "RETURN DIVIDE(Conf, [Valor Coberto 30d])", "0.0%"),
-    ("% Abaixo 30d",           f"VAR Fim = CALCULATE(MAX('{T}'[Data]), ALL('{T}')) "
+    ("% Abaixo 30d",           FIM +
                                f"VAR Ab = CALCULATE([Valor Total], ALL('{T}'), '{T}'[Data] >= Fim - 29, "
                                f"'{T}'[Data] <= Fim, '{T}'[Status] = \"ABAIXO DO ACORDO\") "
                                "RETURN DIVIDE(Ab, [Valor Coberto 30d])", "0.0%"),
-    ("Excedente Acima 30d",    f"VAR Fim = CALCULATE(MAX('{T}'[Data]), ALL('{T}')) "
+    ("Excedente Acima 30d",    FIM +
                                f"RETURN CALCULATE(SUM('{T}'[Diferenca Total]), ALL('{T}'), "
                                f"'{T}'[Data] >= Fim - 29, '{T}'[Data] <= Fim, "
                                f"'{T}'[Status] = \"ACIMA DO ACORDO\")", MOEDA_FMT),
@@ -123,30 +145,46 @@ MEDIDAS = [
     # dizer sobre QUAL total o seu percentual foi calculado -- sem isso o
     # leitor compara "R$ 1,8 mi em fuga" com os R$ 17,1 mi do historico
     # inteiro e conclui 10%, quando na janela e 12,6%.
-    ("Valor Total 30d",        f"VAR Fim = CALCULATE(MAX('{T}'[Data]), ALL('{T}')) "
+    ("Valor Total 30d",        FIM +
                                f"RETURN CALCULATE([Valor Total], ALL('{T}'), "
                                f"'{T}'[Data] >= Fim - 29, '{T}'[Data] <= Fim)", MOEDA_FMT),
-    ("Valor Total 365d",       f"VAR Fim = CALCULATE(MAX('{T}'[Data]), ALL('{T}')) "
+    ("Valor Total 365d",       FIM +
                                f"RETURN CALCULATE([Valor Total], ALL('{T}'), "
                                f"'{T}'[Data] >= Fim - 364, '{T}'[Data] <= Fim)", MOEDA_FMT),
-    ("Valor Fora do Acordo 30d", f"VAR Fim = CALCULATE(MAX('{T}'[Data]), ALL('{T}')) "
+    ("Valor Sem Acordo 30d", FIM +
                                f"RETURN CALCULATE([Valor Total], ALL('{T}'), "
                                f"'{T}'[Data] >= Fim - 29, '{T}'[Data] <= Fim, "
                                f"'{T}'[STATUS_ACORDO] = \"SEM_ACORDO\")", MOEDA_FMT),
-    ("% Fora do Acordo 30d",   "DIVIDE([Valor Fora do Acordo 30d], [Valor Total 30d])", "0.0%"),
-    ("Valor em Fuga 365d",     f"VAR Fim = CALCULATE(MAX('{T}'[Data]), ALL('{T}')) "
+    ("% Sem Acordo 30d",   "DIVIDE([Valor Sem Acordo 30d], [Valor Total 30d])", "0.0%"),
+    ("Valor em Fuga 365d",     FIM +
                                f"RETURN CALCULATE([Valor Total], ALL('{T}'), "
                                f"'{T}'[Data] >= Fim - 364, '{T}'[Data] <= Fim, "
                                f"'{T}'[STATUS_ACORDO] = \"SEM_ACORDO\", "
                                f"'{T}'[Tinha acordo?] = \"SIM\")", MOEDA_FMT),
-    ("% em Fuga 365d",         "DIVIDE([Valor em Fuga 365d], [Valor Total 365d])", "0.0%"),
+    ("Valor Sem Acordo 365d", FIM +
+                               f"RETURN CALCULATE([Valor Total], ALL('{T}'), "
+                               f"'{T}'[Data] > Fim - 365, '{T}'[Data] <= Fim, "
+                               f"'{T}'[STATUS_ACORDO] = \"SEM_ACORDO\")", MOEDA_FMT),
+    # O percentual que responde a pergunta do funil: dentro do que passou fora,
+    # quanto tinha acordo disponivel? Medido em 13/08/2026: 22,7%. O outro
+    # denominador possivel (sobre o gasto total, 16,2%) responde outra pergunta
+    # e nao encadeia com a aba anterior.
+    ("% da Fuga sobre o Sem Acordo 365d", "DIVIDE([Valor em Fuga 365d], [Valor Sem Acordo 365d])", "0.0%"),
+    # Base de conformidade explicita e imune ao filtro da pagina. O cartao de
+    # "Valor Total 30d" ao lado de "% Acima" fazia o leitor calcular 21,4% sobre
+    # os R$ 824,1 mil e chegar a R$ 176 mil, quando o valor e R$ 44 mil: os
+    # percentuais de conformidade sao sobre a base COM acordo, R$ 205,5 mil.
+    ("Valor Dentro do Acordo 30d", FIM +
+                               f"RETURN CALCULATE([Valor Total], ALL('{T}'), "
+                               f"'{T}'[Data] >= Fim - 29, '{T}'[Data] <= Fim, "
+                               f"'{T}'[STATUS_ACORDO] = \"COM_ACORDO\")", MOEDA_FMT),
 
     ("Fornecedores",           f"DISTINCTCOUNT('{T}'[Fornecedor])", "#,0"),
     ("Cidades",                f"DISTINCTCOUNT('{T}'[Cidade])", "#,0"),
     ("Itens",                  f"DISTINCTCOUNT('{T}'[Grupo Item])", "#,0"),
     ("Modelos",                f"DISTINCTCOUNT('{T}'[Grupo Modelo])", "#,0"),
-    ("% do Fora do Acordo",    "DIVIDE([Valor Fora do Acordo], "
-                               "CALCULATE([Valor Fora do Acordo], ALLSELECTED()))", "0.0%"),
+    ("% do Sem Acordo",    "DIVIDE([Valor Sem Acordo], "
+                               "CALCULATE([Valor Sem Acordo], ALLSELECTED()))", "0.0%"),
     ("Ultima Execucao",        f"MAX('{T}'[DATA_EXECUCAO])", "dd/mm/yyyy hh:nn"),
 ]
 

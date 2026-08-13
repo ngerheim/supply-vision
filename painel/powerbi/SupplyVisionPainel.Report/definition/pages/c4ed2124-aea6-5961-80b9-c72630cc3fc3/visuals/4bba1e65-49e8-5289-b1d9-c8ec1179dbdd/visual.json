@@ -1,0 +1,53 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.9.0/schema.json",
+  "name": "4bba1e65-49e8-5289-b1d9-c8ec1179dbdd",
+  "position": {
+    "x": 524,
+    "y": 60,
+    "z": 3000,
+    "height": 80,
+    "width": 254
+  },
+  "visual": {
+    "visualType": "card",
+    "query": {
+      "queryState": {
+        "Values": {
+          "projections": [
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Painel"
+                    }
+                  },
+                  "Property": "Valor Dentro do Acordo 30d"
+                }
+              },
+              "queryRef": "Painel.Valor Dentro do Acordo 30d",
+              "nativeQueryRef": "Valor Dentro do Acordo 30d",
+              "displayName": "Base com acordo avaliada (30d)"
+            }
+          ]
+        }
+      }
+    },
+    "drillFilterOtherVisuals": true,
+    "visualContainerObjects": {
+      "title": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "false"
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

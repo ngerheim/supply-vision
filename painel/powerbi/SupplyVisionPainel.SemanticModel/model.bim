@@ -285,6 +285,12 @@
         ],
         "measures": [
           {
+            "name": "Data Fim Completa",
+            "expression": "VAR Exec = CALCULATE(MAX('Painel'[DATA_EXECUCAO]), ALL('Painel')) VAR DiaExec = DATE(YEAR(Exec), MONTH(Exec), DAY(Exec)) RETURN CALCULATE(MAX('Painel'[Data]), ALL('Painel'), 'Painel'[Data] < DiaExec)",
+            "lineageTag": "7d1bbf76-2f4e-51fe-90c5-0a5a646d0387",
+            "formatString": "dd/mm/yyyy"
+          },
+          {
             "name": "Valor Total",
             "expression": "SUM('Painel'[Preco Total OS])",
             "lineageTag": "96c31c36-8bd9-51e6-bd2b-23c65333a6fd",
@@ -297,9 +303,9 @@
             "formatString": "#,0"
           },
           {
-            "name": "Valor Fora do Acordo",
+            "name": "Valor Sem Acordo",
             "expression": "CALCULATE([Valor Total], 'Painel'[STATUS_ACORDO] = \"SEM_ACORDO\")",
-            "lineageTag": "2bfc07d4-4d03-56c2-b8bb-621d7f0a3bd9",
+            "lineageTag": "e985fb90-2411-577f-a7ce-7341ac8f82ce",
             "formatString": "\"R$\" #,0.00"
           },
           {
@@ -309,9 +315,9 @@
             "formatString": "\"R$\" #,0.00"
           },
           {
-            "name": "% Fora do Acordo",
-            "expression": "DIVIDE([Valor Fora do Acordo], [Valor Total])",
-            "lineageTag": "49b2f71e-8507-50c1-80d8-71d9630136f4",
+            "name": "% Sem Acordo",
+            "expression": "DIVIDE([Valor Sem Acordo], [Valor Total])",
+            "lineageTag": "7da4b68e-42e9-552b-8083-e9907ce9cf58",
             "formatString": "0.0%"
           },
           {
@@ -321,21 +327,21 @@
             "formatString": "\"R$\" #,0.00"
           },
           {
-            "name": "Valor Fora Sem Alternativa",
-            "expression": "[Valor Fora do Acordo] - [Valor em Fuga]",
-            "lineageTag": "d910d05a-09ff-5496-a305-f516ee7e3fde",
+            "name": "Valor Sem Alternativa",
+            "expression": "[Valor Sem Acordo] - [Valor em Fuga]",
+            "lineageTag": "f0fec1d8-99b2-54f5-bfe2-ca2b99b074f0",
             "formatString": "\"R$\" #,0.00"
           },
           {
-            "name": "Valor Acima do Acordo",
+            "name": "Excedente Acima do Acordo",
             "expression": "CALCULATE(SUM('Painel'[Diferenca Total]), 'Painel'[Status] = \"ACIMA DO ACORDO\")",
-            "lineageTag": "213d6114-f87b-5080-b268-a1477f7ef0ad",
+            "lineageTag": "d785ba01-c136-58cc-8168-6af41545af53",
             "formatString": "\"R$\" #,0.00"
           },
           {
-            "name": "Valor Abaixo do Acordo",
+            "name": "Excedente Abaixo do Acordo",
             "expression": "CALCULATE(SUM('Painel'[Diferenca Total]), 'Painel'[Status] = \"ABAIXO DO ACORDO\")",
-            "lineageTag": "dc2338c1-9496-54e2-af33-2920158c75b7",
+            "lineageTag": "ed0be975-6436-5d10-a09a-c2008eed6f3a",
             "formatString": "\"R$\" #,0.00"
           },
           {
@@ -358,79 +364,91 @@
           },
           {
             "name": "Janela 30d",
-            "expression": "VAR Fim = CALCULATE(MAX('Painel'[Data]), ALL('Painel')) RETURN FORMAT(Fim - 29, \"dd/mm/yyyy\") & \" a \" & FORMAT(Fim, \"dd/mm/yyyy\")",
+            "expression": "VAR Fim = [Data Fim Completa] RETURN FORMAT(Fim - 29, \"dd/mm/yyyy\") & \" a \" & FORMAT(Fim, \"dd/mm/yyyy\")",
             "lineageTag": "0f5fda7e-98c0-5e6c-8a11-c1e7bce20def"
           },
           {
             "name": "Janela 365d",
-            "expression": "VAR Fim = CALCULATE(MAX('Painel'[Data]), ALL('Painel')) RETURN FORMAT(Fim - 364, \"dd/mm/yyyy\") & \" a \" & FORMAT(Fim, \"dd/mm/yyyy\")",
+            "expression": "VAR Fim = [Data Fim Completa] RETURN FORMAT(Fim - 364, \"dd/mm/yyyy\") & \" a \" & FORMAT(Fim, \"dd/mm/yyyy\")",
             "lineageTag": "a9f3dd5d-f445-5001-9dd7-b0fe760ab37c"
           },
           {
             "name": "Valor Coberto 30d",
-            "expression": "VAR Fim = CALCULATE(MAX('Painel'[Data]), ALL('Painel')) RETURN CALCULATE([Valor Total], ALL('Painel'), 'Painel'[Data] >= Fim - 29, 'Painel'[Data] <= Fim, 'Painel'[STATUS_ACORDO] = \"COM_ACORDO\")",
+            "expression": "VAR Fim = [Data Fim Completa] RETURN CALCULATE([Valor Total], ALL('Painel'), 'Painel'[Data] >= Fim - 29, 'Painel'[Data] <= Fim, 'Painel'[STATUS_ACORDO] = \"COM_ACORDO\")",
             "lineageTag": "783d4d63-49ed-5618-bf75-8ebd09653b74",
             "formatString": "\"R$\" #,0.00"
           },
           {
             "name": "% Acima 30d",
-            "expression": "VAR Fim = CALCULATE(MAX('Painel'[Data]), ALL('Painel')) VAR Acima = CALCULATE([Valor Total], ALL('Painel'), 'Painel'[Data] >= Fim - 29, 'Painel'[Data] <= Fim, 'Painel'[Status] = \"ACIMA DO ACORDO\") RETURN DIVIDE(Acima, [Valor Coberto 30d])",
+            "expression": "VAR Fim = [Data Fim Completa] VAR Acima = CALCULATE([Valor Total], ALL('Painel'), 'Painel'[Data] >= Fim - 29, 'Painel'[Data] <= Fim, 'Painel'[Status] = \"ACIMA DO ACORDO\") RETURN DIVIDE(Acima, [Valor Coberto 30d])",
             "lineageTag": "e590e9c0-d78a-59cb-a736-aa8f22c394de",
             "formatString": "0.0%"
           },
           {
             "name": "% Conforme 30d",
-            "expression": "VAR Fim = CALCULATE(MAX('Painel'[Data]), ALL('Painel')) VAR Conf = CALCULATE([Valor Total], ALL('Painel'), 'Painel'[Data] >= Fim - 29, 'Painel'[Data] <= Fim, 'Painel'[Status] = \"CONFORME\") RETURN DIVIDE(Conf, [Valor Coberto 30d])",
+            "expression": "VAR Fim = [Data Fim Completa] VAR Conf = CALCULATE([Valor Total], ALL('Painel'), 'Painel'[Data] >= Fim - 29, 'Painel'[Data] <= Fim, 'Painel'[Status] = \"CONFORME\") RETURN DIVIDE(Conf, [Valor Coberto 30d])",
             "lineageTag": "3ea90a08-8048-5952-91e3-8f9238923153",
             "formatString": "0.0%"
           },
           {
             "name": "% Abaixo 30d",
-            "expression": "VAR Fim = CALCULATE(MAX('Painel'[Data]), ALL('Painel')) VAR Ab = CALCULATE([Valor Total], ALL('Painel'), 'Painel'[Data] >= Fim - 29, 'Painel'[Data] <= Fim, 'Painel'[Status] = \"ABAIXO DO ACORDO\") RETURN DIVIDE(Ab, [Valor Coberto 30d])",
+            "expression": "VAR Fim = [Data Fim Completa] VAR Ab = CALCULATE([Valor Total], ALL('Painel'), 'Painel'[Data] >= Fim - 29, 'Painel'[Data] <= Fim, 'Painel'[Status] = \"ABAIXO DO ACORDO\") RETURN DIVIDE(Ab, [Valor Coberto 30d])",
             "lineageTag": "eb4d18d6-6e2a-5ed9-b62f-0c8d1fddca7e",
             "formatString": "0.0%"
           },
           {
             "name": "Excedente Acima 30d",
-            "expression": "VAR Fim = CALCULATE(MAX('Painel'[Data]), ALL('Painel')) RETURN CALCULATE(SUM('Painel'[Diferenca Total]), ALL('Painel'), 'Painel'[Data] >= Fim - 29, 'Painel'[Data] <= Fim, 'Painel'[Status] = \"ACIMA DO ACORDO\")",
+            "expression": "VAR Fim = [Data Fim Completa] RETURN CALCULATE(SUM('Painel'[Diferenca Total]), ALL('Painel'), 'Painel'[Data] >= Fim - 29, 'Painel'[Data] <= Fim, 'Painel'[Status] = \"ACIMA DO ACORDO\")",
             "lineageTag": "4b1604ec-e540-59da-99fe-6def5c651e12",
             "formatString": "\"R$\" #,0.00"
           },
           {
             "name": "Valor Total 30d",
-            "expression": "VAR Fim = CALCULATE(MAX('Painel'[Data]), ALL('Painel')) RETURN CALCULATE([Valor Total], ALL('Painel'), 'Painel'[Data] >= Fim - 29, 'Painel'[Data] <= Fim)",
+            "expression": "VAR Fim = [Data Fim Completa] RETURN CALCULATE([Valor Total], ALL('Painel'), 'Painel'[Data] >= Fim - 29, 'Painel'[Data] <= Fim)",
             "lineageTag": "bf4032fb-7525-5299-91a6-e29fddde6484",
             "formatString": "\"R$\" #,0.00"
           },
           {
             "name": "Valor Total 365d",
-            "expression": "VAR Fim = CALCULATE(MAX('Painel'[Data]), ALL('Painel')) RETURN CALCULATE([Valor Total], ALL('Painel'), 'Painel'[Data] >= Fim - 364, 'Painel'[Data] <= Fim)",
+            "expression": "VAR Fim = [Data Fim Completa] RETURN CALCULATE([Valor Total], ALL('Painel'), 'Painel'[Data] >= Fim - 364, 'Painel'[Data] <= Fim)",
             "lineageTag": "1ca20805-c6ae-5c51-b320-86418e180977",
             "formatString": "\"R$\" #,0.00"
           },
           {
-            "name": "Valor Fora do Acordo 30d",
-            "expression": "VAR Fim = CALCULATE(MAX('Painel'[Data]), ALL('Painel')) RETURN CALCULATE([Valor Total], ALL('Painel'), 'Painel'[Data] >= Fim - 29, 'Painel'[Data] <= Fim, 'Painel'[STATUS_ACORDO] = \"SEM_ACORDO\")",
-            "lineageTag": "d5cbdf55-44c2-5f9a-813c-b2ddfee3730f",
+            "name": "Valor Sem Acordo 30d",
+            "expression": "VAR Fim = [Data Fim Completa] RETURN CALCULATE([Valor Total], ALL('Painel'), 'Painel'[Data] >= Fim - 29, 'Painel'[Data] <= Fim, 'Painel'[STATUS_ACORDO] = \"SEM_ACORDO\")",
+            "lineageTag": "c8e1e3bb-dad2-5acd-82ea-cb78fd559f80",
             "formatString": "\"R$\" #,0.00"
           },
           {
-            "name": "% Fora do Acordo 30d",
-            "expression": "DIVIDE([Valor Fora do Acordo 30d], [Valor Total 30d])",
-            "lineageTag": "e2a05386-ce4e-55a8-82aa-6a29e545266f",
+            "name": "% Sem Acordo 30d",
+            "expression": "DIVIDE([Valor Sem Acordo 30d], [Valor Total 30d])",
+            "lineageTag": "1285f810-0827-51ba-aaeb-4d37753dd2cd",
             "formatString": "0.0%"
           },
           {
             "name": "Valor em Fuga 365d",
-            "expression": "VAR Fim = CALCULATE(MAX('Painel'[Data]), ALL('Painel')) RETURN CALCULATE([Valor Total], ALL('Painel'), 'Painel'[Data] >= Fim - 364, 'Painel'[Data] <= Fim, 'Painel'[STATUS_ACORDO] = \"SEM_ACORDO\", 'Painel'[Tinha acordo?] = \"SIM\")",
+            "expression": "VAR Fim = [Data Fim Completa] RETURN CALCULATE([Valor Total], ALL('Painel'), 'Painel'[Data] >= Fim - 364, 'Painel'[Data] <= Fim, 'Painel'[STATUS_ACORDO] = \"SEM_ACORDO\", 'Painel'[Tinha acordo?] = \"SIM\")",
             "lineageTag": "3ff20baa-d9a6-5f44-b10d-18b88fcfac54",
             "formatString": "\"R$\" #,0.00"
           },
           {
-            "name": "% em Fuga 365d",
-            "expression": "DIVIDE([Valor em Fuga 365d], [Valor Total 365d])",
-            "lineageTag": "a60c4f22-3390-511f-9e2c-7910938be493",
+            "name": "Valor Sem Acordo 365d",
+            "expression": "VAR Fim = [Data Fim Completa] RETURN CALCULATE([Valor Total], ALL('Painel'), 'Painel'[Data] > Fim - 365, 'Painel'[Data] <= Fim, 'Painel'[STATUS_ACORDO] = \"SEM_ACORDO\")",
+            "lineageTag": "4f11cf73-530f-53e7-9cfa-afcc9f0fe9bf",
+            "formatString": "\"R$\" #,0.00"
+          },
+          {
+            "name": "% da Fuga sobre o Sem Acordo 365d",
+            "expression": "DIVIDE([Valor em Fuga 365d], [Valor Sem Acordo 365d])",
+            "lineageTag": "14a492a9-4d17-5f77-85a6-fe903e1c2f8a",
             "formatString": "0.0%"
+          },
+          {
+            "name": "Valor Dentro do Acordo 30d",
+            "expression": "VAR Fim = [Data Fim Completa] RETURN CALCULATE([Valor Total], ALL('Painel'), 'Painel'[Data] >= Fim - 29, 'Painel'[Data] <= Fim, 'Painel'[STATUS_ACORDO] = \"COM_ACORDO\")",
+            "lineageTag": "cbe4f654-6f7c-5861-b3a3-8f30b70c274a",
+            "formatString": "\"R$\" #,0.00"
           },
           {
             "name": "Fornecedores",
@@ -457,9 +475,9 @@
             "formatString": "#,0"
           },
           {
-            "name": "% do Fora do Acordo",
-            "expression": "DIVIDE([Valor Fora do Acordo], CALCULATE([Valor Fora do Acordo], ALLSELECTED()))",
-            "lineageTag": "e9e270d8-661c-59f0-952e-4a32452d919f",
+            "name": "% do Sem Acordo",
+            "expression": "DIVIDE([Valor Sem Acordo], CALCULATE([Valor Sem Acordo], ALLSELECTED()))",
+            "lineageTag": "d77c2d1a-5110-5708-814c-a825eb8c4f01",
             "formatString": "0.0%"
           },
           {
@@ -489,7 +507,14 @@
                 "    // DateTime.LocalNow(): assim a pagina de conformidade e as medidas de 30",
                 "    // dias usam exatamente o mesmo recorte, e um refresh atrasado nao esvazia",
                 "    // a pagina -- ela passa a mostrar os ultimos 30 dias que existem no dado.",
-                "    Fim = List.Max(ComTrimestre[Data]),",
+                "    // Ancora no ultimo dia COMPLETO, nao no maior [Data] da base. Medido em",
+                "    // 13/08/2026: o dia da extracao tinha 59 linhas e R$ 7,7 mil contra ~200",
+                "    // linhas e R$ 30 a 54 mil dos dias anteriores -- a extracao roda no meio da",
+                "    // tarde. Com o dia parcial dentro, a janela de 30 dias fechava em R$ 824,1",
+                "    // mil em vez de R$ 850,8 mil: 3,2% a menos, e o mesmo desvio na base de",
+                "    // conformidade. Um unico registro do dia corrente desloca a janela inteira.",
+                "    DataExec = Date.From(List.Max(ComTrimestre[DATA_EXECUCAO])),",
+                "    Fim = List.Max(List.Select(ComTrimestre[Data], each Date.From(_) < DataExec)),",
                 "    ComJanela = Table.AddColumn(ComTrimestre, \"Ultimos 30 dias\", each [Data] >= Date.AddDays(Fim, -29), type logical),",
                 "    // 365 dias para a fuga de contrato: sem vigencia na ACORDOS.xlsx, uma",
                 "    // compra de 2025 que hoje casa com um acordo pode nao ter tido acordo",
