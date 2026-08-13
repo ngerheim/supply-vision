@@ -1,6 +1,6 @@
 {
   "name": "SupplyVisionPainel",
-  "compatibilityLevel": 1567,
+  "compatibilityLevel": 1606,
   "model": {
     "culture": "pt-BR",
     "defaultPowerBIDataSourceVersion": "powerBI_V3",
