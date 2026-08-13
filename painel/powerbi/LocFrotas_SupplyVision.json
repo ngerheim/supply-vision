@@ -21,47 +21,27 @@
     "title": {
       "fontSize": 15,
       "fontFace": "Segoe UI Semibold",
-      "color": {
-        "solid": {
-          "color": "#0B1B2E"
-        }
-      }
+      "color": "#0B1B2E"
     },
     "header": {
       "fontSize": 12,
       "fontFace": "Segoe UI Semibold",
-      "color": {
-        "solid": {
-          "color": "#0B1B2E"
-        }
-      }
+      "color": "#0B1B2E"
     },
     "label": {
       "fontSize": 10,
       "fontFace": "Segoe UI",
-      "color": {
-        "solid": {
-          "color": "#4A5568"
-        }
-      }
+      "color": "#4A5568"
     },
     "callout": {
       "fontSize": 30,
       "fontFace": "Segoe UI Semibold",
-      "color": {
-        "solid": {
-          "color": "#0B1B2E"
-        }
-      }
+      "color": "#0B1B2E"
     },
     "largeTitle": {
       "fontSize": 20,
       "fontFace": "Segoe UI Semibold",
-      "color": {
-        "solid": {
-          "color": "#0B1B2E"
-        }
-      }
+      "color": "#0B1B2E"
     }
   },
   "visualStyles": {
