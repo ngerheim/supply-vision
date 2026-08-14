@@ -104,12 +104,12 @@ MEDIDAS = [
 
     # ── Conformidade de preco. Respeitam o filtro da pagina: usadas na aba
     # restrita aos ultimos 30 dias.
-    # Somam Diferenca Total, ou seja, o EXCEDENTE pago -- nao o valor comprado.
-    # Os nomes antigos ("Valor Acima do Acordo") colidiam com a leitura de
-    # composicao por status, onde "acima do acordo" sao os R$ 44 mil comprados,
-    # e nao os R$ 12 mil pagos a mais. Dois numeros diferentes com o mesmo nome.
-    ("Excedente Acima do Acordo",  f'CALCULATE(SUM(\'{T}\'[Diferenca Total]), \'{T}\'[Status] = "ACIMA DO ACORDO")', MOEDA_FMT),
-    ("Excedente Abaixo do Acordo", f'CALCULATE(SUM(\'{T}\'[Diferenca Total]), \'{T}\'[Status] = "ABAIXO DO ACORDO")', MOEDA_FMT),
+    # Nao existe medida de excedente sem janela, de proposito. Duas medidas de
+    # excedente com nomes parecidos -- uma com janela, outra sem -- foi
+    # exatamente a causa da divergencia de 13/08/2026: R$ 387.898,08 no total de
+    # uma tabela ao lado de R$ 13.940,24 num cartao. O excedente do painel e
+    # Excedente Acima 30d, e so ele. Comparar preco fora da janela nao e uma
+    # opcao que deva estar disponivel no modelo.
     ("% Acima",                f'DIVIDE(CALCULATE([Valor Total], \'{T}\'[Status] = "ACIMA DO ACORDO"), [Valor Dentro do Acordo])', "0.0%"),
     ("% Conforme",             f'DIVIDE(CALCULATE([Valor Total], \'{T}\'[Status] = "CONFORME"), [Valor Dentro do Acordo])', "0.0%"),
     ("% Abaixo",               f'DIVIDE(CALCULATE([Valor Total], \'{T}\'[Status] = "ABAIXO DO ACORDO"), [Valor Dentro do Acordo])', "0.0%"),
@@ -136,10 +136,20 @@ MEDIDAS = [
                                f"VAR Ab = CALCULATE([Valor Total], ALL('{T}'), '{T}'[Data] >= Fim - 29, "
                                f"'{T}'[Data] <= Fim, '{T}'[Status] = \"ABAIXO DO ACORDO\") "
                                "RETURN DIVIDE(Ab, [Valor Coberto 30d])", "0.0%"),
+    # Excedente pago na janela, respeitando o contexto do visual. KEEPFILTERS,
+    # nao ALL(): com ALL() a medida ignora fornecedor, item e -- pior -- a
+    # propria linha da tabela, e o mesmo numero apareceria em toda linha. Com
+    # KEEPFILTERS o filtro de data INTERSECTA o contexto, entao numa linha de
+    # 2025 a intersecao e vazia e a medida devolve vazio, enquanto no total da
+    # tabela ela vale exatamente o mesmo que no cartao.
+    #
+    # Esta e a medida unica de excedente: cartao, ranking e tabela usam ela, e o
+    # total do Detalhe reconcilia com o cartao da Conformidade por construcao.
     ("Excedente Acima 30d",    FIM +
-                               f"RETURN CALCULATE(SUM('{T}'[Diferenca Total]), ALL('{T}'), "
-                               f"'{T}'[Data] >= Fim - 29, '{T}'[Data] <= Fim, "
-                               f"'{T}'[Status] = \"ACIMA DO ACORDO\")", MOEDA_FMT),
+                               f"RETURN CALCULATE(SUM('{T}'[Diferenca Total]), "
+                               f"KEEPFILTERS('{T}'[Data] >= Fim - 29), "
+                               f"KEEPFILTERS('{T}'[Data] <= Fim), "
+                               f"KEEPFILTERS('{T}'[Status] = \"ACIMA DO ACORDO\"))", MOEDA_FMT),
 
     # ── Denominadores das janelas. Cada aba restrita a um recorte precisa
     # dizer sobre QUAL total o seu percentual foi calculado -- sem isso o
@@ -182,12 +192,17 @@ MEDIDAS = [
     # data, fornecedor, item, quantidade e preco pago, mas sem um numero de
     # diferenca que ninguem pode defender. Ordenando por elas, o topo da tabela
     # e necessariamente comparavel.
+    # IF(MAX(Data) >= Fim - 29, ...) parecia funcionar e nao funcionava: na linha
+    # de TOTAL da tabela o MAX(Data) e a data maxima global, a condicao fica
+    # verdadeira, e o SUM percorre o historico inteiro. Medido em 13/08/2026: o
+    # total da coluna mostrava R$ 387.898,08 -- a soma liquida de dezenove meses
+    # -- ao lado de um cartao de R$ 13,9 mil. Um gate por IF nao e um filtro; a
+    # forma correta e CALCULATE com KEEPFILTERS, que intersecta o contexto em
+    # qualquer grao.
     ("Preco Acordo Vigente",   FIM +
-                               f"RETURN IF(MAX('{T}'[Data]) >= Fim - 29, "
-                               f"SUM('{T}'[Preco Acordo]))", MOEDA_FMT),
-    ("Diferenca Comparavel",   FIM +
-                               f"RETURN IF(MAX('{T}'[Data]) >= Fim - 29, "
-                               f"SUM('{T}'[Diferenca Total]))", MOEDA_FMT),
+                               f"RETURN CALCULATE(SUM('{T}'[Preco Acordo]), "
+                               f"KEEPFILTERS('{T}'[Data] >= Fim - 29), "
+                               f"KEEPFILTERS('{T}'[Data] <= Fim))", MOEDA_FMT),
 
     ("Valor Dentro do Acordo 30d", FIM +
                                f"RETURN CALCULATE([Valor Total], ALL('{T}'), "

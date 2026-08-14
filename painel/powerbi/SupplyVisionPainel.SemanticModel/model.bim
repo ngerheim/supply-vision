@@ -333,18 +333,6 @@
             "formatString": "\"R$\" #,0.00"
           },
           {
-            "name": "Excedente Acima do Acordo",
-            "expression": "CALCULATE(SUM('Painel'[Diferenca Total]), 'Painel'[Status] = \"ACIMA DO ACORDO\")",
-            "lineageTag": "d785ba01-c136-58cc-8168-6af41545af53",
-            "formatString": "\"R$\" #,0.00"
-          },
-          {
-            "name": "Excedente Abaixo do Acordo",
-            "expression": "CALCULATE(SUM('Painel'[Diferenca Total]), 'Painel'[Status] = \"ABAIXO DO ACORDO\")",
-            "lineageTag": "ed0be975-6436-5d10-a09a-c2008eed6f3a",
-            "formatString": "\"R$\" #,0.00"
-          },
-          {
             "name": "% Acima",
             "expression": "DIVIDE(CALCULATE([Valor Total], 'Painel'[Status] = \"ACIMA DO ACORDO\"), [Valor Dentro do Acordo])",
             "lineageTag": "c8b0e991-6278-5f17-9a1c-871655cd6c47",
@@ -398,7 +386,7 @@
           },
           {
             "name": "Excedente Acima 30d",
-            "expression": "VAR Fim = [Data Fim Completa] RETURN CALCULATE(SUM('Painel'[Diferenca Total]), ALL('Painel'), 'Painel'[Data] >= Fim - 29, 'Painel'[Data] <= Fim, 'Painel'[Status] = \"ACIMA DO ACORDO\")",
+            "expression": "VAR Fim = [Data Fim Completa] RETURN CALCULATE(SUM('Painel'[Diferenca Total]), KEEPFILTERS('Painel'[Data] >= Fim - 29), KEEPFILTERS('Painel'[Data] <= Fim), KEEPFILTERS('Painel'[Status] = \"ACIMA DO ACORDO\"))",
             "lineageTag": "4b1604ec-e540-59da-99fe-6def5c651e12",
             "formatString": "\"R$\" #,0.00"
           },
@@ -446,14 +434,8 @@
           },
           {
             "name": "Preco Acordo Vigente",
-            "expression": "VAR Fim = [Data Fim Completa] RETURN IF(MAX('Painel'[Data]) >= Fim - 29, SUM('Painel'[Preco Acordo]))",
+            "expression": "VAR Fim = [Data Fim Completa] RETURN CALCULATE(SUM('Painel'[Preco Acordo]), KEEPFILTERS('Painel'[Data] >= Fim - 29), KEEPFILTERS('Painel'[Data] <= Fim))",
             "lineageTag": "feebe658-7531-5334-b9b9-8052ac4994f0",
-            "formatString": "\"R$\" #,0.00"
-          },
-          {
-            "name": "Diferenca Comparavel",
-            "expression": "VAR Fim = [Data Fim Completa] RETURN IF(MAX('Painel'[Data]) >= Fim - 29, SUM('Painel'[Diferenca Total]))",
-            "lineageTag": "82b954aa-7919-564b-8131-9615acf73817",
             "formatString": "\"R$\" #,0.00"
           },
           {

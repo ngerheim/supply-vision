@@ -1,13 +1,6 @@
 $ErrorActionPreference = 'Continue'
-$pb = 'C:\Projetos\supply-vision\painel\powerbi'
-Add-Type -AssemblyName System.IO.Compression.FileSystem
-$zip = [System.IO.Compression.ZipFile]::OpenRead((Join-Path $pb '_gerador.zip'))
-foreach ($e in $zip.Entries) {
-  [System.IO.Compression.ZipFileExtensions]::ExtractToFile($e, (Join-Path $pb "gerador\$($e.Name)"), $true)
-}
-$zip.Dispose()
 Set-Location 'C:\Projetos\supply-vision'
-foreach ($f in @('_aplicar.ps1','_aplicar.log','_gerador.zip')) {
+foreach ($f in @('_aplicar.ps1','_aplicar.log','_conc.py','_conc.log','_check.ps1','_check.log')) {
   Remove-Item (Join-Path 'painel\powerbi' $f) -Force -ErrorAction SilentlyContinue
 }
 Get-ChildItem '.git' -Recurse -Filter '*.lock' -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue

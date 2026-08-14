@@ -64,9 +64,14 @@ def faixa_cards(medidas, y=CARD_Y, fontes=None, destaque=None, larg=None):
                  destaque=(m == destaque), rotulo=ROTULOS.get(m))
             for i, m in enumerate(medidas)]
 
+FAIXA_H = 26  # 18px cortava verticalmente o texto de 9pt: a caixa de texto tem
+              # padding interno proprio, entao a altura util e menor que a caixa.
+
+
 def faixa(y, conteudo, x=0, w=W):
-    """Cabecalho fino de secao: 18px, sem fundo, sem borda."""
-    return texto(x, y, w, 18, conteudo, 9, negrito=False, cor=MUDO, chapa=False)
+    """Cabecalho fino de secao, sem fundo e sem borda."""
+    return texto(x, y, w, FAIXA_H, conteudo, 9, negrito=False, cor=MUDO,
+                 chapa=False)
 
 
 MUDO = "#8A94A6"
@@ -85,17 +90,17 @@ def pagina(nome, visuais, filtros=None):
 #
 # Com o grafico mensal fora, os quatro rankings ficam com 560px de altura --
 # 28px por barra no top 20, o dobro do que tinham.
-p1 = [texto(0, 0, W, 44, "Supply Vision", 15)]
+p1 = [texto(0, 0, W, 40, "Supply Vision", 15)]
 # O cartao de fuga usa a medida de 365 dias, nao a historica. Mostrar R$ 2,6 mi
 # de fuga no historico contradiz a propria regra do painel: sem vigencia no
 # acordo, a fuga historica e justamente a leitura que a metodologia considera
 # insegura. Na janela sao R$ 1,8 mi, e esse e o numero acionavel.
 p1 += faixa_cards(["Valor Total", "Valor Sem Acordo", "% Sem Acordo",
-                   "Valor em Fuga 365d"], y=48, destaque="% Sem Acordo", larg=306)
+                   "Valor em Fuga 365d"], y=44, destaque="% Sem Acordo", larg=306)
 # Um subtitulo para os quatro rankings, em vez de repetir "(historico)" em cada
 # titulo. Os titulos ficam curtos o suficiente para nao truncar em 314px.
-p1 += [faixa(134, "Gasto total por dimensao — historico desde 01/2025. "
-                  "Barra dividida em dentro do acordo e sem acordo onde aplicavel.")]
+p1 += [faixa(126, "Gasto total por dimensão — histórico desde 01/2025. "
+                  "Barra dividida em dentro do acordo e sem acordo onde aplicável.")]
 # Quatro colunas de 314px com a mesma altura. Antes, "grupos de item" tinha
 # 340px para vinte barras e mostrava treze com barra de rolagem -- um top 20 que
 # esconde sete nao e um top 20. Com o rotulo de dado fora, 314px de largura
@@ -121,7 +126,7 @@ p1 += [
 ]
 
 # ═══ 2. Fora do Acordo ═══════════════════════════════════════════
-p2 = [texto(0, 0, W, 44, "Sem acordo", 15)]
+p2 = [texto(0, 0, W, 40, "Sem acordo", 15)]
 # Cartoes na janela de 30 dias. Os do total historico sao identicos aos da
 # Visao Geral -- dois cartoes repetindo numero nao informam nada. Em 30 dias
 # passam a responder "e agora, esta melhorando?".
@@ -133,15 +138,15 @@ p2 = [texto(0, 0, W, 44, "Sem acordo", 15)]
 # primeira tentativa eu os coloquei como visuais soltos, e o de diagnostico caiu
 # sobre os cartoes (y=112 contra cartoes terminando em 140) enquanto o de
 # situacao atual virou um cartao vazio flutuando a direita.
-p2 += [faixa(46, "Situação atual — últimos 30 dias")]
+p2 += [faixa(42, "Situação atual — últimos 30 dias")]
 p2 += faixa_cards(["Janela 30d", "Valor Sem Acordo 30d", "% Sem Acordo 30d"],
-                  y=66, fontes={"Janela 30d": 11}, destaque="% Sem Acordo 30d",
+                  y=70, fontes={"Janela 30d": 11}, destaque="% Sem Acordo 30d",
                   larg=306)
-p2 += [faixa(150, "Diagnóstico histórico — 01/2025 em diante, meses fechados")]
+p2 += [faixa(154, "Diagnóstico histórico — 01/2025 em diante, meses fechados")]
 p2 += [
-    colunas_(0, 172, 836, 220, "Ano-Mes", "Valor Sem Acordo",
+    colunas_(0, 184, 836, 208, "Ano-Mes", "Valor Sem Acordo",
              "Valor sem acordo por mês", cat_asc=True, filtros=filtro_coluna("Mes Fechado")),
-    barras(844, 172, 436, 220, "Motivo Sem Acordo", "Valor Sem Acordo",
+    barras(844, 184, 436, 208, "Motivo Sem Acordo", "Valor Sem Acordo",
            "Em qual dimensão faltou referência"),
     barras(844, 400, 436, 308, "Grupo Modelo", "Valor Sem Acordo",
            "Sem acordo por grupo de modelo"),
@@ -207,16 +212,14 @@ p4 += [
     # SEM ACORDO (R$ 0,6 mi) achata ACIMA e ABAIXO a zero visivel, e sao elas a
     # pergunta da aba. Com a medida de dentro do acordo, SEM ACORDO fica vazia e
     # sai do eixo sozinha.
-    barras(0, 148, 636, 260, "Status", "Valor Dentro do Acordo",
-           "Valor comprado por status do preço — janela de 30 dias", cor=NAVY),
+    barras(0, 148, 420, 260, "Status", "Valor Dentro do Acordo",
+           "Valor comprado por status do preço", cor=NAVY),
     # Excedente pago, nao valor comprado: sao numeros de ordem de grandeza
     # diferente e antes tinham nomes parecidos.
-    barras(644, 148, 636, 260, "Fornecedor", "Excedente Acima do Acordo",
-           "Excedente pago por fornecedor — janela de 30 dias",
-           filtros=top_n("Fornecedor", 20)),
-    barras(0, 416, 636, 292, "Grupo Item", "Excedente Acima do Acordo",
-           "Excedente pago por grupo de item — janela de 30 dias",
-           filtros=top_n("Grupo Item", 20)),
+    barras(428, 148, 420, 260, "Fornecedor", "Excedente Acima 30d",
+           "Excedente pago por fornecedor", filtros=top_n("Fornecedor", 20)),
+    barras(856, 148, 424, 260, "Grupo Item", "Excedente Acima 30d",
+           "Excedente pago por grupo de item", filtros=top_n("Grupo Item", 20)),
     # A prova da cobranca e preco cobrado x preco acordado x quantidade x
     # diferenca. Antes essas quatro colunas ficavam fora da area visivel, atras
     # de Cidade e Grupo Item, e a tabela abria ordenada por data -- comecava
@@ -224,13 +227,18 @@ p4 += [
     # Diferenca imediatamente depois do item: e a coluna que decide se vale
     # abrir a conversa, e ficava atras de Qtd e dos dois precos. Data sai --
     # a pagina inteira e a janela de 30 dias, entao a data nao qualifica nada.
-    tabela(644, 416, 636, 292,
-           ["OS", "Fornecedor", "Item", "Diferenca Total", "Qtd",
-            "Preco OS", "Preco Acordo"],
-           "Linhas acima do acordo, da maior diferença para a menor",
-           ordem=("Diferenca Total", False),
-           apelidos={"Diferenca Total": "Diferença R$", "Preco OS": "Preço OS",
-                     "Preco Acordo": "Preço acordo"}),
+    # Tabela na largura inteira. Em 636px as sete colunas nao cabiam e preco
+    # cobrado, preco acordado e diferenca ficavam atras da rolagem horizontal --
+    # exatamente as tres que sustentam a cobranca.
+    tabela(0, 416, 1280, 292,
+           ["OS", "Fornecedor", "Item", "Excedente Acima 30d", "Qtd",
+            "Preco OS", "Preco Acordo", "Cidade"],
+           "Linhas acima do acordo, do maior excedente para o menor",
+           medidas=("Excedente Acima 30d",),
+           ordem=("Excedente Acima 30d", True),
+           apelidos={"Excedente Acima 30d": "Excedente R$",
+                     "Preco OS": "Preço cobrado",
+                     "Preco Acordo": "Preço acordado"}),
 ]
 
 # ═══ 7. Detalhe ══════════════════════════════════════════════════
@@ -255,23 +263,28 @@ for i, dim in enumerate(FILTROS_DIR):
 # Colunas na ordem da decisao: quem, o que, quanto, e so depois a classificacao.
 # Antes a tabela abria por data e as colunas de dinheiro ficavam atras de sete
 # colunas de dimensao, fora da area visivel.
-# Preco acordado e diferenca vem por MEDIDA, nao por coluna: fora da janela de
+# Preco acordado e excedente vem por MEDIDA, nao por coluna: fora da janela de
 # 30 dias elas retornam vazio. A linha de 2025 continua na tabela com data,
 # fornecedor, item, quantidade e preco pago -- o que falta e a diferenca contra
-# um catalogo de acordos que nao existia naquela data. Ordenando por
-# "Diferenca Comparavel", o topo da tabela e necessariamente comparavel, em vez
-# de ser a maior deriva de catalogo dos ultimos dezenove meses.
+# um catalogo de acordos que nao existia naquela data. Ordenando pelo excedente,
+# o topo da tabela e necessariamente comparavel, em vez de ser a maior deriva de
+# catalogo dos ultimos dezenove meses.
+#
+# A medida e a MESMA do cartao da Conformidade (Excedente Acima 30d), entao o
+# total desta coluna reconcilia com aquele cartao. Uma versao anterior usava uma
+# medida propria com gate por IF, e o total mostrava R$ 387.898,08 contra um
+# cartao de R$ 13,9 mil.
 p7 += [tabela(428, 60, 852, 648,
-              ["Data", "OS", "Fornecedor", "Item", "Diferenca Comparavel",
+              ["Data", "OS", "Fornecedor", "Item", "Excedente Acima 30d",
                "Qtd", "Preco OS", "Preco Acordo Vigente", "Cidade", "Modelo",
                "Grupo Modelo", "Grupo Item", "Status", "STATUS_ACORDO",
                "Tinha acordo?", "Motivo Sem Acordo", "Criador"],
-              "Linhas do painel — preço acordado e diferença só na janela de 30 dias",
-              medidas=("Preco Acordo Vigente", "Diferenca Comparavel"),
-              ordem=("Diferenca Comparavel", True),
+              "Linhas do painel — excedente e preço acordado só na janela de 30 dias",
+              medidas=("Preco Acordo Vigente", "Excedente Acima 30d"),
+              ordem=("Excedente Acima 30d", True),
               apelidos={"Preco OS": "Preço OS", "Mes Nome": "Mês",
                         "Preco Acordo Vigente": "Preço acordo (30d)",
-                        "Diferenca Comparavel": "Diferença R$ (30d)",
+                        "Excedente Acima 30d": "Excedente R$ (30d)",
                         "STATUS_ACORDO": "Dentro ou fora do acordo",
                         "Status": "Status do preço",
                         "Criador": "Criador da OS",
