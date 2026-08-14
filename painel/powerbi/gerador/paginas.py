@@ -81,7 +81,11 @@ MUDO = "#8A94A6"
 
 def pagina(nome, visuais, filtros=None):
     p = {"name": guid("pg/"+nome), "displayName": nome, "visualContainers": visuais}
-    if filtros: p["filterConfig"] = filtros
+    if filtros:
+        p["filterConfig"] = filtros
+    inter = interacoes(visuais)
+    if inter:
+        p["visualInteractions"] = inter
     return p
 
 # ═══ 1. Visao Geral ══════════════════════════════════════════════

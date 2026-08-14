@@ -329,6 +329,32 @@ def barras_empilhadas(x, y, w, h, dim, medidas, tit, cores=None, filtros=None,
     if filtros: v["filterConfig"] = filtros
     return v
 
+# ── interacao entre visuais ─────────────────────────────────────────
+def interacoes(visuais, alvos=("card",)):
+    """Forca a selecao a chegar nos cartoes como FILTRO, nao como realce.
+
+    Sem isto o cartao mente. O padrao do PBIR e type "Default", que delega ao
+    visual de DESTINO a decisao entre filtrar e realcar; cartao nao sabe
+    renderizar realce, entao ignora a selecao e continua exibindo o valor cheio.
+    Resultado observado em 14/08/2026: selecionar um fornecedor na tabela deixava
+    o cartao de excedente parado no total da janela -- quem filtrasse leria
+    R$ 13.940,24 como se fosse daquele fornecedor.
+
+    Nao e defeito do DAX: a medida usa KEEPFILTERS e responde a filtro. O que
+    faltava era a selecao chegar nela.
+
+    Slicer e textbox ficam fora: slicer filtra por outro mecanismo, e textbox nao
+    participa de selecao.
+    """
+    def tipo(v):
+        return v.get("visual", {}).get("visualType", "")
+
+    fontes = [v for v in visuais if tipo(v) not in ("textbox", "slicer")]
+    destinos = [v for v in fontes if tipo(v) in alvos]
+    return [{"source": f["name"], "target": d["name"], "type": "DataFilter"}
+            for f in fontes for d in destinos if f["name"] != d["name"]]
+
+
 # ── escrita da arvore de pastas ─────────────────────────────────────
 def escrever(destino, paginas):
     """Grava definition/ no formato PBIR. Devolve (n_paginas, n_visuais).
@@ -356,7 +382,14 @@ def escrever(destino, paginas):
         pagina_json = {"$schema": S_PAGE, "name": pg["name"],
                        "displayName": pg["displayName"], "displayOption": "FitToPage",
                        "height": 720, "width": 1280}
-        if pg.get("filterConfig"): pagina_json["filterConfig"] = pg["filterConfig"]
+        if pg.get("filterConfig"):
+            pagina_json["filterConfig"] = pg["filterConfig"]
+        # visualInteractions estava sendo montado em pagina() e descartado aqui:
+        # escrever() copiava campo por campo e nao conhecia a chave nova. Nao deu
+        # erro nenhum -- o arquivo validou e o painel abriu com a interacao no
+        # padrao, que e o defeito que se queria corrigir.
+        if pg.get("visualInteractions"):
+            pagina_json["visualInteractions"] = pg["visualInteractions"]
         esc(alvo / "page.json", pagina_json)
         for i, v in enumerate(pg["visualContainers"]):
             v["position"]["z"] = i * 1000

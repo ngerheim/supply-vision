@@ -14,18 +14,31 @@ pre-carregado com todos os schemas do clone, indexados pela URI canonica, e
 tambem pelo caminho relativo resolvido -- os $ref internos da Microsoft usam
 caminhos como "../../semanticQuery/1.4.0/schema.json".
 """
-import collections, json, glob, os, sys, jsonschema
+import collections, json, glob, os, sys
+
+import jsonschema
+from referencing import Registry, Resource
+from referencing.jsonschema import DRAFT7
 
 W, H = 1280, 720
 
 BASE = "/tmp/js/fabric/"
 URI  = "https://developer.microsoft.com/json-schemas/fabric/"
 
+# Registry do referencing em vez do RefResolver antigo. O RefResolver empilhava
+# escopo ao entrar num $ref externo e, ao voltar, resolvia um "#/definitions/..."
+# contra o documento errado -- na pratica, adicionar visualInteractions ao
+# page.json fazia a validacao estourar com KeyError em vez de acusar erro de
+# schema. O Registry indexa cada documento pela URI canonica e nao tem esse
+# problema de escopo.
 store = {}
+recursos = {}
 for f in glob.glob(BASE + "**/*.json", recursive=True):
     o = json.load(open(f, encoding="utf-8"))
-    store[URI + os.path.relpath(f, BASE)] = o
-    store["file://" + f] = o
+    uri = URI + os.path.relpath(f, BASE).replace(os.sep, "/")
+    store[uri] = o
+    recursos[uri] = Resource(contents=o, specification=DRAFT7)
+REGISTRY = Registry().with_resources(recursos.items())
 
 def valida(destino):
     erros = n = 0
@@ -36,8 +49,7 @@ def valida(destino):
             continue
         if uri not in store:
             print("schema fora do clone:", uri); erros += 1; continue
-        r = jsonschema.RefResolver(base_uri=uri, referrer=store[uri], store=store)
-        v = jsonschema.Draft7Validator(store[uri], resolver=r)
+        v = jsonschema.Draft7Validator(store[uri], registry=REGISTRY)
         for e in v.iter_errors(o):
             erros += 1
             print(os.path.relpath(f, destino), "|", "/".join(map(str, e.absolute_path)),

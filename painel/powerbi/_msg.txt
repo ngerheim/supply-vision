@@ -1,37 +1,31 @@
-Adiciona conferir.py e fecha o acabamento das faixas de secao
+Faz a selecao chegar nos cartoes como filtro, e nao como realce
 
-O erro que mais custou nesta construcao foi uma medida que devolvia o numero
-errado, e nenhuma das checagens existentes podia peg�-la: o schema valida
-estrutura, a geometria valida posicao, as referencias validam nomes. A
-divergencia de R$ 387.898,08 contra R$ 13.940,24 atravessou tres rodadas de
-revisao visual e so apareceu quando alguem comparou dois numeros de paginas
-diferentes.
+Selecionar um fornecedor na tabela nao mexia no cartao de excedente: ele ficava
+parado em R$ 13.940,24, o total da janela. Quem filtrasse leria o total como se
+fosse daquele fornecedor -- pior que um numero errado, porque parece certo.
 
-conferir.py faz essa comparacao em codigo. Recalcula em pandas o que cada medida
-deveria devolver e confere as identidades que precisam valer:
+A causa nao e o DAX. A medida usa KEEPFILTERS e responde a filtro; o que faltava
+era a selecao chegar nela. No PBIR, visualInteractions tem type "Default", que
+delega ao visual de DESTINO decidir entre filtrar e realcar. Cartao nao sabe
+renderizar realce, entao ignora a selecao e continua exibindo o valor cheio.
+Confirmado no schema oficial: VisualInteractionFilterType aceita Default,
+DataFilter, HighlightFilter e NoFilter.
 
-  - total = dentro do acordo + sem acordo, no historico e nas duas janelas;
-  - fuga e subconjunto de sem acordo, e sem acordo = sem alternativa + fuga;
-  - ACIMA, ABAIXO e CONFORME nunca ocorrem em SEM_ACORDO, e vice-versa;
-  - Diferenca Total = Qtd x (Preco OS - Preco Acordo);
-  - o excedente da janela fecha com a soma por fornecedor, item, cidade e grupo
-    de modelo;
-  - o excedente filtrado por fornecedor devolve o valor daquele fornecedor, e
-    nao o total -- este e o teste que um PDF nao consegue fazer, e o que falharia
-    se a medida usasse ALL() em vez de KEEPFILTERS.
+Cada pagina agora declara visualInteractions com DataFilter de todo visual que
+pode originar selecao para todo cartao da pagina. Slicer e textbox ficam fora:
+slicer filtra por outro mecanismo e textbox nao participa. Grafico para grafico
+segue no padrao, que e realce -- comportamento nativo do Power BI, que o usuario
+reconhece.
 
-Sai com codigo 1 se alguma identidade falhar, para poder entrar num gancho antes
-de publicar. Rodado agora: 0 falhas, excedente da janela R$ 13.940,24, base com
-acordo R$ 216.287,84, fuga em 22,7% do sem acordo.
+Dois defeitos de ferramenta apareceram no caminho e foram corrigidos:
 
-Faixas de secao de 26 para 32px. Em 26px ainda sobrava um indicador de rolagem
-cinza no canto: a caixa de texto reserva padding proprio, e a altura util fica
-bem abaixo da declarada. O subtitulo da Visao Geral tambem encurtou -- o texto
-longo forcava quebra de linha dentro da faixa.
+O escrever() copiava o page.json campo por campo e nao conhecia a chave nova,
+entao descartava silenciosamente o visualInteractions montado em pagina(). O
+arquivo validava, o painel abria, e a interacao continuava no padrao -- ou seja,
+a correcao parecia aplicada e nao estava.
 
-Aviso escrito na aba de Fuga: os cartoes cobrem 365 dias corridos e o grafico,
-12 meses fechados. Sao recortes diferentes de proposito, porque meia coluna nas
-pontas nao se le, mas somar as doze colunas nao devolve o valor do cartao.
-Medido: R$ 1,78 mi contra R$ 1,73 mi, 2,5%. O aviso existe porque a diferenca e
-pequena o bastante para parecer arredondamento, e nao e. O conferir.py imprime
-essa diferenca a cada execucao e avisa se passar de 10%.
+O validar.py usava jsonschema.RefResolver, que empilha escopo ao entrar num $ref
+externo e, ao voltar, resolve um "#/definitions/..." contra o documento errado.
+Adicionar visualInteractions ao page.json fazia a validacao estourar com
+KeyError em vez de acusar erro de schema. Trocado pelo Registry do referencing,
+que indexa cada documento pela URI canonica.

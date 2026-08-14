@@ -63,5 +63,207 @@
         "isLockedInViewMode": true
       }
     ]
-  }
+  },
+  "visualInteractions": [
+    {
+      "source": "f03c3580-d052-58a0-b015-10267c5faaed",
+      "target": "cc605df2-20a8-5648-ba3c-14c2116a8586",
+      "type": "DataFilter"
+    },
+    {
+      "source": "f03c3580-d052-58a0-b015-10267c5faaed",
+      "target": "b9994e27-e27b-51dd-8bcb-714010c36e1f",
+      "type": "DataFilter"
+    },
+    {
+      "source": "f03c3580-d052-58a0-b015-10267c5faaed",
+      "target": "9540c58f-5350-5265-9616-7e55cc880daa",
+      "type": "DataFilter"
+    },
+    {
+      "source": "f03c3580-d052-58a0-b015-10267c5faaed",
+      "target": "e51d22d8-591a-5977-b6d7-1f04dc95a756",
+      "type": "DataFilter"
+    },
+    {
+      "source": "cc605df2-20a8-5648-ba3c-14c2116a8586",
+      "target": "f03c3580-d052-58a0-b015-10267c5faaed",
+      "type": "DataFilter"
+    },
+    {
+      "source": "cc605df2-20a8-5648-ba3c-14c2116a8586",
+      "target": "b9994e27-e27b-51dd-8bcb-714010c36e1f",
+      "type": "DataFilter"
+    },
+    {
+      "source": "cc605df2-20a8-5648-ba3c-14c2116a8586",
+      "target": "9540c58f-5350-5265-9616-7e55cc880daa",
+      "type": "DataFilter"
+    },
+    {
+      "source": "cc605df2-20a8-5648-ba3c-14c2116a8586",
+      "target": "e51d22d8-591a-5977-b6d7-1f04dc95a756",
+      "type": "DataFilter"
+    },
+    {
+      "source": "b9994e27-e27b-51dd-8bcb-714010c36e1f",
+      "target": "f03c3580-d052-58a0-b015-10267c5faaed",
+      "type": "DataFilter"
+    },
+    {
+      "source": "b9994e27-e27b-51dd-8bcb-714010c36e1f",
+      "target": "cc605df2-20a8-5648-ba3c-14c2116a8586",
+      "type": "DataFilter"
+    },
+    {
+      "source": "b9994e27-e27b-51dd-8bcb-714010c36e1f",
+      "target": "9540c58f-5350-5265-9616-7e55cc880daa",
+      "type": "DataFilter"
+    },
+    {
+      "source": "b9994e27-e27b-51dd-8bcb-714010c36e1f",
+      "target": "e51d22d8-591a-5977-b6d7-1f04dc95a756",
+      "type": "DataFilter"
+    },
+    {
+      "source": "9540c58f-5350-5265-9616-7e55cc880daa",
+      "target": "f03c3580-d052-58a0-b015-10267c5faaed",
+      "type": "DataFilter"
+    },
+    {
+      "source": "9540c58f-5350-5265-9616-7e55cc880daa",
+      "target": "cc605df2-20a8-5648-ba3c-14c2116a8586",
+      "type": "DataFilter"
+    },
+    {
+      "source": "9540c58f-5350-5265-9616-7e55cc880daa",
+      "target": "b9994e27-e27b-51dd-8bcb-714010c36e1f",
+      "type": "DataFilter"
+    },
+    {
+      "source": "9540c58f-5350-5265-9616-7e55cc880daa",
+      "target": "e51d22d8-591a-5977-b6d7-1f04dc95a756",
+      "type": "DataFilter"
+    },
+    {
+      "source": "e51d22d8-591a-5977-b6d7-1f04dc95a756",
+      "target": "f03c3580-d052-58a0-b015-10267c5faaed",
+      "type": "DataFilter"
+    },
+    {
+      "source": "e51d22d8-591a-5977-b6d7-1f04dc95a756",
+      "target": "cc605df2-20a8-5648-ba3c-14c2116a8586",
+      "type": "DataFilter"
+    },
+    {
+      "source": "e51d22d8-591a-5977-b6d7-1f04dc95a756",
+      "target": "b9994e27-e27b-51dd-8bcb-714010c36e1f",
+      "type": "DataFilter"
+    },
+    {
+      "source": "e51d22d8-591a-5977-b6d7-1f04dc95a756",
+      "target": "9540c58f-5350-5265-9616-7e55cc880daa",
+      "type": "DataFilter"
+    },
+    {
+      "source": "6f1fda01-db09-538b-90e1-0f91a5be045c",
+      "target": "f03c3580-d052-58a0-b015-10267c5faaed",
+      "type": "DataFilter"
+    },
+    {
+      "source": "6f1fda01-db09-538b-90e1-0f91a5be045c",
+      "target": "cc605df2-20a8-5648-ba3c-14c2116a8586",
+      "type": "DataFilter"
+    },
+    {
+      "source": "6f1fda01-db09-538b-90e1-0f91a5be045c",
+      "target": "b9994e27-e27b-51dd-8bcb-714010c36e1f",
+      "type": "DataFilter"
+    },
+    {
+      "source": "6f1fda01-db09-538b-90e1-0f91a5be045c",
+      "target": "9540c58f-5350-5265-9616-7e55cc880daa",
+      "type": "DataFilter"
+    },
+    {
+      "source": "6f1fda01-db09-538b-90e1-0f91a5be045c",
+      "target": "e51d22d8-591a-5977-b6d7-1f04dc95a756",
+      "type": "DataFilter"
+    },
+    {
+      "source": "ea0f8cc1-7b20-57ec-a701-6fbd9e6db75c",
+      "target": "f03c3580-d052-58a0-b015-10267c5faaed",
+      "type": "DataFilter"
+    },
+    {
+      "source": "ea0f8cc1-7b20-57ec-a701-6fbd9e6db75c",
+      "target": "cc605df2-20a8-5648-ba3c-14c2116a8586",
+      "type": "DataFilter"
+    },
+    {
+      "source": "ea0f8cc1-7b20-57ec-a701-6fbd9e6db75c",
+      "target": "b9994e27-e27b-51dd-8bcb-714010c36e1f",
+      "type": "DataFilter"
+    },
+    {
+      "source": "ea0f8cc1-7b20-57ec-a701-6fbd9e6db75c",
+      "target": "9540c58f-5350-5265-9616-7e55cc880daa",
+      "type": "DataFilter"
+    },
+    {
+      "source": "ea0f8cc1-7b20-57ec-a701-6fbd9e6db75c",
+      "target": "e51d22d8-591a-5977-b6d7-1f04dc95a756",
+      "type": "DataFilter"
+    },
+    {
+      "source": "1869233b-e924-55bf-9027-1f631ac77d68",
+      "target": "f03c3580-d052-58a0-b015-10267c5faaed",
+      "type": "DataFilter"
+    },
+    {
+      "source": "1869233b-e924-55bf-9027-1f631ac77d68",
+      "target": "cc605df2-20a8-5648-ba3c-14c2116a8586",
+      "type": "DataFilter"
+    },
+    {
+      "source": "1869233b-e924-55bf-9027-1f631ac77d68",
+      "target": "b9994e27-e27b-51dd-8bcb-714010c36e1f",
+      "type": "DataFilter"
+    },
+    {
+      "source": "1869233b-e924-55bf-9027-1f631ac77d68",
+      "target": "9540c58f-5350-5265-9616-7e55cc880daa",
+      "type": "DataFilter"
+    },
+    {
+      "source": "1869233b-e924-55bf-9027-1f631ac77d68",
+      "target": "e51d22d8-591a-5977-b6d7-1f04dc95a756",
+      "type": "DataFilter"
+    },
+    {
+      "source": "8444a3fc-df02-520f-b560-11f3856d94b3",
+      "target": "f03c3580-d052-58a0-b015-10267c5faaed",
+      "type": "DataFilter"
+    },
+    {
+      "source": "8444a3fc-df02-520f-b560-11f3856d94b3",
+      "target": "cc605df2-20a8-5648-ba3c-14c2116a8586",
+      "type": "DataFilter"
+    },
+    {
+      "source": "8444a3fc-df02-520f-b560-11f3856d94b3",
+      "target": "b9994e27-e27b-51dd-8bcb-714010c36e1f",
+      "type": "DataFilter"
+    },
+    {
+      "source": "8444a3fc-df02-520f-b560-11f3856d94b3",
+      "target": "9540c58f-5350-5265-9616-7e55cc880daa",
+      "type": "DataFilter"
+    },
+    {
+      "source": "8444a3fc-df02-520f-b560-11f3856d94b3",
+      "target": "e51d22d8-591a-5977-b6d7-1f04dc95a756",
+      "type": "DataFilter"
+    }
+  ]
 }
