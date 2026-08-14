@@ -1,33 +1,32 @@
 {
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.9.0/schema.json",
-  "name": "9540c58f-5350-5265-9616-7e55cc880daa",
+  "name": "f6b4ee49-f549-5ac2-ae72-d0d7dee7c576",
   "position": {
-    "x": 771,
-    "y": 60,
-    "z": 6000,
-    "height": 80,
-    "width": 249
+    "x": 640,
+    "y": 0,
+    "z": 1000,
+    "height": 56,
+    "width": 316
   },
   "visual": {
-    "visualType": "card",
+    "visualType": "slicer",
     "query": {
       "queryState": {
         "Values": {
           "projections": [
             {
               "field": {
-                "Measure": {
+                "Column": {
                   "Expression": {
                     "SourceRef": {
                       "Entity": "Painel"
                     }
                   },
-                  "Property": "Valor em Fuga 365d"
+                  "Property": "Fornecedor"
                 }
               },
-              "queryRef": "Painel.Valor em Fuga 365d",
-              "nativeQueryRef": "Valor em Fuga 365d",
-              "displayName": "Fuga de contrato — 365d"
+              "queryRef": "Painel.Fornecedor",
+              "nativeQueryRef": "Fornecedor"
             }
           ]
         }

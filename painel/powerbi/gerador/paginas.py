@@ -169,7 +169,9 @@ p2 += [
 # 2025 que hoje casa com um acordo pode nao ter tido acordo naquela data. Um
 # ano limita o quanto o catalogo mudou entre a OS e a tabela atual.
 # Na janela: R$ 1,77 mi em 10.986 linhas, e a fuga se concentra em 38 cidades.
-p3 = [texto(0, 0, W, TOPO_H, "Fuga de contrato", 15)]
+p3 = [texto(0, 0, 620, TOPO_H, "Fuga de contrato", 15),
+      filtro(640, 0, 316, TOPO_H, "Fornecedor"),
+      filtro(964, 0, 316, TOPO_H, "Grupo Item", "Grupo de item")]
 # O gasto total da janela entra ao lado da fuga: sem ele o leitor compara
 # R$ 1,8 mi de fuga com os R$ 17,1 mi do historico e conclui 10%, quando dentro
 # da janela e outro numero.
@@ -206,7 +208,13 @@ p3 += [
 ]
 
 # ═══ 4. Conformidade de Preco (30 dias) ══════════════════════════
-p4 = [texto(0, 0, W, TOPO_H, "Conformidade de preço", 15)]
+# Segmentadores de pagina no lugar de campo arrastado para o painel de filtros.
+# O painel abre em "Filtros neste visual": filtrar por ali move um visual so e
+# deixa os cartoes parados no total. Nao e erro do leitor -- a pagina nao
+# oferecia o caminho certo, entao o gesto natural caia no escopo errado.
+p4 = [texto(0, 0, 620, TOPO_H, "Conformidade de preço", 15),
+      filtro(640, 0, 316, TOPO_H, "Fornecedor"),
+      filtro(964, 0, 316, TOPO_H, "Grupo Item", "Grupo de item")]
 # "% Conforme" sai da faixa: e 100% menos acima menos abaixo, e o espaco vale
 # mais para a base do calculo, que era o que faltava.
 # "% Abaixo" sai da faixa. Preco abaixo do acordado ja foi classificado como
