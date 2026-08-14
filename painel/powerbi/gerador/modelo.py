@@ -80,6 +80,28 @@ MOEDA_FMT = '"R$" #,0.00'
 # cartao usarem recortes diferentes.
 FIM = "VAR Fim = [Data Fim Completa] "
 
+
+def janela(dias, expr="[Valor Total]", extra=(), inicio=">="):
+    """Medida restrita a uma janela que TERMINA no ultimo dia completo.
+
+    Existe para nao haver dez strings quase iguais. Na primeira versao havia, e
+    a diferenca entre elas era ALL() ou KEEPFILTERS -- ao converter, converti
+    duas e deixei oito para tras, e os cartoes ficaram parados no total quando o
+    leitor filtrava um fornecedor. Um helper unico torna esse erro impossivel de
+    cometer pela metade.
+
+    KEEPFILTERS, nunca ALL(): ALL() remove TODO filtro, inclusive fornecedor,
+    item e cidade. O que se quer e restringir a data POR CIMA do contexto, nao
+    apagar o contexto. A unica medida que legitimamente usa ALL() e
+    [Data Fim Completa], porque a ancora da janela precisa ser global -- do
+    contrario cada fornecedor teria a sua propria data de fim.
+    """
+    partes = [f"KEEPFILTERS('{T}'[Data] {inicio} Fim - {dias})",
+              f"KEEPFILTERS('{T}'[Data] <= Fim)"]
+    partes += [f"KEEPFILTERS('{T}'[{c}] = \"{v}\")" for c, v in extra]
+    return FIM + f"RETURN CALCULATE({expr}, " + ", ".join(partes) + ")"
+
+
 MEDIDAS = [
     ("Data Fim Completa",      f"VAR Exec = CALCULATE(MAX('{T}'[DATA_EXECUCAO]), ALL('{T}')) "
                                f"VAR DiaExec = DATE(YEAR(Exec), MONTH(Exec), DAY(Exec)) "
@@ -121,93 +143,41 @@ MEDIDAS = [
                                'RETURN FORMAT(Fim - 29, "dd/mm/yyyy") & " a " & FORMAT(Fim, "dd/mm/yyyy")', None),
     ("Janela 365d",            FIM +
                                'RETURN FORMAT(Fim - 364, "dd/mm/yyyy") & " a " & FORMAT(Fim, "dd/mm/yyyy")', None),
-    ("Valor Coberto 30d",      FIM +
-                               f"RETURN CALCULATE([Valor Total], ALL('{T}'), '{T}'[Data] >= Fim - 29, "
-                               f"'{T}'[Data] <= Fim, '{T}'[STATUS_ACORDO] = \"COM_ACORDO\")", MOEDA_FMT),
-    ("% Acima 30d",            FIM +
-                               f"VAR Acima = CALCULATE([Valor Total], ALL('{T}'), '{T}'[Data] >= Fim - 29, "
-                               f"'{T}'[Data] <= Fim, '{T}'[Status] = \"ACIMA DO ACORDO\") "
-                               "RETURN DIVIDE(Acima, [Valor Coberto 30d])", "0.0%"),
-    ("% Conforme 30d",         FIM +
-                               f"VAR Conf = CALCULATE([Valor Total], ALL('{T}'), '{T}'[Data] >= Fim - 29, "
-                               f"'{T}'[Data] <= Fim, '{T}'[Status] = \"CONFORME\") "
-                               "RETURN DIVIDE(Conf, [Valor Coberto 30d])", "0.0%"),
-    ("% Abaixo 30d",           FIM +
-                               f"VAR Ab = CALCULATE([Valor Total], ALL('{T}'), '{T}'[Data] >= Fim - 29, "
-                               f"'{T}'[Data] <= Fim, '{T}'[Status] = \"ABAIXO DO ACORDO\") "
-                               "RETURN DIVIDE(Ab, [Valor Coberto 30d])", "0.0%"),
-    # Excedente pago na janela, respeitando o contexto do visual. KEEPFILTERS,
-    # nao ALL(): com ALL() a medida ignora fornecedor, item e -- pior -- a
-    # propria linha da tabela, e o mesmo numero apareceria em toda linha. Com
-    # KEEPFILTERS o filtro de data INTERSECTA o contexto, entao numa linha de
-    # 2025 a intersecao e vazia e a medida devolve vazio, enquanto no total da
-    # tabela ela vale exatamente o mesmo que no cartao.
+
+    # ── Janela de 30 dias: conformidade de preco ────────────────────
+    ("Valor Dentro do Acordo 30d", janela(29, extra=[("STATUS_ACORDO", "COM_ACORDO")]), MOEDA_FMT),
+    ("Valor Total 30d",        janela(29), MOEDA_FMT),
+    ("Valor Sem Acordo 30d",   janela(29, extra=[("STATUS_ACORDO", "SEM_ACORDO")]), MOEDA_FMT),
+    ("% Sem Acordo 30d",       "DIVIDE([Valor Sem Acordo 30d], [Valor Total 30d])", "0.0%"),
+    # Nao existem "% Acima 30d", "% Conforme 30d" e "% Abaixo 30d". As medidas
+    # usadas sao [% Acima], [% Conforme] e [% Abaixo], que dividem pela base com
+    # acordo do CONTEXTO -- e como a aba de Conformidade tem filtro de janela
+    # travado na pagina, o contexto ja e a janela de 30 dias. Duas medidas quase
+    # iguais, uma com janela embutida e outra sem, foi exatamente o que produziu
+    # a divergencia de R$ 387.898,08 contra R$ 13.940,24. Uma so.
     #
-    # Esta e a medida unica de excedente: cartao, ranking e tabela usam ela, e o
-    # total do Detalhe reconcilia com o cartao da Conformidade por construcao.
-    ("Excedente Acima 30d",    FIM +
-                               f"RETURN CALCULATE(SUM('{T}'[Diferenca Total]), "
-                               f"KEEPFILTERS('{T}'[Data] >= Fim - 29), "
-                               f"KEEPFILTERS('{T}'[Data] <= Fim), "
-                               f"KEEPFILTERS('{T}'[Status] = \"ACIMA DO ACORDO\"))", MOEDA_FMT),
+    # Excedente pago: a UNICA medida de excedente do painel. Cartao, ranking e
+    # tabela usam ela, entao o total do Detalhe reconcilia com o cartao da
+    # Conformidade por construcao.
+    ("Excedente Acima 30d",    janela(29, expr=f"SUM('{T}'[Diferenca Total])",
+                                      extra=[("Status", "ACIMA DO ACORDO")]), MOEDA_FMT),
+    # Comparacao de preco no Detalhe: vazia fora da janela. A linha de 2025
+    # continua na tabela com data, fornecedor, item, quantidade e preco pago --
+    # falta so a diferenca contra um catalogo que nao existia naquela data.
+    ("Preco Acordo Vigente",   janela(29, expr=f"SUM('{T}'[Preco Acordo])"), MOEDA_FMT),
 
-    # ── Denominadores das janelas. Cada aba restrita a um recorte precisa
-    # dizer sobre QUAL total o seu percentual foi calculado -- sem isso o
-    # leitor compara "R$ 1,8 mi em fuga" com os R$ 17,1 mi do historico
-    # inteiro e conclui 10%, quando na janela e 12,6%.
-    ("Valor Total 30d",        FIM +
-                               f"RETURN CALCULATE([Valor Total], ALL('{T}'), "
-                               f"'{T}'[Data] >= Fim - 29, '{T}'[Data] <= Fim)", MOEDA_FMT),
-    ("Valor Total 365d",       FIM +
-                               f"RETURN CALCULATE([Valor Total], ALL('{T}'), "
-                               f"'{T}'[Data] >= Fim - 364, '{T}'[Data] <= Fim)", MOEDA_FMT),
-    ("Valor Sem Acordo 30d", FIM +
-                               f"RETURN CALCULATE([Valor Total], ALL('{T}'), "
-                               f"'{T}'[Data] >= Fim - 29, '{T}'[Data] <= Fim, "
-                               f"'{T}'[STATUS_ACORDO] = \"SEM_ACORDO\")", MOEDA_FMT),
-    ("% Sem Acordo 30d",   "DIVIDE([Valor Sem Acordo 30d], [Valor Total 30d])", "0.0%"),
-    ("Valor em Fuga 365d",     FIM +
-                               f"RETURN CALCULATE([Valor Total], ALL('{T}'), "
-                               f"'{T}'[Data] >= Fim - 364, '{T}'[Data] <= Fim, "
-                               f"'{T}'[STATUS_ACORDO] = \"SEM_ACORDO\", "
-                               f"'{T}'[Tinha acordo?] = \"SIM\")", MOEDA_FMT),
-    ("Valor Sem Acordo 365d", FIM +
-                               f"RETURN CALCULATE([Valor Total], ALL('{T}'), "
-                               f"'{T}'[Data] > Fim - 365, '{T}'[Data] <= Fim, "
-                               f"'{T}'[STATUS_ACORDO] = \"SEM_ACORDO\")", MOEDA_FMT),
-    # O percentual que responde a pergunta do funil: dentro do que passou fora,
-    # quanto tinha acordo disponivel? Medido em 13/08/2026: 22,7%. O outro
-    # denominador possivel (sobre o gasto total, 16,2%) responde outra pergunta
-    # e nao encadeia com a aba anterior.
-    ("% da Fuga sobre o Sem Acordo 365d", "DIVIDE([Valor em Fuga 365d], [Valor Sem Acordo 365d])", "0.0%"),
-    # Base de conformidade explicita e imune ao filtro da pagina. O cartao de
-    # "Valor Total 30d" ao lado de "% Acima" fazia o leitor calcular 21,4% sobre
-    # os R$ 824,1 mil e chegar a R$ 176 mil, quando o valor e R$ 44 mil: os
-    # percentuais de conformidade sao sobre a base COM acordo, R$ 205,5 mil.
-    # ── Comparacao de preco no Detalhe, valida so dentro da janela ──
-    # A tabela do Detalhe e historica de proposito (rastreabilidade), mas preco
-    # acordado e diferenca comparados contra o catalogo de HOJE em uma OS de
-    # 2025 sao a comparacao que o painel inteiro evita. Estas duas medidas
-    # devolvem vazio fora da janela de 30 dias: a linha continua na tabela, com
-    # data, fornecedor, item, quantidade e preco pago, mas sem um numero de
-    # diferenca que ninguem pode defender. Ordenando por elas, o topo da tabela
-    # e necessariamente comparavel.
-    # IF(MAX(Data) >= Fim - 29, ...) parecia funcionar e nao funcionava: na linha
-    # de TOTAL da tabela o MAX(Data) e a data maxima global, a condicao fica
-    # verdadeira, e o SUM percorre o historico inteiro. Medido em 13/08/2026: o
-    # total da coluna mostrava R$ 387.898,08 -- a soma liquida de dezenove meses
-    # -- ao lado de um cartao de R$ 13,9 mil. Um gate por IF nao e um filtro; a
-    # forma correta e CALCULATE com KEEPFILTERS, que intersecta o contexto em
-    # qualquer grao.
-    ("Preco Acordo Vigente",   FIM +
-                               f"RETURN CALCULATE(SUM('{T}'[Preco Acordo]), "
-                               f"KEEPFILTERS('{T}'[Data] >= Fim - 29), "
-                               f"KEEPFILTERS('{T}'[Data] <= Fim))", MOEDA_FMT),
-
-    ("Valor Dentro do Acordo 30d", FIM +
-                               f"RETURN CALCULATE([Valor Total], ALL('{T}'), "
-                               f"'{T}'[Data] >= Fim - 29, '{T}'[Data] <= Fim, "
-                               f"'{T}'[STATUS_ACORDO] = \"COM_ACORDO\")", MOEDA_FMT),
+    # ── Janela de 365 dias: fuga de contrato ────────────────────────
+    ("Valor Total 365d",       janela(365, inicio=">"), MOEDA_FMT),
+    ("Valor Sem Acordo 365d",  janela(365, inicio=">",
+                                      extra=[("STATUS_ACORDO", "SEM_ACORDO")]), MOEDA_FMT),
+    ("Valor em Fuga 365d",     janela(365, inicio=">",
+                                      extra=[("STATUS_ACORDO", "SEM_ACORDO"),
+                                             ("Tinha acordo?", "SIM")]), MOEDA_FMT),
+    # O percentual do funil: dentro do que passou sem acordo, quanto tinha acordo
+    # disponivel? 22,7%. O outro denominador possivel (gasto total, 16,2%)
+    # responde outra pergunta e nao encadeia com a aba anterior.
+    ("% da Fuga sobre o Sem Acordo 365d",
+     "DIVIDE([Valor em Fuga 365d], [Valor Sem Acordo 365d])", "0.0%"),
 
     ("Fornecedores",           f"DISTINCTCOUNT('{T}'[Fornecedor])", "#,0"),
     ("Cidades",                f"DISTINCTCOUNT('{T}'[Cidade])", "#,0"),
@@ -223,6 +193,16 @@ def _medida(n, e, f):
     if f: m["formatString"] = f
     return m
 medidas = [_medida(*x) for x in MEDIDAS]
+
+# Trava contra a regressao mais cara deste modelo. ALL() remove TODO filtro,
+# inclusive fornecedor, item e cidade: uma medida de janela com ALL() fica presa
+# no total e o cartao nao reage quando o leitor filtra -- pior que numero errado,
+# porque parece certo. A unica excecao legitima e a ancora da janela, que precisa
+# ser global. Se uma medida nova precisar de ALL(), acrescente aqui com o motivo.
+ALL_PERMITIDO = {"Data Fim Completa"}
+_com_all = [m["name"] for m in medidas
+            if f"ALL('{T}')" in m["expression"] and m["name"] not in ALL_PERMITIDO]
+assert not _com_all, f"medidas usando ALL() sem justificativa: {_com_all}"
 
 model = {
     "name": "SupplyVisionPainel",

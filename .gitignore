@@ -72,6 +72,10 @@
 # SupplyVisionPainel.Report; o out/ e a copia intermediaria de onde ele foi
 # copiado, e versionar as duas garantiria que divergissem.
 /painel/powerbi/gerador/out/
+# Saida intermediaria do modelo.py. O model.bim que vale e o de dentro do
+# SupplyVisionPainel.SemanticModel; versionar as duas copias garantiria que
+# divergissem.
+/painel/powerbi/gerador/model.bim.json
 
 # Painel do Power BI: o CODIGO vai para o Git, os SNAPSHOTS nao.
 # Os parquets sao dado operacional (centenas de milhares de linhas), e o

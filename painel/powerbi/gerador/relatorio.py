@@ -330,7 +330,7 @@ def barras_empilhadas(x, y, w, h, dim, medidas, tit, cores=None, filtros=None,
     return v
 
 # ── interacao entre visuais ─────────────────────────────────────────
-def interacoes(visuais, alvos=("card",)):
+def interacoes(visuais, alvos=None):
     """Forca a selecao a chegar nos cartoes como FILTRO, nao como realce.
 
     Sem isto o cartao mente. O padrao do PBIR e type "Default", que delega ao
@@ -350,7 +350,7 @@ def interacoes(visuais, alvos=("card",)):
         return v.get("visual", {}).get("visualType", "")
 
     fontes = [v for v in visuais if tipo(v) not in ("textbox", "slicer")]
-    destinos = [v for v in fontes if tipo(v) in alvos]
+    destinos = fontes if alvos is None else [v for v in fontes if tipo(v) in alvos]
     return [{"source": f["name"], "target": d["name"], "type": "DataFilter"}
             for f in fontes for d in destinos if f["name"] != d["name"]]
 
