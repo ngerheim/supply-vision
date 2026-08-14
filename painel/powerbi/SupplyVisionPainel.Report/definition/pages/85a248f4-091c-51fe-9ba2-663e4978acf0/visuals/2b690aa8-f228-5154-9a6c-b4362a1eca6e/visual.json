@@ -26,7 +26,8 @@
                 }
               },
               "queryRef": "Painel.Status",
-              "nativeQueryRef": "Status"
+              "nativeQueryRef": "Status",
+              "displayName": "Status do preço"
             }
           ]
         }

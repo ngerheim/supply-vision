@@ -26,7 +26,8 @@
                 }
               },
               "queryRef": "Painel.Motivo Sem Acordo",
-              "nativeQueryRef": "Motivo Sem Acordo"
+              "nativeQueryRef": "Motivo Sem Acordo",
+              "displayName": "Motivo de não ter acordo"
             }
           ]
         }

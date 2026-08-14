@@ -26,7 +26,8 @@
                 }
               },
               "queryRef": "Painel.STATUS_ACORDO",
-              "nativeQueryRef": "STATUS_ACORDO"
+              "nativeQueryRef": "STATUS_ACORDO",
+              "displayName": "Dentro ou fora do acordo"
             }
           ]
         }

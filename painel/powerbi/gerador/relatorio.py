@@ -84,14 +84,28 @@ def visual(tipo, x, y, w, h, projections, selects, tit=None, order=None,
     if filtros: vc["filterConfig"] = filtros
     return vc
 
-def texto(x, y, w, h, conteudo, tamanho=20, negrito=True):
+def texto(x, y, w, h, conteudo, tamanho=20, negrito=True, cor="#06203C",
+          chapa=True):
+    """Caixa de texto.
+
+    chapa=False remove fundo e borda. O tema pinta todo visual de branco com
+    anel cinza, o que e certo para grafico e cartao e errado para um rotulo de
+    secao: ele passa a parecer um cartao vazio flutuando na pagina.
+    """
     runs = [{"value": conteudo, "textStyle": {"fontSize": f"{tamanho}pt",
-             "fontWeight": "bold" if negrito else "normal", "color": "#06203C"}}]
-    return {"$schema": S_VC, "name": guid(f"txt/{x}/{y}/{conteudo}"),
-            "position": {"x": x, "y": y, "z": 0, "height": h, "width": w},
-            "visual": {"visualType": "textbox", "drillFilterOtherVisuals": True,
-                       "objects": {"general": [{"properties": {"paragraphs":
-                           [{"textRuns": runs}]}}]}}}
+             "fontWeight": "bold" if negrito else "normal", "color": cor}}]
+    v = {"visualType": "textbox", "drillFilterOtherVisuals": True,
+         "objects": {"general": [{"properties": {"paragraphs":
+             [{"textRuns": runs}]}}]}}
+    vc = {"$schema": S_VC, "name": guid(f"txt/{x}/{y}/{conteudo}"),
+          "position": {"x": x, "y": y, "z": 0, "height": h, "width": w},
+          "visual": v}
+    if not chapa:
+        v["visualContainerObjects"] = {
+            "background": [{"properties": {"show": {"expr": {"Literal": {"Value": "false"}}}}}],
+            "border":     [{"properties": {"show": {"expr": {"Literal": {"Value": "false"}}}}}],
+        }
+    return vc
 
 # ── atalhos por tipo (mesma assinatura da versao legada) ────────────
 def card(x, y, w, h, medida, fonte=None, destaque=False, rotulo=None):
@@ -157,21 +171,33 @@ def matriz(x, y, w, h, linhas, colunas, medidas, tit, filtros=None):
     sels = [sel_col(c) for c in linhas + colunas] + [sel_med(m) for m in medidas]
     return visual("pivotTable", x, y, w, h, proj, sels, tit, filtros=filtros)
 
-def tabela(x, y, w, h, campos, medidas, tit, filtros=None, ordem=None):
-    """Tabela. ordem=(nome, e_medida) ordena decrescente por essa coluna.
+def tabela(x, y, w, h, itens, tit, medidas=(), filtros=None, ordem=None,
+           apelidos=None):
+    """Tabela. itens e a lista ORDENADA de colunas e medidas, na ordem exibida.
 
-    Numa tabela que existe para embasar cobranca, a ordem nao e detalhe: sem
-    ela o Power BI devolve por data, e quem le comeca pela linha mais antiga em
-    vez da mais cara.
+    medidas= diz quais nomes de itens sao medidas. Antes a assinatura recebia
+    colunas e medidas separadas e concatenava, o que empurrava toda medida para
+    o fim da tabela: a diferenca em reais, que e a coluna de decisao, ficava
+    atras de quinze colunas de dimensao, fora da area visivel.
+
+    ordem=(nome, e_medida) ordena decrescente. Numa tabela que embasa cobranca a
+    ordem nao e detalhe: sem ela o Power BI devolve por data, e quem le comeca
+    pela linha mais antiga em vez da mais cara.
     """
-    proj = {"Values": [ref(c) for c in campos] + [ref(m) for m in medidas]}
-    sels = [sel_col(c) for c in campos] + [sel_med(m) for m in medidas]
+    ap = apelidos or {}
+    med = set(medidas)
+    proj = {"Values": [ref(i, ap.get(i)) for i in itens]}
+    sels = [(sel_med(i) if i in med else sel_col(i)) for i in itens]
     o = ordenar(ordem[0], medida=ordem[1]) if ordem else None
     return visual("tableEx", x, y, w, h, proj, sels, tit, order=o, filtros=filtros)
 
-def filtro(x, y, w, h, dim):
-    """Segmentador. Sem titulo -- o cabecalho do proprio slicer nomeia o campo."""
-    v = visual("slicer", x, y, w, h, {"Values": [ref(dim)]}, [sel_col(dim)], None)
+def filtro(x, y, w, h, dim, rotulo=None):
+    """Segmentador. Sem titulo -- o cabecalho do proprio slicer nomeia o campo.
+
+    rotulo= troca o nome exibido. Serve para nomes tecnicos de coluna:
+    STATUS_ACORDO nao e expressao de negocio, "Dentro ou fora do acordo" e.
+    """
+    v = visual("slicer", x, y, w, h, {"Values": [ref(dim, rotulo)]}, [sel_col(dim)], None)
     v["visual"]["visualContainerObjects"] = sem_titulo()
     return v
 

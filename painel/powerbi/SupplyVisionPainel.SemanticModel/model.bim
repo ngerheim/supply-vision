@@ -445,6 +445,18 @@
             "formatString": "0.0%"
           },
           {
+            "name": "Preco Acordo Vigente",
+            "expression": "VAR Fim = [Data Fim Completa] RETURN IF(MAX('Painel'[Data]) >= Fim - 29, SUM('Painel'[Preco Acordo]))",
+            "lineageTag": "feebe658-7531-5334-b9b9-8052ac4994f0",
+            "formatString": "\"R$\" #,0.00"
+          },
+          {
+            "name": "Diferenca Comparavel",
+            "expression": "VAR Fim = [Data Fim Completa] RETURN IF(MAX('Painel'[Data]) >= Fim - 29, SUM('Painel'[Diferenca Total]))",
+            "lineageTag": "82b954aa-7919-564b-8131-9615acf73817",
+            "formatString": "\"R$\" #,0.00"
+          },
+          {
             "name": "Valor Dentro do Acordo 30d",
             "expression": "VAR Fim = [Data Fim Completa] RETURN CALCULATE([Valor Total], ALL('Painel'), 'Painel'[Data] >= Fim - 29, 'Painel'[Data] <= Fim, 'Painel'[STATUS_ACORDO] = \"COM_ACORDO\")",
             "lineageTag": "cbe4f654-6f7c-5861-b3a3-8f30b70c274a",

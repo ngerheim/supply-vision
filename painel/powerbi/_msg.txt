@@ -1,48 +1,46 @@
-Adota a nomenclatura de sem acordo e fuga, e fecha os denominadores
+Fecha o recorte temporal do Detalhe e corrige a geometria da pagina
 
-Vocabulario definido pelo negocio: "sem acordo" e o guarda-chuva (R$ 12,3 mi) e
-"fuga de contrato" e o subconjunto que tinha acordo disponivel e nao usou
-(R$ 2,57 mi). O resto, que nunca teve acordo, e "sem alternativa" -- nao pode
-reusar "sem acordo", que agora nomeia o total. Medidas renomeadas: Valor Fora do
-Acordo -> Valor Sem Acordo, % Fora do Acordo -> % Sem Acordo, Valor Fora Sem
-Alternativa -> Valor Sem Alternativa, e as variantes 30d e 365d. A coluna
-STATUS_ACORDO do parquet fica como esta, por decisao: mexer nela alcancaria os
-relatorios diarios.
+O Detalhe estava comparando preco no historico inteiro. Ao trazer Preco Acordo e
+Diferenca Total para a frente da tabela e ordenar por elas, a rodada anterior
+reintroduziu justamente a comparacao que o painel evita: uma OS de janeiro de
+2025 contra o catalogo de acordos de hoje. As maiores "diferencas" do topo eram,
+por construcao, as maiores derivas de catalogo dos ultimos dezenove meses.
 
-Denominador da conformidade explicito na faixa. Entra "Base com acordo avaliada
-(30d)" ao lado do gasto total, e os percentuais passam a se chamar "% acima --
-da base avaliada". A faixa mostrava R$ 824,1 mil ao lado de 21,4%, e multiplicar
-os dois da R$ 176 mil onde o numero e R$ 44 mil: a base e R$ 205,5 mil.
+Entram duas medidas, Preco Acordo Vigente e Diferenca Comparavel, que devolvem
+vazio fora da janela de 30 dias. A linha historica continua na tabela com data,
+fornecedor, item, quantidade e preco pago -- some apenas o numero de diferenca
+que ninguem poderia defender. Ordenando por Diferenca Comparavel, o topo da
+tabela e necessariamente comparavel.
 
-Cartao de fuga da Visao Geral passa para a janela de 365 dias. Exibir R$ 2,6 mi
-de fuga historica contradiz a regra do proprio painel.
+Sobreposicao na pagina Sem acordo. Os dois rotulos de periodo tinham sido postos
+como visuais soltos: o de diagnostico caia sobre os cartoes (y=112 contra
+cartoes terminando em 140) e o de situacao atual virava um cartao branco vazio
+flutuando a direita, porque o tema pinta todo visual de branco com anel cinza.
+Agora sao cabecalhos finos de 18px acima de cada secao, com fundo e borda
+desligados, e os graficos desceram para 172.
 
-Percentual da fuga passa a dividir pelo sem acordo, nao pelo gasto total: 22,7%
-em vez de 16,2%. O rotulo diz o denominador -- "% do sem acordo que era fuga".
+Cinco cartoes estouravam a pagina em 22px. larg=254 com cinco cartoes soma
+1302 numa pagina de 1280 -- a quinta caixa ficava cortada nas abas de Fuga e de
+Conformidade. As faixas de cinco passam a dividir a largura exata, e faixa_cards
+ganhou uma assercao que falha na geracao em vez de deixar passar.
 
-Aba "Sem acordo" ganha rotulo das duas zonas de periodo: "Situacao atual -- 30
-dias" sobre a faixa de cartoes e "Diagnostico historico" sobre os graficos. A
-pagina mistura os dois de proposito, mas sem rotular o leitor supoe que o
-grafico detalha o cartao.
+Assinatura de tabela() refeita: recebe uma lista ordenada de itens e um conjunto
+dizendo quais sao medidas. Antes concatenava colunas e medidas, o que empurrava
+toda medida para o fim -- a diferenca em reais, coluna de decisao, ficava atras
+de quinze colunas de dimensao.
 
-Filtros de janela travados no modo de leitura (isLockedInViewMode). Sem isso
-qualquer leitor podia abrir o painel de filtros e apagar o recorte, e a pagina
-virava historica sem aviso -- exatamente a leitura que a ausencia de vigencia
-torna insegura. Seguem visiveis, para o recorte nao ficar oculto.
+Cartao de % Abaixo sai da Conformidade e entra Excedente Acima 30d em reais.
+Preco abaixo do acordado ja tinha sido classificado como ruido de catalogo, nao
+oportunidade: nao ha o que cobrar de quem cobrou menos.
 
-Titulos e nomes de aba com acentuacao. A convencao sem acento do projeto vale
-para mensagem de commit e codigo, nao para texto que o usuario le: "Composicao
-mensal", "Analises", "Em qual dimensao" apareciam sem acento ao lado de nomes de
-fornecedor acentuados corretamente. Nome de aba entra na URL de link direto,
-entao a hora de acertar e antes da primeira publicacao.
+Titulos dos rankings encurtados ("Itens -- top 20 = 59,3%") com um subtitulo
+unico dizendo que a faixa e historica, em vez de repetir "(historico)" em cada
+titulo e truncar o nome em 314px.
 
-Tabela do Detalhe reordenada: Data, OS, Fornecedor, Item, Qtd, Preco OS, Preco
-Acordo, Diferenca Total e so depois as dimensoes, abrindo pela maior diferenca.
-As colunas de dinheiro ficavam atras de sete colunas de dimensao, fora da area
-visivel, e a tabela abria pela linha mais antiga.
+Rotulos de negocio nos segmentadores e colunas do Detalhe: STATUS_ACORDO passa a
+aparecer como "Dentro ou fora do acordo", Status como "Status do preco", Criador
+como "Criador da OS", Mes Nome como "Mes".
 
-Verificado, nao suposto: Diferenca Total e Qtd x (Preco OS - Preco Acordo), com
-erro maximo zero em 18.223 linhas ACIMA DO ACORDO. O ranking de excedente
-prioriza montante contestavel (R$ 855,1 mil), nao valor comprado (R$ 2,68 mi).
-Status e STATUS_ACORDO nao sao redundantes, sao aninhados: ACIMA, ABAIXO e
-CONFORME ocorrem apenas em COM_ACORDO, e SEM ACORDO apenas em SEM_ACORDO.
+Checagem geometrica no gerador: detecta sobreposicao entre visuais e visual fora
+dos limites da pagina. Foi ela que achou o estouro dos 22px, que passou por
+duas rodadas de revisao visual sem ser nomeado.

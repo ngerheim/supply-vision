@@ -174,6 +174,21 @@ MEDIDAS = [
     # "Valor Total 30d" ao lado de "% Acima" fazia o leitor calcular 21,4% sobre
     # os R$ 824,1 mil e chegar a R$ 176 mil, quando o valor e R$ 44 mil: os
     # percentuais de conformidade sao sobre a base COM acordo, R$ 205,5 mil.
+    # ── Comparacao de preco no Detalhe, valida so dentro da janela ──
+    # A tabela do Detalhe e historica de proposito (rastreabilidade), mas preco
+    # acordado e diferenca comparados contra o catalogo de HOJE em uma OS de
+    # 2025 sao a comparacao que o painel inteiro evita. Estas duas medidas
+    # devolvem vazio fora da janela de 30 dias: a linha continua na tabela, com
+    # data, fornecedor, item, quantidade e preco pago, mas sem um numero de
+    # diferenca que ninguem pode defender. Ordenando por elas, o topo da tabela
+    # e necessariamente comparavel.
+    ("Preco Acordo Vigente",   FIM +
+                               f"RETURN IF(MAX('{T}'[Data]) >= Fim - 29, "
+                               f"SUM('{T}'[Preco Acordo]))", MOEDA_FMT),
+    ("Diferenca Comparavel",   FIM +
+                               f"RETURN IF(MAX('{T}'[Data]) >= Fim - 29, "
+                               f"SUM('{T}'[Diferenca Total]))", MOEDA_FMT),
+
     ("Valor Dentro do Acordo 30d", FIM +
                                f"RETURN CALCULATE([Valor Total], ALL('{T}'), "
                                f"'{T}'[Data] >= Fim - 29, '{T}'[Data] <= Fim, "

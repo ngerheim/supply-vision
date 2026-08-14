@@ -26,7 +26,8 @@
                 }
               },
               "queryRef": "Painel.Tinha acordo?",
-              "nativeQueryRef": "Tinha acordo?"
+              "nativeQueryRef": "Tinha acordo?",
+              "displayName": "Tinha acordo disponível?"
             }
           ]
         }

@@ -26,7 +26,8 @@
                 }
               },
               "queryRef": "Painel.Criador",
-              "nativeQueryRef": "Criador"
+              "nativeQueryRef": "Criador",
+              "displayName": "Criador da OS"
             }
           ]
         }

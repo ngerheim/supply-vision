@@ -26,7 +26,8 @@
                 }
               },
               "queryRef": "Painel.Mes Nome",
-              "nativeQueryRef": "Mes Nome"
+              "nativeQueryRef": "Mes Nome",
+              "displayName": "Mês"
             }
           ]
         }

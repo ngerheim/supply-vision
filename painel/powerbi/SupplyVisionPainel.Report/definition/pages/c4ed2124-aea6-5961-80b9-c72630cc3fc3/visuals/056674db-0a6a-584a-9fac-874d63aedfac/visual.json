@@ -22,20 +22,6 @@
                       "Entity": "Painel"
                     }
                   },
-                  "Property": "Data"
-                }
-              },
-              "queryRef": "Painel.Data",
-              "nativeQueryRef": "Data"
-            },
-            {
-              "field": {
-                "Column": {
-                  "Expression": {
-                    "SourceRef": {
-                      "Entity": "Painel"
-                    }
-                  },
                   "Property": "OS"
                 }
               },
@@ -78,6 +64,21 @@
                       "Entity": "Painel"
                     }
                   },
+                  "Property": "Diferenca Total"
+                }
+              },
+              "queryRef": "Painel.Diferenca Total",
+              "nativeQueryRef": "Diferenca Total",
+              "displayName": "Diferença R$"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Painel"
+                    }
+                  },
                   "Property": "Qtd"
                 }
               },
@@ -96,7 +97,8 @@
                 }
               },
               "queryRef": "Painel.Preco OS",
-              "nativeQueryRef": "Preco OS"
+              "nativeQueryRef": "Preco OS",
+              "displayName": "Preço OS"
             },
             {
               "field": {
@@ -110,21 +112,8 @@
                 }
               },
               "queryRef": "Painel.Preco Acordo",
-              "nativeQueryRef": "Preco Acordo"
-            },
-            {
-              "field": {
-                "Column": {
-                  "Expression": {
-                    "SourceRef": {
-                      "Entity": "Painel"
-                    }
-                  },
-                  "Property": "Diferenca Total"
-                }
-              },
-              "queryRef": "Painel.Diferenca Total",
-              "nativeQueryRef": "Diferenca Total"
+              "nativeQueryRef": "Preco Acordo",
+              "displayName": "Preço acordo"
             }
           ]
         }
