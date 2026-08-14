@@ -1,38 +1,37 @@
-Unifica a medida de excedente e faz a tabela reconciliar com o cartao
+Adiciona conferir.py e fecha o acabamento das faixas de secao
 
-O total da coluna de diferenca no Detalhe mostrava R$ 387.898,08 ao lado de um
-cartao de R$ 13.940,24 na Conformidade. A causa: as medidas Preco Acordo Vigente
-e Diferenca Comparavel usavam IF(MAX([Data]) >= Fim - 29, SUM(...)). Isso parece
-um filtro e nao e. Linha a linha funciona, porque cada linha tem uma data; na
-linha de TOTAL o MAX([Data]) e a data maxima global, a condicao fica verdadeira,
-e o SUM percorre os dezenove meses.
+O erro que mais custou nesta construcao foi uma medida que devolvia o numero
+errado, e nenhuma das checagens existentes podia peg�-la: o schema valida
+estrutura, a geometria valida posicao, as referencias validam nomes. A
+divergencia de R$ 387.898,08 contra R$ 13.940,24 atravessou tres rodadas de
+revisao visual e so apareceu quando alguem comparou dois numeros de paginas
+diferentes.
 
-Conferido na base, nao deduzido: R$ 387.898,08 e exatamente a soma liquida
-historica de Diferenca Total -- R$ 855.131,81 de acima menos R$ 467.233,73 de
-abaixo. O valor certo da janela de 14/07 a 12/08 e R$ 13.940,24.
+conferir.py faz essa comparacao em codigo. Recalcula em pandas o que cada medida
+deveria devolver e confere as identidades que precisam valer:
 
-Correcao em duas partes. Primeiro, a forma: CALCULATE com KEEPFILTERS no lugar
-do gate por IF. KEEPFILTERS intersecta o filtro de data com o contexto em vez de
-substitui-lo, entao numa linha de 2025 a intersecao e vazia e a medida devolve
-vazio, e no total da tabela ela vale o mesmo que no cartao.
+  - total = dentro do acordo + sem acordo, no historico e nas duas janelas;
+  - fuga e subconjunto de sem acordo, e sem acordo = sem alternativa + fuga;
+  - ACIMA, ABAIXO e CONFORME nunca ocorrem em SEM_ACORDO, e vice-versa;
+  - Diferenca Total = Qtd x (Preco OS - Preco Acordo);
+  - o excedente da janela fecha com a soma por fornecedor, item, cidade e grupo
+    de modelo;
+  - o excedente filtrado por fornecedor devolve o valor daquele fornecedor, e
+    nao o total -- este e o teste que um PDF nao consegue fazer, e o que falharia
+    se a medida usasse ALL() em vez de KEEPFILTERS.
 
-Segundo, a unicidade: existia Excedente Acima do Acordo (sem janela) e Excedente
-Acima 30d (com janela, mas com ALL(), o que a tornava inutilizavel em tabela).
-Duas medidas de excedente com nomes parecidos foi o que permitiu a divergencia.
-Fica UMA, Excedente Acima 30d, agora respeitando contexto, usada no cartao, nos
-dois rankings e nas duas tabelas. Diferenca Comparavel e as duas medidas de
-excedente sem janela foram removidas.
+Sai com codigo 1 se alguma identidade falhar, para poder entrar num gancho antes
+de publicar. Rodado agora: 0 falhas, excedente da janela R$ 13.940,24, base com
+acordo R$ 216.287,84, fuga em 22,7% do sem acordo.
 
-Teste de aceite conferido na base: o excedente da janela soma R$ 13.940,24, e as
-somas do ranking por fornecedor e por grupo de item fecham no mesmo centavo.
+Faixas de secao de 26 para 32px. Em 26px ainda sobrava um indicador de rolagem
+cinza no canto: a caixa de texto reserva padding proprio, e a altura util fica
+bem abaixo da declarada. O subtitulo da Visao Geral tambem encurtou -- o texto
+longo forcava quebra de linha dentro da faixa.
 
-Faixas de secao de 18 para 26px. A caixa de texto tem padding interno proprio,
-entao 18px cortava verticalmente o texto de 9pt -- "Situacao atual" e
-"Diagnostico historico" apareciam com a base das letras cortada. A pilha
-vertical das paginas 1 e 2 foi recalculada em volta da altura nova.
-
-Tabela da Conformidade na largura inteira, com os tres graficos lado a lado
-acima dela. Em 636px as sete colunas nao cabiam e preco cobrado, preco acordado
-e excedente ficavam atras da rolagem horizontal -- as tres colunas que
-sustentam a cobranca. A tabela agora ordena pelo excedente, nao pela diferenca
-bruta, e traz Cidade, que serve para saber com qual filial falar.
+Aviso escrito na aba de Fuga: os cartoes cobrem 365 dias corridos e o grafico,
+12 meses fechados. Sao recortes diferentes de proposito, porque meia coluna nas
+pontas nao se le, mas somar as doze colunas nao devolve o valor do cartao.
+Medido: R$ 1,78 mi contra R$ 1,73 mi, 2,5%. O aviso existe porque a diferenca e
+pequena o bastante para parecer arredondamento, e nao e. O conferir.py imprime
+essa diferenca a cada execucao e avisa se passar de 10%.

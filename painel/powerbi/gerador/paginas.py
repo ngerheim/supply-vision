@@ -64,8 +64,10 @@ def faixa_cards(medidas, y=CARD_Y, fontes=None, destaque=None, larg=None):
                  destaque=(m == destaque), rotulo=ROTULOS.get(m))
             for i, m in enumerate(medidas)]
 
-FAIXA_H = 26  # 18px cortava verticalmente o texto de 9pt: a caixa de texto tem
-              # padding interno proprio, entao a altura util e menor que a caixa.
+# 18px cortava o texto de 9pt e 26px ainda deixava um indicador de rolagem
+# cinza no canto da caixa. A caixa de texto do Power BI reserva padding proprio
+# em cima e embaixo, entao a altura util fica bem abaixo da altura declarada.
+FAIXA_H = 32
 
 
 def faixa(y, conteudo, x=0, w=W):
@@ -99,29 +101,29 @@ p1 += faixa_cards(["Valor Total", "Valor Sem Acordo", "% Sem Acordo",
                    "Valor em Fuga 365d"], y=44, destaque="% Sem Acordo", larg=306)
 # Um subtitulo para os quatro rankings, em vez de repetir "(historico)" em cada
 # titulo. Os titulos ficam curtos o suficiente para nao truncar em 314px.
-p1 += [faixa(126, "Gasto total por dimensão — histórico desde 01/2025. "
-                  "Barra dividida em dentro do acordo e sem acordo onde aplicável.")]
+# Subtitulo curto: o texto longo forcava quebra de linha dentro da faixa.
+p1 += [faixa(126, "Gasto total por dimensão — histórico desde 01/2025")]
 # Quatro colunas de 314px com a mesma altura. Antes, "grupos de item" tinha
 # 340px para vinte barras e mostrava treze com barra de rolagem -- um top 20 que
 # esconde sete nao e um top 20. Com o rotulo de dado fora, 314px de largura
 # comportam mais texto de categoria do que os 414px comportavam com rotulo.
 p1 += [
-    barras(0, 156, 314, 552, "Cidade", "Valor Total",
+    barras(0, 162, 314, 546, "Cidade", "Valor Total",
            "Cidades — top 20 = 58,7%",
            filtros=top_n("Cidade", 20), cor=NAVY),
-    barras_empilhadas(322, 156, 314, 552, "Fornecedor",
+    barras_empilhadas(322, 162, 314, 546, "Fornecedor",
                       ["Valor Dentro do Acordo", "Valor Sem Acordo"],
                       "Fornecedores — top 20 = 36,8%",
                       cores=CORES_DENTRO_FORA, filtros=top_n("Fornecedor", 20),
                       apelidos=APELIDOS),
-    barras_empilhadas(644, 156, 314, 552, "Grupo Item",
+    barras_empilhadas(644, 162, 314, 546, "Grupo Item",
                       ["Valor Dentro do Acordo", "Valor Sem Acordo"],
                       "Itens — top 20 = 59,3%",
                       cores=CORES_DENTRO_FORA, filtros=top_n("Grupo Item", 20),
                       apelidos=APELIDOS),
     # Oito grupos apos os filtros do Supply Vision, entao nao ha top N a aplicar
     # e a cobertura e 100% por construcao.
-    barras(966, 156, 314, 552, "Grupo Modelo", "Valor Total",
+    barras(966, 162, 314, 546, "Grupo Modelo", "Valor Total",
            "Grupos de modelo — todos os 8", cor=NAVY),
 ]
 
@@ -138,15 +140,15 @@ p2 = [texto(0, 0, W, 40, "Sem acordo", 15)]
 # primeira tentativa eu os coloquei como visuais soltos, e o de diagnostico caiu
 # sobre os cartoes (y=112 contra cartoes terminando em 140) enquanto o de
 # situacao atual virou um cartao vazio flutuando a direita.
-p2 += [faixa(42, "Situação atual — últimos 30 dias")]
+p2 += [faixa(40, "Situação atual — últimos 30 dias")]
 p2 += faixa_cards(["Janela 30d", "Valor Sem Acordo 30d", "% Sem Acordo 30d"],
-                  y=70, fontes={"Janela 30d": 11}, destaque="% Sem Acordo 30d",
+                  y=76, fontes={"Janela 30d": 11}, destaque="% Sem Acordo 30d",
                   larg=306)
-p2 += [faixa(154, "Diagnóstico histórico — 01/2025 em diante, meses fechados")]
+p2 += [faixa(162, "Diagnóstico histórico — 01/2025 em diante, meses fechados")]
 p2 += [
-    colunas_(0, 184, 836, 208, "Ano-Mes", "Valor Sem Acordo",
+    colunas_(0, 198, 836, 198, "Ano-Mes", "Valor Sem Acordo",
              "Valor sem acordo por mês", cat_asc=True, filtros=filtro_coluna("Mes Fechado")),
-    barras(844, 184, 436, 208, "Motivo Sem Acordo", "Valor Sem Acordo",
+    barras(844, 198, 436, 198, "Motivo Sem Acordo", "Valor Sem Acordo",
            "Em qual dimensão faltou referência"),
     barras(844, 400, 436, 308, "Grupo Modelo", "Valor Sem Acordo",
            "Sem acordo por grupo de modelo"),
@@ -174,20 +176,28 @@ p3 += faixa_cards(["Janela 365d", "Valor Total 365d", "Valor Sem Acordo 365d",
                    "Valor em Fuga 365d", "% da Fuga sobre o Sem Acordo 365d"],
                   fontes={"Janela 365d": 11},
                   destaque="% da Fuga sobre o Sem Acordo 365d")
+# Os cartoes cobrem 365 dias corridos; o grafico abaixo, 12 meses fechados. Sao
+# recortes diferentes de proposito -- meia coluna nas pontas nao se le -- mas
+# somar as doze colunas nao devolve o valor do cartao. Medido em 13/08/2026:
+# R$ 1,78 mi em 365 dias contra R$ 1,73 mi em 12 meses fechados, 2,5% de
+# diferenca. O aviso fica escrito porque a diferenca e pequena o suficiente para
+# alguem achar que e erro de arredondamento, e nao e.
+p3 += [faixa(144, "Cartões: 365 dias corridos. Gráfico abaixo: 12 meses "
+                  "fechados — recortes diferentes, as colunas não somam ao cartão.")]
 p3 += [
     # Doze meses fechados em vez de "tudo na janela de 365 dias": a janela
     # comeca no meio de agosto/2025 e termina no meio de agosto/2026, entao as
     # duas colunas das pontas apareciam pela metade e a serie parecia subir e
     # depois cair.
-    colunas_(0, 148, 836, 240, "Ano-Mes", "Valor em Fuga",
+    colunas_(0, 180, 836, 212, "Ano-Mes", "Valor em Fuga",
              "Fuga de contrato por mês — 12 meses fechados", cat_asc=True,
              filtros=filtro_coluna("Ultimos 12 meses fechados")),
-    barras(844, 148, 436, 560, "Cidade", "Valor em Fuga",
+    barras(844, 180, 436, 528, "Cidade", "Valor em Fuga",
            "Top 20 cidades — 96,0% da fuga na janela (ocorre em 38)",
            filtros=top_n("Cidade", 20)),
-    barras(0, 396, 414, 312, "Fornecedor", "Valor em Fuga",
+    barras(0, 400, 414, 308, "Fornecedor", "Valor em Fuga",
            "Top 20 fornecedores — 56,3% da fuga na janela", filtros=top_n("Fornecedor", 20)),
-    barras(422, 396, 414, 312, "Grupo Item", "Valor em Fuga",
+    barras(422, 400, 414, 308, "Grupo Item", "Valor em Fuga",
            "Top 20 grupos de item — 72,4% da fuga na janela", filtros=top_n("Grupo Item", 20)),
 ]
 

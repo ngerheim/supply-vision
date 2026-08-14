@@ -1,6 +1,6 @@
 $ErrorActionPreference = 'Continue'
 Set-Location 'C:\Projetos\supply-vision'
-foreach ($f in @('_aplicar.ps1','_aplicar.log','_conc.py','_conc.log','_check.ps1','_check.log')) {
+foreach ($f in @('_aplicar.ps1','_conf.log','_conc.py','_conc.log')) {
   Remove-Item (Join-Path 'painel\powerbi' $f) -Force -ErrorAction SilentlyContinue
 }
 Get-ChildItem '.git' -Recurse -Filter '*.lock' -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
