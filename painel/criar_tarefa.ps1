@@ -8,7 +8,7 @@
 # sessao ativa, entao um refresh disparado sem sessao falharia depois.
 #
 # Nao ha -WorkingDirectory porque o atualizar_painel.ps1 se localiza sozinho
-# (parametro $Raiz com default C:\Projetos\supply-vision + Set-Location).
+# (parametro $Raiz com default C:\Projetos\supply-vision-privado + Set-Location).
 
 $ErrorActionPreference = 'Stop'
 $nome = 'SupplyVision - Painel'

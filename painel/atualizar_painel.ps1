@@ -17,14 +17,14 @@
     No Agendador de Tarefas:
         Programa:   powershell.exe
         Argumentos: -NoProfile -ExecutionPolicy Bypass -File "C:\Projetos\supply-vision-privado\painel\atualizar_painel.ps1"
-        Iniciar em: C:\Projetos\supply-vision
+        Iniciar em: C:\Projetos\supply-vision-privado
         Marcar "Executar estando o usuario conectado ou nao" NAO funciona aqui:
         o gateway pessoal e aplicacao interativa e precisa da sessao ativa.
         Use "Executar somente quando o usuario estiver conectado".
 #>
 [CmdletBinding()]
 param(
-    [string] $Raiz = 'C:\Projetos\supply-vision',
+    [string] $Raiz = 'C:\Projetos\supply-vision-privado',
     # Sem extrair do Qlik, para reprocessar a base ja baixada.
     [switch] $SemExtrair
 )
