@@ -186,6 +186,89 @@ MEDIDAS = [
     ("% do Sem Acordo",    "DIVIDE([Valor Sem Acordo], "
                                "CALCULATE([Valor Sem Acordo], ALLSELECTED()))", "0.0%"),
     ("Ultima Execucao",        f"MAX('{T}'[DATA_EXECUCAO])", "dd/mm/yyyy hh:nn"),
+
+    # ── Frescor do dado ─────────────────────────────────────────────
+    # O refresh do Servico termina "com sucesso" lendo um parquet que nao
+    # avancou: se o pipeline falhou, o arquivo anterior continua no lugar e o
+    # Power BI atualiza contra ele -- nada no painel muda de aparencia. E o mesmo
+    # modo de falha do gateway pessoal: o painel nao quebra, envelhece.
+    #
+    # As duas datas sao diferentes de proposito. DATA_EXECUCAO diz quando o
+    # pipeline rodou; [Data Fim Completa] diz ate onde o dado alcanca. Um
+    # pipeline que roda todo dia sobre uma extracao travada mantem a primeira
+    # andando e a segunda parada -- e e a segunda que importa para quem decide.
+    ("Atualizacao",
+     '"Dados até " & FORMAT([Data Fim Completa], "dd/mm/yyyy") & '
+     '"   ·   carga " & FORMAT([Ultima Execucao], "dd/mm/yyyy HH:mm")', None),
+    # Nao existe medida "Dias de Defasagem". Ela precisaria de ALL('Painel') para
+    # ancorar a data de execucao globalmente, o que exigiria abrir ALL_PERMITIDO
+    # -- e nenhum visual a usaria: [Atualizacao] ja imprime as duas datas, e a
+    # diferenca entre elas e visivel sem uma terceira medida para calcula-la.
+] + [
+    # ── Cobertura do top 20: o numero que estava digitado no titulo ──
+    # Nove titulos deste painel carregavam percentual na string. O percentual vem
+    # da distribuicao da base; a string nao acompanha refresh nenhum. Depois da
+    # primeira atualizacao que mexa na cauda, o titulo afirma uma cobertura que as
+    # barras nao mostram -- e ninguem confere titulo contra grafico.
+    #
+    # ALL na COLUNA da dimensao, nao na tabela: o denominador precisa escapar do
+    # proprio VisualTopN do grafico (senao seria top20/top20 = 100%), mas tem de
+    # continuar obedecendo fornecedor, cidade e janela que o leitor filtrou.
+    # ALL('Painel'[Coluna]) remove um filtro; ALL('Painel') removeria todos -- e
+    # por isso esta forma nao precisa entrar em ALL_PERMITIDO.
+    (f"% Top 20 {rot}",
+     f"VAR Base = FILTER(ALL('{T}'[{dim}]), NOT ISBLANK('{T}'[{dim}])) "
+     f"VAR Top20 = TOPN(20, Base, [{med}], DESC, '{T}'[{dim}], ASC) "
+     f"VAR VTop = SUMX(Top20, CALCULATE([{med}])) "
+     f"VAR VTot = SUMX(Base, CALCULATE([{med}])) "
+     "RETURN DIVIDE(VTop, VTot)", "0.0%")
+    for rot, dim, med in [
+        # Visao Geral: cobertura pelo TOTAL da barra. conferir.py ja garante a
+        # identidade total = dentro + sem acordo, entao [Valor Total] E a soma das
+        # duas series -- nao ha por que criar medida auxiliar somando as duas.
+        ("Cidades",              "Cidade",     "Valor Total"),
+        ("Fornecedores",         "Fornecedor", "Valor Total"),
+        ("Grupos de Item",       "Grupo Item", "Valor Total"),
+        ("Fornecedores SA",      "Fornecedor", "Valor Sem Acordo"),
+        ("Grupos de Item SA",    "Grupo Item", "Valor Sem Acordo"),
+        # Fuga: a medida com janela embutida, nao a base. O filtro de pagina de
+        # 365 dias saiu (ver paginas.py), entao a janela tem de vir da medida.
+        ("Fornecedores Fuga",    "Fornecedor", "Valor em Fuga 365d"),
+        ("Grupos de Item Fuga",  "Grupo Item", "Valor em Fuga 365d"),
+        ("Cidades Fuga",         "Cidade",     "Valor em Fuga 365d"),
+    ]
+] + [
+    # "ocorre em 38": contagem digitada, mesmo problema.
+    ("Cidades com Fuga 365d",
+     f"COUNTROWS(FILTER(FILTER(ALL('{T}'[Cidade]), NOT ISBLANK('{T}'[Cidade])), "
+     "CALCULATE([Valor em Fuga 365d]) > 0))", "#,0"),
+
+    # ── Titulos. O texto mora onde mora o numero ─────────────────────
+    # Separar os dois foi a causa do problema: titulo no relatorio, numero na
+    # base. Aqui um refresh que mude a distribuicao muda o titulo junto.
+    # "todos os 8" reaproveita [Modelos], que ja e DISTINCTCOUNT(Grupo Modelo) --
+    # criar uma segunda contagem quase igual e o padrao que produziu a divergencia
+    # de R$ 387.898,08 contra R$ 13.940,24.
+    ("Titulo VG Cidades",
+     '"Cidades — top 20 = " & FORMAT([% Top 20 Cidades], "0.0%")', None),
+    ("Titulo VG Fornecedores",
+     '"Fornecedores — top 20 = " & FORMAT([% Top 20 Fornecedores], "0.0%")', None),
+    ("Titulo VG Grupos de Item",
+     '"Itens — top 20 = " & FORMAT([% Top 20 Grupos de Item], "0.0%")', None),
+    ("Titulo VG Grupos de Modelo",
+     '"Grupos de modelo — todos os " & '
+     f'FORMAT(CALCULATE([Modelos], REMOVEFILTERS(\'{T}\'[Grupo Modelo])), "0")', None),
+    ("Titulo SA Fornecedores",
+     '"Fornecedores — top 20 = " & FORMAT([% Top 20 Fornecedores SA], "0.0%") & " do sem acordo"', None),
+    ("Titulo SA Grupos de Item",
+     '"Itens — top 20 = " & FORMAT([% Top 20 Grupos de Item SA], "0.0%") & " do sem acordo"', None),
+    ("Titulo Fuga Fornecedores",
+     '"Top 20 fornecedores — " & FORMAT([% Top 20 Fornecedores Fuga], "0.0%") & " da fuga na janela"', None),
+    ("Titulo Fuga Grupos de Item",
+     '"Top 20 grupos de item — " & FORMAT([% Top 20 Grupos de Item Fuga], "0.0%") & " da fuga na janela"', None),
+    ("Titulo Fuga Cidades",
+     '"Top 20 cidades — " & FORMAT([% Top 20 Cidades Fuga], "0.0%") & '
+     '" da fuga na janela (ocorre em " & FORMAT([Cidades com Fuga 365d], "0") & ")"', None),
 ]
 
 def _medida(n, e, f):

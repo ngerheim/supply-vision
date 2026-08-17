@@ -65,9 +65,26 @@ def titulo(txt):
         "show": {"expr": {"Literal": {"Value": "true"}}},
         "text": {"expr": {"Literal": {"Value": "'" + txt.replace("'", "''") + "'"}}}}}]}
 
+
+def titulo_medida(nome):
+    """Titulo ligado a uma medida, em vez de texto digitado.
+
+    Existe porque nove titulos deste painel carregavam numero na string
+    ("top 20 = 36,8%"). O numero vem da base; a string nao. Depois do primeiro
+    refresh que mude a distribuicao, o titulo afirma um percentual que as barras
+    embaixo dele nao mostram mais -- e titulo errado e pior que titulo ausente,
+    porque ninguem confere titulo contra grafico.
+
+    O gate contra medida inexistente esta em validar.py (orfas): titulo nao e
+    projecao, entao a checagem de referencias nao o alcancava.
+    """
+    return {"title": [{"properties": {
+        "show": {"expr": {"Literal": {"Value": "true"}}},
+        "text": {"expr": _campo_med(nome)}}}]}
+
 # ── visual ──────────────────────────────────────────────────────────
 def visual(tipo, x, y, w, h, projections, selects, tit=None, order=None,
-           objects=None, filtros=None):
+           objects=None, filtros=None, tit_medida=None):
     porNome = {s["Name"]: s for s in selects}
     qs = {}
     for papel, itens in projections.items():
@@ -78,7 +95,10 @@ def visual(tipo, x, y, w, h, projections, selects, tit=None, order=None,
     v = {"visualType": tipo, "query": {"queryState": qs}, "drillFilterOtherVisuals": True}
     if order: v["query"]["sortDefinition"] = {"sort": order}
     if objects: v["objects"] = objects
-    if tit: v["visualContainerObjects"] = titulo(tit)
+    # tit_medida tem precedencia: onde existe medida de titulo, o texto fixo
+    # passa a ser so a semente do GUID (trocar o titulo nao deve mover o visual).
+    if tit_medida: v["visualContainerObjects"] = titulo_medida(tit_medida)
+    elif tit: v["visualContainerObjects"] = titulo(tit)
     vc = {"$schema": S_VC, "name": guid(f"vis/{tipo}/{x}/{y}/{tit}"),
           "position": {"x": x, "y": y, "z": 0, "height": h, "width": w}, "visual": v}
     if filtros: vc["filterConfig"] = filtros
@@ -129,7 +149,8 @@ def card(x, y, w, h, medida, fonte=None, destaque=False, rotulo=None):
     v["visual"]["visualContainerObjects"] = sem_titulo()
     return v
 
-def barras(x, y, w, h, dim, medida, tit, filtros=None, objetos=None, cor=None):
+def barras(x, y, w, h, dim, medida, tit, filtros=None, objetos=None, cor=None,
+           tit_medida=None):
     """Barras horizontais. cor= fixa a cor da serie pelo nome da medida.
 
     Sem cor=, o Power BI usa dataColors[0] -- o ambar da marca -- em TODA serie
@@ -140,7 +161,7 @@ def barras(x, y, w, h, dim, medida, tit, filtros=None, objetos=None, cor=None):
     if cor: obj.update(cores_series({medida: cor}))
     return visual("barChart", x, y, w, h, {"Category": [ref(dim)], "Y": [ref(medida)]},
                   [sel_col(dim), sel_med(medida)], tit, order=ordenar(medida),
-                  objects=obj or None, filtros=filtros)
+                  objects=obj or None, filtros=filtros, tit_medida=tit_medida)
 
 def colunas_(x, y, w, h, dim, medida, tit, cat_asc=False, objetos=None, filtros=None):
     return visual("clusteredColumnChart", x, y, w, h,
@@ -240,18 +261,65 @@ def top_n(dim, quantos=20):
                    "Where": [{"Target": [_campo_col_alias(dim)],
                               "Condition": {"VisualTopN": {"ItemCount": quantos}}}]},
         "howCreated": "User",
+        # Travado como os filtros de janela. O top N nao e preferencia de
+        # leitura: o percentual do titulo e calculado sobre 20 categorias. Um
+        # leitor que abra o painel de filtros e troque para 10 passa a ver um
+        # grafico de 10 barras com um titulo que afirma a cobertura de 20.
+        "isLockedInViewMode": True,
     }]}
 
-def filtro_coluna(coluna):
+
+def combinar(*configs):
+    """Junta filterConfigs num so. Serve a visual que precisa de dois filtros.
+
+    Os helpers devolvem {"filters": [...]} porque cada um nasceu para ser o unico
+    filtro do visual. Passar dois para o parametro filtros= significava escolher
+    entre eles -- foi assim que os rankings de "Sem acordo" ficaram com top N e
+    SEM o recorte de mes fechado que o cabecalho da secao anuncia.
+    """
+    fs = [f for c in configs if c for f in c["filters"]]
+    return {"filters": fs} if fs else None
+
+
+def filtro_medida_maior(nome, valor=0):
+    """Filtro de visual: medida > valor.
+
+    Ordenar por excedente decrescente nao filtra nada. A tabela de Conformidade
+    se chama "Linhas acima do acordo" e mostrava TODA linha da janela de 30 dias:
+    as colunas de dimensao (OS, Fornecedor, Item, Cidade) tem valor em qualquer
+    linha, entao a linha aparece com o excedente em branco. Quem le a tabela pelo
+    titulo conta linhas que nao estao acima de acordo nenhum.
+    """
+    return {"filters": [{
+        "name": guid(f"med>{valor}/{nome}"),
+        "type": "Advanced",
+        "field": _campo_med(nome),
+        "filter": {"Version": 2,
+                   "From": [{"Name": "p", "Entity": T, "Type": 0}],
+                   "Where": [{"Condition": {"Comparison": {
+                       "ComparisonKind": 1,   # GreaterThan
+                       "Left": {"Measure": {"Expression": {"SourceRef": {"Source": "p"}},
+                                            "Property": nome}},
+                       "Right": {"Literal": {"Value": f"{valor}D"}}}}}]},
+        "howCreated": "User",
+        "isLockedInViewMode": True,
+    }]}
+
+
+def filtro_coluna(coluna, sufixo=""):
     """Mesma coisa que filtro_janela, mas aplicado a UM visual.
 
     A estrutura do filtro e identica -- o que muda e onde o dicionario e
     pendurado: em filterConfig da pagina ou do visual. Existe com nome proprio
     porque o uso e outro: aqui serve para tirar o mes corrente de um grafico
     mensal sem esconder o mes corrente do resto da pagina.
+
+    sufixo= discrimina o GUID quando a MESMA coluna filtra visuais diferentes na
+    mesma pagina -- em "Sem acordo" sao cinco visuais com Mes Fechado, e cinco
+    filtros com o mesmo name deixam o arquivo ambiguo.
     """
     f = filtro_janela(coluna)
-    f["filters"][0]["name"] = guid("colvis/" + coluna)
+    f["filters"][0]["name"] = guid("colvis/" + coluna + "/" + sufixo)
     return f
 
 
@@ -317,15 +385,32 @@ def empilhado(x, y, w, h, cat, medidas, tit, cores=None, cem_por_cento=False,
     return v
 
 def barras_empilhadas(x, y, w, h, dim, medidas, tit, cores=None, filtros=None,
-                      apelidos=None, objetos=None):
+                      apelidos=None, objetos=None, total=None, tit_medida=None):
+    """Barras empilhadas. total= ranqueia e ordena pela ALTURA DA BARRA.
+
+    Sem total=, o ranking sai por medidas[0] -- e nao e so a ordem que muda: o
+    filtro VisualTopN usa esta mesma sortDefinition, entao o top 20 passa a ser
+    "os 20 maiores em Dentro do Acordo", nao "os 20 maiores no total". Um
+    fornecedor de R$ 500 mil integralmente sem acordo pode ficar FORA da lista --
+    exatamente o fornecedor que a pagina existe para expor. E o titulo continua
+    dizendo "top 20 = 36,8%" de um total que nao e o que foi ranqueado.
+
+    O Power BI nao ordena empilhado pela soma das series, mas ordena por qualquer
+    campo presente no visual -- inclusive em Tooltips. Entao a medida de total
+    entra como tooltip (util por si) e a ordenacao aponta para ela.
+    """
     obj = dict(objetos or {})
     if cores: obj.update(cores_series(cores))
     obj = obj or None
     ap = apelidos or {}
-    v = visual("barChart", x, y, w, h,
-               {"Category": [ref(dim)], "Y": [ref(m, ap.get(m)) for m in medidas]},
-               [sel_col(dim)] + [sel_med(m) for m in medidas], tit,
-               order=ordenar(medidas[0]), objects=obj)
+    proj = {"Category": [ref(dim)], "Y": [ref(m, ap.get(m)) for m in medidas]}
+    sels = [sel_col(dim)] + [sel_med(m) for m in medidas]
+    if total and total not in medidas:
+        proj["Tooltips"] = [ref(total, ap.get(total))]
+        sels.append(sel_med(total))
+    v = visual("barChart", x, y, w, h, proj, sels, tit,
+               order=ordenar(total or medidas[0]), objects=obj,
+               tit_medida=tit_medida)
     if filtros: v["filterConfig"] = filtros
     return v
 

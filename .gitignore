@@ -117,3 +117,17 @@ desktop.ini
 /preparar_snapshot_publico.ps1
 # Snapshot embutido no painel web: e dado, nao codigo.
 /painel/web/painel_locfrotas.html
+
+# ═══════════════════════════════════════════════════════════════════
+# Versoes antigas parqueadas a mao. A unica regra que faltava.
+#
+# 442 arquivos em quatro geracoes do PBIR (pbir_v1..v3, definition_20260814,
+# out_20260814). O Git e o lugar de versao antiga; pasta com data no nome e o
+# sintoma de nao confiar nele. Ignorada, nao apagada -- apagar e decisao de quem
+# a criou.
+# ═══════════════════════════════════════════════════════════════════
+/_to_delete/
+# Copia de seguranca feita a mao antes de uma alteracao grande. Com Git
+# funcionando, isto nao deveria precisar existir -- mas existe, e nao
+# pertence ao historico.
+/painel/powerbi/gerador/_backup_*/

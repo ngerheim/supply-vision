@@ -14,16 +14,61 @@ pre-carregado com todos os schemas do clone, indexados pela URI canonica, e
 tambem pelo caminho relativo resolvido -- os $ref internos da Microsoft usam
 caminhos como "../../semanticQuery/1.4.0/schema.json".
 """
-import collections, json, glob, os, sys
+import collections, json, glob, os, pathlib, sys
 
-import jsonschema
-from referencing import Registry, Resource
-from referencing.jsonschema import DRAFT7
+
+def _falta(o_que, como):
+    """Uma mensagem so, cobrindo dependencia E clone.
+
+    O import de jsonschema estourava antes de qualquer checagem, entao quem
+    rodasse numa maquina sem as dependencias recebia ModuleNotFoundError e nao a
+    instrucao -- e este script e declarado no LEIA.md como requisito de
+    publicacao. Codigo de saida 2 distingue "nao consegui validar" de "validei e
+    encontrei erro" (1), que e a diferenca que um gancho de pre-publicacao
+    precisa enxergar.
+    """
+    print(f"nao foi possivel validar: {o_que}\n\nResolver com:\n{como}")
+    sys.exit(2)
+
+
+try:
+    import jsonschema
+    from referencing import Registry, Resource
+    from referencing.jsonschema import DRAFT7
+except ModuleNotFoundError as e:
+    _falta(f"modulo '{e.name}' ausente",
+           "  pip install jsonschema referencing")
 
 W, H = 1280, 720
 
-BASE = "/tmp/js/fabric/"
+# BASE era um caminho fixo de UMA maquina ("/tmp/js/fabric/"). O LEIA.md declara
+# este script como requisito para copiar a geracao para o projeto, mas em
+# nb-loc-0036 ele nao rodava: o caminho nao existe la. Um gate obrigatorio que
+# nao executa na maquina onde o painel e gerado nao e um gate.
+#
+# Agora procura em ordem e explica o que falta. SV_FABRIC_SCHEMAS tem precedencia
+# para quem clonou em outro lugar.
+CANDIDATOS = [
+    os.environ.get("SV_FABRIC_SCHEMAS"),
+    r"C:\Projetos\json-schemas\fabric",
+    os.path.expanduser("~/json-schemas/fabric"),
+    "/tmp/js/fabric",
+]
 URI  = "https://developer.microsoft.com/json-schemas/fabric/"
+
+
+def _base():
+    for c in CANDIDATOS:
+        if c and os.path.isdir(c):
+            return c.rstrip("/\\") + os.sep
+    onde = "\n".join("  - " + c for c in CANDIDATOS if c)
+    _falta("clone de microsoft/json-schemas nao encontrado.\nProcurei em:\n" + onde,
+           "  git clone --depth 1 https://github.com/microsoft/json-schemas.git"
+           r" C:\Projetos\json-schemas"
+           "\n\nOu apontar SV_FABRIC_SCHEMAS para a pasta 'fabric' do clone.")
+
+
+BASE = _base()
 
 # Registry do referencing em vez do RefResolver antigo. O RefResolver empilhava
 # escopo ao entrar num $ref externo e, ao voltar, resolvia um "#/definitions/..."
@@ -65,12 +110,25 @@ def geometria(destino):
     numa pagina de 1280 e valida sem erro nenhum -- a quinta caixa simplesmente
     fica cortada. Isso passou por duas rodadas de revisao visual em 13/08/2026
     sem ser nomeado, porque num print o corte parece margem.
+
+    O agrupamento por pagina usava f.split(os.sep + "pages" + os.sep). No Windows
+    isso NAO casava: o glob preserva a "/" literal do padrao e devolve caminho
+    misto, entao procurar "\\pages\\" falhava, o split devolvia o caminho inteiro
+    e as cinco paginas caiam num balde unico. Resultado em nb-loc-0036: "paginas
+    conferidas: 1 | problemas geometricos: 308" -- todo visual comparado contra
+    todos os das outras paginas. A checagem nao era fraca, era invertida: 308
+    falsos positivos escondem o positivo verdadeiro. Em Linux passava porque
+    os.sep e "/".
+
+    parts[-4] em vez de split por separador: a estrutura e sempre
+    .../pages/<pagina>/visuals/<guid>/visual.json, e PurePath normaliza os dois
+    separadores.
     """
     paginas = collections.defaultdict(list)
     for f in glob.glob(destino + "/pages/*/visuals/*/visual.json"):
         o = json.load(open(f, encoding="utf-8"))
         p = o["position"]
-        paginas[f.split(os.sep + "pages" + os.sep)[-1].split(os.sep)[0]].append(
+        paginas[pathlib.PurePath(f).parts[-4]].append(
             (p["x"], p["y"], p["width"], p["height"], o["visual"]["visualType"]))
 
     def colide(a, b):
@@ -107,6 +165,24 @@ def orfas(destino, bim="model.bim.json"):
             for pr in papel["projections"]:
                 if pr["nativeQueryRef"] not in nomes:
                     ruins.add(pr["nativeQueryRef"])
+        # Titulo ligado a medida. Nao e projecao, entao o laco acima nao o
+        # alcanca -- e o modo de falha e pior que o do visual vazio: titulo
+        # apontando para medida inexistente renderiza EM BRANCO, e grafico sem
+        # titulo passa por decisao de design, nao por erro. Nove titulos deste
+        # painel dependem desta checagem desde que deixaram de ser texto literal.
+        for t in o["visual"].get("visualContainerObjects", {}).get("title", []):
+            e = t.get("properties", {}).get("text", {}).get("expr", {})
+            m = e.get("Measure", {}).get("Property")
+            if m and m not in nomes:
+                ruins.add(m + " (titulo)")
+        # Medida referenciada por filtro de visual: mesma lacuna. Um filtro
+        # "Excedente > 0" apontando para medida renomeada nao filtra nada, e a
+        # tabela volta a mostrar a janela inteira sob um titulo que promete outra
+        # coisa -- silenciosamente, que e o defeito que o filtro veio corrigir.
+        for fl in o.get("filterConfig", {}).get("filters", []):
+            m = fl.get("field", {}).get("Measure", {}).get("Property")
+            if m and m not in nomes:
+                ruins.add(m + " (filtro)")
     print("referencias orfas:", ", ".join(sorted(ruins)) or "nenhuma")
     return len(ruins)
 

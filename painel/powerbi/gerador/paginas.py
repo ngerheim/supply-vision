@@ -76,7 +76,9 @@ def faixa(y, conteudo, x=0, w=W):
                  chapa=False)
 
 
-MUDO = "#8A94A6"
+# Mesmo motivo do tema: faixa() escreve em 9pt, e 3,06:1 nao serve para texto
+# pequeno. CINZA acima continua #8A94A6 -- e cor de serie, area preenchida.
+MUDO = "#667085"
 
 
 def pagina(nome, visuais, filtros=None):
@@ -96,7 +98,13 @@ def pagina(nome, visuais, filtros=None):
 #
 # Com o grafico mensal fora, os quatro rankings ficam com 560px de altura --
 # 28px por barra no top 20, o dobro do que tinham.
-p1 = [texto(0, 0, W, 40, "Supply Vision", 15)]
+# O cartao de frescor divide a linha do titulo. "Refresh concluido" e "dado
+# atualizado" sao controles diferentes: se o pipeline falhar e o parquet anterior
+# ficar no lugar, o Servico atualiza contra ele e o painel nao muda de aparencia.
+# Sem esta linha a descoberta vem pela pessoa que decidiu com dado de tres
+# semanas -- o mesmo modo de falha silencioso do gateway pessoal.
+p1 = [texto(0, 0, 860, 40, "Supply Vision", 15),
+      card(868, 0, 412, 40, "Atualizacao", fonte=10)]
 # O cartao de fuga usa a medida de 365 dias, nao a historica. Mostrar R$ 2,6 mi
 # de fuga no historico contradiz a propria regra do painel: sem vigencia no
 # acordo, a fuga historica e justamente a leitura que a metodologia considera
@@ -113,22 +121,28 @@ p1 += [faixa(126, "Gasto total por dimensão — histórico desde 01/2025")]
 # comportam mais texto de categoria do que os 414px comportavam com rotulo.
 p1 += [
     barras(0, 162, 314, 546, "Cidade", "Valor Total",
-           "Cidades — top 20 = 58,7%",
+           "Cidades — top 20", tit_medida="Titulo VG Cidades",
            filtros=top_n("Cidade", 20), cor=NAVY),
+    # total= ranqueia pela ALTURA DA BARRA. Sem ele o top 20 saia por "Dentro do
+    # Acordo" -- e nao era so a ordem: o VisualTopN usa a mesma ordenacao, entao
+    # um fornecedor de R$ 500 mil integralmente SEM acordo podia ficar fora da
+    # lista. Justo o fornecedor que esta pagina existe para expor, e o titulo
+    # ainda declarava cobertura sobre o total.
     barras_empilhadas(322, 162, 314, 546, "Fornecedor",
                       ["Valor Dentro do Acordo", "Valor Sem Acordo"],
-                      "Fornecedores — top 20 = 36,8%",
+                      "Fornecedores — top 20", tit_medida="Titulo VG Fornecedores",
                       cores=CORES_DENTRO_FORA, filtros=top_n("Fornecedor", 20),
-                      apelidos=APELIDOS),
+                      apelidos=APELIDOS, total="Valor Total"),
     barras_empilhadas(644, 162, 314, 546, "Grupo Item",
                       ["Valor Dentro do Acordo", "Valor Sem Acordo"],
-                      "Itens — top 20 = 59,3%",
+                      "Itens — top 20", tit_medida="Titulo VG Grupos de Item",
                       cores=CORES_DENTRO_FORA, filtros=top_n("Grupo Item", 20),
-                      apelidos=APELIDOS),
+                      apelidos=APELIDOS, total="Valor Total"),
     # Oito grupos apos os filtros do Supply Vision, entao nao ha top N a aplicar
-    # e a cobertura e 100% por construcao.
+    # e a cobertura e 100% por construcao. A CONTAGEM, porem, vem da base: se um
+    # nono grupo entrar, "todos os 8" passa a mentir sem nada quebrar.
     barras(966, 162, 314, 546, "Grupo Modelo", "Valor Total",
-           "Grupos de modelo — todos os 8", cor=NAVY),
+           "Grupos de modelo", tit_medida="Titulo VG Grupos de Modelo", cor=NAVY),
 ]
 
 # ═══ 2. Fora do Acordo ═══════════════════════════════════════════
@@ -149,19 +163,27 @@ p2 += faixa_cards(["Janela 30d", "Valor Sem Acordo 30d", "% Sem Acordo 30d"],
                   y=76, fontes={"Janela 30d": 11}, destaque="% Sem Acordo 30d",
                   larg=306)
 p2 += [faixa(162, "Diagnóstico histórico — 01/2025 em diante, meses fechados")]
+# "Meses fechados" era promessa do cabecalho e regra de UM visual so: apenas o
+# grafico mensal filtrava Mes Fechado. Os outros quatro somavam o mes corrente --
+# em 13/08/2026, doze dias de agosto dentro de um bloco anunciado como fechado.
+# Nao da para resolver com filtro de PAGINA: os cartoes desta pagina sao de 30
+# dias e a janela deles inclui o mes corrente de proposito. Um Mes Fechado de
+# pagina se intersectaria com a janela dos cartoes e derrubaria justamente a
+# leitura "e agora, esta melhorando?".
+FECHADO = lambda quem: filtro_coluna("Mes Fechado", quem)
 p2 += [
     colunas_(0, 198, 836, 198, "Ano-Mes", "Valor Sem Acordo",
-             "Valor sem acordo por mês", cat_asc=True, filtros=filtro_coluna("Mes Fechado")),
+             "Valor sem acordo por mês", cat_asc=True, filtros=FECHADO("mensal")),
     barras(844, 198, 436, 198, "Motivo Sem Acordo", "Valor Sem Acordo",
-           "Em qual dimensão faltou referência"),
+           "Em qual dimensão faltou referência", filtros=FECHADO("motivo")),
     barras(844, 400, 436, 308, "Grupo Modelo", "Valor Sem Acordo",
-           "Sem acordo por grupo de modelo"),
+           "Sem acordo por grupo de modelo", filtros=FECHADO("modelo")),
     barras(0, 400, 414, 308, "Fornecedor", "Valor Sem Acordo",
-           "Fornecedores — top 20 = 25,9% do sem acordo",
-           filtros=top_n("Fornecedor", 20)),
+           "Fornecedores — top 20", tit_medida="Titulo SA Fornecedores",
+           filtros=combinar(top_n("Fornecedor", 20), FECHADO("fornecedor"))),
     barras(422, 400, 414, 308, "Grupo Item", "Valor Sem Acordo",
-           "Itens — top 20 = 51,7% do sem acordo",
-           filtros=top_n("Grupo Item", 20)),
+           "Itens — top 20", tit_medida="Titulo SA Grupos de Item",
+           filtros=combinar(top_n("Grupo Item", 20), FECHADO("grupoitem"))),
 ]
 
 # ═══ 3. Fuga de Contrato (365 dias) ══════════════════════════════
@@ -188,8 +210,9 @@ p3 += faixa_cards(["Janela 365d", "Valor Total 365d", "Valor Sem Acordo 365d",
 # R$ 1,78 mi em 365 dias contra R$ 1,73 mi em 12 meses fechados, 2,5% de
 # diferenca. O aviso fica escrito porque a diferenca e pequena o suficiente para
 # alguem achar que e erro de arredondamento, e nao e.
-p3 += [faixa(144, "Cartões: 365 dias corridos. Gráfico abaixo: 12 meses "
-                  "fechados — recortes diferentes, as colunas não somam ao cartão.")]
+p3 += [faixa(144, "Cartões e rankings: 365 dias corridos (ver janela acima). "
+                  "Gráfico abaixo: 12 meses fechados — recortes diferentes, as "
+                  "colunas não somam ao cartão.")]
 p3 += [
     # Doze meses fechados em vez de "tudo na janela de 365 dias": a janela
     # comeca no meio de agosto/2025 e termina no meio de agosto/2026, entao as
@@ -198,13 +221,18 @@ p3 += [
     colunas_(0, 180, 836, 212, "Ano-Mes", "Valor em Fuga",
              "Fuga de contrato por mês — 12 meses fechados", cat_asc=True,
              filtros=filtro_coluna("Ultimos 12 meses fechados")),
-    barras(844, 180, 436, 528, "Cidade", "Valor em Fuga",
-           "Top 20 cidades — 96,0% da fuga na janela (ocorre em 38)",
+    # Medidas com janela embutida, nao a base [Valor em Fuga]: o filtro de pagina
+    # de 365 dias saiu (ver a lista de paginas no fim do arquivo) e a janela
+    # destes rankings passa a vir do DAX, como ja vinha nos cartoes.
+    barras(844, 180, 436, 528, "Cidade", "Valor em Fuga 365d",
+           "Top 20 cidades", tit_medida="Titulo Fuga Cidades",
            filtros=top_n("Cidade", 20)),
-    barras(0, 400, 414, 308, "Fornecedor", "Valor em Fuga",
-           "Top 20 fornecedores — 56,3% da fuga na janela", filtros=top_n("Fornecedor", 20)),
-    barras(422, 400, 414, 308, "Grupo Item", "Valor em Fuga",
-           "Top 20 grupos de item — 72,4% da fuga na janela", filtros=top_n("Grupo Item", 20)),
+    barras(0, 400, 414, 308, "Fornecedor", "Valor em Fuga 365d",
+           "Top 20 fornecedores", tit_medida="Titulo Fuga Fornecedores",
+           filtros=top_n("Fornecedor", 20)),
+    barras(422, 400, 414, 308, "Grupo Item", "Valor em Fuga 365d",
+           "Top 20 grupos de item", tit_medida="Titulo Fuga Grupos de Item",
+           filtros=top_n("Grupo Item", 20)),
 ]
 
 # ═══ 4. Conformidade de Preco (30 dias) ══════════════════════════
@@ -257,6 +285,12 @@ p4 += [
             "Preco OS", "Preco Acordo", "Cidade"],
            "Linhas acima do acordo, do maior excedente para o menor",
            medidas=("Excedente Acima 30d",),
+           # Ordenar por excedente decrescente NAO filtra: OS, Fornecedor, Item e
+           # Cidade tem valor em qualquer linha da janela, entao a linha aparecia
+           # com o excedente em branco. A tabela mostrava toda a janela de 30 dias
+           # sob um titulo que promete "linhas acima do acordo" -- quem contava
+           # linhas contava linhas que nao estavam acima de acordo nenhum.
+           filtros=filtro_medida_maior("Excedente Acima 30d", 0),
            ordem=("Excedente Acima 30d", True),
            apelidos={"Excedente Acima 30d": "Excedente R$",
                      "Preco OS": "Preço cobrado",
@@ -318,7 +352,17 @@ p7 += [tabela(428, 60, 852, 648,
 # pagina. Trocar depois de publicar quebra o link daquela aba -- e agora ou nunca.
 paginas = [pagina("Visão Geral", p1),
            pagina("Sem acordo", p2),
-           pagina("Fuga de contrato", p3, filtros=filtro_janela("Ultimos 365 dias")),
+           # Sem filtro de pagina de 365 dias. Ele se combinava com o filtro de
+           # visual "Ultimos 12 meses fechados" do grafico mensal -- filtro de
+           # pagina e de visual se INTERSECTAM, nao se substituem. A janela de 365
+           # dias comeca em 13/08/2025 e os 12 meses fechados comecam em
+           # 01/08/2025: a intersecao cortava os doze primeiros dias de agosto de
+           # 2025, e a primeira coluna do grafico aparecia baixa por recorte, nao
+           # por gasto. Era tambem a razao pela qual conferir.py media 12 meses
+           # fechados (R$ 1,73 mi) contra um grafico que mostrava outro numero.
+           # Agora cada visual declara a sua janela: cartoes e rankings pelas
+           # medidas 365d, grafico mensal pelo filtro de 12 meses fechados.
+           pagina("Fuga de contrato", p3),
            pagina("Conformidade de preço", p4, filtros=filtro_janela("Ultimos 30 dias")),
            pagina("Detalhe", p7)]
 

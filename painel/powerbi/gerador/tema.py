@@ -7,7 +7,12 @@ import json, pathlib
 # dataColors em ordem, e a maioria dos visuais aqui tem uma ou duas series.
 SERIES = ["#E39502", "#1C5CAB", "#E34948", "#4A3AA7", "#E87BA4", "#0CA30C"]
 
-AMBAR, NAVY, TINTA, TINTA2, MUDO = "#E39502", "#06203C", "#0B1B2E", "#4A5568", "#8A94A6"
+# MUDO era #8A94A6: contraste 3,06:1 sobre branco, e ele pinta eixo, cabecalho
+# de tabela e cabecalho de slicer em 9-10pt. Texto pequeno precisa de 4,5:1
+# (WCAG AA); 3:1 vale para preenchimento grande, nao para rotulo de eixo.
+# #667085 da 4,97:1 e continua discreto. O cinza de SERIE (paginas.py:CINZA)
+# fica em #8A94A6 de proposito: ali e area preenchida, onde 3:1 basta.
+AMBAR, NAVY, TINTA, TINTA2, MUDO = "#E39502", "#06203C", "#0B1B2E", "#4A5568", "#667085"
 GRADE, SUP = "#E4E7EC", "#FFFFFF"
 
 def txt(tam, cor=TINTA, face="Segoe UI"):
