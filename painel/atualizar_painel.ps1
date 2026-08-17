@@ -16,7 +16,7 @@
 
     No Agendador de Tarefas:
         Programa:   powershell.exe
-        Argumentos: -NoProfile -ExecutionPolicy Bypass -File "C:\Projetos\supply-vision\painel\atualizar_painel.ps1"
+        Argumentos: -NoProfile -ExecutionPolicy Bypass -File "C:\Projetos\supply-vision-privado\painel\atualizar_painel.ps1"
         Iniciar em: C:\Projetos\supply-vision
         Marcar "Executar estando o usuario conectado ou nao" NAO funciona aqui:
         o gateway pessoal e aplicacao interativa e precisa da sessao ativa.

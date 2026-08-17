@@ -71,11 +71,13 @@ def rastreados():
     return [l for l in r.stdout.splitlines() if l]
 
 
-def main(listar):
+def main(listar, excluir=()):
     achados = []
     n = 0
     for rel in rastreados():
         if rel in ISENTOS or not rel.endswith(EXT):
+            continue
+        if excluir and rel.startswith(tuple(excluir)):
             continue
         p = R / rel
         try:
@@ -114,5 +116,12 @@ def main(listar):
     return 1
 
 
+def _excluir_de(argv):
+    for a in argv:
+        if a.startswith("--excluir="):
+            return [p for p in a.split("=", 1)[1].split(",") if p]
+    return []
+
+
 if __name__ == "__main__":
-    sys.exit(main("--lista" in sys.argv))
+    sys.exit(main("--lista" in sys.argv, _excluir_de(sys.argv)))

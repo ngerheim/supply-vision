@@ -564,7 +564,7 @@
               "type": "m",
               "expression": [
                 "let",
-                "    Fonte = Parquet.Document(File.Contents(\"C:\\Projetos\\supply-vision\\painel\\consolidado\\supply_vision_painel.parquet\")),",
+                "    Fonte = Parquet.Document(File.Contents(\"C:\\Projetos\\supply-vision-privado\\painel\\consolidado\\supply_vision_painel.parquet\")),",
                 "    Tipos = Table.TransformColumnTypes(Fonte, {{\"Data\", type date}}),",
                 "    ComAno = Table.AddColumn(Tipos, \"Ano\", each Date.Year([Data]), Int64.Type),",
                 "    ComAnoMes = Table.AddColumn(ComAno, \"Ano-Mes\", each Date.ToText([Data], [Format=\"yyyy-MM\"]), type text),",

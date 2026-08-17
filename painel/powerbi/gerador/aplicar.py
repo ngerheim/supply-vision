@@ -18,9 +18,9 @@ import sys
 import tempfile
 from pathlib import Path
 
-GER = Path(r"C:\Projetos\supply-vision\painel\powerbi\gerador")
-REPORT = Path(r"C:\Projetos\supply-vision\painel\powerbi\SupplyVisionPainel.Report")
-MODEL = Path(r"C:\Projetos\supply-vision\painel\powerbi\SupplyVisionPainel.SemanticModel")
+GER = Path(r"C:\Projetos\supply-vision-privado\painel\powerbi\gerador")
+REPORT = Path(r"C:\Projetos\supply-vision-privado\painel\powerbi\SupplyVisionPainel.Report")
+MODEL = Path(r"C:\Projetos\supply-vision-privado\painel\powerbi\SupplyVisionPainel.SemanticModel")
 
 
 def rodar(script, *args):

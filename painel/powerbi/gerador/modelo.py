@@ -1,6 +1,6 @@
 import json, uuid, pathlib
 
-PARQUET = r"C:\Projetos\supply-vision\painel\consolidado\supply_vision_painel.parquet"
+PARQUET = r"C:\Projetos\supply-vision-privado\painel\consolidado\supply_vision_painel.parquet"
 T = "Painel"
 
 def guid(seed):

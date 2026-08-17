@@ -12,7 +12,7 @@
 
 $ErrorActionPreference = 'Stop'
 $nome = 'SupplyVision - Painel'
-$script = 'C:\Projetos\supply-vision\painel\atualizar_painel.ps1'
+$script = 'C:\Projetos\supply-vision-privado\painel\atualizar_painel.ps1'
 
 if (-not (Test-Path $script)) { throw "script nao encontrado: $script" }
 
