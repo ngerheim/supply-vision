@@ -8,7 +8,7 @@ antes de entregar em vez de descobrir requisito por requisito.
 As versoes de schema abaixo sao as que o proprio Desktop 2.156 (julho/2026)
 gravou neste projeto -- copiadas de la, nao escolhidas por mim.
 """
-import json, uuid, pathlib, shutil
+import json, uuid, pathlib, shutil, tempfile
 
 T = "Painel"
 S_VC   = "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.9.0/schema.json"
@@ -128,16 +128,26 @@ def texto(x, y, w, h, conteudo, tamanho=20, negrito=True, cor="#06203C",
     return vc
 
 # ── atalhos por tipo (mesma assinatura da versao legada) ────────────
-def card(x, y, w, h, medida, fonte=None, destaque=False, rotulo=None):
+def card(x, y, w, h, medida, fonte=None, destaque=False, rotulo=None,
+         sem_rotulo=False):
     """Cartao de um numero. Sem titulo -- o rotulo da categoria ja nomeia.
 
     destaque=True pinta o fundo com o ambar mais claro da rampa da marca. Um
     por pagina: e o numero que aquela aba existe para responder. Mais de um e a
     hierarquia se dissolve -- se tudo destaca, nada destaca.
+
+    sem_rotulo=True esconde o rotulo da categoria. Serve ao cartao cujo VALOR ja
+    e uma frase: [Atualizacao] imprime "Dados ate ... carga ...", e embaixo o
+    cartao ainda escrevia "Atualizacao". Duas linhas numa caixa de 40px cortam as
+    duas -- no print de 14/08 a data aparecia com o topo raspado e o rotulo pela
+    metade. Aqui o rotulo nao acrescenta nada que a frase nao diga.
     """
     obj = {}
     if fonte:
         obj["labels"] = [{"properties": {"fontSize": {"expr": {"Literal": {"Value": f"{fonte}D"}}}}}]
+    if sem_rotulo:
+        obj["categoryLabels"] = [{"properties": {
+            "show": {"expr": {"Literal": {"Value": "false"}}}}}]
     if destaque:
         obj["background"] = [{"properties": {
             "show": {"expr": {"Literal": {"Value": "true"}}},
@@ -158,7 +168,9 @@ def barras(x, y, w, h, dim, medida, tit, filtros=None, objetos=None, cor=None,
     mesma cor. Ambar significa excecao neste painel; total e navy.
     """
     obj = dict(objetos or {})
-    if cor: obj.update(cores_series({medida: cor}))
+    # cor_unica, nao cores_series: aqui ha uma medida, logo uma serie so, e o
+    # selector por metadata nao casa. Ver o docstring de cor_unica().
+    if cor: obj.update(cor_unica(cor))
     return visual("barChart", x, y, w, h, {"Category": [ref(dim)], "Y": [ref(medida)]},
                   [sel_col(dim), sel_med(medida)], tit, order=ordenar(medida),
                   objects=obj or None, filtros=filtros, tit_medida=tit_medida)
@@ -353,11 +365,33 @@ def cores_series(mapa):
 
     Sem isso o tema aplica dataColors na ordem das series, e a mesma cor
     passaria a significar coisas diferentes de um visual para outro.
+
+    So funciona onde HA series: o selector por metadata identifica uma serie, e
+    num grafico de serie unica nao existe serie para identificar. Para esse caso
+    use cor_unica(). Os empilhados desta pagina acertavam a cor e os rankings de
+    serie unica saiam ambar apesar de pedirem navy -- mesmo helper, dois
+    comportamentos, e ninguem notou porque ambar tambem e uma cor do tema.
     """
     return {"dataPoint": [
         {"properties": {"fill": {"solid": {"color": {"expr": {"Literal": {"Value": f"'{cor}'"}}}}}},
          "selector": {"metadata": f"{T}.{medida}"}}
         for medida, cor in mapa.items()]}
+
+
+def cor_unica(cor):
+    """Cor de todos os pontos de um grafico de UMA serie, sem selector.
+
+    Sem selector a propriedade vale para o visual inteiro. Com selector por
+    metadata, o Power BI procura a serie correspondente, nao encontra em grafico
+    de serie unica e cai no dataColors[0] do tema -- que aqui e o ambar.
+
+    Consequencia observada no print de 14/08/2026: "Cidades - top 20" e "Grupos de
+    modelo" pediam navy no codigo e apareciam ambar no painel. Ambar significa
+    excecao neste painel (fora do acordo, fuga, acima do preco); gasto total e
+    navy. Com os dois ambar, a cor deixa de informar.
+    """
+    return {"dataPoint": [{"properties": {
+        "fill": {"solid": {"color": {"expr": {"Literal": {"Value": f"'{cor}'"}}}}}}}]}
 
 def rotulos(ligado=True, casas=0, unidades=0):
     return {"labels": [{"properties": {
@@ -440,6 +474,55 @@ def interacoes(visuais, alvos=None):
             for f in fontes for d in destinos if f["name"] != d["name"]]
 
 
+# ── botao ───────────────────────────────────────────────────────────
+def botao_bookmark(x, y, w, h, rotulo, bookmark):
+    """Botao que dispara um bookmark existente.
+
+    A divisao de trabalho aqui e deliberada e vale registrar: o BOOKMARK e criado
+    no Power BI Desktop, o BOTAO e gerado aqui.
+
+    O bookmark guarda o estado de doze segmentadores. Escrever esse
+    explorationState a mao valida contra o schema e ainda assim pode nao limpar
+    nada -- e botao de "limpar filtros" que nao limpa e pior que botao ausente,
+    porque o leitor confia nele e segue com filtro residual. O Desktop captura o
+    estado com o proprio motor que depois o aplica; nenhuma checagem local
+    substitui isso.
+
+    O botao, ao contrario, e geometria e uma referencia por nome: da para validar
+    contra o schema e conferir a olho. Fica no codigo.
+
+    Ver o comentario de escrever() sobre a pasta bookmarks/ ser preservada.
+    """
+    return {
+        "$schema": S_VC,
+        "name": guid(f"btn/{bookmark}/{x}/{y}"),
+        "position": {"x": x, "y": y, "z": 0, "height": h, "width": w},
+        "visual": {
+            "visualType": "actionButton",
+            "objects": {
+                "text": [{"properties": {
+                    "show": {"expr": {"Literal": {"Value": "true"}}},
+                    "text": {"expr": {"Literal": {"Value": "'" + rotulo.replace("'", "''") + "'"}}},
+                    "fontSize": {"expr": {"Literal": {"Value": "9D"}}},
+                    "fontColor": {"solid": {"color": {"expr": {"Literal": {"Value": "'#1C5CAB'"}}}}},
+                }}],
+                "outline": [{"properties": {
+                    "show": {"expr": {"Literal": {"Value": "true"}}},
+                    "lineColor": {"solid": {"color": {"expr": {"Literal": {"Value": "'#E4E7EC'"}}}}},
+                }}],
+            },
+            "visualContainerObjects": {
+                "visualLink": [{"properties": {
+                    "show": {"expr": {"Literal": {"Value": "true"}}},
+                    "type": {"expr": {"Literal": {"Value": "'Bookmark'"}}},
+                    "bookmark": {"expr": {"Literal": {"Value": f"'{bookmark}'"}}},
+                }}],
+            },
+            "drillFilterOtherVisuals": True,
+        },
+    }
+
+
 # ── escrita da arvore de pastas ─────────────────────────────────────
 def escrever(destino, paginas):
     """Grava definition/ no formato PBIR. Devolve (n_paginas, n_visuais).
@@ -449,8 +532,19 @@ def escrever(destino, paginas):
     painel mostra o mesmo ranking duas vezes, um deles espremido no tamanho
     velho. Foi exatamente o que aconteceu em 13/08/2026: 73 visual.json para 67
     visuais.
+
+    EXCECAO: definition/bookmarks/. Bookmark guarda estado de segmentador, e esse
+    estado o Desktop captura melhor do que este gerador consegue escrever -- ver
+    botao_bookmark(). Se a pasta existir no destino, ela e salva antes do rmtree e
+    devolvida depois. Sem isso, o bookmark criado a mao morre na primeira
+    regeracao e o botao passa a apontar para nada, silenciosamente.
     """
     d = pathlib.Path(destino)
+    guardado = None
+    bm = d / "bookmarks"
+    if bm.is_dir():
+        guardado = pathlib.Path(tempfile.mkdtemp()) / "bookmarks"
+        shutil.copytree(bm, guardado)
     if d.exists(): shutil.rmtree(d)
     d.mkdir(parents=True, exist_ok=True)
     esc = lambda p, o: p.write_text(json.dumps(o, indent=2, ensure_ascii=False), encoding="utf-8")
@@ -480,4 +574,8 @@ def escrever(destino, paginas):
             v["position"]["z"] = i * 1000
             vd = alvo / "visuals" / v["name"]; vd.mkdir(parents=True, exist_ok=True)
             esc(vd / "visual.json", v); n += 1
+    if guardado is not None:
+        shutil.copytree(guardado, d / "bookmarks")
+        shutil.rmtree(guardado.parent)
+        print(f"bookmarks/ preservado: {len(list((d / 'bookmarks').glob('*.json')))} arquivos")
     return len(paginas), n

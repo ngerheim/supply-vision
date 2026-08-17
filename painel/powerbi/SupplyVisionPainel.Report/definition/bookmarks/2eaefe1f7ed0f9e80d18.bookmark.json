@@ -1,0 +1,773 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/bookmark/2.1.0/schema.json",
+  "displayName": "Limpar filtros",
+  "name": "2eaefe1f7ed0f9e80d18",
+  "options": {
+    "targetVisualNames": [],
+    "suppressActiveSection": true
+  },
+  "explorationState": {
+    "version": "1.0",
+    "activeSection": "85a248f4-091c-51fe-9ba2-663e4978acf0",
+    "sections": {
+      "85a248f4-091c-51fe-9ba2-663e4978acf0": {
+        "visualContainers": {
+          "0414d3aa-6abb-50c3-885d-6d1ee7df2852": {
+            "filters": {
+              "byExpr": [
+                {
+                  "name": "627259ae1e969e12453a",
+                  "type": "Categorical",
+                  "expression": {
+                    "Column": {
+                      "Expression": {
+                        "SourceRef": {
+                          "Entity": "Painel"
+                        }
+                      },
+                      "Property": "Data"
+                    }
+                  },
+                  "howCreated": 0
+                },
+                {
+                  "name": "caa735fb23f35e50222e",
+                  "type": "Categorical",
+                  "expression": {
+                    "Column": {
+                      "Expression": {
+                        "SourceRef": {
+                          "Entity": "Painel"
+                        }
+                      },
+                      "Property": "OS"
+                    }
+                  },
+                  "howCreated": 0
+                },
+                {
+                  "name": "db7b838f3942c0928d16",
+                  "type": "Categorical",
+                  "expression": {
+                    "Column": {
+                      "Expression": {
+                        "SourceRef": {
+                          "Entity": "Painel"
+                        }
+                      },
+                      "Property": "Fornecedor"
+                    }
+                  },
+                  "howCreated": 0
+                },
+                {
+                  "name": "f485c4a912b3e2865ac3",
+                  "type": "Categorical",
+                  "expression": {
+                    "Column": {
+                      "Expression": {
+                        "SourceRef": {
+                          "Entity": "Painel"
+                        }
+                      },
+                      "Property": "Item"
+                    }
+                  },
+                  "howCreated": 0
+                },
+                {
+                  "name": "a5ef6fdddb8285041f6b",
+                  "type": "Advanced",
+                  "expression": {
+                    "Measure": {
+                      "Expression": {
+                        "SourceRef": {
+                          "Entity": "Painel"
+                        }
+                      },
+                      "Property": "Excedente Acima 30d"
+                    }
+                  },
+                  "howCreated": 0
+                },
+                {
+                  "name": "ec9b8eb94a7d31c9b129",
+                  "type": "Advanced",
+                  "expression": {
+                    "Column": {
+                      "Expression": {
+                        "SourceRef": {
+                          "Entity": "Painel"
+                        }
+                      },
+                      "Property": "Qtd"
+                    }
+                  },
+                  "howCreated": 0
+                },
+                {
+                  "name": "92e7449a0785cb4d75ab",
+                  "type": "Advanced",
+                  "expression": {
+                    "Column": {
+                      "Expression": {
+                        "SourceRef": {
+                          "Entity": "Painel"
+                        }
+                      },
+                      "Property": "Preco OS"
+                    }
+                  },
+                  "howCreated": 0
+                },
+                {
+                  "name": "5b752d649f424d82a087",
+                  "type": "Advanced",
+                  "expression": {
+                    "Measure": {
+                      "Expression": {
+                        "SourceRef": {
+                          "Entity": "Painel"
+                        }
+                      },
+                      "Property": "Preco Acordo Vigente"
+                    }
+                  },
+                  "howCreated": 0
+                },
+                {
+                  "name": "1cb0f3504f6e839a8997",
+                  "type": "Categorical",
+                  "expression": {
+                    "Column": {
+                      "Expression": {
+                        "SourceRef": {
+                          "Entity": "Painel"
+                        }
+                      },
+                      "Property": "Cidade"
+                    }
+                  },
+                  "howCreated": 0
+                },
+                {
+                  "name": "7ccc7a339eea8573abf3",
+                  "type": "Categorical",
+                  "expression": {
+                    "Column": {
+                      "Expression": {
+                        "SourceRef": {
+                          "Entity": "Painel"
+                        }
+                      },
+                      "Property": "Modelo"
+                    }
+                  },
+                  "howCreated": 0
+                },
+                {
+                  "name": "c6ad704d4597b320ab6c",
+                  "type": "Categorical",
+                  "expression": {
+                    "Column": {
+                      "Expression": {
+                        "SourceRef": {
+                          "Entity": "Painel"
+                        }
+                      },
+                      "Property": "Grupo Modelo"
+                    }
+                  },
+                  "howCreated": 0
+                },
+                {
+                  "name": "cafb934f6e83577a6140",
+                  "type": "Categorical",
+                  "expression": {
+                    "Column": {
+                      "Expression": {
+                        "SourceRef": {
+                          "Entity": "Painel"
+                        }
+                      },
+                      "Property": "Grupo Item"
+                    }
+                  },
+                  "howCreated": 0
+                },
+                {
+                  "name": "1f9561f0bde2145cf13d",
+                  "type": "Categorical",
+                  "expression": {
+                    "Column": {
+                      "Expression": {
+                        "SourceRef": {
+                          "Entity": "Painel"
+                        }
+                      },
+                      "Property": "Status"
+                    }
+                  },
+                  "howCreated": 0
+                },
+                {
+                  "name": "90ed8d9858d05b01afaa",
+                  "type": "Categorical",
+                  "expression": {
+                    "Column": {
+                      "Expression": {
+                        "SourceRef": {
+                          "Entity": "Painel"
+                        }
+                      },
+                      "Property": "STATUS_ACORDO"
+                    }
+                  },
+                  "howCreated": 0
+                },
+                {
+                  "name": "de87a1787d420dcb34c8",
+                  "type": "Categorical",
+                  "expression": {
+                    "Column": {
+                      "Expression": {
+                        "SourceRef": {
+                          "Entity": "Painel"
+                        }
+                      },
+                      "Property": "Tinha acordo?"
+                    }
+                  },
+                  "howCreated": 0
+                },
+                {
+                  "name": "ddc56d0097965f22416e",
+                  "type": "Categorical",
+                  "expression": {
+                    "Column": {
+                      "Expression": {
+                        "SourceRef": {
+                          "Entity": "Painel"
+                        }
+                      },
+                      "Property": "Motivo Sem Acordo"
+                    }
+                  },
+                  "howCreated": 0
+                },
+                {
+                  "name": "b3fe61274fb4766a372a",
+                  "type": "Categorical",
+                  "expression": {
+                    "Column": {
+                      "Expression": {
+                        "SourceRef": {
+                          "Entity": "Painel"
+                        }
+                      },
+                      "Property": "Criador"
+                    }
+                  },
+                  "howCreated": 0
+                }
+              ]
+            },
+            "singleVisual": {
+              "visualType": "tableEx",
+              "objects": {},
+              "orderBy": [
+                {
+                  "Direction": 2,
+                  "Expression": {
+                    "Measure": {
+                      "Expression": {
+                        "SourceRef": {
+                          "Entity": "Painel"
+                        }
+                      },
+                      "Property": "Excedente Acima 30d"
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          "06640825-2d9c-50f3-a6d4-c1f7a07baa20": {
+            "filters": {
+              "byExpr": [
+                {
+                  "name": "75177ee48a6d75e8c3bf",
+                  "type": "Categorical",
+                  "expression": {
+                    "Column": {
+                      "Expression": {
+                        "SourceRef": {
+                          "Entity": "Painel"
+                        }
+                      },
+                      "Property": "Tinha acordo?"
+                    }
+                  },
+                  "howCreated": 0
+                }
+              ]
+            },
+            "singleVisual": {
+              "visualType": "slicer",
+              "objects": {},
+              "activeProjections": {
+                "Values": [
+                  {
+                    "Column": {
+                      "Expression": {
+                        "SourceRef": {
+                          "Entity": "Painel"
+                        }
+                      },
+                      "Property": "Tinha acordo?"
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          "0c17a673-eca8-5749-84b0-028dfb6dd0e9": {
+            "filters": {
+              "byExpr": [
+                {
+                  "name": "9ea2fa836f010c694117",
+                  "type": "Categorical",
+                  "expression": {
+                    "Column": {
+                      "Expression": {
+                        "SourceRef": {
+                          "Entity": "Painel"
+                        }
+                      },
+                      "Property": "Cidade"
+                    }
+                  },
+                  "howCreated": 0
+                }
+              ]
+            },
+            "singleVisual": {
+              "visualType": "slicer",
+              "objects": {},
+              "activeProjections": {
+                "Values": [
+                  {
+                    "Column": {
+                      "Expression": {
+                        "SourceRef": {
+                          "Entity": "Painel"
+                        }
+                      },
+                      "Property": "Cidade"
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          "0dfa4c46-ac94-5443-a05e-84ceeeb3c6e0": {
+            "filters": {
+              "byExpr": [
+                {
+                  "name": "f1015ce1198fe18e55b2",
+                  "type": "Categorical",
+                  "expression": {
+                    "Column": {
+                      "Expression": {
+                        "SourceRef": {
+                          "Entity": "Painel"
+                        }
+                      },
+                      "Property": "Modelo"
+                    }
+                  },
+                  "howCreated": 0
+                }
+              ]
+            },
+            "singleVisual": {
+              "visualType": "slicer",
+              "objects": {},
+              "activeProjections": {
+                "Values": [
+                  {
+                    "Column": {
+                      "Expression": {
+                        "SourceRef": {
+                          "Entity": "Painel"
+                        }
+                      },
+                      "Property": "Modelo"
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          "1f7af054-f023-59e3-a43e-d897e15a32b0": {
+            "filters": {
+              "byExpr": [
+                {
+                  "name": "3e85872006530c683836",
+                  "type": "Categorical",
+                  "expression": {
+                    "Column": {
+                      "Expression": {
+                        "SourceRef": {
+                          "Entity": "Painel"
+                        }
+                      },
+                      "Property": "Ano-Mes"
+                    }
+                  },
+                  "howCreated": 0
+                }
+              ]
+            },
+            "singleVisual": {
+              "visualType": "slicer",
+              "objects": {},
+              "activeProjections": {
+                "Values": [
+                  {
+                    "Column": {
+                      "Expression": {
+                        "SourceRef": {
+                          "Entity": "Painel"
+                        }
+                      },
+                      "Property": "Ano-Mes"
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          "238ad0d8-8913-58af-906d-956c3b9f512b": {
+            "filters": {
+              "byExpr": [
+                {
+                  "name": "dd4fe1adcffc900329f9",
+                  "type": "Categorical",
+                  "expression": {
+                    "Column": {
+                      "Expression": {
+                        "SourceRef": {
+                          "Entity": "Painel"
+                        }
+                      },
+                      "Property": "STATUS_ACORDO"
+                    }
+                  },
+                  "howCreated": 0
+                }
+              ]
+            },
+            "singleVisual": {
+              "visualType": "slicer",
+              "objects": {},
+              "activeProjections": {
+                "Values": [
+                  {
+                    "Column": {
+                      "Expression": {
+                        "SourceRef": {
+                          "Entity": "Painel"
+                        }
+                      },
+                      "Property": "STATUS_ACORDO"
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          "2b690aa8-f228-5154-9a6c-b4362a1eca6e": {
+            "filters": {
+              "byExpr": [
+                {
+                  "name": "3edde97176c6ca074d51",
+                  "type": "Categorical",
+                  "expression": {
+                    "Column": {
+                      "Expression": {
+                        "SourceRef": {
+                          "Entity": "Painel"
+                        }
+                      },
+                      "Property": "Status"
+                    }
+                  },
+                  "howCreated": 0
+                }
+              ]
+            },
+            "singleVisual": {
+              "visualType": "slicer",
+              "objects": {},
+              "activeProjections": {
+                "Values": [
+                  {
+                    "Column": {
+                      "Expression": {
+                        "SourceRef": {
+                          "Entity": "Painel"
+                        }
+                      },
+                      "Property": "Status"
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          "714046d0-32a3-555d-a2e3-6f749238d16c": {
+            "filters": {
+              "byExpr": [
+                {
+                  "name": "02c98b0008a9e9e2236f",
+                  "type": "Categorical",
+                  "expression": {
+                    "Column": {
+                      "Expression": {
+                        "SourceRef": {
+                          "Entity": "Painel"
+                        }
+                      },
+                      "Property": "Grupo Modelo"
+                    }
+                  },
+                  "howCreated": 0
+                }
+              ]
+            },
+            "singleVisual": {
+              "visualType": "slicer",
+              "objects": {},
+              "activeProjections": {
+                "Values": [
+                  {
+                    "Column": {
+                      "Expression": {
+                        "SourceRef": {
+                          "Entity": "Painel"
+                        }
+                      },
+                      "Property": "Grupo Modelo"
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          "933678bf-f0ff-5f12-aaf3-083e026e30e8": {
+            "singleVisual": {
+              "visualType": "textbox",
+              "objects": {}
+            }
+          },
+          "b335cee7-bca2-55b1-a541-4c6eb4a792a1": {
+            "filters": {
+              "byExpr": [
+                {
+                  "name": "05f4114f8e92ffa8daa3",
+                  "type": "Categorical",
+                  "expression": {
+                    "Column": {
+                      "Expression": {
+                        "SourceRef": {
+                          "Entity": "Painel"
+                        }
+                      },
+                      "Property": "Grupo Item"
+                    }
+                  },
+                  "howCreated": 0
+                }
+              ]
+            },
+            "singleVisual": {
+              "visualType": "slicer",
+              "objects": {},
+              "activeProjections": {
+                "Values": [
+                  {
+                    "Column": {
+                      "Expression": {
+                        "SourceRef": {
+                          "Entity": "Painel"
+                        }
+                      },
+                      "Property": "Grupo Item"
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          "bef10b86-d980-5955-abf3-1ed35309efbc": {
+            "filters": {
+              "byExpr": [
+                {
+                  "name": "07bb574e3171a12e3e8e",
+                  "type": "Categorical",
+                  "expression": {
+                    "Column": {
+                      "Expression": {
+                        "SourceRef": {
+                          "Entity": "Painel"
+                        }
+                      },
+                      "Property": "Motivo Sem Acordo"
+                    }
+                  },
+                  "howCreated": 0
+                }
+              ]
+            },
+            "singleVisual": {
+              "visualType": "slicer",
+              "objects": {},
+              "activeProjections": {
+                "Values": [
+                  {
+                    "Column": {
+                      "Expression": {
+                        "SourceRef": {
+                          "Entity": "Painel"
+                        }
+                      },
+                      "Property": "Motivo Sem Acordo"
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          "db79bebd-ffbc-53b8-b749-425cc4066ef2": {
+            "filters": {
+              "byExpr": [
+                {
+                  "name": "da2ac1705a11fa22d243",
+                  "type": "Categorical",
+                  "expression": {
+                    "Column": {
+                      "Expression": {
+                        "SourceRef": {
+                          "Entity": "Painel"
+                        }
+                      },
+                      "Property": "Criador"
+                    }
+                  },
+                  "howCreated": 0
+                }
+              ]
+            },
+            "singleVisual": {
+              "visualType": "slicer",
+              "objects": {},
+              "activeProjections": {
+                "Values": [
+                  {
+                    "Column": {
+                      "Expression": {
+                        "SourceRef": {
+                          "Entity": "Painel"
+                        }
+                      },
+                      "Property": "Criador"
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          "efda2cf6-b409-5d0c-bd09-231e7ac4cda3": {
+            "filters": {
+              "byExpr": [
+                {
+                  "name": "146434b332f6be51e356",
+                  "type": "Categorical",
+                  "expression": {
+                    "Column": {
+                      "Expression": {
+                        "SourceRef": {
+                          "Entity": "Painel"
+                        }
+                      },
+                      "Property": "Fornecedor"
+                    }
+                  },
+                  "howCreated": 0
+                }
+              ]
+            },
+            "singleVisual": {
+              "visualType": "slicer",
+              "objects": {},
+              "activeProjections": {
+                "Values": [
+                  {
+                    "Column": {
+                      "Expression": {
+                        "SourceRef": {
+                          "Entity": "Painel"
+                        }
+                      },
+                      "Property": "Fornecedor"
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          "f7ae62dc-6844-5c21-b1b3-671d2292c9d0": {
+            "filters": {
+              "byExpr": [
+                {
+                  "name": "9944c26fb1245127a625",
+                  "type": "Categorical",
+                  "expression": {
+                    "Column": {
+                      "Expression": {
+                        "SourceRef": {
+                          "Entity": "Painel"
+                        }
+                      },
+                      "Property": "Item"
+                    }
+                  },
+                  "howCreated": 0
+                }
+              ]
+            },
+            "singleVisual": {
+              "visualType": "slicer",
+              "objects": {},
+              "activeProjections": {
+                "Values": [
+                  {
+                    "Column": {
+                      "Expression": {
+                        "SourceRef": {
+                          "Entity": "Painel"
+                        }
+                      },
+                      "Property": "Item"
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

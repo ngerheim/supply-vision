@@ -4,9 +4,9 @@
   "position": {
     "x": 0,
     "y": 76,
-    "z": 2000,
+    "z": 3000,
     "height": 80,
-    "width": 306
+    "width": 460
   },
   "visual": {
     "visualType": "card",
@@ -22,32 +22,18 @@
                       "Entity": "Painel"
                     }
                   },
-                  "Property": "Janela 30d"
+                  "Property": "Valor Sem Acordo 30d"
                 }
               },
-              "queryRef": "Painel.Janela 30d",
-              "nativeQueryRef": "Janela 30d"
+              "queryRef": "Painel.Valor Sem Acordo 30d",
+              "nativeQueryRef": "Valor Sem Acordo 30d",
+              "displayName": "Sem acordo — 30d"
             }
           ]
         }
       }
     },
     "drillFilterOtherVisuals": true,
-    "objects": {
-      "labels": [
-        {
-          "properties": {
-            "fontSize": {
-              "expr": {
-                "Literal": {
-                  "Value": "11D"
-                }
-              }
-            }
-          }
-        }
-      ]
-    },
     "visualContainerObjects": {
       "title": [
         {

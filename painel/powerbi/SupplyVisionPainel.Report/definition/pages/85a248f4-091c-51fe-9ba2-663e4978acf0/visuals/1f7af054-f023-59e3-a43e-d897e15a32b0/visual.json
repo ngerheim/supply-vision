@@ -1,5 +1,5 @@
 {
-  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.9.0/schema.json",
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.11.0/schema.json",
   "name": "1f7af054-f023-59e3-a43e-d897e15a32b0",
   "position": {
     "x": 0,
@@ -22,17 +22,25 @@
                       "Entity": "Painel"
                     }
                   },
-                  "Property": "Ano"
+                  "Property": "Ano-Mes"
                 }
               },
-              "queryRef": "Painel.Ano",
-              "nativeQueryRef": "Ano"
+              "queryRef": "Painel.Ano-Mes",
+              "nativeQueryRef": "Ano-Mes",
+              "active": true,
+              "displayName": "Ano-Mês"
             }
           ]
         }
       }
     },
-    "drillFilterOtherVisuals": true,
+    "objects": {
+      "general": [
+        {
+          "properties": {}
+        }
+      ]
+    },
     "visualContainerObjects": {
       "title": [
         {
@@ -47,6 +55,7 @@
           }
         }
       ]
-    }
+    },
+    "drillFilterOtherVisuals": true
   }
 }

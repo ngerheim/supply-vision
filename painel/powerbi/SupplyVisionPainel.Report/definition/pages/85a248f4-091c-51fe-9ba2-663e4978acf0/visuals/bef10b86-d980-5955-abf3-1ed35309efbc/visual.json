@@ -1,10 +1,10 @@
 {
-  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.9.0/schema.json",
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.11.0/schema.json",
   "name": "bef10b86-d980-5955-abf3-1ed35309efbc",
   "position": {
     "x": 214,
     "y": 380,
-    "z": 13000,
+    "z": 12000,
     "height": 56,
     "width": 206
   },
@@ -27,13 +27,13 @@
               },
               "queryRef": "Painel.Motivo Sem Acordo",
               "nativeQueryRef": "Motivo Sem Acordo",
+              "active": true,
               "displayName": "Motivo de não ter acordo"
             }
           ]
         }
       }
     },
-    "drillFilterOtherVisuals": true,
     "visualContainerObjects": {
       "title": [
         {
@@ -48,6 +48,7 @@
           }
         }
       ]
-    }
+    },
+    "drillFilterOtherVisuals": true
   }
 }

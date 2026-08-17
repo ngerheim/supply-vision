@@ -95,7 +95,7 @@
   "filterConfig": {
     "filters": [
       {
-        "name": "487937ce-c52d-5092-aa4f-e25d27ae40eb",
+        "name": "649b16c8-af35-5a60-88a6-a586066a29f1",
         "type": "Categorical",
         "field": {
           "Column": {

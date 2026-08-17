@@ -1,5 +1,5 @@
 {
-  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.9.0/schema.json",
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.11.0/schema.json",
   "name": "e51d22d8-591a-5977-b6d7-1f04dc95a756",
   "position": {
     "x": 1028,
@@ -26,45 +26,12 @@
                 }
               },
               "queryRef": "Painel.Excedente Acima 30d",
-              "nativeQueryRef": "Excedente Acima 30d"
+              "nativeQueryRef": "Excedente Acima 30d",
+              "displayName": "Excedente pago — 30d"
             }
           ]
         }
       }
-    },
-    "drillFilterOtherVisuals": true,
-    "objects": {
-      "background": [
-        {
-          "properties": {
-            "show": {
-              "expr": {
-                "Literal": {
-                  "Value": "true"
-                }
-              }
-            },
-            "color": {
-              "solid": {
-                "color": {
-                  "expr": {
-                    "Literal": {
-                      "Value": "'#FDF3E0'"
-                    }
-                  }
-                }
-              }
-            },
-            "transparency": {
-              "expr": {
-                "Literal": {
-                  "Value": "0D"
-                }
-              }
-            }
-          }
-        }
-      ]
     },
     "visualContainerObjects": {
       "title": [
@@ -80,6 +47,7 @@
           }
         }
       ]
-    }
+    },
+    "drillFilterOtherVisuals": true
   }
 }

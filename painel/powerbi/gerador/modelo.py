@@ -197,9 +197,14 @@ MEDIDAS = [
     # pipeline rodou; [Data Fim Completa] diz ate onde o dado alcanca. Um
     # pipeline que roda todo dia sobre uma extracao travada mantem a primeira
     # andando e a segunda parada -- e e a segunda que importa para quem decide.
+    # "carga" e termo do pipeline, nao de quem le o painel. As duas datas
+    # continuam separadas porque medem coisas diferentes -- ver o comentario
+    # acima -- mas a segunda passa a se chamar pelo que ela significa para o
+    # leitor: quando isto foi atualizado.
     ("Atualizacao",
      '"Dados até " & FORMAT([Data Fim Completa], "dd/mm/yyyy") & '
-     '"   ·   carga " & FORMAT([Ultima Execucao], "dd/mm/yyyy HH:mm")', None),
+     '"   |   Atualizado em " & FORMAT([Ultima Execucao], "dd/mm/yyyy") & '
+     '" às " & FORMAT([Ultima Execucao], "HH:mm")', None),
     # Nao existe medida "Dias de Defasagem". Ela precisaria de ALL('Painel') para
     # ancorar a data de execucao globalmente, o que exigiria abrir ALL_PERMITIDO
     # -- e nenhum visual a usaria: [Atualizacao] ja imprime as duas datas, e a
@@ -249,26 +254,34 @@ MEDIDAS = [
     # "todos os 8" reaproveita [Modelos], que ja e DISTINCTCOUNT(Grupo Modelo) --
     # criar uma segunda contagem quase igual e o padrao que produziu a divergencia
     # de R$ 387.898,08 contra R$ 13.940,24.
+    # Padrao unico: "Top 20 <dimensao> — X% <referencia>". Antes havia duas
+    # formas ("Fornecedores — top 20 = 36,7%" e "Top 20 fornecedores — 56,2% da
+    # fuga"), o que faz o leitor reprocessar a estrutura da frase em cada visual.
+    # A referencia ("do total", "do sem acordo", "da fuga") e obrigatoria: sem
+    # ela o percentual nao tem denominador declarado.
     ("Titulo VG Cidades",
-     '"Cidades — top 20 = " & FORMAT([% Top 20 Cidades], "0.0%")', None),
+     '"Top 20 cidades — " & FORMAT([% Top 20 Cidades], "0.0%") & " do total"', None),
     ("Titulo VG Fornecedores",
-     '"Fornecedores — top 20 = " & FORMAT([% Top 20 Fornecedores], "0.0%")', None),
+     '"Top 20 fornecedores — " & FORMAT([% Top 20 Fornecedores], "0.0%") & " do total"', None),
     ("Titulo VG Grupos de Item",
-     '"Itens — top 20 = " & FORMAT([% Top 20 Grupos de Item], "0.0%")', None),
-    ("Titulo VG Grupos de Modelo",
-     '"Grupos de modelo — todos os " & '
-     f'FORMAT(CALCULATE([Modelos], REMOVEFILTERS(\'{T}\'[Grupo Modelo])), "0")', None),
+     '"Top 20 itens — " & FORMAT([% Top 20 Grupos de Item], "0.0%") & " do total"', None),
     ("Titulo SA Fornecedores",
-     '"Fornecedores — top 20 = " & FORMAT([% Top 20 Fornecedores SA], "0.0%") & " do sem acordo"', None),
+     '"Top 20 fornecedores — " & FORMAT([% Top 20 Fornecedores SA], "0.0%") & " do sem acordo"', None),
     ("Titulo SA Grupos de Item",
-     '"Itens — top 20 = " & FORMAT([% Top 20 Grupos de Item SA], "0.0%") & " do sem acordo"', None),
+     '"Top 20 itens — " & FORMAT([% Top 20 Grupos de Item SA], "0.0%") & " do sem acordo"', None),
+    # "na janela" sai: a faixa acima ja declara 365 dias corridos e o cartao
+    # imprime as datas. Repetir em tres titulos gasta caractere que o nome da
+    # categoria precisa.
     ("Titulo Fuga Fornecedores",
-     '"Top 20 fornecedores — " & FORMAT([% Top 20 Fornecedores Fuga], "0.0%") & " da fuga na janela"', None),
+     '"Top 20 fornecedores — " & FORMAT([% Top 20 Fornecedores Fuga], "0.0%") & " da fuga"', None),
     ("Titulo Fuga Grupos de Item",
-     '"Top 20 grupos de item — " & FORMAT([% Top 20 Grupos de Item Fuga], "0.0%") & " da fuga na janela"', None),
+     '"Top 20 grupos de item — " & FORMAT([% Top 20 Grupos de Item Fuga], "0.0%") & " da fuga"', None),
+    # "(ocorre em 38)" sai do titulo. A contagem era informacao boa em lugar
+    # ruim: dentro do titulo ela competia com o percentual e empurrava o texto
+    # para duas linhas em 436px. [Cidades com Fuga 365d] continua no modelo,
+    # pronta para um cartao, e nao esta em visual nenhum hoje.
     ("Titulo Fuga Cidades",
-     '"Top 20 cidades — " & FORMAT([% Top 20 Cidades Fuga], "0.0%") & '
-     '" da fuga na janela (ocorre em " & FORMAT([Cidades com Fuga 365d], "0") & ")"', None),
+     '"Top 20 cidades — " & FORMAT([% Top 20 Cidades Fuga], "0.0%") & " da fuga"', None),
 ]
 
 def _medida(n, e, f):

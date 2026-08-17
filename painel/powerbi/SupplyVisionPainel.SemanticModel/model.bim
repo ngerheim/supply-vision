@@ -1,354 +1,937 @@
 {
-  "name": "SupplyVisionPainel",
   "compatibilityLevel": 1606,
   "model": {
+    "annotations": [
+      {
+        "name": "PBI_QueryOrder",
+        "value": "[\"Painel\"]"
+      },
+      {
+        "name": "__PBI_TimeIntelligenceEnabled",
+        "value": "1"
+      },
+      {
+        "name": "PBI_ProTooling",
+        "value": "[\"DevMode\"]"
+      }
+    ],
     "culture": "pt-BR",
-    "defaultPowerBIDataSourceVersion": "powerBI_V3",
-    "sourceQueryCulture": "pt-BR",
+    "cultures": [
+      {
+        "name": "pt-BR",
+        "linguisticMetadata": {
+          "content": {
+            "Entities": {
+              "painel.acima": {
+                "Definition": {
+                  "Binding": {
+                    "ConceptualEntity": "Painel",
+                    "ConceptualProperty": "% Acima"
+                  }
+                },
+                "State": "Generated",
+                "Terms": [
+                  {
+                    "% acima — do valor avaliado": {
+                      "Source": {
+                        "Agent": "PowerBI.VisualColumnRename",
+                        "Type": "External"
+                      },
+                      "State": "Suggested",
+                      "Weight": 0.9
+                    }
+                  }
+                ]
+              },
+              "painel.anomes": {
+                "Definition": {
+                  "Binding": {
+                    "ConceptualEntity": "Painel",
+                    "ConceptualProperty": "Ano-Mes"
+                  }
+                },
+                "State": "Generated",
+                "Terms": [
+                  {
+                    "Ano-Mês": {
+                      "Source": {
+                        "Agent": "PowerBI.VisualColumnRename",
+                        "Type": "External"
+                      },
+                      "State": "Suggested",
+                      "Weight": 0.9
+                    }
+                  }
+                ]
+              },
+              "painel.criador": {
+                "Definition": {
+                  "Binding": {
+                    "ConceptualEntity": "Painel",
+                    "ConceptualProperty": "Criador"
+                  }
+                },
+                "State": "Generated",
+                "Terms": [
+                  {
+                    "Criador da OS": {
+                      "Source": {
+                        "Agent": "PowerBI.VisualColumnRename",
+                        "Type": "External"
+                      },
+                      "State": "Suggested",
+                      "Weight": 0.9
+                    }
+                  }
+                ]
+              },
+              "painel.da_fuga_sobre_o_sem_acordo_365d": {
+                "Definition": {
+                  "Binding": {
+                    "ConceptualEntity": "Painel",
+                    "ConceptualProperty": "% da Fuga sobre o Sem Acordo 365d"
+                  }
+                },
+                "State": "Generated",
+                "Terms": [
+                  {
+                    "% do sem acordo por fuga": {
+                      "Source": {
+                        "Agent": "PowerBI.VisualColumnRename",
+                        "Type": "External"
+                      },
+                      "State": "Suggested",
+                      "Weight": 0.9
+                    }
+                  }
+                ]
+              },
+              "painel.excedente_acima_30d": {
+                "Definition": {
+                  "Binding": {
+                    "ConceptualEntity": "Painel",
+                    "ConceptualProperty": "Excedente Acima 30d"
+                  }
+                },
+                "State": "Generated",
+                "Terms": [
+                  {
+                    "Excedente pago — 30d": {
+                      "Source": {
+                        "Agent": "PowerBI.VisualColumnRename",
+                        "Type": "External"
+                      },
+                      "State": "Suggested",
+                      "Weight": 0.9
+                    }
+                  },
+                  {
+                    "Excedente R$": {
+                      "Source": {
+                        "Agent": "PowerBI.VisualColumnRename",
+                        "Type": "External"
+                      },
+                      "State": "Suggested",
+                      "Weight": 0.9
+                    }
+                  },
+                  {
+                    "Excedente R$ (30d)": {
+                      "Source": {
+                        "Agent": "PowerBI.VisualColumnRename",
+                        "Type": "External"
+                      },
+                      "State": "Suggested",
+                      "Weight": 0.9
+                    }
+                  }
+                ]
+              },
+              "painel.grupo_item": {
+                "Definition": {
+                  "Binding": {
+                    "ConceptualEntity": "Painel",
+                    "ConceptualProperty": "Grupo Item"
+                  }
+                },
+                "State": "Generated",
+                "Terms": [
+                  {
+                    "Grupo de item": {
+                      "Source": {
+                        "Agent": "PowerBI.VisualColumnRename",
+                        "Type": "External"
+                      },
+                      "State": "Suggested",
+                      "Weight": 0.9
+                    }
+                  }
+                ]
+              },
+              "painel.motivo_sem_acordo": {
+                "Definition": {
+                  "Binding": {
+                    "ConceptualEntity": "Painel",
+                    "ConceptualProperty": "Motivo Sem Acordo"
+                  }
+                },
+                "State": "Generated",
+                "Terms": [
+                  {
+                    "Motivo de não ter acordo": {
+                      "Source": {
+                        "Agent": "PowerBI.VisualColumnRename",
+                        "Type": "External"
+                      },
+                      "State": "Suggested",
+                      "Weight": 0.9
+                    }
+                  }
+                ]
+              },
+              "painel.preco_acordo": {
+                "Definition": {
+                  "Binding": {
+                    "ConceptualEntity": "Painel",
+                    "ConceptualProperty": "Preco Acordo"
+                  }
+                },
+                "State": "Generated",
+                "Terms": [
+                  {
+                    "Preço acordado": {
+                      "Source": {
+                        "Agent": "PowerBI.VisualColumnRename",
+                        "Type": "External"
+                      },
+                      "State": "Suggested",
+                      "Weight": 0.9
+                    }
+                  }
+                ]
+              },
+              "painel.preco_acordo_vigente": {
+                "Definition": {
+                  "Binding": {
+                    "ConceptualEntity": "Painel",
+                    "ConceptualProperty": "Preco Acordo Vigente"
+                  }
+                },
+                "State": "Generated",
+                "Terms": [
+                  {
+                    "Preço acordo (30d)": {
+                      "Source": {
+                        "Agent": "PowerBI.VisualColumnRename",
+                        "Type": "External"
+                      },
+                      "State": "Suggested",
+                      "Weight": 0.9
+                    }
+                  }
+                ]
+              },
+              "painel.preco_os": {
+                "Definition": {
+                  "Binding": {
+                    "ConceptualEntity": "Painel",
+                    "ConceptualProperty": "Preco OS"
+                  }
+                },
+                "State": "Generated",
+                "Terms": [
+                  {
+                    "Preço cobrado": {
+                      "Source": {
+                        "Agent": "PowerBI.VisualColumnRename",
+                        "Type": "External"
+                      },
+                      "State": "Suggested",
+                      "Weight": 0.9
+                    }
+                  },
+                  {
+                    "Preço OS": {
+                      "Source": {
+                        "Agent": "PowerBI.VisualColumnRename",
+                        "Type": "External"
+                      },
+                      "State": "Suggested",
+                      "Weight": 0.9
+                    }
+                  }
+                ]
+              },
+              "painel.status": {
+                "Definition": {
+                  "Binding": {
+                    "ConceptualEntity": "Painel",
+                    "ConceptualProperty": "Status"
+                  }
+                },
+                "State": "Generated",
+                "Terms": [
+                  {
+                    "Status do preço": {
+                      "Source": {
+                        "Agent": "PowerBI.VisualColumnRename",
+                        "Type": "External"
+                      },
+                      "State": "Suggested",
+                      "Weight": 0.9
+                    }
+                  }
+                ]
+              },
+              "painel.status_acordo": {
+                "Definition": {
+                  "Binding": {
+                    "ConceptualEntity": "Painel",
+                    "ConceptualProperty": "STATUS_ACORDO"
+                  }
+                },
+                "State": "Generated",
+                "Terms": [
+                  {
+                    "Dentro ou fora do acordo": {
+                      "Source": {
+                        "Agent": "PowerBI.VisualColumnRename",
+                        "Type": "External"
+                      },
+                      "State": "Suggested",
+                      "Weight": 0.9
+                    }
+                  }
+                ]
+              },
+              "painel.tinha_acordo": {
+                "Definition": {
+                  "Binding": {
+                    "ConceptualEntity": "Painel",
+                    "ConceptualProperty": "Tinha acordo?"
+                  }
+                },
+                "State": "Generated",
+                "Terms": [
+                  {
+                    "Tinha acordo disponível?": {
+                      "Source": {
+                        "Agent": "PowerBI.VisualColumnRename",
+                        "Type": "External"
+                      },
+                      "State": "Suggested",
+                      "Weight": 0.9
+                    }
+                  }
+                ]
+              },
+              "painel.valor_dentro_do_acordo": {
+                "Definition": {
+                  "Binding": {
+                    "ConceptualEntity": "Painel",
+                    "ConceptualProperty": "Valor Dentro do Acordo"
+                  }
+                },
+                "State": "Generated",
+                "Terms": [
+                  {
+                    "Dentro do acordo": {
+                      "Source": {
+                        "Agent": "PowerBI.VisualColumnRename",
+                        "Type": "External"
+                      },
+                      "State": "Suggested",
+                      "Weight": 0.9
+                    }
+                  }
+                ]
+              },
+              "painel.valor_dentro_do_acordo_30d": {
+                "Definition": {
+                  "Binding": {
+                    "ConceptualEntity": "Painel",
+                    "ConceptualProperty": "Valor Dentro do Acordo 30d"
+                  }
+                },
+                "State": "Generated",
+                "Terms": [
+                  {
+                    "Valor avaliado com acordo — 30d": {
+                      "Source": {
+                        "Agent": "PowerBI.VisualColumnRename",
+                        "Type": "External"
+                      },
+                      "State": "Suggested",
+                      "Weight": 0.9
+                    }
+                  }
+                ]
+              },
+              "painel.valor_em_fuga_365d": {
+                "Definition": {
+                  "Binding": {
+                    "ConceptualEntity": "Painel",
+                    "ConceptualProperty": "Valor em Fuga 365d"
+                  }
+                },
+                "State": "Generated",
+                "Terms": [
+                  {
+                    "Fuga de contrato — 365d": {
+                      "Source": {
+                        "Agent": "PowerBI.VisualColumnRename",
+                        "Type": "External"
+                      },
+                      "State": "Suggested",
+                      "Weight": 0.9
+                    }
+                  }
+                ]
+              },
+              "painel.valor_sem_acordo": {
+                "Definition": {
+                  "Binding": {
+                    "ConceptualEntity": "Painel",
+                    "ConceptualProperty": "Valor Sem Acordo"
+                  }
+                },
+                "State": "Generated",
+                "Terms": [
+                  {
+                    "Sem acordo": {
+                      "Source": {
+                        "Agent": "PowerBI.VisualColumnRename",
+                        "Type": "External"
+                      },
+                      "State": "Suggested",
+                      "Weight": 0.9
+                    }
+                  }
+                ]
+              },
+              "painel.valor_sem_acordo_30d": {
+                "Definition": {
+                  "Binding": {
+                    "ConceptualEntity": "Painel",
+                    "ConceptualProperty": "Valor Sem Acordo 30d"
+                  }
+                },
+                "State": "Generated",
+                "Terms": [
+                  {
+                    "Sem acordo — 30d": {
+                      "Source": {
+                        "Agent": "PowerBI.VisualColumnRename",
+                        "Type": "External"
+                      },
+                      "State": "Suggested",
+                      "Weight": 0.9
+                    }
+                  }
+                ]
+              },
+              "painel.valor_sem_acordo_365d": {
+                "Definition": {
+                  "Binding": {
+                    "ConceptualEntity": "Painel",
+                    "ConceptualProperty": "Valor Sem Acordo 365d"
+                  }
+                },
+                "State": "Generated",
+                "Terms": [
+                  {
+                    "Sem acordo — 365d": {
+                      "Source": {
+                        "Agent": "PowerBI.VisualColumnRename",
+                        "Type": "External"
+                      },
+                      "State": "Suggested",
+                      "Weight": 0.9
+                    }
+                  }
+                ]
+              },
+              "painel.valor_total": {
+                "Definition": {
+                  "Binding": {
+                    "ConceptualEntity": "Painel",
+                    "ConceptualProperty": "Valor Total"
+                  }
+                },
+                "State": "Generated",
+                "Terms": [
+                  {
+                    "Valor pago": {
+                      "Source": {
+                        "Agent": "PowerBI.VisualColumnRename",
+                        "Type": "External"
+                      },
+                      "State": "Suggested",
+                      "Weight": 0.9
+                    }
+                  }
+                ]
+              },
+              "painel.valor_total_30d": {
+                "Definition": {
+                  "Binding": {
+                    "ConceptualEntity": "Painel",
+                    "ConceptualProperty": "Valor Total 30d"
+                  }
+                },
+                "State": "Generated",
+                "Terms": [
+                  {
+                    "Gasto total — 30d": {
+                      "Source": {
+                        "Agent": "PowerBI.VisualColumnRename",
+                        "Type": "External"
+                      },
+                      "State": "Suggested",
+                      "Weight": 0.9
+                    }
+                  }
+                ]
+              },
+              "painel.valor_total_365d": {
+                "Definition": {
+                  "Binding": {
+                    "ConceptualEntity": "Painel",
+                    "ConceptualProperty": "Valor Total 365d"
+                  }
+                },
+                "State": "Generated",
+                "Terms": [
+                  {
+                    "Gasto total — 365d": {
+                      "Source": {
+                        "Agent": "PowerBI.VisualColumnRename",
+                        "Type": "External"
+                      },
+                      "State": "Suggested",
+                      "Weight": 0.9
+                    }
+                  }
+                ]
+              }
+            },
+            "Language": "en-US",
+            "Version": "2.0.0"
+          },
+          "contentType": "json"
+        }
+      }
+    ],
     "dataAccessOptions": {
       "legacyRedirects": true,
       "returnErrorValuesAsNull": true
     },
+    "defaultPowerBIDataSourceVersion": "powerBI_V3",
+    "relationships": [
+      {
+        "name": "bd1fdd8e-8ac2-412a-850c-1983b3e4113f",
+        "fromColumn": "Data",
+        "fromTable": "Painel",
+        "joinOnDateBehavior": "datePartOnly",
+        "toColumn": "Date",
+        "toTable": "LocalDateTable_81040377-8ca0-44f4-8e0f-123d882d98e7"
+      },
+      {
+        "name": "6ff419ea-4b32-4f09-9bbb-60231c737037",
+        "fromColumn": "DATA_EXECUCAO",
+        "fromTable": "Painel",
+        "joinOnDateBehavior": "datePartOnly",
+        "toColumn": "Date",
+        "toTable": "LocalDateTable_80e9f214-f4d4-4224-b068-b2d1aecc3359"
+      }
+    ],
+    "sourceQueryCulture": "pt-BR",
     "tables": [
       {
         "name": "Painel",
-        "lineageTag": "09eb5dd3-1590-5c95-a9c3-2a95dd9e8a3c",
         "columns": [
           {
             "name": "Data",
+            "annotations": [
+              {
+                "name": "UnderlyingDateTimeDataType",
+                "value": "Date"
+              }
+            ],
             "dataType": "dateTime",
+            "formatString": "dd/mm/yyyy",
+            "lineageTag": "e477810a-d283-5143-8bab-19cf77b9534f",
             "sourceColumn": "Data",
             "summarizeBy": "none",
-            "lineageTag": "e477810a-d283-5143-8bab-19cf77b9534f",
-            "formatString": "dd/mm/yyyy"
+            "variations": [
+              {
+                "name": "Variation",
+                "defaultHierarchy": {
+                  "hierarchy": "Hierarquia de datas",
+                  "table": "LocalDateTable_81040377-8ca0-44f4-8e0f-123d882d98e7"
+                },
+                "isDefault": true,
+                "relationship": "bd1fdd8e-8ac2-412a-850c-1983b3e4113f"
+              }
+            ]
           },
           {
             "name": "OS",
             "dataType": "string",
+            "lineageTag": "1b389e8a-e7b6-58f2-ac34-3b6ffcfbcc27",
             "sourceColumn": "OS",
-            "summarizeBy": "none",
-            "lineageTag": "1b389e8a-e7b6-58f2-ac34-3b6ffcfbcc27"
+            "summarizeBy": "none"
           },
           {
             "name": "Criador",
             "dataType": "string",
+            "lineageTag": "17e57edd-0ee4-5d93-af1b-37142416d607",
             "sourceColumn": "Criador",
-            "summarizeBy": "none",
-            "lineageTag": "17e57edd-0ee4-5d93-af1b-37142416d607"
+            "summarizeBy": "none"
           },
           {
             "name": "Cidade",
             "dataType": "string",
+            "lineageTag": "6f71ab0c-cf1e-57ab-bcb3-6b7142fac1fe",
             "sourceColumn": "Cidade",
-            "summarizeBy": "none",
-            "lineageTag": "6f71ab0c-cf1e-57ab-bcb3-6b7142fac1fe"
+            "summarizeBy": "none"
           },
           {
             "name": "Fornecedor",
             "dataType": "string",
+            "lineageTag": "79fc1302-b2a9-5914-b9b4-2f2cee4225ee",
             "sourceColumn": "Fornecedor",
-            "summarizeBy": "none",
-            "lineageTag": "79fc1302-b2a9-5914-b9b4-2f2cee4225ee"
+            "summarizeBy": "none"
           },
           {
             "name": "Modelo",
             "dataType": "string",
+            "lineageTag": "4762f385-da62-521d-8569-f55a7c937199",
             "sourceColumn": "Modelo",
-            "summarizeBy": "none",
-            "lineageTag": "4762f385-da62-521d-8569-f55a7c937199"
-          },
-          {
-            "name": "Grupo Modelo",
-            "dataType": "string",
-            "sourceColumn": "Grupo Modelo",
-            "summarizeBy": "none",
-            "lineageTag": "ee0a7e97-5789-5021-80e7-712f01bc1780"
+            "summarizeBy": "none"
           },
           {
             "name": "Item",
             "dataType": "string",
+            "lineageTag": "8a1f5633-fe3c-59e0-a402-a7f29470baba",
             "sourceColumn": "Item",
-            "summarizeBy": "none",
-            "lineageTag": "8a1f5633-fe3c-59e0-a402-a7f29470baba"
-          },
-          {
-            "name": "Grupo Item",
-            "dataType": "string",
-            "sourceColumn": "Grupo Item",
-            "summarizeBy": "none",
-            "lineageTag": "4ff7e603-60b6-567f-8895-85c21d3ad06a"
+            "summarizeBy": "none"
           },
           {
             "name": "Motivo Sem Acordo",
             "dataType": "string",
+            "lineageTag": "958eacdf-2fc4-592f-86ae-fcb9e39da2d7",
             "sourceColumn": "Motivo Sem Acordo",
-            "summarizeBy": "none",
-            "lineageTag": "958eacdf-2fc4-592f-86ae-fcb9e39da2d7"
+            "summarizeBy": "none"
           },
           {
             "name": "Tinha acordo?",
             "dataType": "string",
+            "lineageTag": "f0166095-0d38-571d-8bf4-3b90fcc4e7e4",
             "sourceColumn": "Tinha acordo?",
-            "summarizeBy": "none",
-            "lineageTag": "f0166095-0d38-571d-8bf4-3b90fcc4e7e4"
+            "summarizeBy": "none"
           },
           {
             "name": "Fornecedor do Acordo",
             "dataType": "string",
+            "lineageTag": "08c17e9d-b19c-5672-a586-637fe8224582",
             "sourceColumn": "Fornecedor do Acordo",
-            "summarizeBy": "none",
-            "lineageTag": "08c17e9d-b19c-5672-a586-637fe8224582"
+            "summarizeBy": "none"
           },
           {
             "name": "Status",
             "dataType": "string",
+            "lineageTag": "9b96e65d-6eeb-5700-bdff-60192788f6cd",
             "sourceColumn": "Status",
-            "summarizeBy": "none",
-            "lineageTag": "9b96e65d-6eeb-5700-bdff-60192788f6cd"
+            "summarizeBy": "none"
           },
           {
             "name": "CNPJ",
             "dataType": "string",
+            "lineageTag": "f575da17-07e5-5f55-9d81-7967c1263b2e",
             "sourceColumn": "CNPJ",
-            "summarizeBy": "none",
-            "lineageTag": "f575da17-07e5-5f55-9d81-7967c1263b2e"
+            "summarizeBy": "none"
           },
           {
             "name": "STATUS_ACORDO",
             "dataType": "string",
+            "lineageTag": "6113dd38-6470-5e9f-ba93-0eeeb72279f0",
             "sourceColumn": "STATUS_ACORDO",
-            "summarizeBy": "none",
-            "lineageTag": "6113dd38-6470-5e9f-ba93-0eeeb72279f0"
+            "summarizeBy": "none"
           },
           {
             "name": "RUN_ID",
             "dataType": "string",
+            "lineageTag": "fc21360a-9898-56cc-badd-407fe09eef1d",
             "sourceColumn": "RUN_ID",
-            "summarizeBy": "none",
-            "lineageTag": "fc21360a-9898-56cc-badd-407fe09eef1d"
+            "summarizeBy": "none"
           },
           {
             "name": "Ano-Mes",
             "dataType": "string",
+            "lineageTag": "cbb7bd97-7846-5d1f-97c2-2d0f42a41205",
             "sourceColumn": "Ano-Mes",
-            "summarizeBy": "none",
-            "lineageTag": "cbb7bd97-7846-5d1f-97c2-2d0f42a41205"
+            "summarizeBy": "none"
           },
           {
             "name": "Mes",
             "dataType": "string",
+            "lineageTag": "269f90d9-ea10-5a37-a11c-d41d00ba2005",
             "sourceColumn": "Mes",
-            "summarizeBy": "none",
-            "lineageTag": "269f90d9-ea10-5a37-a11c-d41d00ba2005"
+            "summarizeBy": "none"
           },
           {
             "name": "Trimestre",
             "dataType": "string",
+            "lineageTag": "d04c4cc8-b89b-5b9d-b80b-f52b15ec61ba",
             "sourceColumn": "Trimestre",
-            "summarizeBy": "none",
-            "lineageTag": "d04c4cc8-b89b-5b9d-b80b-f52b15ec61ba"
-          },
-          {
-            "name": "Mes Nome",
-            "dataType": "string",
-            "sourceColumn": "Mes Nome",
-            "summarizeBy": "none",
-            "lineageTag": "2851a87f-68a7-51e6-9892-ee5591c8bf59",
-            "sortByColumn": "Mes Num"
+            "summarizeBy": "none"
           },
           {
             "name": "Ano",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ],
             "dataType": "int64",
-            "sourceColumn": "Ano",
-            "summarizeBy": "none",
-            "lineageTag": "354c0cfa-0350-552a-b21e-89e39d068e01",
-            "formatString": "0"
-          },
-          {
-            "name": "Mes Num",
-            "dataType": "int64",
-            "sourceColumn": "Mes Num",
-            "summarizeBy": "none",
-            "lineageTag": "13786026-981e-56c4-9e5b-00f49ae01453",
             "formatString": "0",
-            "isHidden": true
-          },
-          {
-            "name": "Ultimos 30 dias",
-            "dataType": "boolean",
-            "sourceColumn": "Ultimos 30 dias",
-            "summarizeBy": "none",
-            "lineageTag": "0299f5e3-fb15-502a-a2c4-114798d3cc90"
-          },
-          {
-            "name": "Ultimos 365 dias",
-            "dataType": "boolean",
-            "sourceColumn": "Ultimos 365 dias",
-            "summarizeBy": "none",
-            "lineageTag": "83519ce8-2b06-56e6-9bfc-dc0f95cc5ebb"
-          },
-          {
-            "name": "Mes Fechado",
-            "dataType": "boolean",
-            "sourceColumn": "Mes Fechado",
-            "summarizeBy": "none",
-            "lineageTag": "1005d227-93b2-5874-9ad0-2fd81b92b96e"
-          },
-          {
-            "name": "Ultimos 12 meses fechados",
-            "dataType": "boolean",
-            "sourceColumn": "Ultimos 12 meses fechados",
-            "summarizeBy": "none",
-            "lineageTag": "548e25cd-c2fb-5d3b-a80f-0e30b2802249"
+            "lineageTag": "354c0cfa-0350-552a-b21e-89e39d068e01",
+            "sourceColumn": "Ano",
+            "summarizeBy": "sum"
           },
           {
             "name": "Qtd",
             "dataType": "double",
-            "sourceColumn": "Qtd",
-            "summarizeBy": "sum",
+            "formatString": "#,0.##",
             "lineageTag": "005b64c6-7a3c-50d8-9df8-f7f208c454d8",
-            "formatString": "#,0.##"
+            "sourceColumn": "Qtd",
+            "summarizeBy": "sum"
           },
           {
             "name": "Preco OS",
             "dataType": "double",
-            "sourceColumn": "Preco OS",
-            "summarizeBy": "sum",
+            "formatString": "\"R$\" #,0.00",
             "lineageTag": "aceb274d-ffe6-5b27-a5cc-8b40a3ab2971",
-            "formatString": "\"R$\" #,0.00"
+            "sourceColumn": "Preco OS",
+            "summarizeBy": "sum"
           },
           {
             "name": "Preco Acordo",
             "dataType": "double",
-            "sourceColumn": "Preco Acordo",
-            "summarizeBy": "sum",
+            "formatString": "\"R$\" #,0.00",
             "lineageTag": "2a5f2c6f-8d55-5b12-88f5-25860baaf7cd",
-            "formatString": "\"R$\" #,0.00"
+            "sourceColumn": "Preco Acordo",
+            "summarizeBy": "sum"
           },
           {
             "name": "Preco Total OS",
             "dataType": "double",
-            "sourceColumn": "Preco Total OS",
-            "summarizeBy": "sum",
+            "formatString": "\"R$\" #,0.00",
             "lineageTag": "038f37bf-e769-5eca-a1ff-7aca0630f80f",
-            "formatString": "\"R$\" #,0.00"
+            "sourceColumn": "Preco Total OS",
+            "summarizeBy": "sum"
           },
           {
             "name": "Preco Total Acordo",
             "dataType": "double",
-            "sourceColumn": "Preco Total Acordo",
-            "summarizeBy": "sum",
+            "formatString": "\"R$\" #,0.00",
             "lineageTag": "c7f5bf4f-a95e-52e3-a1d8-b93249db2f32",
-            "formatString": "\"R$\" #,0.00"
+            "sourceColumn": "Preco Total Acordo",
+            "summarizeBy": "sum"
           },
           {
             "name": "Diferenca Unit.",
             "dataType": "double",
-            "sourceColumn": "Diferenca Unit.",
-            "summarizeBy": "sum",
+            "formatString": "\"R$\" #,0.00",
             "lineageTag": "7f91307f-5b5a-5b0a-91e3-aa13a062520b",
-            "formatString": "\"R$\" #,0.00"
+            "sourceColumn": "Diferenca Unit.",
+            "summarizeBy": "sum"
           },
           {
             "name": "Diferenca Total",
             "dataType": "double",
-            "sourceColumn": "Diferenca Total",
-            "summarizeBy": "sum",
+            "formatString": "\"R$\" #,0.00",
             "lineageTag": "a1c8a37a-de56-53be-8d9c-3e39a47730db",
-            "formatString": "\"R$\" #,0.00"
+            "sourceColumn": "Diferenca Total",
+            "summarizeBy": "sum"
           },
           {
             "name": "Menor Preco Acordo",
             "dataType": "double",
-            "sourceColumn": "Menor Preco Acordo",
-            "summarizeBy": "sum",
+            "formatString": "\"R$\" #,0.00",
             "lineageTag": "839ed315-3103-5e5d-a19a-33cf2787e1c4",
-            "formatString": "\"R$\" #,0.00"
+            "sourceColumn": "Menor Preco Acordo",
+            "summarizeBy": "sum"
           },
           {
             "name": "Dif. p/ Menor Acordo",
             "dataType": "double",
-            "sourceColumn": "Dif. p/ Menor Acordo",
-            "summarizeBy": "sum",
+            "formatString": "\"R$\" #,0.00",
             "lineageTag": "0165fdc3-5bb6-545d-9817-59662be3f5b4",
-            "formatString": "\"R$\" #,0.00"
+            "sourceColumn": "Dif. p/ Menor Acordo",
+            "summarizeBy": "sum"
           },
           {
             "name": "DATA_EXECUCAO",
             "dataType": "dateTime",
+            "formatString": "dd/mm/yyyy hh:nn",
+            "isHidden": true,
+            "lineageTag": "068565cb-025b-55f6-9270-ceeec64833c6",
             "sourceColumn": "DATA_EXECUCAO",
             "summarizeBy": "none",
-            "lineageTag": "068565cb-025b-55f6-9270-ceeec64833c6",
-            "formatString": "dd/mm/yyyy hh:nn",
-            "isHidden": true
+            "variations": [
+              {
+                "name": "Variation",
+                "defaultHierarchy": {
+                  "hierarchy": "Hierarquia de datas",
+                  "table": "LocalDateTable_80e9f214-f4d4-4224-b068-b2d1aecc3359"
+                },
+                "isDefault": true,
+                "relationship": "6ff419ea-4b32-4f09-9bbb-60231c737037"
+              }
+            ]
+          },
+          {
+            "name": "Grupo Modelo",
+            "dataType": "string",
+            "lineageTag": "ee0a7e97-5789-5021-80e7-712f01bc1780",
+            "sourceColumn": "Grupo Modelo",
+            "summarizeBy": "none"
+          },
+          {
+            "name": "Grupo Item",
+            "dataType": "string",
+            "lineageTag": "4ff7e603-60b6-567f-8895-85c21d3ad06a",
+            "sourceColumn": "Grupo Item",
+            "summarizeBy": "none"
+          },
+          {
+            "name": "Mes Nome",
+            "dataType": "string",
+            "lineageTag": "2851a87f-68a7-51e6-9892-ee5591c8bf59",
+            "sortByColumn": "Mes Num",
+            "sourceColumn": "Mes Nome",
+            "summarizeBy": "none"
+          },
+          {
+            "name": "Mes Num",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ],
+            "dataType": "int64",
+            "formatString": "0",
+            "isHidden": true,
+            "lineageTag": "13786026-981e-56c4-9e5b-00f49ae01453",
+            "sourceColumn": "Mes Num",
+            "summarizeBy": "sum"
+          },
+          {
+            "name": "Ultimos 30 dias",
+            "dataType": "boolean",
+            "lineageTag": "0299f5e3-fb15-502a-a2c4-114798d3cc90",
+            "sourceColumn": "Ultimos 30 dias",
+            "summarizeBy": "none"
+          },
+          {
+            "name": "Ultimos 365 dias",
+            "dataType": "boolean",
+            "lineageTag": "83519ce8-2b06-56e6-9bfc-dc0f95cc5ebb",
+            "sourceColumn": "Ultimos 365 dias",
+            "summarizeBy": "none"
+          },
+          {
+            "name": "Mes Fechado",
+            "dataType": "boolean",
+            "lineageTag": "1005d227-93b2-5874-9ad0-2fd81b92b96e",
+            "sourceColumn": "Mes Fechado",
+            "summarizeBy": "none"
+          },
+          {
+            "name": "Ultimos 12 meses fechados",
+            "dataType": "boolean",
+            "lineageTag": "548e25cd-c2fb-5d3b-a80f-0e30b2802249",
+            "sourceColumn": "Ultimos 12 meses fechados",
+            "summarizeBy": "none"
           }
         ],
+        "lineageTag": "09eb5dd3-1590-5c95-a9c3-2a95dd9e8a3c",
         "measures": [
-          {
-            "name": "Data Fim Completa",
-            "expression": "VAR Exec = CALCULATE(MAX('Painel'[DATA_EXECUCAO]), ALL('Painel')) VAR DiaExec = DATE(YEAR(Exec), MONTH(Exec), DAY(Exec)) RETURN CALCULATE(MAX('Painel'[Data]), ALL('Painel'), 'Painel'[Data] < DiaExec)",
-            "lineageTag": "7d1bbf76-2f4e-51fe-90c5-0a5a646d0387",
-            "formatString": "dd/mm/yyyy"
-          },
           {
             "name": "Valor Total",
             "expression": "SUM('Painel'[Preco Total OS])",
-            "lineageTag": "96c31c36-8bd9-51e6-bd2b-23c65333a6fd",
-            "formatString": "\"R$\" #,0.00"
+            "formatString": "\"R$\" #,0.00",
+            "lineageTag": "96c31c36-8bd9-51e6-bd2b-23c65333a6fd"
           },
           {
             "name": "Linhas",
             "expression": "COUNTROWS('Painel')",
-            "lineageTag": "8c243e69-91ce-50bf-aa49-8cf0b2bf4ade",
-            "formatString": "#,0"
-          },
-          {
-            "name": "Valor Sem Acordo",
-            "expression": "CALCULATE([Valor Total], 'Painel'[STATUS_ACORDO] = \"SEM_ACORDO\")",
-            "lineageTag": "e985fb90-2411-577f-a7ce-7341ac8f82ce",
-            "formatString": "\"R$\" #,0.00"
+            "formatString": "#,0",
+            "lineageTag": "8c243e69-91ce-50bf-aa49-8cf0b2bf4ade"
           },
           {
             "name": "Valor Dentro do Acordo",
             "expression": "CALCULATE([Valor Total], 'Painel'[STATUS_ACORDO] = \"COM_ACORDO\")",
-            "lineageTag": "546f99c8-e2a0-5149-ad28-fc7a4514ee2a",
-            "formatString": "\"R$\" #,0.00"
+            "formatString": "\"R$\" #,0.00",
+            "lineageTag": "546f99c8-e2a0-5149-ad28-fc7a4514ee2a"
           },
           {
-            "name": "% Sem Acordo",
-            "expression": "DIVIDE([Valor Sem Acordo], [Valor Total])",
-            "lineageTag": "7da4b68e-42e9-552b-8083-e9907ce9cf58",
-            "formatString": "0.0%"
+            "name": "Fornecedores",
+            "expression": "DISTINCTCOUNT('Painel'[Fornecedor])",
+            "formatString": "#,0",
+            "lineageTag": "9162b21f-c433-5730-939d-0fccaf35d61b"
+          },
+          {
+            "name": "Cidades",
+            "expression": "DISTINCTCOUNT('Painel'[Cidade])",
+            "formatString": "#,0",
+            "lineageTag": "ff8077fd-974e-58e1-9ec5-089209fcf8e3"
+          },
+          {
+            "name": "Itens",
+            "expression": "DISTINCTCOUNT('Painel'[Grupo Item])",
+            "formatString": "#,0",
+            "lineageTag": "5e1af8b6-6079-511a-ad9b-9cdb2563e5bf"
+          },
+          {
+            "name": "Modelos",
+            "expression": "DISTINCTCOUNT('Painel'[Grupo Modelo])",
+            "formatString": "#,0",
+            "lineageTag": "f471d0f8-2568-562a-ba58-b4930b52d3f8"
+          },
+          {
+            "name": "Ultima Execucao",
+            "expression": "MAX('Painel'[DATA_EXECUCAO])",
+            "formatString": "dd/mm/yyyy hh:nn",
+            "lineageTag": "5ccbcb8c-caae-5d53-9548-7750f8f7dcf5"
           },
           {
             "name": "Valor em Fuga",
             "expression": "CALCULATE([Valor Total], 'Painel'[STATUS_ACORDO] = \"SEM_ACORDO\", 'Painel'[Tinha acordo?] = \"SIM\")",
-            "lineageTag": "26e515fa-c653-54f4-b66a-485830781f01",
-            "formatString": "\"R$\" #,0.00"
-          },
-          {
-            "name": "Valor Sem Alternativa",
-            "expression": "[Valor Sem Acordo] - [Valor em Fuga]",
-            "lineageTag": "f0fec1d8-99b2-54f5-bfe2-ca2b99b074f0",
-            "formatString": "\"R$\" #,0.00"
+            "formatString": "\"R$\" #,0.00",
+            "lineageTag": "26e515fa-c653-54f4-b66a-485830781f01"
           },
           {
             "name": "% Acima",
             "expression": "DIVIDE(CALCULATE([Valor Total], 'Painel'[Status] = \"ACIMA DO ACORDO\"), [Valor Dentro do Acordo])",
-            "lineageTag": "c8b0e991-6278-5f17-9a1c-871655cd6c47",
-            "formatString": "0.0%"
+            "formatString": "0.0%",
+            "lineageTag": "c8b0e991-6278-5f17-9a1c-871655cd6c47"
           },
           {
             "name": "% Conforme",
             "expression": "DIVIDE(CALCULATE([Valor Total], 'Painel'[Status] = \"CONFORME\"), [Valor Dentro do Acordo])",
-            "lineageTag": "0a97840f-44b5-5ed4-ae6a-03ac68f816db",
-            "formatString": "0.0%"
+            "formatString": "0.0%",
+            "lineageTag": "0a97840f-44b5-5ed4-ae6a-03ac68f816db"
           },
           {
             "name": "% Abaixo",
             "expression": "DIVIDE(CALCULATE([Valor Total], 'Painel'[Status] = \"ABAIXO DO ACORDO\"), [Valor Dentro do Acordo])",
-            "lineageTag": "943a8286-4ed4-5130-9592-8059e9cb8e1c",
-            "formatString": "0.0%"
+            "formatString": "0.0%",
+            "lineageTag": "943a8286-4ed4-5130-9592-8059e9cb8e1c"
           },
           {
             "name": "Janela 30d",
@@ -361,100 +944,193 @@
             "lineageTag": "a9f3dd5d-f445-5001-9dd7-b0fe760ab37c"
           },
           {
-            "name": "Valor Dentro do Acordo 30d",
-            "expression": "VAR Fim = [Data Fim Completa] RETURN CALCULATE([Valor Total], KEEPFILTERS('Painel'[Data] >= Fim - 29), KEEPFILTERS('Painel'[Data] <= Fim), KEEPFILTERS('Painel'[STATUS_ACORDO] = \"COM_ACORDO\"))",
-            "lineageTag": "cbe4f654-6f7c-5861-b3a3-8f30b70c274a",
-            "formatString": "\"R$\" #,0.00"
+            "name": "Excedente Acima 30d",
+            "expression": "VAR Fim = [Data Fim Completa] RETURN CALCULATE(SUM('Painel'[Diferenca Total]), KEEPFILTERS('Painel'[Data] >= Fim - 29), KEEPFILTERS('Painel'[Data] <= Fim), KEEPFILTERS('Painel'[Status] = \"ACIMA DO ACORDO\"))",
+            "formatString": "\"R$\" #,0.00",
+            "lineageTag": "4b1604ec-e540-59da-99fe-6def5c651e12"
           },
           {
             "name": "Valor Total 30d",
             "expression": "VAR Fim = [Data Fim Completa] RETURN CALCULATE([Valor Total], KEEPFILTERS('Painel'[Data] >= Fim - 29), KEEPFILTERS('Painel'[Data] <= Fim))",
-            "lineageTag": "bf4032fb-7525-5299-91a6-e29fddde6484",
-            "formatString": "\"R$\" #,0.00"
-          },
-          {
-            "name": "Valor Sem Acordo 30d",
-            "expression": "VAR Fim = [Data Fim Completa] RETURN CALCULATE([Valor Total], KEEPFILTERS('Painel'[Data] >= Fim - 29), KEEPFILTERS('Painel'[Data] <= Fim), KEEPFILTERS('Painel'[STATUS_ACORDO] = \"SEM_ACORDO\"))",
-            "lineageTag": "c8e1e3bb-dad2-5acd-82ea-cb78fd559f80",
-            "formatString": "\"R$\" #,0.00"
-          },
-          {
-            "name": "% Sem Acordo 30d",
-            "expression": "DIVIDE([Valor Sem Acordo 30d], [Valor Total 30d])",
-            "lineageTag": "1285f810-0827-51ba-aaeb-4d37753dd2cd",
-            "formatString": "0.0%"
-          },
-          {
-            "name": "Excedente Acima 30d",
-            "expression": "VAR Fim = [Data Fim Completa] RETURN CALCULATE(SUM('Painel'[Diferenca Total]), KEEPFILTERS('Painel'[Data] >= Fim - 29), KEEPFILTERS('Painel'[Data] <= Fim), KEEPFILTERS('Painel'[Status] = \"ACIMA DO ACORDO\"))",
-            "lineageTag": "4b1604ec-e540-59da-99fe-6def5c651e12",
-            "formatString": "\"R$\" #,0.00"
-          },
-          {
-            "name": "Preco Acordo Vigente",
-            "expression": "VAR Fim = [Data Fim Completa] RETURN CALCULATE(SUM('Painel'[Preco Acordo]), KEEPFILTERS('Painel'[Data] >= Fim - 29), KEEPFILTERS('Painel'[Data] <= Fim))",
-            "lineageTag": "feebe658-7531-5334-b9b9-8052ac4994f0",
-            "formatString": "\"R$\" #,0.00"
+            "formatString": "\"R$\" #,0.00",
+            "lineageTag": "bf4032fb-7525-5299-91a6-e29fddde6484"
           },
           {
             "name": "Valor Total 365d",
             "expression": "VAR Fim = [Data Fim Completa] RETURN CALCULATE([Valor Total], KEEPFILTERS('Painel'[Data] > Fim - 365), KEEPFILTERS('Painel'[Data] <= Fim))",
-            "lineageTag": "1ca20805-c6ae-5c51-b320-86418e180977",
-            "formatString": "\"R$\" #,0.00"
-          },
-          {
-            "name": "Valor Sem Acordo 365d",
-            "expression": "VAR Fim = [Data Fim Completa] RETURN CALCULATE([Valor Total], KEEPFILTERS('Painel'[Data] > Fim - 365), KEEPFILTERS('Painel'[Data] <= Fim), KEEPFILTERS('Painel'[STATUS_ACORDO] = \"SEM_ACORDO\"))",
-            "lineageTag": "4f11cf73-530f-53e7-9cfa-afcc9f0fe9bf",
-            "formatString": "\"R$\" #,0.00"
+            "formatString": "\"R$\" #,0.00",
+            "lineageTag": "1ca20805-c6ae-5c51-b320-86418e180977"
           },
           {
             "name": "Valor em Fuga 365d",
             "expression": "VAR Fim = [Data Fim Completa] RETURN CALCULATE([Valor Total], KEEPFILTERS('Painel'[Data] > Fim - 365), KEEPFILTERS('Painel'[Data] <= Fim), KEEPFILTERS('Painel'[STATUS_ACORDO] = \"SEM_ACORDO\"), KEEPFILTERS('Painel'[Tinha acordo?] = \"SIM\"))",
-            "lineageTag": "3ff20baa-d9a6-5f44-b10d-18b88fcfac54",
-            "formatString": "\"R$\" #,0.00"
+            "formatString": "\"R$\" #,0.00",
+            "lineageTag": "3ff20baa-d9a6-5f44-b10d-18b88fcfac54"
+          },
+          {
+            "name": "Data Fim Completa",
+            "expression": "VAR Exec = CALCULATE(MAX('Painel'[DATA_EXECUCAO]), ALL('Painel')) VAR DiaExec = DATE(YEAR(Exec), MONTH(Exec), DAY(Exec)) RETURN CALCULATE(MAX('Painel'[Data]), ALL('Painel'), 'Painel'[Data] < DiaExec)",
+            "formatString": "dd/mm/yyyy",
+            "lineageTag": "7d1bbf76-2f4e-51fe-90c5-0a5a646d0387"
+          },
+          {
+            "name": "Valor Sem Acordo",
+            "expression": "CALCULATE([Valor Total], 'Painel'[STATUS_ACORDO] = \"SEM_ACORDO\")",
+            "formatString": "\"R$\" #,0.00",
+            "lineageTag": "e985fb90-2411-577f-a7ce-7341ac8f82ce"
+          },
+          {
+            "name": "% Sem Acordo",
+            "expression": "DIVIDE([Valor Sem Acordo], [Valor Total])",
+            "formatString": "0.0%",
+            "lineageTag": "7da4b68e-42e9-552b-8083-e9907ce9cf58"
+          },
+          {
+            "name": "Valor Sem Alternativa",
+            "expression": "[Valor Sem Acordo] - [Valor em Fuga]",
+            "formatString": "\"R$\" #,0.00",
+            "lineageTag": "f0fec1d8-99b2-54f5-bfe2-ca2b99b074f0"
+          },
+          {
+            "name": "Valor Sem Acordo 30d",
+            "expression": "VAR Fim = [Data Fim Completa] RETURN CALCULATE([Valor Total], KEEPFILTERS('Painel'[Data] >= Fim - 29), KEEPFILTERS('Painel'[Data] <= Fim), KEEPFILTERS('Painel'[STATUS_ACORDO] = \"SEM_ACORDO\"))",
+            "formatString": "\"R$\" #,0.00",
+            "lineageTag": "c8e1e3bb-dad2-5acd-82ea-cb78fd559f80"
+          },
+          {
+            "name": "% Sem Acordo 30d",
+            "expression": "DIVIDE([Valor Sem Acordo 30d], [Valor Total 30d])",
+            "formatString": "0.0%",
+            "lineageTag": "1285f810-0827-51ba-aaeb-4d37753dd2cd"
+          },
+          {
+            "name": "Valor Sem Acordo 365d",
+            "expression": "VAR Fim = [Data Fim Completa] RETURN CALCULATE([Valor Total], KEEPFILTERS('Painel'[Data] > Fim - 365), KEEPFILTERS('Painel'[Data] <= Fim), KEEPFILTERS('Painel'[STATUS_ACORDO] = \"SEM_ACORDO\"))",
+            "formatString": "\"R$\" #,0.00",
+            "lineageTag": "4f11cf73-530f-53e7-9cfa-afcc9f0fe9bf"
           },
           {
             "name": "% da Fuga sobre o Sem Acordo 365d",
             "expression": "DIVIDE([Valor em Fuga 365d], [Valor Sem Acordo 365d])",
-            "lineageTag": "14a492a9-4d17-5f77-85a6-fe903e1c2f8a",
-            "formatString": "0.0%"
+            "formatString": "0.0%",
+            "lineageTag": "14a492a9-4d17-5f77-85a6-fe903e1c2f8a"
           },
           {
-            "name": "Fornecedores",
-            "expression": "DISTINCTCOUNT('Painel'[Fornecedor])",
-            "lineageTag": "9162b21f-c433-5730-939d-0fccaf35d61b",
-            "formatString": "#,0"
-          },
-          {
-            "name": "Cidades",
-            "expression": "DISTINCTCOUNT('Painel'[Cidade])",
-            "lineageTag": "ff8077fd-974e-58e1-9ec5-089209fcf8e3",
-            "formatString": "#,0"
-          },
-          {
-            "name": "Itens",
-            "expression": "DISTINCTCOUNT('Painel'[Grupo Item])",
-            "lineageTag": "5e1af8b6-6079-511a-ad9b-9cdb2563e5bf",
-            "formatString": "#,0"
-          },
-          {
-            "name": "Modelos",
-            "expression": "DISTINCTCOUNT('Painel'[Grupo Modelo])",
-            "lineageTag": "f471d0f8-2568-562a-ba58-b4930b52d3f8",
-            "formatString": "#,0"
+            "name": "Valor Dentro do Acordo 30d",
+            "expression": "VAR Fim = [Data Fim Completa] RETURN CALCULATE([Valor Total], KEEPFILTERS('Painel'[Data] >= Fim - 29), KEEPFILTERS('Painel'[Data] <= Fim), KEEPFILTERS('Painel'[STATUS_ACORDO] = \"COM_ACORDO\"))",
+            "formatString": "\"R$\" #,0.00",
+            "lineageTag": "cbe4f654-6f7c-5861-b3a3-8f30b70c274a"
           },
           {
             "name": "% do Sem Acordo",
             "expression": "DIVIDE([Valor Sem Acordo], CALCULATE([Valor Sem Acordo], ALLSELECTED()))",
-            "lineageTag": "d77c2d1a-5110-5708-814c-a825eb8c4f01",
-            "formatString": "0.0%"
+            "formatString": "0.0%",
+            "lineageTag": "d77c2d1a-5110-5708-814c-a825eb8c4f01"
           },
           {
-            "name": "Ultima Execucao",
-            "expression": "MAX('Painel'[DATA_EXECUCAO])",
-            "lineageTag": "5ccbcb8c-caae-5d53-9548-7750f8f7dcf5",
-            "formatString": "dd/mm/yyyy hh:nn"
+            "name": "Preco Acordo Vigente",
+            "expression": "VAR Fim = [Data Fim Completa] RETURN CALCULATE(SUM('Painel'[Preco Acordo]), KEEPFILTERS('Painel'[Data] >= Fim - 29), KEEPFILTERS('Painel'[Data] <= Fim))",
+            "formatString": "\"R$\" #,0.00",
+            "lineageTag": "feebe658-7531-5334-b9b9-8052ac4994f0"
+          },
+          {
+            "name": "Atualizacao",
+            "expression": "\"Dados até \" & FORMAT([Data Fim Completa], \"dd/mm/yyyy\") & \"   |   Atualizado em \" & FORMAT([Ultima Execucao], \"dd/mm/yyyy\") & \" às \" & FORMAT([Ultima Execucao], \"HH:mm\")",
+            "lineageTag": "9036577e-09f0-572c-800b-6ead6c54b4ed"
+          },
+          {
+            "name": "% Top 20 Cidades",
+            "expression": "VAR Base = FILTER(ALL('Painel'[Cidade]), NOT ISBLANK('Painel'[Cidade])) VAR Top20 = TOPN(20, Base, [Valor Total], DESC, 'Painel'[Cidade], ASC) VAR VTop = SUMX(Top20, CALCULATE([Valor Total])) VAR VTot = SUMX(Base, CALCULATE([Valor Total])) RETURN DIVIDE(VTop, VTot)",
+            "formatString": "0.0%",
+            "lineageTag": "03855b69-3283-5ad8-8116-151e26b28c15"
+          },
+          {
+            "name": "% Top 20 Fornecedores",
+            "expression": "VAR Base = FILTER(ALL('Painel'[Fornecedor]), NOT ISBLANK('Painel'[Fornecedor])) VAR Top20 = TOPN(20, Base, [Valor Total], DESC, 'Painel'[Fornecedor], ASC) VAR VTop = SUMX(Top20, CALCULATE([Valor Total])) VAR VTot = SUMX(Base, CALCULATE([Valor Total])) RETURN DIVIDE(VTop, VTot)",
+            "formatString": "0.0%",
+            "lineageTag": "bbafb5ad-9e4f-5698-8af8-82640788c813"
+          },
+          {
+            "name": "% Top 20 Grupos de Item",
+            "expression": "VAR Base = FILTER(ALL('Painel'[Grupo Item]), NOT ISBLANK('Painel'[Grupo Item])) VAR Top20 = TOPN(20, Base, [Valor Total], DESC, 'Painel'[Grupo Item], ASC) VAR VTop = SUMX(Top20, CALCULATE([Valor Total])) VAR VTot = SUMX(Base, CALCULATE([Valor Total])) RETURN DIVIDE(VTop, VTot)",
+            "formatString": "0.0%",
+            "lineageTag": "d8cae9ab-1289-5f85-85c7-fcc6fc2acbf0"
+          },
+          {
+            "name": "% Top 20 Fornecedores SA",
+            "expression": "VAR Base = FILTER(ALL('Painel'[Fornecedor]), NOT ISBLANK('Painel'[Fornecedor])) VAR Top20 = TOPN(20, Base, [Valor Sem Acordo], DESC, 'Painel'[Fornecedor], ASC) VAR VTop = SUMX(Top20, CALCULATE([Valor Sem Acordo])) VAR VTot = SUMX(Base, CALCULATE([Valor Sem Acordo])) RETURN DIVIDE(VTop, VTot)",
+            "formatString": "0.0%",
+            "lineageTag": "ac48aabe-c4e2-5503-84c4-cba846ce8137"
+          },
+          {
+            "name": "% Top 20 Grupos de Item SA",
+            "expression": "VAR Base = FILTER(ALL('Painel'[Grupo Item]), NOT ISBLANK('Painel'[Grupo Item])) VAR Top20 = TOPN(20, Base, [Valor Sem Acordo], DESC, 'Painel'[Grupo Item], ASC) VAR VTop = SUMX(Top20, CALCULATE([Valor Sem Acordo])) VAR VTot = SUMX(Base, CALCULATE([Valor Sem Acordo])) RETURN DIVIDE(VTop, VTot)",
+            "formatString": "0.0%",
+            "lineageTag": "77263906-5654-58be-a1f0-73784696ed6f"
+          },
+          {
+            "name": "% Top 20 Fornecedores Fuga",
+            "expression": "VAR Base = FILTER(ALL('Painel'[Fornecedor]), NOT ISBLANK('Painel'[Fornecedor])) VAR Top20 = TOPN(20, Base, [Valor em Fuga 365d], DESC, 'Painel'[Fornecedor], ASC) VAR VTop = SUMX(Top20, CALCULATE([Valor em Fuga 365d])) VAR VTot = SUMX(Base, CALCULATE([Valor em Fuga 365d])) RETURN DIVIDE(VTop, VTot)",
+            "formatString": "0.0%",
+            "lineageTag": "26380f6b-1684-5131-bdc5-a6a76be7bfd4"
+          },
+          {
+            "name": "% Top 20 Grupos de Item Fuga",
+            "expression": "VAR Base = FILTER(ALL('Painel'[Grupo Item]), NOT ISBLANK('Painel'[Grupo Item])) VAR Top20 = TOPN(20, Base, [Valor em Fuga 365d], DESC, 'Painel'[Grupo Item], ASC) VAR VTop = SUMX(Top20, CALCULATE([Valor em Fuga 365d])) VAR VTot = SUMX(Base, CALCULATE([Valor em Fuga 365d])) RETURN DIVIDE(VTop, VTot)",
+            "formatString": "0.0%",
+            "lineageTag": "baf318b2-a979-5e59-b310-cadb55aad705"
+          },
+          {
+            "name": "% Top 20 Cidades Fuga",
+            "expression": "VAR Base = FILTER(ALL('Painel'[Cidade]), NOT ISBLANK('Painel'[Cidade])) VAR Top20 = TOPN(20, Base, [Valor em Fuga 365d], DESC, 'Painel'[Cidade], ASC) VAR VTop = SUMX(Top20, CALCULATE([Valor em Fuga 365d])) VAR VTot = SUMX(Base, CALCULATE([Valor em Fuga 365d])) RETURN DIVIDE(VTop, VTot)",
+            "formatString": "0.0%",
+            "lineageTag": "0e3e896f-1402-56fa-93b2-a2c807d4eb37"
+          },
+          {
+            "name": "Cidades com Fuga 365d",
+            "expression": "COUNTROWS(FILTER(FILTER(ALL('Painel'[Cidade]), NOT ISBLANK('Painel'[Cidade])), CALCULATE([Valor em Fuga 365d]) > 0))",
+            "formatString": "#,0",
+            "lineageTag": "d8e3e865-3389-5356-b36d-acd13802d66e"
+          },
+          {
+            "name": "Titulo VG Cidades",
+            "expression": "\"Top 20 cidades — \" & FORMAT([% Top 20 Cidades], \"0.0%\") & \" do total\"",
+            "lineageTag": "56a01b50-9b92-5297-81e3-188f14541843"
+          },
+          {
+            "name": "Titulo VG Fornecedores",
+            "expression": "\"Top 20 fornecedores — \" & FORMAT([% Top 20 Fornecedores], \"0.0%\") & \" do total\"",
+            "lineageTag": "83bdc1de-11d5-54a9-ad42-f8b5411a1162"
+          },
+          {
+            "name": "Titulo VG Grupos de Item",
+            "expression": "\"Top 20 itens — \" & FORMAT([% Top 20 Grupos de Item], \"0.0%\") & \" do total\"",
+            "lineageTag": "2f8cab01-c3e3-5907-95e8-756928fade45"
+          },
+          {
+            "name": "Titulo SA Fornecedores",
+            "expression": "\"Top 20 fornecedores — \" & FORMAT([% Top 20 Fornecedores SA], \"0.0%\") & \" do sem acordo\"",
+            "lineageTag": "57b7eeb2-6ac3-5e18-84f2-77e4aaa8cd67"
+          },
+          {
+            "name": "Titulo SA Grupos de Item",
+            "expression": "\"Top 20 itens — \" & FORMAT([% Top 20 Grupos de Item SA], \"0.0%\") & \" do sem acordo\"",
+            "lineageTag": "cb54d08e-cf6a-5583-9245-8560f8764aee"
+          },
+          {
+            "name": "Titulo Fuga Fornecedores",
+            "expression": "\"Top 20 fornecedores — \" & FORMAT([% Top 20 Fornecedores Fuga], \"0.0%\") & \" da fuga\"",
+            "lineageTag": "4893ed7c-5127-55ce-be5b-6dda03d97f55"
+          },
+          {
+            "name": "Titulo Fuga Grupos de Item",
+            "expression": "\"Top 20 grupos de item — \" & FORMAT([% Top 20 Grupos de Item Fuga], \"0.0%\") & \" da fuga\"",
+            "lineageTag": "e1e24e79-93a5-50ee-8372-db199624e666"
+          },
+          {
+            "name": "Titulo Fuga Cidades",
+            "expression": "\"Top 20 cidades — \" & FORMAT([% Top 20 Cidades Fuga], \"0.0%\") & \" da fuga\"",
+            "lineageTag": "31b9e60e-3e1f-5548-98a0-f5b439efbc62"
           }
         ],
         "partitions": [
@@ -462,7 +1138,6 @@
             "name": "Painel",
             "mode": "import",
             "source": {
-              "type": "m",
               "expression": [
                 "let",
                 "    Fonte = Parquet.Document(File.Contents(\"C:\\Projetos\\supply-vision\\painel\\consolidado\\supply_vision_painel.parquet\")),",
@@ -504,16 +1179,633 @@
                 "        each [Data] >= Inicio12 and [Data] < InicioMesFim, type logical)",
                 "in",
                 "    Com12Meses"
-              ]
+              ],
+              "type": "m"
             }
           }
         ]
-      }
-    ],
-    "annotations": [
+      },
       {
-        "name": "PBI_QueryOrder",
-        "value": "[\"Painel\"]"
+        "name": "DateTableTemplate_8be8fba2-13ef-4665-9ed4-a65f8688bb84",
+        "annotations": [
+          {
+            "name": "__PBI_TemplateDateTable",
+            "value": "true"
+          },
+          {
+            "name": "DefaultItem",
+            "value": "DateHierarchy"
+          }
+        ],
+        "columns": [
+          {
+            "name": "Date",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "User"
+              }
+            ],
+            "dataCategory": "PaddedDateTableDates",
+            "dataType": "dateTime",
+            "formatString": "General Date",
+            "isHidden": true,
+            "isNameInferred": true,
+            "lineageTag": "63cc6e76-0dc5-4f92-8d3c-4a91da18ff42",
+            "sourceColumn": "[Date]",
+            "summarizeBy": "none",
+            "type": "calculatedTableColumn"
+          },
+          {
+            "name": "Ano",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "User"
+              },
+              {
+                "name": "TemplateId",
+                "value": "Year"
+              }
+            ],
+            "dataCategory": "Years",
+            "dataType": "int64",
+            "expression": "YEAR([Date])",
+            "formatString": "0",
+            "isHidden": true,
+            "lineageTag": "eba21fad-b28a-4e59-8c97-cca6679783c2",
+            "summarizeBy": "none",
+            "type": "calculated"
+          },
+          {
+            "name": "MonthNo",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "User"
+              },
+              {
+                "name": "TemplateId",
+                "value": "MonthNumber"
+              }
+            ],
+            "dataCategory": "MonthOfYear",
+            "dataType": "int64",
+            "expression": "MONTH([Date])",
+            "formatString": "0",
+            "isHidden": true,
+            "lineageTag": "e90edfe5-b181-40d3-96f1-92d8054ad2b0",
+            "summarizeBy": "none",
+            "type": "calculated"
+          },
+          {
+            "name": "Mês",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "User"
+              },
+              {
+                "name": "TemplateId",
+                "value": "Month"
+              }
+            ],
+            "dataCategory": "Months",
+            "dataType": "string",
+            "expression": "FORMAT([Date], \"MMMM\")",
+            "isHidden": true,
+            "lineageTag": "85d3f204-4612-406b-9a9c-3ca6f5bb5dc5",
+            "sortByColumn": "MonthNo",
+            "summarizeBy": "none",
+            "type": "calculated"
+          },
+          {
+            "name": "QuarterNo",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "User"
+              },
+              {
+                "name": "TemplateId",
+                "value": "QuarterNumber"
+              }
+            ],
+            "dataCategory": "QuarterOfYear",
+            "dataType": "int64",
+            "expression": "INT(([MonthNo] + 2) / 3)",
+            "formatString": "0",
+            "isHidden": true,
+            "lineageTag": "0c91a0c9-4973-4dfe-afa3-a4c0de5ad45a",
+            "summarizeBy": "none",
+            "type": "calculated"
+          },
+          {
+            "name": "Trimestre",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "User"
+              },
+              {
+                "name": "TemplateId",
+                "value": "Quarter"
+              }
+            ],
+            "dataCategory": "Quarters",
+            "dataType": "string",
+            "expression": "\"Qtr \" & [QuarterNo]",
+            "isHidden": true,
+            "lineageTag": "474864e2-c9d3-4d9f-814c-11dcfe5632a1",
+            "sortByColumn": "QuarterNo",
+            "summarizeBy": "none",
+            "type": "calculated"
+          },
+          {
+            "name": "Dia",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "User"
+              },
+              {
+                "name": "TemplateId",
+                "value": "Day"
+              }
+            ],
+            "dataCategory": "DayOfMonth",
+            "dataType": "int64",
+            "expression": "DAY([Date])",
+            "formatString": "0",
+            "isHidden": true,
+            "lineageTag": "1692b0bc-ed6b-4825-875d-7371172a3b8a",
+            "summarizeBy": "none",
+            "type": "calculated"
+          }
+        ],
+        "hierarchies": [
+          {
+            "name": "Hierarquia de datas",
+            "annotations": [
+              {
+                "name": "TemplateId",
+                "value": "DateHierarchy"
+              }
+            ],
+            "levels": [
+              {
+                "name": "Ano",
+                "column": "Ano",
+                "lineageTag": "c0058806-5683-4628-b8ad-99a5f010a9e0",
+                "ordinal": 0
+              },
+              {
+                "name": "Trimestre",
+                "column": "Trimestre",
+                "lineageTag": "bd523dba-fff2-4264-a31b-db921ecf6192",
+                "ordinal": 1
+              },
+              {
+                "name": "Mês",
+                "column": "Mês",
+                "lineageTag": "11eb1d49-ca93-4497-88b3-444cb711f20f",
+                "ordinal": 2
+              },
+              {
+                "name": "Dia",
+                "column": "Dia",
+                "lineageTag": "188944a8-1c64-4db1-a1af-960a5c401eaf",
+                "ordinal": 3
+              }
+            ],
+            "lineageTag": "ba58863a-8496-41a9-bae2-f8821f910f9a"
+          }
+        ],
+        "isHidden": true,
+        "isPrivate": true,
+        "lineageTag": "d536218b-9cad-4f00-908f-c7446cf282a5",
+        "partitions": [
+          {
+            "name": "DateTableTemplate_8be8fba2-13ef-4665-9ed4-a65f8688bb84",
+            "mode": "import",
+            "source": {
+              "expression": "Calendar(Date(2015,1,1), Date(2015,1,1))",
+              "type": "calculated"
+            }
+          }
+        ]
+      },
+      {
+        "name": "LocalDateTable_81040377-8ca0-44f4-8e0f-123d882d98e7",
+        "annotations": [
+          {
+            "name": "__PBI_LocalDateTable",
+            "value": "true"
+          }
+        ],
+        "columns": [
+          {
+            "name": "Date",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "User"
+              }
+            ],
+            "dataCategory": "PaddedDateTableDates",
+            "dataType": "dateTime",
+            "formatString": "General Date",
+            "isHidden": true,
+            "isNameInferred": true,
+            "lineageTag": "458455f8-ef72-4991-9795-2d5172f79305",
+            "sourceColumn": "[Date]",
+            "summarizeBy": "none",
+            "type": "calculatedTableColumn"
+          },
+          {
+            "name": "Ano",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "User"
+              },
+              {
+                "name": "TemplateId",
+                "value": "Year"
+              }
+            ],
+            "dataCategory": "Years",
+            "dataType": "int64",
+            "expression": "YEAR([Date])",
+            "formatString": "0",
+            "isHidden": true,
+            "lineageTag": "249c6411-5e18-4420-be50-ae369a971493",
+            "summarizeBy": "none",
+            "type": "calculated"
+          },
+          {
+            "name": "MonthNo",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "User"
+              },
+              {
+                "name": "TemplateId",
+                "value": "MonthNumber"
+              }
+            ],
+            "dataCategory": "MonthOfYear",
+            "dataType": "int64",
+            "expression": "MONTH([Date])",
+            "formatString": "0",
+            "isHidden": true,
+            "lineageTag": "ee0fa5fc-0c24-4332-8b4c-d4bf245a171d",
+            "summarizeBy": "none",
+            "type": "calculated"
+          },
+          {
+            "name": "Mês",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "User"
+              },
+              {
+                "name": "TemplateId",
+                "value": "Month"
+              }
+            ],
+            "dataCategory": "Months",
+            "dataType": "string",
+            "expression": "FORMAT([Date], \"MMMM\")",
+            "isHidden": true,
+            "lineageTag": "77d11b95-bce2-4c16-af49-bfe6a7814a21",
+            "sortByColumn": "MonthNo",
+            "summarizeBy": "none",
+            "type": "calculated"
+          },
+          {
+            "name": "QuarterNo",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "User"
+              },
+              {
+                "name": "TemplateId",
+                "value": "QuarterNumber"
+              }
+            ],
+            "dataCategory": "QuarterOfYear",
+            "dataType": "int64",
+            "expression": "INT(([MonthNo] + 2) / 3)",
+            "formatString": "0",
+            "isHidden": true,
+            "lineageTag": "08dc1fa1-1469-447a-93be-6383d4f3f5f1",
+            "summarizeBy": "none",
+            "type": "calculated"
+          },
+          {
+            "name": "Trimestre",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "User"
+              },
+              {
+                "name": "TemplateId",
+                "value": "Quarter"
+              }
+            ],
+            "dataCategory": "Quarters",
+            "dataType": "string",
+            "expression": "\"Qtr \" & [QuarterNo]",
+            "isHidden": true,
+            "lineageTag": "4c986873-5954-4474-806b-a691ac870577",
+            "sortByColumn": "QuarterNo",
+            "summarizeBy": "none",
+            "type": "calculated"
+          },
+          {
+            "name": "Dia",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "User"
+              },
+              {
+                "name": "TemplateId",
+                "value": "Day"
+              }
+            ],
+            "dataCategory": "DayOfMonth",
+            "dataType": "int64",
+            "expression": "DAY([Date])",
+            "formatString": "0",
+            "isHidden": true,
+            "lineageTag": "12a8e7e3-297e-40f7-9205-10b867db38da",
+            "summarizeBy": "none",
+            "type": "calculated"
+          }
+        ],
+        "hierarchies": [
+          {
+            "name": "Hierarquia de datas",
+            "annotations": [
+              {
+                "name": "TemplateId",
+                "value": "DateHierarchy"
+              }
+            ],
+            "levels": [
+              {
+                "name": "Ano",
+                "column": "Ano",
+                "lineageTag": "06463b80-3fec-4665-a67e-ae9ea367b58b",
+                "ordinal": 0
+              },
+              {
+                "name": "Trimestre",
+                "column": "Trimestre",
+                "lineageTag": "c9d96876-ba71-44f2-b7a7-5d0852ae8031",
+                "ordinal": 1
+              },
+              {
+                "name": "Mês",
+                "column": "Mês",
+                "lineageTag": "36a442e1-bbb4-4f52-81b5-17725ff733c7",
+                "ordinal": 2
+              },
+              {
+                "name": "Dia",
+                "column": "Dia",
+                "lineageTag": "c2d7de32-12df-433b-8b42-dc969508d7d5",
+                "ordinal": 3
+              }
+            ],
+            "lineageTag": "035c6445-7fa6-423e-8e17-d5f7f0f566b5"
+          }
+        ],
+        "isHidden": true,
+        "lineageTag": "c6a1b791-4ab7-4c67-a3f3-8b902d34f5eb",
+        "partitions": [
+          {
+            "name": "LocalDateTable_81040377-8ca0-44f4-8e0f-123d882d98e7",
+            "mode": "import",
+            "source": {
+              "expression": "Calendar(Date(Year(MIN('Painel'[Data])), 1, 1), Date(Year(MAX('Painel'[Data])), 12, 31))",
+              "type": "calculated"
+            }
+          }
+        ],
+        "showAsVariationsOnly": true
+      },
+      {
+        "name": "LocalDateTable_80e9f214-f4d4-4224-b068-b2d1aecc3359",
+        "annotations": [
+          {
+            "name": "__PBI_LocalDateTable",
+            "value": "true"
+          }
+        ],
+        "columns": [
+          {
+            "name": "Date",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "User"
+              }
+            ],
+            "dataCategory": "PaddedDateTableDates",
+            "dataType": "dateTime",
+            "formatString": "General Date",
+            "isHidden": true,
+            "isNameInferred": true,
+            "lineageTag": "9672e0c2-621d-4f87-8f3c-b42701ff12d2",
+            "sourceColumn": "[Date]",
+            "summarizeBy": "none",
+            "type": "calculatedTableColumn"
+          },
+          {
+            "name": "Ano",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "User"
+              },
+              {
+                "name": "TemplateId",
+                "value": "Year"
+              }
+            ],
+            "dataCategory": "Years",
+            "dataType": "int64",
+            "expression": "YEAR([Date])",
+            "formatString": "0",
+            "isHidden": true,
+            "lineageTag": "b3160b59-1fc8-4db5-99b1-0b734c529624",
+            "summarizeBy": "none",
+            "type": "calculated"
+          },
+          {
+            "name": "MonthNo",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "User"
+              },
+              {
+                "name": "TemplateId",
+                "value": "MonthNumber"
+              }
+            ],
+            "dataCategory": "MonthOfYear",
+            "dataType": "int64",
+            "expression": "MONTH([Date])",
+            "formatString": "0",
+            "isHidden": true,
+            "lineageTag": "625125e2-a0a2-4fc5-89d1-48c5d73af161",
+            "summarizeBy": "none",
+            "type": "calculated"
+          },
+          {
+            "name": "Mês",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "User"
+              },
+              {
+                "name": "TemplateId",
+                "value": "Month"
+              }
+            ],
+            "dataCategory": "Months",
+            "dataType": "string",
+            "expression": "FORMAT([Date], \"MMMM\")",
+            "isHidden": true,
+            "lineageTag": "4aa0421f-50c8-4d58-8f7c-2bf437a4e247",
+            "sortByColumn": "MonthNo",
+            "summarizeBy": "none",
+            "type": "calculated"
+          },
+          {
+            "name": "QuarterNo",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "User"
+              },
+              {
+                "name": "TemplateId",
+                "value": "QuarterNumber"
+              }
+            ],
+            "dataCategory": "QuarterOfYear",
+            "dataType": "int64",
+            "expression": "INT(([MonthNo] + 2) / 3)",
+            "formatString": "0",
+            "isHidden": true,
+            "lineageTag": "8ab5f485-a3f5-47e9-a472-23836a97b303",
+            "summarizeBy": "none",
+            "type": "calculated"
+          },
+          {
+            "name": "Trimestre",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "User"
+              },
+              {
+                "name": "TemplateId",
+                "value": "Quarter"
+              }
+            ],
+            "dataCategory": "Quarters",
+            "dataType": "string",
+            "expression": "\"Qtr \" & [QuarterNo]",
+            "isHidden": true,
+            "lineageTag": "37999644-13b8-417d-aadc-c5e7fedd9bc3",
+            "sortByColumn": "QuarterNo",
+            "summarizeBy": "none",
+            "type": "calculated"
+          },
+          {
+            "name": "Dia",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "User"
+              },
+              {
+                "name": "TemplateId",
+                "value": "Day"
+              }
+            ],
+            "dataCategory": "DayOfMonth",
+            "dataType": "int64",
+            "expression": "DAY([Date])",
+            "formatString": "0",
+            "isHidden": true,
+            "lineageTag": "13113f9d-c63f-4995-b4ef-0d32f6a295f5",
+            "summarizeBy": "none",
+            "type": "calculated"
+          }
+        ],
+        "hierarchies": [
+          {
+            "name": "Hierarquia de datas",
+            "annotations": [
+              {
+                "name": "TemplateId",
+                "value": "DateHierarchy"
+              }
+            ],
+            "levels": [
+              {
+                "name": "Ano",
+                "column": "Ano",
+                "lineageTag": "a0a9ffe4-c6fa-429e-957b-58d381f15bc3",
+                "ordinal": 0
+              },
+              {
+                "name": "Trimestre",
+                "column": "Trimestre",
+                "lineageTag": "41db1a14-af1d-40bb-a1c3-bc464c0f1b62",
+                "ordinal": 1
+              },
+              {
+                "name": "Mês",
+                "column": "Mês",
+                "lineageTag": "1c03afd2-4101-42ae-827c-83f065252e78",
+                "ordinal": 2
+              },
+              {
+                "name": "Dia",
+                "column": "Dia",
+                "lineageTag": "94aedd57-53af-4af3-b4e7-803baacd4ed5",
+                "ordinal": 3
+              }
+            ],
+            "lineageTag": "5f39e893-1165-4225-8a5e-9c04fd5cfe52"
+          }
+        ],
+        "isHidden": true,
+        "lineageTag": "eeb234a5-99ec-437f-8de8-7ce7df9a2251",
+        "partitions": [
+          {
+            "name": "LocalDateTable_80e9f214-f4d4-4224-b068-b2d1aecc3359",
+            "mode": "import",
+            "source": {
+              "expression": "Calendar(Date(Year(MIN('Painel'[DATA_EXECUCAO])), 1, 1), Date(Year(MAX('Painel'[DATA_EXECUCAO])), 12, 31))",
+              "type": "calculated"
+            }
+          }
+        ],
+        "showAsVariationsOnly": true
       }
     ]
   }

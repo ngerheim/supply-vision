@@ -131,3 +131,18 @@ desktop.ini
 # funcionando, isto nao deveria precisar existir -- mas existe, e nao
 # pertence ao historico.
 /painel/powerbi/gerador/_backup_*/
+
+# ═══════════════════════════════════════════════════════════════════
+# Saida do tema e residuo de importacao. Acrescentado em 17/08/2026.
+# ═══════════════════════════════════════════════════════════════════
+# tema.py escreve na pasta onde roda. O arquivo que vale e o de
+# painel/powerbi/; este e a copia intermediaria, pelo mesmo motivo que
+# model.bim.json ja esta ignorado -- versionar as duas garantiria que
+# divergissem.
+/painel/powerbi/gerador/LocFrotas_SupplyVision.json
+# Cada importacao de tema no Desktop registra uma copia nova aqui e nada remove
+# as antigas: a auditoria contou 6, o disco tem 9, e a maioria e byte a byte
+# identica. O report.json gerado declara themeCollection vazio, entao nenhuma
+# delas e referenciada pelo relatorio. O tema versionado e
+# painel/powerbi/LocFrotas_SupplyVision.json.
+/painel/powerbi/SupplyVisionPainel.Report/StaticResources/RegisteredResources/

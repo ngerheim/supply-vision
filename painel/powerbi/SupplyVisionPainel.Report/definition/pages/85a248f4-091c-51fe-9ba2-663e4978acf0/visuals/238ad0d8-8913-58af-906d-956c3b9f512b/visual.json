@@ -1,10 +1,10 @@
 {
-  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.9.0/schema.json",
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.11.0/schema.json",
   "name": "238ad0d8-8913-58af-906d-956c3b9f512b",
   "position": {
     "x": 214,
     "y": 252,
-    "z": 11000,
+    "z": 10000,
     "height": 56,
     "width": 206
   },
@@ -27,13 +27,13 @@
               },
               "queryRef": "Painel.STATUS_ACORDO",
               "nativeQueryRef": "STATUS_ACORDO",
+              "active": true,
               "displayName": "Dentro ou fora do acordo"
             }
           ]
         }
       }
     },
-    "drillFilterOtherVisuals": true,
     "visualContainerObjects": {
       "title": [
         {
@@ -48,6 +48,7 @@
           }
         }
       ]
-    }
+    },
+    "drillFilterOtherVisuals": true
   }
 }

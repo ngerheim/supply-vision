@@ -34,16 +34,29 @@ APELIDOS = {"Valor Dentro do Acordo": "Dentro do acordo",
 # lado de um cartao de R$ 824,1 mil convida a multiplicar os dois -- e da R$ 176
 # mil onde o numero e R$ 44 mil, porque a base e o valor COM acordo.
 ROTULOS = {
-    "Valor Dentro do Acordo 30d":          "Base com acordo avaliada (30d)",
-    "% Acima":                             "% acima — da base avaliada",
-    "% Abaixo":                            "% abaixo — da base avaliada",
-    "% Conforme":                          "% conforme — da base avaliada",
+    # "Base" sugeria contagem de registros; o cartao mostra reais.
+    "Valor Dentro do Acordo 30d":          "Valor avaliado com acordo — 30d",
+    # O nome da MEDIDA continua "Excedente Acima 30d": a coluna da tabela do
+    # Detalhe reconcilia com este cartao por esse nome, e renomear a medida
+    # quebraria a rastreabilidade que custou a divergencia de R$ 387.898,08.
+    "Excedente Acima 30d":                 "Excedente pago — 30d",
+    # "base" podia ser valor, linhas, compras ou universo elegivel. O DAX e
+    # DIVIDE(valor com Status="ACIMA DO ACORDO", [Valor Dentro do Acordo]):
+    # denominador financeiro, e apenas a parte COM acordo -- nao o gasto total.
+    # O rotulo agora casa com o do cartao ao lado ("Valor avaliado com acordo"),
+    # entao o leitor ve numerador e denominador na mesma faixa.
+    "% Acima":                             "% acima — do valor avaliado",
+    "% Abaixo":                            "% abaixo — do valor avaliado",
+    "% Conforme":                          "% conforme — do valor avaliado",
     "Valor Total 30d":                     "Gasto total — 30d",
     "Valor Total 365d":                    "Gasto total — 365d",
     "Valor Sem Acordo 30d":                "Sem acordo — 30d",
     "Valor Sem Acordo 365d":               "Sem acordo — 365d",
     "Valor em Fuga 365d":                  "Fuga de contrato — 365d",
-    "% da Fuga sobre o Sem Acordo 365d":   "% do sem acordo que era fuga",
+    # Mais curto, e mantem o denominador na frase. "Fuga / Sem acordo" seria
+    # menor ainda, mas uma razao com barra obriga o leitor a adivinhar qual
+    # lado e o numerador.
+    "% da Fuga sobre o Sem Acordo 365d":   "% do sem acordo por fuga",
 }
 
 
@@ -103,8 +116,12 @@ def pagina(nome, visuais, filtros=None):
 # ficar no lugar, o Servico atualiza contra ele e o painel nao muda de aparencia.
 # Sem esta linha a descoberta vem pela pessoa que decidiu com dado de tres
 # semanas -- o mesmo modo de falha silencioso do gateway pessoal.
-p1 = [texto(0, 0, 860, 40, "Supply Vision", 15),
-      card(868, 0, 412, 40, "Atualizacao", fonte=10)]
+# sem_rotulo: o valor ja e a frase inteira, e o rotulo "Atualizacao" embaixo dela
+# fazia duas linhas em 40px -- as duas saiam cortadas. h=44 em vez de 40 porque a
+# caixa do cartao reserva padding proprio; 44 e o maximo antes de encostar na
+# faixa de cartoes em y=44.
+p1 = [texto(0, 0, 860, 44, "Supply Vision", 15),
+      card(868, 0, 412, 44, "Atualizacao", fonte=10, sem_rotulo=True)]
 # O cartao de fuga usa a medida de 365 dias, nao a historica. Mostrar R$ 2,6 mi
 # de fuga no historico contradiz a propria regra do painel: sem vigencia no
 # acordo, a fuga historica e justamente a leitura que a metodologia considera
@@ -114,39 +131,47 @@ p1 += faixa_cards(["Valor Total", "Valor Sem Acordo", "% Sem Acordo",
 # Um subtitulo para os quatro rankings, em vez de repetir "(historico)" em cada
 # titulo. Os titulos ficam curtos o suficiente para nao truncar em 314px.
 # Subtitulo curto: o texto longo forcava quebra de linha dentro da faixa.
-p1 += [faixa(126, "Gasto total por dimensão — histórico desde 01/2025")]
-# Quatro colunas de 314px com a mesma altura. Antes, "grupos de item" tinha
-# 340px para vinte barras e mostrava treze com barra de rolagem -- um top 20 que
-# esconde sete nao e um top 20. Com o rotulo de dado fora, 314px de largura
-# comportam mais texto de categoria do que os 414px comportavam com rotulo.
+p1 += [faixa(126, "Gasto por dimensão — desde 01/2025")]
+# Tres colunas, nao quatro. O grafico de Grupo Modelo saiu por decisao de
+# 17/08/2026 -- registro aqui o que ele mostrava, porque a informacao nao existe
+# em nenhum outro visual do painel: Hilux concentrava 54,6% de todo o gasto
+# (R$ 9,3 mi de R$ 17,1 mi), com HHI 0,333 contra 0,031 da segunda dimensao mais
+# concentrada. Era tambem a unica dimensao sem top N, entao nao escondia cauda.
+# E havia uma leitura que o grafico nao chegou a mostrar por medir valor absoluto:
+# a cobertura de acordo e INVERSA ao volume -- Hilux 65,9% sem acordo contra
+# Oroch 85,9%, Gol 85,2%, Saveiro 83,8%. Se um dia a pergunta "onde negociar
+# acordo" voltar, e [% Sem Acordo] por Grupo Modelo que a responde.
+#
+# Larguras desiguais de proposito: fornecedor e item tem nomes longos e ganham
+# 442px; cidade se resolve em 380. Somam 1264 + 16 de folga = 1280.
 p1 += [
-    barras(0, 162, 314, 546, "Cidade", "Valor Total",
-           "Cidades — top 20", tit_medida="Titulo VG Cidades",
+    barras(0, 162, 380, 546, "Cidade", "Valor Total",
+           "Top 20 cidades", tit_medida="Titulo VG Cidades",
            filtros=top_n("Cidade", 20), cor=NAVY),
     # total= ranqueia pela ALTURA DA BARRA. Sem ele o top 20 saia por "Dentro do
     # Acordo" -- e nao era so a ordem: o VisualTopN usa a mesma ordenacao, entao
     # um fornecedor de R$ 500 mil integralmente SEM acordo podia ficar fora da
     # lista. Justo o fornecedor que esta pagina existe para expor, e o titulo
     # ainda declarava cobertura sobre o total.
-    barras_empilhadas(322, 162, 314, 546, "Fornecedor",
+    barras_empilhadas(388, 162, 442, 546, "Fornecedor",
                       ["Valor Dentro do Acordo", "Valor Sem Acordo"],
-                      "Fornecedores — top 20", tit_medida="Titulo VG Fornecedores",
+                      "Top 20 fornecedores", tit_medida="Titulo VG Fornecedores",
                       cores=CORES_DENTRO_FORA, filtros=top_n("Fornecedor", 20),
                       apelidos=APELIDOS, total="Valor Total"),
-    barras_empilhadas(644, 162, 314, 546, "Grupo Item",
+    barras_empilhadas(838, 162, 442, 546, "Grupo Item",
                       ["Valor Dentro do Acordo", "Valor Sem Acordo"],
-                      "Itens — top 20", tit_medida="Titulo VG Grupos de Item",
+                      "Top 20 itens", tit_medida="Titulo VG Grupos de Item",
                       cores=CORES_DENTRO_FORA, filtros=top_n("Grupo Item", 20),
                       apelidos=APELIDOS, total="Valor Total"),
-    # Oito grupos apos os filtros do Supply Vision, entao nao ha top N a aplicar
-    # e a cobertura e 100% por construcao. A CONTAGEM, porem, vem da base: se um
-    # nono grupo entrar, "todos os 8" passa a mentir sem nada quebrar.
-    barras(966, 162, 314, 546, "Grupo Modelo", "Valor Total",
-           "Grupos de modelo", tit_medida="Titulo VG Grupos de Modelo", cor=NAVY),
 ]
 
 # ═══ 2. Fora do Acordo ═══════════════════════════════════════════
-p2 = [texto(0, 0, W, 40, "Sem acordo", 15)]
+# A janela sai da faixa de KPI. Ela e contexto, nao indicador, e no formato de
+# cartao de 306px recebia o mesmo peso visual de R$ 634,5 mil e de 74,6%. Sobe
+# para a linha do titulo, no mesmo lugar em que a Visao Geral poe [Atualizacao] --
+# informacao de recorte no canto superior direito, padrao entre as paginas.
+p2 = [texto(0, 0, 860, 44, "Sem acordo", 15),
+      card(868, 0, 412, 44, "Janela 30d", fonte=10, sem_rotulo=True)]
 # Cartoes na janela de 30 dias. Os do total historico sao identicos aos da
 # Visao Geral -- dois cartoes repetindo numero nao informam nada. Em 30 dias
 # passam a responder "e agora, esta melhorando?".
@@ -158,10 +183,15 @@ p2 = [texto(0, 0, W, 40, "Sem acordo", 15)]
 # primeira tentativa eu os coloquei como visuais soltos, e o de diagnostico caiu
 # sobre os cartoes (y=112 contra cartoes terminando em 140) enquanto o de
 # situacao atual virou um cartao vazio flutuando a direita.
-p2 += [faixa(40, "Situação atual — últimos 30 dias")]
-p2 += faixa_cards(["Janela 30d", "Valor Sem Acordo 30d", "% Sem Acordo 30d"],
-                  y=76, fontes={"Janela 30d": 11}, destaque="% Sem Acordo 30d",
-                  larg=306)
+# y=44, nao 40: a linha do titulo passou a ter 44px de altura para caber o
+# cartao da janela. A checagem geometrica acusou 4px de sobreposicao -- e o
+# tipo de defeito que num print parece espacamento.
+p2 += [faixa(44, "Situação atual — últimos 30 dias")]
+# Dois cartoes, nao tres. larg=460 e um meio: dividir a pagina daria 636px para
+# um numero de oito caracteres -- dois retangulos quase vazios, como aconteceu
+# antes -- e manter 306 deixaria metade da faixa sem nada.
+p2 += faixa_cards(["Valor Sem Acordo 30d", "% Sem Acordo 30d"],
+                  y=76, destaque="% Sem Acordo 30d", larg=460)
 p2 += [faixa(162, "Diagnóstico histórico — 01/2025 em diante, meses fechados")]
 # "Meses fechados" era promessa do cabecalho e regra de UM visual so: apenas o
 # grafico mensal filtrava Mes Fechado. Os outros quatro somavam o mes corrente --
@@ -173,16 +203,17 @@ p2 += [faixa(162, "Diagnóstico histórico — 01/2025 em diante, meses fechados
 FECHADO = lambda quem: filtro_coluna("Mes Fechado", quem)
 p2 += [
     colunas_(0, 198, 836, 198, "Ano-Mes", "Valor Sem Acordo",
-             "Valor sem acordo por mês", cat_asc=True, filtros=FECHADO("mensal")),
+             "Evolução mensal do valor sem acordo", cat_asc=True,
+             filtros=FECHADO("mensal")),
     barras(844, 198, 436, 198, "Motivo Sem Acordo", "Valor Sem Acordo",
            "Em qual dimensão faltou referência", filtros=FECHADO("motivo")),
     barras(844, 400, 436, 308, "Grupo Modelo", "Valor Sem Acordo",
            "Sem acordo por grupo de modelo", filtros=FECHADO("modelo")),
     barras(0, 400, 414, 308, "Fornecedor", "Valor Sem Acordo",
-           "Fornecedores — top 20", tit_medida="Titulo SA Fornecedores",
+           "Top 20 fornecedores", tit_medida="Titulo SA Fornecedores",
            filtros=combinar(top_n("Fornecedor", 20), FECHADO("fornecedor"))),
     barras(422, 400, 414, 308, "Grupo Item", "Valor Sem Acordo",
-           "Itens — top 20", tit_medida="Titulo SA Grupos de Item",
+           "Top 20 itens", tit_medida="Titulo SA Grupos de Item",
            filtros=combinar(top_n("Grupo Item", 20), FECHADO("grupoitem"))),
 ]
 
@@ -210,9 +241,11 @@ p3 += faixa_cards(["Janela 365d", "Valor Total 365d", "Valor Sem Acordo 365d",
 # R$ 1,78 mi em 365 dias contra R$ 1,73 mi em 12 meses fechados, 2,5% de
 # diferenca. O aviso fica escrito porque a diferenca e pequena o suficiente para
 # alguem achar que e erro de arredondamento, e nao e.
-p3 += [faixa(144, "Cartões e rankings: 365 dias corridos (ver janela acima). "
-                  "Gráfico abaixo: 12 meses fechados — recortes diferentes, as "
-                  "colunas não somam ao cartão.")]
+# Encurtada, mas a ultima clausula fica: ela e a nota. A diferenca entre os dois
+# recortes foi medida em 2,5% (R$ 1,78 mi contra R$ 1,73 mi), pequena o bastante
+# para alguem tratar como arredondamento e grande o bastante para nao ser.
+p3 += [faixa(144, "Cartões e rankings: 365 dias corridos. Gráfico mensal: 12 "
+                  "meses fechados — as colunas não somam ao cartão.")]
 p3 += [
     # Doze meses fechados em vez de "tudo na janela de 365 dias": a janela
     # comeca no meio de agosto/2025 e termina no meio de agosto/2026, entao as
@@ -263,7 +296,7 @@ p4 += [
     # pergunta da aba. Com a medida de dentro do acordo, SEM ACORDO fica vazia e
     # sai do eixo sozinha.
     barras(0, 148, 420, 260, "Status", "Valor Dentro do Acordo",
-           "Valor comprado por status do preço", cor=NAVY),
+           "Valor por conformidade de preço", cor=NAVY),
     # Excedente pago, nao valor comprado: sao numeros de ordem de grandeza
     # diferente e antes tinham nomes parecidos.
     barras(428, 148, 420, 260, "Fornecedor", "Excedente Acima 30d",
@@ -283,7 +316,7 @@ p4 += [
     tabela(0, 416, 1280, 292,
            ["OS", "Fornecedor", "Item", "Excedente Acima 30d", "Qtd",
             "Preco OS", "Preco Acordo", "Cidade"],
-           "Linhas acima do acordo, do maior excedente para o menor",
+           "Compras acima do acordo — maiores excedentes",
            medidas=("Excedente Acima 30d",),
            # Ordenar por excedente decrescente NAO filtra: OS, Fornecedor, Item e
            # Cidade tem valor em qualquer linha da janela, entao a linha aparecia
@@ -300,13 +333,17 @@ p4 += [
 # ═══ 7. Detalhe ══════════════════════════════════════════════════
 # Treze segmentadores em duas colunas. Com as abas de dimensao removidas, esta
 # pagina virou o lugar de consulta pontual ("o fornecedor X cumpre acordo?").
-FILTROS_ESQ = ["Ano", "Mes Nome", "Cidade", "Fornecedor", "Grupo Modelo", "Modelo", "Criador"]
+# Ano-Mes no lugar de Ano + Mes Nome: dois segmentadores viravam um, e a
+# combinacao ambigua desaparece -- selecionar "Janeiro" sem ano abrangia todos os
+# anos da base, o que ninguem quer e ninguem percebe. Doze segmentadores, seis por
+# coluna.
+FILTROS_ESQ = ["Ano-Mes", "Cidade", "Fornecedor", "Grupo Modelo", "Modelo", "Criador"]
 FILTROS_DIR = ["Grupo Item", "Item", "Status", "STATUS_ACORDO", "Tinha acordo?", "Motivo Sem Acordo"]
 # Nome tecnico de coluna nao e expressao de negocio.
 ROTULO_FILTRO = {"STATUS_ACORDO": "Dentro ou fora do acordo",
                  "Status": "Status do preço",
                  "Criador": "Criador da OS",
-                 "Mes Nome": "Mês",
+                 "Ano-Mes": "Ano-Mês",
                  "Tinha acordo?": "Tinha acordo disponível?",
                  "Motivo Sem Acordo": "Motivo de não ter acordo"}
 # Em modo lista a caixa precisava de ~96px; o dropdown fecha em 56 e os treze
@@ -316,6 +353,19 @@ for i, dim in enumerate(FILTROS_ESQ):
     p7.append(filtro(0, 60 + i*64, 206, 56, dim, ROTULO_FILTRO.get(dim)))
 for i, dim in enumerate(FILTROS_DIR):
     p7.append(filtro(214, 60 + i*64, 206, 56, dim, ROTULO_FILTRO.get(dim)))
+# Botao de reset, logo abaixo da ultima linha de segmentadores (que termina em
+# y=436) e na largura das duas colunas. Le-se como "limpe os filtros acima".
+#
+# O NOME abaixo e um identificador que o Power BI Desktop gerou ao capturar o
+# indicador; nao e escolhido aqui. Conferido em 17/08/2026 contra o arquivo em
+# definition/bookmarks/: activeSection e a pagina Detalhe, uma unica secao, 14
+# visualContainers, e os doze segmentadores gravados com clausula Where VAZIA --
+# ou seja, estado sem selecao, que e o que um reset precisa aplicar.
+#
+# Se o indicador for recriado no Desktop, este nome muda e o botao passa a
+# apontar para nada, sem erro. O passo 7 do _aud/aplicar.py imprime o nome atual.
+BOOKMARK_RESET = "2eaefe1f7ed0f9e80d18"
+p7.append(botao_bookmark(0, 444, 420, 32, "Limpar filtros", BOOKMARK_RESET))
 # Colunas na ordem da decisao: quem, o que, quanto, e so depois a classificacao.
 # Antes a tabela abria por data e as colunas de dinheiro ficavam atras de sete
 # colunas de dimensao, fora da area visivel.
@@ -330,13 +380,29 @@ for i, dim in enumerate(FILTROS_DIR):
 # total desta coluna reconcilia com aquele cartao. Uma versao anterior usava uma
 # medida propria com gate por IF, e o total mostrava R$ 387.898,08 contra um
 # cartao de R$ 13,9 mil.
+# [Valor Total] na tabela nao e enfeite: e o que mantem a linha existindo.
+#
+# Uma tabela do Power BI e executada como SUMMARIZECOLUMNS, e SUMMARIZECOLUMNS
+# NAO devolve linha em que TODAS as medidas sao BLANK. As duas medidas daqui
+# ([Preco Acordo Vigente] e [Excedente Acima 30d]) tem janela de 30 dias
+# embutida, entao fora da janela as duas eram blank e a linha sumia -- sem erro e
+# sem aviso. Medido em 17/08/2026: 98.652 de 103.604 linhas invisiveis (95,2%) e
+# R$ 16,2 mi de R$ 17,1 mi (95,0%). Pior efeito colateral: 790 dos 1.028
+# fornecedores nao tinham UMA linha na janela, entao apareciam no segmentador e
+# filtravam para tabela vazia -- o que se le como "nao comprou", nao como
+# "o recorte da tabela e outro".
+#
+# [Valor Total] e SUM(Preco Total OS) sem janela: nunca blank para uma linha que
+# existe (conferido: zero nulos e zero zeros na coluna). Com ela na projecao, a
+# linha sobrevive mesmo com as duas medidas de 30 dias em branco -- que era a
+# intencao escrita no comentario abaixo e que o codigo nao cumpria.
 p7 += [tabela(428, 60, 852, 648,
               ["Data", "OS", "Fornecedor", "Item", "Excedente Acima 30d",
-               "Qtd", "Preco OS", "Preco Acordo Vigente", "Cidade", "Modelo",
-               "Grupo Modelo", "Grupo Item", "Status", "STATUS_ACORDO",
-               "Tinha acordo?", "Motivo Sem Acordo", "Criador"],
+               "Qtd", "Preco OS", "Valor Total", "Preco Acordo Vigente",
+               "Cidade", "Modelo", "Grupo Modelo", "Grupo Item", "Status",
+               "STATUS_ACORDO", "Tinha acordo?", "Motivo Sem Acordo", "Criador"],
               "Linhas do painel — excedente e preço acordado só na janela de 30 dias",
-              medidas=("Preco Acordo Vigente", "Excedente Acima 30d"),
+              medidas=("Preco Acordo Vigente", "Excedente Acima 30d", "Valor Total"),
               ordem=("Excedente Acima 30d", True),
               apelidos={"Preco OS": "Preço OS", "Mes Nome": "Mês",
                         "Preco Acordo Vigente": "Preço acordo (30d)",

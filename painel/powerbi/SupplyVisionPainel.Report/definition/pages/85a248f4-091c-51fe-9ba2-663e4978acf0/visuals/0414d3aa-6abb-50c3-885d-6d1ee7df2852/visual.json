@@ -122,6 +122,21 @@
                       "Entity": "Painel"
                     }
                   },
+                  "Property": "Valor Total"
+                }
+              },
+              "queryRef": "Painel.Valor Total",
+              "nativeQueryRef": "Valor Total",
+              "displayName": "Valor pago"
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Painel"
+                    }
+                  },
                   "Property": "Preco Acordo Vigente"
                 }
               },

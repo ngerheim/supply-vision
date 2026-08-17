@@ -187,7 +187,122 @@ def orfas(destino, bim="model.bim.json"):
     return len(ruins)
 
 
+def bookmarks(destino):
+    """Botao apontando para bookmark que nao existe.
+
+    O bookmark e criado no Power BI Desktop -- ver botao_bookmark() em
+    relatorio.py -- e o Desktop gera o identificador. Se alguem recriar o
+    indicador, o nome muda e o botao passa a apontar para nada. O Power BI nao
+    acusa: o botao renderiza normal e o clique nao faz efeito, o que se confunde
+    com "os filtros ja estavam limpos". Um botao de limpar que nao limpa e pior
+    que botao ausente, porque o leitor confia nele e segue com filtro residual.
+
+    Confere tambem o inverso, como aviso: bookmark sem botao que o dispare e
+    trabalho que ninguem alcanca pela interface.
+    """
+    bmdir = os.path.join(destino, "bookmarks")
+    existentes = set()
+    for f in glob.glob(os.path.join(bmdir, "*.bookmark.json")):
+        o = json.load(open(f, encoding="utf-8"))
+        if o.get("name"):
+            existentes.add(o["name"])
+
+    usados = {}
+    for f in glob.glob(destino + "/pages/*/visuals/*/visual.json"):
+        o = json.load(open(f, encoding="utf-8"))
+        for vl in o["visual"].get("visualContainerObjects", {}).get("visualLink", []):
+            v = vl.get("properties", {}).get("bookmark", {}) \
+                  .get("expr", {}).get("Literal", {}).get("Value", "")
+            if v:
+                usados[v.strip("'")] = pathlib.PurePath(f).parts[-4]
+
+    erros = 0
+    for nome, pg in sorted(usados.items()):
+        if nome not in existentes:
+            print(f"botao aponta para bookmark inexistente: {nome} (pagina {pg[:8]})")
+            erros += 1
+    orfaos = existentes - set(usados)
+    print(f"bookmarks: {len(existentes)} definidos | {len(usados)} referenciados por botao"
+          + (f" | sem botao: {', '.join(sorted(orfaos))}" if orfaos else ""))
+    return erros
+
+
+def tabelas_com_janela(destino, bim="model.bim.json"):
+    """Tabela em que TODA medida tem janela: as linhas de fora desaparecem.
+
+    Uma tabela do Power BI e executada como SUMMARIZECOLUMNS, e SUMMARIZECOLUMNS
+    nao devolve linha em que TODAS as medidas sao BLANK. Se cada medida da tabela
+    restringe data, as linhas fora do recorte somem -- sem erro, sem celula vazia,
+    sem nada que se leia como defeito. A tabela apenas parece ter menos dado.
+
+    Foi o que aconteceu no Detalhe: duas medidas, as duas de 30 dias, e 95,2% das
+    103.604 linhas invisiveis. O comentario do gerador afirmava explicitamente que
+    a linha de 2025 continuava na tabela. Nao continuava. Quem descobriu foi um
+    leitor selecionando um fornecedor no segmentador e recebendo tabela vazia --
+    790 dos 1.028 fornecedores faziam isso.
+
+    Deteccao exata, nao heuristica: toda medida de janela deste modelo passa pelo
+    helper janela(), que emite "VAR Fim = [Data Fim Completa]". Medida cuja
+    expressao referencia [Data Fim Completa] restringe data; medida que nao
+    referencia, nao. Se uma tabela tem medidas e todas restringem, e erro.
+
+    Duas isencoes, porque o que se procura e restricao ACIDENTAL:
+
+    - pagina com filtro de janela declarado. A Conformidade tem "Ultimos 30 dias"
+      travado no modo de leitura: a pagina inteira e a janela, entao a tabela
+      restringir junto e o desenho, nao o defeito.
+    - tabela com filtro proprio sobre medida. "[Excedente Acima 30d] > 0" diz que
+      o autor quer so um subconjunto; nao faz sentido avisar que ha linha de fora.
+    """
+    if not os.path.exists(bim):
+        return 0
+    tb = json.load(open(bim, encoding="utf-8"))["model"]["tables"][0]
+    com_janela = {m["name"] for m in tb["measures"]
+                  if "[Data Fim Completa]" in m.get("expression", "")}
+    COLUNAS_JANELA = {"Ultimos 30 dias", "Ultimos 365 dias", "Mes Fechado",
+                      "Ultimos 12 meses fechados"}
+
+    def pagina_declara_janela(caminho_visual):
+        pj = pathlib.Path(caminho_visual).parents[2] / "page.json"
+        if not pj.exists():
+            return False
+        o = json.load(open(pj, encoding="utf-8"))
+        for fl in (o.get("filterConfig") or {}).get("filters", []):
+            col = (fl.get("field") or {}).get("Column") or {}
+            if col.get("Property") in COLUNAS_JANELA:
+                return True
+        return False
+
+    erros = 0
+    for f in glob.glob(destino + "/pages/*/visuals/*/visual.json"):
+        o = json.load(open(f, encoding="utf-8"))
+        v = o["visual"]
+        if v.get("visualType") not in ("tableEx", "pivotTable"):
+            continue
+        if pagina_declara_janela(f):
+            continue
+        if any((fl.get("field") or {}).get("Measure")
+               for fl in (o.get("filterConfig") or {}).get("filters", [])):
+            continue
+        medidas = []
+        for papel in v.get("query", {}).get("queryState", {}).values():
+            for pr in papel["projections"]:
+                if "Measure" in (pr.get("field") or {}):
+                    medidas.append(pr["nativeQueryRef"])
+        if not medidas:
+            continue
+        livres = [m for m in medidas if m not in com_janela]
+        if not livres:
+            pg = pathlib.PurePath(f).parts[-4]
+            print(f"tabela so com medidas de janela em {pg[:8]}: {', '.join(medidas)}"
+                  f" -- linhas fora do recorte nao serao devolvidas")
+            erros += 1
+    print(f"tabelas conferidas contra recorte silencioso: problemas: {erros}")
+    return erros
+
+
 if __name__ == "__main__":
     d = sys.argv[1] if len(sys.argv) > 1 else "out/SupplyVisionPainel.Report/definition"
-    total = valida(d) + geometria(d) + orfas(d)
+    total = (valida(d) + geometria(d) + orfas(d) + bookmarks(d)
+             + tabelas_com_janela(d))
     sys.exit(1 if total else 0)

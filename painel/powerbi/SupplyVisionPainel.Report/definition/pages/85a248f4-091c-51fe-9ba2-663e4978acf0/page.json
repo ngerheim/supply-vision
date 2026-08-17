@@ -4,5 +4,17 @@
   "displayName": "Detalhe",
   "displayOption": "FitToPage",
   "height": 720,
-  "width": 1280
+  "width": 1280,
+  "visualInteractions": [
+    {
+      "source": "f6230c0e-846f-5a82-ac74-e773bc7a230d",
+      "target": "0414d3aa-6abb-50c3-885d-6d1ee7df2852",
+      "type": "DataFilter"
+    },
+    {
+      "source": "0414d3aa-6abb-50c3-885d-6d1ee7df2852",
+      "target": "f6230c0e-846f-5a82-ac74-e773bc7a230d",
+      "type": "DataFilter"
+    }
+  ]
 }

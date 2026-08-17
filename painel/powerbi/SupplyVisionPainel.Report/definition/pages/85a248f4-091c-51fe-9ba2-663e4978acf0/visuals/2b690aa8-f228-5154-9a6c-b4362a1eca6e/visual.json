@@ -1,10 +1,10 @@
 {
-  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.9.0/schema.json",
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.11.0/schema.json",
   "name": "2b690aa8-f228-5154-9a6c-b4362a1eca6e",
   "position": {
     "x": 214,
     "y": 188,
-    "z": 10000,
+    "z": 9000,
     "height": 56,
     "width": 206
   },
@@ -27,13 +27,13 @@
               },
               "queryRef": "Painel.Status",
               "nativeQueryRef": "Status",
+              "active": true,
               "displayName": "Status do preço"
             }
           ]
         }
       }
     },
-    "drillFilterOtherVisuals": true,
     "visualContainerObjects": {
       "title": [
         {
@@ -48,6 +48,7 @@
           }
         }
       ]
-    }
+    },
+    "drillFilterOtherVisuals": true
   }
 }
