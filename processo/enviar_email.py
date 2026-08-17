@@ -6,22 +6,13 @@ import json
 from email.message import EmailMessage
 from datetime import datetime
 
-# O console do Windows abre em cp1252, e as mensagens usam acentos. Chamado
-# pelo pipeline.py a codificação vinha ajustada por fora, mas este script
-# executado à mão para depurar morria com UnicodeEncodeError. Cada script
-# deve se bastar — mesma correção que existe no topo do rodar.py.
 for _s in (sys.stdout, sys.stderr):
     try:
         _s.reconfigure(encoding="utf-8", errors="replace")
     except (AttributeError, ValueError):
         pass
 
-# ═══════════════════════════════════════════════════════════════════
-# CONFIGURAÇÃO
-# ═══════════════════════════════════════════════════════════════════
 
-# --- Servidor SMTP (mesma config do Outlook: saída) ---
-# Valores em config/cfg_ambiente.txt — fora do repositório Git.
 import sv_paths
 
 SMTP_SERVIDOR  = sv_paths.SMTP_SERVIDOR
@@ -31,8 +22,6 @@ SMTP_USUARIO   = sv_paths.SMTP_USUARIO
 SMTP_SENHA_PATH = str(sv_paths.CFG_SMTP)
 REMETENTE      = sv_paths.REMETENTE
 
-# Destinatários e Cco ficam em destinatarios.txt (seções [PARA] e
-# [CCO]) — editar LÁ, não aqui. Vale a partir do disparo seguinte à edição.
 DESTINATARIOS_PATH = str(sv_paths.DESTINATARIOS)
 
 def carregar_destinatarios(path=DESTINATARIOS_PATH):
@@ -71,9 +60,6 @@ def carregar_destinatarios(path=DESTINATARIOS_PATH):
 
 DESTINATARIOS, COPIA_OCULTA = carregar_destinatarios()
 
-# ═══════════════════════════════════════════════════════════════════
-# CONTEXTO (passado pelo pipeline via argumentos)
-# ═══════════════════════════════════════════════════════════════════
 
 def carregar_contexto():
     """Lê contexto e datas passados pelo pipeline via sys.argv."""
@@ -82,9 +68,6 @@ def carregar_contexto():
     output   = sys.argv[3] if len(sys.argv) > 3 else ""
     return contexto, datas, output
 
-# ═══════════════════════════════════════════════════════════════════
-# ASSUNTO
-# ═══════════════════════════════════════════════════════════════════
 
 def montar_assunto(contexto, datas):
     if contexto == "segunda_manha":
@@ -96,9 +79,6 @@ def montar_assunto(contexto, datas):
     else:
         return f"Conformidade de Preços — Compilado Final | {datas[0]}"
 
-# ═══════════════════════════════════════════════════════════════════
-# RESUMO DO OUTPUT DO rodar.py
-# ═══════════════════════════════════════════════════════════════════
 
 def extrair_resumo(output):
     """Extrai o marcador estruturado; não depende de frases humanas."""
@@ -136,9 +116,6 @@ def extrair_resumo(output):
                    f"acima do limite de {resumo_dados['limite_alerta_sem_acordo']}%.\n")
     return resumo, resumo_dados
 
-# ═══════════════════════════════════════════════════════════════════
-# CORPO
-# ═══════════════════════════════════════════════════════════════════
 
 def montar_corpo(contexto, datas, output, com_acordo=None, sem_acordo=None, pendencias=None):
     agora = datetime.now().strftime("%d/%m/%Y às %H:%M")
@@ -173,9 +150,6 @@ def montar_corpo(contexto, datas, output, com_acordo=None, sem_acordo=None, pend
     ).rstrip() + "\n"
     return corpo
 
-# ═══════════════════════════════════════════════════════════════════
-# ANEXOS
-# ═══════════════════════════════════════════════════════════════════
 
 class RelatorioAusente(RuntimeError):
     """O pipeline indicou um relatório que não existe no disco."""
@@ -209,9 +183,6 @@ def anexo_da_execucao(caminho, rotulo):
         )
     return p
 
-# ═══════════════════════════════════════════════════════════════════
-# ENVIO VIA SMTP
-# ═══════════════════════════════════════════════════════════════════
 
 def enviar_email(assunto, corpo, anexos, destinatarios):
     senha = pathlib.Path(SMTP_SENHA_PATH).read_text(encoding="utf-8-sig").strip()
@@ -221,10 +192,7 @@ def enviar_email(assunto, corpo, anexos, destinatarios):
     msg["To"]      = ", ".join(destinatarios)
     msg["Subject"] = assunto
     msg.set_content(corpo)
-    # OBS: a cópia oculta (Cco) NÃO entra no cabeçalho — assim os destinatários
-    # não a enxergam. Ela só é incluída na lista de entrega do servidor abaixo.
 
-    # Anexos
     for anexo in anexos:
         if anexo:
             dados = pathlib.Path(anexo).read_bytes()
@@ -236,14 +204,12 @@ def enviar_email(assunto, corpo, anexos, destinatarios):
             )
             print(f"  Anexo adicionado: {pathlib.Path(anexo).name}")
 
-    # Lista completa de entrega = destinatários visíveis + cópia oculta
     entrega = list(destinatarios) + list(COPIA_OCULTA)
 
-    # Conexão na porta 587 (submissão) com STARTTLS — autenticação cifrada
     with smtplib.SMTP(SMTP_SERVIDOR, SMTP_PORTA, timeout=60) as servidor:
         servidor.ehlo()
-        servidor.starttls()   # sobe a conexão pra TLS ANTES de autenticar
-        servidor.ehlo()       # re-apresenta sobre o canal já cifrado
+        servidor.starttls()
+        servidor.ehlo()
         servidor.login(SMTP_USUARIO, senha)
         servidor.send_message(msg, to_addrs=entrega)
 
@@ -251,9 +217,6 @@ def enviar_email(assunto, corpo, anexos, destinatarios):
     if COPIA_OCULTA:
         print(f"  (Cco: {', '.join(COPIA_OCULTA)})")
 
-# ═══════════════════════════════════════════════════════════════════
-# AVISO — quando não há nada a reportar
-# ═══════════════════════════════════════════════════════════════════
 
 def montar_aviso(situacao, datas):
     """Monta assunto e corpo do e-mail de aviso (sem anexos)."""
@@ -267,7 +230,7 @@ def montar_aviso(situacao, datas):
             f"Não foram encontrados lançamentos no Qlik para {periodo} "
             f"até o momento ({agora}). Nenhum relatório foi gerado.\n"
         )
-    else:  # SEM_DADOS_FILTRO
+    else:
         assunto = f"Conformidade de Preços — Nada dentro dos filtros | {periodo}"
         corpo = (
             f"Olá,\n\n"
@@ -277,14 +240,10 @@ def montar_aviso(situacao, datas):
         )
     return assunto, corpo
 
-# ═══════════════════════════════════════════════════════════════════
-# EXECUÇÃO
-# ═══════════════════════════════════════════════════════════════════
 
 if __name__ == "__main__":
     contexto, datas, output = carregar_contexto()
 
-    # 4º argumento opcional: situação de aviso (SEM_DADOS_QLIK / SEM_DADOS_FILTRO)
     situacao = sys.argv[4] if len(sys.argv) > 4 else ""
 
     if situacao in ("SEM_DADOS_QLIK", "SEM_DADOS_FILTRO"):
@@ -293,7 +252,6 @@ if __name__ == "__main__":
         enviar_email(assunto, corpo, [], DESTINATARIOS)
         sys.exit(0)
 
-    # Caminhos dos relatórios gerados NESTA execução (argv 5 a 7, via pipeline).
     try:
         com_acordo = anexo_da_execucao(sys.argv[5] if len(sys.argv) > 5 else "", "com_acordo")
         sem_acordo = anexo_da_execucao(sys.argv[6] if len(sys.argv) > 6 else "", "sem_acordo")

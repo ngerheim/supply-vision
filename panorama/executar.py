@@ -8,7 +8,7 @@ import pathlib
 import sys
 import time
 
-sys.dont_write_bytecode = True   # não deixa __pycache__ em processo/
+sys.dont_write_bytecode = True
 
 try:
     sys.stdout.reconfigure(encoding='utf-8', errors='replace')

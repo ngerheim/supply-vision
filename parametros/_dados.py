@@ -32,7 +32,6 @@ TOLERANCIA_QUEDA = 0.20
 
 _NULOS = {'', '-', 'NONE', 'NAN', 'NULL', '<NA>', 'NAT'}
 
-# Letras que não decompõem em base + acento sob NFD.
 _IRREDUTIVEIS = str.maketrans({'Ø': 'O', 'Đ': 'D', 'Ð': 'D', 'Ł': 'L',
                                'Þ': 'TH', 'ß': 'SS', 'Æ': 'AE', 'Œ': 'OE'})
 
@@ -50,7 +49,7 @@ def _e_nulo(valor):
     if type(valor).__name__ in ('NAType', 'NaTType'):
         return True
     try:
-        return valor != valor          # NaN float
+        return valor != valor
     except (TypeError, ValueError):
         return False
 
@@ -77,10 +76,8 @@ def normalizar(texto):
     if _e_nulo(texto):
         return ''
     s = str(texto).strip().upper()
-    # NFD separa a letra do acento; o filtro descarta as marcas combinantes.
     s = ''.join(c for c in unicodedata.normalize('NFD', s)
                 if not unicodedata.combining(c))
-    # Letras que não decompõem em base + acento: Ø, Đ, Ł, ß e afins.
     s = s.translate(_IRREDUTIVEIS)
     s = re.sub(r'\s+', ' ', s).strip()
     return '' if s in _NULOS else s
@@ -115,9 +112,6 @@ def _checar_queda(nome, quantidade):
         try:
             hist = json.loads(CONTAGENS.read_text(encoding='utf-8'))
         except (OSError, ValueError) as e:
-            # Tratar corrupção como "sem histórico" desarmaria justamente a
-            # guarda que deveria pegar uma queda anormal — e a próxima carga
-            # gravaria o valor reduzido como novo normal.
             raise ParametroInvalido(
                 f'{CONTAGENS.name} ilegível ({e}).\n'
                 f'   Sem ele não dá para detectar queda anormal de parâmetro.\n'
@@ -144,16 +138,13 @@ def _checar_queda(nome, quantidade):
 
     if hist.get(nome) != quantidade:
         hist[nome] = quantidade
-        # Grava em temporário e renomeia: escrita interrompida no meio deixaria
-        # o arquivo truncado, e a carga seguinte abortaria por corrupção.
         tmp = CONTAGENS.with_suffix('.json.tmp')
         try:
             tmp.write_text(json.dumps(hist, indent=2, ensure_ascii=False),
                            encoding='utf-8')
             tmp.replace(CONTAGENS)
         except OSError:
-            tmp.unlink(missing_ok=True)   # o registro ajuda, mas não vale
-                                          # derrubar o pipeline por ele
+            tmp.unlink(missing_ok=True)
     return quantidade
 
 

@@ -12,7 +12,6 @@ def acordo(precos):
             "_fornec_norm": "1", "_cidade_norm": "X", "_modelo_norm": "M",
             "_peca_norm": "ITEM", "PECA_SERVICO": "ITEM", "FORNECEDOR": "F",
             "PRECO": preco, "_preco_original": str(preco),
-            # Espelha carregar_acordo: 0 é cortesia, portanto válido.
             "_preco_valido": bool(pd.notna(preco) and np.isfinite(preco) and preco >= 0),
         })
     return pd.DataFrame(linhas)
@@ -46,7 +45,6 @@ def test_carregamento_arredonda_e_rejeita_preco_nao_finito(rodar, monkeypatch):
     monkeypatch.setattr(pd, "read_excel", lambda *args, **kwargs: bruto.copy())
     carregado = rodar.carregar_acordo("falso.xlsx")
     assert carregado.loc[0, "PRECO"] == carregado.loc[1, "PRECO"] == 10.0
-    # 0 é cortesia, portanto preço válido; -1 e inf continuam inválidos.
     assert carregado["_preco_valido"].tolist() == [True, True, True, False, False]
 
 

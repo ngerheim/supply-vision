@@ -15,7 +15,7 @@ Sem e-mail. Saída em reports\\, nomeada com o período.
 import os, secrets, sys, pathlib
 from datetime import datetime
 
-sys.dont_write_bytecode = True   # não grava __pycache__ no Supply Vision ao importar o rodar.py
+sys.dont_write_bytecode = True
 
 try:
     sys.stdout.reconfigure(encoding='utf-8', errors='replace')
@@ -23,25 +23,21 @@ try:
 except Exception:
     pass
 
-PANORAMA = pathlib.Path(__file__).resolve().parent   # supply-vision/panorama
+PANORAMA = pathlib.Path(__file__).resolve().parent
 
-sys.path.insert(0, str(PANORAMA))          # svp_paths.py e periodo.py, ao lado
+sys.path.insert(0, str(PANORAMA))
 import svp_paths
 from periodo import resolver_ou_sair
 
-sys.path.insert(0, str(svp_paths.SUPPLY_VISION_SRC))    # rodar.py e sv_paths.py
+sys.path.insert(0, str(svp_paths.SUPPLY_VISION_SRC))
 
-# Mesmo período que o baixar_periodo.py resolveu: os dois leem o mesmo argv,
-# ou o mesmo recorte.py. O _verificar_base() abaixo confere que a base em
-# disco corresponde a ele, para não rotular um relatório com período errado.
 DATA_INICIO, DATA_FIM, ORIGEM_PERIODO = resolver_ou_sair()
 
-import rodar                    # motor original do Supply Vision
+import rodar
 
 BASE_PATH   = str(svp_paths.BASE_PATH)
 META_PATH   = str(svp_paths.META_PATH)
-ACORDO_PATH = rodar.ACORDO_PATH      # mesma ACORDOS.xlsx do pipeline diário;
-                                     # leitura com retry embutido no rodar.carregar_acordo
+ACORDO_PATH = rodar.ACORDO_PATH
 OUTPUT_DIR  = svp_paths.REPORTS
 
 
@@ -89,7 +85,7 @@ def gerar():
         print('       Nenhum relatório gerado.')
         return False
 
-    df_acordo = rodar.carregar_acordo(ACORDO_PATH)   # retry embutido no rodar.py (16/07/2026)
+    df_acordo = rodar.carregar_acordo(ACORDO_PATH)
     print(f'  Base: {len(df_base):,} linhas | Acordo: {len(df_acordo):,} linhas')
 
     print('Processando...')

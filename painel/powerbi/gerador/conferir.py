@@ -3,8 +3,8 @@
 Existe porque as outras checagens nao pegam o erro que mais custou nesta
 construcao. O schema valida estrutura, a geometria valida posicao, as
 referencias validam nomes -- e nenhuma delas nota uma medida que devolve o
-numero errado. A divergencia de 13/08/2026 (R$ 387.898,08 no total de uma
-tabela contra R$ 13.940,24 num cartao) atravessou tres rodadas de revisao
+numero errado. A divergencia entre o total de uma tabela e o valor de um
+cartao da mesma medida atravessou tres rodadas de revisao
 visual e so apareceu quando alguem comparou dois numeros de paginas
 diferentes.
 
@@ -23,10 +23,9 @@ from pathlib import Path
 
 import pandas as pd
 
-TOL = 0.01  # um centavo
+TOL = 0.01
 
-# painel/powerbi/gerador/conferir.py -> parents[3] e a raiz do projeto.
-RAIZ = Path(__file__).resolve().parents[3]        # supply-vision/
+RAIZ = Path(__file__).resolve().parents[3]
 PARQUET = RAIZ / "painel" / "consolidado" / "supply_vision_painel.parquet"
 
 falhas = 0
@@ -90,9 +89,6 @@ def main(caminho):
     print(f"linhas: {len(d):,} | ultimo dia completo: {fim.date()}")
     print()
 
-    # ── 1. decomposicao do gasto ────────────────────────────────────
-    # Sem acordo e o guarda-chuva; fuga e subconjunto dele. Se esta identidade
-    # quebrar, a nomenclatura do painel esta mentindo.
     print("decomposicao do gasto (historico)")
     confere("total = dentro + sem acordo",
             dentro(d) + sem_acordo(d), d["Preco Total OS"].sum())
@@ -102,10 +98,6 @@ def main(caminho):
     confere("sem acordo = sem alternativa + fuga",
             sem_alt + fuga(d), sem_acordo(d))
 
-    # ── 2. exclusividade do Status ──────────────────────────────────
-    # ACIMA, ABAIXO e CONFORME so podem existir em COM_ACORDO. Se aparecer um
-    # ACIMA dentro de SEM_ACORDO, a comparacao de preco esta cruzando linha que
-    # nao tem preco de acordo.
     print()
     print("exclusividade de Status x STATUS_ACORDO")
     cruz = pd.crosstab(d["Status"], d["STATUS_ACORDO"])
@@ -117,10 +109,6 @@ def main(caminho):
         confere("SEM ACORDO nunca em COM_ACORDO",
                 float(cruz.loc["SEM ACORDO"].get("COM_ACORDO", 0)), 0.0, tol=0)
 
-    # ── 3. a formula do excedente ───────────────────────────────────
-    # Diferenca Total tem que ser Qtd x (Preco OS - Preco Acordo). O painel
-    # apresenta essa coluna como montante contestavel numa conversa com
-    # fornecedor; se ela for outra coisa, a conversa comeca errada.
     print()
     print("formula do excedente")
     ac = d[d["Status"] == "ACIMA DO ACORDO"]
@@ -128,9 +116,6 @@ def main(caminho):
     confere("Diferenca Total = Qtd x (Preco OS - Preco Acordo)",
             ac["Diferenca Total"].sum(), esperado)
 
-    # ── 4. reconciliacao do excedente na janela ─────────────────────
-    # Foi aqui que o painel divergiu. O cartao, cada ranking e cada tabela
-    # precisam devolver o mesmo total, inclusive quando o leitor filtra.
     print()
     print("reconciliacao do excedente na janela de 30 dias")
     exc = excedente(j30)
@@ -139,9 +124,6 @@ def main(caminho):
         soma = j30[j30["Status"] == "ACIMA DO ACORDO"].groupby(dim)["Diferenca Total"].sum().sum()
         confere(f"soma por {dim} fecha com o total", soma, exc)
 
-    # Reconciliacao SOB FILTRO: e o teste que o PDF nao consegue fazer. Se a
-    # medida usasse ALL() em vez de KEEPFILTERS, o valor filtrado seria igual ao
-    # total e este bloco falharia.
     print()
     print("reconciliacao sob filtro (tres maiores fornecedores)")
     top = (j30[j30["Status"] == "ACIMA DO ACORDO"]
@@ -152,7 +134,6 @@ def main(caminho):
         confere(f"{forn[:34]}: excedente filtrado", excedente(fatia), valor)
     confere("soma dos tres <= total da janela", min(top.sum(), exc), top.sum())
 
-    # ── 5. denominadores mostrados nos cartoes ──────────────────────
     print()
     print("denominadores das janelas")
     confere("30d: total = dentro + sem acordo",
@@ -164,10 +145,6 @@ def main(caminho):
     print(f"  info  % do sem acordo que era fuga (365d): "
           f"{100 * fuga(j365) / sem_acordo(j365):.1f}%")
 
-    # ── 6. cartao de 365 dias contra grafico de 12 meses fechados ───
-    # Nao e uma identidade: sao recortes diferentes de proposito. O numero e
-    # impresso para que a diferenca seja conhecida em vez de descoberta, e para
-    # avisar se ela crescer muito -- acima de 10% o rotulo da pagina fica fraco.
     print()
     print("cartao 365d contra grafico de 12 meses fechados")
     f365, f12 = fuga(j365), fuga(j12m)

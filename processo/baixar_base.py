@@ -33,7 +33,7 @@ def datas_alvo():
     agora = datetime.now()
     hoje  = agora.date()
     hora  = agora.hour
-    dow   = agora.weekday()          # 0 = segunda
+    dow   = agora.weekday()
 
     if hora < 10:
         if dow == 0:
@@ -69,8 +69,6 @@ def baixar():
         casadas = s.selecionar_datas(CAMPO, datas)
         print(f'Datas com movimento: {casadas} de {len(datas)}')
         if casadas == 0:
-            # Feriado em dia útil, ou segunda após feriadão. O pipeline manda
-            # aviso e encerra com sucesso.
             print('AVISO: Nenhum dado no Qlik para a(s) data(s) alvo.')
             sinaliza('SEM_DADOS_QLIK')
             sys.exit(0)

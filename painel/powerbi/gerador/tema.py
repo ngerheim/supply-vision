@@ -1,17 +1,7 @@
 import json, pathlib
 
-# Ordem validada por scripts/validate_palette.js (skill dataviz):
-# pior par adjacente CVD dE 14.7 (alvo >= 8) e visao normal dE 33.3 (piso 15),
-# sobre superficie #FFFFFF. Os dois primeiros slots sao a leitura principal do
-# painel -- ambar = fora do acordo, azul = dentro -- porque o Power BI atribui
-# dataColors em ordem, e a maioria dos visuais aqui tem uma ou duas series.
 SERIES = ["#E39502", "#1C5CAB", "#E34948", "#4A3AA7", "#E87BA4", "#0CA30C"]
 
-# MUDO era #8A94A6: contraste 3,06:1 sobre branco, e ele pinta eixo, cabecalho
-# de tabela e cabecalho de slicer em 9-10pt. Texto pequeno precisa de 4,5:1
-# (WCAG AA); 3:1 vale para preenchimento grande, nao para rotulo de eixo.
-# #667085 da 4,97:1 e continua discreto. O cinza de SERIE (paginas.py:CINZA)
-# fica em #8A94A6 de proposito: ali e area preenchida, onde 3:1 basta.
 AMBAR, NAVY, TINTA, TINTA2, MUDO = "#E39502", "#06203C", "#0B1B2E", "#4A5568", "#667085"
 GRADE, SUP = "#E4E7EC", "#FFFFFF"
 
@@ -32,7 +22,7 @@ tema = {
     "foreground": TINTA,
     "tableAccent": AMBAR,
     "good": "#0CA30C", "neutral": MUDO, "bad": "#D03B3B",
-    "maximum": "#5C3B00", "center": "#EDB04C", "minimum": "#FDF3E0",  # rampa ambar
+    "maximum": "#5C3B00", "center": "#EDB04C", "minimum": "#FDF3E0",
     "textClasses": {
         "title":      txt(15, TINTA, "Segoe UI Semibold"),
         "header":     txt(12, TINTA, "Segoe UI Semibold"),
@@ -42,21 +32,13 @@ tema = {
     },
     "visualStyles": {
         "*": {"*": {
-            # Cartao com anel fino e canto arredondado, no lugar da borda cinza
-            # padrao: a hierarquia vem do agrupamento, nao de moldura grossa.
             "background": [{"show": True, "color": {"solid": {"color": SUP}}, "transparency": 0}],
             "border":     [{"show": True, "color": {"solid": {"color": "#E8EBEF"}}, "radius": 8}],
-            # Sem sombra. Com 13 visuais na pagina eram 13 sombras competindo,
-            # e o card branco sobre o plano cinza ja se separa sem ela.
             "dropShadow": [{"show": False}],
-            # Titulo sem bloco de fundo: sobre fundo branco nao produzia efeito
-            # nenhum e quebrava o alinhamento com o resto do cartao.
             "title": [{"show": True, "fontColor": {"solid": {"color": TINTA}},
                        "fontSize": 11, "fontFamily": "Segoe UI Semibold",
                        "alignment": "left"}],
-            # Cabecalho do visual e ferramenta de autoria (foco, filtro, menu).
             "visualHeader": [{"show": False}],
-            # Eixos e grade recuados: linha de grade fina, sem linha vertical.
             "categoryAxis": [{"show": True, "fontSize": 10,
                               "labelColor": {"solid": {"color": MUDO}},
                               "showAxisTitle": False,
@@ -72,16 +54,6 @@ tema = {
                         "fontSize": 10, "labelColor": {"solid": {"color": TINTA2}}}],
             "labels": [{"show": False}],
         }},
-        # ── Cartao KPI ────────────────────────────────────────────
-        # labelDisplayUnits e o ajuste que mais muda a faixa de cards. Sem
-        # ele, o formato da medida ("R$" #,0.00) manda "R$ 17.117.247,11" para
-        # um tile de 249px: o Power BI encolhe a fonte para caber, e como cada
-        # valor tem um comprimento diferente, cada card acaba com um corpo de
-        # letra diferente. Com unidade automatica e uma casa, vira "R$ 17,1 mi"
-        # em todos -- mesma largura, mesma fonte, faixa alinhada.
-        #
-        # 0 = automatico. A precisao de 1 casa evita "R$ 17 mi", que perde
-        # granularidade justamente nos numeros que interessam.
         "card": {"*": {
             "labels":         [{"fontSize": 28,
                                 "color": {"solid": {"color": TINTA}},
@@ -92,23 +64,11 @@ tema = {
                                 "color": {"solid": {"color": MUDO}}}],
             "wordWrap": [{"show": False}],
             "title": [{"show": False}],
-            # Uma camada de moldura, nao tres. O card branco sobre o plano
-            # cinza da pagina ja se destaca sozinho: borda fina resolve o
-            # contorno, e sombra em cima disso era a terceira camada.
             "background": [{"show": True, "color": {"solid": {"color": SUP}}, "transparency": 0}],
             "border":     [{"show": True, "color": {"solid": {"color": "#E8EBEF"}}, "radius": 8}],
             "dropShadow": [{"show": False}],
-            # O cabecalho do visual e ferramenta de autoria (foco, filtro,
-            # menu). Num card de um numero ele nao serve para nada e ocupa a
-            # faixa superior do tile.
             "visualHeader": [{"show": False}],
         }},
-        # Barras sem rotulo de dado, com eixo de valor. O rotulo por barra nao
-        # sobrevive a um ranking: qualquer unidade fixa quebra numa das pontas
-        # -- em milhoes a cauda imprime "R$ 0,0 Mi", em milhares o topo imprime
-        # "R$ 9.320 Mil". Um eixo com tres ou quatro marcas da a escala sem
-        # repetir vinte vezes o mesmo texto, e devolve ~70px de largura para o
-        # nome do fornecedor, que e o que estava truncando.
         "barChart": {"*": {
             "labels": [{"show": False}],
             "valueAxis": [{"show": True, "fontSize": 9, "showAxisTitle": False,
@@ -154,10 +114,6 @@ tema = {
             "values": [{"fontSize": 10, "backColorPrimary": {"solid": {"color": SUP}},
                         "backColorSecondary": {"solid": {"color": "#F8F9FB"}}}],
         }},
-        # Dropdown, nao lista. Em lista o slicer precisa de ~120px de altura
-        # para mostrar itens; em 44px so aparece o cabecalho, e a caixa parece
-        # vazia. Dropdown funciona em 40px e cabe treze deles na aba Detalhe.
-        # "mode" e propriedade do card "*" do slicer -- conferido no schema.
         "slicer": {"*": {
             "*":      [{"mode": "Dropdown", "textSize": 9,
                         "fontColor": {"solid": {"color": TINTA}}}],
@@ -166,7 +122,6 @@ tema = {
             "items":  [{"fontColor": {"solid": {"color": TINTA}}, "fontSize": 9,
                         "background": {"solid": {"color": SUP}}}],
         }},
-        # A pagina inteira sobre o plano claro; o cabecalho navy vem do textbox.
         "page": {"*": {
             "background": [{"color": {"solid": {"color": "#F1F3F6"}}, "transparency": 0}],
             "outspace":   [{"color": {"solid": {"color": "#F1F3F6"}}, "transparency": 0}],

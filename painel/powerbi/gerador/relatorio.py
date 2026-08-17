@@ -19,7 +19,6 @@ S_VER  = "https://developer.microsoft.com/json-schemas/fabric/item/report/defini
 
 def guid(seed): return str(uuid.uuid5(uuid.NAMESPACE_URL, "sv-painel/" + seed))
 
-# ── campos ──────────────────────────────────────────────────────────
 def _campo_col(nome):
     return {"Column": {"Expression": {"SourceRef": {"Entity": T}}, "Property": nome}}
 def _campo_med(nome):
@@ -70,7 +69,7 @@ def titulo_medida(nome):
     """Titulo ligado a uma medida, em vez de texto digitado.
 
     Existe porque nove titulos deste painel carregavam numero na string
-    ("top 20 = 36,8%"). O numero vem da base; a string nao. Depois do primeiro
+    ("top 20 = X%"). O numero vem da base; a string nao. Depois do primeiro
     refresh que mude a distribuicao, o titulo afirma um percentual que as barras
     embaixo dele nao mostram mais -- e titulo errado e pior que titulo ausente,
     porque ninguem confere titulo contra grafico.
@@ -82,7 +81,6 @@ def titulo_medida(nome):
         "show": {"expr": {"Literal": {"Value": "true"}}},
         "text": {"expr": _campo_med(nome)}}}]}
 
-# ── visual ──────────────────────────────────────────────────────────
 def visual(tipo, x, y, w, h, projections, selects, tit=None, order=None,
            objects=None, filtros=None, tit_medida=None):
     porNome = {s["Name"]: s for s in selects}
@@ -95,8 +93,6 @@ def visual(tipo, x, y, w, h, projections, selects, tit=None, order=None,
     v = {"visualType": tipo, "query": {"queryState": qs}, "drillFilterOtherVisuals": True}
     if order: v["query"]["sortDefinition"] = {"sort": order}
     if objects: v["objects"] = objects
-    # tit_medida tem precedencia: onde existe medida de titulo, o texto fixo
-    # passa a ser so a semente do GUID (trocar o titulo nao deve mover o visual).
     if tit_medida: v["visualContainerObjects"] = titulo_medida(tit_medida)
     elif tit: v["visualContainerObjects"] = titulo(tit)
     vc = {"$schema": S_VC, "name": guid(f"vis/{tipo}/{x}/{y}/{tit}"),
@@ -127,7 +123,6 @@ def texto(x, y, w, h, conteudo, tamanho=20, negrito=True, cor="#06203C",
         }
     return vc
 
-# ── atalhos por tipo (mesma assinatura da versao legada) ────────────
 def card(x, y, w, h, medida, fonte=None, destaque=False, rotulo=None,
          sem_rotulo=False):
     """Cartao de um numero. Sem titulo -- o rotulo da categoria ja nomeia.
@@ -168,8 +163,6 @@ def barras(x, y, w, h, dim, medida, tit, filtros=None, objetos=None, cor=None,
     mesma cor. Ambar significa excecao neste painel; total e navy.
     """
     obj = dict(objetos or {})
-    # cor_unica, nao cores_series: aqui ha uma medida, logo uma serie so, e o
-    # selector por metadata nao casa. Ver o docstring de cor_unica().
     if cor: obj.update(cor_unica(cor))
     return visual("barChart", x, y, w, h, {"Category": [ref(dim)], "Y": [ref(medida)]},
                   [sel_col(dim), sel_med(medida)], tit, order=ordenar(medida),
@@ -243,7 +236,7 @@ def cascata(x, y, w, h, cat, medida, tit):
     return visual("waterfallChart", x, y, w, h, {"Category": [ref(cat)], "Y": [ref(medida)]},
                   [sel_col(cat), sel_med(medida)], tit)
 
-def fita(x, y, w, h, cat, medida, serie, tit):   # mantido por compatibilidade
+def fita(x, y, w, h, cat, medida, serie, tit):
     return visual("ribbonChart", x, y, w, h,
                   {"Category": [ref(cat)], "Y": [ref(medida)], "Series": [ref(serie)]},
                   [sel_col(cat), sel_col(serie), sel_med(medida)], tit,
@@ -251,7 +244,6 @@ def fita(x, y, w, h, cat, medida, serie, tit):   # mantido por compatibilidade
 
 
 
-# ── filtros ─────────────────────────────────────────────────────────
 def _campo_col_alias(nome, alias="p"):
     """Dentro de uma FilterDefinition existe clausula From, entao a referencia
     e pelo alias da tabela; fora dela, e pela entidade. Sao as duas formas de
@@ -273,10 +265,6 @@ def top_n(dim, quantos=20):
                    "Where": [{"Target": [_campo_col_alias(dim)],
                               "Condition": {"VisualTopN": {"ItemCount": quantos}}}]},
         "howCreated": "User",
-        # Travado como os filtros de janela. O top N nao e preferencia de
-        # leitura: o percentual do titulo e calculado sobre 20 categorias. Um
-        # leitor que abra o painel de filtros e troque para 10 passa a ver um
-        # grafico de 10 barras com um titulo que afirma a cobertura de 20.
         "isLockedInViewMode": True,
     }]}
 
@@ -309,7 +297,7 @@ def filtro_medida_maior(nome, valor=0):
         "filter": {"Version": 2,
                    "From": [{"Name": "p", "Entity": T, "Type": 0}],
                    "Where": [{"Condition": {"Comparison": {
-                       "ComparisonKind": 1,   # GreaterThan
+                       "ComparisonKind": 1,
                        "Left": {"Measure": {"Expression": {"SourceRef": {"Source": "p"}},
                                             "Property": nome}},
                        "Right": {"Literal": {"Value": f"{valor}D"}}}}}]},
@@ -352,14 +340,9 @@ def filtro_janela(coluna="Ultimos 30 dias"):
                        "Expressions": [_campo_col_alias(coluna)],
                        "Values": [[{"Literal": {"Value": "true"}}]]}}}]},
         "howCreated": "User",
-        # Travado no modo de leitura. Sem isto qualquer leitor pode abrir o
-        # painel de filtros e apagar a janela -- a pagina viraria historica sem
-        # aviso, e e justamente a leitura que a ausencia de vigencia no acordo
-        # torna insegura. Continua visivel, para que o recorte nao seja oculto.
         "isLockedInViewMode": True,
     }]}
 
-# ── formatacao por serie ────────────────────────────────────────────
 def cores_series(mapa):
     """Fixa a cor de cada serie pelo nome da medida.
 
@@ -399,7 +382,6 @@ def rotulos(ligado=True, casas=0, unidades=0):
         "labelPrecision": {"expr": {"Literal": {"Value": f"{casas}D"}}},
         "labelDisplayUnits": {"expr": {"Literal": {"Value": f"{unidades}D"}}}}}]}
 
-# ── colunas empilhadas ──────────────────────────────────────────────
 def empilhado(x, y, w, h, cat, medidas, tit, cores=None, cem_por_cento=False,
               filtros=None, objetos=None, apelidos=None):
     """Colunas empilhadas: um eixo, varias medidas somando a altura da coluna.
@@ -425,9 +407,9 @@ def barras_empilhadas(x, y, w, h, dim, medidas, tit, cores=None, filtros=None,
     Sem total=, o ranking sai por medidas[0] -- e nao e so a ordem que muda: o
     filtro VisualTopN usa esta mesma sortDefinition, entao o top 20 passa a ser
     "os 20 maiores em Dentro do Acordo", nao "os 20 maiores no total". Um
-    fornecedor de R$ 500 mil integralmente sem acordo pode ficar FORA da lista --
-    exatamente o fornecedor que a pagina existe para expor. E o titulo continua
-    dizendo "top 20 = 36,8%" de um total que nao e o que foi ranqueado.
+    fornecedor cujo gasto seja integralmente sem acordo pode ficar FORA da lista
+    -- exatamente o fornecedor que a pagina existe para expor. E o titulo continua
+    declarando cobertura sobre um total que nao e o que foi ranqueado.
 
     O Power BI nao ordena empilhado pela soma das series, mas ordena por qualquer
     campo presente no visual -- inclusive em Tooltips. Entao a medida de total
@@ -448,7 +430,6 @@ def barras_empilhadas(x, y, w, h, dim, medidas, tit, cores=None, filtros=None,
     if filtros: v["filterConfig"] = filtros
     return v
 
-# ── interacao entre visuais ─────────────────────────────────────────
 def interacoes(visuais, alvos=None):
     """Forca a selecao a chegar nos cartoes como FILTRO, nao como realce.
 
@@ -457,7 +438,7 @@ def interacoes(visuais, alvos=None):
     renderizar realce, entao ignora a selecao e continua exibindo o valor cheio.
     Resultado observado em 14/08/2026: selecionar um fornecedor na tabela deixava
     o cartao de excedente parado no total da janela -- quem filtrasse leria
-    R$ 13.940,24 como se fosse daquele fornecedor.
+    o total da janela como se fosse daquele fornecedor.
 
     Nao e defeito do DAX: a medida usa KEEPFILTERS e responde a filtro. O que
     faltava era a selecao chegar nela.
@@ -474,7 +455,6 @@ def interacoes(visuais, alvos=None):
             for f in fontes for d in destinos if f["name"] != d["name"]]
 
 
-# ── botao ───────────────────────────────────────────────────────────
 def botao_bookmark(x, y, w, h, rotulo, bookmark):
     """Botao que dispara um bookmark existente.
 
@@ -523,26 +503,11 @@ def botao_bookmark(x, y, w, h, rotulo, bookmark):
     }
 
 
-# ── tema registrado ─────────────────────────────────────────────────
-# Nome de arquivo FIXO. O Desktop registra com sufixo numerico aleatorio
-# ("Loc_Frotas___Supply_Vision7329854293304904.json") e nao remove os anteriores:
-# em 17/08/2026 havia 14 copias byte a byte identicas na pasta, seis delas
-# rastreadas no Git. Nome fixo faz a proxima geracao sobrescrever a mesma, em vez
-# de somar mais uma.
-#
-# Nome sem a marca no arquivo. O tema declara "Loc Frotas — Supply Vision" no
-# conteudo, o que e o nome que aparece no Desktop; o nome do ARQUIVO nao precisa
-# repetir isso, e repetir espalha a marca por caminho de arquivo num repositorio
-# que tem versao publica.
 TEMA_ARQ = "tema_supply_vision.json"
 
-# Versoes de schema do proprio gerador. O Desktop grava aqui as versoes que ELE
-# usa (2.11.0 / 3.4.0 / 2.3.1), que sao mais novas que as emitidas por este
-# arquivo. Declarar as do gerador mantem o report.json coerente consigo mesmo.
 TEMA_VERSOES = {"visual": "2.9.0", "report": "3.3.0", "page": "2.1.0"}
 
 
-# ── escrita da arvore de pastas ─────────────────────────────────────
 def escrever(destino, paginas, tema=None):
     """Grava definition/ no formato PBIR. Devolve (n_paginas, n_visuais).
 
@@ -587,10 +552,6 @@ def escrever(destino, paginas, tema=None):
         origem_tema = pathlib.Path(tema)
         if not origem_tema.is_file():
             raise FileNotFoundError(f"tema nao encontrado: {origem_tema}")
-        # d.parent, nao d: StaticResources/ e IRMAO de definition/ dentro da pasta
-        # .Report, nao filho dela. Escrever em definition/StaticResources/ valida
-        # contra o schema e o tema simplesmente nao carrega -- o report.json
-        # aponta para um caminho que o Power BI procura um nivel acima.
         rec = d.parent / "StaticResources" / "RegisteredResources"
         rec.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(origem_tema, rec / TEMA_ARQ)
@@ -614,10 +575,6 @@ def escrever(destino, paginas, tema=None):
                        "height": 720, "width": 1280}
         if pg.get("filterConfig"):
             pagina_json["filterConfig"] = pg["filterConfig"]
-        # visualInteractions estava sendo montado em pagina() e descartado aqui:
-        # escrever() copiava campo por campo e nao conhecia a chave nova. Nao deu
-        # erro nenhum -- o arquivo validou e o painel abriu com a interacao no
-        # padrao, que e o defeito que se queria corrigir.
         if pg.get("visualInteractions"):
             pagina_json["visualInteractions"] = pg["visualInteractions"]
         esc(alvo / "page.json", pagina_json)

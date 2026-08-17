@@ -16,10 +16,6 @@ from datetime import datetime
 from xlsxwriter.utility import xl_col_to_name
 from zipfile import BadZipFile
 
-# O console do Windows abre em cp1252, e as mensagens de progresso usam "→" e
-# acentos. Executado pelo pipeline.py a codificação vinha ajustada por fora, mas
-# rodar.py chamado direto (para depurar ou regerar à mão) morria com
-# UnicodeEncodeError já no primeiro filtro. Cada script deve se bastar.
 for _s in (sys.stdout, sys.stderr):
     try:
         _s.reconfigure(encoding="utf-8", errors="replace")
@@ -29,52 +25,30 @@ for _s in (sys.stdout, sys.stderr):
 import sv_paths
 import contrato_base
 
-# Parâmetros de universo — grupos, modelos, fornecedores, itens e sinônimos.
-# Fonte única, compartilhada com o recorte histórico.
 sys.path.insert(0, str(sv_paths.PARAMETROS_SRC))
 
 from parametros import (FORNECEDORES_EXCLUIR, GRUPOS_EXCLUIR, ITENS_EXCLUIR,
                         MODELOS, MODELOS_EXCLUIR, SINONIMOS, normalizar)
 
 
-# ═══════════════════════════════════════════════════════════════════
-# CONFIGURAÇÃO — caminhos centralizados em sv_paths.py
-# ═══════════════════════════════════════════════════════════════════
 
 BASE_PATH   = str(sv_paths.BASE_PATH)
 ACORDO_PATH = str(sv_paths.ACORDO_PATH)
 OUTPUT_DIR  = str(sv_paths.REPORTS)
 
-# A ACORDOS.xlsx é editada à mão enquanto o pipeline roda: a cada salvamento
-# há janelas curtas de bloqueio (PermissionError) ou de arquivo truncado
-# (BadZipFile). O carregar_acordo tolera isso com retry; se o bloqueio
-# persistir além da janela, falha alto (o pipeline marca erro e o watchdog
-# avisa minutos depois).
 ACORDO_TENTATIVAS  = 5
 ACORDO_INTERVALO_S = 15
 
-# Acima deste % de SEM ACORDO o pipeline alerta. Em operação normal o número
-# fica na faixa de 60-70%; um salto brusco costuma ser parâmetro quebrado, não
-# mudança de comportamento de compra.
 LIMITE_ALERTA_SEM_ACORDO = 75.0
 
-# Destino de sinônimo com menos linhas que isso no acordo é suspeito de ser
-# variante de digitação, e não o nome canônico. Ver _validar_parametros().
 MIN_LINHAS_DESTINO = 10
 
-# Chave de correspondência entre a compra e o acordo.
 CHAVE_ACORDO = ["_fornec_norm", "_cidade_norm", "_modelo_norm", "_peca_norm"]
 
-# Dois estados em que existe acordo, mas ele não pode servir de referência.
-# Ficam FORA dos indicadores de conformidade: comparar contra um preço que
-# não se sabe se é o vigente produz não-conformidade inventada.
 STATUS_AMBIGUO         = "ACORDO AMBÍGUO"
 STATUS_PRECO_INVALIDO  = "ACORDO SEM PREÇO VÁLIDO"
 
 
-# ═══════════════════════════════════════════════════════════════════
-# LAYOUT — visual dos relatórios (cores, colunas, formatação)
-# ═══════════════════════════════════════════════════════════════════
 
 FONTE = "Arial"
 BORDA = {"border": 1, "border_color": "#D9D9D9"}
@@ -93,8 +67,6 @@ WASH = {"CONFORME":         "#EAF7EE",
         "ABAIXO DO ACORDO": "#EAF1FB",
         "SEM ACORDO":       "#F7F7F7"}
 
-# Catálogo-mestre de colunas — ordem canônica
-# (nome, largura, tipo, banda, oculta, quebra-de-texto)
 COLUNAS = [
     ("Data",                       11, "date",  "B", False, False),
     ("OS",                         11, "int",   "B", False, False),
@@ -122,12 +94,7 @@ COLUNAS = [
 SEMPRE_OCULTAR = {"Peca Acordo", "Grupo Despesa"}
 
 
-# ═══════════════════════════════════════════════════════════════════
-# LEITURA — carrega e filtra a base e a planilha de acordo
-# ═══════════════════════════════════════════════════════════════════
 
-# Forma canônica de comparação, a mesma usada na carga dos parâmetros. Duas
-# implementações divergiriam com o tempo.
 _norm = normalizar
 
 
@@ -148,10 +115,6 @@ def _validar_colunas(df, obrigatorias, origem):
 
 def carregar_base(path):
     df = pd.read_excel(path, dtype=str).rename(columns=lambda c: c.strip())
-    # As 11 do contrato, não um subconjunto. Coluna que some do Qlik precisa
-    # parar o pipeline: se Grupo Despesa sumisse, o filtro de grupo — que hoje
-    # tira ~13% da base — deixaria de rodar sem aviso, e o SEM ACORDO subiria
-    # como se fosse comportamento do negócio.
     _validar_colunas(df, contrato_base.COLUNAS, "base.xlsx (Qlik)")
     df["_desc_norm"]   = df["Descrição"].apply(_norm)
     df["_cidade_norm"] = df["Forncedor por Cidade"].apply(_norm)
@@ -197,17 +160,6 @@ def carregar_acordo(path):
     df["_preco_original"] = df["PRECO"]
     df["PRECO"]        = pd.to_numeric(df["PRECO"], errors="coerce").round(2)
 
-    # Preço vazio, não numérico ou negativo não serve de referência. Marcar em
-    # vez de descartar: a linha de acordo existe, e "existe acordo com preço
-    # inutilizável" é situação diferente de "não existe acordo". Confundir as
-    # duas mandava a compra para SEM ACORDO, escondendo um erro de cadastro
-    # atrás de um número de não-conformidade.
-    #
-    # ZERO É PREÇO VÁLIDO: na ACORDOS.xlsx o 0 significa cortesia — o item foi
-    # negociado para não ser cobrado. Tratá-lo como inválido mandava a linha
-    # para a fila de pendências e escondia justamente o caso que interessa:
-    # cobrança de item que era cortesia (sai como ACIMA DO ACORDO). Célula
-    # vazia continua inválida: pd.to_numeric a converte em NaN, não em 0.
     df["_preco_valido"] = np.isfinite(df["PRECO"]) & (df["PRECO"] >= 0)
     n_inval = int((~df["_preco_valido"]).sum())
     if n_inval:
@@ -217,9 +169,6 @@ def carregar_acordo(path):
     return df
 
 
-# ═══════════════════════════════════════════════════════════════════
-# PROCESSAMENTO — cruza base com acordo e calcula status/diferenças
-# ═══════════════════════════════════════════════════════════════════
 
 def _validar_parametros(df_acordo):
     """Guarda-corpo dos parâmetros de universo (SINONIMOS / MODELOS).
@@ -262,17 +211,6 @@ def _validar_parametros(df_acordo):
         for chave, nk, destino, nv in sorted(invertidos, key=lambda t: -t[1]):
             print(f"       {chave!r} ({nk} linhas) -> {destino!r} ({nv} linhas)")
 
-    # Destino que EXISTE mas é variante rara, havendo um nome equivalente muito
-    # mais comum. Não é inversão (a chave pode não existir no acordo), então a
-    # checagem acima não pega. Foi o caso de 'REGULAGEM FREIO DE MAO' (3 linhas,
-    # um fornecedor só) convivendo com 'REGULAGEM DE FREIO DE MAO' (314 linhas).
-    #
-    # Critério ESTRITO de equivalência: mesmo conjunto de palavras ignorando
-    # "DE"/"DO"/"DA" e ordem. Uma primeira versão desta checagem usava
-    # similaridade por difflib e acusava 10 casos, 8 deles falsos ('PINCA DE
-    # FREIO TROCA' sugerindo 'DISCO DE FREIO TROCA', '0W30' sugerindo '5W30').
-    # Aviso que erra mais do que acerta treina todo mundo a ignorar o log,
-    # então aqui é melhor perder caso do que gerar ruído.
     def _tokens(p):
         return frozenset(t for t in p.split() if t not in {"DE", "DO", "DA"})
 
@@ -299,8 +237,6 @@ def _validar_parametros(df_acordo):
             print(f"       {chave!r} -> {destino!r} ({nv} linhas); usar {alvo!r} ({na} linhas)")
 
 
-    # Chaves com preço divergente: qual acordo se aplica é indeterminado, e a
-    # linha vai para quarentena — ver STATUS_AMBIGUO em processar().
     dup = (df_acordo[df_acordo["_preco_valido"]]
                     .groupby(CHAVE_ACORDO)["PRECO"]
                     .agg(["nunique", "min", "max"]))
@@ -318,13 +254,6 @@ def _validar_parametros(df_acordo):
         print("  Parâmetros de universo: sem inconsistências contra a ACORDOS.xlsx.")
 
 
-# Nome curto de propósito: o motivo é rótulo de eixo e de coluna, lido dezenas
-# de vezes por quem usa o relatório e o painel. "Fornecedor sem acordo" repetia
-# "sem acordo" em toda linha de uma coluna que só existe para linhas sem acordo,
-# e o texto longo forçava o eixo a truncar. O que o motivo responde é: em qual
-# dimensão a combinação deixou de encontrar referência.
-#
-# A hierarquia (ORDEM_MOTIVOS) não mudou — só o texto.
 MOTIVO_NAO_COMPARAVEL = "Sem equivalente"
 MOTIVO_FORNECEDOR     = "Fornecedor"
 MOTIVO_CIDADE         = "Cidade"
@@ -332,8 +261,6 @@ MOTIVO_MODELO         = "Modelo"
 MOTIVO_ITEM_MAPEAR    = "Sinonimo"
 MOTIVO_ITEM           = "Item"
 
-# Quarentena: há acordo, mas ele não serve de referência. Não são "sem
-# acordo" — o problema está no cadastro, não na compra.
 MOTIVO_AMBIGUO         = "Acordo ambíguo — preços divergentes"
 MOTIVO_PRECO_INVALIDO  = "Acordo com preço inválido"
 
@@ -395,21 +322,13 @@ def processar(df_base, df_acordo):
     df["_peca_busca"] = df["_desc_norm"].map(sin_map).fillna(df["_desc_norm"]).apply(_norm)
     df["_sin_none"]   = df["_desc_norm"].isin(sin_none)
 
-    # Só linhas com preço utilizável entram na correspondência. As demais
-    # existem, e o efeito delas é tratado logo abaixo por chave.
     ac_valido = df_acordo[df_acordo["_preco_valido"]]
 
-    # Chaves em quarentena, apuradas antes do merge:
-    #   ambíguas          -> mais de um preço válido; não dá para saber qual vale
-    #   sem preço válido  -> a chave existe no acordo, mas nenhum preço serve
     n_precos = ac_valido.groupby(CHAVE_ACORDO)["PRECO"].nunique()
     chaves_ambiguas = set(n_precos[n_precos > 1].index)
     chaves_com_preco = set(map(tuple, ac_valido[CHAVE_ACORDO].values))
     chaves_sem_preco = set(map(tuple, df_acordo[CHAVE_ACORDO].values)) - chaves_com_preco
 
-    # Dedup determinístico pelo menor preço. Continua valendo para as chaves
-    # NÃO ambíguas — nelas os preços são iguais, e o critério só evita que o
-    # escolhido mude se a planilha for reordenada.
     ac = (ac_valido.sort_values("PRECO")
                    .drop_duplicates(subset=CHAVE_ACORDO, keep="first"))
 
@@ -428,13 +347,11 @@ def processar(df_base, df_acordo):
     e_sem_preco &= ~m["_sin_none"]
 
     po  = m["Valor Unitario"]
-    pa  = m["PRECO"].where(~e_ambigua)     # ambígua não expõe preço de referência
+    pa  = m["PRECO"].where(~e_ambigua)
     qtd = pd.to_numeric(m["OS Quantidade"], errors="coerce")
 
     quarentena = e_ambigua | e_sem_preco
 
-    # "Sem valor" (preço vazio/zero) já foi filtrado em carregar_base —
-    # todo po aqui é válido, então a classificação é binária: tem ou não acordo.
     com_ac = pa.notna() & ~quarentena
     sem_ac = ~com_ac & ~quarentena
     motivo = _motivo_sem_acordo(m, df_acordo, sem_ac)
@@ -458,16 +375,9 @@ def processar(df_base, df_acordo):
     dif_total          = (preco_total - preco_total_acordo).round(2)
     dt                 = pd.to_datetime(m["Data Abertura"], dayfirst=True, errors="coerce")
 
-    # Data e OS saem como valor, não como texto: o Excel precisa deles tipados
-    # para ordenar, filtrar por período e somar corretamente.
     os_col = pd.to_numeric(m.get("Codigo OS", pd.Series("", index=m.index)),
                            errors="coerce")
 
-    # ── Oportunidade de acordo (ignora o fornecedor usado): existe acordo para
-    #    cidade + modelo + item com QUALQUER fornecedor? Usa o menor preço.
-    # A referência alternativa só pode vir de uma chave completa confiável.
-    # Se fornecedor+cidade+modelo+item é ambíguo, nenhum de seus preços prova
-    # uma oportunidade válida, mesmo quando ignoramos o fornecedor da compra.
     ac_ref = ac_valido[
         ~ac_valido[CHAVE_ACORDO].apply(tuple, axis=1).isin(chaves_ambiguas)
     ]
@@ -480,17 +390,13 @@ def processar(df_base, df_acordo):
     k_base     = m["_cidade_norm"] + "|" + m["_modelo_ac"] + "|" + m["_peca_busca"]
     preco_ref  = k_base.map(preco_map)
     fornec_ref = k_base.map(fornec_map)
-    preco_ref[m["_sin_none"]]  = np.nan          # item sem sinônimo válido → sem acordo possível
+    preco_ref[m["_sin_none"]]  = np.nan
     fornec_ref[m["_sin_none"]] = np.nan
     preco_ref[quarentena] = np.nan
     fornec_ref[quarentena] = np.nan
 
     tinha_acordo     = pd.Series(np.where(preco_ref.notna(), "SIM", "NAO"), index=m.index)
     tinha_acordo[quarentena] = ""
-    # Diferença contra o menor acordo disponível para a mesma cidade + modelo
-    # + item. Pode ser negativa: a compra saiu abaixo da melhor referência.
-    # Por isso a coluna não se chama "economia perdida" — nesse caso não houve
-    # perda nenhuma, e o nome mentiria sobre o sinal.
     dif_referencia = (preco_total - preco_ref * qtd).round(2)
     dif_referencia[preco_ref.isna()] = np.nan
 
@@ -584,9 +490,6 @@ def imprimir_resumo(resumo):
     print("RESUMO_JSON=" + json.dumps(resumo, ensure_ascii=False, separators=(",", ":")))
 
 
-# ═══════════════════════════════════════════════════════════════════
-# MOTOR DE ESCRITA — aba Resultado (sem linha de total)
-# ═══════════════════════════════════════════════════════════════════
 
 def _gerar_aba(wb, df, drop, nome_tabela):
     excluir  = set(drop) | SEMPRE_OCULTAR
@@ -666,14 +569,11 @@ def _gerar_aba(wb, df, drop, nome_tabela):
 
 
 
-# ═══════════════════════════════════════════════════════════════════
-# RELATÓRIO: COM ACORDO
-# ═══════════════════════════════════════════════════════════════════
 
 STATUS_COM_ACORDO = {"CONFORME", "ACIMA DO ACORDO", "ABAIXO DO ACORDO"}
 
 DROP_COM_ACORDO = {
-    "Motivo Sem Acordo",     # sempre vazio quando há acordo
+    "Motivo Sem Acordo",
     "Tinha acordo?",
     "Menor Preco Acordo",
     "Fornecedor do Acordo",
@@ -687,9 +587,6 @@ def gerar_com_acordo(df, path):
     print(f"  Salvo: {path}")
 
 
-# ═══════════════════════════════════════════════════════════════════
-# RELATÓRIO: SEM ACORDO
-# ═══════════════════════════════════════════════════════════════════
 
 DROP_SEM_ACORDO = {
     "Status",
@@ -702,7 +599,6 @@ DROP_SEM_ACORDO = {
 def gerar_sem_acordo(df, path):
     df = df.copy()
     if "Dif. p/ Menor Acordo" in df.columns:
-        # Maior diferenca contra a referencia no topo; sem acordo possivel no fim
         df = df.sort_values("Dif. p/ Menor Acordo", ascending=False, na_position="last")
     wb = xlsxwriter.Workbook(path)
     _gerar_aba(wb, df, drop=DROP_SEM_ACORDO, nome_tabela="SemAcordo")
@@ -754,15 +650,11 @@ def gerar_qualidade_acordos(df_acordo, path):
     print(f"  Salvo: {path}")
 
 
-# ═══════════════════════════════════════════════════════════════════
-# EXECUÇÃO — roda tudo
-# ═══════════════════════════════════════════════════════════════════
 
 if __name__ == "__main__":
     print("Carregando base...")
     df_base   = carregar_base(BASE_PATH)
 
-    # Se os filtros zeraram a base, não há nada a reportar (Situação 2)
     if df_base.empty:
         print("AVISO: Nenhuma linha sobrou após os filtros.")
         print("RESULTADO=SEM_DADOS_FILTRO")

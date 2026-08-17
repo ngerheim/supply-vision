@@ -8,9 +8,6 @@ import secrets
 import msvcrt
 from datetime import datetime
 
-# ═══════════════════════════════════════════════════════════════════
-# CONFIGURAÇÃO — caminhos centralizados em sv_paths.py (mesma pasta)
-# ═══════════════════════════════════════════════════════════════════
 
 import sv_paths
 
@@ -21,30 +18,23 @@ RUN_ID = os.environ.get("SUPPLY_VISION_RUN_ID") or \
 LOCK_PATH = sv_paths.LOG_DIR / "pipeline.lock"
 _lock_handle = None
 
-# Usa sempre o python.exe normal para os subprocessos (saída capturada vai pro log).
-# Mesmo que o pipeline seja iniciado por pythonw.exe (sem janela), os filhos usam python.exe.
 PYTHON = sys.executable.lower().replace("pythonw.exe", "python.exe")
 
 SCRIPT_BAIXAR = str(sv_paths.SCRIPT_BAIXAR)
 SCRIPT_RODAR  = str(sv_paths.SCRIPT_RODAR)
 SCRIPT_EMAIL  = str(sv_paths.SCRIPT_EMAIL)
 
-# ═══════════════════════════════════════════════════════════════════
-# LOG
-# ═══════════════════════════════════════════════════════════════════
 
 def configurar_log():
     pathlib.Path(LOG_DIR).mkdir(parents=True, exist_ok=True)
     log_path = f"{LOG_DIR}\\pipeline_{RUN_ID}.log"
 
-    # Força UTF-8 no console (evita erro com caracteres como → ç ã)
     try:
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
         sys.stderr.reconfigure(encoding="utf-8", errors="replace")
     except Exception:
         pass
 
-    # Handlers: sempre grava em arquivo. Console só se existir (pythonw não tem stdout).
     handlers = [logging.FileHandler(log_path, encoding="utf-8")]
     if sys.stdout is not None:
         handlers.append(logging.StreamHandler(sys.stdout))
@@ -57,9 +47,6 @@ def configurar_log():
     )
     return log_path
 
-# ═══════════════════════════════════════════════════════════════════
-# EXECUÇÃO DE SCRIPT
-# ═══════════════════════════════════════════════════════════════════
 
 def rodar_script(caminho, nome, args=None):
     logging.info(f"{'='*50}")
@@ -95,9 +82,6 @@ def rodar_script(caminho, nome, args=None):
     logging.info(f"CONCLUÍDO: {nome}")
     return True, resultado.stdout
 
-# ═══════════════════════════════════════════════════════════════════
-# EXTRAI CONTEXTO E DATAS DO OUTPUT DO baixar_base.py
-# ═══════════════════════════════════════════════════════════════════
 
 def extrair_contexto(output):
     contexto = "parcial"
@@ -164,9 +148,6 @@ def enviar_aviso(contexto, datas, situacao):
     logging.info("="*50)
     sys.exit(0)
 
-# ═══════════════════════════════════════════════════════════════════
-# MAIN
-# ═══════════════════════════════════════════════════════════════════
 
 def main():
     try:
@@ -179,7 +160,6 @@ def main():
     logging.info(f"Pipeline iniciado — {datetime.now().strftime('%d/%m/%Y %H:%M')}")
     logging.info(f"Log: {log_path}")
 
-    # 1. Baixar e filtrar na fonte (Qlik) -> gera BASE.xlsx
     ok, output_baixar = rodar_script(SCRIPT_BAIXAR, "Download Qlik (filtrado)")
     if not ok:
         logging.error("Pipeline interrompido em: Download Qlik")
@@ -188,22 +168,17 @@ def main():
     contexto, datas = extrair_contexto(output_baixar)
     logging.info(f"  Contexto detectado: {contexto} | Datas: {', '.join(datas)}")
 
-    # Situação 1 — nada no Qlik: avisa e encerra
     if extrair_resultado(output_baixar) == "SEM_DADOS_QLIK":
         enviar_aviso(contexto, datas, "SEM_DADOS_QLIK")
 
-    # 2. Gerar relatórios
     ok, output_rodar = rodar_script(SCRIPT_RODAR, "Geração de relatórios")
     if not ok:
         logging.error("Pipeline interrompido em: Geração de relatórios")
         sys.exit(1)
 
-    # Situação 2 — filtros zeraram a base: avisa e encerra
     if extrair_resultado(output_rodar) == "SEM_DADOS_FILTRO":
         enviar_aviso(contexto, datas, "SEM_DADOS_FILTRO")
 
-    # 3. Enviar e-mail — passa contexto, datas, output e os caminhos EXATOS
-    #    dos relatórios gerados nesta execução (evita anexar arquivo antigo).
     caminho_com, caminho_sem, caminho_pend = extrair_relatorios(output_rodar)
     logging.info(f"  Relatórios desta execução: com_acordo={caminho_com or '(não gerado)'} | sem_acordo={caminho_sem or '(não gerado)'} | pendencias={caminho_pend or '(não gerado)'}")
     ok, _ = rodar_script(

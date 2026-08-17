@@ -35,7 +35,7 @@ from datetime import date, datetime, timedelta
 import numpy as np
 import pandas as pd
 
-sys.dont_write_bytecode = True   # não deixa __pycache__ em processo/
+sys.dont_write_bytecode = True
 
 try:
     sys.stdout.reconfigure(encoding='utf-8', errors='replace')
@@ -43,7 +43,7 @@ try:
 except Exception:
     pass
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))   # painel_paths
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import painel_paths
 
 sys.path.insert(0, str(painel_paths.SUPPLY_VISION_SRC))
@@ -62,9 +62,6 @@ class PainelFalhou(RuntimeError):
     """Interrompe a execução com mensagem própria, sem traceback."""
 
 
-# ═══════════════════════════════════════════════════════════════════
-# INFRA — log e lock
-# ═══════════════════════════════════════════════════════════════════
 
 def configurar_log():
     log_path = painel_paths.LOGS_DIR / f"painel_{datetime.now():%Y%m%d_%H%M%S}.log"
@@ -104,9 +101,6 @@ def liberar_lock():
         _lock_handle = None
 
 
-# ═══════════════════════════════════════════════════════════════════
-# ETAPA 1 — extração do recorte completo
-# ═══════════════════════════════════════════════════════════════════
 
 def extrair():
     """Baixa o recorte do painel e grava dados/base_painel.xlsx.
@@ -147,9 +141,6 @@ def extrair():
     logging.info(f"base_painel.xlsx salva ({len(df):,} linhas)")
 
 
-# ═══════════════════════════════════════════════════════════════════
-# ETAPA 2 — processamento e gravação do candidato
-# ═══════════════════════════════════════════════════════════════════
 
 def gerar_candidato(run_id):
     """Cruza com os acordos e grava o Parquet candidato. Devolve o caminho."""
@@ -162,9 +153,6 @@ def gerar_candidato(run_id):
 
     df = rodar.processar(df_base, df_acordo)
 
-    # Pendências (acordo ambíguo ou sem preço válido) ficam fora do painel:
-    # não são "sem acordo", são "não dá para saber". Mesmo tratamento que o
-    # README dá a elas nos relatórios.
     antes = len(df)
     df = df[~df["Status"].isin(rodar.STATUS_QUARENTENA)]
     logging.info(f"Pendências excluídas: {antes - len(df):,} de {antes:,}")
@@ -173,20 +161,14 @@ def gerar_candidato(run_id):
 
     painel = df[painel_paths.COLUNAS_PAINEL].copy()
 
-    # Agrupa as variações do mesmo veículo (ver painel_paths.grupo_modelo).
     painel["Grupo Modelo"] = painel["Modelo"].map(painel_paths.grupo_modelo)
 
-    # Agrupa as grafias do mesmo item pelo de-para do projeto. SINONIMOS vem de
-    # parametros/, carregado com as chaves já normalizadas — é a mesma tabela
-    # que o rodar.py usa no cruzamento, não uma segunda cópia.
     from parametros import SINONIMOS, normalizar
     painel["Grupo Item"] = painel["Item"].map(
         lambda d: painel_paths.grupo_item(d, SINONIMOS, normalizar))
     logging.info(f"Itens: {painel['Item'].nunique():,} descrições → "
                  f"{painel['Grupo Item'].nunique():,} grupos")
 
-    # Uma exceção que passa a cobrir mais de um modelo deixou de ser exceção:
-    # avisa em vez de rotular dois veículos diferentes com o mesmo nome.
     for grupo in set(painel_paths.GRUPO_MODELO_EXCECOES.values()):
         modelos = painel.loc[painel["Grupo Modelo"] == grupo, "Modelo"].unique()
         if len(modelos) > 1:
@@ -194,27 +176,17 @@ def gerar_candidato(run_id):
                             f"({', '.join(sorted(modelos))}) — revisar "
                             f"GRUPO_MODELO_EXCECOES em painel_paths.py")
 
-    # Dentro ou fora do acordo, pela mesma régua que separa os relatórios
-    # com_acordo/sem_acordo. Ver a nota em painel_paths sobre por que não sai
-    # de "Tinha acordo?".
     dentro = painel["Status"].isin(rodar.STATUS_COM_ACORDO)
     painel["STATUS_ACORDO"] = np.where(dentro, painel_paths.STATUS_ACORDO_DENTRO,
                                        painel_paths.STATUS_ACORDO_FORA)
     painel["DATA_EXECUCAO"] = datetime.now()
     painel["RUN_ID"]        = run_id
 
-    # Status que não seja de acordo nem "SEM ACORDO" cairia em SEM_ACORDO sem
-    # ninguém ver — um valor novo no rodar.py entraria como se fosse fora do
-    # acordo, e o painel mentiria sobre o percentual.
     inesperado = set(painel.loc[~dentro, "Status"].unique()) - {painel_paths.STATUS_FORA}
     if inesperado:
         raise PainelFalhou(f"Status inesperado, não classificável como dentro "
                            f"ou fora do acordo: {sorted(inesperado)}")
 
-    # Tipos explícitos, sem deixar o parquet inferir. OS e CNPJ como texto:
-    # são identificadores, não números — e OS inteiro perderia o dtype entre
-    # execuções se um recorte viesse com nulo. O nulo vira vazio, não a
-    # string "<NA>", que apareceria assim no Power BI.
     painel["OS"] = (painel["OS"].astype("Int64").astype(str)
                                 .replace("<NA>", "").fillna(""))
     painel["CNPJ"] = painel["CNPJ"].fillna("").astype(str)
@@ -225,9 +197,6 @@ def gerar_candidato(run_id):
     return caminho
 
 
-# ═══════════════════════════════════════════════════════════════════
-# ETAPA 3 — validação
-# ═══════════════════════════════════════════════════════════════════
 
 def validar(caminho):
     """Confere o candidato. Devolve a lista de avisos (não impeditivos).
@@ -251,8 +220,6 @@ def validar(caminho):
     if fora_dominio:
         raise PainelFalhou(f"STATUS_ACORDO fora do domínio: {sorted(fora_dominio)}")
 
-    # STATUS_ACORDO sai de Status na etapa 2 — divergência aqui é bug de
-    # geração, não dado de origem.
     esperado = np.where(df["Status"].isin(rodar.STATUS_COM_ACORDO),
                         painel_paths.STATUS_ACORDO_DENTRO,
                         painel_paths.STATUS_ACORDO_FORA)
@@ -279,9 +246,6 @@ def validar(caminho):
     return avisos
 
 
-# ═══════════════════════════════════════════════════════════════════
-# ETAPA 4 — publicação atômica
-# ═══════════════════════════════════════════════════════════════════
 
 def publicar(caminho):
     """Promove o candidato a oficial, guardando a versão anterior.

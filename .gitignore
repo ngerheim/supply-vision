@@ -150,3 +150,13 @@ desktop.ini
 # pelo report.json e um clone limpo precisa dele para o relatorio abrir com a
 # identidade certa. As outras copias sao as do Desktop, com sufixo aleatorio.
 !/painel/powerbi/SupplyVisionPainel.Report/StaticResources/RegisteredResources/tema_supply_vision.json
+
+# ═══════════════════════════════════════════════════════════════════
+# Comentarios extraidos do codigo, com as medicoes que os sustentam.
+#
+# Contem cifra da operacao (gasto total, concentracao por modelo,
+# excedente) -- e material para wiki de repositorio PRIVADO. A wiki de um
+# repositorio publico e publica: nao existe wiki privada em repo publico,
+# so desabilitada. Entra na wiki quando o privado existir.
+# ═══════════════════════════════════════════════════════════════════
+/docs/wiki/

@@ -29,8 +29,6 @@ import sv_paths
 
 MANTER_ULTIMOS = 3
 
-# Aceita o padrão legado AAAAMMDD_HHMM e o novo
-# AAAAMMDD_HHMMSS_<sufixo>. O sufixo evita colisões entre disparos.
 _TS_RE = re.compile(r"(\d{8})_(\d{4})(\d{2})?(?:_[0-9a-zA-Z]+)?")
 
 
@@ -84,9 +82,6 @@ def limpar(dry_run: bool):
         if not pasta.exists():
             continue
 
-        # Agrupa os arquivos da pasta por PREFIXO (com_acordo, sem_acordo,
-        # pipeline, limpeza, verificacao, ...) — cada grupo mantém seus
-        # próprios N mais recentes, independente dos outros grupos.
         grupos = {}
         for arq in pasta.iterdir():
             if not arq.is_file():
@@ -99,7 +94,7 @@ def limpar(dry_run: bool):
             grupos.setdefault(prefixo, []).append((dt, arq))
 
         for prefixo, itens in grupos.items():
-            itens.sort(key=lambda x: x[0], reverse=True)  # mais recente primeiro
+            itens.sort(key=lambda x: x[0], reverse=True)
             mover = itens[MANTER_ULTIMOS:]
 
             for dt, arq in mover:
@@ -118,7 +113,6 @@ def limpar(dry_run: bool):
                 except Exception as e:
                     registrar(log_path, f"  [ERRO] {arq}: {e}")
 
-    # __pycache__ descartável (bytecode que regenera sozinho)
     for pycache in sv_paths.RAIZ.rglob("__pycache__"):
         if str(sv_paths.ARCHIVE_DIR) in str(pycache):
             continue

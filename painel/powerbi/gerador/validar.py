@@ -41,13 +41,6 @@ except ModuleNotFoundError as e:
 
 W, H = 1280, 720
 
-# BASE era um caminho fixo de UMA maquina ("/tmp/js/fabric/"). O LEIA.md declara
-# este script como requisito para copiar a geracao para o projeto, mas em
-# nb-loc-0036 ele nao rodava: o caminho nao existe la. Um gate obrigatorio que
-# nao executa na maquina onde o painel e gerado nao e um gate.
-#
-# Agora procura em ordem e explica o que falta. SV_FABRIC_SCHEMAS tem precedencia
-# para quem clonou em outro lugar.
 CANDIDATOS = [
     os.environ.get("SV_FABRIC_SCHEMAS"),
     r"C:\Projetos\json-schemas\fabric",
@@ -70,12 +63,6 @@ def _base():
 
 BASE = _base()
 
-# Registry do referencing em vez do RefResolver antigo. O RefResolver empilhava
-# escopo ao entrar num $ref externo e, ao voltar, resolvia um "#/definitions/..."
-# contra o documento errado -- na pratica, adicionar visualInteractions ao
-# page.json fazia a validacao estourar com KeyError em vez de acusar erro de
-# schema. O Registry indexa cada documento pela URI canonica e nao tem esse
-# problema de escopo.
 store = {}
 recursos = {}
 for f in glob.glob(BASE + "**/*.json", recursive=True):
@@ -165,20 +152,11 @@ def orfas(destino, bim="model.bim.json"):
             for pr in papel["projections"]:
                 if pr["nativeQueryRef"] not in nomes:
                     ruins.add(pr["nativeQueryRef"])
-        # Titulo ligado a medida. Nao e projecao, entao o laco acima nao o
-        # alcanca -- e o modo de falha e pior que o do visual vazio: titulo
-        # apontando para medida inexistente renderiza EM BRANCO, e grafico sem
-        # titulo passa por decisao de design, nao por erro. Nove titulos deste
-        # painel dependem desta checagem desde que deixaram de ser texto literal.
         for t in o["visual"].get("visualContainerObjects", {}).get("title", []):
             e = t.get("properties", {}).get("text", {}).get("expr", {})
             m = e.get("Measure", {}).get("Property")
             if m and m not in nomes:
                 ruins.add(m + " (titulo)")
-        # Medida referenciada por filtro de visual: mesma lacuna. Um filtro
-        # "Excedente > 0" apontando para medida renomeada nao filtra nada, e a
-        # tabela volta a mostrar a janela inteira sob um titulo que promete outra
-        # coisa -- silenciosamente, que e o defeito que o filtro veio corrigir.
         for fl in o.get("filterConfig", {}).get("filters", []):
             m = fl.get("field", {}).get("Measure", {}).get("Property")
             if m and m not in nomes:
@@ -235,11 +213,11 @@ def tabelas_com_janela(destino, bim="model.bim.json"):
     restringe data, as linhas fora do recorte somem -- sem erro, sem celula vazia,
     sem nada que se leia como defeito. A tabela apenas parece ter menos dado.
 
-    Foi o que aconteceu no Detalhe: duas medidas, as duas de 30 dias, e 95,2% das
-    103.604 linhas invisiveis. O comentario do gerador afirmava explicitamente que
-    a linha de 2025 continuava na tabela. Nao continuava. Quem descobriu foi um
+    Foi o que aconteceu no Detalhe: duas medidas, as duas de 30 dias, e a grande
+    maioria das linhas invisivel. O comentario do gerador afirmava explicitamente
+    que a linha de 2025 continuava na tabela. Nao continuava. Quem descobriu foi um
     leitor selecionando um fornecedor no segmentador e recebendo tabela vazia --
-    790 dos 1.028 fornecedores faziam isso.
+    tres em cada quatro fornecedores faziam isso. Numeros em docs/wiki.
 
     Deteccao exata, nao heuristica: toda medida de janela deste modelo passa pelo
     helper janela(), que emite "VAR Fim = [Data Fim Completa]". Medida cuja

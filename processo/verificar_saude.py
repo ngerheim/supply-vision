@@ -29,43 +29,25 @@ import smtplib
 from email.message import EmailMessage
 from datetime import datetime, date
 
-# ═══════════════════════════════════════════════════════════════════
-# CONFIGURAÇÃO
-# ═══════════════════════════════════════════════════════════════════
 
 import sv_paths
 
 LOG_DIR      = str(sv_paths.LOG_DIR)
-# Log unitário por execução (logs/verificacao_AAAAMMDD_HHMM.log) — não é
-# mais um único arquivo que cresce para sempre. Calculado uma vez no
-# import: todas as chamadas de registrar() dentro desta mesma execução
-# vão para o mesmo arquivo; a próxima execução cria um novo.
 LOG_VERIF    = str(pathlib.Path(LOG_DIR) / f"verificacao_{datetime.now().strftime('%Y%m%d_%H%M')}.log")
 
-# Mesma infra SMTP do enviar_email.py — lida direto do mesmo arquivo de senha.
-# Valores em config/cfg_ambiente.txt — fora do repositório Git.
 SMTP_SERVIDOR   = sv_paths.SMTP_SERVIDOR
 SMTP_PORTA      = sv_paths.SMTP_PORTA
 SMTP_USUARIO    = sv_paths.SMTP_USUARIO
 SMTP_SENHA_PATH = str(sv_paths.CFG_SMTP)
 REMETENTE       = sv_paths.REMETENTE
 
-# Alerta vai SÓ para o responsável — nunca para os destinatários do
-# relatório nem para a Cco departamental. É um canal operacional interno.
 DESTINATARIO_ALERTA = sv_paths.DESTINATARIO_ALERTA
 
-# Tolerância para casar o log com o horário esperado (jitter do scheduler).
 TOLERANCIA_SEGUNDOS = 90
 
-# Expiração da chave de API do Qlik — ver "Chave de API do Qlik" no README.
-# Avisos proativos são enviados SÓ no slot das 08:00 e SÓ nos dias-marco
-# abaixo, para não virar ruído. Se já expirou, avisa todo dia às 08:05.
 CHAVE_QLIK_EXPIRA = date(2027, 6, 23)
 DIAS_AVISO_CHAVE  = {30, 15, 7, 3, 1}
 
-# ═══════════════════════════════════════════════════════════════════
-# LOG PRÓPRIO DO VERIFICADOR (auditoria simples, mesmo padrão do _limpeza.log)
-# ═══════════════════════════════════════════════════════════════════
 
 def registrar(msg):
     linha = f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}  {msg}"
@@ -74,9 +56,6 @@ def registrar(msg):
     with open(LOG_VERIF, "a", encoding="utf-8") as f:
         f.write(linha + "\n")
 
-# ═══════════════════════════════════════════════════════════════════
-# ENVIO DO ALERTA
-# ═══════════════════════════════════════════════════════════════════
 
 def _enviar_email(assunto, corpo):
     """Envia e-mail pela mesma infra SMTP do pipeline. Retorna True se saiu.
@@ -152,9 +131,6 @@ def checar_expiracao_chave(hhmm_esperado):
     if _enviar_email(assunto, corpo):
         registrar(f"AVISO DE EXPIRAÇÃO DA CHAVE QLIK enviado — {dias} dia(s) restante(s)")
 
-# ═══════════════════════════════════════════════════════════════════
-# BUSCA E VALIDAÇÃO DO LOG DA JANELA ESPERADA
-# ═══════════════════════════════════════════════════════════════════
 
 def encontrar_log(hhmm_esperado):
     """Procura, entre os logs de HOJE, um cujo timestamp esteja dentro da
@@ -165,9 +141,6 @@ def encontrar_log(hhmm_esperado):
     esperado_dt = datetime.strptime(hhmm_esperado, "%H%M")
 
     for arq in pasta.glob(f"pipeline_{hoje}_*.log"):
-        # Compatibilidade durante a transição:
-        #   legado: pipeline_AAAAMMDD_HHMM.log
-        #   atual:  pipeline_AAAAMMDD_HHMMSS_<sufixo>.log
         m = re.fullmatch(
             r"pipeline_\d{8}_(\d{4})(\d{2})?(?:_[0-9A-Za-z]+)?\.log",
             arq.name,
@@ -215,16 +188,13 @@ def verificar(hhmm_esperado):
         detalhe=f"Últimas linhas do log:\n\n{trecho}"
     )
 
-# ═══════════════════════════════════════════════════════════════════
-# EXECUÇÃO
-# ═══════════════════════════════════════════════════════════════════
 
 if __name__ == "__main__":
     if len(sys.argv) < 2 or not re.match(r"^\d{4}$", sys.argv[1]):
         registrar("ERRO: argumento de horário esperado ausente ou inválido (formato HHMM).")
         sys.exit(1)
 
-    dow = datetime.now().weekday()  # 0=seg ... 6=dom
+    dow = datetime.now().weekday()
     if dow > 4:
         registrar("Fim de semana — verificação não se aplica, encerrando.")
         sys.exit(0)

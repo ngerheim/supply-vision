@@ -9,10 +9,9 @@ O descarte de colunas acontece aqui, e não no hipercubo, de propósito:
 reduzir o cubo no Qlik faz linhas distintas colapsarem, porque ele devolve
 uma linha por combinação de dimensões. Aqui é projeção pura.
 
-A deduplicação foi medida em 243.537 linhas, de 01/2025 a 08/2026: com as 22
-colunas do objeto, a base não tem nenhuma linha repetida; com as 11 usadas,
-aparecem 21 — todas criadas pelo próprio descarte, e todas artefato de
-lançamento. Ela registra quantas removeu porque deduplicação silenciosa
+A deduplicação foi medida sobre a base completa (ver docs/wiki): com as 22
+colunas do objeto não há nenhuma linha repetida; com as 11 usadas aparecem
+poucas, todas criadas pelo próprio descarte e todas artefato de lançamento. Ela registra quantas removeu porque deduplicação silenciosa
 deixa de ser regra e vira comportamento emergente: no dia em que o modelo de
 dados mudar, o número muda sozinho e ninguém vê.
 """
@@ -22,7 +21,6 @@ class BaseInvalida(RuntimeError):
     """A base não cumpre o contrato: falta coluna obrigatória."""
 
 
-# Ordem canônica. Define também a ordem das colunas na base gravada.
 COLUNAS = [
     'Grupo Despesa',
     'Modelo',
@@ -32,12 +30,11 @@ COLUNAS = [
     'OS Quantidade',
     'Valor Unitario',
     'Fornecedor',
-    'Forncedor por Cidade',   # a grafia errada é do Qlik, não daqui
+    'Forncedor por Cidade',
     'Fornecedor CNPJ',
     'Criado Por',
 ]
 
-# Chegam como número, não como texto, na leitura do hipercubo.
 COLUNAS_NUMERICAS = {'Valor Unitario', 'OS Quantidade'}
 
 

@@ -12,7 +12,6 @@ mandaria e-mail para a relação errada, sem ninguém perceber.
 """
 from pathlib import Path
 
-# sv_paths.py vive em processo/; sobe um nível para a raiz do projeto.
 RAIZ = Path(__file__).resolve().parent.parent
 
 CONFIG_DIR   = RAIZ / "config"
@@ -22,8 +21,6 @@ LOG_DIR      = RAIZ / "logs"
 REPORTS      = RAIZ / "reports"
 ARCHIVE_DIR  = LOG_DIR / "archive"
 
-# base.xlsx é dado, não código: vive em dados/, não junto dos scripts.
-# Regerada a cada execução pelo baixar_base.py.
 BASE_PATH     = DADOS_DIR / "base.xlsx"
 
 CFG_QLIK      = CONFIG_DIR / "cfg_qlik.txt"
@@ -35,7 +32,6 @@ SCRIPT_BAIXAR = PROCESSO_DIR / "baixar_base.py"
 SCRIPT_RODAR  = PROCESSO_DIR / "rodar.py"
 SCRIPT_EMAIL  = PROCESSO_DIR / "enviar_email.py"
 
-# Pasta-pai de parametros/, para o `from parametros import ...` funcionar.
 PARAMETROS_SRC = RAIZ
 PARAMETROS_DIR = RAIZ / "parametros"
 
@@ -79,27 +75,20 @@ def _exigir(chave):
     return valor
 
 
-# --- Qlik Cloud ---
 QLIK_TENANT = _exigir("QLIK_TENANT")
 QLIK_APP_ID = _exigir("QLIK_APP_ID")
 QLIK_OBJ_ID = _exigir("QLIK_OBJ_ID")
 
-# --- SMTP ---
 SMTP_SERVIDOR       = _exigir("SMTP_SERVIDOR")
 SMTP_PORTA          = int(_exigir("SMTP_PORTA"))
 SMTP_USUARIO        = _exigir("SMTP_USUARIO")
 REMETENTE           = _exigir("REMETENTE")
 DESTINATARIO_ALERTA = _exigir("DESTINATARIO_ALERTA")
 
-# Nome da tarefa no Agendador de Tarefas do Windows. Fica na configuração
-# porque precisa bater exatamente com o que está registrado na máquina.
 TAREFA_RELATORIO = _exigir("TAREFA_RELATORIO")
 
-# Planilha de acordos: única dependência fora da pasta do projeto.
 ACORDO_PATH = Path(_exigir("ACORDO_PATH"))
 
-# Tempo máximo por subprocesso do pipeline. É opcional para manter
-# compatibilidade com instalações existentes, mas valor inválido falha alto.
 try:
     PIPELINE_TIMEOUT_S = int(AMBIENTE.get("PIPELINE_TIMEOUT_S", "1800"))
     if PIPELINE_TIMEOUT_S <= 0:

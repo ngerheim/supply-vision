@@ -15,15 +15,11 @@ from datetime import date
 
 import websocket
 
-# --- Conexão ---
 TENTATIVAS_CONEXAO = 3
 INTERVALO_RETRY_S  = 45
-TIMEOUT_CONEXAO_S  = 30    # handshake
-TIMEOUT_LEITURA_S  = 120   # cada recv; recorte grande devolve resposta maior
+TIMEOUT_CONEXAO_S  = 30
+TIMEOUT_LEITURA_S  = 120
 
-# --- Paginação ---
-# Numa extração de 200 mil linhas são ~500 chamadas. Sem retry, uma única
-# falha transitória custava a extração inteira.
 TENTATIVAS_PAGINA    = 3
 PAUSA_RETRY_PAGINA_S = 3
 CELULAS_POR_PAGINA   = 10000
@@ -48,7 +44,6 @@ class Sessao:
         self.ws = None
         self._id = 0
 
-    # ---------------------------------------------------------------- ciclo
     def __enter__(self):
         self.abrir()
         return self
@@ -83,7 +78,7 @@ class Sessao:
             raise ultimo
 
         self.ws.settimeout(TIMEOUT_LEITURA_S)
-        self.ws.recv()                      # OnConnected
+        self.ws.recv()
         self.call('OpenDoc', -1, [self.app_id])
         self.call('ClearAll', 1, [False])
         return self
@@ -96,7 +91,6 @@ class Sessao:
                 pass
             self.ws = None
 
-    # ------------------------------------------------------------- protocolo
     def call(self, method, handle, params):
         """Chamada JSON-RPC, casando a resposta pelo id.
 
@@ -113,7 +107,7 @@ class Sessao:
         while True:
             msg = json.loads(self.ws.recv())
             if msg.get('id') != meu:
-                continue                    # notificação assíncrona: ignora
+                continue
             if 'error' in msg:
                 err = msg['error']
                 raise QlikErro(f"Qlik recusou {method}: {err.get('message', '?')} "
@@ -122,7 +116,6 @@ class Sessao:
                 raise QlikErro(f"Qlik respondeu {method} sem 'result': {msg}")
             return msg['result']
 
-    # ----------------------------------------------------------------- cubo
     def abrir_objeto(self, obj_id):
         """Abre o objeto e devolve (handle, cabeçalhos, nº de colunas)."""
         h = self.call('GetObject', 1, [obj_id])['qReturn']['qHandle']
@@ -139,7 +132,6 @@ class Sessao:
         """Quantas linhas o objeto expõe no estado de seleção atual."""
         return self.call('GetLayout', h, [])['qLayout']['qHyperCube']['qSize']['qcy']
 
-    # ------------------------------------------------------------- seleção
     def selecionar_datas(self, campo, datas):
         """Seleciona as datas por valor e devolve quantas casaram.
 
@@ -170,7 +162,6 @@ class Sessao:
         dim = self.call('GetLayout', lb, [])['qLayout']['qListObject']['qDimensionInfo']
         return dim['qStateCounts']['qSelected']
 
-    # ------------------------------------------------------------- leitura
     def ler(self, h, headers, qcx, colunas_numericas, progresso_a_cada=0):
         """Lê o objeto inteiro, paginado, e devolve a lista de linhas.
 

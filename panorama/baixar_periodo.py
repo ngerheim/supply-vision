@@ -16,7 +16,7 @@ from datetime import datetime, timedelta
 
 import pandas as pd
 
-sys.dont_write_bytecode = True   # não polui processo/ com __pycache__
+sys.dont_write_bytecode = True
 
 try:
     sys.stdout.reconfigure(encoding='utf-8', errors='replace')
@@ -24,8 +24,8 @@ try:
 except Exception:
     pass
 
-RAIZ = pathlib.Path(__file__).resolve().parent   # supply-vision/panorama
-sys.path.insert(0, str(RAIZ))                    # svp_paths.py e periodo.py
+RAIZ = pathlib.Path(__file__).resolve().parent
+sys.path.insert(0, str(RAIZ))
 import svp_paths
 from periodo import resolver_ou_sair
 
@@ -45,8 +45,8 @@ OBJ_ID  = _sv.QLIK_OBJ_ID
 TENANT  = _sv.QLIK_TENANT
 CAMPO   = 'OS.OSABERTURADATA'
 
-AVISO_DIAS = 366          # acima disso avisa que vai demorar; não impede
-PROGRESSO_A_CADA = 25     # páginas entre cada linha de progresso
+AVISO_DIAS = 366
+PROGRESSO_A_CADA = 25
 
 
 def dias_do_recorte():
