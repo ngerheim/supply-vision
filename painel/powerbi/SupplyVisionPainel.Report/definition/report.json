@@ -2,14 +2,18 @@
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/report/3.3.0/schema.json",
   "themeCollection": {
     "customTheme": {
-      "name": "Loc_Frotas___Supply_Vision7329854293304904.json",
+      "name": "tema_supply_vision.json",
       "reportVersionAtImport": {
-        "visual": "2.11.0",
-        "report": "3.4.0",
-        "page": "2.3.1"
+        "visual": "2.9.0",
+        "report": "3.3.0",
+        "page": "2.1.0"
       },
       "type": "RegisteredResources"
     }
+  },
+  "settings": {
+    "useStylableVisualContainerHeader": true,
+    "defaultDrillFilterOtherVisuals": true
   },
   "resourcePackages": [
     {
@@ -17,16 +21,11 @@
       "type": "RegisteredResources",
       "items": [
         {
-          "name": "Loc_Frotas___Supply_Vision7329854293304904.json",
-          "path": "Loc_Frotas___Supply_Vision7329854293304904.json",
+          "name": "tema_supply_vision.json",
+          "path": "tema_supply_vision.json",
           "type": "CustomTheme"
         }
       ]
     }
-  ],
-  "settings": {
-    "useStylableVisualContainerHeader": true,
-    "defaultDrillFilterOtherVisuals": true,
-    "useEnhancedTooltips": false
-  }
+  ]
 }

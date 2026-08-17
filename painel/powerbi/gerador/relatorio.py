@@ -523,8 +523,27 @@ def botao_bookmark(x, y, w, h, rotulo, bookmark):
     }
 
 
+# ── tema registrado ─────────────────────────────────────────────────
+# Nome de arquivo FIXO. O Desktop registra com sufixo numerico aleatorio
+# ("Loc_Frotas___Supply_Vision7329854293304904.json") e nao remove os anteriores:
+# em 17/08/2026 havia 14 copias byte a byte identicas na pasta, seis delas
+# rastreadas no Git. Nome fixo faz a proxima geracao sobrescrever a mesma, em vez
+# de somar mais uma.
+#
+# Nome sem a marca no arquivo. O tema declara "Loc Frotas — Supply Vision" no
+# conteudo, o que e o nome que aparece no Desktop; o nome do ARQUIVO nao precisa
+# repetir isso, e repetir espalha a marca por caminho de arquivo num repositorio
+# que tem versao publica.
+TEMA_ARQ = "tema_supply_vision.json"
+
+# Versoes de schema do proprio gerador. O Desktop grava aqui as versoes que ELE
+# usa (2.11.0 / 3.4.0 / 2.3.1), que sao mais novas que as emitidas por este
+# arquivo. Declarar as do gerador mantem o report.json coerente consigo mesmo.
+TEMA_VERSOES = {"visual": "2.9.0", "report": "3.3.0", "page": "2.1.0"}
+
+
 # ── escrita da arvore de pastas ─────────────────────────────────────
-def escrever(destino, paginas):
+def escrever(destino, paginas, tema=None):
     """Grava definition/ no formato PBIR. Devolve (n_paginas, n_visuais).
 
     Apaga o destino antes de escrever. Sem isso, um visual que muda de posicao
@@ -538,6 +557,17 @@ def escrever(destino, paginas):
     botao_bookmark(). Se a pasta existir no destino, ela e salva antes do rmtree e
     devolvida depois. Sem isso, o bookmark criado a mao morre na primeira
     regeracao e o botao passa a apontar para nada, silenciosamente.
+
+    tema= caminho do JSON do tema. Com ele, escrever() registra o tema no
+    report.json E copia o arquivo para StaticResources/RegisteredResources/.
+
+    Por que isso passou a ser responsabilidade do gerador: antes o report.json
+    saia com themeCollection VAZIO, o Desktop percebia a falta ao abrir e
+    registrava o tema sozinho -- gravando resourcePackages, criando uma copia com
+    sufixo aleatorio, e sujando 21 arquivos que a geracao seguinte desfazia. O
+    artefato e o gerador se alternavam a cada abertura. Pior: num clone limpo o
+    relatorio abria SEM tema, porque o unico lugar onde o registro existia era a
+    maquina de quem tinha aberto o Desktop antes.
     """
     d = pathlib.Path(destino)
     guardado = None
@@ -549,9 +579,30 @@ def escrever(destino, paginas):
     d.mkdir(parents=True, exist_ok=True)
     esc = lambda p, o: p.write_text(json.dumps(o, indent=2, ensure_ascii=False), encoding="utf-8")
     esc(d / "version.json", {"$schema": S_VER, "version": "2.0.0"})
-    esc(d / "report.json", {"$schema": S_REP, "themeCollection": {},
-        "settings": {"useStylableVisualContainerHeader": True,
-                     "defaultDrillFilterOtherVisuals": True}})
+
+    rep = {"$schema": S_REP, "themeCollection": {},
+           "settings": {"useStylableVisualContainerHeader": True,
+                        "defaultDrillFilterOtherVisuals": True}}
+    if tema:
+        origem_tema = pathlib.Path(tema)
+        if not origem_tema.is_file():
+            raise FileNotFoundError(f"tema nao encontrado: {origem_tema}")
+        # d.parent, nao d: StaticResources/ e IRMAO de definition/ dentro da pasta
+        # .Report, nao filho dela. Escrever em definition/StaticResources/ valida
+        # contra o schema e o tema simplesmente nao carrega -- o report.json
+        # aponta para um caminho que o Power BI procura um nivel acima.
+        rec = d.parent / "StaticResources" / "RegisteredResources"
+        rec.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(origem_tema, rec / TEMA_ARQ)
+        rep["themeCollection"] = {"customTheme": {
+            "name": TEMA_ARQ,
+            "reportVersionAtImport": TEMA_VERSOES,
+            "type": "RegisteredResources"}}
+        rep["resourcePackages"] = [{
+            "name": "RegisteredResources",
+            "type": "RegisteredResources",
+            "items": [{"name": TEMA_ARQ, "path": TEMA_ARQ, "type": "CustomTheme"}]}]
+    esc(d / "report.json", rep)
     pd = d / "pages"; pd.mkdir(exist_ok=True)
     esc(pd / "pages.json", {"$schema": S_PGS,
         "pageOrder": [p["name"] for p in paginas], "activePageName": paginas[0]["name"]})

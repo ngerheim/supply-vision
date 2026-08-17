@@ -1,5 +1,5 @@
 {
-  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.11.0/schema.json",
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.9.0/schema.json",
   "name": "06640825-2d9c-50f3-a6d4-c1f7a07baa20",
   "position": {
     "x": 214,
@@ -27,13 +27,13 @@
               },
               "queryRef": "Painel.Tinha acordo?",
               "nativeQueryRef": "Tinha acordo?",
-              "active": true,
               "displayName": "Tinha acordo disponível?"
             }
           ]
         }
       }
     },
+    "drillFilterOtherVisuals": true,
     "visualContainerObjects": {
       "title": [
         {
@@ -48,7 +48,6 @@
           }
         }
       ]
-    },
-    "drillFilterOtherVisuals": true
+    }
   }
 }

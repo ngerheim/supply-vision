@@ -432,5 +432,10 @@ paginas = [pagina("Visão Geral", p1),
            pagina("Conformidade de preço", p4, filtros=filtro_janela("Ultimos 30 dias")),
            pagina("Detalhe", p7)]
 
-n_pg, n_vis = escrever("out/SupplyVisionPainel.Report/definition", paginas)
+# tema= faz o gerador registrar o tema no report.json e copiar o arquivo para
+# StaticResources/RegisteredResources/. Sem isso o Desktop fazia esse registro
+# sozinho na primeira abertura, e a geracao seguinte o desfazia -- 21 arquivos
+# alternando a cada ciclo. Roda tema.py antes; ele escreve este JSON.
+n_pg, n_vis = escrever("out/SupplyVisionPainel.Report/definition", paginas,
+                       tema="LocFrotas_SupplyVision.json")
 print("paginas:", n_pg, "| visuais:", n_vis)

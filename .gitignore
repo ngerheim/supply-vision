@@ -145,4 +145,8 @@ desktop.ini
 # identica. O report.json gerado declara themeCollection vazio, entao nenhuma
 # delas e referenciada pelo relatorio. O tema versionado e
 # painel/powerbi/LocFrotas_SupplyVision.json.
-/painel/powerbi/SupplyVisionPainel.Report/StaticResources/RegisteredResources/
+/painel/powerbi/SupplyVisionPainel.Report/StaticResources/RegisteredResources/*
+# Excecao: o tema que o GERADOR registra, com nome fixo. Ele e referenciado
+# pelo report.json e um clone limpo precisa dele para o relatorio abrir com a
+# identidade certa. As outras copias sao as do Desktop, com sufixo aleatorio.
+!/painel/powerbi/SupplyVisionPainel.Report/StaticResources/RegisteredResources/tema_supply_vision.json

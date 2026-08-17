@@ -1,5 +1,5 @@
 {
-  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.11.0/schema.json",
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.9.0/schema.json",
   "name": "db79bebd-ffbc-53b8-b749-425cc4066ef2",
   "position": {
     "x": 0,
@@ -27,13 +27,13 @@
               },
               "queryRef": "Painel.Criador",
               "nativeQueryRef": "Criador",
-              "active": true,
               "displayName": "Criador da OS"
             }
           ]
         }
       }
     },
+    "drillFilterOtherVisuals": true,
     "visualContainerObjects": {
       "title": [
         {
@@ -48,7 +48,6 @@
           }
         }
       ]
-    },
-    "drillFilterOtherVisuals": true
+    }
   }
 }

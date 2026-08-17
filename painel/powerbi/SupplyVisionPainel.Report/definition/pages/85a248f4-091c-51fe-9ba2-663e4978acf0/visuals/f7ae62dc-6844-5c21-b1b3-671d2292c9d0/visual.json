@@ -1,5 +1,5 @@
 {
-  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.11.0/schema.json",
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.9.0/schema.json",
   "name": "f7ae62dc-6844-5c21-b1b3-671d2292c9d0",
   "position": {
     "x": 214,
@@ -26,13 +26,13 @@
                 }
               },
               "queryRef": "Painel.Item",
-              "nativeQueryRef": "Item",
-              "active": true
+              "nativeQueryRef": "Item"
             }
           ]
         }
       }
     },
+    "drillFilterOtherVisuals": true,
     "visualContainerObjects": {
       "title": [
         {
@@ -47,7 +47,6 @@
           }
         }
       ]
-    },
-    "drillFilterOtherVisuals": true
+    }
   }
 }

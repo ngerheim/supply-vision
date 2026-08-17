@@ -1,5 +1,5 @@
 {
-  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.11.0/schema.json",
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.9.0/schema.json",
   "name": "0c17a673-eca8-5749-84b0-028dfb6dd0e9",
   "position": {
     "x": 0,
@@ -26,13 +26,13 @@
                 }
               },
               "queryRef": "Painel.Cidade",
-              "nativeQueryRef": "Cidade",
-              "active": true
+              "nativeQueryRef": "Cidade"
             }
           ]
         }
       }
     },
+    "drillFilterOtherVisuals": true,
     "visualContainerObjects": {
       "title": [
         {
@@ -47,7 +47,6 @@
           }
         }
       ]
-    },
-    "drillFilterOtherVisuals": true
+    }
   }
 }

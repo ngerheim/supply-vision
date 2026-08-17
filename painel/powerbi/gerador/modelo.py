@@ -324,7 +324,24 @@ model = {
                 "source": {"type": "m", "expression": M.split("\n")}
             }],
         }],
-        "annotations": [{"name": "PBI_QueryOrder", "value": json.dumps([T])}],
+        "annotations": [
+            {"name": "PBI_QueryOrder", "value": json.dumps([T])},
+            # Desliga a data/hora automatica. Sem isto o Desktop cria uma tabela
+            # oculta por coluna de data ao abrir o projeto -- em 17/08/2026 eram
+            # tres (DateTableTemplate_... e dois LocalDateTable_...), e o
+            # model.bim do projeto passou a ter 4 tabelas contra 1 do gerador.
+            #
+            # O efeito nao e so tamanho (29 KB -> 67 KB). E oscilacao: aplicar.py
+            # copia a versao de 1 tabela, o Desktop devolve as 3 na abertura
+            # seguinte, e cada commit alterna 38 KB. Diff que muda sozinho para
+            # frente e para tras deixa de ser lido, e ai um diff que importa passa
+            # junto.
+            #
+            # Aqui nao se perde nada: o painel nao usa hierarquia de data do
+            # Power BI. Ano, Ano-Mes, Mes Nome, Mes Fechado e as tres colunas de
+            # janela sao calculadas no M e vem prontas na tabela Painel.
+            {"name": "__PBI_TimeIntelligenceEnabled", "value": "0"},
+        ],
     },
 }
 
