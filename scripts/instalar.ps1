@@ -6,16 +6,19 @@ $Portal=Join-Path $Raiz 'portal'; $Alertas=Join-Path $Raiz 'alertas'; $Privado=J
 function Etapa([string]$m){Write-Host "`n==> $m" -ForegroundColor Cyan}
 function Comando([string]$nome,[string]$pacote,[string]$descricao){
   $c=Get-Command $nome -ErrorAction SilentlyContinue
-  if($c){return $c.Source}
+  if($c){return [string]$c.Source}
   if($SomenteVerificar){throw "$descricao nao encontrado. Execute INSTALAR.bat."}
   $w=Get-Command winget.exe -ErrorAction SilentlyContinue
   if(!$w){throw "$descricao ausente e winget indisponivel. Instale-o e execute novamente."}
   Etapa "Instalando $descricao"
-  & $w.Source install --id $pacote --exact --accept-package-agreements --accept-source-agreements
-  if($LASTEXITCODE){throw "Falha ao instalar $descricao."}
+  $saidaWinget=@(& $w.Source install --id $pacote --exact --accept-package-agreements --accept-source-agreements 2>&1)
+  $codigoWinget=$LASTEXITCODE
+  $saidaWinget|ForEach-Object{Write-Host $_}
+  if($codigoWinget){throw "Falha ao instalar $descricao (codigo $codigoWinget)."}
   $env:Path=[Environment]::GetEnvironmentVariable('Path','Machine')+';'+[Environment]::GetEnvironmentVariable('Path','User')
   $c=Get-Command $nome -ErrorAction SilentlyContinue
-  if(!$c){throw "Reinicie o Windows e execute o instalador novamente."}; return $c.Source
+  if(!$c){throw "$descricao foi instalado, mas o Windows ainda nao o disponibilizou. Reinicie o Windows e execute INSTALAR.bat novamente."}
+  return [string]$c.Source
 }
 function Versao([string]$exe,[version]$min,[string]$nome){
   $t=(& $exe --version 2>&1|Select-Object -First 1)
