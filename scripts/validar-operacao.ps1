@@ -5,8 +5,19 @@ if(!$Raiz){$Raiz=(Resolve-Path (Join-Path $PSScriptRoot '..')).Path}
 . (Join-Path $PSScriptRoot 'operacao-logica.ps1')
 $privado=Join-Path $Raiz 'privado';$erros=[Collections.Generic.List[string]]::new()
 function Falha([string]$m){$erros.Add($m)}
-function Exigir-Arquivo([string]$p){if(!(Test-Path -LiteralPath $p -PathType Leaf)){Falha "Arquivo ausente: $p"}elseif((Get-Item -LiteralPath $p).Length-eq0){Falha "Arquivo vazio: $p"}}
-function Ler-Chaves([string]$p,[string[]]$chaves){if(!(Test-Path $p)){Falha "Arquivo ausente: $p";return};$valores=@{};foreach($l in Get-Content $p){$t=$l.Trim();if($t-and!$t.StartsWith('#')-and$t.Contains('=')){$k,$v=$t.Split('=',2);$valores[$k.Trim().ToUpper()]=$v.Trim()}};foreach($k in $chaves){if(!$valores[$k]){Falha "Configuracao ausente em $p`: $k"}};return $valores}
+function Exigir-Arquivo([string]$p){
+ try{
+  if(!(Test-Path -LiteralPath $p -PathType Leaf -ErrorAction Stop)){Falha "Arquivo ausente: $p"}
+  elseif((Get-Item -LiteralPath $p -ErrorAction Stop).Length-eq0){Falha "Arquivo vazio: $p"}
+ }catch{Falha "Sem acesso ao arquivo: $p ($($_.Exception.Message))"}
+}
+function Ler-Chaves([string]$p,[string[]]$chaves){
+ try{
+  if(!(Test-Path -LiteralPath $p -PathType Leaf -ErrorAction Stop)){Falha "Arquivo ausente: $p";return}
+  $linhas=@(Get-Content -LiteralPath $p -ErrorAction Stop)
+ }catch{Falha "Sem acesso ao arquivo: $p ($($_.Exception.Message))";return}
+ $valores=@{};foreach($l in $linhas){$t=$l.Trim();if($t-and!$t.StartsWith('#')-and$t.Contains('=')){$k,$v=$t.Split('=',2);$valores[$k.Trim().ToUpper()]=$v.Trim()}};foreach($k in $chaves){if(!$valores[$k]){Falha "Configuracao ausente em $p`: $k"}};return $valores
+}
 $op=Join-Path $privado 'comum\operacao.env';try{$cfg=Ler-ConfigOperacao $op;Validar-Horarios $cfg}catch{Falha $_.Exception.Message}
 if($cfg){$minimo=0.0;if(![double]::TryParse($cfg['ESPACO_MINIMO_GB'],[Globalization.NumberStyles]::Number,[Globalization.CultureInfo]::InvariantCulture,[ref]$minimo)-or$minimo-lt1){Falha 'ESPACO_MINIMO_GB deve ser um numero maior ou igual a 1.'}}
 Ler-Chaves (Join-Path $privado 'comum\smtp.env') @('SMTP_HOST','SMTP_PORT','SMTP_USER','SMTP_PASSWORD','EMAIL_FROM_NAME')|Out-Null
