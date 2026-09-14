@@ -21,8 +21,8 @@ jobs:
       run:
         working-directory: portal
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
@@ -37,8 +37,8 @@ jobs:
     name: Alertas
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
           cache: pip
@@ -46,4 +46,18 @@ jobs:
             alertas/config/requirements.txt
             alertas/config/requirements-dev.txt
       - run: pip install -r alertas/config/requirements.txt -r alertas/config/requirements-dev.txt
+      - name: Preparar configuração fictícia
+        run: |
+          mkdir -p privado/comum privado/alertas/config
+          mkdir -p privado/alertas/parametros/de_para privado/alertas/parametros/filtros
+          cp compartilhado/smtp.env.example privado/comum/smtp.env
+          cp alertas/config/cfg_ambiente.exemplo.txt privado/alertas/config/cfg_ambiente.txt
+          cp alertas/config/cfg_qlik.exemplo.txt privado/alertas/config/cfg_qlik.txt
+          cp alertas/config/destinatarios.exemplo.txt privado/alertas/config/destinatarios.txt
+          for arquivo in alertas/parametros/de_para/*.exemplo.csv; do
+            cp "$arquivo" "privado/alertas/parametros/de_para/$(basename "$arquivo" .exemplo.csv).csv"
+          done
+          for arquivo in alertas/parametros/filtros/*.exemplo.txt; do
+            cp "$arquivo" "privado/alertas/parametros/filtros/$(basename "$arquivo" .exemplo.txt).txt"
+          done
       - run: python -m pytest alertas/tests -q
