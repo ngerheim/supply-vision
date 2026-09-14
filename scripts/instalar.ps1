@@ -4,9 +4,27 @@ $ErrorActionPreference='Stop'
 $Raiz=(Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $Portal=Join-Path $Raiz 'portal'; $Alertas=Join-Path $Raiz 'alertas'; $Privado=Join-Path $Raiz 'privado'
 function Etapa([string]$m){Write-Host "`n==> $m" -ForegroundColor Cyan}
+function Localizar-Comando([string]$nome){
+  foreach($c in @(Get-Command $nome -All -ErrorAction SilentlyContinue)){
+    $origem=[string]$c.Source
+    if(!$origem-or!(Test-Path -LiteralPath $origem -PathType Leaf)){continue}
+    if($nome-eq'python.exe'-and$origem-like '*\Microsoft\WindowsApps\python.exe'){continue}
+    return $origem
+  }
+  if($nome-eq'python.exe'){
+    $padroes=@(
+      (Join-Path $env:LocalAppData 'Programs\Python\Python*\python.exe'),
+      (Join-Path $env:ProgramFiles 'Python*\python.exe')
+    )
+    foreach($c in @($padroes|ForEach-Object{Get-ChildItem -Path $_ -File -ErrorAction SilentlyContinue}|Sort-Object FullName -Descending)){
+      return [string]$c.FullName
+    }
+  }
+  return $null
+}
 function Comando([string]$nome,[string]$pacote,[string]$descricao){
-  $c=Get-Command $nome -ErrorAction SilentlyContinue
-  if($c){return [string]$c.Source}
+  $c=Localizar-Comando $nome
+  if($c){return $c}
   if($SomenteVerificar){throw "$descricao nao encontrado. Execute INSTALAR.bat."}
   $w=Get-Command winget.exe -ErrorAction SilentlyContinue
   if(!$w){throw "$descricao ausente e winget indisponivel. Instale-o e execute novamente."}
@@ -16,9 +34,9 @@ function Comando([string]$nome,[string]$pacote,[string]$descricao){
   $saidaWinget|ForEach-Object{Write-Host $_}
   if($codigoWinget){throw "Falha ao instalar $descricao (codigo $codigoWinget)."}
   $env:Path=[Environment]::GetEnvironmentVariable('Path','Machine')+';'+[Environment]::GetEnvironmentVariable('Path','User')
-  $c=Get-Command $nome -ErrorAction SilentlyContinue
+  $c=Localizar-Comando $nome
   if(!$c){throw "$descricao foi instalado, mas o Windows ainda nao o disponibilizou. Reinicie o Windows e execute INSTALAR.bat novamente."}
-  return [string]$c.Source
+  return $c
 }
 function Versao([string]$exe,[version]$min,[string]$nome){
   $t=(& $exe --version 2>&1|Select-Object -First 1)
