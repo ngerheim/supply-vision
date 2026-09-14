@@ -1,0 +1,27 @@
+# Dados operacionais, credenciais e resultados reais
+/privado/
+
+# Arquivos temporários e dependências locais dos módulos
+**/node_modules/
+**/__pycache__/
+**/*.py[cod]
+**/.pytest_cache/
+**/.venv/
+**/dist/
+**/.wrangler/
+**/work/
+**/coverage/
+
+# Artefatos locais de execução
+**/*.log
+**/*.lock
+**/*.pid
+**/.DS_Store
+
+# Defesa contra dados reais fora da area privada
+*.xlsx
+*.xls
+*.sqlite
+*.sqlite-*
+*.db
+*.env

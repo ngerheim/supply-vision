@@ -1,0 +1,2 @@
+# Modelo fictício. Copie para excluir_descricoes.txt, um valor por linha.
+DESCRICAO_EXCLUIDA_EXEMPLO

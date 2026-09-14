@@ -1,0 +1,5 @@
+# Copie para privado/alertas/config/destinatarios.txt.
+[PARA]
+usuario@example.com
+
+[CCO]

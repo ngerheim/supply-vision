@@ -1,0 +1,57 @@
+{
+  "name": "supply-vision-portal",
+  "version": "0.1.0",
+  "private": true,
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "scripts": {
+    "dev": "vinext dev --host 0.0.0.0",
+    "build": "node scripts/verificar-porta-build.mjs && vinext build",
+    "start": "wrangler dev --config dist/server/wrangler.json --persist-to ../privado/portal/banco/estado/state",
+    "start:local": "wrangler dev --config dist/server/wrangler.json --persist-to ../privado/portal/banco/estado/state --ip 127.0.0.1 --port 3000",
+    "start:lan": "wrangler dev --config dist/server/wrangler.json --persist-to ../privado/portal/banco/estado/state --ip 0.0.0.0 --port 3000",
+    "email:once": "node --experimental-strip-types scripts/processar-emails.mjs",
+    "email:watch": "node --experimental-strip-types scripts/processar-emails.mjs --watch",
+    "lint": "oxlint",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test --experimental-strip-types tests/*.test.ts tests/*.test.mjs",
+    "format": "oxfmt",
+    "test:restore": "node scripts/testar-restauracao.mjs"
+  },
+  "dependencies": {
+    "@base-ui/react": "1.7.0",
+    "@fontsource-variable/jetbrains-mono": "^5.3.0",
+    "@fontsource-variable/plus-jakarta-sans": "^5.3.0",
+    "class-variance-authority": "0.7.1",
+    "clsx": "2.1.1",
+    "lucide-react": "1.31.0",
+    "nodemailer": "10.0.1",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "react-server-dom-webpack": "19.2.8",
+    "tailwind-merge": "3.6.0",
+    "tw-animate-css": "1.4.0",
+    "vinext": "1.0.0-beta.8",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
+  },
+  "devDependencies": {
+    "@cloudflare/vite-plugin": "^1.54.4",
+    "@cloudflare/workers-types": "^5.20260903.1",
+    "@openai/sites-vite-plugin": "^0.2.0",
+    "@tailwindcss/postcss": "4.2.1",
+    "@types/node": "22.19.19",
+    "@types/react": "19.2.14",
+    "@types/react-dom": "19.2.3",
+    "@vitejs/plugin-react": "6.0.2",
+    "@vitejs/plugin-rsc": "0.5.34",
+    "oxfmt": "0.61.0",
+    "oxlint": "1.76.0",
+    "oxlint-tsgolint": "7.0.2001",
+    "tailwindcss": "4.2.1",
+    "typescript": "5.9.3",
+    "vite": "^8.2.2",
+    "wrangler": "^4.129.0"
+  },
+  "type": "module"
+}

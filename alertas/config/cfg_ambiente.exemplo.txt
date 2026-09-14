@@ -1,0 +1,7 @@
+# Copie para privado/alertas/config/cfg_ambiente.txt.
+QLIK_TENANT = tenant.example.com
+QLIK_APP_ID = 00000000-0000-0000-0000-000000000000
+QLIK_OBJ_ID = objeto-exemplo
+DESTINATARIO_ALERTA = usuario@example.com
+ACORDO_PATH = C:\caminho\ACORDOS.xlsx
+PIPELINE_TIMEOUT_S = 1800

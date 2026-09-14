@@ -1,0 +1,6 @@
+# Dependencias de execução dos Alertas.
+websocket-client>=1.9
+pandas>=2.2
+numpy>=1.26
+openpyxl>=3.1
+xlsxwriter>=3.2

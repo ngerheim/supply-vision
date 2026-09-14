@@ -1,0 +1,2 @@
+# Modelo fictício. Copie para excluir_fornecedores.txt, um valor por linha.
+FORNECEDOR_EXCLUIDO_EXEMPLO
