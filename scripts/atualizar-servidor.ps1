@@ -135,3 +135,4 @@ Ok "Portal no ar em $url"
 Write-Host "`n=== Atualizado: $($anterior.Substring(0,7)) -> $($remoto.Substring(0,7)) ===" -ForegroundColor Cyan
 git log -1 --pretty=format:'    %s'
 Write-Host ''
+exit 0
