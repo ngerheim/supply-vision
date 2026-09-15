@@ -134,10 +134,16 @@ def checar_expiracao_chave(hhmm_esperado):
         registrar(f"AVISO DE EXPIRAÇÃO DA CHAVE QLIK enviado — {dias} dia(s) restante(s)")
 
 
-def encontrar_log(hhmm_esperado):
+def encontrar_log(hhmm_esperado, run_id=None):
     """Procura, entre os logs de HOJE, um cujo timestamp esteja dentro da
     tolerância do horário esperado. Ignora execuções manuais fora da janela
     (ex.: um disparo às 08:41 não deve mascarar a ausência do de 08:00)."""
+    if run_id is not None:
+        if not re.fullmatch(r"\d{8}_\d{6}_[0-9A-Za-z]+", run_id):
+            return None
+        log_exato = pathlib.Path(LOG_DIR) / f"pipeline_{run_id}.log"
+        return log_exato if log_exato.is_file() else None
+
     hoje = datetime.now().strftime("%Y%m%d")
     pasta = pathlib.Path(LOG_DIR)
     esperado_dt = datetime.strptime(hhmm_esperado, "%H%M")
@@ -155,10 +161,10 @@ def encontrar_log(hhmm_esperado):
     return None
 
 
-def verificar(hhmm_esperado):
+def verificar(hhmm_esperado, run_id=None):
     hh, mm = hhmm_esperado[:2], hhmm_esperado[2:]
 
-    log = encontrar_log(hhmm_esperado)
+    log = encontrar_log(hhmm_esperado, run_id)
 
     if log is None:
         registrar(f"FALHA — nenhum log encontrado para {hh}:{mm}")
@@ -202,4 +208,4 @@ if __name__ == "__main__":
         sys.exit(0)
 
     checar_expiracao_chave(sys.argv[1])
-    verificar(sys.argv[1])
+    verificar(sys.argv[1], sys.argv[2] if len(sys.argv) > 2 else None)
