@@ -6,6 +6,8 @@ $ErrorActionPreference='Stop'
 $Raiz=(Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $Privado=Join-Path $Raiz 'privado';$Portal=Join-Path $Raiz 'portal';$Alertas=Join-Path $Raiz 'alertas'
 $Operacao=Join-Path $Privado 'operacao';New-Item -ItemType Directory -Force $Operacao|Out-Null
+$ConfigOperacao=Join-Path $Privado 'comum\operacao.env'
+[void](Atualizar-AgendaAlertasLegada $ConfigOperacao)
 try { & (Join-Path $PSScriptRoot 'validar-operacao.ps1') -Raiz $Raiz }
 catch { Add-Content (Join-Path $Operacao 'supervisor.log') "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')  ERRO DE CONFIGURACAO: $($_.Exception.Message)"; throw }
 $LockFile=Join-Path $Operacao 'supervisor.lock'
@@ -19,7 +21,7 @@ if(Test-Path $PidFile){
 }
 Remove-Item $PararFile -Force -ErrorAction SilentlyContinue
 @{pid=$PID;inicio=(Get-Date).ToUniversalTime().ToString('o');raiz=$Raiz}|ConvertTo-Json -Compress|Set-Content $PidFile -Encoding UTF8
-$config=Ler-ConfigOperacao (Join-Path $Privado 'comum\operacao.env')
+$config=Ler-ConfigOperacao $ConfigOperacao
 $ManutencaoFile=Join-Path $Operacao 'manutencao.sinal'
 $estado=@{};if(Test-Path $EstadoFile){try{$o=Get-Content $EstadoFile -Raw|ConvertFrom-Json;$o.psobject.Properties|ForEach-Object{$estado[$_.Name]=$_.Value}}catch{}}
 function Salvar-Estado{

@@ -258,10 +258,7 @@ if __name__ == "__main__":
     situacao = sys.argv[4] if len(sys.argv) > 4 else ""
 
     if situacao in ("SEM_DADOS_QLIK", "SEM_DADOS_FILTRO"):
-        assunto, corpo = montar_aviso(situacao, datas)
-        print(f"Assunto (aviso): {assunto}")
-        html = email_visual.montar_html("Conformidade de Preços", [corpo.strip()])
-        enviar_email(assunto, corpo, [], DESTINATARIOS, html=html)
+        print(f"Nenhum e-mail enviado: {situacao}.")
         sys.exit(0)
 
     try:
