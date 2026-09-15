@@ -7,6 +7,16 @@ import pytest
 
 
 ROOT = Path(__file__).resolve().parents[1]
+RAIZ = ROOT.parent
+sys.path.insert(0, str(ROOT / "processo"))
+
+
+def pytest_configure(config):
+    """Evita o TEMP do perfil, que pode ser somente leitura no servidor."""
+    if config.option.basetemp is None:
+        pasta = RAIZ / "privado" / "testes-temp" / "pytest-alertas"
+        pasta.parent.mkdir(parents=True, exist_ok=True)
+        config.option.basetemp = str(pasta)
 
 
 @pytest.fixture
@@ -38,7 +48,9 @@ def rodar(monkeypatch, tmp_path):
     fake_parametros.normalizar = normalizar
     monkeypatch.setitem(sys.modules, "parametros", fake_parametros)
 
-    spec = importlib.util.spec_from_file_location("rodar_test", ROOT / "processo" / "rodar.py")
+    spec = importlib.util.spec_from_file_location(
+        "rodar_test", ROOT / "processo" / "rodar.py"
+    )
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
