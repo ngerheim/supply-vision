@@ -19,16 +19,16 @@ migrado para um servidor dedicado.
 
 Toda a operação passa pela central: abra **`Supply Vision.bat`**.
 
-Ela mostra se está no ar, abre o Portal e os registros, valida a configuração
-e testa o backup. `INICIAR.bat` e `PARAR.bat` existem para suporte, mas a
-rotina normal é pela central.
+Ela mostra se está no ar, atualiza o sistema, abre o Portal e os registros,
+valida a configuração e testa o backup. `INICIAR.bat`, `PARAR.bat` e os
+scripts existem para suporte, mas a rotina normal é pela central.
 
 ## Os três verbos
 
 | Quero | Comando | Onde |
 |---|---|---|
 | Instalar pela primeira vez | `INSTALAR.bat` | [docs/INSTALAR.md](docs/INSTALAR.md) |
-| Publicar uma melhoria | `scripts\atualizar-servidor.ps1` | [docs/OPERAR.md](docs/OPERAR.md) |
+| Receber uma melhoria | `Supply Vision.bat` → Atualizar sistema | [docs/OPERAR.md](docs/OPERAR.md) |
 | Resolver um problema | `Supply Vision.bat` → Validar | [docs/SOCORRO.md](docs/SOCORRO.md) |
 
 ## Regra de dados
