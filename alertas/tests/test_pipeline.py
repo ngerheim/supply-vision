@@ -92,7 +92,16 @@ def test_conclusao_sem_dados_nao_executa_modulo_de_email(monkeypatch, tmp_path):
 
 @pytest.mark.parametrize("saida_relatorios", [
     "RESULTADO=SEM_DADOS_FILTRO",
-    "RESUMO_JSON=" + json.dumps({"total_elegivel": 0}),
+    "RESUMO_JSON=" + json.dumps({"total_elegivel": 0, "contagens": {}}),
+    "RESUMO_JSON=" + json.dumps({
+        "total_elegivel": 12,
+        "contagens": {
+            "CONFORME": 12,
+            "ACIMA DO ACORDO": 0,
+            "ABAIXO DO ACORDO": 0,
+            "SEM ACORDO": 0,
+        },
+    }),
 ])
 def test_conclusao_sem_linhas_nao_executa_modulo_de_email(
         monkeypatch, tmp_path, saida_relatorios):

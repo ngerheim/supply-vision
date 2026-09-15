@@ -188,8 +188,13 @@ def main():
     if extrair_resultado(output_rodar) == "SEM_DADOS_FILTRO":
         concluir_sem_envio("SEM_DADOS_FILTRO")
 
-    if extrair_resumo(output_rodar)["total_elegivel"] == 0:
+    resumo = extrair_resumo(output_rodar)
+    if resumo["total_elegivel"] == 0:
         concluir_sem_envio("SEM_LINHAS_COMPARAVEIS")
+
+    contagens = resumo["contagens"]
+    if contagens["ACIMA DO ACORDO"] + contagens["ABAIXO DO ACORDO"] == 0:
+        concluir_sem_envio("SEM_DIVERGENCIAS")
 
     caminho_com = extrair_relatorio(output_rodar)
     caminho_qualidade = extrair_qualidade(output_rodar)
