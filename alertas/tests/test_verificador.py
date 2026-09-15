@@ -44,3 +44,20 @@ def test_execucao_manual_fora_da_janela_nao_mascara_falha(monkeypatch, tmp_path)
     hoje = datetime.now().strftime("%Y%m%d")
     (tmp_path / f"pipeline_{hoje}_120500_abcdef.log").write_text("ok", encoding="utf-8")
     assert mod.encontrar_log("1200") is None
+
+
+def test_execucao_recuperada_fora_da_janela_e_encontrada_pelo_run_id(monkeypatch, tmp_path):
+    mod = carregar_verificador(monkeypatch, tmp_path)
+    hoje = datetime.now().strftime("%Y%m%d")
+    run_id = f"{hoje}_082822_abcdef"
+    recuperado = tmp_path / f"pipeline_{run_id}.log"
+    recuperado.write_text("PIPELINE CONCLUÍDO COM SUCESSO", encoding="utf-8")
+    assert mod.encontrar_log("0800") is None
+    assert mod.encontrar_log("0800", run_id) == recuperado
+
+
+def test_run_id_exato_nao_aceita_outro_log(monkeypatch, tmp_path):
+    mod = carregar_verificador(monkeypatch, tmp_path)
+    hoje = datetime.now().strftime("%Y%m%d")
+    (tmp_path / f"pipeline_{hoje}_080000_outro1.log").write_text("ok", encoding="utf-8")
+    assert mod.encontrar_log("0800", f"{hoje}_082822_abcdef") is None
