@@ -2,6 +2,7 @@ import subprocess
 import pathlib
 import sys
 import re
+import json
 import logging
 import os
 import secrets
@@ -104,6 +105,14 @@ def extrair_resultado(output):
     return m.group(1) if m else ""
 
 
+def extrair_resumo(output):
+    """Lê o resumo estruturado emitido por rodar.py."""
+    m = re.search(r"^RESUMO_JSON=(.+)$", output, re.MULTILINE)
+    if not m:
+        raise ValueError("RESUMO_JSON ausente no output de rodar.py")
+    return json.loads(m.group(1))
+
+
 def extrair_relatorio(output):
     """Lê o anexo de divergências gerado NESTA execução."""
     com = re.search(r"RELATORIO_COM_ACORDO=(.+)", output)
@@ -138,19 +147,11 @@ def adquirir_lock():
         raise RuntimeError("já existe uma execução do Supply Vision em andamento")
 
 
-def enviar_aviso(contexto, datas, situacao):
-    """Dispara o e-mail de aviso (sem relatórios) e encerra o pipeline."""
-    logging.info(f"  Situação detectada: {situacao} — enviando e-mail de aviso.")
-    ok, _ = rodar_script(
-        SCRIPT_EMAIL,
-        "Envio de e-mail (aviso)",
-        args=[contexto, ",".join(datas), "", situacao]
-    )
-    if not ok:
-        logging.error("Pipeline interrompido em: Envio de e-mail (aviso)")
-        sys.exit(1)
+def concluir_sem_envio(situacao):
+    """Ausência de linhas é resultado normal e nunca deve abrir o SMTP."""
+    logging.info(f"  Situação detectada: {situacao} — nenhum e-mail será enviado.")
     logging.info("="*50)
-    logging.info(f"PIPELINE CONCLUÍDO — AVISO ENVIADO ({situacao})")
+    logging.info(f"PIPELINE CONCLUÍDO COM SUCESSO — SEM ENVIO ({situacao})")
     logging.info("="*50)
     sys.exit(0)
 
@@ -177,7 +178,7 @@ def main():
     logging.info(f"  Contexto detectado: {contexto} | Datas: {', '.join(datas)}")
 
     if extrair_resultado(output_baixar) == "SEM_DADOS_QLIK":
-        enviar_aviso(contexto, datas, "SEM_DADOS_QLIK")
+        concluir_sem_envio("SEM_DADOS_QLIK")
 
     ok, output_rodar = rodar_script(SCRIPT_RODAR, "Geração de relatórios")
     if not ok:
@@ -185,7 +186,10 @@ def main():
         sys.exit(1)
 
     if extrair_resultado(output_rodar) == "SEM_DADOS_FILTRO":
-        enviar_aviso(contexto, datas, "SEM_DADOS_FILTRO")
+        concluir_sem_envio("SEM_DADOS_FILTRO")
+
+    if extrair_resumo(output_rodar)["total_elegivel"] == 0:
+        concluir_sem_envio("SEM_LINHAS_COMPARAVEIS")
 
     caminho_com = extrair_relatorio(output_rodar)
     caminho_qualidade = extrair_qualidade(output_rodar)

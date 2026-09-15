@@ -27,8 +27,8 @@ def datas_alvo():
     """Quais dias buscar e qual o contexto do e-mail, conforme o horário.
 
       manhã (< 10h)  dia anterior — na segunda, sexta + sábado
-      meio-dia       hoje, parcial
-      tarde          hoje, compilado
+      11h/14h        hoje, parcial (sexta 14h encerra o dia)
+      17h            hoje, compilado
     """
     agora = datetime.now()
     hoje  = agora.date()
@@ -44,7 +44,7 @@ def datas_alvo():
             contexto = 'manha'
     else:
         datas = [hoje]
-        contexto = 'parcial' if hora < 15 else 'compilado'
+        contexto = 'compilado' if hora >= 15 or (dow == 4 and hora >= 14) else 'parcial'
 
     return datas, contexto
 

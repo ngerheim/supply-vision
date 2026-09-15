@@ -29,6 +29,10 @@ o dia não executa.**
 O modelo `compartilhado/operacao.env.example` mostra o formato. Valor vazio
 significa que a rotina não executa naquele dia.
 
+Os Alertas executam de segunda a quinta às 08:00, 11:00, 14:00 e 17:00;
+na sexta, às 08:00, 11:00 e 14:00. Quando não há dados ou nenhuma linha
+comparável, o pipeline conclui normalmente sem enviar e-mail.
+
 Se o notebook estiver desligado num horário, ao voltar o supervisor executa
 **somente o slot mais recente** que ficou pendente — não dispara cópias
 atrasadas. Falhas são retentadas após dez minutos, e locks internos impedem

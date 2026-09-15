@@ -61,3 +61,21 @@ function Obter-SlotDevido([string]$Tipo, [string]$Lista, [hashtable]$Estado, [da
   foreach ($item in $devidos) { if ($item.chave -ne $ultimo.chave) { $Estado[$item.chave] = 'recuperado-pelo-slot-mais-recente' } }
   return $ultimo
 }
+
+function Atualizar-AgendaAlertasLegada([string]$Caminho) {
+  # privado/ nao viaja pelo Git. Migra somente os valores padrao conhecidos,
+  # sem sobrescrever uma agenda que o operador tenha personalizado.
+  $linhas = @(Get-Content -LiteralPath $Caminho)
+  $mudou = $false
+  for ($i = 0; $i -lt $linhas.Count; $i++) {
+    if ($linhas[$i] -eq 'ALERTAS_HORARIOS=08:00,12:00,17:00') {
+      $linhas[$i] = 'ALERTAS_HORARIOS=08:00,11:00,14:00,17:00'
+      $mudou = $true
+    } elseif ($linhas[$i] -eq 'ALERTAS_HORARIOS_SEX=08:00,12:00,16:00') {
+      $linhas[$i] = 'ALERTAS_HORARIOS_SEX=08:00,11:00,14:00'
+      $mudou = $true
+    }
+  }
+  if ($mudou) { $linhas | Set-Content -LiteralPath $Caminho -Encoding UTF8 }
+  return $mudou
+}
