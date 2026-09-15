@@ -8,10 +8,10 @@ do banco e limpeza diária.
 
 ## Central
 
-`Supply Vision.bat` mostra o estado e oferece iniciar, parar, abrir o Portal,
-abrir os registros, validar a configuração, testar o backup, ligar a
-inicialização automática e o modo manutenção. Ela exibe o commit em uso e o
-espaço livre em disco.
+`Supply Vision.bat` mostra o estado e oferece iniciar, parar, atualizar o
+sistema, abrir o Portal e os registros, validar a configuração, testar o
+backup, ligar a inicialização automática e o modo manutenção. Ela exibe o
+commit em uso e o espaço livre em disco.
 
 O **modo manutenção** mantém Portal e e-mails no ar, mas pausa novos Alertas,
 backups e limpezas. Rotinas já iniciadas terminam. Use durante diagnóstico,
@@ -39,8 +39,11 @@ pipelines concorrentes.
 
 ## Publicar uma melhoria
 
-Desenvolva na máquina de origem, valide com `Atualizar Portal.cmd`, commite e
-publique. No servidor:
+Desenvolva na máquina de origem, valide, commite e publique. No servidor, abra
+`Supply Vision.bat` e use **Atualizar sistema**. A central pede confirmação,
+acompanha o processo sem travar a janela e informa o resultado.
+
+Para diagnóstico, o mesmo fluxo pode ser executado pelo PowerShell:
 
 ```powershell
 .\scripts\atualizar-servidor.ps1 -Simular   # mostra o que viria
