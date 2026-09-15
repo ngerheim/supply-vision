@@ -42,11 +42,13 @@ $man.Add_CheckedChanged({New-Item -ItemType Directory -Force $Op|Out-Null;if($ma
 $timer=New-Object Windows.Forms.Timer;$timer.Interval=5000;$timer.Add_Tick({
  Atualizar
  if($script:processoAtualizacao-and$script:processoAtualizacao.HasExited){
+  $script:processoAtualizacao.WaitForExit();$script:processoAtualizacao.Refresh()
   $codigo=$script:processoAtualizacao.ExitCode;$script:processoAtualizacao.Dispose();$script:processoAtualizacao=$null
   $atualizar.Enabled=$true;$atualizar.Text='Atualizar sistema'
   $v.Text=try{(& git -C $Raiz log -1 --date=format:'%d/%m/%Y' --pretty=format:'%h  %ad' 2>$null)}catch{'versão indisponível'}
-  if($codigo-eq0){
-   $saidaTexto=@(Get-Content (Join-Path $Op 'atualizacao-saida.log') -ErrorAction SilentlyContinue)-join"`n"
+  $saidaTexto=@(Get-Content (Join-Path $Op 'atualizacao-saida.log') -ErrorAction SilentlyContinue)-join"`n"
+  $concluiu = ($codigo -eq 0) -or ($saidaTexto -match '=== Atualizado: .+ ===') -or ($saidaTexto -like '*Nada a fazer*')
+  if($concluiu){
    $mensagem=if($saidaTexto-like'*Nada a fazer*'){'O sistema já está na versão mais recente.'}else{'Sistema atualizado e operação reiniciada.'}
    [Windows.Forms.MessageBox]::Show($mensagem,'Atualização concluída','OK','Information')|Out-Null
   }
