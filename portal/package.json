@@ -17,7 +17,8 @@
     "typecheck": "tsc --noEmit",
     "test": "node --test --experimental-strip-types tests/*.test.ts tests/*.test.mjs",
     "format": "oxfmt",
-    "test:restore": "node scripts/testar-restauracao.mjs"
+    "test:restore": "node scripts/testar-restauracao.mjs",
+    "test:imports": "node scripts/teste-importacao-stress.mjs"
   },
   "dependencies": {
     "@base-ui/react": "1.7.0",

@@ -13,6 +13,7 @@
 import * as XLSX from 'xlsx';
 
 import { inspecionarXlsxZip } from './xlsx-zip-guard.ts';
+import { normalizeImportColumn } from './domain.ts';
 
 export type LinhaPlanilha = Record<string, unknown>;
 
@@ -24,7 +25,7 @@ export const PLANILHA_LIMITES = {
 };
 
 export type ResultadoLeitura =
-  | { ok: true; linhas: LinhaPlanilha[]; aba: string }
+  | { ok: true; linhas: LinhaPlanilha[]; numerosLinhas: number[]; aba: string }
   | { ok: false; erro: string };
 
 // Assinatura real do arquivo. A extensao nao prova nada: um .exe renomeado
@@ -103,7 +104,26 @@ export async function lerPlanilha(arquivo: File): Promise<ResultadoLeitura> {
 
   let brutas: LinhaPlanilha[];
   try {
-    brutas = XLSX.utils.sheet_to_json<LinhaPlanilha>(aba, { defval: '' });
+    // Linhas inteiramente vazias antes do cabeçalho não são dados.
+    let cabecalho = faixa.s.r;
+    while (cabecalho <= faixa.e.r) {
+      let preenchida = false;
+      for (let column = faixa.s.c; column <= faixa.e.c; column++) {
+        const value = aba[XLSX.utils.encode_cell({ r: cabecalho, c: column })]?.v;
+        if (value !== undefined && value !== null && String(value).trim() !== '') { preenchida = true; break; }
+      }
+      if (preenchida) break;
+      cabecalho++;
+    }
+    const campos = new Map<string, string>();
+    for (let column = faixa.s.c; column <= faixa.e.c; column++) {
+      const cell = XLSX.utils.encode_cell({ r: cabecalho, c: column });
+      const key = normalizeImportColumn(aba[cell]?.v);
+      if (!key) continue;
+      if (campos.has(key)) return { ok: false, erro: `Cabeçalho duplicado para ${key}: células ${campos.get(key)} e ${cell}, aba "${nomeAba}". Mantenha apenas uma coluna por campo.` };
+      campos.set(key, cell);
+    }
+    brutas = XLSX.utils.sheet_to_json<LinhaPlanilha>(aba, { defval: '', range: cabecalho });
   } catch (erro) {
     return { ok: false, erro: `Não foi possível interpretar os dados: ${erro instanceof Error ? erro.message : 'formato inesperado'}.` };
   }
@@ -121,5 +141,7 @@ export async function lerPlanilha(arquivo: File): Promise<ResultadoLeitura> {
     return saida;
   });
 
-  return { ok: true, linhas: limpas, aba: nomeAba };
+  // SheetJS conserva a posição física em __rowNum__, mesmo ao omitir vazios.
+  const numerosLinhas = brutas.map((linha) => Number(linha.__rowNum__) + 1);
+  return { ok: true, linhas: limpas, numerosLinhas, aba: nomeAba };
 }
