@@ -26,6 +26,36 @@ export function normalizeText(value: unknown) {
   return text.trim().replace(/\s+/g, ' ').toUpperCase();
 }
 
+// Forma canônica usada exclusivamente na entrada de planilhas e nas chaves
+// de De/Para. Além de caixa e espaços, remove acentos e caracteres invisíveis
+// que costumam vir de cópias do Excel. A pontuação legível é preservada.
+export function normalizeImportText(value: unknown) {
+  return normalizeText(value)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[\u0141ØĐÐ]/g, (character) => ({ 'Ł': 'L', 'Ø': 'O', 'Đ': 'D', 'Ð': 'D' })[character] || character)
+    .replace(/\u00c6/g, 'AE')
+    .replace(/\u0152/g, 'OE')
+    .replace(/[\u00a0\u2007\u202f]/g, ' ')
+    .replace(/[\u200b-\u200d\ufeff]/g, '')
+    .split('').filter((character) => {
+      const code = character.charCodeAt(0);
+      return code >= 32 && (code < 127 || code > 159);
+    }).join('')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+export function resolveImportMapping(value: unknown, mappings: ReadonlyMap<string, string>) {
+  return mappings.get(normalizeImportText(value)) ?? null;
+}
+
+export function resolveImportUnit(value: unknown, units: ReadonlyArray<{ code: string; name: string }>) {
+  const key = normalizeImportText(value);
+  const match = units.find((unit) => normalizeImportText(unit.code) === key || normalizeImportText(unit.name) === key);
+  return match ? normalizeImportText(match.code) : null;
+}
+
 export function normalizeCnpj(value: unknown) {
   const text = typeof value === 'string' || typeof value === 'number' ? String(value) : '';
   return text.replace(/\D/g, '');
