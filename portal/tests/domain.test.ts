@@ -7,7 +7,10 @@ import {
   isValidCnpj,
   isValidDateRange,
   normalizeCnpj,
+  normalizeImportText,
   normalizeText,
+  resolveImportMapping,
+  resolveImportUnit,
   safeFilename,
   toNonNegativeMoney,
   validatePassword,
@@ -17,6 +20,24 @@ void test('normaliza texto sem converter objetos acidentalmente', () => {
   assert.equal(normalizeText('  óleo   do motor '), 'ÓLEO DO MOTOR');
   assert.equal(normalizeText(42), '42');
   assert.equal(normalizeText({ value: 'texto' }), '');
+});
+
+void test('normaliza texto de importação removendo acentos e caracteres invisíveis', () => {
+  assert.equal(normalizeImportText('  óleo\u00a0 de  direção\t'), 'OLEO DE DIRECAO');
+  assert.equal(normalizeImportText('Revisão 10.000 km'), 'REVISAO 10.000 KM');
+});
+
+void test('resolve De/Para pela forma normalizada e recusa origem desconhecida', () => {
+  const mappings = new Map([['OLEO DE MOTOR', 'OLEO MOTOR 5W30']]);
+  assert.equal(resolveImportMapping('Óleo  de motor', mappings), 'OLEO MOTOR 5W30');
+  assert.equal(resolveImportMapping('ITEM SEM DE PARA', mappings), null);
+});
+
+void test('aceita código ou nome de unidade e recusa erro de digitação', () => {
+  const units = [{ code: 'L', name: 'Litro' }, { code: 'UNIDADE', name: 'Unidade' }];
+  assert.equal(resolveImportUnit('litro', units), 'L');
+  assert.equal(resolveImportUnit(' l ', units), 'L');
+  assert.equal(resolveImportUnit('lirto', units), null);
 });
 
 void test('normaliza e valida CNPJ pelo tamanho e pelos dígitos verificadores', () => {
