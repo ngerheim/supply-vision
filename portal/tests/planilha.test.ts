@@ -50,6 +50,21 @@ void test('lê apenas a primeira aba', async () => {
   }
 });
 
+void test('preserva linha física com cabeçalho deslocado e linhas vazias', async () => {
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([[], [], ['ITEM', 'UNIDADE'], ['Óleo', 'LITRO'], [], ['Óleo', 'lirto']]), 'Dados');
+  const bytes = XLSX.write(wb, { type: 'array', bookType: 'xlsx' }) as ArrayBuffer;
+  const result = await lerPlanilha(new File([bytes], 'linhas.xlsx'));
+  assert.equal(result.ok, true);
+  if (result.ok) assert.deepEqual(result.numerosLinhas, [4, 6]);
+});
+
+void test('recusa cabeçalhos duplicados após normalização ou equivalência', async () => {
+  const result = await lerPlanilha(arquivoDe([{ ...LINHA_BOA, ' Peça/Serviço ': 'OUTRA PEÇA' }]));
+  assert.equal(result.ok, false);
+  if (!result.ok) assert.match(result.erro, /Cabeçalho duplicado.*PECA_SERVICO/);
+});
+
 void test('recusa arquivo que não é planilha', async () => {
   const r = await lerPlanilha(new File([new Uint8Array([0x4d, 0x5a, 0x90, 0x00, 1, 2, 3, 4])], 'falso.xlsx'));
   assert.equal(r.ok, false);

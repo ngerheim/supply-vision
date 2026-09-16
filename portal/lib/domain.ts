@@ -46,14 +46,20 @@ export function normalizeImportText(value: unknown) {
     .trim();
 }
 
-export function resolveImportMapping(value: unknown, mappings: ReadonlyMap<string, string>) {
+export function resolveImportMapping<T>(value: unknown, mappings: ReadonlyMap<string, T>) {
   return mappings.get(normalizeImportText(value)) ?? null;
+}
+
+export function normalizeImportColumn(value: unknown) {
+  const key = normalizeImportText(value).replace(/[\s/]+/g, '_');
+  const aliases: Record<string, string> = { ITEM: 'PECA_SERVICO', UNIDADE: 'MEDIDA', VALOR: 'PRECO', MARCA: 'MARCAS' };
+  return Object.hasOwn(aliases, key) ? aliases[key] : key;
 }
 
 export function resolveImportUnit(value: unknown, units: ReadonlyArray<{ code: string; name: string }>) {
   const key = normalizeImportText(value);
-  const match = units.find((unit) => normalizeImportText(unit.code) === key || normalizeImportText(unit.name) === key);
-  return match ? normalizeImportText(match.code) : null;
+  const matches = units.filter((unit) => normalizeImportText(unit.code) === key || normalizeImportText(unit.name) === key);
+  return key && matches.length === 1 ? normalizeImportText(matches[0].code) : null;
 }
 
 export function normalizeCnpj(value: unknown) {

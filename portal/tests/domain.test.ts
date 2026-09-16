@@ -38,6 +38,7 @@ void test('aceita código ou nome de unidade e recusa erro de digitação', () =
   assert.equal(resolveImportUnit('litro', units), 'L');
   assert.equal(resolveImportUnit(' l ', units), 'L');
   assert.equal(resolveImportUnit('lirto', units), null);
+  assert.equal(resolveImportUnit('litro', [...units, { code: 'L2', name: 'Litro' }]), null);
 });
 
 void test('normaliza e valida CNPJ pelo tamanho e pelos dígitos verificadores', () => {

@@ -25,8 +25,8 @@ import {
   TICKET_PRIORITIES,
   TICKET_STATUSES,
   normalizeImportText,
+  normalizeImportColumn,
   resolveImportMapping,
-  resolveImportUnit,
   toNonNegativeMoney,
   validatePassword,
   type Role,
@@ -70,6 +70,13 @@ const ok = (data: unknown, init?: ResponseInit) => {
   return NextResponse.json(data, { ...init, headers });
 };
 const fail = (message: string, status = 400) => ok({ error: message }, { status });
+// Respostas antecipadas a escritas precisam finalizar o corpo HTTP. No runtime
+// local, deixar um corpo pequeno pendente pode derrubar a conexão reutilizada.
+// Mantém o limite mesmo em pedidos não autorizados.
+async function denyWrite(request: Request, message: string) {
+  if (request.body) await corpoBinarioLimitado(request, CORPO_MAX_JSON);
+  return fail(message, 403);
+}
 const partsOf = (request: Request) => new URL(request.url).pathname.replace(/^\/api\/?/, '').split('/').filter(Boolean);
 const canWrite = (user: User) => user.role === 'admin' || user.role === 'editor';
 const all = async <T = Record<string, unknown>>(sql: string, values: unknown[] = []) => (await rawDb().prepare(sql).bind(...values).all<T>()).results;
@@ -217,7 +224,7 @@ async function POSTInterno(request: NextRequest) {
   if (parts[0] === 'logout') return logout(request);
   const user = await requireUser(request);
   if (!user) return fail('Sessão expirada.', 401);
-  if (!canWrite(user)) return fail('Seu perfil permite somente consulta.', 403);
+  if (!canWrite(user)) return denyWrite(request, 'Seu perfil permite somente consulta.');
 
   if (parts[0] === 'agreements' && parts.length === 1) return createAgreement(request, user);
   if (parts[0] === 'agreements' && parts[2] === 'items') return addAgreementItems(request, user, parts[1]);
@@ -243,7 +250,7 @@ async function PUTInterno(request: NextRequest) {
   if (originFailure) return originFailure;
   const user = await requireUser(request);
   if (!user) return fail('Sessão expirada.', 401);
-  if (!canWrite(user)) return fail('Seu perfil permite somente consulta.', 403);
+  if (!canWrite(user)) return denyWrite(request, 'Seu perfil permite somente consulta.');
   const parts = partsOf(request);
   if (parts[0] === 'agreements' && parts[1] && parts.length === 2) return updateAgreement(request, user, parts[1]);
   if (parts[0] === 'items' && parts[1]) return updateItem(request, user, parts[1]);
@@ -342,8 +349,8 @@ async function deleteAgreement(user: User, agreementId: string) {
 // entao o portal explica o que trava e sugere inativar.
 const catalogDependencies: Record<string, { table: string; queries: Array<[string, string]> }> = {
   suppliers: { table: 'suppliers', queries: [['acordo(s)', 'SELECT COUNT(*) n FROM agreements WHERE supplier_id=?']] },
-  items: { table: 'catalog_items', queries: [['condição(ões)', 'SELECT COUNT(*) n FROM agreement_items WHERE catalog_item_id=?']] },
-  models: { table: 'vehicle_models', queries: [['condição(ões)', 'SELECT COUNT(*) n FROM agreement_items WHERE vehicle_model_id=?']] },
+  items: { table: 'catalog_items', queries: [['condição(ões)', 'SELECT COUNT(*) n FROM agreement_items WHERE catalog_item_id=?'], ['correspondência(s) de De/Para', 'SELECT COUNT(*) n FROM import_item_mappings WHERE target_id=?']] },
+  models: { table: 'vehicle_models', queries: [['condição(ões)', 'SELECT COUNT(*) n FROM agreement_items WHERE vehicle_model_id=?'], ['correspondência(s) de De/Para', 'SELECT COUNT(*) n FROM import_model_mappings WHERE target_id=?']] },
   units: { table: 'units', queries: [['condição(ões)', 'SELECT COUNT(*) n FROM agreement_items WHERE unit_id=?']] },
   brands: { table: 'brands', queries: [] },
   locations: { table: 'locations', queries: [['condição(ões)', 'SELECT COUNT(*) n FROM agreement_items WHERE location_id=?'], ['acordo(s)', 'SELECT COUNT(*) n FROM agreement_locations WHERE location_id=?']] },
@@ -724,11 +731,11 @@ async function validateMappingInput(request: Request, type: string) {
   if (!sourceKey || !targetId) return { error: 'Informe a nomenclatura de origem e o destino.' };
   const target = await first(`SELECT 1 ok FROM ${cfg.targetTable} WHERE id=? AND active=1`, [targetId]);
   if (!target) return { error: `O ${cfg.label} de destino não existe ou está inativo.` };
-  return { cfg, body, source: source.trim(), sourceKey, targetId, notes: nullableText(body.notes), active: body.active === false ? 0 : 1 };
+  return { cfg, body, source: source.trim(), sourceKey, targetId, notes: nullableText(body.notes), active: body.active === false || body.active === 0 ? 0 : 1 };
 }
 
 async function createMapping(request: Request, user: User, type: string) {
-  if (user.role !== 'admin') return fail('Somente administradores podem gerenciar o De/Para.', 403);
+  if (user.role !== 'admin') return denyWrite(request, 'Somente administradores podem gerenciar o De/Para.');
   const value = await validateMappingInput(request, type);
   if ('error' in value) return fail(value.error || 'De/Para inválido.');
   const recordId=id('map'), timestamp=now();
@@ -743,7 +750,7 @@ async function createMapping(request: Request, user: User, type: string) {
 }
 
 async function updateMapping(request: Request, user: User, type: string, recordId: string) {
-  if (user.role !== 'admin') return fail('Somente administradores podem gerenciar o De/Para.', 403);
+  if (user.role !== 'admin') return denyWrite(request, 'Somente administradores podem gerenciar o De/Para.');
   const value = await validateMappingInput(request, type);
   if ('error' in value) return fail(value.error || 'De/Para inválido.');
   const existing=await first(`SELECT 1 ok FROM ${value.cfg.table} WHERE id=?`,[recordId]);
@@ -934,11 +941,11 @@ async function importWorkbookComTrava(request: Request, user: User, agreementId:
     if (!leitura.ok) throw new Error(leitura.erro);
     const sourceRows = leitura.linhas as Row[];
     if (!sourceRows.length) throw new Error('A planilha não contém linhas de dados.');
-    const parsed = sourceRows.map((row, index) => parseImportRow(row, index + 2, legacy));
+    const parsed = sourceRows.map((row, index) => parseImportRow(row, leitura.numerosLinhas[index], legacy));
     await applyImportMappings(parsed);
     const errors = parsed.filter((r) => r.error);
     if (errors.length) {
-      const summary = { sampleErrors: errors.slice(0, 50).map((r) => ({ row: r.rowNumber, error: r.error })) };
+      const summary = { sheet: leitura.aba, sampleErrors: errors.slice(0, 50).map((r) => ({ row: r.rowNumber, error: r.error })) };
       await rawDb().prepare('UPDATE imports SET status=?,total_rows=?,valid_rows=?,error_rows=?,summary_json=?,completed_at=? WHERE id=?').bind('error', parsed.length, parsed.length-errors.length, errors.length, JSON.stringify(summary), now(), importId).run();
       return ok({ error: `A planilha possui ${errors.length} linha(s) inválida(s). Nenhum dado foi publicado.`, importId, ...summary }, { status: 400 });
     }
@@ -955,17 +962,17 @@ async function importWorkbookComTrava(request: Request, user: User, agreementId:
 }
 
 function parseImportRow(row: Row, rowNumber: number, legacy: boolean) {
-  const find = (...keys: string[]) => { const entry = Object.entries(row).find(([k]) => keys.includes(normalizeImportText(k).replaceAll(' ', '_'))); return entry?.[1] ?? ''; };
+  const find = (...keys: string[]) => { const entry = Object.entries(row).find(([k]) => keys.includes(normalizeImportColumn(k))); return entry?.[1] ?? ''; };
   const rawCnpj=find('CNPJ'), numericCnpj=typeof rawCnpj==='number'&&Number.isInteger(rawCnpj)?String(rawCnpj):'',
     cnpj=numericCnpj.length===13?`0${numericCnpj}`:normalizeCnpj(rawCnpj),
     rawModel=find('MODELO'), rawItem=find('PECA_SERVICO','PECA/SERVICO','ITEM'), rawUnit=find('MEDIDA','UNIDADE'),
     city = normalizeImportText(find('CIDADE')), state = normalizeImportText(find('UF')),
     supplier = normalizeImportText(find('FORNECEDOR')), model = normalizeImportText(rawModel), item = normalizeImportText(rawItem),
-    unit = normalizeImportText(rawUnit) || (legacy ? 'UNIDADE' : ''), brands = normalizeImportText(find('MARCAS','MARCA')),
+    unit = normalizeImportText(rawUnit), brands = normalizeImportText(find('MARCAS','MARCA')),
     priceRaw = find('PRECO','PREÇO','VALOR'), priceParsed = parsePrice(priceRaw), price = priceParsed.value;
   let error = '';
   if (!city) error = 'A coluna CIDADE está vazia.';
-  else if (state.length !== 2) error = state ? `UF inválida: "${state}". Use a sigla de duas letras (ex.: GO).` : 'A coluna UF está vazia.';
+  else if (!['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO'].includes(state)) error = state ? `UF inválida: "${state}". Use uma sigla brasileira válida (ex.: GO).` : 'A coluna UF está vazia.';
   else if (!model) error = 'A coluna MODELO está vazia.';
   else if (!item) error = 'A coluna PECA_SERVICO está vazia.';
   else if (!unit) error = 'A coluna MEDIDA está vazia.';
@@ -974,26 +981,36 @@ function parseImportRow(row: Row, rowNumber: number, legacy: boolean) {
     if (!supplier) error = 'A coluna FORNECEDOR está vazia (obrigatória na carga inicial).';
     else if (!isValidCnpj(cnpj)) error = `CNPJ inválido: "${textoSeguro(rawCnpj)}".`;
   }
-  return { rowNumber, city, state, cnpj, supplier, model, item, unit, brands, price, error, rawModel: textoSeguro(rawModel), rawItem: textoSeguro(rawItem), rawUnit: textoSeguro(rawUnit) };
+  return { rowNumber, city, state, cnpj, supplier, model, item, unit, brands, price, error, itemId: '', modelId: '', unitId: '', rawModel: textoSeguro(rawModel), rawItem: textoSeguro(rawItem), rawUnit: textoSeguro(rawUnit) };
 }
 
 async function applyImportMappings(rows: ReturnType<typeof parseImportRow>[]) {
   const [itemRows, modelRows, unitRows] = await Promise.all([
-    all<{ sourceKey: string; target: string }>(`SELECT m.source_key AS sourceKey,c.name AS target FROM import_item_mappings m JOIN catalog_items c ON c.id=m.target_id WHERE m.active=1 AND c.active=1`),
-    all<{ sourceKey: string; target: string }>(`SELECT m.source_key AS sourceKey,v.name AS target FROM import_model_mappings m JOIN vehicle_models v ON v.id=m.target_id WHERE m.active=1 AND v.active=1`),
-    all<{ code: string; name: string }>('SELECT code,name FROM units WHERE active=1'),
+    all<{ sourceKey: string; target: string; id: string }>(`SELECT m.source_key AS sourceKey,c.name AS target,c.id FROM import_item_mappings m JOIN catalog_items c ON c.id=m.target_id WHERE m.active=1 AND c.active=1`),
+    all<{ sourceKey: string; target: string; id: string }>(`SELECT m.source_key AS sourceKey,v.name AS target,v.id FROM import_model_mappings m JOIN vehicle_models v ON v.id=m.target_id WHERE m.active=1 AND v.active=1`),
+    all<{ id: string; code: string; name: string }>('SELECT id,code,name FROM units WHERE active=1'),
   ]);
-  const items = new Map(itemRows.map((entry) => [entry.sourceKey, normalizeImportText(entry.target)]));
-  const models = new Map(modelRows.map((entry) => [entry.sourceKey, normalizeImportText(entry.target)]));
+  const items = new Map(itemRows.map((entry) => [entry.sourceKey, entry]));
+  const models = new Map(modelRows.map((entry) => [entry.sourceKey, entry]));
+  const units = new Map<string, typeof unitRows[number] | null>();
+  for (const unit of unitRows) {
+    for (const key of new Set([normalizeImportText(unit.code), normalizeImportText(unit.name)])) {
+      if (key) units.set(key, units.has(key) ? null : unit);
+    }
+  }
   for (const row of rows) {
     if (row.error) continue;
     const item = resolveImportMapping(row.item, items);
     const model = resolveImportMapping(row.model, models);
-    const unit = resolveImportUnit(row.unit, unitRows);
+    const unit = units.get(row.unit);
     if (!item) row.error = `PECA_SERVICO sem correspondência ativa no De/Para: "${row.rawItem}".`;
     else if (!model) row.error = `MODELO sem correspondência ativa no De/Para: "${row.rawModel}".`;
-    else if (!unit) row.error = `UNIDADE inválida: "${row.rawUnit || row.unit}". Use um código ou nome ativo do cadastro de unidades.`;
-    else { row.item = item; row.model = model; row.unit = unit; }
+    else if (!unit) row.error = `UNIDADE inválida ou ambígua: "${row.rawUnit || row.unit}". Use um código ou nome que identifique uma única unidade ativa.`;
+    else {
+      row.item = normalizeImportText(item.target); row.itemId = item.id;
+      row.model = normalizeImportText(model.target); row.modelId = model.id;
+      row.unit = normalizeImportText(unit.code); row.unitId = unit.id;
+    }
   }
 }
 
@@ -1025,8 +1042,9 @@ function parsePrice(raw: unknown): { value: number; error: string } {
   const semPreco = ['SOB CONSULTA','A COMBINAR','A DEFINIR','CONSULTAR','ORCAMENTO','ORÇAMENTO','N/A','NA','ND','-','--','SEM PRECO','SEM PREÇO','?'];
   if (semPreco.includes(normalizeText(text))) return { value: Number.NaN, error: `Preço não informado ("${text}"). Defina o valor negociado antes de importar.` };
 
-  const limpo = text.replace(/R\$/gi, '').replace(/\s/g, '');
+  const limpo = text.replace(/^R\$\s*/i, '').replace(/\s/g, '');
   // Formato brasileiro: ponto e separador de milhar, virgula e decimal.
+  if (limpo.includes(',') && !/^(?:\d+|\d{1,3}(?:\.\d{3})+),\d+$/.test(limpo)) return { value: Number.NaN, error: `Preço inválido: "${text}".` };
   const numerico = limpo.includes(',') ? limpo.replace(/\./g, '').replace(',', '.') : limpo;
   if (!/^\d+(\.\d+)?$/.test(numerico)) return { value: Number.NaN, error: `Preço inválido: "${text}".` };
   const value = Number(numerico);
@@ -1051,9 +1069,6 @@ async function ensureReferenceData(rows: ReturnType<typeof parseImportRow>[]) {
   return {
     suppliers: new Map((await all<{id:string;cnpj:string}>('SELECT id,cnpj FROM suppliers')).map((x) => [x.cnpj,x.id])),
     locations: new Map((await all<{id:string;city:string;state:string}>('SELECT id,city,state FROM locations')).map((x) => [`${x.city}|${x.state}`,x.id])),
-    items: new Map((await all<{id:string;name:string}>('SELECT id,name FROM catalog_items')).map((x) => [normalizeImportText(x.name),x.id])),
-    models: new Map((await all<{id:string;name:string}>('SELECT id,name FROM vehicle_models')).map((x) => [normalizeImportText(x.name),x.id])),
-    units: new Map((await all<{id:string;code:string}>('SELECT id,code FROM units')).map((x) => [normalizeImportText(x.code),x.id])),
   };
 }
 
@@ -1092,11 +1107,11 @@ async function processLegacy(rows: ReturnType<typeof parseImportRow>[], user: Us
   for (const row of rows) {
     const agreement=agreements.get(row.cnpj)!, locationId=refs.locations.get(`${row.city}|${row.state}`)!;
     locationLinks.set(`${agreement.agreementId}|${locationId}`,[agreement.agreementId,locationId]);
-    const key=[agreement.versionId,locationId,refs.items.get(row.item),refs.models.get(row.model),refs.units.get(row.unit)].join('|');
+    const key=[agreement.versionId,locationId,row.itemId,row.modelId,row.unitId].join('|');
     const previous=deduped.get(key);
     if(!previous || row.price < previous.row.price) deduped.set(key,{row:{...row,brands:Array.from(new Set(`${previous?.row.brands||''}/${row.brands}`.split('/').map(x=>x.trim()).filter(Boolean))).join(' / ')},agreement,locationId});
   }
-  const statements=Array.from(deduped.values()).map(({row,agreement,locationId})=>db.prepare(`INSERT INTO agreement_items (id,version_id,location_id,catalog_item_id,vehicle_model_id,unit_id,price,courtesy,brands_text,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)`).bind(id('itm'),agreement.versionId,locationId,refs.items.get(row.item),refs.models.get(row.model),refs.units.get(row.unit),row.price,row.price===0?1:0,row.brands||null,timestamp,timestamp));
+  const statements=Array.from(deduped.values()).map(({row,agreement,locationId})=>db.prepare(`INSERT INTO agreement_items (id,version_id,location_id,catalog_item_id,vehicle_model_id,unit_id,price,courtesy,brands_text,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)`).bind(id('itm'),agreement.versionId,locationId,row.itemId,row.modelId,row.unitId,row.price,row.price===0?1:0,row.brands||null,timestamp,timestamp));
   await batch(statements,80);
   const finalized: StagedAgreement[]=[];
   try {
@@ -1128,8 +1143,8 @@ async function processAgreementImport(rows: ReturnType<typeof parseImportRow>[],
   const agreement = await first<{id:string;number:string}>('SELECT id,number FROM agreements WHERE id=?',[agreementId]); if(!agreement) throw new Error('Acordo não encontrado');
   const uniqueRows=new Map<string,ReturnType<typeof parseImportRow>>();
   for(const row of rows){
-    const key=[row.city,row.state,row.item,row.model,row.unit].join('|'), previous=uniqueRows.get(key);
-    if(previous && previous.price!==row.price) throw new Error(`Preços conflitantes para ${row.item}, ${row.model}, ${row.city}/${row.state}`);
+    const key=JSON.stringify([row.city,row.state,row.itemId,row.modelId,row.unitId]), previous=uniqueRows.get(key);
+    if(previous && previous.price!==row.price) throw new Error(`Preços conflitantes nas linhas ${previous.rowNumber} e ${row.rowNumber} para ${row.item}, ${row.model}, ${row.city}/${row.state}`);
     uniqueRows.set(key,{...row,brands:Array.from(new Set(`${previous?.brands||''}/${row.brands}`.split('/').map(x=>x.trim()).filter(Boolean))).join(' / ')});
   }
   const effectiveRows=Array.from(uniqueRows.values());
@@ -1138,7 +1153,7 @@ async function processAgreementImport(rows: ReturnType<typeof parseImportRow>[],
   const versionId=id('ver'), versionNumber=Number(max?.n||0)+1;
   await db.prepare(`INSERT INTO agreement_versions (id,agreement_id,version_number,import_id,status,published_at,created_by,created_at) VALUES (?,?,?,?,'processing',NULL,?,?)`).bind(versionId,agreementId,versionNumber,importId,user.id,timestamp).run();
   const links=new Map<string,string>(), statements:D1PreparedStatement[]=[];
-  for(const row of effectiveRows){ const locationId=refs.locations.get(`${row.city}|${row.state}`)!; links.set(locationId,locationId); statements.push(db.prepare(`INSERT INTO agreement_items (id,version_id,location_id,catalog_item_id,vehicle_model_id,unit_id,price,courtesy,brands_text,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)`).bind(id('itm'),versionId,locationId,refs.items.get(row.item),refs.models.get(row.model),refs.units.get(row.unit),row.price,row.price===0?1:0,row.brands||null,timestamp,timestamp)); }
+  for(const row of effectiveRows){ const locationId=refs.locations.get(`${row.city}|${row.state}`)!; links.set(locationId,locationId); statements.push(db.prepare(`INSERT INTO agreement_items (id,version_id,location_id,catalog_item_id,vehicle_model_id,unit_id,price,courtesy,brands_text,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)`).bind(id('itm'),versionId,locationId,row.itemId,row.modelId,row.unitId,row.price,row.price===0?1:0,row.brands||null,timestamp,timestamp)); }
   await batch(statements,80);
   await db.batch([
     db.prepare('DELETE FROM agreement_locations WHERE agreement_id=?').bind(agreementId),
