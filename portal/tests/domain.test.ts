@@ -7,6 +7,7 @@ import {
   isValidCnpj,
   isValidDateRange,
   normalizeCnpj,
+  normalizeImportCnpj,
   normalizeImportText,
   normalizeText,
   resolveImportMapping,
@@ -47,6 +48,29 @@ void test('normaliza e valida CNPJ pelo tamanho e pelos dígitos verificadores',
   assert.equal(isValidCnpj('11.222.333/0001-81'), true);
   assert.equal(isValidCnpj('11.222.333/0001-82'), false);
   assert.equal(isValidCnpj('00.000.000/0000-00'), false);
+});
+
+void test('recupera zero à esquerda perdido pelo Excel sem inventar CNPJ curto', () => {
+  // Casos reais da base de acordos: o Excel gravou a célula como número.
+  assert.equal(normalizeImportCnpj(2252621000198), '02252621000198');
+  assert.equal(normalizeImportCnpj(209995000103), '00209995000103');
+  assert.equal(isValidCnpj(normalizeImportCnpj(2252621000198)), true);
+  assert.equal(isValidCnpj(normalizeImportCnpj(209995000103)), true);
+  // O mesmo valor chegando como texto também é recuperado.
+  assert.equal(normalizeImportCnpj('7238647000103'), '07238647000103');
+  assert.equal(isValidCnpj(normalizeImportCnpj('7238647000103')), true);
+  // Quem já tem 14 dígitos passa intacto, com ou sem pontuação.
+  assert.equal(normalizeImportCnpj('11.222.333/0001-81'), '11222333000181');
+  assert.equal(normalizeImportCnpj('20357708000101'), '20357708000101');
+  // Abaixo de 12 dígitos não há recuperação: continua curto e inválido.
+  assert.equal(normalizeImportCnpj('20999500010'), '20999500010');
+  assert.equal(normalizeImportCnpj('123'), '123');
+  assert.equal(isValidCnpj(normalizeImportCnpj('123')), false);
+  assert.equal(normalizeImportCnpj(''), '');
+  // Controle negativo: dígito verificador errado não vira válido por completar
+  // 14 dígitos; a correção do dado é que resolve.
+  assert.equal(isValidCnpj(normalizeImportCnpj('50377296000130')), false);
+  assert.equal(isValidCnpj(normalizeImportCnpj('50377296000132')), true);
 });
 
 void test('valida datas reais e intervalos de vigência', () => {
