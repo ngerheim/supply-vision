@@ -560,7 +560,7 @@ async function bootstrap(user: User) {
       (SELECT COUNT(*) FROM suppliers WHERE active=1) suppliers,
       (SELECT COUNT(*) FROM agreements WHERE status='active' AND end_date IS NOT NULL AND date(end_date) BETWEEN date('now') AND date('now','+60 day')) expiring`),
     agreementList(), all('SELECT id,legal_name AS legalName,trade_name AS tradeName,cnpj,city,state,active FROM suppliers ORDER BY trade_name'),
-    all('SELECT id,name,category,active FROM catalog_items ORDER BY name'), all('SELECT id,name,active FROM vehicle_models ORDER BY name'),
+    all('SELECT id,name,active FROM catalog_items ORDER BY name'), all('SELECT id,name,active FROM vehicle_models ORDER BY name'),
     all('SELECT id,code,name,active FROM units ORDER BY code'), all('SELECT id,name,active FROM brands ORDER BY name'),
     all('SELECT id,city,state FROM locations ORDER BY state,city'), canWrite(user) ? importList() : Promise.resolve([]),
   ]);
@@ -703,7 +703,7 @@ async function updateItem(request: Request, user: User, itemId: string) {
 
 const catalogConfig: Record<string, { table: string; fields: string[] }> = {
   suppliers: { table: 'suppliers', fields: ['legalName', 'tradeName', 'cnpj', 'city', 'state'] },
-  items: { table: 'catalog_items', fields: ['name', 'category'] }, models: { table: 'vehicle_models', fields: ['name'] },
+  items: { table: 'catalog_items', fields: ['name'] }, models: { table: 'vehicle_models', fields: ['name'] },
   units: { table: 'units', fields: ['code', 'name'] }, brands: { table: 'brands', fields: ['name'] }, locations: { table: 'locations', fields: ['city', 'state'] },
 };
 
@@ -781,7 +781,6 @@ function exigeCamposDeCatalogo(body: CatalogInput) {
   exigeTexto(body.name, LIMITES_CAMPO.nome, 'nome');
   exigeTexto(body.tradeName, LIMITES_CAMPO.nome, 'nome fantasia');
   exigeTexto(body.legalName, LIMITES_CAMPO.nome, 'razão social');
-  exigeTexto(body.category, LIMITES_CAMPO.nome, 'categoria');
   exigeTexto(body.code, LIMITES_CAMPO.codigo, 'código');
   exigeTexto(body.city, LIMITES_CAMPO.cidade, 'cidade');
 }
@@ -797,7 +796,7 @@ async function createCatalog(request: Request, user: User, type: string) {
     values = [recordId, textValue(body.legalName) || textValue(body.tradeName), textValue(body.tradeName), normalizeCnpj(body.cnpj), nullableText(body.city), nullableText(body.state)?.toUpperCase().slice(0,2) ?? null, timestamp, timestamp];
   } else if (type === 'items') {
     if (!textValue(body.name)) return fail('Informe o nome da peça ou serviço.');
-    sql = 'INSERT INTO catalog_items (id,name,category,active) VALUES (?,?,?,1)'; values = [recordId, normalizeText(body.name), nullableText(body.category)];
+    sql = 'INSERT INTO catalog_items (id,name,active) VALUES (?,?,1)'; values = [recordId, normalizeText(body.name)];
   } else if (type === 'models') {
     if (!textValue(body.name)) return fail('Informe o modelo.');
     sql = 'INSERT INTO vehicle_models (id,name,active) VALUES (?,?,1)'; values = [recordId, normalizeText(body.name)];
@@ -830,7 +829,7 @@ async function updateCatalog(request: Request, user: User, type: string, recordI
       await rawDb().prepare('UPDATE suppliers SET legal_name=?,trade_name=?,cnpj=?,city=?,state=?,active=?,updated_at=? WHERE id=?').bind(textValue(body.legalName) || textValue(body.tradeName), textValue(body.tradeName), normalizeCnpj(body.cnpj), nullableText(body.city), nullableText(body.state)?.toUpperCase().slice(0,2) ?? null, active, now(), recordId).run();
     } else if (type === 'items') {
       if (!textValue(body.name)) return fail('Informe o nome da peça ou serviço.');
-      await rawDb().prepare('UPDATE catalog_items SET name=?,category=?,active=? WHERE id=?').bind(normalizeText(body.name), nullableText(body.category), active, recordId).run();
+      await rawDb().prepare('UPDATE catalog_items SET name=?,active=? WHERE id=?').bind(normalizeText(body.name), active, recordId).run();
     } else if (type === 'models') {
       if (!textValue(body.name)) return fail('Informe o modelo.');
       await rawDb().prepare('UPDATE vehicle_models SET name=?,active=? WHERE id=?').bind(normalizeText(body.name), active, recordId).run();
