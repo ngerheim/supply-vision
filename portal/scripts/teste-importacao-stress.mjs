@@ -98,6 +98,15 @@ function erroDaLinha(data, linha) {
   return (data.outrosErros || []).find(e => e.linha === linha)?.erro ?? '';
 }
 async function catalog(type, data) { return good(`/api/catalogs/${type}`, { method: 'POST', body: data }, 201); }
+// Localidade virou cadastro previo, e varios checks inventam cidade para gerar
+// condicoes distintas. Cria em lotes paralelos para nao dominar o tempo da
+// suite; repeticao volta 400 e e ignorada de proposito.
+async function localidades(nomes, state = 'GO') {
+  for (let inicio = 0; inicio < nomes.length; inicio += 50) {
+    await Promise.all(nomes.slice(inicio, inicio + 50).map(city => request('/api/catalogs/locations', { method: 'POST', body: { city, state } })));
+  }
+}
+const serie = (prefixo, total) => Array.from({ length: total }, (_, indice) => `${prefixo} ${indice}`);
 async function mapping(type, source, targetId, extra = {}) { return good(`/api/mappings/${type}`, { method: 'POST', body: { source, targetId, ...extra } }, 201); }
 function noise(text) {
   const gaps = [' ', '  ', '\t', '\n', '\u00a0', '\u202f'];
@@ -139,6 +148,7 @@ try {
   // existe para o check de UF fora da chave de deduplicacao.
   await catalog('locations', { city: 'GOIANIA', state: 'GO' });
   await catalog('locations', { city: 'GOIANIA', state: 'MG' });
+  await catalog('locations', { city: 'SAO PAULO', state: 'SP' });
   const item = await catalog('items', { name: 'OLEO DE MOTOR TESTE' });
   const model = await catalog('models', { name: 'HILUX 2.8 TESTE' });
   const itemMap = await mapping('items', 'Óleo teste', item.id);
@@ -186,6 +196,7 @@ try {
   }));
   await check('Cabeçalhos equivalentes duplicados são rejeitados', () => rejected(file([], { name: 'cabecalhos-duplicados', aoa: [[...headers, ' Peça/Serviço '], [...Object.values(row()), 'OUTRO ITEM']] }), replace));
   await check('500 ruídos aleatórios reproduzíveis mantêm nomenclaturas e valores', async () => {
+    await localidades(serie('CIDADE', 500));
     const noisyHeaders = headers.map(noise);
     const rows = Array.from({ length: 500 }, (_, index) => headers.map(key => { const value = row({ CIDADE: `CIDADE ${index}` })[key]; return typeof value === 'string' && key !== 'CNPJ' ? noise(value) : value; }));
     const result = await upload(file([], { name: 'ruidos-semente-20260916', aoa: [noisyHeaders, ...rows] }), replace);
@@ -366,6 +377,7 @@ try {
   });
   await check('Erro na última das 49.999 linhas aborta a carga inteira', () => rejected(file(Array.from({ length: 49999 }, (_, index) => row(index === 49998 ? { MEDIDA: 'lirto' } : {})), { name: 'erro-no-fim-50000' }), replace, 400, data => assert.equal(data.outrosErros[0].linha, 50000)));
   await check('Carga de 10.000 condições distintas publica todas', async () => {
+    await localidades(serie('STRESS', 10000));
     const large = file(Array.from({ length: 10000 }, (_, index) => row({ CIDADE: `STRESS ${index}`, PRECO: index / 100 })), { name: 'dez-mil-condicoes' });
     const result = await upload(large, replace); assert.equal(result.status, 200, JSON.stringify(result.data)); assert.equal(result.data.summary.items, 10000);
     assert.equal(query('SELECT COUNT(*) n FROM agreement_items WHERE version_id=(SELECT current_version_id FROM agreements WHERE id=?)', agreementId)[0].n, 10000);
