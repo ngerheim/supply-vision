@@ -18,6 +18,7 @@ import {
   isOneOf,
   isRecord,
   isValidCnpj,
+  normalizeImportCnpj,
   isValidDateRange,
   MAX_IMPORT_BYTES,
   ROLES,
@@ -949,7 +950,12 @@ async function importWorkbookComTrava(request: Request, user: User, agreementId:
       await rawDb().prepare('UPDATE imports SET status=?,total_rows=?,valid_rows=?,error_rows=?,summary_json=?,completed_at=? WHERE id=?').bind('error', parsed.length, parsed.length-errors.length, errors.length, JSON.stringify(summary), now(), importId).run();
       return ok({ error: `A planilha possui ${errors.length} linha(s) inválida(s). Nenhum dado foi publicado.`, importId, ...summary }, { status: 400 });
     }
-    const summary = legacy ? await processLegacy(parsed, user, importId) : await processAgreementImport(parsed, user, importId, agreementId!);
+    // O zero à esquerda recuperado altera um dado do arquivo: o resumo precisa
+    // dizer quantos fornecedores passaram por isso, para a conferência não
+    // depender de o operador reparar sozinho.
+    const cnpjsRecuperados = new Set(parsed.filter((r) => r.cnpjRecuperado).map((r) => r.cnpj)).size;
+    const processado = legacy ? await processLegacy(parsed, user, importId) : await processAgreementImport(parsed, user, importId, agreementId!);
+    const summary = cnpjsRecuperados ? { ...processado, cnpjsRecuperados } : processado;
     await rawDb().prepare('UPDATE imports SET status=?,total_rows=?,valid_rows=?,error_rows=0,summary_json=?,completed_at=? WHERE id=?').bind('completed', parsed.length, parsed.length, JSON.stringify(summary), now(), importId).run();
     await audit(user.id, 'IMPORT', legacy ? 'legacy_base' : 'agreement', agreementId, `${file.name}: ${parsed.length} linhas publicadas`);
     return ok({ success: true, summary });
@@ -963,8 +969,7 @@ async function importWorkbookComTrava(request: Request, user: User, agreementId:
 
 function parseImportRow(row: Row, rowNumber: number, legacy: boolean) {
   const find = (...keys: string[]) => { const entry = Object.entries(row).find(([k]) => keys.includes(normalizeImportColumn(k))); return entry?.[1] ?? ''; };
-  const rawCnpj=find('CNPJ'), numericCnpj=typeof rawCnpj==='number'&&Number.isInteger(rawCnpj)?String(rawCnpj):'',
-    cnpj=numericCnpj.length===13?`0${numericCnpj}`:normalizeCnpj(rawCnpj),
+  const rawCnpj=find('CNPJ'), cnpj=normalizeImportCnpj(rawCnpj), cnpjRecuperado=cnpj!==normalizeCnpj(rawCnpj),
     rawModel=find('MODELO'), rawItem=find('PECA_SERVICO','PECA/SERVICO','ITEM'), rawUnit=find('MEDIDA','UNIDADE'),
     city = normalizeImportText(find('CIDADE')), state = normalizeImportText(find('UF')),
     supplier = normalizeImportText(find('FORNECEDOR')), model = normalizeImportText(rawModel), item = normalizeImportText(rawItem),
@@ -981,7 +986,7 @@ function parseImportRow(row: Row, rowNumber: number, legacy: boolean) {
     if (!supplier) error = 'A coluna FORNECEDOR está vazia (obrigatória na carga inicial).';
     else if (!isValidCnpj(cnpj)) error = `CNPJ inválido: "${textoSeguro(rawCnpj)}".`;
   }
-  return { rowNumber, city, state, cnpj, supplier, model, item, unit, brands, price, error, itemId: '', modelId: '', unitId: '', rawModel: textoSeguro(rawModel), rawItem: textoSeguro(rawItem), rawUnit: textoSeguro(rawUnit) };
+  return { rowNumber, city, state, cnpj, cnpjRecuperado, supplier, model, item, unit, brands, price, error, itemId: '', modelId: '', unitId: '', rawModel: textoSeguro(rawModel), rawItem: textoSeguro(rawItem), rawUnit: textoSeguro(rawUnit) };
 }
 
 async function applyImportMappings(rows: ReturnType<typeof parseImportRow>[]) {
