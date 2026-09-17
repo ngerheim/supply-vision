@@ -1084,6 +1084,20 @@ function medidasDivergentes(previous: ReturnType<typeof parseImportRow>, row: Re
   return `Medidas diferentes para o mesmo item nas linhas ${previous.rowNumber} e ${row.rowNumber}: ${row.rawItem}, ${row.model}, ${row.city} — "${previous.rawUnit}" e "${row.rawUnit}". A medida define o preço, então corrija a planilha antes de importar.`;
 }
 
+type Duplicata = { item: string; modelo: string; cidade: string; linhaMantida: number; linhaDescartada: number; precoMantido: number; precoDescartado: number; motivo: string };
+
+// A duplicata some do resultado final, entao precisa aparecer no resumo: qual
+// linha ficou, qual saiu e por que. Sem isso a escolha do importador vira uma
+// decisao silenciosa que so uma conferencia manual pegaria.
+function registroDuplicata(mantida: ReturnType<typeof parseImportRow>, descartada: ReturnType<typeof parseImportRow>): Duplicata {
+  return {
+    item: descartada.rawItem, modelo: descartada.model, cidade: descartada.city,
+    linhaMantida: mantida.rowNumber, linhaDescartada: descartada.rowNumber,
+    precoMantido: mantida.price, precoDescartado: descartada.price,
+    motivo: mantida.price === descartada.price ? 'linha repetida' : 'preço maior',
+  };
+}
+
 async function processLegacy(rows: ReturnType<typeof parseImportRow>[], user: User, importId: string) {
   const refs = await ensureReferenceData(rows), db = rawDb(), timestamp = now();
   const cnpjs = Array.from(new Set(rows.map((r) => r.cnpj)));
@@ -1115,6 +1129,7 @@ async function processLegacy(rows: ReturnType<typeof parseImportRow>[], user: Us
     }
   }
   const locationLinks = new Map<string,[string,string]>();
+  const duplicatas: Duplicata[] = [];
   const deduped = new Map<string,{row:ReturnType<typeof parseImportRow>;agreement:StagedAgreement;locationId:string}>();
   for (const row of rows) {
     const agreement=agreements.get(row.cnpj)!, locationId=refs.locations.get(`${row.city}|${row.state}`)!;
@@ -1126,7 +1141,11 @@ async function processLegacy(rows: ReturnType<typeof parseImportRow>[], user: Us
     const key=[agreement.versionId,row.city,row.itemId,row.modelId].join('|');
     const previous=deduped.get(key);
     if(previous && previous.row.unitId!==row.unitId) throw new Error(medidasDivergentes(previous.row,row));
-    if(!previous || row.price < previous.row.price) deduped.set(key,{row:{...row,brands:Array.from(new Set(`${previous?.row.brands||''}/${row.brands}`.split('/').map(x=>x.trim()).filter(Boolean))).join(' / ')},agreement,locationId});
+    if(!previous) { deduped.set(key,{row,agreement,locationId}); continue; }
+    // Empate de preco mantem a primeira linha; preco menor vence.
+    const mantida = row.price < previous.row.price ? row : previous.row;
+    duplicatas.push(registroDuplicata(mantida, mantida===row ? previous.row : row));
+    if(mantida===row) deduped.set(key,{row,agreement,locationId});
   }
   const statements=Array.from(deduped.values()).map(({row,agreement,locationId})=>db.prepare(`INSERT INTO agreement_items (id,version_id,location_id,catalog_item_id,vehicle_model_id,unit_id,price,courtesy,brands_text,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)`).bind(id('itm'),agreement.versionId,locationId,row.itemId,row.modelId,row.unitId,row.price,row.price===0?1:0,row.brands||null,timestamp,timestamp));
   await batch(statements,80);
@@ -1153,17 +1172,20 @@ async function processLegacy(rows: ReturnType<typeof parseImportRow>[], user: Us
     }
     throw error;
   }
-  return { agreements: agreements.size, items: deduped.size, duplicateKeysResolved: rows.length-deduped.size, suppliers: cnpjs.length, locations: new Set(rows.map((r)=>`${r.city}|${r.state}`)).size };
+  return { agreements: agreements.size, items: deduped.size, duplicateKeysResolved: rows.length-deduped.size, duplicatas: duplicatas.length, amostraDuplicatas: duplicatas.slice(0,50), suppliers: cnpjs.length, locations: new Set(rows.map((r)=>`${r.city}|${r.state}`)).size };
 }
 
 async function processAgreementImport(rows: ReturnType<typeof parseImportRow>[], user: User, importId: string, agreementId: string) {
   const agreement = await first<{id:string;number:string}>('SELECT id,number FROM agreements WHERE id=?',[agreementId]); if(!agreement) throw new Error('Acordo não encontrado');
   const uniqueRows=new Map<string,ReturnType<typeof parseImportRow>>();
+  const duplicatas: Duplicata[] = [];
   for(const row of rows){
     const key=JSON.stringify([row.city,row.itemId,row.modelId]), previous=uniqueRows.get(key);
     if(previous && previous.unitId!==row.unitId) throw new Error(medidasDivergentes(previous,row));
-    if(previous && previous.price!==row.price) throw new Error(`Preços conflitantes nas linhas ${previous.rowNumber} e ${row.rowNumber} para ${row.item}, ${row.model}, ${row.city}/${row.state}`);
-    uniqueRows.set(key,{...row,brands:Array.from(new Set(`${previous?.brands||''}/${row.brands}`.split('/').map(x=>x.trim()).filter(Boolean))).join(' / ')});
+    if(!previous) { uniqueRows.set(key,row); continue; }
+    const mantida = row.price < previous.price ? row : previous;
+    duplicatas.push(registroDuplicata(mantida, mantida===row ? previous : row));
+    uniqueRows.set(key,mantida);
   }
   const effectiveRows=Array.from(uniqueRows.values());
   const refs=await ensureReferenceData(effectiveRows), db=rawDb(), timestamp=now();
@@ -1179,7 +1201,7 @@ async function processAgreementImport(rows: ReturnType<typeof parseImportRow>[],
     db.prepare('UPDATE agreements SET current_version_id=?,updated_at=? WHERE id=?').bind(versionId,timestamp,agreementId),
     db.prepare(`UPDATE agreement_versions SET status='published',published_at=? WHERE id=?`).bind(timestamp,versionId),
   ]);
-  return { agreement: agreement.number, version: versionNumber, items: effectiveRows.length, duplicateKeysMerged: rows.length-effectiveRows.length, locations: links.size };
+  return { agreement: agreement.number, version: versionNumber, items: effectiveRows.length, duplicatas: duplicatas.length, amostraDuplicatas: duplicatas.slice(0,50), locations: links.size };
 }
 
 async function batch(statements: D1PreparedStatement[], size: number) { for(let i=0;i<statements.length;i+=size) await rawDb().batch(statements.slice(i,i+size)); }
