@@ -942,11 +942,34 @@ async function importWorkbookComTrava(request: Request, user: User, agreementId:
     if (!leitura.ok) throw new Error(leitura.erro);
     const sourceRows = leitura.linhas as Row[];
     if (!sourceRows.length) throw new Error('A planilha não contém linhas de dados.');
+    const ausentes = colunasAusentes(sourceRows[0], legacy);
+    if (ausentes.length) throw new Error(`A planilha não tem ${ausentes.length === 1 ? 'a coluna' : 'as colunas'} ${ausentes.join(', ')}. Confira o cabeçalho da primeira aba.`);
     const parsed = sourceRows.map((row, index) => parseImportRow(row, leitura.numerosLinhas[index], legacy));
     await applyImportMappings(parsed);
     const errors = parsed.filter((r) => r.error);
     if (errors.length) {
-      const summary = { sheet: leitura.aba, sampleErrors: errors.slice(0, 50).map((r) => ({ row: r.rowNumber, error: r.error })) };
+      // Nomenclatura errada e um problema por nome, nao por linha: "CAPO" sem
+      // De/Para em 40 linhas e um cadastro a fazer, e listar as 40 linhas
+      // enchia a amostra e escondia os outros nomes. Erro de dado continua
+      // linha a linha, porque ai a celula e que precisa ser achada.
+      const nomenclaturas = new Map<string, { campo: string; valor: string; linhas: number; primeiraLinha: number }>();
+      const outrosErros: { linha: number; erro: string }[] = [];
+      for (const linha of errors) {
+        if (!linha.errorCampo) { outrosErros.push({ linha: linha.rowNumber, erro: linha.error }); continue; }
+        const chave = `${linha.errorCampo}|${normalizeImportText(linha.errorValor)}`;
+        const registro = nomenclaturas.get(chave);
+        if (registro) registro.linhas += 1;
+        else nomenclaturas.set(chave, { campo: linha.errorCampo, valor: linha.errorValor, linhas: 1, primeiraLinha: linha.rowNumber });
+      }
+      const lista = Array.from(nomenclaturas.values()).sort((a, b) => b.linhas - a.linhas);
+      const summary = {
+        sheet: leitura.aba,
+        totalErros: errors.length,
+        nomenclaturas: lista.slice(0, 500),
+        nomenclaturasOmitidas: Math.max(0, lista.length - 500),
+        outrosErros: outrosErros.slice(0, 50),
+        outrosErrosOmitidos: Math.max(0, outrosErros.length - 50),
+      };
       await rawDb().prepare('UPDATE imports SET status=?,total_rows=?,valid_rows=?,error_rows=?,summary_json=?,completed_at=? WHERE id=?').bind('error', parsed.length, parsed.length-errors.length, errors.length, JSON.stringify(summary), now(), importId).run();
       return ok({ error: `A planilha possui ${errors.length} linha(s) inválida(s). Nenhum dado foi publicado.`, importId, ...summary }, { status: 400 });
     }
@@ -965,6 +988,20 @@ async function importWorkbookComTrava(request: Request, user: User, agreementId:
     await rawDb().prepare('UPDATE imports SET status=?,summary_json=?,completed_at=? WHERE id=?').bind('error', JSON.stringify({ error: message }), now(), importId).run();
     return ok({ error: `Não foi possível importar: ${message}`, importId }, { status: 400 });
   }
+}
+
+// Coluna que falta no cabecalho produzia um erro identico em cada linha ("a
+// coluna CIDADE esta vazia", 27 mil vezes), mandando o operador procurar
+// celulas em branco em vez da coluna inexistente. Conferir o cabecalho antes
+// troca isso por uma frase.
+const COLUNAS_OBRIGATORIAS = ['CIDADE', 'UF', 'MODELO', 'PECA_SERVICO', 'MEDIDA', 'PRECO'];
+const COLUNAS_CARGA_INICIAL = ['FORNECEDOR', 'CNPJ'];
+
+function colunasAusentes(row: Row, legacy: boolean) {
+  // normalizeImportColumn ja resolve acento, caixa, barra e os apelidos
+  // (ITEM, UNIDADE, VALOR, MARCA), entao basta comparar o nome canonico.
+  const presentes = new Set(Object.keys(row).map((chave) => normalizeImportColumn(chave)));
+  return [...COLUNAS_OBRIGATORIAS, ...(legacy ? COLUNAS_CARGA_INICIAL : [])].filter((coluna) => !presentes.has(coluna));
 }
 
 function parseImportRow(row: Row, rowNumber: number, legacy: boolean) {
@@ -986,7 +1023,7 @@ function parseImportRow(row: Row, rowNumber: number, legacy: boolean) {
     if (!supplier) error = 'A coluna FORNECEDOR está vazia (obrigatória na carga inicial).';
     else if (!isValidCnpj(cnpj)) error = `CNPJ inválido: "${textoSeguro(rawCnpj)}".`;
   }
-  return { rowNumber, city, state, cnpj, cnpjRecuperado, supplier, model, item, unit, brands, price, error, itemId: '', modelId: '', unitId: '', rawModel: textoSeguro(rawModel), rawItem: textoSeguro(rawItem), rawUnit: textoSeguro(rawUnit) };
+  return { rowNumber, city, state, cnpj, cnpjRecuperado, supplier, model, item, unit, brands, price, error, errorCampo: '', errorValor: '', itemId: '', modelId: '', unitId: '', rawModel: textoSeguro(rawModel), rawItem: textoSeguro(rawItem), rawUnit: textoSeguro(rawUnit) };
 }
 
 async function applyImportMappings(rows: ReturnType<typeof parseImportRow>[]) {
@@ -1008,8 +1045,8 @@ async function applyImportMappings(rows: ReturnType<typeof parseImportRow>[]) {
     const item = resolveImportMapping(row.item, items);
     const model = resolveImportMapping(row.model, models);
     const unit = units.get(row.unit);
-    if (!item) row.error = `PECA_SERVICO sem correspondência ativa no De/Para: "${row.rawItem}".`;
-    else if (!model) row.error = `MODELO sem correspondência ativa no De/Para: "${row.rawModel}".`;
+    if (!item) { row.error = `PECA_SERVICO sem correspondência ativa no De/Para: "${row.rawItem}".`; row.errorCampo = 'PECA_SERVICO'; row.errorValor = row.rawItem; }
+    else if (!model) { row.error = `MODELO sem correspondência ativa no De/Para: "${row.rawModel}".`; row.errorCampo = 'MODELO'; row.errorValor = row.rawModel; }
     else if (!unit) row.error = `UNIDADE inválida ou ambígua: "${row.rawUnit || row.unit}". Use um código ou nome que identifique uma única unidade ativa.`;
     else {
       row.item = normalizeImportText(item.target); row.itemId = item.id;

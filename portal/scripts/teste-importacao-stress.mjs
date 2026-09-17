@@ -90,6 +90,13 @@ async function rejected(document, route, expected = 400, verify) {
   if (verify) await verify(result.data);
   return result;
 }
+// O erro de nomenclatura vira registro agrupado (sem numero de linha proprio,
+// so a primeira ocorrencia); o de dado continua linha a linha.
+function erroDaLinha(data, linha) {
+  const agrupado = (data.nomenclaturas || []).find(n => n.primeiraLinha === linha);
+  if (agrupado) return `${agrupado.campo} sem correspondência ativa no De/Para: "${agrupado.valor}".`;
+  return (data.outrosErros || []).find(e => e.linha === linha)?.erro ?? '';
+}
 async function catalog(type, data) { return good(`/api/catalogs/${type}`, { method: 'POST', body: data }, 201); }
 async function mapping(type, source, targetId, extra = {}) { return good(`/api/mappings/${type}`, { method: 'POST', body: { source, targetId, ...extra } }, 201); }
 function noise(text) {
@@ -158,10 +165,21 @@ try {
       ['uf-invalida', { UF: 'XX' }, /UF/],
     ]);
     for (const [label, changes, match] of invalidCases) await check(`${mode}: ${label} aborta tudo e localiza linha`, () => rejected(file([row(), row(changes)], { name: `${mode}-${label}` }), route, 400, data => {
-      assert.equal(data.sampleErrors?.[0].row, 3); assert.match(data.sampleErrors[0].error, match);
+      assert.match(erroDaLinha(data, 3), match);
     }));
   }
-  await check('Linha real após vazios e cabeçalho deslocado', () => rejected(file([], { name: 'linha-real', aoa: [[], [], headers, Object.values(row()), [], Object.values(row({ MEDIDA: 'lirto' }))] }), replace, 400, data => assert.equal(data.sampleErrors?.[0].row, 6)));
+  await check('Linha real após vazios e cabeçalho deslocado', () => rejected(file([], { name: 'linha-real', aoa: [[], [], headers, Object.values(row()), [], Object.values(row({ MEDIDA: 'lirto' }))] }), replace, 400, data => assert.match(erroDaLinha(data, 6), /UNIDADE/)));
+  await check('Nomenclatura repetida vira um registro agrupado, nao um por linha', () => rejected(file(Array.from({ length: 120 }, (_, index) => row(index % 2 ? { PECA_SERVICO: 'ITEM FANTASMA A' } : { PECA_SERVICO: 'ITEM FANTASMA B' })), { name: 'nomenclatura-agrupada' }), replace, 400, data => {
+    assert.equal(data.totalErros, 120);
+    assert.equal(data.nomenclaturas.length, 2, JSON.stringify(data.nomenclaturas));
+    assert.equal(data.nomenclaturas[0].linhas, 60); assert.equal(data.nomenclaturas[1].linhas, 60);
+    assert.deepEqual(data.nomenclaturas.map(n => n.valor).sort(), ['ITEM FANTASMA A', 'ITEM FANTASMA B']);
+    assert.equal(data.outrosErros.length, 0);
+  }));
+  await check('Coluna ausente é uma mensagem só, não um erro por linha', () => rejected(file([], { name: 'coluna-ausente', aoa: [headers.filter(h => h !== 'CIDADE'), Object.values(row()).filter((_, i) => headers[i] !== 'CIDADE')] }), replace, 400, data => {
+    assert.match(String(data.error), /não tem a coluna CIDADE/);
+    assert.ok(!data.outrosErros?.length, 'coluna ausente nao deve virar erro por linha');
+  }));
   await check('Cabeçalhos equivalentes duplicados são rejeitados', () => rejected(file([], { name: 'cabecalhos-duplicados', aoa: [[...headers, ' Peça/Serviço '], [...Object.values(row()), 'OUTRO ITEM']] }), replace));
   await check('500 ruídos aleatórios reproduzíveis mantêm nomenclaturas e valores', async () => {
     const noisyHeaders = headers.map(noise);
@@ -289,7 +307,8 @@ try {
   });
   await check('Carga inicial inteira aborta se o segundo fornecedor contiver erro', () => rejected(file([row({ CIDADE: 'CIDADE NOVA NAO CRIAR' }), row({ CNPJ: '04.252.011/0001-10', FORNECEDOR: 'OUTRO', MEDIDA: 'lirto' })], { name: 'dois-fornecedores-falha' })));
   await check('100 erros preservam contagem e amostra', () => rejected(file(Array.from({ length: 100 }, () => row({ MEDIDA: 'lirto' })), { name: 'cem-erros' }), replace, 400, async data => {
-    assert.equal(data.sampleErrors.length, 50); const detail = await good(`/api/imports/${data.importId}`); assert.equal(detail.errorRows, 100); assert.equal(detail.totalRows, 100);
+    assert.equal(data.totalErros, 100); assert.equal(data.outrosErros.length, 50); assert.equal(data.outrosErrosOmitidos, 50);
+    const detail = await good(`/api/imports/${data.importId}`); assert.equal(detail.errorRows, 100); assert.equal(detail.totalRows, 100);
   }));
   await check('100 erros aleatórios de nomenclatura são todos rejeitados', () => rejected(file(Array.from({ length: 100 }, () => {
     const field = ['MODELO', 'PECA_SERVICO', 'MEDIDA'][Math.floor(random() * 3)];
@@ -314,7 +333,7 @@ try {
     const large = file(Array.from({ length: 49999 }, () => row()), { name: 'limite-50000-linhas' });
     const result = await upload(large, replace); assert.equal(result.status, 200, JSON.stringify(result.data)); assert.equal(result.data.summary.items, 1);
   });
-  await check('Erro na última das 49.999 linhas aborta a carga inteira', () => rejected(file(Array.from({ length: 49999 }, (_, index) => row(index === 49998 ? { MEDIDA: 'lirto' } : {})), { name: 'erro-no-fim-50000' }), replace, 400, data => assert.equal(data.sampleErrors[0].row, 50000)));
+  await check('Erro na última das 49.999 linhas aborta a carga inteira', () => rejected(file(Array.from({ length: 49999 }, (_, index) => row(index === 49998 ? { MEDIDA: 'lirto' } : {})), { name: 'erro-no-fim-50000' }), replace, 400, data => assert.equal(data.outrosErros[0].linha, 50000)));
   await check('Carga de 10.000 condições distintas publica todas', async () => {
     const large = file(Array.from({ length: 10000 }, (_, index) => row({ CIDADE: `STRESS ${index}`, PRECO: index / 100 })), { name: 'dez-mil-condicoes' });
     const result = await upload(large, replace); assert.equal(result.status, 200, JSON.stringify(result.data)); assert.equal(result.data.summary.items, 10000);
