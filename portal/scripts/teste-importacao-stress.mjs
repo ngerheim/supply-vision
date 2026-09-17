@@ -244,10 +244,18 @@ try {
     const ids = query('SELECT catalog_item_id FROM agreement_items WHERE version_id=(SELECT current_version_id FROM agreements WHERE id=?)', agreementId).map(r => r.catalog_item_id).sort();
     assert.deepEqual(ids, [targetA.id, targetB.id].sort((a,b) => a.localeCompare(b)));
   });
-  await check('Unidade com descrição ambígua é recusada', async () => {
-    const ambiguous = await catalog('units', { code: 'L2', name: 'Litro' });
-    try { await rejected(file([row()], { name: 'unidade-ambigua' }), replace); }
-    finally { await good(`/api/catalogs/units/${ambiguous.id}`, { method: 'PUT', body: { code: 'L2', name: 'Litro', active: false } }); }
+  // A unidade passou a ter uma grafia so: o cadastro grava a descricao igual ao
+  // codigo, entao nao ha como criar duas unidades em que o nome de uma bata com
+  // o codigo da outra. A ambiguidade deixou de ser alcancavel pela interface; a
+  // defesa continua no importador para o caso de dado antigo no banco.
+  await check('Unidade nova não cria ambiguidade: o código é a única grafia', async () => {
+    const nova = await catalog('units', { code: 'L2', name: 'Litro' });
+    try {
+      assert.equal(query("SELECT name FROM units WHERE code='L2'")[0].name, 'L2', 'descrição enviada deveria ser ignorada');
+      const result = await upload(file([row()], { name: 'unidade-sem-ambiguidade' }), replace);
+      assert.equal(result.status, 200, JSON.stringify(result.data));
+    }
+    finally { await good(`/api/catalogs/units/${nova.id}`, { method: 'PUT', body: { code: 'L2', active: false } }); }
   });
   await check('Destino usado por De/Para tem exclusão bloqueada com 409', async () => {
     const target = await catalog('models', { name: 'DESTINO PROTEGIDO' });
