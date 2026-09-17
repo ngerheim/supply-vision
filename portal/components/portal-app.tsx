@@ -137,10 +137,14 @@ function useOrdenacao(chave?:string){
   // efeito colateral, que e o que o react-compiler exige.
   const ordem=escolha&&escolha.chave===chave?escolha:null;
   const alternar=(coluna:number)=>setEscolha(!ordem||ordem.coluna!==coluna?{chave,coluna,direcao:1}:ordem.direcao===1?{chave,coluna,direcao:-1}:null);
+  // Converte so o que tem representacao textual obvia. String() sobre valor de
+  // tipo desconhecido produziria "[object Object]" numa celula que fosse um no
+  // de JSX, e a ordenacao sairia errada sem ninguem notar.
+  const texto=(valor:unknown)=>typeof valor==='string'?valor:typeof valor==='number'||typeof valor==='boolean'?String(valor):'';
   const ordenar=(linhas:AnyRow[],valores:(linha:AnyRow)=>unknown[])=>{
     if(!ordem) return linhas;
     const colacao=new Intl.Collator('pt-BR',{numeric:true,sensitivity:'base'});
-    return [...linhas].sort((a,b)=>colacao.compare(String(valores(a)[ordem.coluna]??''),String(valores(b)[ordem.coluna]??''))*ordem.direcao);
+    return [...linhas].sort((a,b)=>colacao.compare(texto(valores(a)[ordem.coluna]),texto(valores(b)[ordem.coluna]))*ordem.direcao);
   };
   return {ordem,alternar,ordenar};
 }
