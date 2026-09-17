@@ -251,6 +251,19 @@ try {
     assert.equal(result.status, 200); assert.equal(result.data.summary.items, 1);
     assert.equal(query('SELECT brands_text FROM agreement_items WHERE version_id=(SELECT current_version_id FROM agreements WHERE id=?)', agreementId)[0].brands_text, 'A / B');
   });
+  await check('Medidas diferentes para o mesmo item são rejeitadas na substituição', () => rejected(file([row(), row({ MEDIDA: 'par' })], { name: 'medidas-divergentes' }), replace, 400, data => {
+    assert.match(String(data.error), /[Mm]edidas diferentes/);
+    assert.match(String(data.error), /"litro"|"par"/);
+  }));
+  await check('Medidas diferentes para o mesmo item são rejeitadas na carga inicial', () => rejected(file([row(), row({ MEDIDA: 'par' })], { name: 'medidas-divergentes-legado' }), undefined, 400, data => assert.match(String(data.error), /[Mm]edidas diferentes/)));
+  await check('Mesma medida escrita de outro jeito continua sendo duplicata', async () => {
+    const result = await upload(file([row({ MARCAS: 'C' }), row({ MEDIDA: ' LITRO ', MARCAS: 'D' })], { name: 'medida-grafia' }), replace);
+    assert.equal(result.status, 200); assert.equal(result.data.summary.items, 1);
+  });
+  await check('UF fora da chave: mesma cidade e item não duplicam por estado', async () => {
+    const result = await upload(file([row(), row({ UF: 'MG' })], { name: 'uf-fora-da-chave' }), replace);
+    assert.equal(result.status, 200); assert.equal(result.data.summary.items, 1);
+  });
   await check('Preços conflitantes na substituição não alteram versão', () => rejected(file([row(), row({ PRECO: 70 })], { name: 'precos-conflitantes' }), replace));
   await check('Carga inicial inteira aborta se o segundo fornecedor contiver erro', () => rejected(file([row({ CIDADE: 'CIDADE NOVA NAO CRIAR' }), row({ CNPJ: '04.252.011/0001-10', FORNECEDOR: 'OUTRO', MEDIDA: 'lirto' })], { name: 'dois-fornecedores-falha' })));
   await check('100 erros preservam contagem e amostra', () => rejected(file(Array.from({ length: 100 }, () => row({ MEDIDA: 'lirto' })), { name: 'cem-erros' }), replace, 400, async data => {

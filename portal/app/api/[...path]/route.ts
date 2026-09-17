@@ -1077,6 +1077,13 @@ async function ensureReferenceData(rows: ReturnType<typeof parseImportRow>[]) {
   };
 }
 
+// Medida divergente para a mesma condicao nao tem desempate possivel: se a
+// unidade esta errada, o preco dela esta errado junto, e as duas linhas viram
+// suspeitas. Quem corrige e a planilha, nao o importador.
+function medidasDivergentes(previous: ReturnType<typeof parseImportRow>, row: ReturnType<typeof parseImportRow>) {
+  return `Medidas diferentes para o mesmo item nas linhas ${previous.rowNumber} e ${row.rowNumber}: ${row.rawItem}, ${row.model}, ${row.city} — "${previous.rawUnit}" e "${row.rawUnit}". A medida define o preço, então corrija a planilha antes de importar.`;
+}
+
 async function processLegacy(rows: ReturnType<typeof parseImportRow>[], user: User, importId: string) {
   const refs = await ensureReferenceData(rows), db = rawDb(), timestamp = now();
   const cnpjs = Array.from(new Set(rows.map((r) => r.cnpj)));
@@ -1112,8 +1119,13 @@ async function processLegacy(rows: ReturnType<typeof parseImportRow>[], user: Us
   for (const row of rows) {
     const agreement=agreements.get(row.cnpj)!, locationId=refs.locations.get(`${row.city}|${row.state}`)!;
     locationLinks.set(`${agreement.agreementId}|${locationId}`,[agreement.agreementId,locationId]);
-    const key=[agreement.versionId,locationId,row.itemId,row.modelId,row.unitId].join('|');
+    // Fornecedor, cidade, modelo e item identificam a condicao comercial. A
+    // unidade fica fora de proposito: a mesma peca cotada em medidas
+    // diferentes e preenchimento errado, e o preco erra junto — 20 a unidade
+    // e 40 o par sao o mesmo valor, entao comparar os numeros nao resolve.
+    const key=[agreement.versionId,row.city,row.itemId,row.modelId].join('|');
     const previous=deduped.get(key);
+    if(previous && previous.row.unitId!==row.unitId) throw new Error(medidasDivergentes(previous.row,row));
     if(!previous || row.price < previous.row.price) deduped.set(key,{row:{...row,brands:Array.from(new Set(`${previous?.row.brands||''}/${row.brands}`.split('/').map(x=>x.trim()).filter(Boolean))).join(' / ')},agreement,locationId});
   }
   const statements=Array.from(deduped.values()).map(({row,agreement,locationId})=>db.prepare(`INSERT INTO agreement_items (id,version_id,location_id,catalog_item_id,vehicle_model_id,unit_id,price,courtesy,brands_text,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)`).bind(id('itm'),agreement.versionId,locationId,row.itemId,row.modelId,row.unitId,row.price,row.price===0?1:0,row.brands||null,timestamp,timestamp));
@@ -1148,7 +1160,8 @@ async function processAgreementImport(rows: ReturnType<typeof parseImportRow>[],
   const agreement = await first<{id:string;number:string}>('SELECT id,number FROM agreements WHERE id=?',[agreementId]); if(!agreement) throw new Error('Acordo não encontrado');
   const uniqueRows=new Map<string,ReturnType<typeof parseImportRow>>();
   for(const row of rows){
-    const key=JSON.stringify([row.city,row.state,row.itemId,row.modelId,row.unitId]), previous=uniqueRows.get(key);
+    const key=JSON.stringify([row.city,row.itemId,row.modelId]), previous=uniqueRows.get(key);
+    if(previous && previous.unitId!==row.unitId) throw new Error(medidasDivergentes(previous,row));
     if(previous && previous.price!==row.price) throw new Error(`Preços conflitantes nas linhas ${previous.rowNumber} e ${row.rowNumber} para ${row.item}, ${row.model}, ${row.city}/${row.state}`);
     uniqueRows.set(key,{...row,brands:Array.from(new Set(`${previous?.brands||''}/${row.brands}`.split('/').map(x=>x.trim()).filter(Boolean))).join(' / ')});
   }
