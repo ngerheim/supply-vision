@@ -704,7 +704,7 @@ async function updateItem(request: Request, user: User, itemId: string) {
 const catalogConfig: Record<string, { table: string; fields: string[] }> = {
   suppliers: { table: 'suppliers', fields: ['legalName', 'tradeName', 'cnpj', 'city', 'state'] },
   items: { table: 'catalog_items', fields: ['name'] }, models: { table: 'vehicle_models', fields: ['name'] },
-  units: { table: 'units', fields: ['code', 'name'] }, brands: { table: 'brands', fields: ['name'] }, locations: { table: 'locations', fields: ['city', 'state'] },
+  units: { table: 'units', fields: ['code'] }, brands: { table: 'brands', fields: ['name'] }, locations: { table: 'locations', fields: ['city', 'state'] },
 };
 
 const mappingConfig: Record<string, { table: string; targetTable: string; label: string }> = {
@@ -801,8 +801,11 @@ async function createCatalog(request: Request, user: User, type: string) {
     if (!textValue(body.name)) return fail('Informe o modelo.');
     sql = 'INSERT INTO vehicle_models (id,name,active) VALUES (?,?,1)'; values = [recordId, normalizeText(body.name)];
   } else if (type === 'units') {
-    if (!textValue(body.code) || !textValue(body.name)) return fail('Informe o código e a descrição da unidade.');
-    sql = 'INSERT INTO units (id,code,name,active) VALUES (?,?,?,1)'; values = [recordId, normalizeText(body.code), textValue(body.name)];
+    if (!textValue(body.code)) return fail('Informe a unidade de medida.');
+    // name existe no banco como NOT NULL e o importador casa a MEDIDA da
+    // planilha contra codigo OU descricao. Gravando os dois iguais, a unidade
+    // passa a ter uma grafia so e o caso de "unidade ambigua" deixa de existir.
+    sql = 'INSERT INTO units (id,code,name,active) VALUES (?,?,?,1)'; values = [recordId, normalizeText(body.code), normalizeText(body.code)];
   } else if (type === 'brands') {
     if (!textValue(body.name)) return fail('Informe a marca.');
     sql = 'INSERT INTO brands (id,name,active) VALUES (?,?,1)'; values = [recordId, normalizeText(body.name)];
@@ -834,8 +837,8 @@ async function updateCatalog(request: Request, user: User, type: string, recordI
       if (!textValue(body.name)) return fail('Informe o modelo.');
       await rawDb().prepare('UPDATE vehicle_models SET name=?,active=? WHERE id=?').bind(normalizeText(body.name), active, recordId).run();
     } else if (type === 'units') {
-      if (!textValue(body.code) || !textValue(body.name)) return fail('Informe o código e a descrição da unidade.');
-      await rawDb().prepare('UPDATE units SET code=?,name=?,active=? WHERE id=?').bind(normalizeText(body.code), textValue(body.name), active, recordId).run();
+      if (!textValue(body.code)) return fail('Informe a unidade de medida.');
+      await rawDb().prepare('UPDATE units SET code=?,name=?,active=? WHERE id=?').bind(normalizeText(body.code), normalizeText(body.code), active, recordId).run();
     } else if (type === 'brands') {
       if (!textValue(body.name)) return fail('Informe a marca.');
       await rawDb().prepare('UPDATE brands SET name=?,active=? WHERE id=?').bind(normalizeText(body.name), active, recordId).run();
