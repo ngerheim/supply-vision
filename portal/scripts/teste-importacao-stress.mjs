@@ -135,6 +135,10 @@ try {
 
   await check('De/Para inicia vazio', async () => assert.deepEqual(await good('/api/mappings'), { items: [], models: [] }));
   await check('Base vazia recusa nomenclatura sem criar cadastros', () => rejected(file([row()], { name: 'sem-de-para' })));
+  // Localidade virou cadastro previo: sem ela nenhuma linha passa. GOIANIA/MG
+  // existe para o check de UF fora da chave de deduplicacao.
+  await catalog('locations', { city: 'GOIANIA', state: 'GO' });
+  await catalog('locations', { city: 'GOIANIA', state: 'MG' });
   const item = await catalog('items', { name: 'OLEO DE MOTOR TESTE' });
   const model = await catalog('models', { name: 'HILUX 2.8 TESTE' });
   const itemMap = await mapping('items', 'Óleo teste', item.id);
@@ -313,7 +317,26 @@ try {
     const result = await upload(file([row(), row({ UF: 'MG' })], { name: 'uf-fora-da-chave' }), replace);
     assert.equal(result.status, 200); assert.equal(result.data.summary.items, 1);
   });
-  await check('Carga inicial inteira aborta se o segundo fornecedor contiver erro', () => rejected(file([row({ CIDADE: 'CIDADE NOVA NAO CRIAR' }), row({ CNPJ: '04.252.011/0001-10', FORNECEDOR: 'OUTRO', MEDIDA: 'lirto' })], { name: 'dois-fornecedores-falha' })));
+  await check('Carga inicial inteira aborta se o segundo fornecedor contiver erro', () => rejected(file([row(), row({ CNPJ: '04.252.011/0001-10', FORNECEDOR: 'OUTRO', MEDIDA: 'lirto' })], { name: 'dois-fornecedores-falha' })));
+  await check('Cidade sem cadastro trava a importação e não cria localidade', () => rejected(file([row(), row({ CIDADE: 'BEOL HORIZONTE', UF: 'MG' })], { name: 'cidade-sem-cadastro' }), replace, 400, data => {
+    assert.equal(data.nomenclaturas.length, 1, JSON.stringify(data.nomenclaturas));
+    assert.equal(data.nomenclaturas[0].campo, 'CIDADE');
+    assert.equal(data.nomenclaturas[0].valor, 'BEOL HORIZONTE/MG');
+    assert.equal(query("SELECT COUNT(*) n FROM locations WHERE city='BEOL HORIZONTE'")[0].n, 0);
+  }));
+  await check('Erro de grafia repetido em muitas linhas vira um registro só', () => rejected(file(Array.from({ length: 40 }, () => row({ CIDADE: 'BEOL HORIZONTE', UF: 'MG' })), { name: 'cidade-errada-repetida' }), replace, 400, data => {
+    assert.equal(data.totalErros, 40);
+    assert.equal(data.nomenclaturas.length, 1);
+    assert.equal(data.nomenclaturas[0].linhas, 40);
+  }));
+  await check('Cidade cadastrada com acento é alcançada pela planilha sem acento', async () => {
+    const acentuada = await catalog('locations', { city: 'Belém', state: 'PA' });
+    try {
+      assert.equal(query("SELECT city FROM locations WHERE id=?", acentuada.id)[0].city, 'BELEM', 'cadastro deveria normalizar');
+      const result = await upload(file([row({ CIDADE: 'Belém', UF: 'PA' })], { name: 'cidade-acentuada' }), replace);
+      assert.equal(result.status, 200, JSON.stringify(result.data));
+    } finally { await upload(file([row()], { name: 'restaura-apos-acento' }), replace); }
+  });
   await check('100 erros preservam contagem e amostra', () => rejected(file(Array.from({ length: 100 }, () => row({ MEDIDA: 'lirto' })), { name: 'cem-erros' }), replace, 400, async data => {
     assert.equal(data.totalErros, 100); assert.equal(data.outrosErros.length, 50); assert.equal(data.outrosErrosOmitidos, 50);
     const detail = await good(`/api/imports/${data.importId}`); assert.equal(detail.errorRows, 100); assert.equal(detail.totalRows, 100);

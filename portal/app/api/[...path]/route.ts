@@ -812,7 +812,10 @@ async function createCatalog(request: Request, user: User, type: string) {
   } else {
     const state = normalizeText(body.state);
     if (!textValue(body.city) || !/^[A-Z]{2}$/.test(state)) return fail('Informe a cidade e uma UF válida com duas letras.');
-    sql = 'INSERT INTO locations (id,city,state) VALUES (?,?,?)'; values = [recordId, normalizeText(body.city), state];
+    // Mesma forma canonica que a importacao usa para comparar: sem acento e
+    // em maiusculas. Gravar "São Paulo" aqui criaria um registro que a
+    // planilha nunca encontraria.
+    sql = 'INSERT INTO locations (id,city,state) VALUES (?,?,?)'; values = [recordId, normalizeImportText(body.city), state];
   }
   try { await rawDb().prepare(sql).bind(...values).run(); await audit(user.id, 'CREATE', type, recordId, 'Cadastro incluído'); return ok({ id: recordId }, { status: 201 }); }
   catch { return fail('Já existe um cadastro com esses dados.'); }
@@ -845,7 +848,7 @@ async function updateCatalog(request: Request, user: User, type: string, recordI
     } else {
       const state = normalizeText(body.state);
       if (!textValue(body.city) || !/^[A-Z]{2}$/.test(state)) return fail('Informe a cidade e uma UF válida com duas letras.');
-      await rawDb().prepare('UPDATE locations SET city=?,state=? WHERE id=?').bind(normalizeText(body.city), state, recordId).run();
+      await rawDb().prepare('UPDATE locations SET city=?,state=? WHERE id=?').bind(normalizeImportText(body.city), state, recordId).run();
     }
     await audit(user.id, 'UPDATE', type, recordId, 'Cadastro atualizado'); return ok({ success: true });
   } catch (error: unknown) {
@@ -1010,7 +1013,7 @@ function parseImportRow(row: Row, rowNumber: number, legacy: boolean) {
   const find = (...keys: string[]) => { const entry = Object.entries(row).find(([k]) => keys.includes(normalizeImportColumn(k))); return entry?.[1] ?? ''; };
   const rawCnpj=find('CNPJ'), cnpj=normalizeImportCnpj(rawCnpj), cnpjRecuperado=cnpj!==normalizeCnpj(rawCnpj),
     rawModel=find('MODELO'), rawItem=find('PECA_SERVICO','PECA/SERVICO','ITEM'), rawUnit=find('MEDIDA','UNIDADE'),
-    city = normalizeImportText(find('CIDADE')), state = normalizeImportText(find('UF')),
+    rawCity = find('CIDADE'), city = normalizeImportText(rawCity), state = normalizeImportText(find('UF')),
     supplier = normalizeImportText(find('FORNECEDOR')), model = normalizeImportText(rawModel), item = normalizeImportText(rawItem),
     unit = normalizeImportText(rawUnit), brands = normalizeImportText(find('MARCAS','MARCA')),
     priceRaw = find('PRECO','PREÇO','VALOR'), priceParsed = parsePrice(priceRaw), price = priceParsed.value;
@@ -1025,15 +1028,17 @@ function parseImportRow(row: Row, rowNumber: number, legacy: boolean) {
     if (!supplier) error = 'A coluna FORNECEDOR está vazia (obrigatória na carga inicial).';
     else if (!isValidCnpj(cnpj)) error = `CNPJ inválido: "${textoSeguro(rawCnpj)}".`;
   }
-  return { rowNumber, city, state, cnpj, cnpjRecuperado, supplier, model, item, unit, brands, price, error, errorCampo: '', errorValor: '', itemId: '', modelId: '', unitId: '', rawModel: textoSeguro(rawModel), rawItem: textoSeguro(rawItem), rawUnit: textoSeguro(rawUnit) };
+  return { rowNumber, city, state, rawCity: textoSeguro(rawCity), cnpj, cnpjRecuperado, supplier, model, item, unit, brands, price, error, errorCampo: '', errorValor: '', itemId: '', modelId: '', unitId: '', rawModel: textoSeguro(rawModel), rawItem: textoSeguro(rawItem), rawUnit: textoSeguro(rawUnit) };
 }
 
 async function applyImportMappings(rows: ReturnType<typeof parseImportRow>[]) {
-  const [itemRows, modelRows, unitRows] = await Promise.all([
+  const [itemRows, modelRows, unitRows, locationRows] = await Promise.all([
     all<{ sourceKey: string; target: string; id: string }>(`SELECT m.source_key AS sourceKey,c.name AS target,c.id FROM import_item_mappings m JOIN catalog_items c ON c.id=m.target_id WHERE m.active=1 AND c.active=1`),
     all<{ sourceKey: string; target: string; id: string }>(`SELECT m.source_key AS sourceKey,v.name AS target,v.id FROM import_model_mappings m JOIN vehicle_models v ON v.id=m.target_id WHERE m.active=1 AND v.active=1`),
     all<{ id: string; code: string; name: string }>('SELECT id,code,name FROM units WHERE active=1'),
+    all<{ id: string; city: string; state: string }>('SELECT id,city,state FROM locations'),
   ]);
+  const localidades = new Set(locationRows.map((linha) => chaveLocalidade(linha.city, linha.state)));
   const items = new Map(itemRows.map((entry) => [entry.sourceKey, entry]));
   const models = new Map(modelRows.map((entry) => [entry.sourceKey, entry]));
   const units = new Map<string, typeof unitRows[number] | null>();
@@ -1047,7 +1052,8 @@ async function applyImportMappings(rows: ReturnType<typeof parseImportRow>[]) {
     const item = resolveImportMapping(row.item, items);
     const model = resolveImportMapping(row.model, models);
     const unit = units.get(row.unit);
-    if (!item) { row.error = `PECA_SERVICO sem correspondência ativa no De/Para: "${row.rawItem}".`; row.errorCampo = 'PECA_SERVICO'; row.errorValor = row.rawItem; }
+    if (!localidades.has(chaveLocalidade(row.city, row.state))) { row.error = `CIDADE sem cadastro em localidades: "${row.rawCity}/${row.state}".`; row.errorCampo = 'CIDADE'; row.errorValor = `${row.city}/${row.state}`; }
+    else if (!item) { row.error = `PECA_SERVICO sem correspondência ativa no De/Para: "${row.rawItem}".`; row.errorCampo = 'PECA_SERVICO'; row.errorValor = row.rawItem; }
     else if (!model) { row.error = `MODELO sem correspondência ativa no De/Para: "${row.rawModel}".`; row.errorCampo = 'MODELO'; row.errorValor = row.rawModel; }
     else if (!unit) row.error = `UNIDADE inválida ou ambígua: "${row.rawUnit || row.unit}". Use um código ou nome que identifique uma única unidade ativa.`;
     else {
@@ -1097,22 +1103,27 @@ function parsePrice(raw: unknown): { value: number; error: string } {
   return { value, error: '' };
 }
 
+// A localidade e comparada pela forma canonica dos dois lados: registro antigo
+// gravado com acento, antes de o cadastro normalizar, continua sendo alcancado.
+function chaveLocalidade(cidade: unknown, uf: unknown) {
+  return `${normalizeImportText(cidade)}|${normalizeImportText(uf)}`;
+}
+
 async function ensureReferenceData(rows: ReturnType<typeof parseImportRow>[]) {
   const db = rawDb(), timestamp = now();
-  const suppliers = new Map<string,string>(), locations = new Map<string,string>(), brands = new Map<string,string>();
+  const suppliers = new Map<string,string>(), brands = new Map<string,string>();
   for (const row of rows) {
-    if (row.cnpj) suppliers.set(row.cnpj, row.supplier); locations.set(`${row.city}|${row.state}`, row.city);
+    if (row.cnpj) suppliers.set(row.cnpj, row.supplier);
     row.brands.split('/').map((x) => x.trim()).filter(Boolean).forEach((x) => brands.set(x,x));
   }
   const statements = [
     ...Array.from(suppliers).map(([cnpj,name]) => db.prepare('INSERT OR IGNORE INTO suppliers (id,legal_name,trade_name,cnpj,active,created_at,updated_at) VALUES (?,?,?,?,1,?,?)').bind(id('sup'),name,name,cnpj,timestamp,timestamp)),
-    ...Array.from(locations).map(([key]) => { const [city,state]=key.split('|'); return db.prepare('INSERT OR IGNORE INTO locations (id,city,state) VALUES (?,?,?)').bind(id('loc'),city,state); }),
     ...Array.from(brands).map(([name]) => db.prepare('INSERT OR IGNORE INTO brands (id,name,active) VALUES (?,?,1)').bind(id('brd'),name)),
   ];
   await batch(statements, 80);
   return {
     suppliers: new Map((await all<{id:string;cnpj:string}>('SELECT id,cnpj FROM suppliers')).map((x) => [x.cnpj,x.id])),
-    locations: new Map((await all<{id:string;city:string;state:string}>('SELECT id,city,state FROM locations')).map((x) => [`${x.city}|${x.state}`,x.id])),
+    locations: new Map((await all<{id:string;city:string;state:string}>('SELECT id,city,state FROM locations')).map((x) => [chaveLocalidade(x.city,x.state),x.id])),
   };
 }
 
@@ -1171,7 +1182,7 @@ async function processLegacy(rows: ReturnType<typeof parseImportRow>[], user: Us
   const duplicatas: Duplicata[] = [];
   const deduped = new Map<string,{row:ReturnType<typeof parseImportRow>;agreement:StagedAgreement;locationId:string}>();
   for (const row of rows) {
-    const agreement=agreements.get(row.cnpj)!, locationId=refs.locations.get(`${row.city}|${row.state}`)!;
+    const agreement=agreements.get(row.cnpj)!, locationId=refs.locations.get(chaveLocalidade(row.city,row.state))!;
     locationLinks.set(`${agreement.agreementId}|${locationId}`,[agreement.agreementId,locationId]);
     // Fornecedor, cidade, modelo e item identificam a condicao comercial. A
     // unidade fica fora de proposito: a mesma peca cotada em medidas
@@ -1232,7 +1243,7 @@ async function processAgreementImport(rows: ReturnType<typeof parseImportRow>[],
   const versionId=id('ver'), versionNumber=Number(max?.n||0)+1;
   await db.prepare(`INSERT INTO agreement_versions (id,agreement_id,version_number,import_id,status,published_at,created_by,created_at) VALUES (?,?,?,?,'processing',NULL,?,?)`).bind(versionId,agreementId,versionNumber,importId,user.id,timestamp).run();
   const links=new Map<string,string>(), statements:D1PreparedStatement[]=[];
-  for(const row of effectiveRows){ const locationId=refs.locations.get(`${row.city}|${row.state}`)!; links.set(locationId,locationId); statements.push(db.prepare(`INSERT INTO agreement_items (id,version_id,location_id,catalog_item_id,vehicle_model_id,unit_id,price,courtesy,brands_text,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)`).bind(id('itm'),versionId,locationId,row.itemId,row.modelId,row.unitId,row.price,row.price===0?1:0,row.brands||null,timestamp,timestamp)); }
+  for(const row of effectiveRows){ const locationId=refs.locations.get(chaveLocalidade(row.city,row.state))!; links.set(locationId,locationId); statements.push(db.prepare(`INSERT INTO agreement_items (id,version_id,location_id,catalog_item_id,vehicle_model_id,unit_id,price,courtesy,brands_text,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)`).bind(id('itm'),versionId,locationId,row.itemId,row.modelId,row.unitId,row.price,row.price===0?1:0,row.brands||null,timestamp,timestamp)); }
   await batch(statements,80);
   await db.batch([
     db.prepare('DELETE FROM agreement_locations WHERE agreement_id=?').bind(agreementId),
