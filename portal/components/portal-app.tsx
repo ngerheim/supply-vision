@@ -131,9 +131,12 @@ function Info({label,value}:JsonData){return <Card size="sm"><CardContent><p cla
 // colacao pt-BR com numeric, para "HILUX 2.10" vir depois de "HILUX 2.8" e
 // acento nao jogar a palavra para o fim da lista.
 function useOrdenacao(chave?:string){
-  const [ordem,setOrdem]=useState<AnyRow|null>(null);
-  useEffect(()=>{setOrdem(null)},[chave]);
-  const alternar=(coluna:number)=>setOrdem((atual:AnyRow|null)=>!atual||atual.coluna!==coluna?{coluna,direcao:1}:atual.direcao===1?{coluna,direcao:-1}:null);
+  const [escolha,setEscolha]=useState<AnyRow|null>(null);
+  // A escolha guarda a aba em que foi feita. Trocar de aba muda o significado
+  // das colunas, entao a escolha antiga passa a ser ignorada — derivado, sem
+  // efeito colateral, que e o que o react-compiler exige.
+  const ordem=escolha&&escolha.chave===chave?escolha:null;
+  const alternar=(coluna:number)=>setEscolha(!ordem||ordem.coluna!==coluna?{chave,coluna,direcao:1}:ordem.direcao===1?{chave,coluna,direcao:-1}:null);
   const ordenar=(linhas:AnyRow[],valores:(linha:AnyRow)=>unknown[])=>{
     if(!ordem) return linhas;
     const colacao=new Intl.Collator('pt-BR',{numeric:true,sensitivity:'base'});
