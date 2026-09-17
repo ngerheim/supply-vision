@@ -246,10 +246,33 @@ try {
     });
     await check(`${role}: permissão de importar respeitada`, async () => assert.equal((await upload(file([row()], { name: `perfil-${role}` }), replace, session)).status, role === 'editor' ? 200 : 403));
   }
-  await check('Duplicatas de mesmo preço unificam marcas', async () => {
+  await check('Linha repetida é descartada e reportada, mantendo a primeira', async () => {
     const result = await upload(file([row({ MARCAS: 'A' }), row({ MARCAS: 'B' })], { name: 'duplicatas-iguais' }), replace);
     assert.equal(result.status, 200); assert.equal(result.data.summary.items, 1);
-    assert.equal(query('SELECT brands_text FROM agreement_items WHERE version_id=(SELECT current_version_id FROM agreements WHERE id=?)', agreementId)[0].brands_text, 'A / B');
+    assert.equal(result.data.summary.duplicatas, 1);
+    const [duplicata] = result.data.summary.amostraDuplicatas;
+    assert.equal(duplicata.motivo, 'linha repetida');
+    assert.equal(duplicata.linhaMantida, 2); assert.equal(duplicata.linhaDescartada, 3);
+    // Sem uniao de marcas: sobrevive a marca da linha mantida.
+    assert.equal(query('SELECT brands_text FROM agreement_items WHERE version_id=(SELECT current_version_id FROM agreements WHERE id=?)', agreementId)[0].brands_text, 'A');
+  });
+  await check('Preço maior é descartado e reportado nos dois modos', async () => {
+    for (const [modo, route] of [['substituição', replace], ['carga inicial', undefined]]) {
+      const result = await upload(file([row({ PRECO: 120 }), row({ PRECO: 90 })], { name: `preco-maior-${modo}` }), route);
+      assert.equal(result.status, 200, `${modo}: ${JSON.stringify(result.data)}`);
+      assert.equal(result.data.summary.duplicatas, 1, modo);
+      const [duplicata] = result.data.summary.amostraDuplicatas;
+      assert.equal(duplicata.motivo, 'preço maior', modo);
+      assert.equal(duplicata.precoMantido, 90, modo);
+      assert.equal(duplicata.precoDescartado, 120, modo);
+      assert.equal(duplicata.linhaMantida, 3, modo);
+      assert.equal(duplicata.linhaDescartada, 2, modo);
+    }
+  });
+  await check('Importação sem duplicatas não reporta nenhuma', async () => {
+    const result = await upload(file([row()], { name: 'sem-duplicatas' }), replace);
+    assert.equal(result.status, 200); assert.equal(result.data.summary.duplicatas, 0);
+    assert.deepEqual(result.data.summary.amostraDuplicatas, []);
   });
   await check('Medidas diferentes para o mesmo item são rejeitadas na substituição', () => rejected(file([row(), row({ MEDIDA: 'par' })], { name: 'medidas-divergentes' }), replace, 400, data => {
     assert.match(String(data.error), /[Mm]edidas diferentes/);
@@ -264,7 +287,6 @@ try {
     const result = await upload(file([row(), row({ UF: 'MG' })], { name: 'uf-fora-da-chave' }), replace);
     assert.equal(result.status, 200); assert.equal(result.data.summary.items, 1);
   });
-  await check('Preços conflitantes na substituição não alteram versão', () => rejected(file([row(), row({ PRECO: 70 })], { name: 'precos-conflitantes' }), replace));
   await check('Carga inicial inteira aborta se o segundo fornecedor contiver erro', () => rejected(file([row({ CIDADE: 'CIDADE NOVA NAO CRIAR' }), row({ CNPJ: '04.252.011/0001-10', FORNECEDOR: 'OUTRO', MEDIDA: 'lirto' })], { name: 'dois-fornecedores-falha' })));
   await check('100 erros preservam contagem e amostra', () => rejected(file(Array.from({ length: 100 }, () => row({ MEDIDA: 'lirto' })), { name: 'cem-erros' }), replace, 400, async data => {
     assert.equal(data.sampleErrors.length, 50); const detail = await good(`/api/imports/${data.importId}`); assert.equal(detail.errorRows, 100); assert.equal(detail.totalRows, 100);
