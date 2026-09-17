@@ -1,0 +1,13 @@
+# Texto normalizado no repositorio; cada sistema recebe o EOL definido aqui.
+* text=auto eol=lf
+
+# Pontos de entrada e scripts operacionais executados no Windows.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# Arquivos abertos e mantidos principalmente pelo Excel no Windows.
+*.csv text eol=crlf
+
+# SVG e texto de configuracao/codigo permanecem portaveis em LF.
+*.svg text eol=lf
