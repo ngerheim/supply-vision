@@ -18,6 +18,7 @@ import {
   isOneOf,
   isRecord,
   isValidCnpj,
+  isValidState,
   normalizeImportCnpj,
   isValidDateRange,
   MAX_IMPORT_BYTES,
@@ -783,6 +784,7 @@ function exigeCamposDeCatalogo(body: CatalogInput) {
   exigeTexto(body.legalName, LIMITES_CAMPO.nome, 'razão social');
   exigeTexto(body.code, LIMITES_CAMPO.codigo, 'código');
   exigeTexto(body.city, LIMITES_CAMPO.cidade, 'cidade');
+  if (textValue(body.state) && !isValidState(body.state)) throw new EntradaInvalida('Selecione uma UF brasileira válida (ex.: GO).');
 }
 
 async function createCatalog(request: Request, user: User, type: string) {
@@ -811,7 +813,7 @@ async function createCatalog(request: Request, user: User, type: string) {
     sql = 'INSERT INTO brands (id,name,active) VALUES (?,?,1)'; values = [recordId, normalizeText(body.name)];
   } else {
     const state = normalizeText(body.state);
-    if (!textValue(body.city) || !/^[A-Z]{2}$/.test(state)) return fail('Informe a cidade e uma UF válida com duas letras.');
+    if (!normalizeImportText(body.city) || !isValidState(state)) return fail('Informe a cidade e selecione uma UF brasileira válida.');
     // Mesma forma canonica que a importacao usa para comparar: sem acento e
     // em maiusculas. Gravar "São Paulo" aqui criaria um registro que a
     // planilha nunca encontraria.
@@ -847,7 +849,7 @@ async function updateCatalog(request: Request, user: User, type: string, recordI
       await rawDb().prepare('UPDATE brands SET name=?,active=? WHERE id=?').bind(normalizeText(body.name), active, recordId).run();
     } else {
       const state = normalizeText(body.state);
-      if (!textValue(body.city) || !/^[A-Z]{2}$/.test(state)) return fail('Informe a cidade e uma UF válida com duas letras.');
+      if (!normalizeImportText(body.city) || !isValidState(state)) return fail('Informe a cidade e selecione uma UF brasileira válida.');
       await rawDb().prepare('UPDATE locations SET city=?,state=? WHERE id=?').bind(normalizeImportText(body.city), state, recordId).run();
     }
     await audit(user.id, 'UPDATE', type, recordId, 'Cadastro atualizado'); return ok({ success: true });
@@ -897,6 +899,9 @@ async function importWorkbook(request: Request, user: User, agreementId: string 
   // recusada depois.
   const donoTrava = id('lck');
   if (!await adquirirTrava(TRAVA_IMPORTACAO, donoTrava)) {
+    // Finaliza o envio sem guardar o arquivo: o proxy local precisa consumir
+    // o corpo para entregar o 409 sem interromper as conexoes concorrentes.
+    await corpoBinarioLimitado(request, 0);
     return fail('Já existe uma importação em andamento. Aguarde ela terminar e tente de novo.', 409);
   }
   try {
@@ -950,7 +955,7 @@ async function importWorkbookComTrava(request: Request, user: User, agreementId:
     const ausentes = colunasAusentes(sourceRows[0], legacy);
     if (ausentes.length) throw new Error(`A planilha não tem ${ausentes.length === 1 ? 'a coluna' : 'as colunas'} ${ausentes.join(', ')}. Confira o cabeçalho da primeira aba.`);
     const parsed = sourceRows.map((row, index) => parseImportRow(row, leitura.numerosLinhas[index], legacy));
-    await applyImportMappings(parsed);
+    await applyImportMappings(parsed, legacy);
     const errors = parsed.filter((r) => r.error);
     if (errors.length) {
       // Nomenclatura errada e um problema por nome, nao por linha: "CAPO" sem
@@ -1011,7 +1016,7 @@ function colunasAusentes(row: Row, legacy: boolean) {
 
 function parseImportRow(row: Row, rowNumber: number, legacy: boolean) {
   const find = (...keys: string[]) => { const entry = Object.entries(row).find(([k]) => keys.includes(normalizeImportColumn(k))); return entry?.[1] ?? ''; };
-  const rawCnpj=find('CNPJ'), cnpj=normalizeImportCnpj(rawCnpj), cnpjRecuperado=cnpj!==normalizeCnpj(rawCnpj),
+  const rawCnpj=legacy ? find('CNPJ') : '', cnpj=normalizeImportCnpj(rawCnpj), cnpjRecuperado=cnpj!==normalizeCnpj(rawCnpj),
     rawModel=find('MODELO'), rawItem=find('PECA_SERVICO','PECA/SERVICO','ITEM'), rawUnit=find('MEDIDA','UNIDADE'),
     rawCity = find('CIDADE'), city = normalizeImportText(rawCity), state = normalizeImportText(find('UF')),
     supplier = normalizeImportText(find('FORNECEDOR')), model = normalizeImportText(rawModel), item = normalizeImportText(rawItem),
@@ -1019,7 +1024,7 @@ function parseImportRow(row: Row, rowNumber: number, legacy: boolean) {
     priceRaw = find('PRECO','PREÇO','VALOR'), priceParsed = parsePrice(priceRaw), price = priceParsed.value;
   let error = '';
   if (!city) error = 'A coluna CIDADE está vazia.';
-  else if (!['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO'].includes(state)) error = state ? `UF inválida: "${state}". Use uma sigla brasileira válida (ex.: GO).` : 'A coluna UF está vazia.';
+  else if (!isValidState(state)) error = state ? `UF inválida: "${state}". Use uma sigla brasileira válida (ex.: GO).` : 'A coluna UF está vazia.';
   else if (!model) error = 'A coluna MODELO está vazia.';
   else if (!item) error = 'A coluna PECA_SERVICO está vazia.';
   else if (!unit) error = 'A coluna MEDIDA está vazia.';
@@ -1031,13 +1036,15 @@ function parseImportRow(row: Row, rowNumber: number, legacy: boolean) {
   return { rowNumber, city, state, rawCity: textoSeguro(rawCity), cnpj, cnpjRecuperado, supplier, model, item, unit, brands, price, error, errorCampo: '', errorValor: '', itemId: '', modelId: '', unitId: '', rawModel: textoSeguro(rawModel), rawItem: textoSeguro(rawItem), rawUnit: textoSeguro(rawUnit) };
 }
 
-async function applyImportMappings(rows: ReturnType<typeof parseImportRow>[]) {
-  const [itemRows, modelRows, unitRows, locationRows] = await Promise.all([
+async function applyImportMappings(rows: ReturnType<typeof parseImportRow>[], legacy: boolean) {
+  const [itemRows, modelRows, unitRows, locationRows, supplierRows] = await Promise.all([
     all<{ sourceKey: string; target: string; id: string }>(`SELECT m.source_key AS sourceKey,c.name AS target,c.id FROM import_item_mappings m JOIN catalog_items c ON c.id=m.target_id WHERE m.active=1 AND c.active=1`),
     all<{ sourceKey: string; target: string; id: string }>(`SELECT m.source_key AS sourceKey,v.name AS target,v.id FROM import_model_mappings m JOIN vehicle_models v ON v.id=m.target_id WHERE m.active=1 AND v.active=1`),
     all<{ id: string; code: string; name: string }>('SELECT id,code,name FROM units WHERE active=1'),
     all<{ id: string; city: string; state: string }>('SELECT id,city,state FROM locations'),
+    legacy ? all<{ cnpj: string; name: string }>('SELECT cnpj,trade_name AS name FROM suppliers WHERE active=1') : [],
   ]);
+  const suppliers = new Map(supplierRows.map((entry) => [entry.cnpj, entry.name]));
   const localidades = new Set(locationRows.map((linha) => chaveLocalidade(linha.city, linha.state)));
   const items = new Map(itemRows.map((entry) => [entry.sourceKey, entry]));
   const models = new Map(modelRows.map((entry) => [entry.sourceKey, entry]));
@@ -1052,11 +1059,13 @@ async function applyImportMappings(rows: ReturnType<typeof parseImportRow>[]) {
     const item = resolveImportMapping(row.item, items);
     const model = resolveImportMapping(row.model, models);
     const unit = units.get(row.unit);
-    if (!localidades.has(chaveLocalidade(row.city, row.state))) { row.error = `CIDADE sem cadastro em localidades: "${row.rawCity}/${row.state}".`; row.errorCampo = 'CIDADE'; row.errorValor = `${row.city}/${row.state}`; }
+    if (legacy && !suppliers.has(row.cnpj)) { row.error = `FORNECEDOR sem cadastro ativo para o CNPJ ${row.cnpj}. Cadastre ou reative o fornecedor antes de importar.`; row.errorCampo = 'CNPJ'; row.errorValor = row.cnpj; }
+    else if (!localidades.has(chaveLocalidade(row.city, row.state))) { row.error = `CIDADE sem cadastro em localidades: "${row.rawCity}/${row.state}".`; row.errorCampo = 'CIDADE'; row.errorValor = `${row.city}/${row.state}`; }
     else if (!item) { row.error = `PECA_SERVICO sem correspondência ativa no De/Para: "${row.rawItem}".`; row.errorCampo = 'PECA_SERVICO'; row.errorValor = row.rawItem; }
     else if (!model) { row.error = `MODELO sem correspondência ativa no De/Para: "${row.rawModel}".`; row.errorCampo = 'MODELO'; row.errorValor = row.rawModel; }
     else if (!unit) row.error = `UNIDADE inválida ou ambígua: "${row.rawUnit || row.unit}". Use um código ou nome que identifique uma única unidade ativa.`;
     else {
+      if (legacy) row.supplier = suppliers.get(row.cnpj)!;
       row.item = normalizeImportText(item.target); row.itemId = item.id;
       row.model = normalizeImportText(model.target); row.modelId = model.id;
       row.unit = normalizeImportText(unit.code); row.unitId = unit.id;
@@ -1110,19 +1119,15 @@ function chaveLocalidade(cidade: unknown, uf: unknown) {
 }
 
 async function ensureReferenceData(rows: ReturnType<typeof parseImportRow>[]) {
-  const db = rawDb(), timestamp = now();
-  const suppliers = new Map<string,string>(), brands = new Map<string,string>();
+  const db = rawDb();
+  const brands = new Map<string,string>();
   for (const row of rows) {
-    if (row.cnpj) suppliers.set(row.cnpj, row.supplier);
     row.brands.split('/').map((x) => x.trim()).filter(Boolean).forEach((x) => brands.set(x,x));
   }
-  const statements = [
-    ...Array.from(suppliers).map(([cnpj,name]) => db.prepare('INSERT OR IGNORE INTO suppliers (id,legal_name,trade_name,cnpj,active,created_at,updated_at) VALUES (?,?,?,?,1,?,?)').bind(id('sup'),name,name,cnpj,timestamp,timestamp)),
-    ...Array.from(brands).map(([name]) => db.prepare('INSERT OR IGNORE INTO brands (id,name,active) VALUES (?,?,1)').bind(id('brd'),name)),
-  ];
+  const statements = Array.from(brands).map(([name]) => db.prepare('INSERT OR IGNORE INTO brands (id,name,active) VALUES (?,?,1)').bind(id('brd'),name));
   await batch(statements, 80);
   return {
-    suppliers: new Map((await all<{id:string;cnpj:string}>('SELECT id,cnpj FROM suppliers')).map((x) => [x.cnpj,x.id])),
+    suppliers: new Map((await all<{id:string;cnpj:string}>('SELECT id,cnpj FROM suppliers WHERE active=1')).map((x) => [x.cnpj,x.id])),
     locations: new Map((await all<{id:string;city:string;state:string}>('SELECT id,city,state FROM locations')).map((x) => [chaveLocalidade(x.city,x.state),x.id])),
   };
 }
@@ -1141,7 +1146,7 @@ type Duplicata = { item: string; modelo: string; cidade: string; linhaMantida: n
 // decisao silenciosa que so uma conferencia manual pegaria.
 function registroDuplicata(mantida: ReturnType<typeof parseImportRow>, descartada: ReturnType<typeof parseImportRow>): Duplicata {
   return {
-    item: descartada.rawItem, modelo: descartada.model, cidade: descartada.city,
+    item: descartada.rawItem, modelo: descartada.model, cidade: `${descartada.city}/${descartada.state}`,
     linhaMantida: mantida.rowNumber, linhaDescartada: descartada.rowNumber,
     precoMantido: mantida.price, precoDescartado: descartada.price,
     motivo: mantida.price === descartada.price ? 'linha repetida' : 'preço maior',
@@ -1188,7 +1193,7 @@ async function processLegacy(rows: ReturnType<typeof parseImportRow>[], user: Us
     // unidade fica fora de proposito: a mesma peca cotada em medidas
     // diferentes e preenchimento errado, e o preco erra junto — 20 a unidade
     // e 40 o par sao o mesmo valor, entao comparar os numeros nao resolve.
-    const key=[agreement.versionId,row.city,row.itemId,row.modelId].join('|');
+    const key=JSON.stringify([agreement.versionId,locationId,row.itemId,row.modelId]);
     const previous=deduped.get(key);
     if(previous && previous.row.unitId!==row.unitId) throw new Error(medidasDivergentes(previous.row,row));
     if(!previous) { deduped.set(key,{row,agreement,locationId}); continue; }
@@ -1230,7 +1235,7 @@ async function processAgreementImport(rows: ReturnType<typeof parseImportRow>[],
   const uniqueRows=new Map<string,ReturnType<typeof parseImportRow>>();
   const duplicatas: Duplicata[] = [];
   for(const row of rows){
-    const key=JSON.stringify([row.city,row.itemId,row.modelId]), previous=uniqueRows.get(key);
+    const key=JSON.stringify([chaveLocalidade(row.city,row.state),row.itemId,row.modelId]), previous=uniqueRows.get(key);
     if(previous && previous.unitId!==row.unitId) throw new Error(medidasDivergentes(previous,row));
     if(!previous) { uniqueRows.set(key,row); continue; }
     const mantida = row.price < previous.price ? row : previous;
@@ -1389,7 +1394,7 @@ async function createTicket(request:Request,user:User){
   const ticketCnpj=body.cnpj ? normalizeCnpj(body.cnpj) : null;
   if(ticketCnpj && !isValidCnpj(ticketCnpj)) return fail('Informe um CNPJ válido.');
   const state=body.state ? normalizeText(body.state) : null;
-  if(state && !/^[A-Z]{2}$/.test(state)) return fail('Informe uma UF válida com duas letras.');
+  if(state && !isValidState(state)) return fail('Selecione uma UF brasileira válida.');
   const assignedTo=textValue(body.assignedTo) || null;
   if(assignedTo && !await first('SELECT 1 ok FROM users WHERE id=? AND active=1',[assignedTo])) return fail('Responsável não encontrado ou inativo.');
   const responsavel=await pessoaNotificacao(assignedTo);
@@ -1435,7 +1440,7 @@ async function updateTicket(request:Request,user:User,ticketId:string){
   const nextCnpj=body.cnpj === undefined ? current.cnpj : textValue(body.cnpj) ? normalizeCnpj(body.cnpj) : null;
   if(nextCnpj && !isValidCnpj(nextCnpj)) return fail('Informe um CNPJ válido.');
   const nextState=body.state === undefined ? current.state : textValue(body.state) ? normalizeText(body.state) : null;
-  if(nextState && !/^[A-Z]{2}$/.test(nextState)) return fail('Informe uma UF válida com duas letras.');
+  if(nextState && !isValidState(nextState)) return fail('Selecione uma UF brasileira válida.');
   const assignedTo=body.assignedTo === undefined ? current.assigned_to : textValue(body.assignedTo) || null;
   if(assignedTo && !await first('SELECT 1 ok FROM users WHERE id=? AND active=1',[assignedTo])) return fail('Responsável não encontrado ou inativo.');
   const supplierName=body.supplierName === undefined ? current.supplier_name : normalizeText(body.supplierName);

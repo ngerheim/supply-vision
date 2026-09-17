@@ -98,13 +98,17 @@ function erroDaLinha(data, linha) {
   return (data.outrosErros || []).find(e => e.linha === linha)?.erro ?? '';
 }
 async function catalog(type, data) { return good(`/api/catalogs/${type}`, { method: 'POST', body: data }, 201); }
-// Localidade virou cadastro previo, e varios checks inventam cidade para gerar
-// condicoes distintas. Cria em lotes paralelos para nao dominar o tempo da
-// suite; repeticao volta 400 e e ignorada de proposito.
+// Fixture de volume no banco descartavel desta execucao. O cadastro HTTP e
+// validado separadamente; 10 mil POSTs mediam cadastro, nao importacao.
 async function localidades(nomes, state = 'GO') {
-  for (let inicio = 0; inicio < nomes.length; inicio += 50) {
-    await Promise.all(nomes.slice(inicio, inicio + 50).map(city => request('/api/catalogs/locations', { method: 'POST', body: { city, state } })));
-  }
+  assert.ok(sqlitePath.startsWith(path.join(output, 'state') + path.sep));
+  const fixture = new DatabaseSync(sqlitePath);
+  try {
+    fixture.exec('PRAGMA busy_timeout=10000; BEGIN IMMEDIATE');
+    const insert = fixture.prepare('INSERT INTO locations (id,city,state) VALUES (?,?,?)');
+    for (const city of nomes) insert.run(`fixture-${state}-${city}`, city, state);
+    fixture.exec('COMMIT');
+  } finally { fixture.close(); }
 }
 const serie = (prefixo, total) => Array.from({ length: total }, (_, indice) => `${prefixo} ${indice}`);
 async function mapping(type, source, targetId, extra = {}) { return good(`/api/mappings/${type}`, { method: 'POST', body: { source, targetId, ...extra } }, 201); }
@@ -144,11 +148,23 @@ try {
 
   await check('De/Para inicia vazio', async () => assert.deepEqual(await good('/api/mappings'), { items: [], models: [] }));
   await check('Base vazia recusa nomenclatura sem criar cadastros', () => rejected(file([row()], { name: 'sem-de-para' })));
-  // Localidade virou cadastro previo: sem ela nenhuma linha passa. GOIANIA/MG
-  // existe para o check de UF fora da chave de deduplicacao.
+  // Nomes homonimos ficticios para conferir a separacao por UF.
   await catalog('locations', { city: 'GOIANIA', state: 'GO' });
   await catalog('locations', { city: 'GOIANIA', state: 'MG' });
   await catalog('locations', { city: 'SAO PAULO', state: 'SP' });
+  const supplier = await catalog('suppliers', { tradeName: 'FORNECEDOR TESTE', cnpj: row().CNPJ });
+  await check('UF inexistente e recusada ao criar ou editar cadastros e chamados', async () => {
+    const before = businessSnapshot();
+    const location = query("SELECT id FROM locations WHERE city='GOIANIA' AND state='GO'")[0];
+    for (const [url, method, body] of [
+      ['/api/catalogs/locations', 'POST', { city: 'ALMAS', state: 'TI' }],
+      [`/api/catalogs/locations/${location.id}`, 'PUT', { city: 'GOIANIA', state: 'TI' }],
+      ['/api/catalogs/suppliers', 'POST', { tradeName: 'TESTE', cnpj: '04.252.011/0001-10', state: 'TI' }],
+      [`/api/catalogs/suppliers/${supplier.id}`, 'PUT', { tradeName: 'FORNECEDOR TESTE', cnpj: row().CNPJ, state: 'TI' }],
+      ['/api/tickets', 'POST', { supplierName: 'TESTE', state: 'TI' }],
+    ]) assert.equal((await request(url, { method, body })).status, 400, url);
+    assert.deepEqual(businessSnapshot(), before);
+  });
   const item = await catalog('items', { name: 'OLEO DE MOTOR TESTE' });
   const model = await catalog('models', { name: 'HILUX 2.8 TESTE' });
   const itemMap = await mapping('items', 'Óleo teste', item.id);
@@ -164,6 +180,21 @@ try {
     assert.equal(published.unit_id, unit.id); assert.equal(published.price, 42.5);
   });
   assert.ok(agreementId, 'Pré-condição: primeira importação');
+  await check('CNPJ desconhecido nao cria fornecedor nem publica carga parcial', () => rejected(file([row(), row({ CNPJ: '04.252.011/0001-10', FORNECEDOR: 'MEGATRNS' })], { name: 'fornecedor-desconhecido' }), undefined, 400, data => {
+    assert.equal(data.nomenclaturas[0].campo, 'CNPJ');
+    assert.equal(data.nomenclaturas[0].valor, '04252011000110');
+  }));
+  await check('Nome incorreto usa o fornecedor identificado pelo CNPJ sem alterar cadastro', async () => {
+    const before = query('SELECT * FROM suppliers');
+    assert.equal((await upload(file([row({ FORNECEDOR: 'MEGATRNS' })], { name: 'fornecedor-grafia' }))).status, 200);
+    assert.deepEqual(query('SELECT * FROM suppliers'), before);
+  });
+  await check('Fornecedor inativo impede carga inicial', async () => {
+    const body = { tradeName: 'FORNECEDOR TESTE', cnpj: row().CNPJ };
+    await good(`/api/catalogs/suppliers/${supplier.id}`, { method: 'PUT', body: { ...body, active: false } });
+    try { await rejected(file([row()], { name: 'fornecedor-inativo' })); }
+    finally { await good(`/api/catalogs/suppliers/${supplier.id}`, { method: 'PUT', body }); }
+  });
   const replace = `/api/imports/agreement/${agreementId}`;
   for (const route of ['/api/imports/legacy', replace]) {
     const mode = route === replace ? 'substituir' : 'inicial';
@@ -324,9 +355,21 @@ try {
     const result = await upload(file([row({ MARCAS: 'C' }), row({ MEDIDA: ' LITRO ', MARCAS: 'D' })], { name: 'medida-grafia' }), replace);
     assert.equal(result.status, 200); assert.equal(result.data.summary.items, 1);
   });
-  await check('UF fora da chave: mesma cidade e item não duplicam por estado', async () => {
-    const result = await upload(file([row(), row({ UF: 'MG' })], { name: 'uf-fora-da-chave' }), replace);
-    assert.equal(result.status, 200); assert.equal(result.data.summary.items, 1);
+  await check('Cidades homonimas em UFs diferentes preservam ambas as condicoes nos dois modos', async () => {
+    for (const route of [replace, undefined]) {
+      const result = await upload(file([row(), row({ UF: 'MG', PRECO: 90 })], { name: 'homonimos-por-uf' }), route);
+      assert.equal(result.status, 200); assert.equal(result.data.summary.items, 2);
+      assert.equal(result.data.summary.duplicatas, 0);
+      const items = query('SELECT l.state,ai.price FROM agreement_items ai JOIN locations l ON l.id=ai.location_id WHERE ai.version_id=(SELECT current_version_id FROM agreements WHERE id=?) ORDER BY l.state', agreementId);
+      assert.deepEqual(items.map(x => [x.state, x.price]), [['GO', 42.5], ['MG', 90]]);
+    }
+  });
+  await check('Substituicao ignora fornecedor da planilha e conserva o fornecedor do acordo', async () => {
+    const before = query('SELECT * FROM suppliers');
+    const result = await upload(file([row({ CNPJ: '04.252.011/0001-10', FORNECEDOR: 'MEGATRNS' })], { name: 'fornecedor-do-acordo' }), replace);
+    assert.equal(result.status, 200);
+    assert.deepEqual(query('SELECT * FROM suppliers'), before);
+    assert.equal(query('SELECT supplier_id FROM agreements WHERE id=?', agreementId)[0].supplier_id, supplier.id);
   });
   await check('Carga inicial inteira aborta se o segundo fornecedor contiver erro', () => rejected(file([row(), row({ CNPJ: '04.252.011/0001-10', FORNECEDOR: 'OUTRO', MEDIDA: 'lirto' })], { name: 'dois-fornecedores-falha' })));
   await check('Cidade sem cadastro trava a importação e não cria localidade', () => rejected(file([row(), row({ CIDADE: 'BEOL HORIZONTE', UF: 'MG' })], { name: 'cidade-sem-cadastro' }), replace, 400, data => {
@@ -389,10 +432,13 @@ try {
     try {
       for (let i = 0; i < 100 && !query('SELECT COUNT(*) n FROM travas')[0].n; i++) await pause(50);
       assert.equal(query('SELECT COUNT(*) n FROM travas')[0].n, 1);
-      const results = await Promise.all(Array.from({ length: 20 }, () => upload(doc, replace)));
-      assert.ok(results.every(r => r.status === 409), results.map(r => r.status).join(','));
-    } finally { first.terminar(m.corpo.subarray(m.corpo.length - 20)); }
-    assert.equal((await first.resposta).status, 200); assert.equal(query('SELECT COUNT(*) n FROM travas')[0].n, 0);
+      const results = await Promise.allSettled(Array.from({ length: 20 }, () => upload(doc, replace)));
+      assert.ok(results.every(r => r.status === 'fulfilled' && r.value.status === 409), JSON.stringify(results));
+    } finally {
+      first.terminar(m.corpo.subarray(m.corpo.length - 20));
+      assert.equal((await first.resposta).status, 200);
+    }
+    assert.equal(query('SELECT COUNT(*) n FROM travas')[0].n, 0);
   });
   await check('Depois do estresse uma nova importação funciona', async () => assert.equal((await upload(file([row()], { name: 'apos-estresse' }), replace)).status, 200));
   await check('Exportação conserva os De/Para', async () => {
