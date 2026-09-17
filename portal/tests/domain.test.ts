@@ -5,6 +5,7 @@ import {
   isAgreementEffective,
   isIsoDate,
   isValidCnpj,
+  isValidState,
   isValidDateRange,
   normalizeCnpj,
   normalizeImportCnpj,
@@ -16,6 +17,11 @@ import {
   toNonNegativeMoney,
   validatePassword,
 } from '../lib/domain.ts';
+
+void test('UF deve existir no Brasil, inclusive em cadastros manuais', () => {
+  for (const value of ['GO', 'TO', 'DF', ' sp ']) assert.equal(isValidState(value), true);
+  for (const value of ['TI', 'XX', 'G', 'GOIAS', '', null, 12]) assert.equal(isValidState(value), false);
+});
 
 void test('normaliza texto sem converter objetos acidentalmente', () => {
   assert.equal(normalizeText('  óleo   do motor '), 'ÓLEO DO MOTOR');

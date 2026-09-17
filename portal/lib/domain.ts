@@ -1,6 +1,12 @@
 export const ROLES = ['admin', 'editor', 'viewer'] as const;
 export type Role = (typeof ROLES)[number];
 
+export const BRAZILIAN_STATES = ['AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 'MT', 'MS', 'MG', 'PA', 'PB', 'PR', 'PE', 'PI', 'RJ', 'RN', 'RS', 'RO', 'RR', 'SC', 'SP', 'SE', 'TO'] as const;
+
+export function isValidState(value: unknown) {
+  return isOneOf(normalizeText(value), BRAZILIAN_STATES);
+}
+
 // Situacoes escolhidas manualmente. 'expired' NAO entra aqui: e derivado da
 // data de fim da vigencia, para que um acordo nunca fique marcado como vigente
 // com a data ja vencida.
