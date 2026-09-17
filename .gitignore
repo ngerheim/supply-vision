@@ -25,3 +25,6 @@
 *.sqlite-*
 *.db
 *.env
+
+# Saida de arquivos entregues pelo Claude; nao faz parte do projeto.
+Claude outputs/
