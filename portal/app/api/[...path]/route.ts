@@ -1022,7 +1022,11 @@ async function importWorkbookComTrava(request: Request, user: User, agreementId:
 // que a propria planilha ja declara. Entao as referencias que faltam nascem
 // dela, e o resumo lista o que foi criado para conferencia. Da segunda
 // importacao em diante a exigencia volta, porque ai existe base de comparacao.
-const PREVIA = 'previa';
+// Prefixo do identificador provisorio. Cada referencia recebe um sufixo
+// proprio porque a deduplicacao compara identificadores: um valor unico para
+// todas faria itens distintos colidirem na mesma chave e a previa acusaria
+// medidas divergentes que nao existem.
+const PREVIA = 'previa:';
 
 type BaseFaltante = {
   localidades: Map<string, { city: string; state: string }>;
@@ -1086,7 +1090,7 @@ async function semearBaseInicial(faltante: BaseFaltante) {
 // canonica, entao repeti-la procuraria o destino como se fosse origem e nao
 // acharia. Aqui so trocamos o identificador provisorio pelo real.
 async function reidentificarSemeadas(rows: ReturnType<typeof parseImportRow>[]) {
-  if (!rows.some((row) => row.itemId === PREVIA || row.modelId === PREVIA || row.locationId === PREVIA)) return;
+  if (!rows.some((row) => row.itemId.startsWith(PREVIA) || row.modelId.startsWith(PREVIA) || row.locationId.startsWith(PREVIA))) return;
   const [itens, modelos, locais] = await Promise.all([
     all<{ id: string; name: string }>('SELECT id,name FROM catalog_items'),
     all<{ id: string; name: string }>('SELECT id,name FROM vehicle_models'),
@@ -1096,9 +1100,9 @@ async function reidentificarSemeadas(rows: ReturnType<typeof parseImportRow>[]) 
   const porModelo = new Map(modelos.map((linha) => [normalizeImportText(linha.name), linha.id]));
   const porLocal = new Map(locais.map((linha) => [chaveLocalidade(linha.city, linha.state), linha.id]));
   for (const row of rows) {
-    if (row.itemId === PREVIA) row.itemId = porItem.get(row.item) ?? '';
-    if (row.modelId === PREVIA) row.modelId = porModelo.get(row.model) ?? '';
-    if (row.locationId === PREVIA) row.locationId = porLocal.get(chaveLocalidade(row.city, row.state)) ?? '';
+    if (row.itemId.startsWith(PREVIA)) row.itemId = porItem.get(row.item) ?? '';
+    if (row.modelId.startsWith(PREVIA)) row.modelId = porModelo.get(row.model) ?? '';
+    if (row.locationId.startsWith(PREVIA)) row.locationId = porLocal.get(chaveLocalidade(row.city, row.state)) ?? '';
   }
   const pendente = rows.find((row) => !row.itemId || !row.modelId || !row.locationId);
   if (pendente) throw new Error(`Não foi possível criar as referências da carga inicial (linha ${pendente.rowNumber}).`);
@@ -1133,10 +1137,10 @@ async function applyImportMappings(rows: ReturnType<typeof parseImportRow>[], le
   // Na previa nada e gravado, entao o que a carga inicial criaria entra como
   // referencia provisoria: o operador ve o resultado real, nao 200 erros.
   if (virtuais) {
-    for (const [chave, nome] of virtuais.itens) items.set(chave, { id: PREVIA, name: nome });
-    for (const [chave, nome] of virtuais.modelos) models.set(chave, { id: PREVIA, name: nome });
+    for (const [chave, nome] of virtuais.itens) items.set(chave, { id: PREVIA + chave, name: nome });
+    for (const [chave, nome] of virtuais.modelos) models.set(chave, { id: PREVIA + chave, name: nome });
     for (const [chave, nome] of virtuais.fornecedores) suppliers.set(chave, nome);
-    for (const [chave, local] of virtuais.localidades) locations.set(chave, { id: PREVIA, city: local.city, state: local.state });
+    for (const [chave, local] of virtuais.localidades) locations.set(chave, { id: PREVIA + chave, city: local.city, state: local.state });
   }
   resolveImportRows(rows, { items, models, units, locations, suppliers }, legacy);
 }
