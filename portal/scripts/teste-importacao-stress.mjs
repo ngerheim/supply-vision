@@ -216,6 +216,21 @@ try {
     assert.equal(result.data.summary.baseCriada.fornecedores, 1);
     assert.equal(query("SELECT trade_name FROM suppliers WHERE cnpj='00000000000191'")[0].trade_name, 'MEGATRNS');
   });
+  await check('Prévia não confunde itens distintos criados na mesma carga', async () => {
+    // Itens diferentes com medidas diferentes, tudo novo: se a previa desse o
+    // mesmo identificador provisorio a todos, a deduplicacao juntaria as linhas
+    // e acusaria medida divergente onde nao ha.
+    const documento = file([
+      row({ CIDADE: 'CIDADE PREVIA', UF: 'BA', PECA_SERVICO: 'ITEM PREVIA UM', MEDIDA: 'LITRO' }),
+      row({ CIDADE: 'CIDADE PREVIA', UF: 'BA', PECA_SERVICO: 'ITEM PREVIA DOIS', MEDIDA: 'UNIDADE' }),
+    ], { name: 'previa-itens-distintos' });
+    const form = new FormData(); form.set('file', new Blob([documento.bytes]), documento.filename);
+    const result = await request('/api/imports/legacy?preview=1', { method: 'POST', body: form });
+    assert.equal(result.status, 200, JSON.stringify(result.data));
+    assert.equal(result.data.valid, true, JSON.stringify(result.data));
+    assert.equal(result.data.summary.items, 2);
+    assert.equal(query("SELECT COUNT(*) n FROM catalog_items WHERE name LIKE 'ITEM PREVIA%'")[0].n, 0, 'prévia não deve gravar');
+  });
   await check('Importação recusada não deixa referência criada para trás', async () => {
     const antes = { s: query('SELECT * FROM suppliers'), l: query('SELECT * FROM locations'), i: query('SELECT * FROM catalog_items'), m: query('SELECT * FROM vehicle_models'), d: query('SELECT * FROM import_item_mappings') };
     // Nomenclatura inteiramente nova numa linha, erro de medida na outra: a
