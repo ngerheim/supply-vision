@@ -372,6 +372,35 @@ try {
     assert.equal(query('SELECT supplier_id FROM agreements WHERE id=?', agreementId)[0].supplier_id, supplier.id);
   });
   await check('Carga inicial inteira aborta se o segundo fornecedor contiver erro', () => rejected(file([row(), row({ CNPJ: '04.252.011/0001-10', FORNECEDOR: 'OUTRO', MEDIDA: 'lirto' })], { name: 'dois-fornecedores-falha' })));
+  await check('Falha na publicacao do segundo fornecedor reverte todo o lote', async () => {
+    const second = await catalog('suppliers', { tradeName: 'SEGUNDO TESTE', cnpj: '04.252.011/0001-10' });
+    assert.ok(sqlitePath.startsWith(path.join(output, 'state') + path.sep));
+    const fixture = new DatabaseSync(sqlitePath);
+    try {
+      fixture.exec(`CREATE TRIGGER teste_falha_publicacao BEFORE UPDATE OF current_version_id ON agreements
+        WHEN NEW.supplier_id='${second.id}' AND NEW.current_version_id IS NOT NULL
+        BEGIN SELECT RAISE(ABORT, 'falha sintetica na publicacao'); END`);
+      await rejected(file([row({ PRECO: 888, MARCAS: 'MARCA NAO CADASTRADA' }), row({ CNPJ: '04.252.011/0001-10' })], { name: 'falha-transacao-final' }));
+    } finally {
+      fixture.exec('DROP TRIGGER IF EXISTS teste_falha_publicacao');
+      fixture.close();
+    }
+  });
+  await check('Falha na auditoria nao publica nem deixa historico concluido', async () => {
+    assert.ok(sqlitePath.startsWith(path.join(output, 'state') + path.sep));
+    const fixture = new DatabaseSync(sqlitePath);
+    try {
+      fixture.exec(`CREATE TRIGGER teste_falha_auditoria BEFORE INSERT ON audit_logs WHEN NEW.action='IMPORT'
+        BEGIN SELECT RAISE(ABORT, 'falha sintetica na auditoria'); END`);
+      for (const route of [replace, undefined]) {
+        const result = await rejected(file([row({ PRECO: 999 })], { name: 'falha-auditoria' }), route);
+        assert.equal(query('SELECT status FROM imports WHERE id=?', result.data.importId)[0].status, 'error');
+      }
+    } finally {
+      fixture.exec('DROP TRIGGER IF EXISTS teste_falha_auditoria');
+      fixture.close();
+    }
+  });
   await check('Cidade sem cadastro trava a importação e não cria localidade', () => rejected(file([row(), row({ CIDADE: 'BEOL HORIZONTE', UF: 'MG' })], { name: 'cidade-sem-cadastro' }), replace, 400, data => {
     assert.equal(data.nomenclaturas.length, 1, JSON.stringify(data.nomenclaturas));
     assert.equal(data.nomenclaturas[0].campo, 'CIDADE');

@@ -26,9 +26,6 @@ Os horários ficam em `privado/comum/operacao.env`; o modelo é
 chave de sufixo (`SEG`…`DOM`), que tem prioridade. **Valor vazio significa que
 o dia não executa.**
 
-O modelo `compartilhado/operacao.env.example` mostra o formato. Valor vazio
-significa que a rotina não executa naquele dia.
-
 Os Alertas executam de segunda a quinta às 08:00, 11:00, 14:00 e 17:00;
 na sexta, às 08:00, 11:00 e 14:00. Quando não há dados, nenhuma linha
 comparável ou nenhuma divergência de preço, o pipeline conclui normalmente
@@ -55,10 +52,13 @@ Para diagnóstico, o mesmo fluxo pode ser executado pelo PowerShell:
 .\scripts\atualizar-servidor.ps1            # aplica
 ```
 
-Ele recusa se houver alteração local, faz backup antes de trocar a versão,
-instala dependências só quando mudaram, roda build e todas as suítes, e
-**reverte sozinho** para o commit anterior se algo falhar. O Portal fica fora
-do ar cerca de um minuto.
+Ele exige a branch `main` limpa e sem commits locais divergentes, e interrompe
+a atualização se não conseguir consultar o repositório remoto. Faz backup antes
+de trocar a versão, instala dependências só quando mudaram e roda build e testes.
+Falhas nessas etapas acionam a tentativa de retorno ao código e às dependências
+anteriores; se o retorno também falhar, a operação permanece parada e o erro
+é informado. O Portal fica fora do ar durante a atualização e as validações;
+reserve uma janela de manutenção, sem assumir duração fixa.
 
 ## Backup
 
