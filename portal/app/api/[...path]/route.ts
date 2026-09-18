@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { lerPlanilha } from '@/lib/planilha';
+import { chaveLocalidade, colunasAusentes, parseImportRow, resolveImportRows, summarizeImportErrors, deduplicateImportRows, uniqueIndex, type ImportTarget } from '@/lib/importacao';
 import { contextoNotificacaoChamado, pessoaNotificacao, prepararNotificacoesChamado, type ContextoNotificacaoChamado } from '@/lib/fila-email-chamados';
 import { corpoBinarioLimitado, corpoLimitado } from '@/lib/corpo-limitado';
 import {
@@ -19,7 +20,6 @@ import {
   isRecord,
   isValidCnpj,
   isValidState,
-  normalizeImportCnpj,
   isValidDateRange,
   MAX_IMPORT_BYTES,
   ROLES,
@@ -27,8 +27,6 @@ import {
   TICKET_PRIORITIES,
   TICKET_STATUSES,
   normalizeImportText,
-  normalizeImportColumn,
-  resolveImportMapping,
   toNonNegativeMoney,
   validatePassword,
   type Role,
@@ -353,9 +351,9 @@ const catalogDependencies: Record<string, { table: string; queries: Array<[strin
   suppliers: { table: 'suppliers', queries: [['acordo(s)', 'SELECT COUNT(*) n FROM agreements WHERE supplier_id=?']] },
   items: { table: 'catalog_items', queries: [['condição(ões)', 'SELECT COUNT(*) n FROM agreement_items WHERE catalog_item_id=?'], ['correspondência(s) de De/Para', 'SELECT COUNT(*) n FROM import_item_mappings WHERE target_id=?']] },
   models: { table: 'vehicle_models', queries: [['condição(ões)', 'SELECT COUNT(*) n FROM agreement_items WHERE vehicle_model_id=?'], ['correspondência(s) de De/Para', 'SELECT COUNT(*) n FROM import_model_mappings WHERE target_id=?']] },
-  units: { table: 'units', queries: [['condição(ões)', 'SELECT COUNT(*) n FROM agreement_items WHERE unit_id=?']] },
+  units: { table: 'units', queries: [['condição(ões)', 'SELECT COUNT(*) n FROM agreement_items WHERE unit_id=?'], ['correspondência(s) de De/Para', 'SELECT COUNT(*) n FROM import_unit_mappings WHERE target_id=?']] },
   brands: { table: 'brands', queries: [] },
-  locations: { table: 'locations', queries: [['condição(ões)', 'SELECT COUNT(*) n FROM agreement_items WHERE location_id=?'], ['acordo(s)', 'SELECT COUNT(*) n FROM agreement_locations WHERE location_id=?']] },
+  locations: { table: 'locations', queries: [['condição(ões)', 'SELECT COUNT(*) n FROM agreement_items WHERE location_id=?'], ['acordo(s)', 'SELECT COUNT(*) n FROM agreement_locations WHERE location_id=?'], ['correspondência(s) de De/Para', 'SELECT COUNT(*) n FROM import_location_mappings WHERE target_id=?']] },
 };
 
 async function deleteCatalog(user: User, type: string, recordId: string) {
@@ -711,28 +709,42 @@ const catalogConfig: Record<string, { table: string; fields: string[] }> = {
 const mappingConfig: Record<string, { table: string; targetTable: string; label: string }> = {
   items: { table: 'import_item_mappings', targetTable: 'catalog_items', label: 'item' },
   models: { table: 'import_model_mappings', targetTable: 'vehicle_models', label: 'modelo' },
+  units: { table: 'import_unit_mappings', targetTable: 'units', label: 'unidade' },
+  locations: { table: 'import_location_mappings', targetTable: 'locations', label: 'localidade' },
 };
 
 async function mappingList() {
-  const select = (table: string, target: string) => all(`SELECT m.id,m.source_text AS source,m.source_key AS sourceKey,m.target_id AS targetId,t.name AS target,m.active,m.notes,m.updated_at AS updatedAt
+  const select = (table: string, target: string, label = 't.name') => all(`SELECT m.id,m.source_text AS source,m.source_key AS sourceKey,m.target_id AS targetId,${label} AS target,m.active,m.notes,m.updated_at AS updatedAt
     FROM ${table} m JOIN ${target} t ON t.id=m.target_id ORDER BY m.source_key`);
-  const [items, models] = await Promise.all([
+  const [items, models, units, locations] = await Promise.all([
     select('import_item_mappings', 'catalog_items'),
     select('import_model_mappings', 'vehicle_models'),
+    select('import_unit_mappings', 'units', 't.code'),
+    select('import_location_mappings', 'locations', "t.city || '/' || t.state"),
   ]);
-  return ok({ items, models });
+  return ok({ items, models, units, locations });
 }
 
 async function validateMappingInput(request: Request, type: string) {
   const cfg = mappingConfig[type];
   if (!cfg) return { error: 'Tipo de De/Para inválido.' };
   const body = await jsonBody<MappingInput>(request);
-  const source = textValue(body.source), sourceKey = normalizeImportText(source), targetId = textValue(body.targetId);
+  const source = textValue(body.source), targetId = textValue(body.targetId);
+  const sourceKey = type === 'locations' ? source.split('/').map(normalizeImportText).join('/') : normalizeImportText(source);
   exigeTexto(body.source, LIMITES_CAMPO.nome, 'nomenclatura de origem');
   exigeTexto(body.notes, LIMITES_CAMPO.observacoes, 'observações');
   if (!sourceKey || !targetId) return { error: 'Informe a nomenclatura de origem e o destino.' };
-  const target = await first(`SELECT 1 ok FROM ${cfg.targetTable} WHERE id=? AND active=1`, [targetId]);
+  if (type === 'locations' && (!/^[^/]+\/[^/]+$/.test(sourceKey))) return { error: 'Informe a localidade original no formato CIDADE/UF, como aparece na planilha.' };
+  const target = await first(`SELECT 1 ok FROM ${cfg.targetTable} WHERE id=?${type === 'locations' ? '' : ' AND active=1'}`, [targetId]);
   if (!target) return { error: `O ${cfg.label} de destino não existe ou está inativo.` };
+  if (type === 'locations') {
+    const locations = await all<{ id: string; city: string; state: string }>('SELECT id,city,state FROM locations');
+    if (locations.some(location => chaveLocalidade(location.city,location.state) === sourceKey && location.id !== targetId)) return { error: 'Essa origem já identifica outra localidade cadastrada. Confira cidade e UF.' };
+  }
+  if (type === 'units') {
+    const units = await all<{ id: string; code: string; name: string }>('SELECT id,code,name FROM units WHERE active=1');
+    if (units.some(unit => unit.id !== targetId && [unit.code,unit.name].some(value => normalizeImportText(value) === sourceKey))) return { error: 'Essa origem já identifica outra unidade ativa. Confira a medida.' };
+  }
   return { cfg, body, source: source.trim(), sourceKey, targetId, notes: nullableText(body.notes), active: body.active === false || body.active === 0 ? 0 : 1 };
 }
 
@@ -945,8 +957,9 @@ async function importWorkbookComTrava(request: Request, user: User, agreementId:
   if (!legacy) {
     if (!agreementId || !await first('SELECT 1 ok FROM agreements WHERE id=?', [agreementId])) return fail('Acordo de destino não encontrado.', 404);
   }
+  const preview = new URL(request.url).searchParams.get('preview') === '1';
   const importId = id('imp'), timestamp = now();
-  await rawDb().prepare(`INSERT INTO imports (id,agreement_id,filename,mode,status,created_by,created_at) VALUES (?,?,?,?,?,?,?)`).bind(importId, agreementId, safeFilename(file.name), legacy ? 'legacy' : 'replace', 'processing', user.id, timestamp).run();
+  if (!preview) await rawDb().prepare(`INSERT INTO imports (id,agreement_id,filename,mode,status,created_by,created_at) VALUES (?,?,?,?,?,?,?)`).bind(importId, agreementId, safeFilename(file.name), legacy ? 'legacy' : 'replace', 'processing', user.id, timestamp).run();
   try {
     const leitura = await lerPlanilha(file);
     if (!leitura.ok) throw new Error(leitura.erro);
@@ -958,28 +971,8 @@ async function importWorkbookComTrava(request: Request, user: User, agreementId:
     await applyImportMappings(parsed, legacy);
     const errors = parsed.filter((r) => r.error);
     if (errors.length) {
-      // Nomenclatura errada e um problema por nome, nao por linha: "CAPO" sem
-      // De/Para em 40 linhas e um cadastro a fazer, e listar as 40 linhas
-      // enchia a amostra e escondia os outros nomes. Erro de dado continua
-      // linha a linha, porque ai a celula e que precisa ser achada.
-      const nomenclaturas = new Map<string, { campo: string; valor: string; linhas: number; primeiraLinha: number }>();
-      const outrosErros: { linha: number; erro: string }[] = [];
-      for (const linha of errors) {
-        if (!linha.errorCampo) { outrosErros.push({ linha: linha.rowNumber, erro: linha.error }); continue; }
-        const chave = `${linha.errorCampo}|${normalizeImportText(linha.errorValor)}`;
-        const registro = nomenclaturas.get(chave);
-        if (registro) registro.linhas += 1;
-        else nomenclaturas.set(chave, { campo: linha.errorCampo, valor: linha.errorValor, linhas: 1, primeiraLinha: linha.rowNumber });
-      }
-      const lista = Array.from(nomenclaturas.values()).sort((a, b) => b.linhas - a.linhas);
-      const summary = {
-        sheet: leitura.aba,
-        totalErros: errors.length,
-        nomenclaturas: lista.slice(0, 500),
-        nomenclaturasOmitidas: Math.max(0, lista.length - 500),
-        outrosErros: outrosErros.slice(0, 50),
-        outrosErrosOmitidos: Math.max(0, outrosErros.length - 50),
-      };
+      const summary = summarizeImportErrors(parsed, leitura.aba);
+      if (preview) return ok({ preview: true, valid: false, totalRows: parsed.length, ...summary });
       await rawDb().prepare('UPDATE imports SET status=?,total_rows=?,valid_rows=?,error_rows=?,summary_json=?,completed_at=? WHERE id=?').bind('error', parsed.length, parsed.length-errors.length, errors.length, JSON.stringify(summary), now(), importId).run();
       return ok({ error: `A planilha possui ${errors.length} linha(s) inválida(s). Nenhum dado foi publicado.`, importId, ...summary }, { status: 400 });
     }
@@ -987,12 +980,16 @@ async function importWorkbookComTrava(request: Request, user: User, agreementId:
     // dizer quantos fornecedores passaram por isso, para a conferência não
     // depender de o operador reparar sozinho.
     const cnpjsRecuperados = new Set(parsed.filter((r) => r.cnpjRecuperado).map((r) => r.cnpj)).size;
-    const processado = legacy ? await processLegacy(parsed, user, importId) : await processAgreementImport(parsed, user, importId, agreementId!);
-    const summary = cnpjsRecuperados ? { ...processado, cnpjsRecuperados } : processado;
+    const prepared = deduplicateImportRows(parsed, legacy);
+    const baseSummary = { ...prepared.summary, ...(cnpjsRecuperados ? { cnpjsRecuperados } : {}) };
+    if (preview) return ok({ preview: true, valid: true, sheet: leitura.aba, totalRows: parsed.length, summary: baseSummary, sample: prepared.rows.slice(0, 20).map(row => ({ linha: row.rowNumber, fornecedor: row.supplier, cidade: row.city, uf: row.state, item: row.item, modelo: row.model, unidade: row.unit, preco: row.price })) });
+    const processado = legacy ? await processLegacy(prepared.rows, user, importId) : await processAgreementImport(prepared.rows, user, importId, agreementId!);
+    const summary = { ...processado, ...baseSummary };
     await rawDb().prepare('UPDATE imports SET status=?,total_rows=?,valid_rows=?,error_rows=0,summary_json=?,completed_at=? WHERE id=?').bind('completed', parsed.length, parsed.length, JSON.stringify(summary), now(), importId).run();
     await audit(user.id, 'IMPORT', legacy ? 'legacy_base' : 'agreement', agreementId, `${file.name}: ${parsed.length} linhas publicadas`);
     return ok({ success: true, summary });
   } catch (error: unknown) {
+    if (preview) return ok({ preview: true, valid: false, error: errorMessage(error, 'Arquivo inválido.') });
     await cleanupFailedImport(importId);
     const message = errorMessage(error, 'arquivo inválido');
     await rawDb().prepare('UPDATE imports SET status=?,summary_json=?,completed_at=? WHERE id=?').bind('error', JSON.stringify({ error: message }), now(), importId).run();
@@ -1000,122 +997,25 @@ async function importWorkbookComTrava(request: Request, user: User, agreementId:
   }
 }
 
-// Coluna que falta no cabecalho produzia um erro identico em cada linha ("a
-// coluna CIDADE esta vazia", 27 mil vezes), mandando o operador procurar
-// celulas em branco em vez da coluna inexistente. Conferir o cabecalho antes
-// troca isso por uma frase.
-const COLUNAS_OBRIGATORIAS = ['CIDADE', 'UF', 'MODELO', 'PECA_SERVICO', 'MEDIDA', 'PRECO'];
-const COLUNAS_CARGA_INICIAL = ['FORNECEDOR', 'CNPJ'];
-
-function colunasAusentes(row: Row, legacy: boolean) {
-  // normalizeImportColumn ja resolve acento, caixa, barra e os apelidos
-  // (ITEM, UNIDADE, VALOR, MARCA), entao basta comparar o nome canonico.
-  const presentes = new Set(Object.keys(row).map((chave) => normalizeImportColumn(chave)));
-  return [...COLUNAS_OBRIGATORIAS, ...(legacy ? COLUNAS_CARGA_INICIAL : [])].filter((coluna) => !presentes.has(coluna));
-}
-
-function parseImportRow(row: Row, rowNumber: number, legacy: boolean) {
-  const find = (...keys: string[]) => { const entry = Object.entries(row).find(([k]) => keys.includes(normalizeImportColumn(k))); return entry?.[1] ?? ''; };
-  const rawCnpj=legacy ? find('CNPJ') : '', cnpj=normalizeImportCnpj(rawCnpj), cnpjRecuperado=cnpj!==normalizeCnpj(rawCnpj),
-    rawModel=find('MODELO'), rawItem=find('PECA_SERVICO','PECA/SERVICO','ITEM'), rawUnit=find('MEDIDA','UNIDADE'),
-    rawCity = find('CIDADE'), city = normalizeImportText(rawCity), state = normalizeImportText(find('UF')),
-    supplier = normalizeImportText(find('FORNECEDOR')), model = normalizeImportText(rawModel), item = normalizeImportText(rawItem),
-    unit = normalizeImportText(rawUnit), brands = normalizeImportText(find('MARCAS','MARCA')),
-    priceRaw = find('PRECO','PREÇO','VALOR'), priceParsed = parsePrice(priceRaw), price = priceParsed.value;
-  let error = '';
-  if (!city) error = 'A coluna CIDADE está vazia.';
-  else if (!isValidState(state)) error = state ? `UF inválida: "${state}". Use uma sigla brasileira válida (ex.: GO).` : 'A coluna UF está vazia.';
-  else if (!model) error = 'A coluna MODELO está vazia.';
-  else if (!item) error = 'A coluna PECA_SERVICO está vazia.';
-  else if (!unit) error = 'A coluna MEDIDA está vazia.';
-  else if (priceParsed.error) error = priceParsed.error;
-  if (!error && legacy) {
-    if (!supplier) error = 'A coluna FORNECEDOR está vazia (obrigatória na carga inicial).';
-    else if (!isValidCnpj(cnpj)) error = `CNPJ inválido: "${textoSeguro(rawCnpj)}".`;
-  }
-  return { rowNumber, city, state, rawCity: textoSeguro(rawCity), cnpj, cnpjRecuperado, supplier, model, item, unit, brands, price, error, errorCampo: '', errorValor: '', itemId: '', modelId: '', unitId: '', rawModel: textoSeguro(rawModel), rawItem: textoSeguro(rawItem), rawUnit: textoSeguro(rawUnit) };
-}
-
 async function applyImportMappings(rows: ReturnType<typeof parseImportRow>[], legacy: boolean) {
-  const [itemRows, modelRows, unitRows, locationRows, supplierRows] = await Promise.all([
-    all<{ sourceKey: string; target: string; id: string }>(`SELECT m.source_key AS sourceKey,c.name AS target,c.id FROM import_item_mappings m JOIN catalog_items c ON c.id=m.target_id WHERE m.active=1 AND c.active=1`),
-    all<{ sourceKey: string; target: string; id: string }>(`SELECT m.source_key AS sourceKey,v.name AS target,v.id FROM import_model_mappings m JOIN vehicle_models v ON v.id=m.target_id WHERE m.active=1 AND v.active=1`),
+  const [itemRows, modelRows, unitRows, locationRows, supplierRows, unitAliases, locationAliases] = await Promise.all([
+    all<{ sourceKey: string; name: string; id: string }>('SELECT m.source_key AS sourceKey,c.name,c.id FROM import_item_mappings m JOIN catalog_items c ON c.id=m.target_id WHERE m.active=1 AND c.active=1'),
+    all<{ sourceKey: string; name: string; id: string }>('SELECT m.source_key AS sourceKey,v.name,v.id FROM import_model_mappings m JOIN vehicle_models v ON v.id=m.target_id WHERE m.active=1 AND v.active=1'),
     all<{ id: string; code: string; name: string }>('SELECT id,code,name FROM units WHERE active=1'),
     all<{ id: string; city: string; state: string }>('SELECT id,city,state FROM locations'),
     legacy ? all<{ cnpj: string; name: string }>('SELECT cnpj,trade_name AS name FROM suppliers WHERE active=1') : [],
+    all<{ sourceKey: string; id: string; name: string }>('SELECT m.source_key AS sourceKey,u.id,u.code AS name FROM import_unit_mappings m JOIN units u ON u.id=m.target_id WHERE m.active=1 AND u.active=1'),
+    all<{ sourceKey: string; id: string; city: string; state: string }>('SELECT m.source_key AS sourceKey,l.id,l.city,l.state FROM import_location_mappings m JOIN locations l ON l.id=m.target_id WHERE m.active=1'),
   ]);
-  const suppliers = new Map(supplierRows.map((entry) => [entry.cnpj, entry.name]));
-  const localidades = new Set(locationRows.map((linha) => chaveLocalidade(linha.city, linha.state)));
-  const items = new Map(itemRows.map((entry) => [entry.sourceKey, entry]));
-  const models = new Map(modelRows.map((entry) => [entry.sourceKey, entry]));
-  const units = new Map<string, typeof unitRows[number] | null>();
-  for (const unit of unitRows) {
-    for (const key of new Set([normalizeImportText(unit.code), normalizeImportText(unit.name)])) {
-      if (key) units.set(key, units.has(key) ? null : unit);
-    }
-  }
-  for (const row of rows) {
-    if (row.error) continue;
-    const item = resolveImportMapping(row.item, items);
-    const model = resolveImportMapping(row.model, models);
-    const unit = units.get(row.unit);
-    if (legacy && !suppliers.has(row.cnpj)) { row.error = `FORNECEDOR sem cadastro ativo para o CNPJ ${row.cnpj}. Cadastre ou reative o fornecedor antes de importar.`; row.errorCampo = 'CNPJ'; row.errorValor = row.cnpj; }
-    else if (!localidades.has(chaveLocalidade(row.city, row.state))) { row.error = `CIDADE sem cadastro em localidades: "${row.rawCity}/${row.state}".`; row.errorCampo = 'CIDADE'; row.errorValor = `${row.city}/${row.state}`; }
-    else if (!item) { row.error = `PECA_SERVICO sem correspondência ativa no De/Para: "${row.rawItem}".`; row.errorCampo = 'PECA_SERVICO'; row.errorValor = row.rawItem; }
-    else if (!model) { row.error = `MODELO sem correspondência ativa no De/Para: "${row.rawModel}".`; row.errorCampo = 'MODELO'; row.errorValor = row.rawModel; }
-    else if (!unit) row.error = `UNIDADE inválida ou ambígua: "${row.rawUnit || row.unit}". Use um código ou nome que identifique uma única unidade ativa.`;
-    else {
-      if (legacy) row.supplier = suppliers.get(row.cnpj)!;
-      row.item = normalizeImportText(item.target); row.itemId = item.id;
-      row.model = normalizeImportText(model.target); row.modelId = model.id;
-      row.unit = normalizeImportText(unit.code); row.unitId = unit.id;
-    }
-  }
-}
-
-// O preco e o campo mais perigoso da planilha: uma celula vazia lida como zero
-// seria publicada como "Cortesia", fazendo o comprador acreditar que o item e
-// gratuito. Por isso vazio, texto e numero negativo sao erros explicitos, e so
-// um zero escrito de proposito vira cortesia.
-// Celula de planilha pode conter qualquer coisa. String(obj) viraria
-// "[object Object]" no meio da mensagem de erro mostrada ao usuario.
-function textoSeguro(valor: unknown): string {
-  if (typeof valor === 'string') return valor;
-  if (typeof valor === 'number' || typeof valor === 'boolean') return String(valor);
-  if (valor instanceof Date) return valor.toISOString().slice(0, 10);
-  return '';
-}
-
-function parsePrice(raw: unknown): { value: number; error: string } {
-  if (raw === null || raw === undefined) return { value: Number.NaN, error: 'A coluna PRECO está vazia.' };
-  if (typeof raw === 'number') {
-    if (!Number.isFinite(raw)) return { value: Number.NaN, error: 'O preço não é um número válido.' };
-    if (raw < 0) return { value: Number.NaN, error: `Preço negativo (${raw}).` };
-    return { value: raw, error: '' };
-  }
-  const text = textoSeguro(raw).trim();
-  if (!text) return { value: Number.NaN, error: 'A coluna PRECO está vazia.' };
-
-  // Marcadores comuns de "preco ainda nao definido" ganham mensagem propria,
-  // porque a correcao e negociar o preco, nao arrumar a planilha.
-  const semPreco = ['SOB CONSULTA','A COMBINAR','A DEFINIR','CONSULTAR','ORCAMENTO','ORÇAMENTO','N/A','NA','ND','-','--','SEM PRECO','SEM PREÇO','?'];
-  if (semPreco.includes(normalizeText(text))) return { value: Number.NaN, error: `Preço não informado ("${text}"). Defina o valor negociado antes de importar.` };
-
-  const limpo = text.replace(/^R\$\s*/i, '').replace(/\s/g, '');
-  // Formato brasileiro: ponto e separador de milhar, virgula e decimal.
-  if (limpo.includes(',') && !/^(?:\d+|\d{1,3}(?:\.\d{3})+),\d+$/.test(limpo)) return { value: Number.NaN, error: `Preço inválido: "${text}".` };
-  const numerico = limpo.includes(',') ? limpo.replace(/\./g, '').replace(',', '.') : limpo;
-  if (!/^\d+(\.\d+)?$/.test(numerico)) return { value: Number.NaN, error: `Preço inválido: "${text}".` };
-  const value = Number(numerico);
-  if (!Number.isFinite(value)) return { value: Number.NaN, error: `Preço inválido: "${text}".` };
-  if (value < 0) return { value: Number.NaN, error: `Preço negativo: "${text}".` };
-  return { value, error: '' };
-}
-
-// A localidade e comparada pela forma canonica dos dois lados: registro antigo
-// gravado com acento, antes de o cadastro normalizar, continua sendo alcancado.
-function chaveLocalidade(cidade: unknown, uf: unknown) {
-  return `${normalizeImportText(cidade)}|${normalizeImportText(uf)}`;
+  const units = uniqueIndex<ImportTarget>(unitRows.flatMap(unit => [...new Set([normalizeImportText(unit.code), normalizeImportText(unit.name)])].map(key => [key, { id: unit.id, name: unit.code }] as [string, ImportTarget])));
+  const locations = uniqueIndex(locationRows.map(location => [chaveLocalidade(location.city, location.state), location]));
+  for (const alias of unitAliases) units.set(alias.sourceKey, alias);
+  for (const alias of locationAliases) locations.set(alias.sourceKey, alias);
+  resolveImportRows(rows, {
+    items: new Map(itemRows.map(item => [item.sourceKey, item])),
+    models: new Map(modelRows.map(model => [model.sourceKey, model])),
+    units, locations, suppliers: new Map(supplierRows.map(supplier => [supplier.cnpj, supplier.name])),
+  }, legacy);
 }
 
 async function ensureReferenceData(rows: ReturnType<typeof parseImportRow>[]) {
@@ -1558,6 +1458,8 @@ async function exportDatabase(){
     catalogItems:await all('SELECT * FROM catalog_items ORDER BY name'),
     vehicleModels:await all('SELECT * FROM vehicle_models ORDER BY name'),
     importItemMappings:await all('SELECT * FROM import_item_mappings ORDER BY source_key'),
+    importUnitMappings:await all('SELECT * FROM import_unit_mappings ORDER BY source_key'),
+    importLocationMappings:await all('SELECT * FROM import_location_mappings ORDER BY source_key'),
     importModelMappings:await all('SELECT * FROM import_model_mappings ORDER BY source_key'),
     units:await all('SELECT * FROM units ORDER BY code'),
     brands:await all('SELECT * FROM brands ORDER BY name'),
