@@ -215,7 +215,7 @@ export function Imports({
                 [
                   'legacy',
                   'Carga inicial por fornecedor',
-                  'Identifica fornecedores cadastrados pelo CNPJ.',
+                  'Uso administrativo excepcional: além de identificar o fornecedor pelo CNPJ, cadastra automaticamente fornecedores, itens, modelos e localidades que ainda não existem.',
                 ],
                 [
                   'agreement',
@@ -368,7 +368,7 @@ export function Imports({
                   {result.summary.locations} localidade(s). Aba: {result.sheet}.
                 </AlertDescription>
               </Alert>
-              <ImportSummary summary={result.summary} />
+              <ImportSummary summary={result.summary} estado="previa" />
               <div className="overflow-x-auto">
                 <Table>
                   <TableHeader>
@@ -424,7 +424,7 @@ export function Imports({
               <AlertTitle>Importação publicada</AlertTitle>
               <AlertDescription>
                 <p>{published.items} condição(ões) publicada(s).</p>
-                <ImportSummary summary={published} />
+                <ImportSummary summary={published} estado="criado" />
               </AlertDescription>
             </Alert>
           )}
@@ -531,7 +531,18 @@ function ResolveIssue({
   );
 }
 
-function BaseCriada({ base }: { base: AnyRow }) {
+type Estado = 'previa' | 'criado' | 'falhou';
+
+// Um texto so, decidido pelo estado da importacao: na previa nada foi gravado,
+// na conclusao os cadastros existem, e numa importacao recusada nada chegou a
+// ser criado — dizer "criados" ali seria mentira.
+const TITULO_BASE: Record<Estado, string> = {
+  previa: 'Cadastros que serão criados a partir do arquivo:',
+  criado: 'Cadastros criados a partir do arquivo:',
+  falhou: 'Cadastros que o arquivo criaria — nada foi criado, porque a importação não foi concluída:',
+};
+
+function BaseCriada({ base, estado }: { base: AnyRow; estado: Estado }) {
   // A carga inicial cria cadastro a partir do proprio arquivo. Sem esta
   // conferencia previa, o operador so descobre uma nomenclatura que escapou do
   // de/para depois que ela ja virou item no catalogo.
@@ -551,7 +562,7 @@ function BaseCriada({ base }: { base: AnyRow }) {
   return (
     <div className="space-y-2">
       <p className="font-medium">
-        Cadastros que serão criados a partir do arquivo:{' '}
+        {TITULO_BASE[estado]}{' '}
         {presentes
           .map((grupo) => `${quantos(grupo.chave)} ${grupo.rotulo}`)
           .join(', ')}
@@ -580,10 +591,10 @@ function BaseCriada({ base }: { base: AnyRow }) {
   );
 }
 
-function ImportSummary({ summary }: { summary: AnyRow }) {
+function ImportSummary({ summary, estado }: { summary: AnyRow; estado: Estado }) {
   return (
     <div className="space-y-2 text-sm">
-      {!!summary.baseCriada && <BaseCriada base={summary.baseCriada} />}
+      {!!summary.baseCriada && <BaseCriada base={summary.baseCriada} estado={estado} />}
       {!!summary.cnpjsRecuperados && (
         <p>
           {summary.cnpjsRecuperados} CNPJ(s) tiveram zeros à esquerda
@@ -732,7 +743,12 @@ function ImportHistory({ rows }: JsonData) {
                 </Alert>
               )}
               <ListaErros resumo={detail.summary} />
-              {detail.summary && <ImportSummary summary={detail.summary} />}
+              {detail.summary && (
+                <ImportSummary
+                  summary={detail.summary}
+                  estado={detail.status === 'completed' ? 'criado' : 'falhou'}
+                />
+              )}
             </div>
           )}
           <DialogFooter>

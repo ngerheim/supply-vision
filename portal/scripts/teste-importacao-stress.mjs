@@ -391,6 +391,18 @@ try {
     }
     finally { await good(`/api/catalogs/units/${nova.id}`, { method: 'PUT', body: { code: 'L2', active: false } }); }
   });
+  // A tela do De/Para de unidades passou a dizer que a unidade ativa escrita com
+  // a nomenclatura correta e aceita direto, sem correspondencia. Este teste
+  // guarda essa afirmacao: se ela deixar de ser verdade, o texto vira mentira.
+  await check('Unidade ativa com a grafia correta e aceita sem De/Para', async () => {
+    const mapeamentos = await good('/api/mappings');
+    const temDePara = (mapeamentos.units || []).some(m => m.sourceKey === 'LITRO' || m.source === 'LITRO');
+    assert.ok(!temDePara, 'o teste precisa valer sem De/Para para LITRO');
+    for (const grafia of ['LITRO', 'litro', ' Litro ']) {
+      const resultado = await upload(file([row({ MEDIDA: grafia })], { name: 'unidade-canonica' }), replace);
+      assert.equal(resultado.status, 200, `grafia ${JSON.stringify(grafia)}: ${JSON.stringify(resultado.data)}`);
+    }
+  });
   await check('Destino usado por De/Para tem exclusão bloqueada com 409', async () => {
     const target = await catalog('models', { name: 'DESTINO PROTEGIDO' });
     await mapping('models', 'ORIGEM PROTEGIDA', target.id);
