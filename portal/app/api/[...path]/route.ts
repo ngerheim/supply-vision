@@ -968,7 +968,14 @@ async function importWorkbookComTrava(request: Request, user: User, agreementId:
     const ausentes = colunasAusentes(sourceRows[0], legacy);
     if (ausentes.length) throw new Error(`A planilha não tem ${ausentes.length === 1 ? 'a coluna' : 'as colunas'} ${ausentes.join(', ')}. Confira o cabeçalho da primeira aba.`);
     const parsed = sourceRows.map((row, index) => parseImportRow(row, leitura.numerosLinhas[index], legacy));
-    await applyImportMappings(parsed, legacy);
+    // A base so e semeada depois que o arquivo inteiro passa. Semear antes
+    // faria uma importacao recusada deixar fornecedor, item e localidade para
+    // tras, quebrando a promessa de que nada e gravado quando ha erro. Por isso
+    // a primeira resolucao trata o que falta como referencia provisoria, e a
+    // gravacao — com nova resolucao, ja com os identificadores reais — so
+    // acontece se nao sobrar nenhum erro.
+    const faltante = legacy ? await referenciasFaltantes(parsed) : null;
+    await applyImportMappings(parsed, legacy, faltante);
     const errors = parsed.filter((r) => r.error);
     if (errors.length) {
       const summary = summarizeImportErrors(parsed, leitura.aba);
@@ -979,9 +986,15 @@ async function importWorkbookComTrava(request: Request, user: User, agreementId:
     // O zero à esquerda recuperado altera um dado do arquivo: o resumo precisa
     // dizer quantos fornecedores passaram por isso, para a conferência não
     // depender de o operador reparar sozinho.
+    const semear = faltante && (faltante.localidades.size || faltante.itens.size || faltante.modelos.size || faltante.fornecedores.size);
+    if (semear && !preview) {
+      await semearBaseInicial(faltante);
+      await reidentificarSemeadas(parsed);
+    }
     const cnpjsRecuperados = new Set(parsed.filter((r) => r.cnpjRecuperado).map((r) => r.cnpj)).size;
     const prepared = deduplicateImportRows(parsed, legacy);
-    const baseSummary = { ...prepared.summary, ...(cnpjsRecuperados ? { cnpjsRecuperados } : {}) };
+    const criadas = semear ? { baseCriada: resumoDaBase(faltante) } : {};
+    const baseSummary = { ...prepared.summary, ...(cnpjsRecuperados ? { cnpjsRecuperados } : {}), ...criadas };
     if (preview) return ok({ preview: true, valid: true, sheet: leitura.aba, totalRows: parsed.length, summary: baseSummary, sample: prepared.rows.slice(0, 20).map(row => ({ linha: row.rowNumber, fornecedor: row.supplier, cidade: row.city, uf: row.state, item: row.item, modelo: row.model, unidade: row.unit, preco: row.price })) });
     const publish: PublishImport = async (statements, details) => {
       const summary = { ...details, ...baseSummary }, db = rawDb(), timestamp = now();
@@ -1004,7 +1017,103 @@ async function importWorkbookComTrava(request: Request, user: User, agreementId:
   }
 }
 
-async function applyImportMappings(rows: ReturnType<typeof parseImportRow>[], legacy: boolean) {
+// A carga inicial e o que define o vocabulario: nao existe base anterior com
+// que comparar, e exigir cadastro previo de tudo obrigaria a digitar de novo o
+// que a propria planilha ja declara. Entao as referencias que faltam nascem
+// dela, e o resumo lista o que foi criado para conferencia. Da segunda
+// importacao em diante a exigencia volta, porque ai existe base de comparacao.
+const PREVIA = 'previa';
+
+type BaseFaltante = {
+  localidades: Map<string, { city: string; state: string }>;
+  itens: Map<string, string>;
+  modelos: Map<string, string>;
+  fornecedores: Map<string, string>;
+};
+
+async function referenciasFaltantes(rows: ReturnType<typeof parseImportRow>[]): Promise<BaseFaltante> {
+  // O que conta como "ja existe" e o que a importacao consegue resolver, e ela
+  // resolve pelo De/Para, nao pelo nome do catalogo. Conferir o catalogo criaria
+  // um item novo para toda nomenclatura que hoje e traduzida para outro nome.
+  // A correspondencia inativa tambem conta: recria-la esbarraria na origem unica
+  // e deixaria um cadastro orfao.
+  const [locais, aliasLocais, itens, modelos, fornecedores] = await Promise.all([
+    all<{ city: string; state: string }>('SELECT city,state FROM locations'),
+    all<{ chave: string }>('SELECT source_key AS chave FROM import_location_mappings'),
+    all<{ chave: string }>('SELECT source_key AS chave FROM import_item_mappings'),
+    all<{ chave: string }>('SELECT source_key AS chave FROM import_model_mappings'),
+    all<{ cnpj: string }>('SELECT cnpj FROM suppliers'),
+  ]);
+  const temLocal = new Set([...locais.map((linha) => chaveLocalidade(linha.city, linha.state)), ...aliasLocais.map((linha) => linha.chave)]);
+  const temItem = new Set(itens.map((linha) => linha.chave));
+  const temModelo = new Set(modelos.map((linha) => linha.chave));
+  const temFornecedor = new Set(fornecedores.map((linha) => linha.cnpj));
+  const faltante: BaseFaltante = { localidades: new Map(), itens: new Map(), modelos: new Map(), fornecedores: new Map() };
+  for (const row of rows) {
+    if (row.error) continue;
+    const chave = chaveLocalidade(row.city, row.state);
+    if (row.city && isValidState(row.state) && !temLocal.has(chave)) faltante.localidades.set(chave, { city: row.city, state: row.state });
+    if (row.item && !temItem.has(row.item)) faltante.itens.set(row.item, row.rawItem || row.item);
+    if (row.model && !temModelo.has(row.model)) faltante.modelos.set(row.model, row.rawModel || row.model);
+    if (row.cnpj && isValidCnpj(row.cnpj) && row.supplier && !temFornecedor.has(row.cnpj)) faltante.fornecedores.set(row.cnpj, row.supplier);
+  }
+  return faltante;
+}
+
+async function semearBaseInicial(faltante: BaseFaltante) {
+  const db = rawDb(), timestamp = now();
+  await batch([
+    ...Array.from(faltante.localidades.values()).map((local) => db.prepare('INSERT OR IGNORE INTO locations (id,city,state) VALUES (?,?,?)').bind(id('loc'), local.city, local.state)),
+    ...Array.from(faltante.itens.keys()).map((nome) => db.prepare('INSERT OR IGNORE INTO catalog_items (id,name,active) VALUES (?,?,1)').bind(id('ite'), nome)),
+    ...Array.from(faltante.modelos.keys()).map((nome) => db.prepare('INSERT OR IGNORE INTO vehicle_models (id,name,active) VALUES (?,?,1)').bind(id('mod'), nome)),
+    ...Array.from(faltante.fornecedores).map(([cnpj, nome]) => db.prepare('INSERT OR IGNORE INTO suppliers (id,legal_name,trade_name,cnpj,active,created_at,updated_at) VALUES (?,?,?,?,1,?,?)').bind(id('sup'), nome, nome, cnpj, timestamp, timestamp)),
+  ], 80);
+  // O De/Para nasce como espelho: origem igual ao destino. Fica visivel e
+  // editavel na tela, e a importacao continua resolvendo so pelo dicionario.
+  const [itens, modelos] = await Promise.all([
+    all<{ id: string; name: string }>('SELECT id,name FROM catalog_items WHERE active=1'),
+    all<{ id: string; name: string }>('SELECT id,name FROM vehicle_models WHERE active=1'),
+  ]);
+  await batch([
+    ...itens.filter((item) => faltante.itens.has(normalizeImportText(item.name)))
+      .map((item) => db.prepare('INSERT OR IGNORE INTO import_item_mappings (id,source_text,source_key,target_id,active,notes,created_at,updated_at) VALUES (?,?,?,?,1,?,?,?)').bind(id('map'), item.name, normalizeImportText(item.name), item.id, 'Criado pela carga inicial', timestamp, timestamp)),
+    ...modelos.filter((modelo) => faltante.modelos.has(normalizeImportText(modelo.name)))
+      .map((modelo) => db.prepare('INSERT OR IGNORE INTO import_model_mappings (id,source_text,source_key,target_id,active,notes,created_at,updated_at) VALUES (?,?,?,?,1,?,?,?)').bind(id('map'), modelo.name, normalizeImportText(modelo.name), modelo.id, 'Criado pela carga inicial', timestamp, timestamp)),
+  ], 80);
+}
+
+// A primeira resolucao ja reescreveu item, modelo e cidade para a forma
+// canonica, entao repeti-la procuraria o destino como se fosse origem e nao
+// acharia. Aqui so trocamos o identificador provisorio pelo real.
+async function reidentificarSemeadas(rows: ReturnType<typeof parseImportRow>[]) {
+  if (!rows.some((row) => row.itemId === PREVIA || row.modelId === PREVIA || row.locationId === PREVIA)) return;
+  const [itens, modelos, locais] = await Promise.all([
+    all<{ id: string; name: string }>('SELECT id,name FROM catalog_items'),
+    all<{ id: string; name: string }>('SELECT id,name FROM vehicle_models'),
+    all<{ id: string; city: string; state: string }>('SELECT id,city,state FROM locations'),
+  ]);
+  const porItem = new Map(itens.map((linha) => [normalizeImportText(linha.name), linha.id]));
+  const porModelo = new Map(modelos.map((linha) => [normalizeImportText(linha.name), linha.id]));
+  const porLocal = new Map(locais.map((linha) => [chaveLocalidade(linha.city, linha.state), linha.id]));
+  for (const row of rows) {
+    if (row.itemId === PREVIA) row.itemId = porItem.get(row.item) ?? '';
+    if (row.modelId === PREVIA) row.modelId = porModelo.get(row.model) ?? '';
+    if (row.locationId === PREVIA) row.locationId = porLocal.get(chaveLocalidade(row.city, row.state)) ?? '';
+  }
+  const pendente = rows.find((row) => !row.itemId || !row.modelId || !row.locationId);
+  if (pendente) throw new Error(`Não foi possível criar as referências da carga inicial (linha ${pendente.rowNumber}).`);
+}
+
+function resumoDaBase(faltante: BaseFaltante) {
+  const lista = (mapa: Map<string, unknown>, limite = 50) => Array.from(mapa.keys()).slice(0, limite);
+  return {
+    localidades: faltante.localidades.size, itens: faltante.itens.size,
+    modelos: faltante.modelos.size, fornecedores: faltante.fornecedores.size,
+    amostra: { localidades: lista(faltante.localidades), itens: lista(faltante.itens), modelos: lista(faltante.modelos), fornecedores: lista(faltante.fornecedores) },
+  };
+}
+
+async function applyImportMappings(rows: ReturnType<typeof parseImportRow>[], legacy: boolean, virtuais: BaseFaltante | null = null) {
   const [itemRows, modelRows, unitRows, locationRows, supplierRows, unitAliases, locationAliases] = await Promise.all([
     all<{ sourceKey: string; name: string; id: string }>('SELECT m.source_key AS sourceKey,c.name,c.id FROM import_item_mappings m JOIN catalog_items c ON c.id=m.target_id WHERE m.active=1 AND c.active=1'),
     all<{ sourceKey: string; name: string; id: string }>('SELECT m.source_key AS sourceKey,v.name,v.id FROM import_model_mappings m JOIN vehicle_models v ON v.id=m.target_id WHERE m.active=1 AND v.active=1'),
@@ -1018,11 +1127,18 @@ async function applyImportMappings(rows: ReturnType<typeof parseImportRow>[], le
   const locations = uniqueIndex(locationRows.map(location => [chaveLocalidade(location.city, location.state), location]));
   for (const alias of unitAliases) units.set(alias.sourceKey, alias);
   for (const alias of locationAliases) locations.set(alias.sourceKey, alias);
-  resolveImportRows(rows, {
-    items: new Map(itemRows.map(item => [item.sourceKey, item])),
-    models: new Map(modelRows.map(model => [model.sourceKey, model])),
-    units, locations, suppliers: new Map(supplierRows.map(supplier => [supplier.cnpj, supplier.name])),
-  }, legacy);
+  const items = new Map<string, ImportTarget>(itemRows.map(item => [item.sourceKey, { id: item.id, name: item.name }]));
+  const models = new Map<string, ImportTarget>(modelRows.map(model => [model.sourceKey, { id: model.id, name: model.name }]));
+  const suppliers = new Map(supplierRows.map(supplier => [supplier.cnpj, supplier.name]));
+  // Na previa nada e gravado, entao o que a carga inicial criaria entra como
+  // referencia provisoria: o operador ve o resultado real, nao 200 erros.
+  if (virtuais) {
+    for (const [chave, nome] of virtuais.itens) items.set(chave, { id: PREVIA, name: nome });
+    for (const [chave, nome] of virtuais.modelos) models.set(chave, { id: PREVIA, name: nome });
+    for (const [chave, nome] of virtuais.fornecedores) suppliers.set(chave, nome);
+    for (const [chave, local] of virtuais.localidades) locations.set(chave, { id: PREVIA, city: local.city, state: local.state });
+  }
+  resolveImportRows(rows, { items, models, units, locations, suppliers }, legacy);
 }
 
 type PublishImport = (statements: D1PreparedStatement[], details: Record<string, unknown>) => Promise<Record<string, unknown>>;
