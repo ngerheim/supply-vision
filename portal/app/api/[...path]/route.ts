@@ -1121,7 +1121,7 @@ async function reidentificarSemeadas(rows: ReturnType<typeof parseImportRow>[]) 
 }
 
 function resumoDaBase(faltante: BaseFaltante) {
-  const lista = (mapa: Map<string, unknown>, limite = 50) => Array.from(mapa.keys()).slice(0, limite);
+  const lista = (mapa: Map<string, unknown>, limite = 200) => Array.from(mapa.keys()).slice(0, limite);
   return {
     localidades: faltante.localidades.size, itens: faltante.itens.size,
     modelos: faltante.modelos.size, fornecedores: faltante.fornecedores.size,
