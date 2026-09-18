@@ -455,9 +455,16 @@ function ResolveIssue({
     () => optionsFor(catalogs, issue.tipo),
     [catalogs, issue.tipo],
   );
+  // Medida nao entra na sugestao por semelhanca. Nomenclatura e localidade a
+  // pessoa confere batendo o olho; medida, nao — LITRO nao se parece com nada,
+  // e aceitar a mais proxima grava preco de litro como preco de unidade em toda
+  // a carga, sem travar e sem avisar. Sem cadastro correto, a importacao para.
+  // Localidade e unidade nao aceitam correspondencia: a primeira porque cidade
+  // se cadastra, nao se traduz; a segunda porque medida errada corrompe o preco
+  // em silencio. Nos dois casos o caminho e cadastrar o que falta.
   const suggestions = useMemo(
-    () => suggestMatches(issue.valor, options),
-    [issue.valor, options],
+    () => (issue.tipo === 'locations' || issue.tipo === 'units' ? [] : suggestMatches(issue.valor, options)),
+    [issue.valor, issue.tipo, options],
   );
   const type = issue.tipo || (issue.campo === 'CNPJ' ? 'suppliers' : '');
   return (

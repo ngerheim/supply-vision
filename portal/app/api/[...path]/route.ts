@@ -710,25 +710,28 @@ const mappingConfig: Record<string, { table: string; targetTable: string; label:
   items: { table: 'import_item_mappings', targetTable: 'catalog_items', label: 'item' },
   models: { table: 'import_model_mappings', targetTable: 'vehicle_models', label: 'modelo' },
   units: { table: 'import_unit_mappings', targetTable: 'units', label: 'unidade' },
-  locations: { table: 'import_location_mappings', targetTable: 'locations', label: 'localidade' },
+  // Localidade nao tem De/Para: cidade nao e nomenclatura a traduzir, e apontar
+  // uma cidade para outra so serve para esconder erro de digitacao.
 };
 
 async function mappingList() {
   const select = (table: string, target: string, label = 't.name') => all(`SELECT m.id,m.source_text AS source,m.source_key AS sourceKey,m.target_id AS targetId,${label} AS target,m.active,m.notes,m.updated_at AS updatedAt
     FROM ${table} m JOIN ${target} t ON t.id=m.target_id ORDER BY m.source_key`);
-  const [items, models, units, locations] = await Promise.all([
+  const [items, models, units] = await Promise.all([
     select('import_item_mappings', 'catalog_items'),
     select('import_model_mappings', 'vehicle_models'),
     select('import_unit_mappings', 'units', 't.code'),
-    select('import_location_mappings', 'locations', "t.city || '/' || t.state"),
   ]);
-  return ok({ items, models, units, locations });
+  return ok({ items, models, units });
 }
 
 async function validateMappingInput(request: Request, type: string) {
+  // O corpo e lido antes de qualquer recusa: devolver resposta sem consumir a
+  // requisicao derruba a conexao do Worker, e o cliente recebe 500 no lugar do
+  // 400 que explica o problema.
+  const body = await jsonBody<MappingInput>(request);
   const cfg = mappingConfig[type];
   if (!cfg) return { error: 'Tipo de De/Para inválido.' };
-  const body = await jsonBody<MappingInput>(request);
   const source = textValue(body.source), targetId = textValue(body.targetId);
   const sourceKey = type === 'locations' ? source.split('/').map(normalizeImportText).join('/') : normalizeImportText(source);
   exigeTexto(body.source, LIMITES_CAMPO.nome, 'nomenclatura de origem');
@@ -742,8 +745,11 @@ async function validateMappingInput(request: Request, type: string) {
     if (locations.some(location => chaveLocalidade(location.city,location.state) === sourceKey && location.id !== targetId)) return { error: 'Essa origem já identifica outra localidade cadastrada. Confira cidade e UF.' };
   }
   if (type === 'units') {
-    const units = await all<{ id: string; code: string; name: string }>('SELECT id,code,name FROM units WHERE active=1');
-    if (units.some(unit => unit.id !== targetId && [unit.code,unit.name].some(value => normalizeImportText(value) === sourceKey))) return { error: 'Essa origem já identifica outra unidade ativa. Confira a medida.' };
+    // Inclusive as inativas: uma medida desativada continua sendo uma medida, e
+    // redirecionar LITRO para UNIDADE muda o significado de todo preco da carga
+    // sem travar nada nem avisar ninguem.
+    const units = await all<{ id: string; code: string; name: string }>('SELECT id,code,name FROM units');
+    if (units.some(unit => unit.id !== targetId && [unit.code,unit.name].some(value => normalizeImportText(value) === sourceKey))) return { error: 'Essa origem já identifica outra unidade cadastrada. Confira a medida.' };
   }
   return { cfg, body, source: source.trim(), sourceKey, targetId, notes: nullableText(body.notes), active: body.active === false || body.active === 0 ? 0 : 1 };
 }
@@ -1032,7 +1038,7 @@ type BaseFaltante = {
   localidades: Map<string, { city: string; state: string }>;
   itens: Map<string, string>;
   modelos: Map<string, string>;
-  fornecedores: Map<string, string>;
+  fornecedores: Map<string, { nome: string; local: { city: string; state: string } | null }>;
 };
 
 async function referenciasFaltantes(rows: ReturnType<typeof parseImportRow>[]): Promise<BaseFaltante> {
@@ -1041,14 +1047,13 @@ async function referenciasFaltantes(rows: ReturnType<typeof parseImportRow>[]): 
   // um item novo para toda nomenclatura que hoje e traduzida para outro nome.
   // A correspondencia inativa tambem conta: recria-la esbarraria na origem unica
   // e deixaria um cadastro orfao.
-  const [locais, aliasLocais, itens, modelos, fornecedores] = await Promise.all([
+  const [locais, itens, modelos, fornecedores] = await Promise.all([
     all<{ city: string; state: string }>('SELECT city,state FROM locations'),
-    all<{ chave: string }>('SELECT source_key AS chave FROM import_location_mappings'),
     all<{ chave: string }>('SELECT source_key AS chave FROM import_item_mappings'),
     all<{ chave: string }>('SELECT source_key AS chave FROM import_model_mappings'),
     all<{ cnpj: string }>('SELECT cnpj FROM suppliers'),
   ]);
-  const temLocal = new Set([...locais.map((linha) => chaveLocalidade(linha.city, linha.state)), ...aliasLocais.map((linha) => linha.chave)]);
+  const temLocal = new Set(locais.map((linha) => chaveLocalidade(linha.city, linha.state)));
   const temItem = new Set(itens.map((linha) => linha.chave));
   const temModelo = new Set(modelos.map((linha) => linha.chave));
   const temFornecedor = new Set(fornecedores.map((linha) => linha.cnpj));
@@ -1059,7 +1064,14 @@ async function referenciasFaltantes(rows: ReturnType<typeof parseImportRow>[]): 
     if (row.city && isValidState(row.state) && !temLocal.has(chave)) faltante.localidades.set(chave, { city: row.city, state: row.state });
     if (row.item && !temItem.has(row.item)) faltante.itens.set(row.item, row.rawItem || row.item);
     if (row.model && !temModelo.has(row.model)) faltante.modelos.set(row.model, row.rawModel || row.model);
-    if (row.cnpj && isValidCnpj(row.cnpj) && row.supplier && !temFornecedor.has(row.cnpj)) faltante.fornecedores.set(row.cnpj, row.supplier);
+    if (row.cnpj && isValidCnpj(row.cnpj) && row.supplier && !temFornecedor.has(row.cnpj)) {
+      const atual = faltante.fornecedores.get(row.cnpj);
+      // Cidade e UF so entram quando o fornecedor aparece numa unica praca na
+      // planilha. Atendendo mais de uma, escolher uma seria arbitrario, e o
+      // campo fica em branco para alguem informar.
+      const mesmaPraca = !atual || (atual.local !== null && atual.local.city === row.city && atual.local.state === row.state);
+      faltante.fornecedores.set(row.cnpj, { nome: atual?.nome ?? row.supplier, local: mesmaPraca ? { city: row.city, state: row.state } : null });
+    }
   }
   return faltante;
 }
@@ -1070,7 +1082,7 @@ async function semearBaseInicial(faltante: BaseFaltante) {
     ...Array.from(faltante.localidades.values()).map((local) => db.prepare('INSERT OR IGNORE INTO locations (id,city,state) VALUES (?,?,?)').bind(id('loc'), local.city, local.state)),
     ...Array.from(faltante.itens.keys()).map((nome) => db.prepare('INSERT OR IGNORE INTO catalog_items (id,name,active) VALUES (?,?,1)').bind(id('ite'), nome)),
     ...Array.from(faltante.modelos.keys()).map((nome) => db.prepare('INSERT OR IGNORE INTO vehicle_models (id,name,active) VALUES (?,?,1)').bind(id('mod'), nome)),
-    ...Array.from(faltante.fornecedores).map(([cnpj, nome]) => db.prepare('INSERT OR IGNORE INTO suppliers (id,legal_name,trade_name,cnpj,active,created_at,updated_at) VALUES (?,?,?,?,1,?,?)').bind(id('sup'), nome, nome, cnpj, timestamp, timestamp)),
+    ...Array.from(faltante.fornecedores).map(([cnpj, dados]) => db.prepare('INSERT OR IGNORE INTO suppliers (id,legal_name,trade_name,cnpj,city,state,active,created_at,updated_at) VALUES (?,?,?,?,?,?,1,?,?)').bind(id('sup'), dados.nome, dados.nome, cnpj, dados.local?.city ?? null, dados.local?.state ?? null, timestamp, timestamp)),
   ], 80);
   // O De/Para nasce como espelho: origem igual ao destino. Fica visivel e
   // editavel na tela, e a importacao continua resolvendo so pelo dicionario.
@@ -1118,19 +1130,20 @@ function resumoDaBase(faltante: BaseFaltante) {
 }
 
 async function applyImportMappings(rows: ReturnType<typeof parseImportRow>[], legacy: boolean, virtuais: BaseFaltante | null = null) {
-  const [itemRows, modelRows, unitRows, locationRows, supplierRows, unitAliases, locationAliases] = await Promise.all([
+  const [itemRows, modelRows, unitRows, locationRows, supplierRows, unitAliases] = await Promise.all([
     all<{ sourceKey: string; name: string; id: string }>('SELECT m.source_key AS sourceKey,c.name,c.id FROM import_item_mappings m JOIN catalog_items c ON c.id=m.target_id WHERE m.active=1 AND c.active=1'),
     all<{ sourceKey: string; name: string; id: string }>('SELECT m.source_key AS sourceKey,v.name,v.id FROM import_model_mappings m JOIN vehicle_models v ON v.id=m.target_id WHERE m.active=1 AND v.active=1'),
     all<{ id: string; code: string; name: string }>('SELECT id,code,name FROM units WHERE active=1'),
     all<{ id: string; city: string; state: string }>('SELECT id,city,state FROM locations'),
     legacy ? all<{ cnpj: string; name: string }>('SELECT cnpj,trade_name AS name FROM suppliers WHERE active=1') : [],
     all<{ sourceKey: string; id: string; name: string }>('SELECT m.source_key AS sourceKey,u.id,u.code AS name FROM import_unit_mappings m JOIN units u ON u.id=m.target_id WHERE m.active=1 AND u.active=1'),
-    all<{ sourceKey: string; id: string; city: string; state: string }>('SELECT m.source_key AS sourceKey,l.id,l.city,l.state FROM import_location_mappings m JOIN locations l ON l.id=m.target_id WHERE m.active=1'),
   ]);
   const units = uniqueIndex<ImportTarget>(unitRows.flatMap(unit => [...new Set([normalizeImportText(unit.code), normalizeImportText(unit.name)])].map(key => [key, { id: unit.id, name: unit.code }] as [string, ImportTarget])));
   const locations = uniqueIndex(locationRows.map(location => [chaveLocalidade(location.city, location.state), location]));
   for (const alias of unitAliases) units.set(alias.sourceKey, alias);
-  for (const alias of locationAliases) locations.set(alias.sourceKey, alias);
+  // Localidade nao e nomenclatura a traduzir: cidade ou esta cadastrada ou
+  // precisa ser cadastrada. O De/Para dela so abria caminho para apontar uma
+  // cidade para outra.
   const items = new Map<string, ImportTarget>(itemRows.map(item => [item.sourceKey, { id: item.id, name: item.name }]));
   const models = new Map<string, ImportTarget>(modelRows.map(model => [model.sourceKey, { id: model.id, name: model.name }]));
   const suppliers = new Map(supplierRows.map(supplier => [supplier.cnpj, supplier.name]));
@@ -1139,7 +1152,7 @@ async function applyImportMappings(rows: ReturnType<typeof parseImportRow>[], le
   if (virtuais) {
     for (const [chave, nome] of virtuais.itens) items.set(chave, { id: PREVIA + chave, name: nome });
     for (const [chave, nome] of virtuais.modelos) models.set(chave, { id: PREVIA + chave, name: nome });
-    for (const [chave, nome] of virtuais.fornecedores) suppliers.set(chave, nome);
+    for (const [chave, dados] of virtuais.fornecedores) suppliers.set(chave, dados.nome);
     for (const [chave, local] of virtuais.localidades) locations.set(chave, { id: PREVIA + chave, city: local.city, state: local.state });
   }
   resolveImportRows(rows, { items, models, units, locations, suppliers }, legacy);
@@ -1157,11 +1170,16 @@ async function processLegacy(rows: ReturnType<typeof parseImportRow>[], user: Us
     versionNumber: number;
   };
   const agreements = new Map<string, StagedAgreement>();
+  // A numeracao segue a ordem de aparicao do fornecedor na planilha e continua
+  // de onde a base parou, para o numero nunca se repetir nem ser reaproveitado.
+  const ultimo = await first<{ n: number }>(`SELECT COALESCE(MAX(CAST(substr(number,4) AS INTEGER)),0) n FROM agreements WHERE number LIKE 'LF-%'`);
+  let sequencia = Number(ultimo?.n || 0);
+  const proximoNumero = () => { sequencia += 1; return `LF-${sequencia}`; };
   for (const cnpj of cnpjs) {
     const supplierId = suppliers.get(cnpj)!;
     const agreement = await first<{id:string;current_version_id:string|null}>('SELECT id,current_version_id FROM agreements WHERE supplier_id=? AND provisional=1', [supplierId]);
     if (!agreement) {
-      const agreementId=id('agr'), versionId=id('ver'), number=`PROV-${cnpj}`;
+      const agreementId=id('agr'), versionId=id('ver'), number=proximoNumero();
       await db.batch([
         db.prepare(`INSERT INTO agreements (id,number,supplier_id,status,start_date,end_date,owner_user_id,notes,provisional,current_version_id,created_at,updated_at) VALUES (?,?,?,'active',?,NULL,?,'Importado da base histórica; completar dados do acordo.',1,NULL,?,?)`).bind(agreementId,number,supplierId,timestamp.slice(0,10),user.id,timestamp,timestamp),
         db.prepare(`INSERT INTO agreement_versions (id,agreement_id,version_number,import_id,status,published_at,created_by,created_at) VALUES (?,?,1,?,'processing',NULL,?,?)`).bind(versionId,agreementId,importId,user.id,timestamp),

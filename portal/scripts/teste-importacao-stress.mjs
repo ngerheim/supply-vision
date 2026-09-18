@@ -146,7 +146,7 @@ try {
   sqlitePath = locateSqlite(state); assert.ok(sqlitePath);
   reader = new DatabaseSync(sqlitePath, { readOnly: true });
 
-  await check('De/Para inicia vazio', async () => assert.deepEqual(await good('/api/mappings'), { items: [], models: [], locations: [], units: [] }));
+  await check('De/Para inicia vazio', async () => assert.deepEqual(await good('/api/mappings'), { items: [], models: [], units: [] }));
   // Vocabulario proprio: a semeadura nao pode contaminar os nomes que o resto
   // da suite usa para exercitar o De/Para com origem diferente do destino.
   const linhaBase = { CIDADE: 'BASE INICIAL', UF: 'TO', MODELO: 'MODELO BASE INICIAL', PECA_SERVICO: 'PECA BASE INICIAL', CNPJ: '11.444.777/0001-61', FORNECEDOR: 'FORNECEDOR BASE INICIAL' };
@@ -173,8 +173,9 @@ try {
     assert.equal(result.data.summary.baseCriada, undefined, 'nada novo deveria ser criado');
   });
   await check('Carga inicial deixa o acordo marcado como provisório', () => {
-    const [acordo] = query("SELECT number,provisional FROM agreements WHERE number='PROV-11444777000161'");
+    const [acordo] = query("SELECT number,provisional FROM agreements ORDER BY created_at LIMIT 1");
     assert.ok(acordo, 'a carga inicial deveria ter criado o acordo provisório');
+    assert.equal(acordo.number, 'LF-1', 'numeração sequencial a partir de LF-1');
     assert.equal(acordo.provisional, 1);
   });
   // Nomes homonimos ficticios para conferir a separacao por UF.
@@ -502,28 +503,37 @@ try {
     assert.equal(result.data.totalErros, 1); assert.equal(result.data.nomenclaturas.length, 4); assert.equal(result.data.outrosErros.length, 1);
     assert.deepEqual(businessSnapshot(), before);
   });
-  await check('Correspondencias confirmadas resolvem localidade e unidade e persistem', async () => {
+  await check('Localidade se cadastra, não se traduz por De/Para', async () => {
     const location = await catalog('locations', { city: 'ALMAS', state: 'TO' });
-    const doc = file([row({ CIDADE: 'ALMS', UF: 'TI', MEDIDA: 'litroo' })], { name: 'aliases-confirmados' });
+    // Cidade escrita errada continua sendo erro: nao existe correspondencia de
+    // localidade para apontar uma cidade para outra.
+    assert.equal((await request('/api/mappings/locations', { method: 'POST', body: { source: 'ALMS / TI', targetId: location.id } })).status, 400);
+    await rejected(file([row({ CIDADE: 'ALMS', UF: 'TI' })], { name: 'cidade-errada-sem-alias' }), replace);
+    // Escrita certa passa sem correspondencia nenhuma.
+    assert.equal((await upload(file([row({ CIDADE: 'ALMAS', UF: 'TO' })], { name: 'cidade-cadastrada' }), replace)).status, 200);
+    const mappings = await good('/api/mappings');
+    assert.equal(mappings.locations, undefined, 'De/Para de localidade não deve mais existir');
+  });
+  await check('Correspondencia de medida confirmada resolve e persiste', async () => {
+    const doc = file([row({ MEDIDA: 'litroo' })], { name: 'alias-medida' });
     await rejected(doc, replace);
-    const locationMap = await mapping('locations', 'ALMS / TI', location.id);
     const unitMap = await mapping('units', 'litroo', unit.id);
-    const preview = await upload(doc, replace + '?preview=1');
-    assert.equal(preview.data.valid, true); assert.equal(preview.data.sample[0].cidade, 'ALMAS'); assert.equal(preview.data.sample[0].uf, 'TO');
     assert.equal((await upload(doc, replace)).status, 200);
-    assert.equal((await request(`/api/catalogs/locations/${location.id}`, { method: 'DELETE' })).status, 409);
     await good(`/api/mappings/units/${unitMap.id}`, { method: 'PUT', body: { source: 'litroo', targetId: unit.id, active: false } });
-    assert.equal((await upload(doc, replace + '?preview=1')).data.valid, false);
     await rejected(doc, replace);
     await good(`/api/mappings/units/${unitMap.id}`, { method: 'PUT', body: { source: 'litroo', targetId: unit.id, active: true } });
-    const mappings = await good('/api/mappings');
-    assert.ok(mappings.locations.some(row => row.id === locationMap.id));
-    assert.ok(mappings.units.some(row => row.id === unitMap.id));
+    assert.ok((await good('/api/mappings')).units.some(row => row.id === unitMap.id));
   });
-  await check('Alias nao pode redirecionar uma localidade ou medida ja cadastrada', async () => {
-    const location = query("SELECT id FROM locations WHERE city='ALMAS' AND state='TO'")[0];
-    assert.equal((await request('/api/mappings/locations', { method: 'POST', body: { source: 'GOIANIA/GO', targetId: location.id } })).status, 400);
+  await check('Medida cadastrada não pode ser redirecionada, ativa ou inativa', async () => {
     assert.equal((await request('/api/mappings/units', { method: 'POST', body: { source: 'PAR', targetId: unit.id } })).status, 400);
+    const jogo = query("SELECT id FROM units WHERE code='JOGO'")[0];
+    await good(`/api/catalogs/units/${jogo.id}`, { method: 'PUT', body: { code: 'JOGO', active: false } });
+    try { assert.equal((await request('/api/mappings/units', { method: 'POST', body: { source: 'JOGO', targetId: unit.id } })).status, 400, 'medida inativa continua sendo medida'); }
+    finally { await good(`/api/catalogs/units/${jogo.id}`, { method: 'PUT', body: { code: 'JOGO', active: true } }); }
+  });
+  await check('Medidas padrão são recriadas ao iniciar', () => {
+    const codigos = query("SELECT code FROM units ORDER BY code").map(linha => linha.code);
+    for (const padrao of ['HORA', 'JOGO', 'LITRO', 'PAR', 'UNIDADE']) assert.ok(codigos.includes(padrao), `${padrao} deveria existir: ${codigos}`);
   });
   await check('Carga inicial aceita modelo sem coluna FORNECEDOR', async () => {
     const data = row(); delete data.FORNECEDOR;
