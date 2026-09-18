@@ -226,6 +226,7 @@ async function POSTInterno(request: NextRequest) {
   if (!user) return fail('Sessão expirada.', 401);
   if (!canWrite(user)) return denyWrite(request, 'Seu perfil permite somente consulta.');
 
+  if (parts[0] === 'agreements' && parts[1] === 'confirmar-provisorios') return confirmarProvisorios(request, user);
   if (parts[0] === 'agreements' && parts.length === 1) return createAgreement(request, user);
   if (parts[0] === 'agreements' && parts[2] === 'items') return addAgreementItems(request, user, parts[1]);
   if (parts[0] === 'catalogs' && parts[1]) return createCatalog(request, user, parts[1]);
@@ -619,6 +620,29 @@ async function createAgreement(request: Request, user: User) {
     await audit(user.id, 'CREATE', 'agreement', agreementId, `Acordo ${body.number} criado`);
     return ok({ id: agreementId }, { status: 201 });
   } catch (error: unknown) { return fail(errorMessage(error).includes('UNIQUE') ? 'Já existe um acordo com esse número.' : 'Não foi possível criar o acordo.'); }
+}
+
+async function confirmarProvisorios(request: Request, user: User) {
+  // A carga inicial cria um acordo por CNPJ com vigencia que ninguem informou.
+  // Repetir a mesma data em 137 telas so convida a erro de digitacao, entao a
+  // confirmacao e uma acao unica e auditada. Vale so para os provisorios: um
+  // acordo ja conferido nunca e tocado por aqui.
+  const body = await jsonBody<{ startDate?: unknown; endDate?: unknown; status?: unknown }>(request);
+  const startDate = textValue(body.startDate);
+  const endDate = nullableText(body.endDate);
+  const status = body.status ?? 'active';
+  if (!startDate) return fail('Informe o inicio da vigencia.');
+  if (!isOneOf(status, AGREEMENT_STATUSES)) return fail('Situacao do acordo invalida.');
+  if (!isValidDateRange(startDate, endDate)) return fail('Confira as datas: o fim nao pode ser anterior ao inicio.');
+  const pendentes = await first<{ n: number }>('SELECT COUNT(*) n FROM agreements WHERE provisional=1');
+  const total = Number(pendentes?.n || 0);
+  if (!total) return fail('Nao ha acordos provisorios para confirmar.');
+  await rawDb()
+    .prepare('UPDATE agreements SET start_date=?,end_date=?,status=?,provisional=0,updated_at=? WHERE provisional=1')
+    .bind(startDate, endDate, status, now())
+    .run();
+  await audit(user.id, 'UPDATE', 'agreement', null, `Confirmou ${total} acordo(s) provisorio(s) da carga inicial`);
+  return ok({ success: true, confirmados: total });
 }
 
 async function updateAgreement(request: Request, user: User, agreementId: string) {

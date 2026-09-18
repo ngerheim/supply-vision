@@ -178,6 +178,30 @@ try {
     assert.equal(acordo.number, 'LF-1', 'numeração sequencial a partir de LF-1');
     assert.equal(acordo.provisional, 1);
   });
+  await check('Confirmar provisorios aplica a vigencia a todos de uma vez', async () => {
+    const antes = query('SELECT id,start_date,end_date,status FROM agreements WHERE provisional=1');
+    assert.ok(antes.length, 'deveria haver acordo provisorio para confirmar');
+    // Data invalida nao pode encostar na base: o lote inteiro e recusado.
+    const recusado = await request('/api/agreements/confirmar-provisorios', { method: 'POST', body: { startDate: '2026-05-10', endDate: '2026-01-01' } });
+    assert.equal(recusado.status, 400, JSON.stringify(recusado.data));
+    assert.deepEqual(query('SELECT id,start_date,end_date,status FROM agreements WHERE provisional=1'), antes);
+
+    const feito = await request('/api/agreements/confirmar-provisorios', { method: 'POST', body: { startDate: '2026-01-01', endDate: '2026-12-31', status: 'active' } });
+    assert.equal(feito.status, 200, JSON.stringify(feito.data));
+    assert.equal(feito.data.confirmados, antes.length);
+    for (const anterior of antes) {
+      const [agora] = query('SELECT provisional,start_date,end_date,status FROM agreements WHERE id=?', anterior.id);
+      assert.equal(agora.provisional, 0, 'a marca de provisorio deveria ter saido');
+      assert.equal(agora.start_date, '2026-01-01');
+      assert.equal(agora.end_date, '2026-12-31');
+      assert.equal(agora.status, 'active');
+    }
+    // Um acordo ja confirmado nao pode ser reescrito por uma segunda chamada.
+    const vazio = await request('/api/agreements/confirmar-provisorios', { method: 'POST', body: { startDate: '2030-01-01' } });
+    assert.equal(vazio.status, 400, JSON.stringify(vazio.data));
+    const [intacto] = query('SELECT start_date FROM agreements WHERE id=?', antes[0].id);
+    assert.equal(intacto.start_date, '2026-01-01');
+  });
   // Nomes homonimos ficticios para conferir a separacao por UF.
   await catalog('locations', { city: 'GOIANIA', state: 'GO' });
   await catalog('locations', { city: 'GOIANIA', state: 'MG' });
