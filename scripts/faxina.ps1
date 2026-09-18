@@ -13,6 +13,14 @@ Write-Host "=== Faxina Supply Vision - modo: $modo ===" -ForegroundColor Cyan
 
 function Remover([string]$caminho, [string]$motivo) {
   if (-not (Test-Path -LiteralPath $caminho)) { return }
+  $caminho = (Resolve-Path -LiteralPath $caminho).Path
+  if (-not $caminho.StartsWith($Raiz + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) {
+    throw "Alvo de limpeza fora do projeto: $caminho"
+  }
+  if ((Get-Item -LiteralPath $caminho -Force).Attributes -band [IO.FileAttributes]::ReparsePoint) {
+    Write-Host "  [PULADO] link de diretorio: $caminho" -ForegroundColor Yellow
+    return
+  }
   if (-not $script:jaListados.Add($caminho)) { return }
   $bytes = 0
   try { $bytes = (Get-ChildItem -LiteralPath $caminho -Recurse -Force -File -ErrorAction SilentlyContinue | Measure-Object Length -Sum).Sum } catch {}
@@ -21,7 +29,7 @@ function Remover([string]$caminho, [string]$motivo) {
   $script:itens++
   $rotulo = '{0,9:N2} MB  {1}  [{2}]' -f ($bytes / 1MB), $caminho.Replace($Raiz, '.'), $motivo
   if ($Executar) {
-    Remove-Item -LiteralPath $caminho -Recurse -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath $caminho -Recurse -Force -ErrorAction Stop
     Write-Host "  [OK]    $rotulo"
   } else {
     Write-Host "  [TESTE] $rotulo"
@@ -38,13 +46,15 @@ Get-ChildItem -LiteralPath $Raiz -Directory -Recurse -Force -Filter '__pycache__
 
 Write-Host "`n-- Temporarios do wrangler --" -ForegroundColor Yellow
 $tmpWrangler = Join-Path $Raiz 'portal\dist\server\.wrangler\tmp'
-if (Test-Path -LiteralPath $tmpWrangler) {
+$portalNoAr = [bool](Get-NetTCPConnection -LocalPort 3000 -State Listen -ErrorAction SilentlyContinue)
+if ($portalNoAr) {
+  Write-Host '  [PULADO] Portal em execucao; temporarios preservados.' -ForegroundColor DarkGray
+} elseif (Test-Path -LiteralPath $tmpWrangler) {
   Get-ChildItem -LiteralPath $tmpWrangler -Directory -Force -ErrorAction SilentlyContinue |
     ForEach-Object { Remover $_.FullName 'temporario de execucao' }
 }
 
 Write-Host "`n-- Rastreamento de observabilidade (regenera sozinho) --" -ForegroundColor Yellow
-$portalNoAr = [bool](Get-NetTCPConnection -LocalPort 3000 -State Listen -ErrorAction SilentlyContinue)
 if ($portalNoAr) {
   Write-Host '  [PULADO] o Portal esta no ar; esses arquivos estao abertos pelo wrangler.' -ForegroundColor DarkGray
   Write-Host '           pare a operacao (PARAR.bat) e rode a faxina de novo para limpa-los.' -ForegroundColor DarkGray

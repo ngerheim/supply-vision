@@ -64,3 +64,8 @@ jobs:
             Copy-Item $_.FullName (Join-Path 'privado/alertas/parametros/filtros' ($_.Name -replace '\.exemplo\.txt$', '.txt'))
           }
       - run: python -m pytest alertas/tests -q
+      - name: Validar protecoes da atualizacao e agenda
+        shell: powershell
+        run: |
+          & ./scripts/testar-atualizacao-segura.ps1
+          & ./scripts/testar-operacao.ps1

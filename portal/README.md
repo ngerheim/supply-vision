@@ -283,6 +283,11 @@ Aceita `.xlsx` e `.xls`, lê a primeira aba e exige todas as linhas válidas; um
 falha aborta a planilha inteira. Preço aceita número, moeda brasileira e zero
 para cortesia; CNPJ é normalizado e validado.
 
+A conferência e a publicação usam a mesma regra de duplicatas. A troca das
+versões de todos os fornecedores, o histórico de conclusão e a auditoria são
+confirmados na mesma transação. Marcas da planilha ficam como texto da condição
+comercial, sem cadastrar automaticamente novas marcas no catálogo.
+
 Há carga inicial e substituição integral de um acordo. A substituição cria uma
 versão nova e preserva a anterior **dentro do banco**, para rastreabilidade do
 negócio — isso não é backup histórico do arquivo.
@@ -294,6 +299,7 @@ o arquivo SQLite nem preencher correspondências antecipadamente.
 `npm run test:imports` testa HTTP real em uma instância e banco descartáveis:
 prévia sem publicação, correspondências, rejeições sem alteração de negócio,
 limites de volume, concorrência, exportação, reinicialização e atualização de banco.
+Inclui falhas provocadas na gravação e na auditoria para verificar a reversão integral.
 Arquivos e relatórios sintéticos ficam em `work/`, fora do Git.
 
 ## Acesso pela rede

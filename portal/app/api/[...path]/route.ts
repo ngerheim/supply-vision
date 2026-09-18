@@ -983,10 +983,17 @@ async function importWorkbookComTrava(request: Request, user: User, agreementId:
     const prepared = deduplicateImportRows(parsed, legacy);
     const baseSummary = { ...prepared.summary, ...(cnpjsRecuperados ? { cnpjsRecuperados } : {}) };
     if (preview) return ok({ preview: true, valid: true, sheet: leitura.aba, totalRows: parsed.length, summary: baseSummary, sample: prepared.rows.slice(0, 20).map(row => ({ linha: row.rowNumber, fornecedor: row.supplier, cidade: row.city, uf: row.state, item: row.item, modelo: row.model, unidade: row.unit, preco: row.price })) });
-    const processado = legacy ? await processLegacy(prepared.rows, user, importId) : await processAgreementImport(prepared.rows, user, importId, agreementId!);
-    const summary = { ...processado, ...baseSummary };
-    await rawDb().prepare('UPDATE imports SET status=?,total_rows=?,valid_rows=?,error_rows=0,summary_json=?,completed_at=? WHERE id=?').bind('completed', parsed.length, parsed.length, JSON.stringify(summary), now(), importId).run();
-    await audit(user.id, 'IMPORT', legacy ? 'legacy_base' : 'agreement', agreementId, `${file.name}: ${parsed.length} linhas publicadas`);
+    const publish: PublishImport = async (statements, details) => {
+      const summary = { ...details, ...baseSummary }, db = rawDb(), timestamp = now();
+      // A publicacao e seus registros de conclusao precisam confirmar juntos.
+      await db.batch([
+        ...statements,
+        db.prepare('UPDATE imports SET status=?,total_rows=?,valid_rows=?,error_rows=0,summary_json=?,completed_at=? WHERE id=?').bind('completed', parsed.length, parsed.length, JSON.stringify(summary), timestamp, importId),
+        db.prepare('INSERT INTO audit_logs (id,user_id,action,entity,entity_id,details,created_at) VALUES (?,?,?,?,?,?,?)').bind(id('aud'), user.id, 'IMPORT', legacy ? 'legacy_base' : 'agreement', agreementId, `${file.name}: ${parsed.length} linhas publicadas`, timestamp),
+      ]);
+      return summary;
+    };
+    const summary = legacy ? await processLegacy(prepared.rows, user, importId, publish) : await processAgreementImport(prepared.rows, user, importId, agreementId!, publish);
     return ok({ success: true, summary });
   } catch (error: unknown) {
     if (preview) return ok({ preview: true, valid: false, error: errorMessage(error, 'Arquivo inválido.') });
@@ -1018,54 +1025,20 @@ async function applyImportMappings(rows: ReturnType<typeof parseImportRow>[], le
   }, legacy);
 }
 
-async function ensureReferenceData(rows: ReturnType<typeof parseImportRow>[]) {
-  const db = rawDb();
-  const brands = new Map<string,string>();
-  for (const row of rows) {
-    row.brands.split('/').map((x) => x.trim()).filter(Boolean).forEach((x) => brands.set(x,x));
-  }
-  const statements = Array.from(brands).map(([name]) => db.prepare('INSERT OR IGNORE INTO brands (id,name,active) VALUES (?,?,1)').bind(id('brd'),name));
-  await batch(statements, 80);
-  return {
-    suppliers: new Map((await all<{id:string;cnpj:string}>('SELECT id,cnpj FROM suppliers WHERE active=1')).map((x) => [x.cnpj,x.id])),
-    locations: new Map((await all<{id:string;city:string;state:string}>('SELECT id,city,state FROM locations')).map((x) => [chaveLocalidade(x.city,x.state),x.id])),
-  };
-}
+type PublishImport = (statements: D1PreparedStatement[], details: Record<string, unknown>) => Promise<Record<string, unknown>>;
 
-// Medida divergente para a mesma condicao nao tem desempate possivel: se a
-// unidade esta errada, o preco dela esta errado junto, e as duas linhas viram
-// suspeitas. Quem corrige e a planilha, nao o importador.
-function medidasDivergentes(previous: ReturnType<typeof parseImportRow>, row: ReturnType<typeof parseImportRow>) {
-  return `Medidas diferentes para o mesmo item nas linhas ${previous.rowNumber} e ${row.rowNumber}: ${row.rawItem}, ${row.model}, ${row.city} — "${previous.rawUnit}" e "${row.rawUnit}". A medida define o preço, então corrija a planilha antes de importar.`;
-}
-
-type Duplicata = { item: string; modelo: string; cidade: string; linhaMantida: number; linhaDescartada: number; precoMantido: number; precoDescartado: number; motivo: string };
-
-// A duplicata some do resultado final, entao precisa aparecer no resumo: qual
-// linha ficou, qual saiu e por que. Sem isso a escolha do importador vira uma
-// decisao silenciosa que so uma conferencia manual pegaria.
-function registroDuplicata(mantida: ReturnType<typeof parseImportRow>, descartada: ReturnType<typeof parseImportRow>): Duplicata {
-  return {
-    item: descartada.rawItem, modelo: descartada.model, cidade: `${descartada.city}/${descartada.state}`,
-    linhaMantida: mantida.rowNumber, linhaDescartada: descartada.rowNumber,
-    precoMantido: mantida.price, precoDescartado: descartada.price,
-    motivo: mantida.price === descartada.price ? 'linha repetida' : 'preço maior',
-  };
-}
-
-async function processLegacy(rows: ReturnType<typeof parseImportRow>[], user: User, importId: string) {
-  const refs = await ensureReferenceData(rows), db = rawDb(), timestamp = now();
+async function processLegacy(rows: ReturnType<typeof parseImportRow>[], user: User, importId: string, publish: PublishImport) {
+  const suppliers = new Map((await all<{id:string;cnpj:string}>('SELECT id,cnpj FROM suppliers WHERE active=1')).map((supplier) => [supplier.cnpj,supplier.id]));
+  const db = rawDb(), timestamp = now();
   const cnpjs = Array.from(new Set(rows.map((r) => r.cnpj)));
   type StagedAgreement = {
     agreementId: string;
     versionId: string;
-    previousVersionId: string | null;
-    previousLocationIds: string[];
     versionNumber: number;
   };
   const agreements = new Map<string, StagedAgreement>();
   for (const cnpj of cnpjs) {
-    const supplierId = refs.suppliers.get(cnpj)!;
+    const supplierId = suppliers.get(cnpj)!;
     const agreement = await first<{id:string;current_version_id:string|null}>('SELECT id,current_version_id FROM agreements WHERE supplier_id=? AND provisional=1', [supplierId]);
     if (!agreement) {
       const agreementId=id('agr'), versionId=id('ver'), number=`PROV-${cnpj}`;
@@ -1073,90 +1046,53 @@ async function processLegacy(rows: ReturnType<typeof parseImportRow>[], user: Us
         db.prepare(`INSERT INTO agreements (id,number,supplier_id,status,start_date,end_date,owner_user_id,notes,provisional,current_version_id,created_at,updated_at) VALUES (?,?,?,'active',?,NULL,?,'Importado da base histórica; completar dados do acordo.',1,NULL,?,?)`).bind(agreementId,number,supplierId,timestamp.slice(0,10),user.id,timestamp,timestamp),
         db.prepare(`INSERT INTO agreement_versions (id,agreement_id,version_number,import_id,status,published_at,created_by,created_at) VALUES (?,?,1,?,'processing',NULL,?,?)`).bind(versionId,agreementId,importId,user.id,timestamp),
       ]);
-      agreements.set(cnpj,{agreementId,versionId,previousVersionId:null,previousLocationIds:[],versionNumber:1});
+      agreements.set(cnpj,{agreementId,versionId,versionNumber:1});
     } else {
       const max=await first<{n:number}>('SELECT COALESCE(MAX(version_number),0) n FROM agreement_versions WHERE agreement_id=?',[agreement.id]);
       const versionNumber=Number(max?.n||0)+1, versionId=id('ver');
-      const previousLocationIds=(await all<{location_id:string}>('SELECT location_id FROM agreement_locations WHERE agreement_id=?',[agreement.id])).map((row)=>row.location_id);
       await db.prepare(`INSERT INTO agreement_versions (id,agreement_id,version_number,import_id,status,published_at,created_by,created_at) VALUES (?,?,?,?,'processing',NULL,?,?)`)
         .bind(versionId,agreement.id,versionNumber,importId,user.id,timestamp).run();
-      agreements.set(cnpj,{agreementId:agreement.id,versionId,previousVersionId:agreement.current_version_id,previousLocationIds,versionNumber});
+      agreements.set(cnpj,{agreementId:agreement.id,versionId,versionNumber});
     }
   }
   const locationLinks = new Map<string,[string,string]>();
-  const duplicatas: Duplicata[] = [];
-  const deduped = new Map<string,{row:ReturnType<typeof parseImportRow>;agreement:StagedAgreement;locationId:string}>();
-  for (const row of rows) {
-    const agreement=agreements.get(row.cnpj)!, locationId=refs.locations.get(chaveLocalidade(row.city,row.state))!;
+  // As linhas ja foram resolvidas e deduplicadas pela mesma regra da conferencia.
+  const statements = rows.map((row) => {
+    const agreement=agreements.get(row.cnpj)!, locationId=row.locationId!;
     locationLinks.set(`${agreement.agreementId}|${locationId}`,[agreement.agreementId,locationId]);
-    // Fornecedor, cidade, modelo e item identificam a condicao comercial. A
-    // unidade fica fora de proposito: a mesma peca cotada em medidas
-    // diferentes e preenchimento errado, e o preco erra junto — 20 a unidade
-    // e 40 o par sao o mesmo valor, entao comparar os numeros nao resolve.
-    const key=JSON.stringify([agreement.versionId,locationId,row.itemId,row.modelId]);
-    const previous=deduped.get(key);
-    if(previous && previous.row.unitId!==row.unitId) throw new Error(medidasDivergentes(previous.row,row));
-    if(!previous) { deduped.set(key,{row,agreement,locationId}); continue; }
-    // Empate de preco mantem a primeira linha; preco menor vence.
-    const mantida = row.price < previous.row.price ? row : previous.row;
-    duplicatas.push(registroDuplicata(mantida, mantida===row ? previous.row : row));
-    if(mantida===row) deduped.set(key,{row,agreement,locationId});
-  }
-  const statements=Array.from(deduped.values()).map(({row,agreement,locationId})=>db.prepare(`INSERT INTO agreement_items (id,version_id,location_id,catalog_item_id,vehicle_model_id,unit_id,price,courtesy,brands_text,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)`).bind(id('itm'),agreement.versionId,locationId,row.itemId,row.modelId,row.unitId,row.price,row.price===0?1:0,row.brands||null,timestamp,timestamp));
+    return db.prepare(`INSERT INTO agreement_items (id,version_id,location_id,catalog_item_id,vehicle_model_id,unit_id,price,courtesy,brands_text,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)`).bind(id('itm'),agreement.versionId,locationId,row.itemId,row.modelId,row.unitId,row.price,row.price===0?1:0,row.brands||null,timestamp,timestamp);
+  });
   await batch(statements,80);
-  const finalized: StagedAgreement[]=[];
-  try {
-    for(const agreement of agreements.values()){
-      const newLocationIds=Array.from(locationLinks.values()).filter(([agreementId])=>agreementId===agreement.agreementId).map(([,locationId])=>locationId);
-      await db.batch([
-        db.prepare('DELETE FROM agreement_locations WHERE agreement_id=?').bind(agreement.agreementId),
-        ...newLocationIds.map((locationId)=>db.prepare('INSERT INTO agreement_locations (agreement_id,location_id) VALUES (?,?)').bind(agreement.agreementId,locationId)),
-        db.prepare('UPDATE agreements SET current_version_id=?,updated_at=? WHERE id=?').bind(agreement.versionId,timestamp,agreement.agreementId),
-        db.prepare(`UPDATE agreement_versions SET status='published',published_at=? WHERE id=?`).bind(timestamp,agreement.versionId),
-      ]);
-      finalized.push(agreement);
-    }
-  } catch (error: unknown) {
-    for(const agreement of finalized.reverse()){
-      await db.batch([
-        db.prepare('DELETE FROM agreement_locations WHERE agreement_id=?').bind(agreement.agreementId),
-        ...agreement.previousLocationIds.map((locationId)=>db.prepare('INSERT INTO agreement_locations (agreement_id,location_id) VALUES (?,?)').bind(agreement.agreementId,locationId)),
-        db.prepare('UPDATE agreements SET current_version_id=?,updated_at=? WHERE id=?').bind(agreement.previousVersionId,timestamp,agreement.agreementId),
-        db.prepare(`UPDATE agreement_versions SET status='processing',published_at=NULL WHERE id=?`).bind(agreement.versionId),
-      ]);
-    }
-    throw error;
+  // Publica todos os fornecedores na mesma transacao: nenhum lote parcial fica visivel.
+  const publication: D1PreparedStatement[]=[];
+  for(const agreement of agreements.values()){
+    const newLocationIds=Array.from(locationLinks.values()).filter(([agreementId])=>agreementId===agreement.agreementId).map(([,locationId])=>locationId);
+    publication.push(
+      db.prepare('DELETE FROM agreement_locations WHERE agreement_id=?').bind(agreement.agreementId),
+      ...newLocationIds.map((locationId)=>db.prepare('INSERT INTO agreement_locations (agreement_id,location_id) VALUES (?,?)').bind(agreement.agreementId,locationId)),
+      db.prepare('UPDATE agreements SET current_version_id=?,updated_at=? WHERE id=?').bind(agreement.versionId,timestamp,agreement.agreementId),
+      db.prepare(`UPDATE agreement_versions SET status='published',published_at=? WHERE id=?`).bind(timestamp,agreement.versionId),
+    );
   }
-  return { agreements: agreements.size, items: deduped.size, duplicateKeysResolved: rows.length-deduped.size, duplicatas: duplicatas.length, amostraDuplicatas: duplicatas.slice(0,50), suppliers: cnpjs.length, locations: new Set(rows.map((r)=>`${r.city}|${r.state}`)).size };
+  return publish(publication, { agreements: agreements.size });
+
 }
 
-async function processAgreementImport(rows: ReturnType<typeof parseImportRow>[], user: User, importId: string, agreementId: string) {
+async function processAgreementImport(rows: ReturnType<typeof parseImportRow>[], user: User, importId: string, agreementId: string, publish: PublishImport) {
   const agreement = await first<{id:string;number:string}>('SELECT id,number FROM agreements WHERE id=?',[agreementId]); if(!agreement) throw new Error('Acordo não encontrado');
-  const uniqueRows=new Map<string,ReturnType<typeof parseImportRow>>();
-  const duplicatas: Duplicata[] = [];
-  for(const row of rows){
-    const key=JSON.stringify([chaveLocalidade(row.city,row.state),row.itemId,row.modelId]), previous=uniqueRows.get(key);
-    if(previous && previous.unitId!==row.unitId) throw new Error(medidasDivergentes(previous,row));
-    if(!previous) { uniqueRows.set(key,row); continue; }
-    const mantida = row.price < previous.price ? row : previous;
-    duplicatas.push(registroDuplicata(mantida, mantida===row ? previous : row));
-    uniqueRows.set(key,mantida);
-  }
-  const effectiveRows=Array.from(uniqueRows.values());
-  const refs=await ensureReferenceData(effectiveRows), db=rawDb(), timestamp=now();
+  const db=rawDb(), timestamp=now();
   const max=await first<{n:number}>('SELECT COALESCE(MAX(version_number),0) n FROM agreement_versions WHERE agreement_id=?',[agreementId]);
   const versionId=id('ver'), versionNumber=Number(max?.n||0)+1;
   await db.prepare(`INSERT INTO agreement_versions (id,agreement_id,version_number,import_id,status,published_at,created_by,created_at) VALUES (?,?,?,?,'processing',NULL,?,?)`).bind(versionId,agreementId,versionNumber,importId,user.id,timestamp).run();
   const links=new Map<string,string>(), statements:D1PreparedStatement[]=[];
-  for(const row of effectiveRows){ const locationId=refs.locations.get(chaveLocalidade(row.city,row.state))!; links.set(locationId,locationId); statements.push(db.prepare(`INSERT INTO agreement_items (id,version_id,location_id,catalog_item_id,vehicle_model_id,unit_id,price,courtesy,brands_text,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)`).bind(id('itm'),versionId,locationId,row.itemId,row.modelId,row.unitId,row.price,row.price===0?1:0,row.brands||null,timestamp,timestamp)); }
+  for(const row of rows){ const locationId=row.locationId!; links.set(locationId,locationId); statements.push(db.prepare(`INSERT INTO agreement_items (id,version_id,location_id,catalog_item_id,vehicle_model_id,unit_id,price,courtesy,brands_text,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)`).bind(id('itm'),versionId,locationId,row.itemId,row.modelId,row.unitId,row.price,row.price===0?1:0,row.brands||null,timestamp,timestamp)); }
   await batch(statements,80);
-  await db.batch([
+  return publish([
     db.prepare('DELETE FROM agreement_locations WHERE agreement_id=?').bind(agreementId),
     ...Array.from(links.keys()).map((locationId)=>db.prepare('INSERT INTO agreement_locations (agreement_id,location_id) VALUES (?,?)').bind(agreementId,locationId)),
     db.prepare('UPDATE agreements SET current_version_id=?,updated_at=? WHERE id=?').bind(versionId,timestamp,agreementId),
     db.prepare(`UPDATE agreement_versions SET status='published',published_at=? WHERE id=?`).bind(timestamp,versionId),
-  ]);
-  return { agreement: agreement.number, version: versionNumber, items: effectiveRows.length, duplicatas: duplicatas.length, amostraDuplicatas: duplicatas.slice(0,50), locations: links.size };
+  ], { agreement: agreement.number, version: versionNumber });
 }
 
 async function batch(statements: D1PreparedStatement[], size: number) { for(let i=0;i<statements.length;i+=size) await rawDb().batch(statements.slice(i,i+size)); }
