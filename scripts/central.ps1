@@ -19,11 +19,24 @@ $voltar=Botao 'Restaurar backup' 30 451;$voltar.Size='505,42';$voltar.BackColor=
 $auto=New-Object Windows.Forms.CheckBox;$auto.Text='Iniciar automaticamente com o Windows';$auto.Location='32,514';$auto.Size='330,27';$auto.Checked=Test-Path $Startup;$form.Controls.Add($auto)
 $man=New-Object Windows.Forms.CheckBox;$man.Text='Modo manutenção (pausar rotinas automáticas)';$man.Location='32,548';$man.Size='390,27';$man.Checked=Test-Path $Manutencao;$form.Controls.Add($man)
 $script:processoAtualizacao=$null
+function Operacao-Ativa{
+ if(!(Test-Path $PidFile)){return $false}
+ try{$r=Get-Content $PidFile -Raw|ConvertFrom-Json;return $null-ne(Get-Process -Id $r.pid -ErrorAction SilentlyContinue)}catch{return $false}
+}
+function Parar-Operacao([int]$Limite=60){
+ # O supervisor le o sinal no ritmo do proprio laco. Esperar por um relogio
+ # fixo dava a operacao como parada antes da hora: a tela voltava a dizer
+ # 'ativa' e a restauracao recusava o banco por achar o portal no ar.
+ if(!(Operacao-Ativa)){return $true}
+ Start-Process $Parar -WindowStyle Hidden
+ for($i=0;$i-lt$Limite-and(Operacao-Ativa);$i++){Start-Sleep 1}
+ return !(Operacao-Ativa)
+}
 function Atualizar{
- $ativo=$false;if(Test-Path $PidFile){try{$r=Get-Content $PidFile -Raw|ConvertFrom-Json;$ativo=$null-ne(Get-Process -Id $r.pid -ErrorAction SilentlyContinue)}catch{}}
+ $ativo=Operacao-Ativa
  if($ativo){$detalhe='Inicializando módulos...';if(Test-Path $StatusFile){try{$st=Get-Content $StatusFile -Raw|ConvertFrom-Json;$po=if($st.portal){'online'}else{'reiniciando'};$em=if($st.emails){'online'}else{'reiniciando'};$detalhe="Portal: $po  |  E-mails: $em`nAlertas: $($st.alertas)  |  Backup: $($st.backup)`nLimpeza: $($st.limpeza)  |  Disco: $($st.espacoLivreGb) GB livres"}catch{}};$status.Text="● OPERAÇÃO ATIVA`n$detalhe";$status.ForeColor=[Drawing.Color]::FromArgb(87,211,140)}else{$status.Text="● OPERAÇÃO PARADA`nUse 'Iniciar operação' quando quiser colocar o conjunto no ar.";$status.ForeColor=[Drawing.Color]::FromArgb(255,180,90)}
 }
-$iniciar.Add_Click({Start-Process $Inicio -WindowStyle Hidden;Start-Sleep 2;Atualizar});$parar.Add_Click({Start-Process $Parar -WindowStyle Hidden;Start-Sleep 2;Atualizar});$portal.Add_Click({Start-Process 'http://localhost:3000'});$logs.Add_Click({New-Item -ItemType Directory -Force $Op|Out-Null;Start-Process explorer.exe $Op})
+$iniciar.Add_Click({Start-Process $Inicio -WindowStyle Hidden;Start-Sleep 2;Atualizar});$parar.Add_Click({$form.Cursor='WaitCursor';$parar.Enabled=$false;try{$ok=Parar-Operacao}finally{$parar.Enabled=$true;$form.Cursor='Default'};Atualizar;if(!$ok){[Windows.Forms.MessageBox]::Show('A operacao nao encerrou dentro do tempo esperado. Veja privado\operacao\supervisor.log.','Supply Vision','OK','Warning')|Out-Null}});$portal.Add_Click({Start-Process 'http://localhost:3000'});$logs.Add_Click({New-Item -ItemType Directory -Force $Op|Out-Null;Start-Process explorer.exe $Op})
 $validar.Add_Click({try{& powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'validar-operacao.ps1')|Out-Null;[Windows.Forms.MessageBox]::Show('Configuração aprovada.','Supply Vision','OK','Information')|Out-Null}catch{[Windows.Forms.MessageBox]::Show($_.Exception.Message,'Configuração reprovada','OK','Error')|Out-Null}})
 $restaurar.Add_Click({try{$saida=& node.exe (Join-Path $Raiz 'portal\scripts\testar-restauracao.mjs') 2>&1;if($LASTEXITCODE){throw ($saida-join "`n")};[Windows.Forms.MessageBox]::Show(($saida-join "`n"),'Backup aprovado','OK','Information')|Out-Null}catch{[Windows.Forms.MessageBox]::Show($_.Exception.Message,'Backup reprovado','OK','Error')|Out-Null}})
 $voltar.Add_Click({
@@ -32,7 +45,7 @@ $voltar.Add_Click({
  $qual=[Windows.Forms.MessageBox]::Show("Usar a copia mais recente?`n`nSim = mais recente (portal-atual)`nNao = geracao anterior (portal-atual.anterior)",'Qual backup','YesNoCancel','Question')
  if($qual-eq[Windows.Forms.DialogResult]::Cancel){return}
  try{
-  Start-Process $Parar -WindowStyle Hidden;Start-Sleep 3
+  if(!(Parar-Operacao)){throw 'A operacao nao encerrou. Restauracao cancelada para nao mexer no banco com o portal no ar.'}
   $argumentos=@((Join-Path $Raiz 'portal\scripts\restaurar-backup.mjs'),'--sim')
   if($qual-eq[Windows.Forms.DialogResult]::No){$argumentos+='--anterior'}
   $saida=& node.exe @argumentos 2>&1
