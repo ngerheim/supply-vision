@@ -94,7 +94,7 @@ async function rejected(document, route, expected = 400, verify) {
 // so a primeira ocorrencia); o de dado continua linha a linha.
 function erroDaLinha(data, linha) {
   const agrupado = (data.nomenclaturas || []).find(n => n.primeiraLinha === linha);
-  if (agrupado) return `${agrupado.campo} sem correspondência ativa no De/Para: "${agrupado.valor}".`;
+  if (agrupado) return agrupado.erro;
   return (data.outrosErros || []).find(e => e.linha === linha)?.erro ?? '';
 }
 async function catalog(type, data) { return good(`/api/catalogs/${type}`, { method: 'POST', body: data }, 201); }
@@ -146,7 +146,7 @@ try {
   sqlitePath = locateSqlite(state); assert.ok(sqlitePath);
   reader = new DatabaseSync(sqlitePath, { readOnly: true });
 
-  await check('De/Para inicia vazio', async () => assert.deepEqual(await good('/api/mappings'), { items: [], models: [] }));
+  await check('De/Para inicia vazio', async () => assert.deepEqual(await good('/api/mappings'), { items: [], models: [], locations: [], units: [] }));
   await check('Base vazia recusa nomenclatura sem criar cadastros', () => rejected(file([row()], { name: 'sem-de-para' })));
   // Nomes homonimos ficticios para conferir a separacao por UF.
   await catalog('locations', { city: 'GOIANIA', state: 'GO' });
@@ -391,10 +391,52 @@ try {
       assert.equal(result.status, 200, JSON.stringify(result.data));
     } finally { await upload(file([row()], { name: 'restaura-apos-acento' }), replace); }
   });
-  await check('100 erros preservam contagem e amostra', () => rejected(file(Array.from({ length: 100 }, () => row({ MEDIDA: 'lirto' })), { name: 'cem-erros' }), replace, 400, async data => {
+  await check('100 erros preservam contagem e amostra', () => rejected(file(Array.from({ length: 100 }, () => row({ PRECO: '' })), { name: 'cem-erros' }), replace, 400, async data => {
     assert.equal(data.totalErros, 100); assert.equal(data.outrosErros.length, 50); assert.equal(data.outrosErrosOmitidos, 50);
     const detail = await good(`/api/imports/${data.importId}`); assert.equal(detail.errorRows, 100); assert.equal(detail.totalRows, 100);
   }));
+  await check('Conferencia valida nao publica nem cria historico de importacao', async () => {
+    const before = businessSnapshot(), count = query('SELECT COUNT(*) n FROM imports')[0].n;
+    const result = await upload(file([row({ PRECO: 120 }), row({ PRECO: 90 })], { name: 'previa-valida' }), replace + '?preview=1');
+    assert.equal(result.status, 200); assert.equal(result.data.valid, true);
+    assert.equal(result.data.summary.items, 1); assert.equal(result.data.summary.duplicatas, 1);
+    assert.equal(result.data.sample[0].preco, 90);
+    assert.deepEqual(businessSnapshot(), before); assert.equal(query('SELECT COUNT(*) n FROM imports')[0].n, count);
+  });
+  await check('Conferencia mostra todas as pendencias sem alterar a base', async () => {
+    const before = businessSnapshot();
+    const result = await upload(file([row({ MODELO: 'Hlux', PECA_SERVICO: 'BILETA', CIDADE: 'ALMS', UF: 'TI', MEDIDA: 'litroo', PRECO: '' })], { name: 'previa-pendencias' }), replace + '?preview=1');
+    assert.equal(result.status, 200); assert.equal(result.data.valid, false);
+    assert.equal(result.data.totalErros, 1); assert.equal(result.data.nomenclaturas.length, 4); assert.equal(result.data.outrosErros.length, 1);
+    assert.deepEqual(businessSnapshot(), before);
+  });
+  await check('Correspondencias confirmadas resolvem localidade e unidade e persistem', async () => {
+    const location = await catalog('locations', { city: 'ALMAS', state: 'TO' });
+    const doc = file([row({ CIDADE: 'ALMS', UF: 'TI', MEDIDA: 'litroo' })], { name: 'aliases-confirmados' });
+    await rejected(doc, replace);
+    const locationMap = await mapping('locations', 'ALMS / TI', location.id);
+    const unitMap = await mapping('units', 'litroo', unit.id);
+    const preview = await upload(doc, replace + '?preview=1');
+    assert.equal(preview.data.valid, true); assert.equal(preview.data.sample[0].cidade, 'ALMAS'); assert.equal(preview.data.sample[0].uf, 'TO');
+    assert.equal((await upload(doc, replace)).status, 200);
+    assert.equal((await request(`/api/catalogs/locations/${location.id}`, { method: 'DELETE' })).status, 409);
+    await good(`/api/mappings/units/${unitMap.id}`, { method: 'PUT', body: { source: 'litroo', targetId: unit.id, active: false } });
+    assert.equal((await upload(doc, replace + '?preview=1')).data.valid, false);
+    await rejected(doc, replace);
+    await good(`/api/mappings/units/${unitMap.id}`, { method: 'PUT', body: { source: 'litroo', targetId: unit.id, active: true } });
+    const mappings = await good('/api/mappings');
+    assert.ok(mappings.locations.some(row => row.id === locationMap.id));
+    assert.ok(mappings.units.some(row => row.id === unitMap.id));
+  });
+  await check('Alias nao pode redirecionar uma localidade ou medida ja cadastrada', async () => {
+    const location = query("SELECT id FROM locations WHERE city='ALMAS' AND state='TO'")[0];
+    assert.equal((await request('/api/mappings/locations', { method: 'POST', body: { source: 'GOIANIA/GO', targetId: location.id } })).status, 400);
+    assert.equal((await request('/api/mappings/units', { method: 'POST', body: { source: 'PAR', targetId: unit.id } })).status, 400);
+  });
+  await check('Carga inicial aceita modelo sem coluna FORNECEDOR', async () => {
+    const data = row(); delete data.FORNECEDOR;
+    assert.equal((await upload(file([data], { name: 'cnpj-suficiente' }))).status, 200);
+  });
   await check('100 erros aleatórios de nomenclatura são todos rejeitados', () => rejected(file(Array.from({ length: 100 }, () => {
     const field = ['MODELO', 'PECA_SERVICO', 'MEDIDA'][Math.floor(random() * 3)];
     return row({ [field]: `${row()[field]} ERRO-${Math.floor(random() * 999999)}` });
@@ -418,7 +460,7 @@ try {
     const large = file(Array.from({ length: 49999 }, () => row()), { name: 'limite-50000-linhas' });
     const result = await upload(large, replace); assert.equal(result.status, 200, JSON.stringify(result.data)); assert.equal(result.data.summary.items, 1);
   });
-  await check('Erro na última das 49.999 linhas aborta a carga inteira', () => rejected(file(Array.from({ length: 49999 }, (_, index) => row(index === 49998 ? { MEDIDA: 'lirto' } : {})), { name: 'erro-no-fim-50000' }), replace, 400, data => assert.equal(data.outrosErros[0].linha, 50000)));
+  await check('Erro na última das 49.999 linhas aborta a carga inteira', () => rejected(file(Array.from({ length: 49999 }, (_, index) => row(index === 49998 ? { MEDIDA: 'lirto' } : {})), { name: 'erro-no-fim-50000' }), replace, 400, data => assert.equal(data.nomenclaturas[0].primeiraLinha, 50000)));
   await check('Carga de 10.000 condições distintas publica todas', async () => {
     await localidades(serie('STRESS', 10000));
     const large = file(Array.from({ length: 10000 }, (_, index) => row({ CIDADE: `STRESS ${index}`, PRECO: index / 100 })), { name: 'dez-mil-condicoes' });
@@ -445,6 +487,8 @@ try {
     const exported = await good('/api/export');
     assert.equal(exported.tables.importItemMappings.length, query('SELECT COUNT(*) n FROM import_item_mappings')[0].n);
     assert.equal(exported.tables.importModelMappings.length, query('SELECT COUNT(*) n FROM import_model_mappings')[0].n);
+    assert.equal(exported.tables.importUnitMappings.length, query('SELECT COUNT(*) n FROM import_unit_mappings')[0].n);
+    assert.equal(exported.tables.importLocationMappings.length, query('SELECT COUNT(*) n FROM import_location_mappings')[0].n);
   });
   await check('Reinicialização conserva acordos e correspondências', async () => {
     const before = businessSnapshot(), mappings = await good('/api/mappings');
@@ -457,7 +501,8 @@ try {
     assert.ok(sqlitePath.startsWith(state + path.sep), 'Só permite alterar o banco desta execução');
     execFileSync(process.execPath, [path.join(portal, 'node_modules/wrangler/bin/wrangler.js'), 'd1', 'execute', 'DB', '--local', '--config', path.join(runtime, 'server/wrangler.json'), '--persist-to', state, '--command', 'DROP TABLE import_item_mappings; DROP TABLE import_model_mappings;'], { cwd: output, windowsHide: true, stdio: ['ignore', serverLog, serverLog], env: { ...process.env, WRANGLER_SEND_METRICS: 'false', WRANGLER_WRITE_LOGS: 'false' } });
     await startServer(); reader = new DatabaseSync(sqlitePath, { readOnly: true });
-    assert.deepEqual(await good('/api/mappings'), { items: [], models: [] });
+    const after = await good('/api/mappings');
+    assert.deepEqual(after.items, []); assert.deepEqual(after.models, []);
     assert.deepEqual(businessSnapshot(), before);
   });
   await check('Integridade final: sem órfãos, versões pendentes ou travas', async () => {

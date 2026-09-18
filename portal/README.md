@@ -46,6 +46,8 @@ defeito.
   cadastro; **Expirado** aparece sozinho quando a data de fim vence.
 - **Fornecedores** — nome, razão social, CNPJ, cidade e UF.
 - **Importações** — carga de planilhas.
+- **De/Para** *(Admin)* — correspondências confirmadas para itens, modelos,
+  unidades e localidades (cidade/UF).
 - **Cadastros** *(Comprador/Admin)* — peças e serviços, modelos, unidades,
   marcas e localidades.
 - **Histórico** *(Admin)* — tudo que foi alterado, por quem e quando, com
@@ -74,8 +76,33 @@ Lê a **primeira aba** de um `.xlsx` ou `.xls`, com cabeçalho na primeira linha
 (`PEÇA/SERVIÇO`, `PECA_SERVICO`, `ITEM`), preço aceita número ou `R$ 1.234,56`,
 e CNPJ com zero truncado pelo Excel é corrigido.
 
-Colunas esperadas: `CIDADE`, `UF`, `MODELO`, `PECA_SERVICO`, `PRECO`, `MEDIDA`
-e `MARCAS` — mais `CNPJ` e `FORNECEDOR` na carga inicial.
+Colunas obrigatórias: `CIDADE`, `UF`, `MODELO`, `PECA_SERVICO`, `PRECO`, `MEDIDA`
+e, na carga inicial, `CNPJ`. `MARCAS` e `FORNECEDOR` são opcionais.
+O fornecedor é identificado pelo CNPJ e precisa estar cadastrado e ativo;
+o nome recebido não cria nem altera fornecedores. Ao atualizar um acordo,
+o fornecedor é o do acordo escolhido, independentemente dessas colunas.
+
+1. Escolha o tipo de importação, o acordo de destino quando aplicável e o arquivo.
+   O botão **Baixar modelo** entrega um Excel com os cabeçalhos necessários.
+2. Clique em **Conferir arquivo**. Essa etapa não publica acordos nem preços.
+3. Confira as pendências agrupadas por nome. Administradores podem escolher
+   uma sugestão ou pesquisar o cadastro e **Confirmar e lembrar correspondência**.
+   A escolha fica no De/Para para as próximas importações. Sugestões nunca são
+   aplicadas automaticamente. Compradores podem corrigir a planilha ou solicitar
+   a confirmação a um administrador.
+4. Confira a amostra, os totais e as duplicatas, e então clique em **Publicar**.
+   A publicação revalida todo o arquivo; uma prévia anterior não dispensa validação.
+
+Itens e modelos exigem De/Para explícito, inclusive quando o nome já é canônico.
+Unidades e localidades aceitam o cadastro exato ou uma correspondência confirmada.
+Uma UF digitada errada continua sendo pendência até a correção da planilha ou
+a confirmação explícita da localidade completa; o cadastro só aceita UFs brasileiras.
+Preços inválidos e células obrigatórias vazias são corrigidos na planilha.
+
+Para a mesma cidade **e UF**, item e modelo, a importação mantém o menor preço.
+Empates mantêm a primeira linha. O resultado informa os descartes; unidades
+diferentes na mesma condição abortam a carga. Cidades homônimas em UFs diferentes
+continuam sendo condições distintas.
 
 **Todas as linhas precisam ser válidas.** Uma falha recusa a planilha inteira e
 nada é publicado; a tabela anterior continua valendo. Preço zero é aceito e
@@ -91,8 +118,10 @@ Arquivos que não sejam planilha de verdade são recusados mesmo com extensão
 Fornecedores e itens de **Cadastros** podem ser excluídos. Se estiverem em uso,
 o portal recusa e informa quantos — nesse caso inative em vez de excluir.
 
-Acordos e chamados não têm exclusão. Num acordo dá para remover uma condição
-por vez; chamado aberto por engano deve ser cancelado.
+Administradores podem excluir acordos após confirmação: as condições e versões
+do acordo são apagadas; chamados relacionados são preservados sem o vínculo.
+Também é possível remover condições individualmente. Chamado aberto por engano
+deve ser cancelado.
 
 ## Se a página ficar sem aparência
 
@@ -185,6 +214,9 @@ sozinho. Veja `docs/OPERAR.md`.
 | `app/` | Página, estilos e API |
 | `components/` | Tela do portal e os componentes visuais |
 | `lib/` | Banco, regras, validações, importação e e-mails |
+| `lib/importacao.ts` | Validação e deduplicação compartilhadas pela conferência e publicação |
+| `components/imports.tsx` | Conferência, resolução assistida e histórico de importações |
+| `components/agreement-dialogs.tsx` | Cadastro manual de acordos e condições |
 | `public/` | Ícone público |
 | `scripts/` | Operação, atualização, testes, backup e monitoramento |
 | `tests/` | Testes automatizados |
@@ -254,6 +286,15 @@ para cortesia; CNPJ é normalizado e validado.
 Há carga inicial e substituição integral de um acordo. A substituição cria uma
 versão nova e preserva a anterior **dentro do banco**, para rastreabilidade do
 negócio — isso não é backup histórico do arquivo.
+
+O banco existente é preservado. As tabelas de De/Para são criadas vazias quando
+ausentes, inclusive as de unidades e localidades. Não é preciso substituir
+o arquivo SQLite nem preencher correspondências antecipadamente.
+
+`npm run test:imports` testa HTTP real em uma instância e banco descartáveis:
+prévia sem publicação, correspondências, rejeições sem alteração de negócio,
+limites de volume, concorrência, exportação, reinicialização e atualização de banco.
+Arquivos e relatórios sintéticos ficam em `work/`, fora do Git.
 
 ## Acesso pela rede
 
