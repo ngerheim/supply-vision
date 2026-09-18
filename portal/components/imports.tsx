@@ -531,9 +531,59 @@ function ResolveIssue({
   );
 }
 
+function BaseCriada({ base }: { base: AnyRow }) {
+  // A carga inicial cria cadastro a partir do proprio arquivo. Sem esta
+  // conferencia previa, o operador so descobre uma nomenclatura que escapou do
+  // de/para depois que ela ja virou item no catalogo.
+  const grupos: { chave: string; rotulo: string }[] = [
+    { chave: 'localidades', rotulo: 'localidade(s)' },
+    { chave: 'itens', rotulo: 'item(ns)' },
+    { chave: 'modelos', rotulo: 'modelo(s)' },
+    { chave: 'fornecedores', rotulo: 'fornecedor(es)' },
+  ];
+  const quantos = (chave: string) => Number(base[chave]) || 0;
+  const amostraDe = (chave: string): string[] => {
+    const lista: unknown = base.amostra?.[chave];
+    return Array.isArray(lista) ? lista.map((nome) => String(nome)) : [];
+  };
+  const presentes = grupos.filter((grupo) => quantos(grupo.chave) > 0);
+  if (!presentes.length) return null;
+  return (
+    <div className="space-y-2">
+      <p className="font-medium">
+        Cadastros que serão criados a partir do arquivo:{' '}
+        {presentes
+          .map((grupo) => `${quantos(grupo.chave)} ${grupo.rotulo}`)
+          .join(', ')}
+        .
+      </p>
+      {presentes.map((grupo) => {
+        const amostra = amostraDe(grupo.chave);
+        if (!amostra.length) return null;
+        return (
+          <details key={grupo.chave}>
+            <summary className="cursor-pointer">
+              Ver {grupo.rotulo} ({quantos(grupo.chave)})
+            </summary>
+            <ul className="mt-2 max-h-48 space-y-1 overflow-auto">
+              {amostra.map((nome, index) => (
+                <li key={index}>{nome}</li>
+              ))}
+            </ul>
+            {quantos(grupo.chave) > amostra.length && (
+              <p>Amostra dos primeiros {amostra.length}.</p>
+            )}
+          </details>
+        );
+      })}
+    </div>
+  );
+}
+
 function ImportSummary({ summary }: { summary: AnyRow }) {
   return (
     <div className="space-y-2 text-sm">
+      {!!summary.baseCriada && <BaseCriada base={summary.baseCriada} />}
       {!!summary.cnpjsRecuperados && (
         <p>
           {summary.cnpjsRecuperados} CNPJ(s) tiveram zeros à esquerda
