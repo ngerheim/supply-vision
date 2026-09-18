@@ -115,6 +115,8 @@ export async function tokenHash(token: string) {
 }
 
 let ready: Promise<void> | null = null;
+export const MEDIDAS_PADRAO = ['UNIDADE', 'LITRO', 'PAR', 'JOGO', 'HORA'] as const;
+
 export function ensureDatabase() {
   if (!ready) ready = initialize();
   return ready;
@@ -139,9 +141,14 @@ async function initialize() {
       // primeiro login de uma instalacao nova nunca funcionaria.
       db.prepare('INSERT INTO users (id,name,email,password_salt,password_hash,password_iterations,role,active,created_at) VALUES (?,?,?,?,?,?,?,1,?)').bind(userId, 'Administrador Local', 'admin@portal.local', salt, hash, PBKDF2_ITERACOES_ATUAL, 'admin', now()),
       db.prepare('INSERT INTO audit_logs (id,user_id,action,entity,entity_id,details,created_at) VALUES (?,?,?,?,?,?,?)').bind(id('aud'), userId, 'CREATE', 'system', null, 'Base local inicializada', now()),
-      ...[['UNIDADE','Unidade'],['LITRO','Litro'],['PAR','Par'],['JOGO','Jogo'],['HORA','Hora']].map(([code, name]) => db.prepare('INSERT OR IGNORE INTO units (id,code,name,active) VALUES (?,?,?,1)').bind(id('unt'), code, name)),
     ]);
   }
+  // As medidas padrao sao infraestrutura, nao cadastro do usuario: sem elas a
+  // importacao nao resolve MEDIDA nenhuma. Antes eram semeadas so na instalacao
+  // nova, entao apagar uma era definitivo — e a conferencia assistida passava a
+  // oferecer outra medida no lugar, gravando preco de par como preco de unidade.
+  // Recriar a cada carga devolve o conjunto sem tocar no que ja existe.
+  await db.batch(MEDIDAS_PADRAO.map((code) => db.prepare('INSERT OR IGNORE INTO units (id,code,name,active) VALUES (?,?,?,1)').bind(id('unt'), code, code)));
   await db.prepare('INSERT OR IGNORE INTO schema_migrations (version,applied_at) VALUES (1,?)').bind(now()).run();
   const prefixoMigrado = await db.prepare('SELECT 1 ok FROM schema_migrations WHERE version=2').first();
   if (!prefixoMigrado) {
