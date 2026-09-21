@@ -119,23 +119,25 @@ function SearchPage({catalogs,openAgreement,filters,setFilters}:JsonData){const 
    Se o relatorio for republicado com outra estrutura de paginas, PBI_PAGINA
    deixa de casar e a aba abre na primeira pagina, sem erro visivel -- e o
    primeiro lugar a conferir se alguem reclamar que abriu a tabela errada. */
-const PBI_URL=`${__PBI_RELATORIO_URL__}&pageName=${__PBI_PAGINA__}&navContentPaneEnabled=false&filterPaneEnabled=false`;
+function montarPowerBiUrl(endereco:string,pagina:string):string{try{const url=new URL(endereco);if(url.protocol!=='https:'||url.hostname!=='app.powerbi.com')return '';if(pagina.trim())url.searchParams.set('pageName',pagina.trim());url.searchParams.set('navContentPaneEnabled','false');url.searchParams.set('filterPaneEnabled','false');return url.toString()}catch{return ''}}
+const PBI_URL=montarPowerBiUrl(__PBI_RELATORIO_URL__,__PBI_PAGINA__);
 
 function Maintenance(){
   /* Trocar a key remonta o iframe do zero. E a unica forma de recarregar um
      quadro de outra origem: o portal nao consegue falar com o conteudo dele. */
   const [recarga,setRecarga]=useState(0);
-  return <div className="space-y-5">
-    <div className="flex flex-wrap items-center justify-between gap-3">
-      <h1 className="text-2xl font-semibold">Histórico de Manutenção</h1>
-      <div className="flex gap-2">
+  if(!PBI_URL)return <div className="space-y-5"><h1 className="text-2xl font-semibold">Histórico de Manutenção</h1><Alert><AlertTriangle/><AlertTitle>Relatório temporariamente indisponível</AlertTitle><AlertDescription>O endereço do Power BI ainda não foi configurado neste servidor. Avise a equipe responsável pelo Portal.</AlertDescription></Alert></div>;
+  return <div className="space-y-4">
+    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div><h1 className="text-2xl font-semibold">Histórico de Manutenção</h1><p className="mt-1 text-sm text-muted-foreground">Dados atualizados pelo Power BI.</p></div>
+      <div className="flex flex-wrap gap-2 sm:justify-end">
         <Button variant="outline" onClick={()=>setRecarga(valor=>valor+1)}><RefreshCw/> Recarregar</Button>
         <Button variant="outline" onClick={()=>window.open(PBI_URL,'_blank','noopener,noreferrer')}><ExternalLink/> Abrir em nova aba</Button>
       </div>
     </div>
-    <Card className="overflow-hidden">
+    <Card className="overflow-hidden shadow-sm">
       <CardContent className="p-0">
-        <iframe key={recarga} src={PBI_URL} title="Histórico de Manutenção — relatório do Power BI" className="h-[calc(100vh-13rem)] min-h-[560px] w-full border-0" allowFullScreen sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-forms allow-downloads"/>
+        <iframe key={recarga} src={PBI_URL} title="Histórico de Manutenção — relatório do Power BI" className="h-[calc(100vh-11rem)] min-h-[640px] w-full border-0" allowFullScreen sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-forms allow-downloads"/>
       </CardContent>
     </Card>
   </div>;

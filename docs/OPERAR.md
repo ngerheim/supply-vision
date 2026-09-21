@@ -105,10 +105,11 @@ Consequências práticas:
   mensagem de erro** — é o primeiro lugar a conferir se alguém reclamar que
   abriu a tabela errada.
 
-Para trocar o relatório: edite as duas chaves no `portal.env` e use **Atualizar
+Para configurar ou trocar o relatório: edite as duas chaves no `portal.env` e use **Atualizar
 sistema** na central. Os valores entram no Portal na compilação, então editar o
-arquivo sem recompilar não muda nada. Se as chaves estiverem ausentes, o Portal
-compila com o relatório que estava em uso quando a aba foi criada.
+arquivo sem recompilar não muda nada. Se as chaves estiverem ausentes ou forem
+inválidas, a aba informa que o relatório está temporariamente indisponível. O
+endereço real nunca deve ser colocado em arquivo versionado.
 
 Para descobrir o `PBI_PAGINA` de uma página: abra o relatório publicado, entre na
 página desejada e leia o `pageName` da requisição que o navegador faz — ou peça a
