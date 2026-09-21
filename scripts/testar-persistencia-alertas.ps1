@@ -6,6 +6,21 @@ $raizReal = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $temp = Join-Path $env:TEMP ('supply-vision-persistencia-' + [guid]::NewGuid().ToString('N'))
 $proc = $null
 $pathAnterior = $env:Path
+function Encerrar-ArvoreTeste($Processo) {
+  if (!$Processo -or $Processo.HasExited) { return }
+  # taskkill /T pode exigir elevacao em algumas instalacoes do Windows. Para o
+  # teste, levantamos a arvore antes de matar o pai e encerramos apenas os
+  # processos que ele proprio criou.
+  $todos = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue)
+  $ids = @([int]$Processo.Id)
+  do {
+    $novos = @($todos | Where-Object { $ids -contains [int]$_.ParentProcessId -and $ids -notcontains [int]$_.ProcessId } | ForEach-Object { [int]$_.ProcessId })
+    if ($novos) { $ids += $novos }
+  } while ($novos)
+  [array]::Reverse($ids)
+  foreach ($idProcesso in $ids) { Stop-Process -Id $idProcesso -Force -ErrorAction SilentlyContinue }
+  $Processo.WaitForExit(15000) | Out-Null
+}
 try {
   $dirs = @('scripts', 'portal\dist\server', 'alertas\processo', 'privado\comum',
             'privado\portal\configuracao', 'privado\portal\logs', 'privado\alertas\config',
@@ -58,8 +73,7 @@ try {
 
   # Neste ponto verificar_saude.py esta rodando (sleep 30). Mata a arvore a
   # forca, sem dar chance ao finally - exatamente como um desligamento.
-  & taskkill.exe /PID $proc.Id /T /F 2>$null | Out-Null
-  $proc.WaitForExit(15000) | Out-Null
+  Encerrar-ArvoreTeste $proc
 
   # O marcador precisa ja estar em disco.
   $estado = Get-Content "$temp\privado\operacao\estado.json" -Raw | ConvertFrom-Json
@@ -77,7 +91,7 @@ try {
   Write-Host 'Persistencia dos alertas: marcador gravado antes da verificacao de saude.' -ForegroundColor Green
 } finally {
   $env:Path = $pathAnterior
-  if ($proc -and !$proc.HasExited) { & taskkill.exe /PID $proc.Id /T /F 2>$null | Out-Null }
+  if ($proc -and !$proc.HasExited) { Encerrar-ArvoreTeste $proc }
   if (Test-Path "$temp\alertas\.venv") { & cmd.exe /c rmdir "$temp\alertas\.venv" 2>$null | Out-Null }
   if (Test-Path $temp) { Remove-Item $temp -Recurse -Force -ErrorAction SilentlyContinue }
 }
