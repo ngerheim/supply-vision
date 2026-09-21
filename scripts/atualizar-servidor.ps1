@@ -114,9 +114,14 @@ $portalEnv = Join-Path $Raiz 'privado\portal\configuracao\portal.env'
 $temToken = (Test-Path $portalEnv) -and (@(Get-Content $portalEnv) | Where-Object { $_ -match '^\s*PORTAL_API_TOKEN\s*=\s*\S+' })
 if (-not $temToken) {
   $bytes = New-Object byte[] 32
-  [Security.Cryptography.RandomNumberGenerator]::Fill($bytes)
-  $token = [Convert]::ToHexString($bytes).ToLowerInvariant()
-  Add-Content -LiteralPath $portalEnv -Value "`r`nPORTAL_API_TOKEN=$token" -Encoding utf8
+  $gerador = [Security.Cryptography.RandomNumberGenerator]::Create()
+  try { $gerador.GetBytes($bytes) } finally { $gerador.Dispose() }
+  $token = ($bytes | ForEach-Object { $_.ToString('x2') }) -join ''
+  $conteudo = Get-Content -LiteralPath $portalEnv -Raw
+  if ($conteudo -match '(?m)^\s*PORTAL_API_TOKEN\s*=') {
+    $conteudo = [regex]::Replace($conteudo, '(?m)^\s*PORTAL_API_TOKEN\s*=.*$', "PORTAL_API_TOKEN=$token")
+  } else { $conteudo += "`r`nPORTAL_API_TOKEN=$token`r`n" }
+  [IO.File]::WriteAllText($portalEnv, $conteudo, (New-Object Text.UTF8Encoding($false)))
   Ok 'credencial interna do Portal criada na configuracao privada'
 }
 

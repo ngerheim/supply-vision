@@ -65,8 +65,9 @@ Copiar "$Portal\portal.env.example" "$Privado\portal\configuracao\portal.env"
 $portalEnv=Join-Path $Privado 'portal\configuracao\portal.env'
 $temToken=(Test-Path $portalEnv)-and(@(Get-Content $portalEnv)|Where-Object{$_-match '^\s*PORTAL_API_TOKEN\s*=\s*\S+'})
 if(-not $temToken){
-  $bytes=New-Object byte[] 32; [Security.Cryptography.RandomNumberGenerator]::Fill($bytes)
-  $token=[Convert]::ToHexString($bytes).ToLowerInvariant()
+  $bytes=New-Object byte[] 32;$gerador=[Security.Cryptography.RandomNumberGenerator]::Create()
+  try{$gerador.GetBytes($bytes)}finally{$gerador.Dispose()}
+  $token=($bytes|ForEach-Object{$_.ToString('x2')})-join''
   $conteudo=Get-Content -LiteralPath $portalEnv -Raw
   if($conteudo-match '(?m)^\s*PORTAL_API_TOKEN\s*='){ $conteudo=[regex]::Replace($conteudo,'(?m)^\s*PORTAL_API_TOKEN\s*=.*$',"PORTAL_API_TOKEN=$token") }
   else { $conteudo+="`r`nPORTAL_API_TOKEN=$token`r`n" }
