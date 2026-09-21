@@ -3,6 +3,19 @@ $ErrorActionPreference = 'Stop'
 function Igual($Esperado,$Atual,[string]$Caso){if($Esperado-ne$Atual){throw "${Caso}: esperado '$Esperado', obtido '$Atual'"}}
 $cfg=@{ALERTAS_HORARIOS='08:00,11:00,14:00,17:00';BACKUP_HORARIOS='12:30,17:45';LIMPEZA_HORARIO='05:30'}
 Validar-Horarios $cfg
+
+# PID sozinho nao identifica um processo no Windows: ele pode ser reutilizado.
+# O instante gravado pelo supervisor precisa pertencer ao processo encontrado.
+$pidTeste=Join-Path ([IO.Path]::GetTempPath()) ('sv-pid-'+[guid]::NewGuid().ToString('N')+'.json')
+try{
+  $atual=Get-Process -Id $PID
+  @{pid=$PID;inicio=$atual.StartTime.ToUniversalTime().ToString('o')}|ConvertTo-Json -Compress|Set-Content -LiteralPath $pidTeste
+  Igual $PID (Obter-ProcessoRegistrado $pidTeste).Id 'registro identifica o processo correto'
+  @{pid=$PID;inicio=$atual.StartTime.ToUniversalTime().AddMinutes(-10).ToString('o')}|ConvertTo-Json -Compress|Set-Content -LiteralPath $pidTeste
+  Igual $null (Obter-ProcessoRegistrado $pidTeste) 'PID reutilizado nao vira operacao ativa'
+  Set-Content -LiteralPath $pidTeste -Value '{invalido'
+  Igual $null (Obter-ProcessoRegistrado $pidTeste) 'registro corrompido nao vira operacao ativa'
+}finally{Remove-Item -LiteralPath $pidTeste -Force -ErrorAction SilentlyContinue}
 try{Validar-Horarios @{ALERTAS_HORARIOS='08:0012:00';BACKUP_HORARIOS='12:30';LIMPEZA_HORARIO='05:30'};throw 'Horario colado foi aceito'}catch{if($_.Exception.Message-eq'Horario colado foi aceito'){throw}}
 $estado=@{};$slot=Obter-SlotDevido 'alertas' $cfg.ALERTAS_HORARIOS $estado ([datetime]'2026-09-11 11:50');Igual '11:00' $slot.hora 'retorno antes das 14h'
 $estado=@{};$slot=Obter-SlotDevido 'alertas' $cfg.ALERTAS_HORARIOS $estado ([datetime]'2026-09-11 18:30');Igual '17:00' $slot.hora 'retorno apos quatro slots';Igual 3 (($estado.Keys|Where-Object{$_-like'alertas-*'}).Count) 'slots antigos marcados';$estado[$slot.chave]='ok';Igual $null (Obter-SlotDevido 'alertas' $cfg.ALERTAS_HORARIOS $estado ([datetime]'2026-09-11 18:31')) 'reinicio sem duplicidade'
