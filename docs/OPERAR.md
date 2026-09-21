@@ -82,6 +82,39 @@ nome nunca é tocado. Varre `logs/`, `relatorios/diarios/` e
 Para o lixo estrutural (caches, temporários do wrangler), use
 `scripts\faxina.ps1` — com `-Executar` para aplicar, e com a operação parada.
 
+## Histórico de Manutenção
+
+A aba **Manutenção** do Portal não tem carga, banco nem rotina agendada: ela
+emoldura a página "Histórico de Manutenção" do relatório publicado no Power BI.
+Nada é copiado para cá, e as colunas e os filtros são os do relatório de origem.
+
+Consequências práticas:
+
+- **A atualização não é nossa.** Os dados seguem o agendamento do relatório de
+  origem, que hoje atualiza quatro vezes por dia em horários definidos fora do
+  Portal. Não há o que reexecutar aqui quando alguém achar o dado velho.
+- **Cada máquina precisa alcançar `app.powerbi.com`.** Se o quadro aparecer em
+  branco, o problema é acesso à internet do cliente, não o Portal. O botão
+  *Abrir em nova aba* confirma o diagnóstico em dois cliques.
+- **O relatório é publicado na web.** Quem tiver o link o vê sem passar pelo
+  login do Portal. Estar embutido aqui não acrescenta proteção nenhuma.
+- **Se o relatório for republicado**, o endereço e o identificador da página
+  mudam. Os dois ficam em `privado\portal\configuracao\portal.env`, nas chaves
+  `PBI_RELATORIO_URL` (o link de *Publicar na web*) e `PBI_PAGINA`. Quando o
+  identificador deixa de casar, a aba abre na primeira página do relatório **sem
+  mensagem de erro** — é o primeiro lugar a conferir se alguém reclamar que
+  abriu a tabela errada.
+
+Para trocar o relatório: edite as duas chaves no `portal.env` e use **Atualizar
+sistema** na central. Os valores entram no Portal na compilação, então editar o
+arquivo sem recompilar não muda nada. Se as chaves estiverem ausentes, o Portal
+compila com o relatório que estava em uso quando a aba foi criada.
+
+Para descobrir o `PBI_PAGINA` de uma página: abra o relatório publicado, entre na
+página desejada e leia o `pageName` da requisição que o navegador faz — ou peça a
+quem mantém o relatório. Ele não é o nome visível da página; é um código como
+`09a18dbe4d61132751d1`.
+
 ## Execução paralela
 
 `alertas\executar.bat` → **Execução paralela (sem enviar e-mail)**. Os
