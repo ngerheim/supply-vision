@@ -1,8 +1,34 @@
+import { readFileSync } from 'node:fs';
 import { sites } from '@openai/sites-vite-plugin';
 import tailwindcss from '@tailwindcss/postcss';
 import vinext from 'vinext';
 import { defineConfig } from 'vite';
 import hostingConfig from './.openai/hosting.json' with { type: 'json' };
+
+// A aba "Manutencao" emoldura um relatorio publicado no Power BI. O endereco
+// dele nao e codigo: muda quando o relatorio e republicado, e quem troca e o
+// operador, nao o desenvolvedor. Por isso ele vive em portal.env, junto das
+// outras configuracoes de operacao, e entra no bundle na compilacao.
+//
+// Os padroes abaixo valem para maquinas sem a pasta privado (checkout limpo,
+// CI). Sem eles o build quebraria onde nao ha operacao configurada, que e
+// justamente onde ninguem pode corrigir o arquivo.
+const PBI_URL_PADRAO = 'https://app.powerbi.com/view?r=eyJrIjoiNDkzODNlNmItOGQxYy00ZjU2LTk0NWQtYzMxNjZlZWU2NjZmIiwidCI6IjBjZGY5MjMzLTExZDYtNDM3OS04ZTgwLTE2YTdkNGQ4YjkyMCJ9';
+const PBI_PAGINA_PADRAO = '09a18dbe4d61132751d1';
+
+function lerPortalEnv(chave: string, padrao: string): string {
+  try {
+    const texto = readFileSync('../privado/portal/configuracao/portal.env', 'utf8');
+    for (const linha of texto.split(/\r?\n/)) {
+      const corte = linha.indexOf('=');
+      if (corte < 0 || linha.trimStart().startsWith('#')) continue;
+      if (linha.slice(0, corte).trim() !== chave) continue;
+      const valor = linha.slice(corte + 1).trim();
+      if (valor) return valor;
+    }
+  } catch { /* sem pasta privado: segue com o padrao */ }
+  return padrao;
+}
 
 const SITE_CREATOR_PLACEHOLDER_DATABASE_ID =
   '00000000-0000-4000-8000-000000000000';
@@ -46,6 +72,10 @@ export default defineConfig(async () => {
   const { cloudflare } = await import('@cloudflare/vite-plugin');
 
   return {
+    define: {
+      __PBI_RELATORIO_URL__: JSON.stringify(lerPortalEnv('PBI_RELATORIO_URL', PBI_URL_PADRAO)),
+      __PBI_PAGINA__: JSON.stringify(lerPortalEnv('PBI_PAGINA', PBI_PAGINA_PADRAO)),
+    },
     css: { postcss: { plugins: [tailwindcss()] } },
     server: {
       host: '0.0.0.0',
