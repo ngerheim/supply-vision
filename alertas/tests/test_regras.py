@@ -30,6 +30,37 @@ def base(qtd=1, preco=100):
     })
 
 
+def com_vigencia(df, inicio="18/09/2026", fim=None, status="active"):
+    df = df.copy()
+    df["INICIO_VIGENCIA"] = inicio
+    df["FIM_VIGENCIA"] = fim
+    df["STATUS_ACORDO"] = status
+    return df
+
+
+def test_antes_do_corte_todos_os_acordos_sao_considerados_ativos(rodar):
+    compras = base(preco=10)
+    compras["Data Abertura"] = "17/09/2026"
+    futuro_suspenso = com_vigencia(acordo([10]), inicio="01/12/2026", status="suspended")
+    assert rodar.processar(compras, futuro_suspenso).loc[0, "Status"] == "CONFORME"
+
+
+def test_a_partir_do_corte_respeita_status_e_inicio_da_vigencia(rodar):
+    compras = base(qtd=3, preco=10)
+    compras["Data Abertura"] = ["18/09/2026", "30/09/2026", "01/10/2026"]
+    vigente = com_vigencia(acordo([10]), inicio="30/09/2026", status="active")
+    resultado = rodar.processar(compras, vigente)
+    assert resultado["Status"].tolist() == ["SEM ACORDO", "CONFORME", "CONFORME"]
+
+
+def test_fim_da_vigencia_e_inclusivo(rodar):
+    compras = base(qtd=2, preco=10)
+    compras["Data Abertura"] = ["30/09/2026", "01/10/2026"]
+    vigente = com_vigencia(acordo([10]), inicio="18/09/2026", fim="30/09/2026")
+    resultado = rodar.processar(compras, vigente)
+    assert resultado["Status"].tolist() == ["CONFORME", "SEM ACORDO"]
+
+
 def test_precos_iguais_na_precisao_monetaria(rodar):
     ac = acordo([10.0, 10.0000000001])
     ac["PRECO"] = pd.to_numeric(ac["PRECO"]).round(2)
@@ -37,25 +68,23 @@ def test_precos_iguais_na_precisao_monetaria(rodar):
     assert resultado.loc[0, "Status"] == "CONFORME"
 
 
-def test_carregamento_arredonda_e_rejeita_preco_nao_finito(rodar, monkeypatch):
+def test_carregamento_arredonda_e_rejeita_preco_nao_finito(rodar):
     bruto = pd.DataFrame({
         "MODELO": ["M"] * 5, "PECA_SERVICO": ["ITEM"] * 5,
         "CIDADE": ["X"] * 5, "CNPJ": ["1"] * 5,
         "PRECO": [10, 10.0000000001, 0, -1, np.inf], "FORNECEDOR": ["F"] * 5,
     })
-    monkeypatch.setattr(pd, "read_excel", lambda *args, **kwargs: bruto.copy())
-    carregado = rodar.carregar_acordo("falso.xlsx")
+    carregado = rodar._preparar_acordos(bruto)
     assert carregado.loc[0, "PRECO"] == carregado.loc[1, "PRECO"] == 10.0
     assert carregado["_preco_valido"].tolist() == [True, True, True, False, False]
 
 
-def test_celula_vazia_de_preco_nao_vira_cortesia(rodar, monkeypatch):
+def test_celula_vazia_de_preco_nao_vira_cortesia(rodar):
     bruto = pd.DataFrame({
         "MODELO": ["M"], "PECA_SERVICO": ["ITEM"], "CIDADE": ["X"],
         "CNPJ": ["1"], "PRECO": [""], "FORNECEDOR": ["F"],
     })
-    monkeypatch.setattr(pd, "read_excel", lambda *args, **kwargs: bruto.copy())
-    carregado = rodar.carregar_acordo("falso.xlsx")
+    carregado = rodar._preparar_acordos(bruto)
     assert not bool(carregado.loc[0, "_preco_valido"])
 
 

@@ -107,6 +107,19 @@ git merge --ff-only $remoto --quiet
 if ($LASTEXITCODE -ne 0) { throw 'Falha ao aplicar a nova versao. Operacao permanece parada; confira o repositorio antes de reiniciar.' }
 Ok "agora em $($remoto.Substring(0,7))"
 
+# O Portal e os Alertas compartilham uma credencial local para que o motor de
+# relatorios leia os acordos sem depender da sessao de uma pessoa. Instalacoes
+# antigas recebem a chave automaticamente, antes do build que a incorpora.
+$portalEnv = Join-Path $Raiz 'privado\portal\configuracao\portal.env'
+$temToken = (Test-Path $portalEnv) -and (@(Get-Content $portalEnv) | Where-Object { $_ -match '^\s*PORTAL_API_TOKEN\s*=\s*\S+' })
+if (-not $temToken) {
+  $bytes = New-Object byte[] 32
+  [Security.Cryptography.RandomNumberGenerator]::Fill($bytes)
+  $token = [Convert]::ToHexString($bytes).ToLowerInvariant()
+  Add-Content -LiteralPath $portalEnv -Value "`r`nPORTAL_API_TOKEN=$token" -Encoding utf8
+  Ok 'credencial interna do Portal criada na configuracao privada'
+}
+
 if ($mexeuNode) {
   Etapa 'Dependencias Node mudaram: npm ci'
   Push-Location $Portal; & npm ci --no-audit --no-fund; $rc = $LASTEXITCODE; Pop-Location

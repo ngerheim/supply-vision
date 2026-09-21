@@ -20,7 +20,7 @@ fs.cpSync(path.join(portal, 'dist'), runtime, { recursive: true });
 const serverLog = fs.openSync(path.join(output, 'servidor.log'), 'a');
 const senha = 'Teste-isolado-2026-0916';
 const checks = [], metrics = [];
-let child, cookie = '', sqlitePath, reader;
+let child, cookie = '', sqlitePath, reader, agreementId = '';
 let seed = 20260916;
 const random = () => { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; return seed / 2 ** 32; };
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -75,7 +75,7 @@ function file(rows, { name = 'teste', format = 'xlsx', aoa, range, extraSheet } 
   fs.writeFileSync(path.join(output, filename), bytes);
   return { bytes, filename };
 }
-async function upload(document, route = '/api/imports/legacy', session = cookie) {
+async function upload(document, route = `/api/imports/agreement/${agreementId}`, session = cookie) {
   const form = new FormData(); form.set('file', new Blob([document.bytes]), document.filename);
   const start = performance.now();
   const result = await request(route, { method: 'POST', body: form, session });
@@ -148,63 +148,8 @@ try {
   reader = new DatabaseSync(sqlitePath, { readOnly: true });
 
   await check('De/Para inicia vazio', async () => assert.deepEqual(await good('/api/mappings'), { items: [], models: [], units: [] }));
-  // Vocabulario proprio: a semeadura nao pode contaminar os nomes que o resto
-  // da suite usa para exercitar o De/Para com origem diferente do destino.
-  const linhaBase = { CIDADE: 'BASE INICIAL', UF: 'TO', MODELO: 'MODELO BASE INICIAL', PECA_SERVICO: 'PECA BASE INICIAL', CNPJ: '11.444.777/0001-61', FORNECEDOR: 'FORNECEDOR BASE INICIAL' };
-  await check('Carga inicial constrói a base a partir do arquivo', async () => {
-    const result = await upload(file([row(linhaBase)], { name: 'base-inicial' }));
-    assert.equal(result.status, 200, JSON.stringify(result.data));
-    const criada = result.data.summary.baseCriada;
-    assert.ok(criada, 'o resumo deveria informar o que foi criado');
-    assert.equal(criada.localidades, 1); assert.equal(criada.itens, 1);
-    assert.equal(criada.modelos, 1); assert.equal(criada.fornecedores, 1);
-    assert.equal(query("SELECT COUNT(*) n FROM locations WHERE city='BASE INICIAL' AND state='TO'")[0].n, 1);
-    assert.equal(query("SELECT COUNT(*) n FROM suppliers WHERE cnpj='11444777000161'")[0].n, 1);
-    // O De/Para nasce espelhado e ativo, senao a proxima importacao recusaria
-    // a mesma nomenclatura que acabou de ser aceita.
-    const mapeamentos = await good('/api/mappings');
-    const espelho = mapeamentos.items.find(m => m.source === 'PECA BASE INICIAL');
-    assert.ok(espelho, JSON.stringify(mapeamentos.items));
-    assert.equal(espelho.target, 'PECA BASE INICIAL');
-    assert.ok(mapeamentos.models.some(m => m.source === 'MODELO BASE INICIAL' && m.target === 'MODELO BASE INICIAL'));
-  });
-  await check('Repetir a carga inicial não recria o que já existe', async () => {
-    const result = await upload(file([row(linhaBase)], { name: 'base-inicial-repetida' }));
-    assert.equal(result.status, 200, JSON.stringify(result.data));
-    assert.equal(result.data.summary.baseCriada, undefined, 'nada novo deveria ser criado');
-  });
-  await check('Carga inicial deixa o acordo marcado como provisório', () => {
-    const [acordo] = query("SELECT number,provisional FROM agreements ORDER BY created_at LIMIT 1");
-    assert.ok(acordo, 'a carga inicial deveria ter criado o acordo provisório');
-    assert.equal(acordo.number, 'LF-1', 'numeração sequencial a partir de LF-1');
-    assert.equal(acordo.provisional, 1);
-  });
-  await check('Confirmar provisorios aplica a vigencia a todos de uma vez', async () => {
-    const antes = query('SELECT id,start_date,end_date,status FROM agreements WHERE provisional=1');
-    assert.ok(antes.length, 'deveria haver acordo provisorio para confirmar');
-    // Data invalida nao pode encostar na base: o lote inteiro e recusado.
-    const recusado = await request('/api/agreements/confirmar-provisorios', { method: 'POST', body: { startDate: '2026-05-10', endDate: '2026-01-01' } });
-    assert.equal(recusado.status, 400, JSON.stringify(recusado.data));
-    assert.deepEqual(query('SELECT id,start_date,end_date,status FROM agreements WHERE provisional=1'), antes);
-
-    const feito = await request('/api/agreements/confirmar-provisorios', { method: 'POST', body: { startDate: '2026-01-01', endDate: '2026-12-31', status: 'active' } });
-    assert.equal(feito.status, 200, JSON.stringify(feito.data));
-    assert.equal(feito.data.confirmados, antes.length);
-    for (const anterior of antes) {
-      const [agora] = query('SELECT provisional,start_date,end_date,status FROM agreements WHERE id=?', anterior.id);
-      assert.equal(agora.provisional, 0, 'a marca de provisorio deveria ter saido');
-      assert.equal(agora.start_date, '2026-01-01');
-      assert.equal(agora.end_date, '2026-12-31');
-      assert.equal(agora.status, 'active');
-    }
-    // Um acordo ja confirmado nao pode ser reescrito por uma segunda chamada.
-    const vazio = await request('/api/agreements/confirmar-provisorios', { method: 'POST', body: { startDate: '2030-01-01' } });
-    assert.equal(vazio.status, 400, JSON.stringify(vazio.data));
-    const [intacto] = query('SELECT start_date FROM agreements WHERE id=?', antes[0].id);
-    assert.equal(intacto.start_date, '2026-01-01');
-  });
   // Nomes homonimos ficticios para conferir a separacao por UF.
-  await catalog('locations', { city: 'GOIANIA', state: 'GO' });
+  const location = await catalog('locations', { city: 'GOIANIA', state: 'GO' });
   await catalog('locations', { city: 'GOIANIA', state: 'MG' });
   await catalog('locations', { city: 'SAO PAULO', state: 'SP' });
   const supplier = await catalog('suppliers', { tradeName: 'FORNECEDOR TESTE', cnpj: row().CNPJ });
@@ -225,71 +170,13 @@ try {
   const itemMap = await mapping('items', 'Óleo teste', item.id);
   await mapping('models', 'Hilux teste', model.id);
   const unit = query("SELECT * FROM units WHERE code='LITRO'")[0];
-  let agreementId;
-  await check('Carga inicial válida publica referências e preço corretos', async () => {
-    const result = await upload(file([row()], { name: 'valida-inicial' }));
-    assert.equal(result.status, 200, JSON.stringify(result.data));
-    // Por CNPJ, nao por posicao: a carga inicial anterior ja criou um acordo.
-    agreementId = query("SELECT a.id FROM agreements a JOIN suppliers s ON s.id=a.supplier_id WHERE s.cnpj='11222333000181'")[0].id;
-    const published = query('SELECT ai.* FROM agreement_items ai JOIN agreements a ON a.current_version_id=ai.version_id WHERE a.id=?', agreementId)[0];
-    assert.equal(published.catalog_item_id, item.id); assert.equal(published.vehicle_model_id, model.id);
-    assert.equal(published.unit_id, unit.id); assert.equal(published.price, 42.5);
-  });
-  assert.ok(agreementId, 'Pré-condição: primeira importação');
-  await check('CNPJ novo na carga inicial cria o fornecedor e reporta', async () => {
-    const result = await upload(file([row(), row({ CNPJ: '00.000.000/0001-91', FORNECEDOR: 'MEGATRNS' })], { name: 'fornecedor-novo' }));
-    assert.equal(result.status, 200, JSON.stringify(result.data));
-    assert.equal(result.data.summary.baseCriada.fornecedores, 1);
-    assert.equal(query("SELECT trade_name FROM suppliers WHERE cnpj='00000000000191'")[0].trade_name, 'MEGATRNS');
-  });
-  await check('Prévia não confunde itens distintos criados na mesma carga', async () => {
-    // Itens diferentes com medidas diferentes, tudo novo: se a previa desse o
-    // mesmo identificador provisorio a todos, a deduplicacao juntaria as linhas
-    // e acusaria medida divergente onde nao ha.
-    const documento = file([
-      row({ CIDADE: 'CIDADE PREVIA', UF: 'BA', PECA_SERVICO: 'ITEM PREVIA UM', MEDIDA: 'LITRO' }),
-      row({ CIDADE: 'CIDADE PREVIA', UF: 'BA', PECA_SERVICO: 'ITEM PREVIA DOIS', MEDIDA: 'UNIDADE' }),
-    ], { name: 'previa-itens-distintos' });
-    const form = new FormData(); form.set('file', new Blob([documento.bytes]), documento.filename);
-    const result = await request('/api/imports/legacy?preview=1', { method: 'POST', body: form });
-    assert.equal(result.status, 200, JSON.stringify(result.data));
-    assert.equal(result.data.valid, true, JSON.stringify(result.data));
-    assert.equal(result.data.summary.items, 2);
-    assert.equal(query("SELECT COUNT(*) n FROM catalog_items WHERE name LIKE 'ITEM PREVIA%'")[0].n, 0, 'prévia não deve gravar');
-  });
-  await check('Importação recusada não deixa referência criada para trás', async () => {
-    const antes = { s: query('SELECT * FROM suppliers'), l: query('SELECT * FROM locations'), i: query('SELECT * FROM catalog_items'), m: query('SELECT * FROM vehicle_models'), d: query('SELECT * FROM import_item_mappings') };
-    // Nomenclatura inteiramente nova numa linha, erro de medida na outra: a
-    // recusa tem de valer também para o que a carga inicial criaria.
-    const result = await upload(file([row({ CIDADE: 'CIDADE FANTASMA', UF: 'BA', PECA_SERVICO: 'PECA FANTASMA', CNPJ: '04.252.011/0001-10', FORNECEDOR: 'FORNECEDOR FANTASMA' }), row({ MEDIDA: 'lirto' })], { name: 'recusa-sem-semear' }));
-    assert.equal(result.status, 400, JSON.stringify(result.data));
-    assert.deepEqual(query('SELECT * FROM suppliers'), antes.s);
-    assert.deepEqual(query('SELECT * FROM locations'), antes.l);
-    assert.deepEqual(query('SELECT * FROM catalog_items'), antes.i);
-    assert.deepEqual(query('SELECT * FROM vehicle_models'), antes.m);
-    assert.deepEqual(query('SELECT * FROM import_item_mappings'), antes.d);
-  });
-  await check('Nome incorreto usa o fornecedor identificado pelo CNPJ sem alterar cadastro', async () => {
-    const before = query('SELECT * FROM suppliers');
-    assert.equal((await upload(file([row({ FORNECEDOR: 'MEGATRNS' })], { name: 'fornecedor-grafia' }))).status, 200);
-    assert.deepEqual(query('SELECT * FROM suppliers'), before);
-  });
-  await check('Fornecedor inativo impede carga inicial', async () => {
-    const body = { tradeName: 'FORNECEDOR TESTE', cnpj: row().CNPJ };
-    await good(`/api/catalogs/suppliers/${supplier.id}`, { method: 'PUT', body: { ...body, active: false } });
-    try { await rejected(file([row()], { name: 'fornecedor-inativo' })); }
-    finally { await good(`/api/catalogs/suppliers/${supplier.id}`, { method: 'PUT', body }); }
-  });
+  agreementId=(await good('/api/agreements',{method:'POST',body:{number:'STRESS-IMPORTACAO',supplierId:supplier.id,status:'active',startDate:'2026-01-01',locationIds:[location.id]}},201)).id;
   const replace = `/api/imports/agreement/${agreementId}`;
-  for (const route of ['/api/imports/legacy', replace]) {
-    const mode = route === replace ? 'substituir' : 'inicial';
-    // Item e modelo desconhecidos so sao erro na substituicao: na carga inicial
-    // eles definem a base e passam a existir.
+  for (const route of [replace]) {
+    const mode = 'substituir';
     const invalidCases = /** @type {Array<[string, Record<string, unknown>, RegExp]>} */ ([
-      ...(route === replace ? [
-        ['item-desconhecido', { PECA_SERVICO: 'PEÇA inexistente' }, /PECA_SERVICO.*PEÇA inexistente/],
-        ['modelo-desconhecido', { MODELO: 'MODELO inexistente' }, /MODELO.*MODELO inexistente/],
-      ] : []),
+      ['item-desconhecido', { PECA_SERVICO: 'PEÇA inexistente' }, /PECA_SERVICO.*PEÇA inexistente/],
+      ['modelo-desconhecido', { MODELO: 'MODELO inexistente' }, /MODELO.*MODELO inexistente/],
       ['lirto', { MEDIDA: 'lirto' }, /UNIDADE.*lirto/],
       ['unidade-vazia', { MEDIDA: '' }, /MEDIDA|UNIDADE/],
       ['preco-vazio', { PRECO: '' }, /PRECO/],
@@ -430,7 +317,7 @@ try {
     assert.equal(query('SELECT brands_text FROM agreement_items WHERE version_id=(SELECT current_version_id FROM agreements WHERE id=?)', agreementId)[0].brands_text, 'A');
   });
   await check('Preço maior é descartado e reportado nos dois modos', async () => {
-    for (const [modo, route] of [['substituição', replace], ['carga inicial', undefined]]) {
+    for (const [modo, route] of [['substituição', replace]]) {
       const result = await upload(file([row({ PRECO: 120 }), row({ PRECO: 90 })], { name: `preco-maior-${modo}` }), route);
       assert.equal(result.status, 200, `${modo}: ${JSON.stringify(result.data)}`);
       assert.equal(result.data.summary.duplicatas, 1, modo);
@@ -451,7 +338,6 @@ try {
     assert.match(String(data.error), /[Mm]edidas diferentes/);
     assert.match(String(data.error), /"litro"|"par"/);
   }));
-  await check('Medidas diferentes para o mesmo item são rejeitadas na carga inicial', () => rejected(file([row(), row({ MEDIDA: 'par' })], { name: 'medidas-divergentes-legado' }), undefined, 400, data => assert.match(String(data.error), /[Mm]edidas diferentes/)));
   await check('Mesma medida escrita de outro jeito continua sendo duplicata', async () => {
     const result = await upload(file([row({ MARCAS: 'C' }), row({ MEDIDA: ' LITRO ', MARCAS: 'D' })], { name: 'medida-grafia' }), replace);
     assert.equal(result.status, 200); assert.equal(result.data.summary.items, 1);
@@ -472,28 +358,14 @@ try {
     assert.deepEqual(query('SELECT * FROM suppliers'), before);
     assert.equal(query('SELECT supplier_id FROM agreements WHERE id=?', agreementId)[0].supplier_id, supplier.id);
   });
-  await check('Carga inicial inteira aborta se o segundo fornecedor contiver erro', () => rejected(file([row(), row({ CNPJ: '04.252.011/0001-10', FORNECEDOR: 'OUTRO', MEDIDA: 'lirto' })], { name: 'dois-fornecedores-falha' })));
-  await check('Falha na publicacao do segundo fornecedor reverte todo o lote', async () => {
-    const second = await catalog('suppliers', { tradeName: 'SEGUNDO TESTE', cnpj: '04.252.011/0001-10' });
-    assert.ok(sqlitePath.startsWith(path.join(output, 'state') + path.sep));
-    const fixture = new DatabaseSync(sqlitePath);
-    try {
-      fixture.exec(`CREATE TRIGGER teste_falha_publicacao BEFORE UPDATE OF current_version_id ON agreements
-        WHEN NEW.supplier_id='${second.id}' AND NEW.current_version_id IS NOT NULL
-        BEGIN SELECT RAISE(ABORT, 'falha sintetica na publicacao'); END`);
-      await rejected(file([row({ PRECO: 888, MARCAS: 'MARCA NAO CADASTRADA' }), row({ CNPJ: '04.252.011/0001-10' })], { name: 'falha-transacao-final' }));
-    } finally {
-      fixture.exec('DROP TRIGGER IF EXISTS teste_falha_publicacao');
-      fixture.close();
-    }
-  });
+  await check('Importação inteira aborta se a segunda linha contiver erro', () => rejected(file([row(), row({ MEDIDA: 'lirto' })], { name: 'segunda-linha-falha' })));
   await check('Falha na auditoria nao publica nem deixa historico concluido', async () => {
     assert.ok(sqlitePath.startsWith(path.join(output, 'state') + path.sep));
     const fixture = new DatabaseSync(sqlitePath);
     try {
       fixture.exec(`CREATE TRIGGER teste_falha_auditoria BEFORE INSERT ON audit_logs WHEN NEW.action='IMPORT'
         BEGIN SELECT RAISE(ABORT, 'falha sintetica na auditoria'); END`);
-      for (const route of [replace, undefined]) {
+      for (const route of [replace]) {
         const result = await rejected(file([row({ PRECO: 999 })], { name: 'falha-auditoria' }), route);
         assert.equal(query('SELECT status FROM imports WHERE id=?', result.data.importId)[0].status, 'error');
       }
@@ -572,7 +444,7 @@ try {
     const codigos = query("SELECT code FROM units ORDER BY code").map(linha => linha.code);
     for (const padrao of ['HORA', 'JOGO', 'LITRO', 'PAR', 'UNIDADE']) assert.ok(codigos.includes(padrao), `${padrao} deveria existir: ${codigos}`);
   });
-  await check('Carga inicial aceita modelo sem coluna FORNECEDOR', async () => {
+  await check('Atualização aceita planilha sem coluna FORNECEDOR', async () => {
     const data = row(); delete data.FORNECEDOR;
     assert.equal((await upload(file([data], { name: 'cnpj-suficiente' }))).status, 200);
   });

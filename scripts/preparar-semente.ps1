@@ -63,7 +63,7 @@ $sha = (Get-FileHash (Join-Path $temp 'banco\portal.sqlite') -Algorithm SHA256).
   revisar = @(
     'privado\portal\configuracao\portal.env -> PORTAL_URL (IP desta maquina)',
     'privado\portal\configuracao\portal.env -> BACKUP_NETWORK_DIR (acesso a rede)',
-    'privado\alertas\config\cfg_ambiente.txt -> ACORDO_PATH (acesso a rede)',
+    'privado\portal\configuracao\portal.env -> PORTAL_API_TOKEN (gerado automaticamente na atualizacao)',
     'privado\comum\operacao.env -> LIMPEZA_HORARIO deve cair na janela em que a maquina fica logada'
   )
 } | ConvertTo-Json -Depth 4 | Set-Content (Join-Path $temp 'semente.json') -Encoding UTF8

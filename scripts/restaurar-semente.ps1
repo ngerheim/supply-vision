@@ -64,7 +64,7 @@ foreach ($r in $meta.revisar) { Write-Host "   [ ] $r" -ForegroundColor Yellow }
 Write-Host ''
 Write-Host '   valores atuais (herdados da maquina de origem):' -ForegroundColor DarkGray
 Get-Content (Join-Path $Privado 'portal\configuracao\portal.env') | ForEach-Object { Write-Host "      $_" -ForegroundColor DarkGray }
-Get-Content (Join-Path $Privado 'alertas\config\cfg_ambiente.txt') | Where-Object { $_ -like 'ACORDO_PATH*' } | ForEach-Object { Write-Host "      $_" -ForegroundColor DarkGray }
+Get-Content (Join-Path $Privado 'portal\configuracao\portal.env') | Where-Object { $_ -like 'PORTAL_URL*' } | ForEach-Object { Write-Host "      $_" -ForegroundColor DarkGray }
 Get-Content (Join-Path $Privado 'comum\operacao.env') | Where-Object { $_ -like '*HORARIO*' } | ForEach-Object { Write-Host "      $_" -ForegroundColor DarkGray }
 
 Write-Host ''

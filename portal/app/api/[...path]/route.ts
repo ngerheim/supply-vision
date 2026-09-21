@@ -100,6 +100,14 @@ function rejectCrossOrigin(request: Request) {
   }
 }
 
+function tokenInternoValido(request: Request) {
+  const recebido = request.headers.get('authorization')?.replace(/^Bearer\s+/i, '') || '';
+  if (!__PORTAL_API_TOKEN__ || recebido.length !== __PORTAL_API_TOKEN__.length) return false;
+  let diferenca = 0;
+  for (let i = 0; i < recebido.length; i++) diferenca |= recebido.charCodeAt(i) ^ __PORTAL_API_TOKEN__.charCodeAt(i);
+  return diferenca === 0;
+}
+
 // Erro com codigo proprio para corpo excessivo: quem chama devolve 413 em vez
 // de tratar como JSON invalido.
 class CorpoGrandeDemais extends Error {
@@ -161,6 +169,10 @@ export async function GET(request: NextRequest) {
   const parts = partsOf(request);
   if (parts[0] === 'health') return ok({ app: 'portal-suprimentos', status: 'ok', schemaVersion: 1 });
   if (parts[0] === 'session') return ok({ user: await currentUser(request) });
+  if (parts[0] === 'internal' && parts[1] === 'agreements') {
+    if (!tokenInternoValido(request)) return fail('Credencial interna inválida.', 401);
+    return internalAgreements();
+  }
   const user = await requireUser(request);
   if (!user) return fail('Sessão expirada.', 401);
 
@@ -1658,4 +1670,16 @@ async function exportAgreements(){
     'cache-control':'no-store','content-type':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     'content-disposition':`attachment; filename="ACORDOS-${now().slice(0,10)}.xlsx"`,'x-content-type-options':'nosniff',
   }});
+}
+
+async function internalAgreements(){
+  const agreements=await all(`SELECT vm.name MODELO,ci.name PECA_SERVICO,l.city CIDADE,l.state UF,s.cnpj CNPJ,
+    ai.price PRECO,s.trade_name FORNECEDOR,un.code MEDIDA,COALESCE(ai.brands_text,'') MARCAS,
+    a.start_date INICIO_VIGENCIA,a.end_date FIM_VIGENCIA,a.status STATUS_ACORDO
+    FROM agreements a JOIN suppliers s ON s.id=a.supplier_id
+    JOIN agreement_items ai ON ai.version_id=a.current_version_id
+    JOIN catalog_items ci ON ci.id=ai.catalog_item_id JOIN vehicle_models vm ON vm.id=ai.vehicle_model_id
+    JOIN units un ON un.id=ai.unit_id JOIN locations l ON l.id=ai.location_id
+    ORDER BY s.trade_name,vm.name,ci.name,l.state,l.city,ai.id`);
+  return ok({generatedAt:now(),agreements});
 }
