@@ -9,8 +9,9 @@
 #
 #   .\scripts\atualizar-servidor.ps1            aplica
 #   .\scripts\atualizar-servidor.ps1 -Simular   so mostra o que viria
+#   .\scripts\atualizar-servidor.ps1 -Reaplicar reconstroi a versao atual
 [CmdletBinding()]
-param([switch]$Simular)
+param([switch]$Simular,[switch]$Reaplicar)
 
 $ErrorActionPreference = 'Stop'
 $Raiz = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
@@ -65,10 +66,14 @@ if ($LASTEXITCODE -ne 0) { throw 'Nao foi possivel identificar origin/main.' }
 $remoto = $remoto.Trim()
 git merge-base --is-ancestor $anterior $remoto
 if ($LASTEXITCODE -ne 0) { throw 'Ha commits locais ou historico divergente. Atualizacao cancelada para preservar o trabalho local.' }
-if ($remoto -eq $anterior) { Ok 'Ja esta na versao mais recente. Nada a fazer.'; exit 0 }
+if ($remoto -eq $anterior -and -not $Reaplicar) { Ok 'Ja esta na versao mais recente. Nada a fazer.'; exit 0 }
 
-Write-Host '   commits a aplicar:'
-git log --oneline "$anterior..$remoto" | ForEach-Object { Write-Host "      $_" }
+if ($Reaplicar -and $remoto -eq $anterior) {
+  Aviso 'modo de reparo: a versao atual sera reconstruida e validada novamente'
+} else {
+  Write-Host '   commits a aplicar:'
+  git log --oneline "$anterior..$remoto" | ForEach-Object { Write-Host "      $_" }
+}
 $mudou = git diff --name-only "$anterior..$remoto"
 $mexeuNode = $mudou | Where-Object { $_ -eq 'portal/package-lock.json' -or $_ -eq 'portal/package.json' }
 $mexeuPython = $mudou | Where-Object { $_ -like 'alertas/config/requirements*' }
