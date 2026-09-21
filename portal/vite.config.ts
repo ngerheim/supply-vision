@@ -74,6 +74,7 @@ export default defineConfig(async () => {
     define: {
       __PBI_RELATORIO_URL__: JSON.stringify(lerPortalEnv('PBI_RELATORIO_URL', PBI_URL_PADRAO)),
       __PBI_PAGINA__: JSON.stringify(lerPortalEnv('PBI_PAGINA', PBI_PAGINA_PADRAO)),
+      __PORTAL_API_TOKEN__: JSON.stringify(lerPortalEnv('PORTAL_API_TOKEN', '')),
     },
     css: { postcss: { plugins: [tailwindcss()] } },
     server: {

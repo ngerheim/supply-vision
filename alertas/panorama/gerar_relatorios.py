@@ -38,7 +38,6 @@ import rodar
 
 BASE_PATH   = str(sv_paths.DADOS_DIR / 'base_periodo.xlsx')
 META_PATH   = str(sv_paths.DADOS_DIR / 'base_periodo.info.txt')
-ACORDO_PATH = rodar.ACORDO_PATH
 OUTPUT_DIR  = sv_paths.RELATORIOS_HISTORICOS
 
 
@@ -86,7 +85,7 @@ def gerar():
         print('       Nenhum relatório gerado.')
         return False
 
-    df_acordo = rodar.carregar_acordo(ACORDO_PATH)
+    df_acordo = rodar.carregar_acordos_portal()
     print(f'  Base: {len(df_base):,} linhas | Acordo: {len(df_acordo):,} linhas')
 
     print('Processando...')

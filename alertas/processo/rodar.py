@@ -1,7 +1,7 @@
 """
 Motor de negócio do Supply Vision.
 
-Carrega a base extraída do Qlik e a planilha de acordos, normaliza os dois
+Carrega a base extraída do Qlik e os acordos do Portal, normaliza os dois
 vocabulários, cruza por cidade + CNPJ + modelo + item e classifica cada linha.
 
 Gera os relatórios operacionais e um CSV com a fila de qualidade da base de
@@ -11,10 +11,9 @@ Usado pelo pipeline diário e pelo recorte histórico: as duas frentes chamam
 carregar_base, carregar_acordo, processar e gerar_* daqui, então classificam
 identicamente.
 """
-import json, os, re, sys, time, pathlib, pandas as pd, numpy as np, xlsxwriter
+import json, os, re, sys, time, pathlib, urllib.error, urllib.request, pandas as pd, numpy as np, xlsxwriter
 from datetime import datetime
 from xlsxwriter.utility import xl_col_to_name
-from zipfile import BadZipFile
 
 for _s in (sys.stdout, sys.stderr):
     try:
@@ -33,7 +32,8 @@ from parametros import (FORNECEDORES_EXCLUIR, GRUPOS_EXCLUIR, ITENS_EXCLUIR,
 
 
 BASE_PATH   = str(sv_paths.BASE_PATH)
-ACORDO_PATH = str(sv_paths.ACORDO_PATH)
+PORTAL_URL = str(sv_paths.PORTAL_URL)
+PORTAL_API_TOKEN = str(sv_paths.PORTAL_API_TOKEN)
 OUTPUT_DIR  = str(sv_paths.RELATORIOS_DIARIOS)
 
 ACORDO_TENTATIVAS  = 5
@@ -137,24 +137,11 @@ def carregar_base(path):
     df = _filtra(df, df["Valor Unitario"].isna() | (df["Valor Unitario"] == 0), "Sem valor")
     return df
 
-def carregar_acordo(path):
-    df = None
-    for i in range(1, ACORDO_TENTATIVAS + 1):
-        try:
-            df = pd.read_excel(path, sheet_name="ACORDO", dtype=str)
-            break
-        except (OSError, BadZipFile) as e:
-            if i == ACORDO_TENTATIVAS:
-                print(f"ERRO: ACORDOS.xlsx inacessível após {ACORDO_TENTATIVAS} tentativas "
-                      f"({type(e).__name__}: {e}).")
-                print("      Causa típica: planilha aberta no Excel durante o salvamento.")
-                raise
-            print(f"AVISO: ACORDOS.xlsx indisponível ({type(e).__name__}) — "
-                  f"tentativa {i}/{ACORDO_TENTATIVAS}; aguardando {ACORDO_INTERVALO_S}s...")
-            time.sleep(ACORDO_INTERVALO_S)
+def _preparar_acordos(df):
+    df = df.copy()
     df.columns = df.columns.str.strip().str.upper()
     _validar_colunas(df, ["MODELO", "PECA_SERVICO", "CIDADE", "CNPJ",
-                          "PRECO", "FORNECEDOR"], "ACORDOS.xlsx (aba ACORDO)")
+                          "PRECO", "FORNECEDOR"], "banco de acordos do Portal")
     df["_modelo_norm"] = df["MODELO"].apply(_norm)
     df["_peca_norm"]   = df["PECA_SERVICO"].apply(_norm)
     df["_cidade_norm"] = df["CIDADE"].apply(_norm)
@@ -165,10 +152,40 @@ def carregar_acordo(path):
     df["_preco_valido"] = np.isfinite(df["PRECO"]) & (df["PRECO"] >= 0)
     n_inval = int((~df["_preco_valido"]).sum())
     if n_inval:
-        print(f"AVISO: {n_inval} linha(s) da ACORDOS.xlsx com preço inválido "
+        print(f"AVISO: {n_inval} condição(ões) do Portal com preço inválido "
               f"(vazio, não numérico ou negativo). As compras que casarem com "
               f"elas saem como '{STATUS_PRECO_INVALIDO}', não como sem acordo.")
     return df
+
+
+def carregar_acordos_portal(url=PORTAL_URL, token=PORTAL_API_TOKEN):
+    """Obtém a tabela vigente diretamente do banco mantido pelo Portal."""
+    if not url or not token:
+        raise RuntimeError("PORTAL_URL e PORTAL_API_TOKEN precisam estar configurados para carregar os acordos")
+    endpoint = f"{url.rstrip('/')}/api/internal/agreements"
+    ultimo_erro = None
+    for tentativa in range(1, ACORDO_TENTATIVAS + 1):
+        try:
+            requisicao = urllib.request.Request(
+                endpoint, headers={"Authorization": f"Bearer {token}", "Accept": "application/json"}
+            )
+            with urllib.request.urlopen(requisicao, timeout=60) as resposta:
+                payload = json.loads(resposta.read().decode("utf-8"))
+            df = pd.DataFrame(payload.get("agreements", []))
+            if df.empty:
+                raise RuntimeError("o Portal devolveu uma tabela de acordos vazia")
+            df.columns = df.columns.str.strip().str.upper()
+            _validar_colunas(df, ["MODELO", "PECA_SERVICO", "CIDADE", "CNPJ", "PRECO",
+                                  "FORNECEDOR", "INICIO_VIGENCIA", "FIM_VIGENCIA", "STATUS_ACORDO"],
+                             "banco de acordos do Portal")
+            return _preparar_acordos(df)
+        except (OSError, ValueError, KeyError, RuntimeError, urllib.error.URLError) as erro:
+            ultimo_erro = erro
+            if tentativa < ACORDO_TENTATIVAS:
+                print(f"AVISO: banco de acordos do Portal indisponível — tentativa "
+                      f"{tentativa}/{ACORDO_TENTATIVAS}; aguardando {ACORDO_INTERVALO_S}s...")
+                time.sleep(ACORDO_INTERVALO_S)
+    raise RuntimeError(f"não foi possível carregar os acordos do Portal: {ultimo_erro}") from ultimo_erro
 
 
 
@@ -176,12 +193,12 @@ def _validar_parametros(df_acordo):
     """Guarda-corpo dos parâmetros de universo (SINONIMOS / MODELOS).
 
     O merge com o acordo é por igualdade exata de string. Se um DESTINO de
-    sinônimo não existe na ACORDOS.xlsx, a linha nunca casa e cai em
+    sinônimo não existe nos acordos do Portal, a linha nunca casa e cai em
     SEM ACORDO sem nenhum sinal — o percentual sobe e parece comportamento de
     compra.
 
     Duas checagens, ambas só avisam (não derrubam o pipeline):
-      1) destino inexistente na ACORDOS.xlsx  -> sinônimo morto;
+      1) destino inexistente no Portal -> sinônimo morto;
       2) chave mais frequente que o destino   -> sinônimo INVERTIDO, isto é,
          está reescrevendo o nome canônico (centenas de linhas de acordo) para
          uma variante rara. Pior que não ter sinônimo nenhum.
@@ -200,7 +217,7 @@ def _validar_parametros(df_acordo):
             invertidos.append((chave, freq.get(k, 0), destino, freq.get(v, 0)))
 
     if mortos:
-        print(f"AVISO: {len(mortos)} sinônimo(s) com destino inexistente na ACORDOS.xlsx "
+        print(f"AVISO: {len(mortos)} sinônimo(s) com destino inexistente nos acordos do Portal "
               "(a linha nunca casará):")
         for chave, destino in sorted(mortos)[:20]:
             print(f"       {chave!r} -> {destino!r}")
@@ -246,14 +263,14 @@ def _validar_parametros(df_acordo):
     if len(dup):
         print(f"AVISO: {len(dup)} chave(s) do acordo com PREÇO DIVERGENTE — as "
               f"compras correspondentes saem como '{STATUS_AMBIGUO}' e ficam "
-              f"fora dos indicadores; corrigir na ACORDOS.xlsx:")
+              f"fora dos indicadores; corrigir no Portal:")
         for (_, cid, mod, peca), r in dup.head(20).iterrows():
             print(f"       {cid} | {mod} | {peca}: R$ {r['min']:,.2f} vs R$ {r['max']:,.2f}")
         if len(dup) > 20:
             print(f"       (+{len(dup) - 20} não listadas)")
 
     if not (mortos or invertidos or raros or len(dup)):
-        print("  Parâmetros de universo: sem inconsistências contra a ACORDOS.xlsx.")
+        print("  Parâmetros de universo: sem inconsistências contra os acordos do Portal.")
 
 
 MOTIVO_NAO_COMPARAVEL = "Sem equivalente"
@@ -314,9 +331,7 @@ def _motivo_sem_acordo(m, df_acordo, sem_ac):
     return pd.Series(motivos, index=m.index)
 
 
-def processar(df_base, df_acordo):
-    _validar_parametros(df_acordo)
-
+def _processar_periodo(df_base, df_acordo):
     df = df_base.copy()
     df["_modelo_ac"]  = df["Modelo"].map(MODELOS).fillna(df["Modelo"]).apply(_norm)
     sin_map  = {k: v for k, v in SINONIMOS.items() if v is not None}
@@ -431,6 +446,48 @@ def processar(df_base, df_acordo):
         "Fornecedor do Acordo":    fornec_ref.fillna(""),
         "Dif. p/ Menor Acordo":    dif_referencia,
     })
+
+
+CORTE_VIGENCIA_ACORDOS = pd.Timestamp("2026-09-18")
+
+
+def _acordos_vigentes_em(df_acordo, data_compra):
+    inicio = pd.to_datetime(df_acordo["INICIO_VIGENCIA"], format="mixed", dayfirst=True, errors="coerce").dt.normalize()
+    fim = pd.to_datetime(df_acordo["FIM_VIGENCIA"], format="mixed", dayfirst=True, errors="coerce").dt.normalize()
+    status = df_acordo["STATUS_ACORDO"].fillna("").astype(str).str.lower()
+    return df_acordo[(status == "active") & inicio.notna() & (inicio <= data_compra) &
+                     (fim.isna() | (fim >= data_compra))]
+
+
+def processar(df_base, df_acordo):
+    """Cruza cada compra com o universo de acordos válido para sua data.
+
+    Compras anteriores a 18/09/2026 usam toda a tabela vigente atual, conforme
+    a regra de transição definida pela operação. Da data de corte em diante,
+    situação e intervalo de vigência passam a ser respeitados.
+    """
+    _validar_parametros(df_acordo)
+    if df_base.empty:
+        return _processar_periodo(df_base, df_acordo)
+    campos_vigencia = {"INICIO_VIGENCIA", "FIM_VIGENCIA", "STATUS_ACORDO"}
+    if not campos_vigencia.issubset(df_acordo.columns):
+        return _processar_periodo(df_base, df_acordo)
+
+    datas = pd.to_datetime(df_base["Data Abertura"], dayfirst=True, errors="coerce").dt.normalize()
+    partes = []
+    anteriores = datas.isna() | (datas < CORTE_VIGENCIA_ACORDOS)
+    grupos = [(anteriores, df_acordo)]
+    for data_compra in sorted(datas[~anteriores].dropna().unique()):
+        data_compra = pd.Timestamp(data_compra)
+        grupos.append((datas == data_compra, _acordos_vigentes_em(df_acordo, data_compra)))
+    for mascara, universo in grupos:
+        indices = df_base.index[mascara]
+        if not len(indices):
+            continue
+        resultado = _processar_periodo(df_base.loc[indices], universo)
+        resultado.index = indices
+        partes.append(resultado)
+    return pd.concat(partes).sort_index() if partes else _processar_periodo(df_base, df_acordo)
 
 
 STATUS_QUARENTENA = {STATUS_AMBIGUO, STATUS_PRECO_INVALIDO}
@@ -739,7 +796,7 @@ if __name__ == "__main__":
         print("RESULTADO=SEM_DADOS_FILTRO")
         sys.exit(0)
 
-    df_acordo = carregar_acordo(ACORDO_PATH)
+    df_acordo = carregar_acordos_portal()
     print(f"  Base: {len(df_base):,} linhas | Acordo: {len(df_acordo):,} linhas")
 
     print("Processando...")

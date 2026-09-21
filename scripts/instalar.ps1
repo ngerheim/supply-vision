@@ -62,6 +62,16 @@ Etapa 'Preparando a area privada sem sobrescrever dados'
 Copiar "$Raiz\compartilhado\smtp.env.example" "$Privado\comum\smtp.env"
 Copiar "$Raiz\compartilhado\operacao.env.example" "$Privado\comum\operacao.env"
 Copiar "$Portal\portal.env.example" "$Privado\portal\configuracao\portal.env"
+$portalEnv=Join-Path $Privado 'portal\configuracao\portal.env'
+$temToken=(Test-Path $portalEnv)-and(@(Get-Content $portalEnv)|Where-Object{$_-match '^\s*PORTAL_API_TOKEN\s*=\s*\S+'})
+if(-not $temToken){
+  $bytes=New-Object byte[] 32; [Security.Cryptography.RandomNumberGenerator]::Fill($bytes)
+  $token=[Convert]::ToHexString($bytes).ToLowerInvariant()
+  $conteudo=Get-Content -LiteralPath $portalEnv -Raw
+  if($conteudo-match '(?m)^\s*PORTAL_API_TOKEN\s*='){ $conteudo=[regex]::Replace($conteudo,'(?m)^\s*PORTAL_API_TOKEN\s*=.*$',"PORTAL_API_TOKEN=$token") }
+  else { $conteudo+="`r`nPORTAL_API_TOKEN=$token`r`n" }
+  [IO.File]::WriteAllText($portalEnv,$conteudo,(New-Object Text.UTF8Encoding($false)))
+}
 Copiar "$Alertas\config\cfg_ambiente.exemplo.txt" "$Privado\alertas\config\cfg_ambiente.txt"
 Copiar "$Alertas\config\cfg_qlik.exemplo.txt" "$Privado\alertas\config\cfg_qlik.txt"
 Copiar "$Alertas\config\destinatarios.exemplo.txt" "$Privado\alertas\config\destinatarios.txt"

@@ -23,7 +23,8 @@ def pytest_configure(config):
 def rodar(monkeypatch, tmp_path):
     fake_paths = types.ModuleType("sv_paths")
     fake_paths.BASE_PATH = tmp_path / "base.xlsx"
-    fake_paths.ACORDO_PATH = tmp_path / "acordos.xlsx"
+    fake_paths.PORTAL_URL = "http://127.0.0.1:3000"
+    fake_paths.PORTAL_API_TOKEN = "token-teste"
     fake_paths.RELATORIOS_DIARIOS = tmp_path / "reports"
     fake_paths.PARAMETROS_SRC = ROOT
     monkeypatch.setitem(sys.modules, "sv_paths", fake_paths)

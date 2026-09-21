@@ -77,7 +77,6 @@ export function Imports({
   onUpdated: () => Promise<void>;
   onCatalog: (type: string, values?: AnyRow) => void;
 }) {
-  const [mode, setMode] = useState(initialAgreement ? 'agreement' : 'legacy');
   const [agreement, setAgreement] = useState(initialAgreement);
   const [file, setFile] = useState<File | null>(null);
   const [result, setResult] = useState<AnyRow | null>(null);
@@ -109,10 +108,7 @@ export function Imports({
     if (!file) return null;
     const body = new FormData();
     body.set('file', file);
-    const path =
-      mode === 'legacy'
-        ? '/api/imports/legacy'
-        : `/api/imports/agreement/${agreement}`;
+    const path = `/api/imports/agreement/${agreement}`;
     return api(path + (preview ? '?preview=1' : ''), { method: 'POST', body });
   };
   const analyze = async () => {
@@ -187,7 +183,6 @@ export function Imports({
         'PRECO',
         'MEDIDA',
         'MARCAS',
-        ...(mode === 'legacy' ? ['CNPJ'] : []),
       ];
       const book = XLSX.utils.book_new(),
         sheet = XLSX.utils.aoa_to_sheet([columns]);
@@ -210,50 +205,22 @@ export function Imports({
         </CardHeader>
         <CardContent className="space-y-5">
           <fieldset disabled={busy} className="space-y-4">
-            <div className="grid gap-3 sm:grid-cols-2">
-              {[
-                [
-                  'legacy',
-                  'Carga inicial por fornecedor',
-                  'Uso administrativo excepcional: além de identificar o fornecedor pelo CNPJ, cadastra automaticamente fornecedores, itens, modelos e localidades que ainda não existem.',
-                ],
-                [
-                  'agreement',
-                  'Atualizar um acordo',
-                  'Substitui todas as condições do acordo escolhido.',
-                ],
-              ].map(([value, title, description]) => (
-                <button
-                  key={value}
-                  type="button"
-                  aria-pressed={mode === value}
-                  className={`rounded-xl border p-4 text-left ${mode === value ? 'border-primary bg-accent/40' : 'hover:bg-muted'}`}
-                  onClick={() => {
-                    setMode(value);
-                    reset();
-                  }}
-                >
-                  <p className="font-semibold">{title}</p>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    {description}
-                  </p>
-                </button>
-              ))}
+            <div className="rounded-xl border border-primary bg-accent/40 p-4">
+              <p className="font-semibold">Adicionar ou atualizar um acordo</p>
+              <p className="mt-1 text-sm text-muted-foreground">Substitui todas as condições do acordo escolhido. A versão anterior permanece no histórico.</p>
             </div>
-            {mode === 'agreement' && (
-              <SearchSelect
-                label="Acordo de destino"
-                value={agreement}
-                onChange={(value) => {
-                  setAgreement(value);
-                  reset();
-                }}
-                options={data.agreements.map((row: AnyRow) => ({
-                  id: row.id,
-                  name: `${row.number} · ${row.supplier}`,
-                }))}
-              />
-            )}
+            <SearchSelect
+              label="Acordo de destino"
+              value={agreement}
+              onChange={(value) => {
+                setAgreement(value);
+                reset();
+              }}
+              options={data.agreements.map((row: AnyRow) => ({
+                id: row.id,
+                name: `${row.number} · ${row.supplier}`,
+              }))}
+            />
             <input
               ref={fileInput}
               className="hidden"
@@ -284,7 +251,7 @@ export function Imports({
                 <Download /> Baixar modelo
               </Button>
               <Button
-                disabled={!file || (mode === 'agreement' && !agreement)}
+                disabled={!file || !agreement}
                 onClick={() => void analyze()}
               >
                 {busy ? (
@@ -375,7 +342,6 @@ export function Imports({
                     <TableRow>
                       {[
                         'Linha',
-                        ...(mode === 'legacy' ? ['Fornecedor'] : []),
                         'Cidade/UF',
                         'Peça ou serviço',
                         'Modelo',
@@ -390,9 +356,6 @@ export function Imports({
                     {(result.sample || []).map((row: AnyRow) => (
                       <TableRow key={row.linha}>
                         <TableCell>{row.linha}</TableCell>
-                        {mode === 'legacy' && (
-                          <TableCell>{row.fornecedor}</TableCell>
-                        )}
                         <TableCell>
                           {row.cidade}/{row.uf}
                         </TableCell>
@@ -407,9 +370,7 @@ export function Imports({
               </div>
               <p className="text-xs text-muted-foreground">
                 Amostra das primeiras 20 condições.{' '}
-                {mode === 'agreement'
-                  ? 'Publicar substituirá toda a tabela atual; a versão anterior permanecerá no histórico.'
-                  : 'Será publicado um acordo provisório por CNPJ. Confira sua vigência após a carga.'}
+                Publicar substituirá toda a tabela atual; a versão anterior permanecerá no histórico.
               </p>
               <Button disabled={busy || !ready} onClick={() => void publish()}>
                 {busy ? <LoaderCircle className="animate-spin" /> : <Upload />}{' '}

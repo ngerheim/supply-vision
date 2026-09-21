@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import * as XLSX from 'xlsx';
 import { lerPlanilha } from '@/lib/planilha';
 import { ConcurrencyGate } from '@/lib/concurrency';
 import { chaveLocalidade, colunasAusentes, parseImportRow, resolveImportRows, summarizeImportErrors, deduplicateImportRows, uniqueIndex, type ImportTarget } from '@/lib/importacao';
@@ -99,6 +100,14 @@ function rejectCrossOrigin(request: Request) {
   }
 }
 
+function tokenInternoValido(request: Request) {
+  const recebido = request.headers.get('authorization')?.replace(/^Bearer\s+/i, '') || '';
+  if (!__PORTAL_API_TOKEN__ || recebido.length !== __PORTAL_API_TOKEN__.length) return false;
+  let diferenca = 0;
+  for (let i = 0; i < recebido.length; i++) diferenca |= recebido.charCodeAt(i) ^ __PORTAL_API_TOKEN__.charCodeAt(i);
+  return diferenca === 0;
+}
+
 // Erro com codigo proprio para corpo excessivo: quem chama devolve 413 em vez
 // de tratar como JSON invalido.
 class CorpoGrandeDemais extends Error {
@@ -160,6 +169,10 @@ export async function GET(request: NextRequest) {
   const parts = partsOf(request);
   if (parts[0] === 'health') return ok({ app: 'portal-suprimentos', status: 'ok', schemaVersion: 1 });
   if (parts[0] === 'session') return ok({ user: await currentUser(request) });
+  if (parts[0] === 'internal' && parts[1] === 'agreements') {
+    if (!tokenInternoValido(request)) return fail('Credencial interna inválida.', 401);
+    return internalAgreements();
+  }
   const user = await requireUser(request);
   if (!user) return fail('Sessão expirada.', 401);
 
@@ -190,6 +203,11 @@ export async function GET(request: NextRequest) {
     : await all('SELECT id,name FROM users WHERE active=1 ORDER BY name') });
   if (parts[0] === 'tickets' && parts[1]) return ticketDetail(parts[1]);
   if (parts[0] === 'tickets') return ok({ tickets: await ticketList(), stats: await ticketStats() });
+  if (parts[0] === 'export' && parts[1] === 'agreements') {
+    const resposta = await exportAgreements();
+    await audit(user.id, 'EXPORT', 'agreement', null, 'Planilha de acordos gerada para download');
+    return resposta;
+  }
   if (parts[0] === 'export') {
     if (user.role !== 'admin') return fail('Somente administradores podem exportar a base.', 403);
     // Monta primeiro e so entao registra: gravar antes faria a auditoria
@@ -235,7 +253,6 @@ async function POSTInterno(request: NextRequest) {
   if (parts[0] === 'tickets' && parts[1] && parts[2] === 'events') return addTicketEvent(request, user, parts[1]);
   if (parts[0] === 'tickets' && parts.length === 1) return createTicket(request, user);
   if (parts[0] === 'email-notifications' && parts[1] && parts[2] === 'retry') return retryEmailNotification(user, parts[1]);
-  if (parts[0] === 'imports' && parts[1] === 'legacy') return importWorkbook(request, user, null, true);
   if (parts[0] === 'imports' && parts[1] === 'agreement' && parts[2]) return importWorkbook(request, user, parts[2], false);
   if (parts[0] === 'mappings' && parts[1]) return createMapping(request, user, parts[1]);
   return fail('Rota não encontrada.', 404);
@@ -606,6 +623,12 @@ async function agreementDetail(agreementId: string, user: User, params: URLSearc
   const requestedOffset = Number(params.get('offset') || 0);
   const offset = Number.isSafeInteger(requestedOffset) && requestedOffset >= 0 ? requestedOffset : 0;
   const limit = 500;
+  const sortColumns: Record<string, string> = {
+    item: 'ci.name', model: 'vm.name', location: "l.state || '/' || l.city",
+    brands: "COALESCE(ai.brands_text,'')", unit: 'un.code', price: 'ai.price',
+  };
+  const sortColumn = sortColumns[params.get('sort') || 'item'] || sortColumns.item;
+  const sortDirection = params.get('direction') === 'desc' ? 'DESC' : 'ASC';
   const agreement = await first(`SELECT a.*,
     (SELECT COUNT(*) FROM agreement_items ai WHERE ai.version_id=a.current_version_id) AS totalItems,
     CASE WHEN a.status='active' AND date(a.start_date)>date('now') THEN 'scheduled'
@@ -621,7 +644,7 @@ async function agreementDetail(agreementId: string, user: User, params: URLSearc
       vm.id AS modelId,vm.name AS model,un.id AS unitId,un.code AS unit,l.id AS locationId,l.city,l.state
       FROM agreements a JOIN agreement_items ai ON ai.version_id=a.current_version_id JOIN catalog_items ci ON ci.id=ai.catalog_item_id
       JOIN vehicle_models vm ON vm.id=ai.vehicle_model_id JOIN units un ON un.id=ai.unit_id JOIN locations l ON l.id=ai.location_id
-      WHERE a.id=? ORDER BY ci.name,vm.name,l.city,ai.id LIMIT ? OFFSET ?`, [agreementId, limit, offset]),
+      WHERE a.id=? ORDER BY ${sortColumn} ${sortDirection},ai.id ASC LIMIT ? OFFSET ?`, [agreementId, limit, offset]),
     all(`SELECT version_number AS versionNumber,status,published_at AS publishedAt,created_at AS createdAt FROM agreement_versions WHERE agreement_id=? ORDER BY version_number DESC`, [agreementId]),
   ]);
   if (!canWrite(user)) {
@@ -1485,7 +1508,6 @@ async function updateTicket(request:Request,user:User,ticketId:string){
   // estava em createTicket, onde o campo nem chega a ser usado: uma mensagem
   // de 3000 caracteres passava direto e ia para o banco.
   exigeTexto(body.statusMessage,LIMITES_CAMPO.mensagem,'mensagem da situação');
-  if(status!==current.status&&(status==='fechado'||status==='cancelado')&&!textValue(body.statusMessage)) return fail('Descreva o resultado antes de concluir ou cancelar o chamado.');
   const agreementId=body.agreementId === undefined ? current.agreement_id : textValue(body.agreementId) || null;
   if(agreementId && !await first('SELECT 1 ok FROM agreements WHERE id=?',[agreementId])) return fail('Acordo relacionado não encontrado.');
   const city=body.city===undefined?current.city:nullableText(body.city)?normalizeText(body.city):null;
@@ -1618,4 +1640,46 @@ async function exportDatabase(){
     'content-disposition':`attachment; filename="exportacao-portal-suprimentos-${now().slice(0,10)}.json"`,
     'x-content-type-options':'nosniff',
   }});
+}
+
+async function exportAgreements(){
+  const headers=['MODELO','PECA_SERVICO','CIDADE','UF','CNPJ','PRECO','FORNECEDOR','MEDIDA','MARCAS','INICIO_VIGENCIA','FIM_VIGENCIA'];
+  const rows=await all<{modelo:string;item:string;cidade:string;uf:string;cnpj:string;preco:number;fornecedor:string;medida:string;marcas:string|null;inicio:string;fim:string|null}>(`SELECT
+    vm.name modelo,ci.name item,l.city cidade,l.state uf,s.cnpj,ai.price preco,s.trade_name fornecedor,
+    un.code medida,ai.brands_text marcas,a.start_date inicio,a.end_date fim
+    FROM agreements a JOIN suppliers s ON s.id=a.supplier_id
+    JOIN agreement_items ai ON ai.version_id=a.current_version_id
+    JOIN catalog_items ci ON ci.id=ai.catalog_item_id JOIN vehicle_models vm ON vm.id=ai.vehicle_model_id
+    JOIN units un ON un.id=ai.unit_id JOIN locations l ON l.id=ai.location_id
+    ORDER BY s.trade_name,vm.name,ci.name,l.state,l.city,ai.id`);
+  const excelDate=(value:string|null)=>value?new Date(`${value}T12:00:00.000Z`):null;
+  const sheet=XLSX.utils.aoa_to_sheet([headers,...rows.map(row=>[
+    row.modelo,row.item,row.cidade,row.uf,String(row.cnpj).padStart(14,'0'),Number(row.preco),row.fornecedor,row.medida,row.marcas||'',excelDate(row.inicio),excelDate(row.fim),
+  ])],{cellDates:true});
+  sheet['!autofilter']={ref:`A1:K${rows.length+1}`};
+  sheet['!cols']=[18,30,20,6,17,13,28,10,28,17,17].map(wch=>({wch}));
+  for(let line=2;line<=rows.length+1;line++){
+    const cnpjCell=sheet[`E${line}`]; if(cnpjCell){cnpjCell.t='s';cnpjCell.z='@';}
+    const priceCell=sheet[`F${line}`]; if(priceCell) priceCell.z='R$ #,##0.00';
+    for(const column of ['J','K']){const cell=sheet[`${column}${line}`];if(cell)cell.z='dd/mm/yyyy';}
+  }
+  const workbook=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook,sheet,'ACORDOS');
+  const content=XLSX.write(workbook,{bookType:'xlsx',type:'array',cellDates:true}) as ArrayBuffer;
+  return new NextResponse(content,{headers:{
+    'cache-control':'no-store','content-type':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'content-disposition':`attachment; filename="ACORDOS-${now().slice(0,10)}.xlsx"`,'x-content-type-options':'nosniff',
+  }});
+}
+
+async function internalAgreements(){
+  const agreements=await all(`SELECT vm.name MODELO,ci.name PECA_SERVICO,l.city CIDADE,l.state UF,s.cnpj CNPJ,
+    ai.price PRECO,s.trade_name FORNECEDOR,un.code MEDIDA,COALESCE(ai.brands_text,'') MARCAS,
+    a.start_date INICIO_VIGENCIA,a.end_date FIM_VIGENCIA,a.status STATUS_ACORDO
+    FROM agreements a JOIN suppliers s ON s.id=a.supplier_id
+    JOIN agreement_items ai ON ai.version_id=a.current_version_id
+    JOIN catalog_items ci ON ci.id=ai.catalog_item_id JOIN vehicle_models vm ON vm.id=ai.vehicle_model_id
+    JOIN units un ON un.id=ai.unit_id JOIN locations l ON l.id=ai.location_id
+    ORDER BY s.trade_name,vm.name,ci.name,l.state,l.city,ai.id`);
+  return ok({generatedAt:now(),agreements});
 }

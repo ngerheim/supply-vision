@@ -17,6 +17,7 @@ CFG_QLIK = CONFIG_DIR / "cfg_qlik.txt"
 CFG_AMBIENTE = CONFIG_DIR / "cfg_ambiente.txt"
 DESTINATARIOS = CONFIG_DIR / "destinatarios.txt"
 SMTP_CONFIG = PRIVADO / "comum" / "smtp.env"
+PORTAL_CONFIG = PRIVADO / "portal" / "configuracao" / "portal.env"
 SCRIPT_BAIXAR = PROCESSO_DIR / "baixar_base.py"
 SCRIPT_RODAR = PROCESSO_DIR / "rodar.py"
 SCRIPT_EMAIL = PROCESSO_DIR / "enviar_email.py"
@@ -39,6 +40,13 @@ def _carregar(path):
         valores[chave.strip().upper()] = valor.strip()
     return valores
 
+def _carregar_opcional(path):
+    """Configuração de integração pode não existir em testes isolados/CI."""
+    try:
+        return _carregar(path)
+    except SystemExit:
+        return {}
+
 def _exigir(valores, chave, origem):
     valor = valores.get(chave, "")
     if not valor:
@@ -47,11 +55,13 @@ def _exigir(valores, chave, origem):
 
 AMBIENTE = _carregar(CFG_AMBIENTE)
 SMTP = _carregar(SMTP_CONFIG)
+PORTAL = _carregar_opcional(PORTAL_CONFIG)
 QLIK_TENANT = _exigir(AMBIENTE, "QLIK_TENANT", CFG_AMBIENTE)
 QLIK_APP_ID = _exigir(AMBIENTE, "QLIK_APP_ID", CFG_AMBIENTE)
 QLIK_OBJ_ID = _exigir(AMBIENTE, "QLIK_OBJ_ID", CFG_AMBIENTE)
 DESTINATARIO_ALERTA = _exigir(AMBIENTE, "DESTINATARIO_ALERTA", CFG_AMBIENTE)
-ACORDO_PATH = Path(_exigir(AMBIENTE, "ACORDO_PATH", CFG_AMBIENTE))
+PORTAL_URL = PORTAL.get("PORTAL_URL", "").rstrip("/")
+PORTAL_API_TOKEN = PORTAL.get("PORTAL_API_TOKEN", "")
 SMTP_SERVIDOR = _exigir(SMTP, "SMTP_HOST", SMTP_CONFIG)
 SMTP_PORTA = int(_exigir(SMTP, "SMTP_PORT", SMTP_CONFIG))
 SMTP_USUARIO = _exigir(SMTP, "SMTP_USER", SMTP_CONFIG)

@@ -351,9 +351,9 @@ Verifica 'Campo no limite com acentos e aceito' {
   if ($c -eq 201) { $true } else { "esperado 201, veio $c" }
 }
 
-Verifica 'Multipart invalido devolve 400, nao 500' {
+Verifica 'Rota antiga de carga inicial permanece bloqueada' {
   $c = CodigoDe { Invoke-WebRequest "$baseUrl/api/imports/legacy" -Method POST -Body '{"nao":"e multipart"}' -ContentType 'application/json' -WebSession $script:sessao -UseBasicParsing -TimeoutSec 30 }
-  if ($c -eq 400) { $true } else { "esperado 400, veio $c" }
+  if ($c -eq 404) { $true } else { "esperado 404, veio $c" }
 }
 
 Verifica 'Login com corpo muito acima do limite e recusado' {

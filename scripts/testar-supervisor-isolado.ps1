@@ -25,8 +25,8 @@ try{
  $npmFalso="@echo off`r`n:aguardar`r`nif exist `"..\privado\operacao\parar.sinal`" exit /b 0`r`nping 127.0.0.1 -n 2 >nul`r`ngoto aguardar`r`n"
  [IO.File]::WriteAllText("$temp\bin\npm.cmd",$npmFalso,[Text.Encoding]::ASCII)
  [IO.File]::WriteAllText("$temp\privado\comum\smtp.env","SMTP_HOST=x`r`nSMTP_PORT=1`r`nSMTP_USER=x`r`nSMTP_PASSWORD=x`r`nEMAIL_FROM_NAME=x")
- [IO.File]::WriteAllText("$temp\privado\portal\configuracao\portal.env","PORTAL_URL=x`r`nBACKUP_EMAIL_TO=x")
- [IO.File]::WriteAllText("$temp\privado\alertas\config\cfg_ambiente.txt","QLIK_TENANT=x`r`nQLIK_APP_ID=x`r`nQLIK_OBJ_ID=x`r`nDESTINATARIO_ALERTA=x`r`nACORDO_PATH=$temp\acordos.xlsx")
+ [IO.File]::WriteAllText("$temp\privado\portal\configuracao\portal.env","PORTAL_URL=x`r`nPORTAL_API_TOKEN=x`r`nBACKUP_EMAIL_TO=x")
+ [IO.File]::WriteAllText("$temp\privado\alertas\config\cfg_ambiente.txt","QLIK_TENANT=x`r`nQLIK_APP_ID=x`r`nQLIK_OBJ_ID=x`r`nDESTINATARIO_ALERTA=x")
  [IO.File]::WriteAllText("$temp\privado\comum\operacao.env","ALERTAS_HORARIOS=00:00`r`nBACKUP_HORARIOS=00:00`r`nLIMPEZA_HORARIO=00:00`r`nESPACO_MINIMO_GB=1")
  $data=Get-Date -Format yyyy-MM-dd;@{"alertas-$data-00:00"='ok';"backup-$data-00:00"='ok';"limpeza-$data-00:00"='ok'}|ConvertTo-Json|Set-Content "$temp\privado\operacao\estado.json"
  $env:Path="$temp\bin;$pathAnterior";$args=@('-NoProfile','-ExecutionPolicy','Bypass','-File',"$temp\scripts\supervisor.ps1")
