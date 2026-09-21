@@ -22,6 +22,26 @@ $Python = Join-Path $Alertas '.venv\Scripts\python.exe'
 function Etapa([string]$t) { Write-Host "`n== $t ==" -ForegroundColor Cyan }
 function Ok([string]$t) { Write-Host "   $t" -ForegroundColor Green }
 function Aviso([string]$t) { Write-Host "   $t" -ForegroundColor Yellow }
+function Garantir-CredencialPortal {
+  $portalEnv = Join-Path $Raiz 'privado\portal\configuracao\portal.env'
+  if (-not (Test-Path -LiteralPath $portalEnv -PathType Leaf)) { throw "Configuracao do Portal ausente: $portalEnv" }
+  $linha = @(Get-Content -LiteralPath $portalEnv) | Where-Object { $_ -match '^\s*PORTAL_API_TOKEN\s*=\s*(\S+)\s*$' } | Select-Object -Last 1
+  $tokenAtual = if ($linha) { ($linha -split '=', 2)[1].Trim() } else { '' }
+  if ($tokenAtual -notmatch '^[0-9a-fA-F]{64}$') {
+    $bytes = New-Object byte[] 32
+    $gerador = [Security.Cryptography.RandomNumberGenerator]::Create()
+    try { $gerador.GetBytes($bytes) } finally { $gerador.Dispose() }
+    $tokenAtual = ($bytes | ForEach-Object { $_.ToString('x2') }) -join ''
+    $conteudo = Get-Content -LiteralPath $portalEnv -Raw
+    if ($conteudo -match '(?m)^\s*PORTAL_API_TOKEN\s*=') {
+      $conteudo = [regex]::Replace($conteudo, '(?m)^\s*PORTAL_API_TOKEN\s*=.*$', "PORTAL_API_TOKEN=$tokenAtual")
+    } else { $conteudo += "`r`nPORTAL_API_TOKEN=$tokenAtual`r`n" }
+    [IO.File]::WriteAllText($portalEnv, $conteudo, (New-Object Text.UTF8Encoding($false)))
+    Ok 'credencial interna do Portal criada ou reparada na configuracao privada'
+  }
+  $confirmacao = @(Get-Content -LiteralPath $portalEnv) | Where-Object { $_ -match '^\s*PORTAL_API_TOKEN\s*=\s*[0-9a-fA-F]{64}\s*$' }
+  if (-not $confirmacao) { throw 'A credencial interna do Portal nao foi gravada corretamente.' }
+}
 
 Etapa 'Conferindo o repositorio'
 $sujo = git status --porcelain
@@ -107,23 +127,9 @@ git merge --ff-only $remoto --quiet
 if ($LASTEXITCODE -ne 0) { throw 'Falha ao aplicar a nova versao. Operacao permanece parada; confira o repositorio antes de reiniciar.' }
 Ok "agora em $($remoto.Substring(0,7))"
 
-# O Portal e os Alertas compartilham uma credencial local para que o motor de
-# relatorios leia os acordos sem depender da sessao de uma pessoa. Instalacoes
-# antigas recebem a chave automaticamente, antes do build que a incorpora.
-$portalEnv = Join-Path $Raiz 'privado\portal\configuracao\portal.env'
-$temToken = (Test-Path $portalEnv) -and (@(Get-Content $portalEnv) | Where-Object { $_ -match '^\s*PORTAL_API_TOKEN\s*=\s*\S+' })
-if (-not $temToken) {
-  $bytes = New-Object byte[] 32
-  $gerador = [Security.Cryptography.RandomNumberGenerator]::Create()
-  try { $gerador.GetBytes($bytes) } finally { $gerador.Dispose() }
-  $token = ($bytes | ForEach-Object { $_.ToString('x2') }) -join ''
-  $conteudo = Get-Content -LiteralPath $portalEnv -Raw
-  if ($conteudo -match '(?m)^\s*PORTAL_API_TOKEN\s*=') {
-    $conteudo = [regex]::Replace($conteudo, '(?m)^\s*PORTAL_API_TOKEN\s*=.*$', "PORTAL_API_TOKEN=$token")
-  } else { $conteudo += "`r`nPORTAL_API_TOKEN=$token`r`n" }
-  [IO.File]::WriteAllText($portalEnv, $conteudo, (New-Object Text.UTF8Encoding($false)))
-  Ok 'credencial interna do Portal criada na configuracao privada'
-}
+# O Portal e os Alertas compartilham uma credencial local. Ela precisa existir
+# antes do build, porque o endpoint interno a incorpora no servidor.
+Garantir-CredencialPortal
 
 if ($mexeuNode) {
   Etapa 'Dependencias Node mudaram: npm ci'
@@ -155,8 +161,14 @@ foreach ($s in $suites) {
   Ok $s.nome
 }
 foreach ($t in @('validar-operacao.ps1', 'testar-operacao.ps1', 'testar-supervisor-isolado.ps1', 'testar-persistencia-alertas.ps1')) {
-  & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot $t)
-  if ($LASTEXITCODE -ne 0) { Reverter "Falhou: $t." }
+  if ($t -eq 'validar-operacao.ps1') { Garantir-CredencialPortal }
+  $saidaTeste = @(& powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot $t) *>&1)
+  $rc = $LASTEXITCODE
+  $saidaTeste | ForEach-Object { Write-Host "   $_" }
+  if ($rc -ne 0) {
+    $detalhes = (@($saidaTeste | Select-Object -Last 8) -join ' | ')
+    Reverter "Falhou: $t. Detalhes: $detalhes"
+  }
 }
 Ok 'suites de operacao aprovadas'
 
