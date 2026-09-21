@@ -1,6 +1,7 @@
 ﻿Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 $Raiz=(Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+. (Join-Path $PSScriptRoot 'operacao-logica.ps1')
 $Op=Join-Path $Raiz 'privado\operacao';$PidFile=Join-Path $Op 'supervisor.pid.json';$StatusFile=Join-Path $Op 'status.json';$Manutencao=Join-Path $Op 'manutencao.sinal'
 $Inicio=Join-Path $Raiz 'INICIAR.bat';$Parar=Join-Path $Raiz 'PARAR.bat';$Atualizador=Join-Path $PSScriptRoot 'atualizar-servidor.ps1';$Startup=Join-Path ([Environment]::GetFolderPath('Startup')) 'Supply Vision.cmd'
 # A versao vem do Git, nao de um arquivo mantido a mao: um VERSAO.md so fica
@@ -20,17 +21,22 @@ $auto=New-Object Windows.Forms.CheckBox;$auto.Text='Iniciar automaticamente com 
 $man=New-Object Windows.Forms.CheckBox;$man.Text='Modo manutenção (pausar rotinas automáticas)';$man.Location='32,548';$man.Size='390,27';$man.Checked=Test-Path $Manutencao;$form.Controls.Add($man)
 $script:processoAtualizacao=$null
 function Operacao-Ativa{
- if(!(Test-Path $PidFile)){return $false}
- try{$r=Get-Content $PidFile -Raw|ConvertFrom-Json;return $null-ne(Get-Process -Id $r.pid -ErrorAction SilentlyContinue)}catch{return $false}
+ return $null-ne(Obter-ProcessoRegistrado $PidFile)
 }
 function Parar-Operacao([int]$Limite=60){
  # O supervisor le o sinal no ritmo do proprio laco. Esperar por um relogio
  # fixo dava a operacao como parada antes da hora: a tela voltava a dizer
  # 'ativa' e a restauracao recusava o banco por achar o portal no ar.
  if(!(Operacao-Ativa)){return $true}
+ Add-Content (Join-Path $Op 'supervisor.log') "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')  CENTRAL: encerramento solicitado." -Encoding UTF8
  Start-Process $Parar -WindowStyle Hidden
  for($i=0;$i-lt$Limite-and(Operacao-Ativa);$i++){Start-Sleep 1}
- return !(Operacao-Ativa)
+ $encerrou=!(Operacao-Ativa)
+ if(!$encerrou){
+  $registro=try{Get-Content $PidFile -Raw}catch{'registro de PID indisponivel'}
+  Add-Content (Join-Path $Op 'supervisor.log') "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')  CENTRAL: tempo de parada esgotado. Registro: $registro" -Encoding UTF8
+ }
+ return $encerrou
 }
 function Atualizar{
  $ativo=Operacao-Ativa

@@ -11,6 +11,19 @@ function Ler-ConfigOperacao([string]$Caminho) {
   return $config
 }
 
+function Obter-ProcessoRegistrado([string]$CaminhoPid) {
+  if (!(Test-Path -LiteralPath $CaminhoPid)) { return $null }
+  try {
+    $registro = Get-Content -LiteralPath $CaminhoPid -Raw | ConvertFrom-Json
+    $processo = Get-Process -Id ([int]$registro.pid) -ErrorAction Stop
+    $inicioRegistrado = [datetime]::Parse([string]$registro.inicio).ToUniversalTime()
+    # O Windows reutiliza numeros de PID. Conferir tambem o instante de inicio
+    # impede que um processo alheio seja confundido com o antigo supervisor.
+    if ([math]::Abs(($processo.StartTime.ToUniversalTime() - $inicioRegistrado).TotalSeconds) -gt 2) { return $null }
+    return $processo
+  } catch { return $null }
+}
+
 $script:DiasSemana = @('DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SAB')
 
 function Obter-HorariosDoDia([hashtable]$Config, [string]$Prefixo, [datetime]$Dia) {
