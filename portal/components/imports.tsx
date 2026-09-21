@@ -539,18 +539,18 @@ type Estado = 'previa' | 'criado' | 'falhou';
 const TITULO_BASE: Record<Estado, string> = {
   previa: 'Cadastros que serão criados a partir do arquivo:',
   criado: 'Cadastros criados a partir do arquivo:',
-  falhou: 'Cadastros que o arquivo criaria — nada foi criado, porque a importação não foi concluída:',
+  falhou: 'Cadastros previstos no arquivo. A importação não foi concluída:',
 };
 
 function BaseCriada({ base, estado }: { base: AnyRow; estado: Estado }) {
   // A carga inicial cria cadastro a partir do proprio arquivo. Sem esta
   // conferencia previa, o operador so descobre uma nomenclatura que escapou do
   // de/para depois que ela ja virou item no catalogo.
-  const grupos: { chave: string; rotulo: string }[] = [
-    { chave: 'localidades', rotulo: 'localidade(s)' },
-    { chave: 'itens', rotulo: 'item(ns)' },
-    { chave: 'modelos', rotulo: 'modelo(s)' },
-    { chave: 'fornecedores', rotulo: 'fornecedor(es)' },
+  const grupos: { chave: string; singular: string; rotulo: string }[] = [
+    { chave: 'localidades', singular: 'localidade', rotulo: 'localidades' },
+    { chave: 'itens', singular: 'item', rotulo: 'itens' },
+    { chave: 'modelos', singular: 'modelo', rotulo: 'modelos' },
+    { chave: 'fornecedores', singular: 'fornecedor', rotulo: 'fornecedores' },
   ];
   const quantos = (chave: string) => Number(base[chave]) || 0;
   const amostraDe = (chave: string): string[] => {
@@ -564,7 +564,7 @@ function BaseCriada({ base, estado }: { base: AnyRow; estado: Estado }) {
       <p className="font-medium">
         {TITULO_BASE[estado]}{' '}
         {presentes
-          .map((grupo) => `${quantos(grupo.chave)} ${grupo.rotulo}`)
+          .map((grupo) => `${quantos(grupo.chave).toLocaleString('pt-BR')} ${quantos(grupo.chave) === 1 ? grupo.singular : grupo.rotulo}`)
           .join(', ')}
         .
       </p>

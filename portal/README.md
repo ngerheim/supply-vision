@@ -20,11 +20,14 @@ servidor. Use o endereço de rede (`PORTAL_URL`).
 
 ## Primeiro acesso
 
-E-mail e senha são fornecidos pelo administrador. O acesso é individual.
+E-mail e senha são fornecidos pelo administrador. Cada navegador mantém uma
+sessão independente. Uma conta compartilhada de consulta não identifica qual
+pessoa realizou cada acesso; use contas individuais quando isso for necessário.
 
-Se errar a senha algumas vezes seguidas, o portal passa a demorar
-propositalmente para responder: é proteção contra tentativa repetida, não
-defeito.
+Tentativas incorretas recebem atraso progressivo. O processo também limita
+logins simultâneos a quatro em execução e dezesseis aguardando; além disso,
+responde que está ocupado e orienta tentar novamente. São limites iniciais de
+proteção de recursos, ainda sujeitos à homologação no notebook-servidor.
 
 ## Perfis
 
@@ -46,8 +49,8 @@ defeito.
   cadastro; **Expirado** aparece sozinho quando a data de fim vence.
 - **Fornecedores** — nome, razão social, CNPJ, cidade e UF.
 - **Importações** — carga de planilhas.
-- **De/Para** *(Admin)* — correspondências confirmadas para itens, modelos,
-  unidades e localidades (cidade/UF).
+- **De/Para** *(Admin)* — correspondências confirmadas para itens, modelos
+  e unidades. Localidades são cadastradas diretamente.
 - **Cadastros** *(Comprador/Admin)* — peças e serviços, modelos, unidades,
   marcas e localidades.
 - **Histórico** *(Admin)* — tudo que foi alterado, por quem e quando, com
@@ -79,7 +82,8 @@ e CNPJ com zero truncado pelo Excel é corrigido.
 Colunas obrigatórias: `CIDADE`, `UF`, `MODELO`, `PECA_SERVICO`, `PRECO`, `MEDIDA`
 e, na carga inicial, `CNPJ`. `MARCAS` e `FORNECEDOR` são opcionais.
 O fornecedor é identificado pelo CNPJ e precisa estar cadastrado e ativo;
-o nome recebido não cria nem altera fornecedores. Ao atualizar um acordo,
+na substituição de um acordo. A carga inicial é excepcional: cria fornecedores,
+itens, modelos e localidades ausentes após a validação. Ao atualizar um acordo,
 o fornecedor é o do acordo escolhido, independentemente dessas colunas.
 
 1. Escolha o tipo de importação, o acordo de destino quando aplicável e o arquivo.
@@ -94,9 +98,9 @@ o fornecedor é o do acordo escolhido, independentemente dessas colunas.
    A publicação revalida todo o arquivo; uma prévia anterior não dispensa validação.
 
 Itens e modelos exigem De/Para explícito, inclusive quando o nome já é canônico.
-Unidades e localidades aceitam o cadastro exato ou uma correspondência confirmada.
-Uma UF digitada errada continua sendo pendência até a correção da planilha ou
-a confirmação explícita da localidade completa; o cadastro só aceita UFs brasileiras.
+Unidades ativas aceitam o nome cadastrado ou uma correspondência confirmada.
+Localidades precisam estar cadastradas na substituição; não possuem De/Para.
+Uma UF digitada errada deve ser corrigida; o cadastro só aceita UFs brasileiras.
 Preços inválidos e células obrigatórias vazias são corrigidos na planilha.
 
 Para a mesma cidade **e UF**, item e modelo, a importação mantém o menor preço.
@@ -108,8 +112,9 @@ continuam sendo condições distintas.
 nada é publicado; a tabela anterior continua valendo. Preço zero é aceito e
 aparece como cortesia.
 
-Ainda não são aceitos cabeçalho fora da primeira linha, células mescladas ou
-subtotais no meio dos dados. Várias abas funcionam: as demais são ignoradas.
+Cabeçalhos deslocados e linhas vazias são tratados preservando a indicação da
+linha física. Evite células mescladas e subtotais no meio dos dados.
+Várias abas funcionam: as demais são ignoradas.
 Arquivos que não sejam planilha de verdade são recusados mesmo com extensão
 `.xlsx`, porque o conteúdo é verificado, não o nome.
 
@@ -300,6 +305,11 @@ o arquivo SQLite nem preencher correspondências antecipadamente.
 prévia sem publicação, correspondências, rejeições sem alteração de negócio,
 limites de volume, concorrência, exportação, reinicialização e atualização de banco.
 Inclui falhas provocadas na gravação e na auditoria para verificar a reversão integral.
+Inclui também permissões de consulta, dez logins simultâneos, independência do
+logout, revogação por troca de senha/desativação e ondas de 10, 25, 50 e 100
+requisições concorrentes com nove sessões, sobre um acordo com 10 mil condições.
+O relatório registra mediana, percentil 95 e máximo de latência. Esses números
+medem o computador onde o ensaio rodou, não certificam o servidor de produção.
 Arquivos e relatórios sintéticos ficam em `work/`, fora do Git.
 
 ## Acesso pela rede

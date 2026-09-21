@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { lerPlanilha } from '@/lib/planilha';
+import { ConcurrencyGate } from '@/lib/concurrency';
 import { chaveLocalidade, colunasAusentes, parseImportRow, resolveImportRows, summarizeImportErrors, deduplicateImportRows, uniqueIndex, type ImportTarget } from '@/lib/importacao';
 import { contextoNotificacaoChamado, pessoaNotificacao, prepararNotificacoesChamado, type ContextoNotificacaoChamado } from '@/lib/fila-email-chamados';
 import { corpoBinarioLimitado, corpoLimitado } from '@/lib/corpo-limitado';
@@ -164,7 +165,7 @@ export async function GET(request: NextRequest) {
 
   if (parts[0] === 'bootstrap') return bootstrap(user);
   if (parts[0] === 'search') return search(request.nextUrl.searchParams);
-  if (parts[0] === 'agreements' && parts[1]) return agreementDetail(parts[1]);
+  if (parts[0] === 'agreements' && parts[1]) return agreementDetail(parts[1], user, request.nextUrl.searchParams);
 
   // Daqui para baixo, somente quem tem perfil de escrita (admin/editor).
   // O perfil de consulta enxerga apenas acordos e a busca de preços.
@@ -422,13 +423,23 @@ const LOGIN_DELAY_MAX_MS = 4000;
 // proprio e constante: usar o salt de um usuario real daria pista sobre a base.
 const SALT_INEXISTENTE = 'conta-inexistente-salt-fixo-nao-usar-em-usuario-real';
 
+// Limites conservadores por processo, a calibrar na homologação do servidor.
+const loginGate = new ConcurrencyGate(4, 16);
 async function login(request: Request) {
+  const texto = await corpoLimitado(request, CORPO_MAX_LOGIN);
+  if (texto === null) return fail('E-mail ou senha inválidos.', 401);
+  const release = await loginGate.acquire();
+  if (!release) {
+    return ok({ error: 'Muitos acessos simultâneos. Tente novamente em alguns segundos.' }, { status: 503, headers: { 'Retry-After': '5' } });
+  }
+  try { return await authenticate(request, texto); }
+  finally { release(); }
+}
+
+async function authenticate(request: Request, texto: string) {
   const ip = clientIp(request);
   const agora = now();
   const since = new Date(Date.now() - LOGIN_WINDOW_MIN * 60 * 1000).toISOString();
-
-  const texto = await corpoLimitado(request, CORPO_MAX_LOGIN);
-  if (texto === null) return fail('E-mail ou senha inválidos.', 401);
 
   let body: { email?: unknown; password?: unknown };
   try { body = JSON.parse(texto || '{}'); }
@@ -551,6 +562,16 @@ async function logout(request: Request) {
 }
 
 async function bootstrap(user: User) {
+  if (!canWrite(user)) {
+    const [metrics, agreements, suppliers, items, models, locations] = await Promise.all([
+      first('SELECT COUNT(*) AS agreements FROM agreements'), agreementList(),
+      all('SELECT id,trade_name AS tradeName FROM suppliers ORDER BY trade_name'),
+      all('SELECT id,name FROM catalog_items ORDER BY name'),
+      all('SELECT id,name FROM vehicle_models ORDER BY name'),
+      all('SELECT id,city,state FROM locations ORDER BY state,city'),
+    ]);
+    return ok({ user, metrics, agreements, catalogs: { suppliers, items, models, locations, units: [], brands: [] }, imports: [] });
+  }
   const [metrics, agreements, suppliers, items, models, units, brands, locations, imports] = await Promise.all([
     first(`SELECT
       (SELECT COUNT(*) FROM agreements) agreements,
@@ -573,16 +594,20 @@ async function agreementList() {
       WHEN a.status='active' AND a.end_date IS NOT NULL AND date(a.end_date)<date('now') THEN 'expired'
       WHEN a.status='active' AND a.end_date IS NOT NULL AND date(a.end_date) BETWEEN date('now') AND date('now','+60 day') THEN 'expiring'
       ELSE a.status END AS effectiveStatus,
-    s.trade_name AS supplier,s.cnpj,COUNT(DISTINCT al.location_id) AS locationCount,
-    COUNT(DISTINCT ai.id) AS itemCount,GROUP_CONCAT(DISTINCT l.city || ' / ' || l.state) AS locations
+    s.trade_name AS supplier,s.cnpj,
+    (SELECT COUNT(*) FROM agreement_locations al WHERE al.agreement_id=a.id) AS locationCount,
+    (SELECT COUNT(*) FROM agreement_items ai WHERE ai.version_id=a.current_version_id) AS itemCount,
+    (SELECT GROUP_CONCAT(l.city || ' / ' || l.state) FROM agreement_locations al JOIN locations l ON l.id=al.location_id WHERE al.agreement_id=a.id) AS locations
     FROM agreements a JOIN suppliers s ON s.id=a.supplier_id
-    LEFT JOIN agreement_locations al ON al.agreement_id=a.id LEFT JOIN locations l ON l.id=al.location_id
-    LEFT JOIN agreement_items ai ON ai.version_id=a.current_version_id
-    GROUP BY a.id ORDER BY a.provisional DESC,a.updated_at DESC LIMIT 500`);
+    ORDER BY a.provisional DESC,a.updated_at DESC LIMIT 500`);
 }
 
-async function agreementDetail(agreementId: string) {
+async function agreementDetail(agreementId: string, user: User, params: URLSearchParams) {
+  const requestedOffset = Number(params.get('offset') || 0);
+  const offset = Number.isSafeInteger(requestedOffset) && requestedOffset >= 0 ? requestedOffset : 0;
+  const limit = 500;
   const agreement = await first(`SELECT a.*,
+    (SELECT COUNT(*) FROM agreement_items ai WHERE ai.version_id=a.current_version_id) AS totalItems,
     CASE WHEN a.status='active' AND date(a.start_date)>date('now') THEN 'scheduled'
       WHEN a.status='active' AND a.end_date IS NOT NULL AND date(a.end_date)<date('now') THEN 'expired'
       WHEN a.status='active' AND a.end_date IS NOT NULL AND date(a.end_date) BETWEEN date('now') AND date('now','+60 day') THEN 'expiring'
@@ -596,10 +621,18 @@ async function agreementDetail(agreementId: string) {
       vm.id AS modelId,vm.name AS model,un.id AS unitId,un.code AS unit,l.id AS locationId,l.city,l.state
       FROM agreements a JOIN agreement_items ai ON ai.version_id=a.current_version_id JOIN catalog_items ci ON ci.id=ai.catalog_item_id
       JOIN vehicle_models vm ON vm.id=ai.vehicle_model_id JOIN units un ON un.id=ai.unit_id JOIN locations l ON l.id=ai.location_id
-      WHERE a.id=? ORDER BY ci.name,vm.name,l.city LIMIT 5000`, [agreementId]),
+      WHERE a.id=? ORDER BY ci.name,vm.name,l.city,ai.id LIMIT ? OFFSET ?`, [agreementId, limit, offset]),
     all(`SELECT version_number AS versionNumber,status,published_at AS publishedAt,created_at AS createdAt FROM agreement_versions WHERE agreement_id=? ORDER BY version_number DESC`, [agreementId]),
   ]);
-  return ok({ agreement, locations, items: rows, versions });
+  if (!canWrite(user)) {
+    const { id, number, status, start_date, end_date, provisional, effectiveStatus, supplier, cnpj } = agreement;
+    return ok({ agreement: { id, number, status, start_date, end_date, provisional, effectiveStatus, supplier, cnpj }, locations,
+      totalItems: agreement.totalItems, offset, limit, version: agreement.current_version_id,
+      items: rows.map(({ notes: _notes, ...item }) => item),
+      versions: versions.map(({ versionNumber }) => ({ versionNumber })),
+    });
+  }
+  return ok({ agreement, locations, items: rows, versions, totalItems: agreement.totalItems, offset, limit, version: agreement.current_version_id });
 }
 
 async function createAgreement(request: Request, user: User) {
