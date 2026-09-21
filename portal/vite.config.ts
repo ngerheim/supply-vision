@@ -10,11 +10,10 @@ import hostingConfig from './.openai/hosting.json' with { type: 'json' };
 // operador, nao o desenvolvedor. Por isso ele vive em portal.env, junto das
 // outras configuracoes de operacao, e entra no bundle na compilacao.
 //
-// Os padroes abaixo valem para maquinas sem a pasta privado (checkout limpo,
-// CI). Sem eles o build quebraria onde nao ha operacao configurada, que e
-// justamente onde ninguem pode corrigir o arquivo.
-const PBI_URL_PADRAO = 'https://app.powerbi.com/view?r=eyJrIjoiNDkzODNlNmItOGQxYy00ZjU2LTk0NWQtYzMxNjZlZWU2NjZmIiwidCI6IjBjZGY5MjMzLTExZDYtNDM3OS04ZTgwLTE2YTdkNGQ4YjkyMCJ9';
-const PBI_PAGINA_PADRAO = '09a18dbe4d61132751d1';
+// Checkout limpo e CI nao possuem a pasta privado. O build continua valido,
+// mas a aba informa que falta configuracao em vez de publicar um endereco real.
+const PBI_URL_PADRAO = '';
+const PBI_PAGINA_PADRAO = '';
 
 function lerPortalEnv(chave: string, padrao: string): string {
   try {
