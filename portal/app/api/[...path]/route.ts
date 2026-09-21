@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import * as XLSX from 'xlsx';
 import { lerPlanilha } from '@/lib/planilha';
 import { ConcurrencyGate } from '@/lib/concurrency';
 import { chaveLocalidade, colunasAusentes, parseImportRow, resolveImportRows, summarizeImportErrors, deduplicateImportRows, uniqueIndex, type ImportTarget } from '@/lib/importacao';
@@ -190,6 +191,11 @@ export async function GET(request: NextRequest) {
     : await all('SELECT id,name FROM users WHERE active=1 ORDER BY name') });
   if (parts[0] === 'tickets' && parts[1]) return ticketDetail(parts[1]);
   if (parts[0] === 'tickets') return ok({ tickets: await ticketList(), stats: await ticketStats() });
+  if (parts[0] === 'export' && parts[1] === 'agreements') {
+    const resposta = await exportAgreements();
+    await audit(user.id, 'EXPORT', 'agreement', null, 'Planilha de acordos gerada para download');
+    return resposta;
+  }
   if (parts[0] === 'export') {
     if (user.role !== 'admin') return fail('Somente administradores podem exportar a base.', 403);
     // Monta primeiro e so entao registra: gravar antes faria a auditoria
@@ -1621,5 +1627,35 @@ async function exportDatabase(){
     'content-type':'application/json; charset=utf-8',
     'content-disposition':`attachment; filename="exportacao-portal-suprimentos-${now().slice(0,10)}.json"`,
     'x-content-type-options':'nosniff',
+  }});
+}
+
+async function exportAgreements(){
+  const headers=['MODELO','PECA_SERVICO','CIDADE','UF','CNPJ','PRECO','FORNECEDOR','MEDIDA','MARCAS','INICIO_VIGENCIA','FIM_VIGENCIA'];
+  const rows=await all<{modelo:string;item:string;cidade:string;uf:string;cnpj:string;preco:number;fornecedor:string;medida:string;marcas:string|null;inicio:string;fim:string|null}>(`SELECT
+    vm.name modelo,ci.name item,l.city cidade,l.state uf,s.cnpj,ai.price preco,s.trade_name fornecedor,
+    un.code medida,ai.brands_text marcas,a.start_date inicio,a.end_date fim
+    FROM agreements a JOIN suppliers s ON s.id=a.supplier_id
+    JOIN agreement_items ai ON ai.version_id=a.current_version_id
+    JOIN catalog_items ci ON ci.id=ai.catalog_item_id JOIN vehicle_models vm ON vm.id=ai.vehicle_model_id
+    JOIN units un ON un.id=ai.unit_id JOIN locations l ON l.id=ai.location_id
+    ORDER BY s.trade_name,vm.name,ci.name,l.state,l.city,ai.id`);
+  const excelDate=(value:string|null)=>value?new Date(`${value}T12:00:00.000Z`):null;
+  const sheet=XLSX.utils.aoa_to_sheet([headers,...rows.map(row=>[
+    row.modelo,row.item,row.cidade,row.uf,String(row.cnpj).padStart(14,'0'),Number(row.preco),row.fornecedor,row.medida,row.marcas||'',excelDate(row.inicio),excelDate(row.fim),
+  ])],{cellDates:true});
+  sheet['!autofilter']={ref:`A1:K${rows.length+1}`};
+  sheet['!cols']=[18,30,20,6,17,13,28,10,28,17,17].map(wch=>({wch}));
+  for(let line=2;line<=rows.length+1;line++){
+    const cnpjCell=sheet[`E${line}`]; if(cnpjCell){cnpjCell.t='s';cnpjCell.z='@';}
+    const priceCell=sheet[`F${line}`]; if(priceCell) priceCell.z='R$ #,##0.00';
+    for(const column of ['J','K']){const cell=sheet[`${column}${line}`];if(cell)cell.z='dd/mm/yyyy';}
+  }
+  const workbook=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook,sheet,'ACORDOS');
+  const content=XLSX.write(workbook,{bookType:'xlsx',type:'array',cellDates:true}) as ArrayBuffer;
+  return new NextResponse(content,{headers:{
+    'cache-control':'no-store','content-type':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'content-disposition':`attachment; filename="ACORDOS-${now().slice(0,10)}.xlsx"`,'x-content-type-options':'nosniff',
   }});
 }
