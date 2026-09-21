@@ -1484,7 +1484,6 @@ async function updateTicket(request:Request,user:User,ticketId:string){
   // estava em createTicket, onde o campo nem chega a ser usado: uma mensagem
   // de 3000 caracteres passava direto e ia para o banco.
   exigeTexto(body.statusMessage,LIMITES_CAMPO.mensagem,'mensagem da situação');
-  if(status!==current.status&&(status==='fechado'||status==='cancelado')&&!textValue(body.statusMessage)) return fail('Descreva o resultado antes de concluir ou cancelar o chamado.');
   const agreementId=body.agreementId === undefined ? current.agreement_id : textValue(body.agreementId) || null;
   if(agreementId && !await first('SELECT 1 ok FROM agreements WHERE id=?',[agreementId])) return fail('Acordo relacionado não encontrado.');
   const city=body.city===undefined?current.city:nullableText(body.city)?normalizeText(body.city):null;
