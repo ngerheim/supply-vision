@@ -605,6 +605,12 @@ async function agreementDetail(agreementId: string, user: User, params: URLSearc
   const requestedOffset = Number(params.get('offset') || 0);
   const offset = Number.isSafeInteger(requestedOffset) && requestedOffset >= 0 ? requestedOffset : 0;
   const limit = 500;
+  const sortColumns: Record<string, string> = {
+    item: 'ci.name', model: 'vm.name', location: "l.state || '/' || l.city",
+    brands: "COALESCE(ai.brands_text,'')", unit: 'un.code', price: 'ai.price',
+  };
+  const sortColumn = sortColumns[params.get('sort') || 'item'] || sortColumns.item;
+  const sortDirection = params.get('direction') === 'desc' ? 'DESC' : 'ASC';
   const agreement = await first(`SELECT a.*,
     (SELECT COUNT(*) FROM agreement_items ai WHERE ai.version_id=a.current_version_id) AS totalItems,
     CASE WHEN a.status='active' AND date(a.start_date)>date('now') THEN 'scheduled'
@@ -620,7 +626,7 @@ async function agreementDetail(agreementId: string, user: User, params: URLSearc
       vm.id AS modelId,vm.name AS model,un.id AS unitId,un.code AS unit,l.id AS locationId,l.city,l.state
       FROM agreements a JOIN agreement_items ai ON ai.version_id=a.current_version_id JOIN catalog_items ci ON ci.id=ai.catalog_item_id
       JOIN vehicle_models vm ON vm.id=ai.vehicle_model_id JOIN units un ON un.id=ai.unit_id JOIN locations l ON l.id=ai.location_id
-      WHERE a.id=? ORDER BY ci.name,vm.name,l.city,ai.id LIMIT ? OFFSET ?`, [agreementId, limit, offset]),
+      WHERE a.id=? ORDER BY ${sortColumn} ${sortDirection},ai.id ASC LIMIT ? OFFSET ?`, [agreementId, limit, offset]),
     all(`SELECT version_number AS versionNumber,status,published_at AS publishedAt,created_at AS createdAt FROM agreement_versions WHERE agreement_id=? ORDER BY version_number DESC`, [agreementId]),
   ]);
   if (!canWrite(user)) {
