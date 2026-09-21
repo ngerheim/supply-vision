@@ -160,6 +160,8 @@ def _preparar_acordos(df):
 
 def carregar_acordos_portal(url=PORTAL_URL, token=PORTAL_API_TOKEN):
     """Obtém a tabela vigente diretamente do banco mantido pelo Portal."""
+    if not url or not token:
+        raise RuntimeError("PORTAL_URL e PORTAL_API_TOKEN precisam estar configurados para carregar os acordos")
     endpoint = f"{url.rstrip('/')}/api/internal/agreements"
     ultimo_erro = None
     for tentativa in range(1, ACORDO_TENTATIVAS + 1):
