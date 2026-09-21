@@ -10,8 +10,14 @@
 #   .\scripts\atualizar-servidor.ps1            aplica
 #   .\scripts\atualizar-servidor.ps1 -Simular   so mostra o que viria
 #   .\scripts\atualizar-servidor.ps1 -Reaplicar reconstroi a versao atual
+#
+# Depois de trocar a versao, o script se relanca a partir do codigo novo
+# (-JaAtualizado). Sem isso, o PowerShell continuaria executando a versao que
+# ja estava na memoria, e qualquer correcao ao proprio processo de atualizacao
+# so valeria na atualizacao seguinte. -JaAtualizado e -VersaoAnterior sao de
+# uso interno; nao devem ser chamados a mao.
 [CmdletBinding()]
-param([switch]$Simular,[switch]$Reaplicar)
+param([switch]$Simular,[switch]$Reaplicar,[switch]$JaAtualizado,[string]$VersaoAnterior)
 
 $ErrorActionPreference = 'Stop'
 $Raiz = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
@@ -44,6 +50,47 @@ function Garantir-CredencialPortal {
   if (-not $confirmacao) { throw 'A credencial interna do Portal nao foi gravada corretamente.' }
 }
 
+# Os arquivos de privado\ nao sao versionados: quando uma versao nova passa a
+# esperar uma chave que ainda nao existe no servidor, a validacao reprova e a
+# atualizacao volta atras. Aqui as chaves que faltam sao acrescentadas com o
+# valor do exemplo, para que o arquivo do servidor fique com a forma esperada
+# e o que precisar de preenchimento apareca como aviso, nao como surpresa.
+function Reparar-ConfiguracaoPrivada {
+  $pares = @(
+    @{ exemplo = Join-Path $Raiz 'portal\portal.env.example';            destino = Join-Path $Raiz 'privado\portal\configuracao\portal.env' },
+    @{ exemplo = Join-Path $Raiz 'compartilhado\smtp.env.example';       destino = Join-Path $Raiz 'privado\comum\smtp.env' },
+    @{ exemplo = Join-Path $Raiz 'compartilhado\operacao.env.example';   destino = Join-Path $Raiz 'privado\comum\operacao.env' }
+  )
+  $pendentes = @()
+  foreach ($par in $pares) {
+    if (-not (Test-Path -LiteralPath $par.exemplo -PathType Leaf)) { continue }
+    if (-not (Test-Path -LiteralPath $par.destino -PathType Leaf)) { throw "Configuracao privada ausente: $($par.destino)" }
+    $doExemplo = [ordered]@{}
+    foreach ($l in @(Get-Content -LiteralPath $par.exemplo)) {
+      if ($l -match '^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=(.*)$') { $doExemplo[$Matches[1]] = $Matches[2].Trim() }
+    }
+    $presentes = @()
+    foreach ($l in @(Get-Content -LiteralPath $par.destino)) {
+      if ($l -match '^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=') { $presentes += $Matches[1] }
+    }
+    $faltando = @($doExemplo.Keys | Where-Object { $presentes -notcontains $_ })
+    if (-not $faltando) { continue }
+    $conteudo = Get-Content -LiteralPath $par.destino -Raw
+    if ($conteudo -and -not $conteudo.EndsWith("`n")) { $conteudo += "`r`n" }
+    $conteudo += "`r`n# Chaves acrescentadas automaticamente pela atualizacao.`r`n"
+    foreach ($k in $faltando) {
+      $conteudo += "$k=$($doExemplo[$k])`r`n"
+      if (-not $doExemplo[$k]) { $pendentes += "$k (em $(Split-Path $par.destino -Leaf))" }
+    }
+    [IO.File]::WriteAllText($par.destino, $conteudo, (New-Object Text.UTF8Encoding($false)))
+    Ok "configuracao completada em $(Split-Path $par.destino -Leaf): $($faltando -join ', ')"
+  }
+  if ($pendentes) {
+    Aviso 'estas chaves novas entraram vazias e talvez precisem de preenchimento:'
+    $pendentes | ForEach-Object { Aviso "  - $_" }
+  }
+}
+
 Etapa 'Conferindo o repositorio'
 $sujo = git status --porcelain
 if ($LASTEXITCODE -ne 0) { throw 'Nao foi possivel conferir o repositorio.' }
@@ -57,6 +104,13 @@ $anterior = git rev-parse --verify HEAD
 if ($LASTEXITCODE -ne 0) { throw 'Nao foi possivel identificar a versao atual.' }
 $anterior = $anterior.Trim()
 Ok "versao atual: $($anterior.Substring(0,7))  $(git log -1 --pretty=format:'%s')"
+
+if ($JaAtualizado) {
+  if ($VersaoAnterior -notmatch '^[0-9a-f]{40}$') { throw 'Reexecucao sem a versao anterior. Rode .\scripts\atualizar-servidor.ps1 sem parametros internos.' }
+  $anterior = $VersaoAnterior
+  $remoto = (git rev-parse --verify HEAD).Trim()
+  Aviso "continuando a atualizacao ja com o codigo de $($remoto.Substring(0,7))"
+} else {
 
 Etapa 'Buscando novidades'
 git fetch origin --quiet
@@ -74,6 +128,9 @@ if ($Reaplicar -and $remoto -eq $anterior) {
   Write-Host '   commits a aplicar:'
   git log --oneline "$anterior..$remoto" | ForEach-Object { Write-Host "      $_" }
 }
+
+}
+
 $mudou = git diff --name-only "$anterior..$remoto"
 $mexeuNode = $mudou | Where-Object { $_ -eq 'portal/package-lock.json' -or $_ -eq 'portal/package.json' }
 $mexeuPython = $mudou | Where-Object { $_ -like 'alertas/config/requirements*' }
@@ -96,14 +153,16 @@ for ($i = 0; $i -lt 60; $i++) {
 }
 if (Get-NetTCPConnection -LocalPort 3000 -State Listen -ErrorAction SilentlyContinue) { throw 'A porta 3000 continua ocupada; operacao nao encerrou.' }
 }
-Etapa 'Parando a operacao'
-Parar-Operacao
-Ok 'operacao parada'
+if (-not $JaAtualizado) {
+  Etapa 'Parando a operacao'
+  Parar-Operacao
+  Ok 'operacao parada'
 
-Etapa 'Backup do banco antes de trocar a versao'
-& node (Join-Path $Portal 'scripts\backup.mjs')
-if ($LASTEXITCODE -ne 0) { throw 'O backup falhou. Atualizacao cancelada — nao se troca versao sem copia do banco.' }
-Ok 'backup concluido'
+  Etapa 'Backup do banco antes de trocar a versao'
+  & node (Join-Path $Portal 'scripts\backup.mjs')
+  if ($LASTEXITCODE -ne 0) { throw 'O backup falhou. Atualizacao cancelada — nao se troca versao sem copia do banco.' }
+  Ok 'backup concluido'
+}
 
 function Reverter([string]$motivo) {
   Write-Host "`n!! $motivo" -ForegroundColor Red
@@ -127,10 +186,24 @@ function Reverter([string]$motivo) {
   exit 1
 }
 
-Etapa 'Aplicando a nova versao'
-git merge --ff-only $remoto --quiet
-if ($LASTEXITCODE -ne 0) { throw 'Falha ao aplicar a nova versao. Operacao permanece parada; confira o repositorio antes de reiniciar.' }
-Ok "agora em $($remoto.Substring(0,7))"
+if (-not $JaAtualizado) {
+  Etapa 'Aplicando a nova versao'
+  git merge --ff-only $remoto --quiet
+  if ($LASTEXITCODE -ne 0) { throw 'Falha ao aplicar a nova versao. Operacao permanece parada; confira o repositorio antes de reiniciar.' }
+  Ok "agora em $($remoto.Substring(0,7))"
+
+  # Daqui para a frente quem manda e o codigo novo. O PowerShell ja carregou
+  # este arquivo inteiro na memoria, entao o resto da atualizacao roda num
+  # processo novo, lendo o script que acabou de chegar. A operacao segue
+  # parada e o backup ja foi feito; o processo filho cuida da reversao se
+  # algo reprovar.
+  Etapa 'Seguindo com o script da nova versao'
+  & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'atualizar-servidor.ps1') -JaAtualizado -VersaoAnterior $anterior
+  exit $LASTEXITCODE
+}
+
+Etapa 'Conferindo a configuracao privada'
+Reparar-ConfiguracaoPrivada
 
 # O Portal e os Alertas compartilham uma credencial local. Ela precisa existir
 # antes do build, porque o endpoint interno a incorpora no servidor.

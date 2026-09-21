@@ -60,6 +60,16 @@ anteriores; se o retorno também falhar, a operação permanece parada e o erro
 é informado. O Portal fica fora do ar durante a atualização e as validações;
 reserve uma janela de manutenção, sem assumir duração fixa.
 
+Depois de trocar a versão, o script se relança a partir do código que acabou de
+chegar. Sem isso, o PowerShell seguiria executando a versão carregada na
+memória, e qualquer correção ao próprio processo de atualização só valeria na
+atualização seguinte. Na sequência ele confere a configuração privada: chaves
+que passaram a existir nos arquivos de exemplo e ainda faltam em `privado\` são
+acrescentadas com o valor do exemplo, e as que entram vazias aparecem como
+aviso no fim da etapa — é onde você descobre o que ainda precisa preencher.
+Como `privado\` não é versionado, era daí que vinham as reprovações da
+validação logo após uma versão passar a exigir uma chave nova.
+
 ## Backup
 
 Cada horário grava uma versão atual do banco em três vias: local em

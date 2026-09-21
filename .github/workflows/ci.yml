@@ -68,4 +68,5 @@ jobs:
         shell: powershell
         run: |
           & ./scripts/testar-atualizacao-segura.ps1
+          & ./scripts/testar-reparo-configuracao.ps1
           & ./scripts/testar-operacao.ps1
