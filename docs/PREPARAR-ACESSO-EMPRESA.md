@@ -23,6 +23,22 @@ de senha invalida sessões anteriores e desativar a conta bloqueia seu acesso.
 
 ## Homologação antes da divulgação
 
+Ensaio curto no notebook de desenvolvimento em 21/09/2026, com nove sessões
+e um acordo sintético de 10 mil condições em 10 mil localidades:
+
+| Requisições simultâneas | Mediana | Percentil 95 | Máximo |
+|---|---|---|---|
+| 10 | 0,89 s | 1,50 s | 1,51 s |
+| 25 | 1,87 s | 4,10 s | 4,93 s |
+| 50 | 3,63 s | 9,89 s | 12,17 s |
+| 100 | 7,80 s | 30,58 s | 34,25 s |
+
+O cliente HTTP do ensaio espera até 180 segundos. O navegador tem limite de
+30 segundos para leitura: portanto, sucesso HTTP do ensaio não equivale a
+sucesso da experiência no patamar de 100. Os números incluem carregamento
+inicial, pesquisa e detalhe e não representam 100 usuários reais. A quantidade
+de localidades da fixture também é maior que a da base inicial da operação.
+
 - Executar `npm run build` e `npm run test:imports` em cópia isolada, em uma
   janela apropriada do notebook-servidor. O ensaio cria seu próprio banco e
   serviço em loopback. Nunca apontar uma ferramenta de carga para produção.
