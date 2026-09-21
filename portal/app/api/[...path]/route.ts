@@ -235,7 +235,6 @@ async function POSTInterno(request: NextRequest) {
   if (parts[0] === 'tickets' && parts[1] && parts[2] === 'events') return addTicketEvent(request, user, parts[1]);
   if (parts[0] === 'tickets' && parts.length === 1) return createTicket(request, user);
   if (parts[0] === 'email-notifications' && parts[1] && parts[2] === 'retry') return retryEmailNotification(user, parts[1]);
-  if (parts[0] === 'imports' && parts[1] === 'legacy') return importWorkbook(request, user, null, true);
   if (parts[0] === 'imports' && parts[1] === 'agreement' && parts[2]) return importWorkbook(request, user, parts[2], false);
   if (parts[0] === 'mappings' && parts[1]) return createMapping(request, user, parts[1]);
   return fail('Rota não encontrada.', 404);
