@@ -2,7 +2,7 @@
 $ErrorActionPreference = 'Stop'
 $source = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'atualizar-servidor.ps1') -Raw
 $start = $source.IndexOf("Etapa 'Conferindo o repositorio'")
-$end = $source.IndexOf('if ($remoto -eq $anterior)')
+$end = $source.IndexOf('$mudou = git diff')
 if ($start -lt 0 -or $end -le $start) { throw 'Bloco de conferencia nao encontrado.' }
 $conferencia = [scriptblock]::Create($source.Substring($start, $end - $start))
 function Etapa([string]$t) {}
