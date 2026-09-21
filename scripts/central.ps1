@@ -89,7 +89,9 @@ $timer=New-Object Windows.Forms.Timer;$timer.Interval=5000;$timer.Add_Tick({
   }
   else{
    $erro=Join-Path $Op 'atualizacao-erro.log';$saida=Join-Path $Op 'atualizacao-saida.log'
-   $detalhe=@(Get-Content $erro,$saida -ErrorAction SilentlyContinue|Select-Object -Last 12)-join"`n"
+   $linhasErro=@(Get-Content $erro -ErrorAction SilentlyContinue|Select-Object -Last 8)
+   $linhasSaida=@(Get-Content $saida -ErrorAction SilentlyContinue|Select-Object -Last 12)
+   $detalhe=@($(if($linhasErro){'ERRO:';$linhasErro});$(if($linhasSaida){'ULTIMAS ETAPAS:';$linhasSaida}))-join"`n"
    if(!$detalhe){$detalhe='Consulte os registros da operação para mais detalhes.'}
    [Windows.Forms.MessageBox]::Show($detalhe,'Atualização não concluída','OK','Error')|Out-Null
   }
