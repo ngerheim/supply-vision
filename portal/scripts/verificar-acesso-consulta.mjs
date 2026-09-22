@@ -38,7 +38,7 @@ export async function verificarAcessoConsulta({ request, good, check, senha, agr
     assert.equal(secondPage.version, detail.version);
   });
   await check('Consulta: todas as famílias de escrita são bloqueadas', async () => {
-    const paths = ['/api/agreements', `/api/agreements/${agreementId}`, `/api/agreements/${agreementId}/items`, '/api/agreements/confirmar-provisorios', '/api/items/inexistente', '/api/catalogs/units', '/api/catalogs/units/inexistente', '/api/users', `/api/users/${user.id}`, '/api/tickets', '/api/tickets/inexistente/events', '/api/email-notifications/inexistente/retry', '/api/imports/legacy', `/api/imports/agreement/${agreementId}`, '/api/mappings/items/inexistente'];
+    const paths = ['/api/agreements', `/api/agreements/${agreementId}`, `/api/agreements/${agreementId}/items`, '/api/items/inexistente', '/api/catalogs/units', '/api/catalogs/units/inexistente', '/api/users', `/api/users/${user.id}`, '/api/tickets', '/api/tickets/inexistente/events', '/api/email-notifications/inexistente/retry', '/api/imports/legacy', `/api/imports/agreement/${agreementId}`, '/api/mappings/items/inexistente'];
     for (const method of ['POST', 'PUT', 'DELETE']) for (const path of paths) {
       assert.equal((await request(path, { method, session, ...(method === 'DELETE' ? {} : { body: {} }) })).status, 403, `${method} ${path}`);
     }

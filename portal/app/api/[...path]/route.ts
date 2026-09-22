@@ -262,7 +262,6 @@ async function POSTInterno(request: NextRequest) {
   if (!user) return fail('Sessão expirada.', 401);
   if (!canWrite(user)) return denyWrite(request, 'Seu perfil permite somente consulta.');
 
-  if (parts[0] === 'agreements' && parts[1] === 'confirmar-provisorios') return confirmarProvisorios(request, user);
   if (parts[0] === 'agreements' && parts.length === 1) return createAgreement(request, user);
   if (parts[0] === 'agreements' && parts[2] === 'items') return addAgreementItems(request, user, parts[1]);
   if (parts[0] === 'catalogs' && parts[1]) return createCatalog(request, user, parts[1]);
@@ -621,7 +620,6 @@ async function bootstrap(user: User) {
       (SELECT COUNT(*) FROM agreements) agreements,
       (SELECT COUNT(*) FROM agreements WHERE status='active' AND date(start_date)<=date(?1) AND (end_date IS NULL OR date(end_date)>=date(?1))) activeAgreements,
       (SELECT COUNT(*) FROM agreement_items ai JOIN agreements a ON a.current_version_id=ai.version_id WHERE a.status='active' AND date(a.start_date)<=date(?1) AND (a.end_date IS NULL OR date(a.end_date)>=date(?1))) searchableItems,
-      (SELECT COUNT(*) FROM agreements WHERE provisional=1) provisional,
       (SELECT COUNT(*) FROM suppliers WHERE active=1) suppliers,
       (SELECT COUNT(*) FROM agreements WHERE status='active' AND end_date IS NOT NULL AND date(end_date) BETWEEN date(?1) AND date(?1,'+60 day')) expiring`, [dataDeNegocio()]),
     agreementList(), all('SELECT id,legal_name AS legalName,trade_name AS tradeName,cnpj,city,state,active FROM suppliers ORDER BY trade_name'),
@@ -633,7 +631,7 @@ async function bootstrap(user: User) {
 }
 
 async function agreementList() {
-  return all(`SELECT a.id,a.number,a.status,a.start_date AS startDate,a.end_date AS endDate,a.provisional,a.updated_at AS updatedAt,
+  return all(`SELECT a.id,a.number,a.status,a.start_date AS startDate,a.end_date AS endDate,a.updated_at AS updatedAt,
     CASE WHEN a.status='active' AND date(a.start_date)>date(?1) THEN 'scheduled'
       WHEN a.status='active' AND a.end_date IS NOT NULL AND date(a.end_date)<date(?1) THEN 'expired'
       WHEN a.status='active' AND a.end_date IS NOT NULL AND date(a.end_date) BETWEEN date(?1) AND date(?1,'+60 day') THEN 'expiring'
@@ -643,7 +641,7 @@ async function agreementList() {
     (SELECT COUNT(*) FROM agreement_items ai WHERE ai.version_id=a.current_version_id) AS itemCount,
     (SELECT GROUP_CONCAT(l.city || ' / ' || l.state) FROM agreement_locations al JOIN locations l ON l.id=al.location_id WHERE al.agreement_id=a.id) AS locations
     FROM agreements a JOIN suppliers s ON s.id=a.supplier_id
-    ORDER BY a.provisional DESC,a.updated_at DESC LIMIT 500`, [dataDeNegocio()]);
+    ORDER BY a.updated_at DESC LIMIT 500`, [dataDeNegocio()]);
 }
 
 async function agreementDetail(agreementId: string, user: User, params: URLSearchParams) {
@@ -675,8 +673,8 @@ async function agreementDetail(agreementId: string, user: User, params: URLSearc
     all(`SELECT version_number AS versionNumber,status,published_at AS publishedAt,created_at AS createdAt FROM agreement_versions WHERE agreement_id=? ORDER BY version_number DESC`, [agreementId]),
   ]);
   if (!canWrite(user)) {
-    const { id, number, status, start_date, end_date, provisional, effectiveStatus, supplier, cnpj } = agreement;
-    return ok({ agreement: { id, number, status, start_date, end_date, provisional, effectiveStatus, supplier, cnpj }, locations,
+    const { id, number, status, start_date, end_date, effectiveStatus, supplier, cnpj } = agreement;
+    return ok({ agreement: { id, number, status, start_date, end_date, effectiveStatus, supplier, cnpj }, locations,
       totalItems: agreement.totalItems, offset, limit, version: agreement.current_version_id,
       items: rows.map(({ notes: _notes, ...item }) => item),
       versions: versions.map(({ versionNumber }) => ({ versionNumber })),
@@ -705,29 +703,6 @@ async function createAgreement(request: Request, user: User) {
   } catch (error: unknown) { return fail(errorMessage(error).includes('UNIQUE') ? 'Já existe um acordo com esse número.' : 'Não foi possível criar o acordo.'); }
 }
 
-async function confirmarProvisorios(request: Request, user: User) {
-  // A carga inicial cria um acordo por CNPJ com vigencia que ninguem informou.
-  // Repetir a mesma data em 137 telas so convida a erro de digitacao, entao a
-  // confirmacao e uma acao unica e auditada. Vale so para os provisorios: um
-  // acordo ja conferido nunca e tocado por aqui.
-  const body = await jsonBody<{ startDate?: unknown; endDate?: unknown; status?: unknown }>(request);
-  const startDate = textValue(body.startDate);
-  const endDate = nullableText(body.endDate);
-  const status = body.status ?? 'active';
-  if (!startDate) return fail('Informe o inicio da vigencia.');
-  if (!isOneOf(status, AGREEMENT_STATUSES)) return fail('Situacao do acordo invalida.');
-  if (!isValidDateRange(startDate, endDate)) return fail('Confira as datas: o fim nao pode ser anterior ao inicio.');
-  const pendentes = await first<{ n: number }>('SELECT COUNT(*) n FROM agreements WHERE provisional=1');
-  const total = Number(pendentes?.n || 0);
-  if (!total) return fail('Nao ha acordos provisorios para confirmar.');
-  await rawDb()
-    .prepare('UPDATE agreements SET start_date=?,end_date=?,status=?,provisional=0,updated_at=? WHERE provisional=1')
-    .bind(startDate, endDate, status, now())
-    .run();
-  await audit(user.id, 'UPDATE', 'agreement', null, `Confirmou ${total} acordo(s) provisorio(s) da carga inicial`);
-  return ok({ success: true, confirmados: total });
-}
-
 async function updateAgreement(request: Request, user: User, agreementId: string) {
   const parsed = validateAgreementInput(await jsonBody<AgreementInput>(request));
   if (!parsed.value) return fail(parsed.error || 'Dados do acordo inválidos.');
@@ -744,7 +719,7 @@ async function updateAgreement(request: Request, user: User, agreementId: string
   if (Number(locations?.n || 0) !== body.locationIds.length) return fail('Uma ou mais localidades não existem.');
   try {
     await rawDb().batch([
-      rawDb().prepare('UPDATE agreements SET number=?,supplier_id=?,status=?,start_date=?,end_date=?,notes=?,provisional=0,updated_at=? WHERE id=?').bind(body.number, body.supplierId, body.status, body.startDate, body.endDate, body.notes, now(), agreementId),
+      rawDb().prepare('UPDATE agreements SET number=?,supplier_id=?,status=?,start_date=?,end_date=?,notes=?,updated_at=? WHERE id=?').bind(body.number, body.supplierId, body.status, body.startDate, body.endDate, body.notes, now(), agreementId),
       rawDb().prepare('DELETE FROM agreement_locations WHERE agreement_id=?').bind(agreementId),
       ...body.locationIds.map((locationId) => rawDb().prepare('INSERT INTO agreement_locations (agreement_id,location_id) VALUES (?,?)').bind(agreementId, locationId)),
     ]);
@@ -1017,7 +992,7 @@ async function search(params: URLSearchParams) {
     WHERE ${conditions.join(' AND ')}`, values))?.n || 0);
   const limit = 1000;
   const rows = await all(`SELECT ai.id,ci.name AS item,vm.name AS model,ai.price,ai.courtesy,un.code AS unit,ai.brands_text AS brands,
-    l.city,l.state,s.trade_name AS supplier,s.cnpj,a.id AS agreementId,a.number,a.end_date AS endDate,a.provisional
+    l.city,l.state,s.trade_name AS supplier,s.cnpj,a.id AS agreementId,a.number,a.end_date AS endDate
     FROM agreement_items ai JOIN agreements a ON a.current_version_id=ai.version_id JOIN suppliers s ON s.id=a.supplier_id
     JOIN catalog_items ci ON ci.id=ai.catalog_item_id JOIN vehicle_models vm ON vm.id=ai.vehicle_model_id JOIN units un ON un.id=ai.unit_id JOIN locations l ON l.id=ai.location_id
     WHERE ${conditions.join(' AND ')} ORDER BY ci.name,vm.name,l.city,ai.price LIMIT ${limit}`, values);
@@ -1172,18 +1147,6 @@ async function cleanupFailedImport(importId:string){
     await db.batch([
       db.prepare('DELETE FROM agreement_items WHERE version_id=?').bind(version.id),
       db.prepare('DELETE FROM agreement_versions WHERE id=?').bind(version.id),
-    ]);
-  }
-  // Acordos provisorios so nasciam na carga inicial, que saiu do Portal. O
-  // trecho fica para a varredura de importacoes interrompidas ainda conseguir
-  // limpar o que uma carga inicial antiga tenha deixado pela metade.
-  for(const agreementId of new Set(staged.map((version)=>version.agreementId))){
-    const orphan=await first<{id:string}>(`SELECT a.id FROM agreements a
-      WHERE a.id=? AND a.provisional=1 AND a.current_version_id IS NULL
-      AND NOT EXISTS (SELECT 1 FROM agreement_versions v WHERE v.agreement_id=a.id)`,[agreementId]);
-    if(orphan) await db.batch([
-      db.prepare('DELETE FROM agreement_locations WHERE agreement_id=?').bind(agreementId),
-      db.prepare('DELETE FROM agreements WHERE id=?').bind(agreementId),
     ]);
   }
 }
