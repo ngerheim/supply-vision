@@ -339,25 +339,25 @@ function CodigoDe([scriptblock]$chamada) {
 
 Verifica 'Corpo JSON acima de 64 KB devolve 413' {
   $corpo = '{"name":"' + ('A' * 200000) + '"}'
-  $c = CodigoDe { Invoke-WebRequest "$baseUrl/api/catalogs/brands" -Method POST -Body $corpo -ContentType 'application/json' -WebSession $script:sessao -UseBasicParsing -TimeoutSec 60 }
+  $c = CodigoDe { Invoke-WebRequest "$baseUrl/api/catalogs/models" -Method POST -Body $corpo -ContentType 'application/json' -WebSession $script:sessao -UseBasicParsing -TimeoutSec 60 }
   if ($c -eq 413) { $true } else { "esperado 413, veio $c" }
 }
 
 Verifica 'JSON invalido devolve 400, nao 500' {
-  $c = CodigoDe { Invoke-WebRequest "$baseUrl/api/catalogs/brands" -Method POST -Body '{quebrado' -ContentType 'application/json' -WebSession $script:sessao -UseBasicParsing -TimeoutSec 30 }
+  $c = CodigoDe { Invoke-WebRequest "$baseUrl/api/catalogs/models" -Method POST -Body '{quebrado' -ContentType 'application/json' -WebSession $script:sessao -UseBasicParsing -TimeoutSec 30 }
   if ($c -eq 400) { $true } else { "esperado 400, veio $c" }
 }
 
 Verifica 'Campo acima do limite devolve 400' {
   $corpo = '{"name":"' + ('N' * 500) + '"}'
-  $c = CodigoDe { Invoke-WebRequest "$baseUrl/api/catalogs/brands" -Method POST -Body $corpo -ContentType 'application/json' -WebSession $script:sessao -UseBasicParsing -TimeoutSec 30 }
+  $c = CodigoDe { Invoke-WebRequest "$baseUrl/api/catalogs/models" -Method POST -Body $corpo -ContentType 'application/json' -WebSession $script:sessao -UseBasicParsing -TimeoutSec 30 }
   if ($c -eq 400) { $true } else { "esperado 400, veio $c" }
 }
 
 Verifica 'Campo no limite com acentos e aceito' {
   # 120 cedilhas: 120 caracteres, 240 bytes. Contar bytes recusaria.
   $corpo = '{"name":"' + ('ç' * 120) + '"}'
-  $c = CodigoDe { Invoke-WebRequest "$baseUrl/api/catalogs/brands" -Method POST -Body $corpo -ContentType 'application/json' -WebSession $script:sessao -UseBasicParsing -TimeoutSec 30 }
+  $c = CodigoDe { Invoke-WebRequest "$baseUrl/api/catalogs/models" -Method POST -Body $corpo -ContentType 'application/json' -WebSession $script:sessao -UseBasicParsing -TimeoutSec 30 }
   if ($c -eq 201) { $true } else { "esperado 201, veio $c" }
 }
 

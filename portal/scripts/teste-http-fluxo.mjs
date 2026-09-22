@@ -30,7 +30,7 @@ console.log('\n  TESTES HTTP EM FLUXO\n  --------------------');
 
 {
   const pedacos = ['{"name":"', ...Array.from({ length: 12 }, () => 'B'.repeat(8192)), '"}'];
-  const r = await pedir({ caminho: '/api/catalogs/brands', pedacos,
+  const r = await pedir({ caminho: '/api/catalogs/models', pedacos,
     cabecalhos: { cookie, 'content-type': 'application/json', 'transfer-encoding': 'chunked' } });
   verifica('JSON chunked sem Content-Length e limitado pelos bytes reais', r.status === 413 || detalhe(r));
 }
@@ -44,12 +44,12 @@ console.log('\n  TESTES HTTP EM FLUXO\n  --------------------');
 
 {
   const corpo = JSON.stringify({ name: 'MARCA TESTE FLUXO ' + Date.now() });
-  const r = await pedir({ caminho: '/api/catalogs/brands', corpo,
+  const r = await pedir({ caminho: '/api/catalogs/models', corpo,
     cabecalhos: { cookie, 'content-type': 'application/json', 'content-length': Buffer.byteLength(corpo) } });
   let removeu = false;
   if (r.status === 201) {
     const criado = JSON.parse(r.corpo);
-    const exclusao = await pedir({ metodo: 'DELETE', caminho: `/api/catalogs/brands/${criado.id}`, cabecalhos: { cookie } });
+    const exclusao = await pedir({ metodo: 'DELETE', caminho: `/api/catalogs/models/${criado.id}`, cabecalhos: { cookie } });
     removeu = exclusao.status === 200;
   }
   verifica('Corpo dentro do limite e limpeza continuam funcionando',

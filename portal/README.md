@@ -51,8 +51,8 @@ proteção de recursos, ainda sujeitos à homologação no notebook-servidor.
 - **Importações** — carga de planilhas.
 - **De/Para** *(Admin)* — correspondências confirmadas para itens, modelos
   e unidades. Localidades são cadastradas diretamente.
-- **Cadastros** *(Comprador/Admin)* — peças e serviços, modelos, unidades,
-  marcas e localidades.
+- **Cadastros** *(Comprador/Admin)* — peças e serviços, modelos, unidades
+  e localidades.
 - **Histórico** *(Admin)* — tudo que foi alterado, por quem e quando, com
   filtros e paginação de 50.
 - **Usuários** *(Admin)* — contas, perfis, exportação, fila de e-mails e
@@ -65,7 +65,7 @@ Nos campos de texto, acentos e maiúsculas não fazem diferença: `peca` encontr
 
 ## Cadastrar do zero
 
-1. Cadastre fornecedor, itens, modelos, unidades, marcas e localidades.
+1. Cadastre fornecedor, itens, modelos, unidades e localidades.
 2. Crie o acordo com número, fornecedor, início, fim opcional e localidades.
 3. Inclua as condições à mão ou importe a tabela em **Importações**.
 4. Consulte em **Buscar**.
@@ -296,8 +296,8 @@ para cortesia.
 
 A conferência e a publicação usam a mesma regra de duplicatas. A troca da
 versão do acordo, o histórico de conclusão e a auditoria são
-confirmados na mesma transação. Marcas da planilha ficam como texto da condição
-comercial, sem cadastrar automaticamente novas marcas no catálogo.
+confirmados na mesma transação. Marcas da planilha ficam como texto livre da
+condição comercial; não há cadastro de marcas.
 
 A importação é sempre a substituição integral de um acordo. Ela cria uma
 versão nova e preserva a anterior **dentro do banco**, para rastreabilidade do

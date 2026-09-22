@@ -391,7 +391,6 @@ const catalogDependencies: Record<string, { table: string; queries: Array<[strin
   items: { table: 'catalog_items', queries: [['condição(ões)', 'SELECT COUNT(*) n FROM agreement_items WHERE catalog_item_id=?'], ['correspondência(s) de De/Para', 'SELECT COUNT(*) n FROM import_item_mappings WHERE target_id=?']] },
   models: { table: 'vehicle_models', queries: [['condição(ões)', 'SELECT COUNT(*) n FROM agreement_items WHERE vehicle_model_id=?'], ['correspondência(s) de De/Para', 'SELECT COUNT(*) n FROM import_model_mappings WHERE target_id=?']] },
   units: { table: 'units', queries: [['condição(ões)', 'SELECT COUNT(*) n FROM agreement_items WHERE unit_id=?'], ['correspondência(s) de De/Para', 'SELECT COUNT(*) n FROM import_unit_mappings WHERE target_id=?']] },
-  brands: { table: 'brands', queries: [] },
   locations: { table: 'locations', queries: [['condição(ões)', 'SELECT COUNT(*) n FROM agreement_items WHERE location_id=?'], ['acordo(s)', 'SELECT COUNT(*) n FROM agreement_locations WHERE location_id=?']] },
 };
 
@@ -623,16 +622,16 @@ async function bootstrap(user: User) {
       all('SELECT id,name FROM vehicle_models ORDER BY name'),
       all('SELECT id,city,state FROM locations ORDER BY state,city'),
     ]);
-    return ok({ user, agreements, totalAcordos: total, catalogs: { suppliers, items, models, locations, units: [], brands: [] }, imports: [], manutencao: relatorioManutencao() });
+    return ok({ user, agreements, totalAcordos: total, catalogs: { suppliers, items, models, locations, units: [] }, imports: [], manutencao: relatorioManutencao() });
   }
-  const [total, agreements, suppliers, items, models, units, brands, locations, imports] = await Promise.all([
+  const [total, agreements, suppliers, items, models, units, locations, imports] = await Promise.all([
     totalDeAcordos(),
     agreementList(), all('SELECT id,legal_name AS legalName,trade_name AS tradeName,cnpj,city,state,active FROM suppliers ORDER BY trade_name'),
     all('SELECT id,name,active FROM catalog_items ORDER BY name'), all('SELECT id,name,active FROM vehicle_models ORDER BY name'),
-    all('SELECT id,code,name,active FROM units ORDER BY code'), all('SELECT id,name,active FROM brands ORDER BY name'),
+    all('SELECT id,code,name,active FROM units ORDER BY code'),
     all('SELECT id,city,state FROM locations ORDER BY state,city'), canWrite(user) ? importList() : Promise.resolve([]),
   ]);
-  return ok({ user, agreements, totalAcordos: total, catalogs: { suppliers, items, models, units, brands, locations }, imports, manutencao: relatorioManutencao() });
+  return ok({ user, agreements, totalAcordos: total, catalogs: { suppliers, items, models, units, locations }, imports, manutencao: relatorioManutencao() });
 }
 
 async function agreementList() {
@@ -794,7 +793,7 @@ async function updateItem(request: Request, user: User, itemId: string) {
 const catalogConfig: Record<string, { table: string; fields: string[] }> = {
   suppliers: { table: 'suppliers', fields: ['legalName', 'tradeName', 'cnpj', 'city', 'state'] },
   items: { table: 'catalog_items', fields: ['name'] }, models: { table: 'vehicle_models', fields: ['name'] },
-  units: { table: 'units', fields: ['code'] }, brands: { table: 'brands', fields: ['name'] }, locations: { table: 'locations', fields: ['city', 'state'] },
+  units: { table: 'units', fields: ['code'] }, locations: { table: 'locations', fields: ['city', 'state'] },
 };
 
 const mappingConfig: Record<string, { table: string; targetTable: string; label: string }> = {
@@ -917,9 +916,6 @@ async function createCatalog(request: Request, user: User, type: string) {
     // planilha contra codigo OU descricao. Gravando os dois iguais, a unidade
     // passa a ter uma grafia so e o caso de "unidade ambigua" deixa de existir.
     sql = 'INSERT INTO units (id,code,name,active) VALUES (?,?,?,1)'; values = [recordId, normalizeText(body.code), normalizeText(body.code)];
-  } else if (type === 'brands') {
-    if (!textValue(body.name)) return fail('Informe a marca.');
-    sql = 'INSERT INTO brands (id,name,active) VALUES (?,?,1)'; values = [recordId, normalizeText(body.name)];
   } else {
     const state = normalizeText(body.state);
     if (!normalizeImportText(body.city) || !isValidState(state)) return fail('Informe a cidade e selecione uma UF brasileira válida.');
@@ -953,9 +949,6 @@ async function updateCatalog(request: Request, user: User, type: string, recordI
     } else if (type === 'units') {
       if (!textValue(body.code)) return fail('Informe a unidade de medida.');
       await rawDb().prepare('UPDATE units SET code=?,name=?,active=? WHERE id=?').bind(normalizeText(body.code), normalizeText(body.code), active, recordId).run();
-    } else if (type === 'brands') {
-      if (!textValue(body.name)) return fail('Informe a marca.');
-      await rawDb().prepare('UPDATE brands SET name=?,active=? WHERE id=?').bind(normalizeText(body.name), active, recordId).run();
     } else {
       const state = normalizeText(body.state);
       if (!normalizeImportText(body.city) || !isValidState(state)) return fail('Informe a cidade e selecione uma UF brasileira válida.');
@@ -1444,7 +1437,6 @@ async function exportDatabase(){
     importUnitMappings:await all('SELECT * FROM import_unit_mappings ORDER BY source_key'),
     importModelMappings:await all('SELECT * FROM import_model_mappings ORDER BY source_key'),
     units:await all('SELECT * FROM units ORDER BY code'),
-    brands:await all('SELECT * FROM brands ORDER BY name'),
     agreements:await all('SELECT * FROM agreements ORDER BY created_at'),
     agreementLocations:await all('SELECT * FROM agreement_locations'),
     imports:await all('SELECT * FROM imports ORDER BY created_at'),

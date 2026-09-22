@@ -68,7 +68,7 @@ de localidades da fixture também é maior que a da base inicial da operação.
 - Limites por rota e cache de catálogos, guiados pelas medições de capacidade.
 - Revogação administrativa explícita de sessões sem trocar a senha.
 - Recuperação resistente a interrupções.
-- Correções de localidades, endereço de fornecedores e papel do catálogo de marcas.
+- Correções de localidades e endereço de fornecedores.
 - Otimizações com novos índices somente em uma etapa que autorize migração.
 
 Não divulgar a conta corporativa supondo que a aprovação do ensaio de importação

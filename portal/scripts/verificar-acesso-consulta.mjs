@@ -22,7 +22,6 @@ export async function verificarAcessoConsulta({ request, good, check, senha, agr
     const initial = (await request('/api/bootstrap', { session })).data;
     assert.deepEqual(initial.imports, []);
     assert.deepEqual(initial.catalogs.units, []);
-    assert.deepEqual(initial.catalogs.brands, []);
     assert.ok(initial.catalogs.suppliers.every(s => !('legalName' in s) && !('cnpj' in s)));
     const agreement = initial.agreements.find(a => a.id === agreementId);
     assert.equal(agreement.itemCount, 10000);

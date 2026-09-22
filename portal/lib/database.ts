@@ -20,7 +20,6 @@ const schema = [
   `CREATE TABLE IF NOT EXISTS catalog_items (id TEXT PRIMARY KEY, name TEXT NOT NULL UNIQUE COLLATE NOCASE, category TEXT, active INTEGER NOT NULL DEFAULT 1)`,
   `CREATE TABLE IF NOT EXISTS vehicle_models (id TEXT PRIMARY KEY, name TEXT NOT NULL UNIQUE COLLATE NOCASE, active INTEGER NOT NULL DEFAULT 1)`,
   `CREATE TABLE IF NOT EXISTS units (id TEXT PRIMARY KEY, code TEXT NOT NULL UNIQUE COLLATE NOCASE, name TEXT NOT NULL, active INTEGER NOT NULL DEFAULT 1)`,
-  `CREATE TABLE IF NOT EXISTS brands (id TEXT PRIMARY KEY, name TEXT NOT NULL UNIQUE COLLATE NOCASE, active INTEGER NOT NULL DEFAULT 1)`,
   `CREATE TABLE IF NOT EXISTS import_item_mappings (id TEXT PRIMARY KEY, source_text TEXT NOT NULL, source_key TEXT NOT NULL UNIQUE, target_id TEXT NOT NULL REFERENCES catalog_items(id), active INTEGER NOT NULL DEFAULT 1, notes TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`,
   `CREATE INDEX IF NOT EXISTS idx_import_item_mappings_target ON import_item_mappings(target_id)`,
   `CREATE TABLE IF NOT EXISTS import_model_mappings (id TEXT PRIMARY KEY, source_text TEXT NOT NULL, source_key TEXT NOT NULL UNIQUE, target_id TEXT NOT NULL REFERENCES vehicle_models(id), active INTEGER NOT NULL DEFAULT 1, notes TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`,
@@ -161,6 +160,16 @@ async function initialize() {
     await db.batch([
       db.prepare('DROP TABLE IF EXISTS import_location_mappings'),
       db.prepare('INSERT INTO schema_migrations (version,applied_at) VALUES (4,?)').bind(now()),
+    ]);
+  }
+  // Versao 5: o cadastro de marcas saiu. "Marcas aceitas" das condicoes
+  // sempre foi texto livre (agreement_items.brands_text) e nunca consultou
+  // esta tabela.
+  const semCadastroDeMarcas = await db.prepare('SELECT 1 ok FROM schema_migrations WHERE version=5').first();
+  if (!semCadastroDeMarcas) {
+    await db.batch([
+      db.prepare('DROP TABLE IF EXISTS brands'),
+      db.prepare('INSERT INTO schema_migrations (version,applied_at) VALUES (5,?)').bind(now()),
     ]);
   }
   const relatorioConfigurado = await db.prepare('SELECT 1 ok FROM schema_migrations WHERE version=3').first();
