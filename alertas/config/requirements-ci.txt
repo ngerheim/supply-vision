@@ -1,0 +1,4 @@
+# Ferramentas usadas so pelo CI. Versao fixa, e nao "pip install pip-audit"
+# solto no workflow: o auditor tambem e codigo de terceiro rodando no CI, e
+# aqui o Dependabot (ecossistema pip de /alertas/config) o mantem atualizado.
+pip-audit==2.10.1
