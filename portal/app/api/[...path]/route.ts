@@ -1,5 +1,6 @@
 import { ATUALIZAR_USUARIO_SQL } from '@/lib/usuarios-sql';
 import { montarPowerBiUrl } from '@/lib/powerbi';
+import { dataDeNegocio } from '@/lib/data-negocio';
 import { NextRequest, NextResponse } from 'next/server';
 import * as XLSX from 'xlsx';
 import { lerPlanilha } from '@/lib/planilha';
@@ -616,11 +617,11 @@ async function bootstrap(user: User) {
   const [metrics, agreements, suppliers, items, models, units, brands, locations, imports] = await Promise.all([
     first(`SELECT
       (SELECT COUNT(*) FROM agreements) agreements,
-      (SELECT COUNT(*) FROM agreements WHERE status='active' AND date(start_date)<=date('now') AND (end_date IS NULL OR date(end_date)>=date('now'))) activeAgreements,
-      (SELECT COUNT(*) FROM agreement_items ai JOIN agreements a ON a.current_version_id=ai.version_id WHERE a.status='active' AND date(a.start_date)<=date('now') AND (a.end_date IS NULL OR date(a.end_date)>=date('now'))) searchableItems,
+      (SELECT COUNT(*) FROM agreements WHERE status='active' AND date(start_date)<=date(?1) AND (end_date IS NULL OR date(end_date)>=date(?1))) activeAgreements,
+      (SELECT COUNT(*) FROM agreement_items ai JOIN agreements a ON a.current_version_id=ai.version_id WHERE a.status='active' AND date(a.start_date)<=date(?1) AND (a.end_date IS NULL OR date(a.end_date)>=date(?1))) searchableItems,
       (SELECT COUNT(*) FROM agreements WHERE provisional=1) provisional,
       (SELECT COUNT(*) FROM suppliers WHERE active=1) suppliers,
-      (SELECT COUNT(*) FROM agreements WHERE status='active' AND end_date IS NOT NULL AND date(end_date) BETWEEN date('now') AND date('now','+60 day')) expiring`),
+      (SELECT COUNT(*) FROM agreements WHERE status='active' AND end_date IS NOT NULL AND date(end_date) BETWEEN date(?1) AND date(?1,'+60 day')) expiring`, [dataDeNegocio()]),
     agreementList(), all('SELECT id,legal_name AS legalName,trade_name AS tradeName,cnpj,city,state,active FROM suppliers ORDER BY trade_name'),
     all('SELECT id,name,active FROM catalog_items ORDER BY name'), all('SELECT id,name,active FROM vehicle_models ORDER BY name'),
     all('SELECT id,code,name,active FROM units ORDER BY code'), all('SELECT id,name,active FROM brands ORDER BY name'),
@@ -631,16 +632,16 @@ async function bootstrap(user: User) {
 
 async function agreementList() {
   return all(`SELECT a.id,a.number,a.status,a.start_date AS startDate,a.end_date AS endDate,a.provisional,a.updated_at AS updatedAt,
-    CASE WHEN a.status='active' AND date(a.start_date)>date('now') THEN 'scheduled'
-      WHEN a.status='active' AND a.end_date IS NOT NULL AND date(a.end_date)<date('now') THEN 'expired'
-      WHEN a.status='active' AND a.end_date IS NOT NULL AND date(a.end_date) BETWEEN date('now') AND date('now','+60 day') THEN 'expiring'
+    CASE WHEN a.status='active' AND date(a.start_date)>date(?1) THEN 'scheduled'
+      WHEN a.status='active' AND a.end_date IS NOT NULL AND date(a.end_date)<date(?1) THEN 'expired'
+      WHEN a.status='active' AND a.end_date IS NOT NULL AND date(a.end_date) BETWEEN date(?1) AND date(?1,'+60 day') THEN 'expiring'
       ELSE a.status END AS effectiveStatus,
     s.trade_name AS supplier,s.cnpj,
     (SELECT COUNT(*) FROM agreement_locations al WHERE al.agreement_id=a.id) AS locationCount,
     (SELECT COUNT(*) FROM agreement_items ai WHERE ai.version_id=a.current_version_id) AS itemCount,
     (SELECT GROUP_CONCAT(l.city || ' / ' || l.state) FROM agreement_locations al JOIN locations l ON l.id=al.location_id WHERE al.agreement_id=a.id) AS locations
     FROM agreements a JOIN suppliers s ON s.id=a.supplier_id
-    ORDER BY a.provisional DESC,a.updated_at DESC LIMIT 500`);
+    ORDER BY a.provisional DESC,a.updated_at DESC LIMIT 500`, [dataDeNegocio()]);
 }
 
 async function agreementDetail(agreementId: string, user: User, params: URLSearchParams) {
@@ -655,12 +656,12 @@ async function agreementDetail(agreementId: string, user: User, params: URLSearc
   const sortDirection = params.get('direction') === 'desc' ? 'DESC' : 'ASC';
   const agreement = await first(`SELECT a.*,
     (SELECT COUNT(*) FROM agreement_items ai WHERE ai.version_id=a.current_version_id) AS totalItems,
-    CASE WHEN a.status='active' AND date(a.start_date)>date('now') THEN 'scheduled'
-      WHEN a.status='active' AND a.end_date IS NOT NULL AND date(a.end_date)<date('now') THEN 'expired'
-      WHEN a.status='active' AND a.end_date IS NOT NULL AND date(a.end_date) BETWEEN date('now') AND date('now','+60 day') THEN 'expiring'
+    CASE WHEN a.status='active' AND date(a.start_date)>date(?1) THEN 'scheduled'
+      WHEN a.status='active' AND a.end_date IS NOT NULL AND date(a.end_date)<date(?1) THEN 'expired'
+      WHEN a.status='active' AND a.end_date IS NOT NULL AND date(a.end_date) BETWEEN date(?1) AND date(?1,'+60 day') THEN 'expiring'
       ELSE a.status END AS effectiveStatus,
     s.trade_name AS supplier,s.legal_name AS legalName,s.cnpj,u.name AS owner
-    FROM agreements a JOIN suppliers s ON s.id=a.supplier_id LEFT JOIN users u ON u.id=a.owner_user_id WHERE a.id=?`, [agreementId]);
+    FROM agreements a JOIN suppliers s ON s.id=a.supplier_id LEFT JOIN users u ON u.id=a.owner_user_id WHERE a.id=?2`, [dataDeNegocio(), agreementId]);
   if (!agreement) return fail('Acordo não encontrado.', 404);
   const [locations, rows, versions] = await Promise.all([
     all(`SELECT l.id,l.city,l.state FROM agreement_locations al JOIN locations l ON l.id=al.location_id WHERE al.agreement_id=? ORDER BY l.state,l.city`, [agreementId]),
@@ -994,10 +995,12 @@ async function createUser(request: Request, actor: User) {
 }
 
 async function search(params: URLSearchParams) {
-  const values: unknown[] = [], conditions = [
+  // ?1 e a data de negocio; os filtros abaixo usam ? e o SQLite os numera a
+  // partir de 2, na ordem em que aparecem.
+  const values: unknown[] = [dataDeNegocio()], conditions = [
     `a.status='active'`,
-    `date(a.start_date)<=date('now')`,
-    `(a.end_date IS NULL OR date(a.end_date)>=date('now'))`,
+    `date(a.start_date)<=date(?1)`,
+    `(a.end_date IS NULL OR date(a.end_date)>=date(?1))`,
   ];
   const state = normalizeText((params.get('state') || '').slice(0, LIMITES_CAMPO.busca));
   if (state) { conditions.push(`l.state=?`); values.push(state); }
