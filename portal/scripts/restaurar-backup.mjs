@@ -140,4 +140,13 @@ if (JSON.stringify(totaisRestaurado) !== JSON.stringify(totaisBackup)) {
 // arquivo novo corrompe a base restaurada.
 for (const sufixo of ['-wal', '-shm']) fs.rmSync(alvo + sufixo, { force: true });
 fs.renameSync(restaurando, alvo);
+
+// Cada restauracao guarda o estado anterior como pre-restauracao-*.sqlite,
+// uma copia integral do banco. Fora da retencao de 7 dias do backup, elas se
+// acumulavam para sempre; ficam as 3 mais recentes. O carimbo no nome e ISO,
+// entao a ordem alfabetica e a cronologica.
+const MANTER_PRE_RESTAURACAO = 3;
+const antigas = fs.readdirSync(pastaBackup).filter((nome) => /^pre-restauracao-.*\.sqlite$/.test(nome)).sort().reverse().slice(MANTER_PRE_RESTAURACAO);
+for (const nome of antigas) fs.rmSync(path.join(pastaBackup, nome), { force: true });
+if (antigas.length) console.log(`Copias pre-restauracao antigas removidas: ${antigas.join(', ')}`);
 console.log('\nRestauracao concluida. Inicie a operacao novamente.');
