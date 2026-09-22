@@ -4,11 +4,22 @@ import test from 'node:test';
 import { VARIAVEIS_DO_WORKER, montarArgumentos, montarVars } from '../scripts/iniciar-portal.mjs';
 
 test('entrega ao Worker as variaveis que ele le de env', () => {
-  const args = montarVars({ INITIAL_ADMIN_PASSWORD: 'senha-bem-grande', TRUSTED_PROXY: 'true' });
+  const args = montarVars({
+    INITIAL_ADMIN_PASSWORD: 'senha-bem-grande',
+    TRUSTED_PROXY: 'true',
+    PORTAL_API_TOKEN: 'a'.repeat(64),
+  });
   assert.deepEqual(args, [
     '--var', 'INITIAL_ADMIN_PASSWORD:senha-bem-grande',
     '--var', 'TRUSTED_PROXY:true',
+    '--var', `PORTAL_API_TOKEN:${'a'.repeat(64)}`,
   ]);
+});
+
+test('a credencial interna vai pelo ambiente, nao so pelo bundle', () => {
+  // Enquanto ela existia apenas embutida na compilacao, trocar o token sem
+  // recompilar derrubava o pipeline com 401.
+  assert.ok(VARIAVEIS_DO_WORKER.includes('PORTAL_API_TOKEN'));
 });
 
 test('ignora variavel ausente ou vazia', () => {
@@ -18,7 +29,7 @@ test('ignora variavel ausente ou vazia', () => {
 });
 
 test('nao repassa segredo que o Worker nao usa', () => {
-  const args = montarVars({ SMTP_PASSWORD: 'nao-deve-vazar', PORTAL_API_TOKEN: 'nem-este' });
+  const args = montarVars({ SMTP_PASSWORD: 'nao-deve-vazar', BACKUP_NETWORK_DIR: '\\\\rede\\backup' });
   assert.deepEqual(args, []);
   assert.ok(!VARIAVEIS_DO_WORKER.includes('SMTP_PASSWORD'));
 });
