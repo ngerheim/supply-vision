@@ -100,11 +100,25 @@ function rejectCrossOrigin(request: Request) {
   }
 }
 
+// A credencial interna vem do ambiente do Worker, entregue pelo
+// scripts/iniciar-portal.mjs a partir do portal.env -- o mesmo arquivo que o
+// rodar.py dos Alertas le a cada execucao. Enquanto ela era apenas embutida na
+// compilacao, trocar o token sem recompilar deixava os dois lados
+// discordando, e o sintoma era 401 no meio do pipeline.
+//
+// O valor compilado permanece como reserva: uma instalacao que ainda suba o
+// Portal pelo caminho antigo continua funcionando ate ser atualizada.
+function credencialInterna() {
+  const doAmbiente = String((env as unknown as { PORTAL_API_TOKEN?: string }).PORTAL_API_TOKEN || '').trim();
+  return doAmbiente || __PORTAL_API_TOKEN__;
+}
+
 function tokenInternoValido(request: Request) {
+  const esperado = credencialInterna();
   const recebido = request.headers.get('authorization')?.replace(/^Bearer\s+/i, '') || '';
-  if (!__PORTAL_API_TOKEN__ || recebido.length !== __PORTAL_API_TOKEN__.length) return false;
+  if (!esperado || recebido.length !== esperado.length) return false;
   let diferenca = 0;
-  for (let i = 0; i < recebido.length; i++) diferenca |= recebido.charCodeAt(i) ^ __PORTAL_API_TOKEN__.charCodeAt(i);
+  for (let i = 0; i < recebido.length; i++) diferenca |= recebido.charCodeAt(i) ^ esperado.charCodeAt(i);
   return diferenca === 0;
 }
 
