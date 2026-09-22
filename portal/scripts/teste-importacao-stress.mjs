@@ -535,6 +535,52 @@ try {
     await good(`/api/agreements/${agreementId}`, { method: 'PUT', body: corpo(atuais) });
     assert.deepEqual(abrangencia(), [...atuais].sort((x, y) => x.localeCompare(y)));
   });
+  await check('Edições simultâneas no mesmo acordo não deixam condição fora da abrangência', async () => {
+    const detalhe = await good(`/api/agreements/${agreementId}`);
+    const a = detalhe.agreement, modelo = detalhe.items[0];
+    const corpo = (locationIds) => ({ number: a.number, supplierId: a.supplier_id, status: a.status, startDate: a.start_date, endDate: a.end_date, notes: a.notes, locationIds });
+    const atuais = detalhe.locations.map((local) => local.id);
+    const extra = await catalog('locations', { city: 'CONCORRENCIA TESTE', state: 'GO' });
+    const condicao = { catalogItemId: modelo.catalogItemId, modelIds: [modelo.modelId], unitId: modelo.unitId, locationId: extra.id, price: 1 };
+    const naCidadeExtra = () => query('SELECT ai.id FROM agreement_items ai JOIN agreements ag ON ag.current_version_id=ai.version_id WHERE ag.id=? AND ai.location_id=?', agreementId, extra.id);
+    const status = { retirar: new Set(), incluir: new Set() };
+    for (let rodada = 0; rodada < 15; rodada++) {
+      for (const item of naCidadeExtra()) await good(`/api/items/${item.id}`, { method: 'DELETE' });
+      await good(`/api/agreements/${agreementId}`, { method: 'PUT', body: corpo([...atuais, extra.id]) });
+      // Uma requisicao retira a cidade enquanto a outra inclui preco nela.
+      const [retirar, incluir] = await Promise.all([
+        request(`/api/agreements/${agreementId}`, { method: 'PUT', body: corpo(atuais) }),
+        request(`/api/agreements/${agreementId}/items`, { method: 'POST', body: condicao }),
+      ]);
+      status.retirar.add(retirar.status); status.incluir.add(incluir.status);
+      assert.ok([200, 409].includes(retirar.status), JSON.stringify(retirar.data));
+      assert.ok([200, 409].includes(incluir.status) || (incluir.status === 400 && /abrangência/.test(incluir.data.error)), JSON.stringify(incluir.data));
+      const fora = query(`SELECT COUNT(*) n FROM agreement_items ai JOIN agreements ag ON ag.current_version_id=ai.version_id
+        WHERE ag.id=? AND ai.location_id NOT IN (SELECT location_id FROM agreement_locations WHERE agreement_id=ag.id)`, agreementId)[0].n;
+      assert.equal(fora, 0, `rodada ${rodada}: condição ficou fora da abrangência`);
+    }
+    for (const item of naCidadeExtra()) await good(`/api/items/${item.id}`, { method: 'DELETE' });
+    await good(`/api/agreements/${agreementId}`, { method: 'PUT', body: corpo([...atuais, extra.id]) });
+    // A disputa acima depende do acaso; esta parte nao. Com o acordo travado
+    // por outra operacao, editar e incluir condicao recebem 409 e nada muda.
+    assert.ok(sqlitePath.startsWith(path.join(output, 'state') + path.sep));
+    const fixture = new DatabaseSync(sqlitePath);
+    try {
+      fixture.exec('PRAGMA busy_timeout=10000');
+      fixture.prepare('INSERT INTO travas (chave,dono,adquirida_em) VALUES (?,?,?)').run(`acordo:${agreementId}`, 'outra-operacao', new Date().toISOString());
+    } finally { fixture.close(); }
+    const abrangenciaTravada = query('SELECT COUNT(*) n FROM agreement_locations WHERE agreement_id=?', agreementId)[0].n;
+    const editar = await request(`/api/agreements/${agreementId}`, { method: 'PUT', body: corpo(atuais) });
+    const incluirTravado = await request(`/api/agreements/${agreementId}/items`, { method: 'POST', body: condicao });
+    for (const r of [editar, incluirTravado]) { assert.equal(r.status, 409, JSON.stringify(r.data)); assert.match(r.data.error, /Outro usuário/); }
+    assert.equal(query('SELECT COUNT(*) n FROM agreement_locations WHERE agreement_id=?', agreementId)[0].n, abrangenciaTravada);
+    assert.equal(naCidadeExtra().length, 0);
+    const soltar = new DatabaseSync(sqlitePath);
+    try { soltar.exec('PRAGMA busy_timeout=10000'); soltar.prepare('DELETE FROM travas WHERE chave=?').run(`acordo:${agreementId}`); } finally { soltar.close(); }
+    await good(`/api/agreements/${agreementId}`, { method: 'PUT', body: corpo(atuais) });
+    assert.equal(query("SELECT COUNT(*) n FROM travas WHERE chave LIKE 'acordo:%'")[0].n, 0, 'Trava de acordo ficou presa');
+    metrics.push({ concorrenciaAbrangencia: { retirar: [...status.retirar], incluir: [...status.incluir] } });
+  });
   await check('Exportação conserva os De/Para', async () => {
     const exported = await good('/api/export');
     assert.equal(exported.tables.importItemMappings.length, query('SELECT COUNT(*) n FROM import_item_mappings')[0].n);

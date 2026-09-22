@@ -122,6 +122,10 @@ async function initialize() {
   const db = rawDb();
   await db.batch(schema.map((sql) => db.prepare(sql)));
   await applyColumnMigrations();
+  // Travas de acordo vivem so durante uma requisicao. Na subida do Portal nao
+  // ha requisicao nenhuma em andamento: o que sobrou e de um processo que
+  // morreu, e ficaria prendendo o acordo ate vencer.
+  await db.prepare("DELETE FROM travas WHERE chave LIKE 'acordo:%'").run();
   const existing = await db.prepare('SELECT id FROM users LIMIT 1').first();
   if (!existing) {
     const initialPassword = (env as unknown as { INITIAL_ADMIN_PASSWORD?: string }).INITIAL_ADMIN_PASSWORD;
