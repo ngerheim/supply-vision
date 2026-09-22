@@ -140,13 +140,22 @@ if (JSON.stringify(totaisRestaurado) !== JSON.stringify(totaisBackup)) {
 // arquivo novo corrompe a base restaurada.
 for (const sufixo of ['-wal', '-shm']) fs.rmSync(alvo + sufixo, { force: true });
 fs.renameSync(restaurando, alvo);
+console.log('\nRestauracao concluida.');
 
 // Cada restauracao guarda o estado anterior como pre-restauracao-*.sqlite,
 // uma copia integral do banco. Fora da retencao de 7 dias do backup, elas se
 // acumulavam para sempre; ficam as 3 mais recentes. O carimbo no nome e ISO,
 // entao a ordem alfabetica e a cronologica.
+//
+// A restauracao ja terminou aqui. A limpeza e secundaria: se um antivirus ou
+// uma sincronizacao segurar um arquivo antigo, ela vira aviso, e o comando nao
+// termina em erro -- o que levaria o operador a restaurar de novo a toa.
 const MANTER_PRE_RESTAURACAO = 3;
-const antigas = fs.readdirSync(pastaBackup).filter((nome) => /^pre-restauracao-.*\.sqlite$/.test(nome)).sort().reverse().slice(MANTER_PRE_RESTAURACAO);
-for (const nome of antigas) fs.rmSync(path.join(pastaBackup, nome), { force: true });
-if (antigas.length) console.log(`Copias pre-restauracao antigas removidas: ${antigas.join(', ')}`);
-console.log('\nRestauracao concluida. Inicie a operacao novamente.');
+try {
+  const antigas = fs.readdirSync(pastaBackup).filter((nome) => /^pre-restauracao-.*\.sqlite$/.test(nome)).sort().reverse().slice(MANTER_PRE_RESTAURACAO);
+  for (const nome of antigas) fs.rmSync(path.join(pastaBackup, nome), { force: true });
+  if (antigas.length) console.log(`Copias pre-restauracao antigas removidas: ${antigas.join(', ')}`);
+} catch (erro) {
+  console.warn(`AVISO: a restauracao foi concluida, mas nao foi possivel remover copias pre-restauracao antigas (${erro instanceof Error ? erro.message : String(erro)}).`);
+}
+console.log('Inicie a operacao novamente.');
