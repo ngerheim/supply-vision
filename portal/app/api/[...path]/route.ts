@@ -392,7 +392,7 @@ const catalogDependencies: Record<string, { table: string; queries: Array<[strin
   models: { table: 'vehicle_models', queries: [['condição(ões)', 'SELECT COUNT(*) n FROM agreement_items WHERE vehicle_model_id=?'], ['correspondência(s) de De/Para', 'SELECT COUNT(*) n FROM import_model_mappings WHERE target_id=?']] },
   units: { table: 'units', queries: [['condição(ões)', 'SELECT COUNT(*) n FROM agreement_items WHERE unit_id=?'], ['correspondência(s) de De/Para', 'SELECT COUNT(*) n FROM import_unit_mappings WHERE target_id=?']] },
   brands: { table: 'brands', queries: [] },
-  locations: { table: 'locations', queries: [['condição(ões)', 'SELECT COUNT(*) n FROM agreement_items WHERE location_id=?'], ['acordo(s)', 'SELECT COUNT(*) n FROM agreement_locations WHERE location_id=?'], ['correspondência(s) de De/Para', 'SELECT COUNT(*) n FROM import_location_mappings WHERE target_id=?']] },
+  locations: { table: 'locations', queries: [['condição(ões)', 'SELECT COUNT(*) n FROM agreement_items WHERE location_id=?'], ['acordo(s)', 'SELECT COUNT(*) n FROM agreement_locations WHERE location_id=?']] },
 };
 
 async function deleteCatalog(user: User, type: string, recordId: string) {
@@ -1442,7 +1442,6 @@ async function exportDatabase(){
     vehicleModels:await all('SELECT * FROM vehicle_models ORDER BY name'),
     importItemMappings:await all('SELECT * FROM import_item_mappings ORDER BY source_key'),
     importUnitMappings:await all('SELECT * FROM import_unit_mappings ORDER BY source_key'),
-    importLocationMappings:await all('SELECT * FROM import_location_mappings ORDER BY source_key'),
     importModelMappings:await all('SELECT * FROM import_model_mappings ORDER BY source_key'),
     units:await all('SELECT * FROM units ORDER BY code'),
     brands:await all('SELECT * FROM brands ORDER BY name'),
