@@ -1,45 +1,6 @@
-import { readFileSync } from 'node:fs';
 import tailwindcss from '@tailwindcss/postcss';
 import vinext from 'vinext';
 import { defineConfig } from 'vite';
-
-// A aba "Manutencao" emoldura um relatorio publicado no Power BI. O endereco
-// dele nao e codigo: muda quando o relatorio e republicado, e quem troca e o
-// operador, nao o desenvolvedor. Por isso ele vive em portal.env, junto das
-// outras configuracoes de operacao, e entra no bundle na compilacao.
-//
-// Checkout limpo e CI nao possuem a pasta privado. O build continua valido,
-// mas a aba informa que falta configuracao em vez de publicar um endereco real.
-const PBI_URL_PADRAO = '';
-const PBI_PAGINA_PADRAO = '';
-
-// Uma chave repetida no portal.env e o pior caso: cada leitor escolhe uma
-// ocorrencia diferente e ninguem percebe. Aqui a duplicidade derruba a
-// compilacao, e o valor adotado e o ultimo — a mesma regra do lado Python.
-//
-// Nenhum segredo passa por aqui. O PORTAL_API_TOKEN ja foi embutido na
-// compilacao e ficava gravado em texto puro em dist/server; hoje ele chega ao
-// Worker so em tempo de execucao, pelo scripts/iniciar-portal.mjs.
-function lerPortalEnv(chave: string, padrao: string): string {
-  const encontrados: string[] = [];
-  try {
-    const texto = readFileSync('../privado/portal/configuracao/portal.env', 'utf8');
-    for (const linha of texto.split(/\r?\n/)) {
-      const corte = linha.indexOf('=');
-      if (corte < 0 || linha.trimStart().startsWith('#')) continue;
-      if (linha.slice(0, corte).trim() !== chave) continue;
-      const valor = linha.slice(corte + 1).trim();
-      if (valor) encontrados.push(valor);
-    }
-  } catch { /* sem pasta privado: segue com o padrao */ }
-  if (encontrados.length > 1 && new Set(encontrados).size > 1) {
-    throw new Error(
-      `portal.env tem ${encontrados.length} linhas ${chave} com valores diferentes. `
-      + 'Deixe apenas uma e compile de novo.',
-    );
-  }
-  return encontrados.at(-1) ?? padrao;
-}
 
 // Banco D1 local. NAO altere database_name nem database_id: o Miniflare usa
 // esses valores para localizar o arquivo do banco em
@@ -70,10 +31,6 @@ export default defineConfig(async () => {
   const { cloudflare } = await import('@cloudflare/vite-plugin');
 
   return {
-    define: {
-      __PBI_RELATORIO_URL__: JSON.stringify(lerPortalEnv('PBI_RELATORIO_URL', PBI_URL_PADRAO)),
-      __PBI_PAGINA__: JSON.stringify(lerPortalEnv('PBI_PAGINA', PBI_PAGINA_PADRAO)),
-    },
     css: { postcss: { plugins: [tailwindcss()] } },
     server: {
       host: '0.0.0.0',

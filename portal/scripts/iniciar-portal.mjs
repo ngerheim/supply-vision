@@ -26,7 +26,7 @@ import { lerConfigBruta, portalPrivado } from './configuracao.mjs';
 
 // Lista fechada: so o que o codigo do Worker realmente le. Uma lista aberta
 // mandaria SMTP_PASSWORD e afins para dentro do Worker sem ninguem pedir.
-export const VARIAVEIS_DO_WORKER = ['INITIAL_ADMIN_PASSWORD', 'TRUSTED_PROXY', 'PORTAL_API_TOKEN'];
+export const VARIAVEIS_DO_WORKER = ['INITIAL_ADMIN_PASSWORD', 'TRUSTED_PROXY', 'PORTAL_API_TOKEN', 'PBI_RELATORIO_URL', 'PBI_PAGINA'];
 
 export const ARQUIVO_VARS = path.join(portalPrivado, 'configuracao', 'worker.env');
 

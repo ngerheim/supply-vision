@@ -1,4 +1,5 @@
 import { ATUALIZAR_USUARIO_SQL } from '@/lib/usuarios-sql';
+import { montarPowerBiUrl } from '@/lib/powerbi';
 import { NextRequest, NextResponse } from 'next/server';
 import * as XLSX from 'xlsx';
 import { lerPlanilha } from '@/lib/planilha';
@@ -594,6 +595,13 @@ async function logout(request: Request) {
   return response;
 }
 
+// Endereco do relatorio de Manutencao. Vai so na resposta do bootstrap, que
+// exige login; ver lib/powerbi.ts.
+function relatorioManutencao() {
+  const vars = env as unknown as { PBI_RELATORIO_URL?: string; PBI_PAGINA?: string };
+  return montarPowerBiUrl(vars.PBI_RELATORIO_URL, vars.PBI_PAGINA);
+}
+
 async function bootstrap(user: User) {
   if (!canWrite(user)) {
     const [metrics, agreements, suppliers, items, models, locations] = await Promise.all([
@@ -603,7 +611,7 @@ async function bootstrap(user: User) {
       all('SELECT id,name FROM vehicle_models ORDER BY name'),
       all('SELECT id,city,state FROM locations ORDER BY state,city'),
     ]);
-    return ok({ user, metrics, agreements, catalogs: { suppliers, items, models, locations, units: [], brands: [] }, imports: [] });
+    return ok({ user, metrics, agreements, catalogs: { suppliers, items, models, locations, units: [], brands: [] }, imports: [], manutencao: relatorioManutencao() });
   }
   const [metrics, agreements, suppliers, items, models, units, brands, locations, imports] = await Promise.all([
     first(`SELECT
@@ -618,7 +626,7 @@ async function bootstrap(user: User) {
     all('SELECT id,code,name,active FROM units ORDER BY code'), all('SELECT id,name,active FROM brands ORDER BY name'),
     all('SELECT id,city,state FROM locations ORDER BY state,city'), canWrite(user) ? importList() : Promise.resolve([]),
   ]);
-  return ok({ user, metrics, agreements, catalogs: { suppliers, items, models, units, brands, locations }, imports });
+  return ok({ user, metrics, agreements, catalogs: { suppliers, items, models, units, brands, locations }, imports, manutencao: relatorioManutencao() });
 }
 
 async function agreementList() {
