@@ -15,7 +15,14 @@ import hostingConfig from './.openai/hosting.json' with { type: 'json' };
 const PBI_URL_PADRAO = '';
 const PBI_PAGINA_PADRAO = '';
 
+// Uma chave repetida no portal.env e o pior caso: cada leitor escolhe uma
+// ocorrencia diferente e ninguem percebe. Este build pegava a primeira e o
+// rodar.py dos Alertas pega a ultima; com dois PORTAL_API_TOKEN diferentes, a
+// rota interna respondia 401 sem nada no arquivo parecer errado. Aqui a
+// duplicidade derruba a compilacao, e o valor adotado e o ultimo — a mesma
+// regra do lado Python.
 function lerPortalEnv(chave: string, padrao: string): string {
+  const encontrados: string[] = [];
   try {
     const texto = readFileSync('../privado/portal/configuracao/portal.env', 'utf8');
     for (const linha of texto.split(/\r?\n/)) {
@@ -23,10 +30,16 @@ function lerPortalEnv(chave: string, padrao: string): string {
       if (corte < 0 || linha.trimStart().startsWith('#')) continue;
       if (linha.slice(0, corte).trim() !== chave) continue;
       const valor = linha.slice(corte + 1).trim();
-      if (valor) return valor;
+      if (valor) encontrados.push(valor);
     }
   } catch { /* sem pasta privado: segue com o padrao */ }
-  return padrao;
+  if (encontrados.length > 1 && new Set(encontrados).size > 1) {
+    throw new Error(
+      `portal.env tem ${encontrados.length} linhas ${chave} com valores diferentes. `
+      + 'Deixe apenas uma e compile de novo.',
+    );
+  }
+  return encontrados.at(-1) ?? padrao;
 }
 
 const SITE_CREATOR_PLACEHOLDER_DATABASE_ID =
