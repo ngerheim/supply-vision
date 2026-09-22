@@ -1,9 +1,14 @@
 # Atualizacao de dependencias por PR, para o CI provar cada uma antes de
 # qualquer coisa chegar ao servidor.
 #
-# Agrupado e semanal de proposito: PR solto por pacote vira ruido e acaba
-# ignorado, que e o mesmo que nao ter. Majors ficam de fora dos grupos --
-# elas merecem ser lidas uma a uma.
+# Os grupos existem para juntar o que sobe junto -- React com as tipagens do
+# React, Tailwind com o plugin do Tailwind -- e nada alem disso. A primeira
+# versao tinha um grupo "producao" com patterns ['*'], que virou um PR de 17
+# pacotes: quando o CI reprovou, nao havia como saber qual deles foi, e o PR
+# so servia para ser fechado. O que nao entra em grupo vem individual, que e
+# facil de aprovar e facil de reverter.
+#
+# Majors ficam fora dos grupos de proposito: cada uma merece ser lida sozinha.
 version: 2
 updates:
   - package-ecosystem: npm
@@ -11,14 +16,39 @@ updates:
     schedule:
       interval: weekly
       day: monday
-    open-pull-requests-limit: 3
+    open-pull-requests-limit: 5
     groups:
-      producao:
-        patterns: ['*']
-        exclude-patterns: ['vinext', 'wrangler', '@cloudflare/*']
+      react:
+        patterns:
+          - react
+          - react-dom
+          - react-server-dom-webpack
+          - '@types/react'
+          - '@types/react-dom'
         update-types: [minor, patch]
+      tailwind:
+        patterns:
+          - tailwindcss
+          - '@tailwindcss/*'
+          - tailwind-merge
+          - tw-animate-css
+        update-types: [minor, patch]
+      ferramental:
+        patterns:
+          - oxlint
+          - oxlint-*
+          - oxfmt
+          - typescript
+          - vite
+          - '@vitejs/*'
+        update-types: [minor, patch]
+      # Runtime do Portal: wrangler, vinext e os pacotes da Cloudflare sobem
+      # juntos porque compartilham contrato.
       plataforma:
-        patterns: ['vinext', 'wrangler', '@cloudflare/*']
+        patterns:
+          - vinext
+          - wrangler
+          - '@cloudflare/*'
         update-types: [minor, patch]
 
   - package-ecosystem: pip
@@ -26,7 +56,7 @@ updates:
     schedule:
       interval: weekly
       day: monday
-    open-pull-requests-limit: 2
+    open-pull-requests-limit: 3
     groups:
       alertas:
         patterns: ['*']
