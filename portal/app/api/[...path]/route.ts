@@ -267,7 +267,7 @@ async function POSTInterno(request: NextRequest) {
   if (!canWrite(user)) return denyWrite(request, 'Seu perfil permite somente consulta.');
 
   if (parts[0] === 'agreements' && parts.length === 1) return createAgreement(request, user);
-  if (parts[0] === 'agreements' && parts[2] === 'items') return addAgreementItems(request, user, parts[1]);
+  if (parts[0] === 'agreements' && parts[2] === 'items') return comTravaDoAcordo(request, parts[1], () => addAgreementItems(request, user, parts[1]));
   if (parts[0] === 'catalogs' && parts[1]) return createCatalog(request, user, parts[1]);
   if (parts[0] === 'users') return createUser(request, user);
   if (parts[0] === 'tickets' && parts[1] && parts[2] === 'events') return addTicketEvent(request, user, parts[1]);
@@ -291,8 +291,8 @@ async function PUTInterno(request: NextRequest) {
   if (!user) return fail('Sessão expirada.', 401);
   if (!canWrite(user)) return denyWrite(request, 'Seu perfil permite somente consulta.');
   const parts = partsOf(request);
-  if (parts[0] === 'agreements' && parts[1] && parts.length === 2) return updateAgreement(request, user, parts[1]);
-  if (parts[0] === 'items' && parts[1]) return updateItem(request, user, parts[1]);
+  if (parts[0] === 'agreements' && parts[1] && parts.length === 2) return comTravaDoAcordo(request, parts[1], () => updateAgreement(request, user, parts[1]));
+  if (parts[0] === 'items' && parts[1]) return comTravaDoAcordo(request, await acordoDaCondicao(parts[1]), () => updateItem(request, user, parts[1]));
   if (parts[0] === 'catalogs' && parts[1] && parts[2]) return updateCatalog(request, user, parts[1], parts[2]);
   if (parts[0] === 'users' && parts[1]) return updateUser(request, user, parts[1]);
   if (parts[0] === 'tickets' && parts[1]) return updateTicket(request, user, parts[1]);
@@ -707,6 +707,41 @@ async function createAgreement(request: Request, user: User) {
   } catch (error: unknown) { return fail(errorMessage(error).includes('UNIQUE') ? 'Já existe um acordo com esse número.' : 'Não foi possível criar o acordo.'); }
 }
 
+// Verificar e gravar a abrangencia e as condicoes de um acordo precisa ser uma
+// operacao so. Sem isso, duas pessoas no mesmo acordo ao mesmo tempo -- uma
+// retirando uma cidade, outra incluindo preco nela -- passavam as duas
+// verificacoes, e a condicao ficava fora da abrangencia. Editar o acordo,
+// incluir ou editar condicao e publicar importacao pegam a trava do acordo
+// antes de verificar; quem chega com ela ocupada recebe 409 e tenta de novo.
+// E o mesmo mecanismo da trava de importacao (PRIMARY KEY em travas).
+async function comTravaDoAcordo(request: Request, agreementId: string | null, operacao: () => Promise<Response>) {
+  if (!agreementId) return operacao();
+  const dono = await travarAcordo(agreementId);
+  if (!dono) {
+    // O corpo precisa ser consumido antes da resposta antecipada (ver denyWrite).
+    if (request.body) await corpoBinarioLimitado(request, CORPO_MAX_JSON);
+    return fail('Outro usuário está alterando este acordo neste momento. Tente de novo em instantes.', 409);
+  }
+  try { return await operacao(); }
+  finally { await soltarAcordo(agreementId, dono); }
+}
+
+async function travarAcordo(agreementId: string) {
+  const dono = id('lck');
+  return await adquirirTrava(`acordo:${agreementId}`, dono) ? dono : null;
+}
+
+async function soltarAcordo(agreementId: string, dono: string) {
+  // Falha ao soltar nao desfaz o que ja foi gravado; a trava vence sozinha.
+  try { await liberarTrava(`acordo:${agreementId}`, dono); }
+  catch (erro) { console.error('[portal] nao foi possivel liberar a trava do acordo:', erro); }
+}
+
+async function acordoDaCondicao(itemId: string) {
+  const linha = await first<{ agreementId: string }>('SELECT v.agreement_id AS agreementId FROM agreement_items ai JOIN agreement_versions v ON v.id=ai.version_id WHERE ai.id=?', [itemId]);
+  return linha?.agreementId ?? null;
+}
+
 async function updateAgreement(request: Request, user: User, agreementId: string) {
   const parsed = validateAgreementInput(await jsonBody<AgreementInput>(request));
   if (!parsed.value) return fail(parsed.error || 'Dados do acordo inválidos.');
@@ -1087,7 +1122,12 @@ async function importWorkbookComTrava(request: Request, user: User, agreementId:
       ]);
       return summary;
     };
-    const summary = await processAgreementImport(prepared.rows, user, importId, agreementId, publish);
+    // A publicacao troca a abrangencia do acordo: pega a mesma trava da edicao.
+    const donoAcordo = await travarAcordo(agreementId);
+    if (!donoAcordo) throw new Error('outro usuário está alterando este acordo neste momento. Tente de novo em instantes');
+    let summary: Record<string, unknown>;
+    try { summary = await processAgreementImport(prepared.rows, user, importId, agreementId, publish); }
+    finally { await soltarAcordo(agreementId, donoAcordo); }
     return ok({ success: true, summary });
   } catch (error: unknown) {
     if (preview) return ok({ preview: true, valid: false, error: errorMessage(error, 'Arquivo inválido.') });
