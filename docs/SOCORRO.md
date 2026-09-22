@@ -55,28 +55,25 @@ também recolha o rastreamento do wrangler).
 
 ## Alertas param com "HTTP Error 401" ao carregar os acordos
 
-O `PORTAL_API_TOKEN` é embutido no Portal durante a compilação, enquanto os
-Alertas leem o mesmo valor do `portal.env` a cada execução. Quando os dois
-discordam, a rota interna recusa o pipeline e o único sintoma é o 401.
+O `PORTAL_API_TOKEN` é entregue ao Portal em tempo de execução, a partir do
+mesmo `portal.env` que os Alertas leem — então os dois lados enxergam o mesmo
+valor e trocar a credencial não exige mais recompilar.
 
-Duas causas, ambas apanhadas hoje pela **Validar configuração** da central:
-
-- **Chave repetida no `portal.env`.** Com duas linhas `PORTAL_API_TOKEN` de
-  valores diferentes, cada lado adota uma. Deixe apenas uma linha.
-- **Token trocado sem recompilar.** O arquivo tem um valor e o Portal em
-  execução foi compilado com outro. Rode **Atualizar sistema**, ou
-  `.\scripts\atualizar-servidor.ps1 -Reaplicar`.
-
-Para conferir à mão qual dos dois é:
+Resta uma forma de eles discordarem: **chave repetida no `portal.env`**, com
+duas linhas `PORTAL_API_TOKEN` de valores diferentes. A **Validar configuração**
+da central recusa isso, e o build também.
 
 ```powershell
 $arq = (Resolve-Path '.\privado\portal\configuracao\portal.env').Path
 @(Get-Content $arq | Where-Object { $_ -match '^\s*PORTAL_API_TOKEN\s*=' })
-$t = (((Get-Content $arq) | Where-Object { $_ -match '^\s*PORTAL_API_TOKEN\s*=' }) -split '=',2)[1].Trim()
-@(Get-ChildItem .\portal\dist -Recurse -File -Filter *.js | Select-String $t -List).Count
 ```
 
-Uma linha só e contagem maior que zero: token e Portal estão de acordo.
+Deve aparecer uma linha só. Se aparecerem duas, apague a sobrando e reinicie a
+operação — não é preciso recompilar.
+
+Se a linha é única e o 401 persiste, o Portal em execução subiu por um caminho
+que não entrega a credencial. Pare e inicie a operação pela central: quem
+repassa é o `portal/scripts/iniciar-portal.mjs`, usado pelo `start:lan`.
 
 ## Recuperar a instalação do zero
 
