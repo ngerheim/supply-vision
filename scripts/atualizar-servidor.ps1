@@ -134,6 +134,10 @@ if ($Reaplicar -and $remoto -eq $anterior) {
 $mudou = git diff --name-only "$anterior..$remoto"
 $mexeuNode = $mudou | Where-Object { $_ -eq 'portal/package-lock.json' -or $_ -eq 'portal/package.json' }
 $mexeuPython = $mudou | Where-Object { $_ -like 'alertas/config/requirements*' }
+# No modo de reparo o antes e o depois sao o mesmo commit, entao a lista de
+# mudancas vem vazia e as dependencias nunca eram reinstaladas: um node_modules
+# ou ambiente Python quebrado continuava quebrado. Reparar e reinstalar tudo.
+if ($Reaplicar) { $mexeuNode = $true; $mexeuPython = $true }
 
 if ($Simular) {
   Write-Host "`n   arquivos alterados:" -ForegroundColor DarkGray
