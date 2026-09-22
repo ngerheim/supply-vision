@@ -240,8 +240,16 @@ foreach ($s in $suites) {
 }
 foreach ($t in @('validar-operacao.ps1', 'testar-operacao.ps1', 'testar-supervisor-isolado.ps1', 'testar-persistencia-alertas.ps1')) {
   if ($t -eq 'validar-operacao.ps1') { Garantir-CredencialPortal }
-  $saidaTeste = @(& powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot $t) *>&1)
-  $rc = $LASTEXITCODE
+  # ErrorActionPreference='Stop' transforma QUALQUER escrita em stderr de um
+  # programa externo em erro terminante. Um teste que reprova escrevendo no
+  # stderr derrubava o atualizador aqui, antes de Reverter -- a versao nova
+  # ficava aplicada e a operacao, parada. O codigo de saida e quem decide.
+  $anterioPreferencia = $ErrorActionPreference
+  $ErrorActionPreference = 'Continue'
+  try {
+    $saidaTeste = @(& powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot $t) *>&1)
+    $rc = $LASTEXITCODE
+  } finally { $ErrorActionPreference = $anterioPreferencia }
   $saidaTeste | ForEach-Object { Write-Host "   $_" }
   if ($rc -ne 0) {
     $detalhes = (@($saidaTeste | Select-Object -Last 8) -join ' | ')
