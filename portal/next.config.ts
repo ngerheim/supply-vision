@@ -1,5 +1,7 @@
 import type { NextConfig } from 'next';
 
+import { CABECALHOS_SEGURANCA } from '@/lib/cabecalhos-seguranca';
+
 const nextConfig: NextConfig = {
   experimental: {
     serverActions: {
@@ -9,13 +11,7 @@ const nextConfig: NextConfig = {
   async headers() {
     return [{
       source: '/:path*',
-      headers: [
-        { key: 'Content-Security-Policy', value: "default-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self'; font-src 'self' data:; frame-src https://app.powerbi.com" },
-        { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=()' },
-        { key: 'Referrer-Policy', value: 'same-origin' },
-        { key: 'X-Content-Type-Options', value: 'nosniff' },
-        { key: 'X-Frame-Options', value: 'DENY' },
-      ],
+      headers: Object.entries(CABECALHOS_SEGURANCA).map(([key, value]) => ({ key, value })),
     }];
   },
 };

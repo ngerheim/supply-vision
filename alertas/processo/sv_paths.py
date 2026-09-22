@@ -1,5 +1,6 @@
 """Caminhos e configuração privada da instalação integrada."""
 import os
+from datetime import datetime
 from pathlib import Path
 
 ALERTAS = Path(__file__).resolve().parent.parent
@@ -74,3 +75,24 @@ try:
         raise ValueError
 except ValueError as exc:
     raise SystemExit("ERRO: PIPELINE_TIMEOUT_S deve ser um inteiro maior que zero.") from exc
+
+
+def _data_de(chave, padrao):
+    """Data de configuracao no formato AAAA-MM-DD.
+
+    Regra de negocio com data fixa dentro do codigo e invisivel para quem
+    opera: quando chega o dia, o comportamento muda e ninguem sabe por que.
+    O padrao preserva o valor que ja valia.
+    """
+    texto = AMBIENTE.get(chave, "").strip() or padrao
+    try:
+        return datetime.strptime(texto, "%Y-%m-%d").date()
+    except ValueError as exc:
+        raise SystemExit(f"ERRO: {chave} deve estar no formato AAAA-MM-DD; veio {texto!r}.") from exc
+
+
+# A partir desta data, situacao e intervalo de vigencia dos acordos passam a
+# ser respeitados no cruzamento. Antes dela, vale a tabela vigente atual.
+CORTE_VIGENCIA_ACORDOS = _data_de("CORTE_VIGENCIA_ACORDOS", "2026-09-18")
+# Expiracao da chave de API do Qlik, usada so para avisar com antecedencia.
+CHAVE_QLIK_EXPIRA = _data_de("CHAVE_QLIK_EXPIRA", "2027-06-23")

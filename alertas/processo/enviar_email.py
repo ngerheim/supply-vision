@@ -65,10 +65,22 @@ DESTINATARIOS, COPIA_OCULTA = carregar_destinatarios()
 
 
 def carregar_contexto():
-    """Lê contexto e datas passados pelo pipeline via sys.argv."""
+    """Lê contexto e datas passados pelo pipeline via sys.argv.
+
+    A saída do rodar.py chega como "@caminho" desde que deixou de caber na
+    linha de comando do Windows. O texto direto continua aceito, para quem
+    chama este script à mão.
+    """
     contexto = sys.argv[1] if len(sys.argv) > 1 else "parcial"
     datas    = sys.argv[2].split(",") if len(sys.argv) > 2 else [datetime.now().strftime("%d/%m/%Y")]
     output   = sys.argv[3] if len(sys.argv) > 3 else ""
+    if output.startswith("@"):
+        caminho = pathlib.Path(output[1:])
+        try:
+            output = caminho.read_text(encoding="utf-8")
+        except OSError as erro:
+            print(f"ERRO: nao foi possivel ler a saida do rodar.py em {caminho}: {erro}")
+            sys.exit(1)
     return contexto, datas, output
 
 

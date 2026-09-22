@@ -199,10 +199,18 @@ def main():
     caminho_com = extrair_relatorio(output_rodar)
     caminho_qualidade = extrair_qualidade(output_rodar)
     logging.info(f"  Anexos desta execução: divergencias={caminho_com or '(não gerado)'} | qualidade={caminho_qualidade or '(sem pendencias)'}")
+
+    # A saída do rodar.py ia inteira como argumento de linha de comando. O
+    # Windows corta a linha em ~32 mil caracteres: num dia com muitos avisos
+    # de sinônimo ou chave divergente, o envio falharia justamente quando há
+    # mais o que relatar. Agora vai por arquivo, e o caminho é o argumento.
+    arquivo_saida = sv_paths.LOG_DIR / f"saida_rodar_{RUN_ID}.txt"
+    arquivo_saida.write_text(output_rodar, encoding="utf-8")
+
     ok, _ = rodar_script(
         SCRIPT_EMAIL,
         "Envio de e-mail",
-        args=[contexto, ",".join(datas), output_rodar, "", caminho_com, caminho_qualidade]
+        args=[contexto, ",".join(datas), f"@{arquivo_saida}", "", caminho_com, caminho_qualidade]
     )
     if not ok:
         logging.error("Pipeline interrompido em: Envio de e-mail")

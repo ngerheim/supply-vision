@@ -448,7 +448,7 @@ def _processar_periodo(df_base, df_acordo):
     })
 
 
-CORTE_VIGENCIA_ACORDOS = pd.Timestamp("2026-09-18")
+CORTE_VIGENCIA_ACORDOS = pd.Timestamp(sv_paths.CORTE_VIGENCIA_ACORDOS)
 
 
 def _acordos_vigentes_em(df_acordo, data_compra):

@@ -41,7 +41,7 @@ function criarCopiaIntegra(origem) {
 
 function replicarNaRede(config) {
   const pastaRede = config.BACKUP_NETWORK_DIR?.trim();
-  if (!pastaRede) return;
+  if (!pastaRede) return null;
   fs.mkdirSync(pastaRede, { recursive: true });
   const final = path.join(pastaRede, 'portal-atual.sqlite');
   const temporario = path.join(pastaRede, 'portal-atual.tmp.sqlite');
@@ -57,35 +57,62 @@ function replicarNaRede(config) {
   catch (erro) { if (fs.existsSync(anterior)) fs.renameSync(anterior, final); throw erro; }
   fs.rmSync(anterior, { force: true });
   console.log(`Copia atual na rede confirmada (SHA-256 ${hashRede.slice(0, 16)}).`);
+  return final;
 }
 async function enviar() {
   const config = lerConfig();
   if (!config.BACKUP_EMAIL_TO) throw new Error('BACKUP_EMAIL_TO nao configurado.');
-  replicarNaRede(config);
+  const copiaNaRede = replicarNaRede(config);
   const conteudo = fs.readFileSync(arquivoFinal);
   const hash = createHash('sha256').update(conteudo).digest('hex');
   const tamanhoMb = (conteudo.length / 1024 / 1024).toFixed(2);
+
+  // O anexo levava o banco INTEIRO para fora da empresa a cada horario de
+  // backup: hashes de senha, sessoes, tentativas de acesso e toda a base
+  // comercial. A exportacao da API ja recusa mandar senhas por principio, e
+  // a copia de rede -- conferida por SHA-256 -- cumpre o papel de redundancia.
+  //
+  // Por padrao o e-mail passa a ser so o comprovante. Anexar de novo e uma
+  // decisao explicita (BACKUP_ANEXAR_BANCO=true). Sem copia de rede nao ha
+  // outra redundancia, entao ali o anexo continua indo, com aviso.
+  const pedidoExplicito = String(config.BACKUP_ANEXAR_BANCO || '').trim().toLowerCase() === 'true';
+  const anexar = pedidoExplicito || !copiaNaRede;
+  if (anexar && !pedidoExplicito) {
+    console.warn('AVISO: sem BACKUP_NETWORK_DIR configurado, o banco segue anexado ao e-mail por falta de outra copia.');
+  }
+  if (anexar && conteudo.length > 20 * 1024 * 1024) {
+    console.warn(`AVISO: o banco tem ${tamanhoMb} MB e pode ser recusado pelo servidor de e-mail. Configure BACKUP_NETWORK_DIR.`);
+  }
+
   const data = new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'medium', timeZone: 'America/Sao_Paulo' }).format(new Date());
+  const ondeEsta = copiaNaRede
+    ? `<tr><td><b>Copia integra</b></td><td>${escapar(copiaNaRede)}</td></tr>`
+    : '';
   const transportador = criarTransportador(config);
   try {
     await transportador.sendMail({
       from: { name: config.EMAIL_FROM_NAME, address: config.SMTP_USER },
       to: config.BACKUP_EMAIL_TO,
       subject: `[Supply Vision] Backup do Portal - ${data}`,
-      text: `Backup integro do banco do Portal Suprimentos.\n\nData: ${data}\nTamanho: ${tamanhoMb} MB\nSHA-256: ${hash}\n`,
+      text: `Backup integro do banco do Portal Suprimentos.\n\nData: ${data}\nTamanho: ${tamanhoMb} MB\nSHA-256: ${hash}\n`
+        + (copiaNaRede ? `Copia integra em: ${copiaNaRede}\n` : '')
+        + (anexar ? '\nO banco segue anexado a esta mensagem.\n' : '\nO banco NAO segue anexado: confira a copia acima.\n'),
       html: montarCasca(
         'Backup do Portal',
         data,
-        `<p style="margin:0 0 20px;line-height:1.55">Copia integra do banco, conferida com <b>PRAGMA integrity_check</b> e anexada a esta mensagem.</p>`
+        `<p style="margin:0 0 20px;line-height:1.55">Copia integra do banco, conferida com <b>PRAGMA integrity_check</b>${anexar ? ' e anexada a esta mensagem' : ''}.</p>`
         + `<table role="presentation" width="100%" cellspacing="0" cellpadding="7" style="font-size:14px;background:${paleta.rodapeFundo};border-radius:10px">`
         + `<tr><td><b>Tamanho</b></td><td>${escapar(tamanhoMb)} MB</td></tr>`
+        + ondeEsta
         + `<tr><td><b>SHA-256</b></td><td style="font-family:Consolas,monospace;font-size:12px;word-break:break-all">${escapar(hash)}</td></tr>`
         + `</table>`,
       ),
-      attachments: [{ filename: 'portal-atual.sqlite', path: arquivoFinal, contentType: 'application/vnd.sqlite3' }],
+      attachments: anexar
+        ? [{ filename: 'portal-atual.sqlite', path: arquivoFinal, contentType: 'application/vnd.sqlite3' }]
+        : [],
     });
   } finally { transportador.close(); }
-  console.log(`Backup atual confirmado (${tamanhoMb} MB, SHA-256 ${hash.slice(0, 16)}) e enviado por e-mail.`);
+  console.log(`Backup atual confirmado (${tamanhoMb} MB, SHA-256 ${hash.slice(0, 16)}); comprovante enviado por e-mail${anexar ? ' com o banco anexado' : ''}.`);
 }
 
 try { criarCopiaIntegra(localizarBanco()); await enviar(); }

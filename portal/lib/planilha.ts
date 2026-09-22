@@ -13,13 +13,15 @@
 import * as XLSX from 'xlsx';
 
 import { inspecionarXlsxZip } from './xlsx-zip-guard.ts';
-import { normalizeImportColumn } from './domain.ts';
+import { MAX_IMPORT_BYTES, MAX_IMPORT_ROWS, normalizeImportColumn } from './domain.ts';
 
 export type LinhaPlanilha = Record<string, unknown>;
 
+// Bytes e linhas vem de domain.ts: eram repetidos aqui com os mesmos numeros,
+// e mexer num lado deixava o outro para tras sem nenhum sinal.
 export const PLANILHA_LIMITES = {
-  bytes: 15 * 1024 * 1024,
-  linhas: 50_000,
+  bytes: MAX_IMPORT_BYTES,
+  linhas: MAX_IMPORT_ROWS,
   colunas: 100,
   celulas: 1_000_000,
 };

@@ -4,3 +4,10 @@ QLIK_APP_ID = 00000000-0000-0000-0000-000000000000
 QLIK_OBJ_ID = objeto-exemplo
 DESTINATARIO_ALERTA = usuario@example.com
 PIPELINE_TIMEOUT_S = 1800
+
+# A partir desta data, situacao e intervalo de vigencia dos acordos passam a
+# ser respeitados no cruzamento; antes dela vale a tabela vigente atual.
+CORTE_VIGENCIA_ACORDOS = 2026-09-18
+# Expiracao da chave de API do Qlik. Serve so para avisar com antecedencia:
+# atualize ao renovar a chave.
+CHAVE_QLIK_EXPIRA = 2027-06-23
