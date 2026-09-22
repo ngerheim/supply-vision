@@ -283,9 +283,10 @@ A importação é sempre a substituição integral de um acordo. Ela cria uma
 versão nova e preserva a anterior **dentro do banco**, para rastreabilidade do
 negócio — isso não é backup histórico do arquivo.
 
-O banco existente é preservado. As tabelas de De/Para são criadas vazias quando
-ausentes, inclusive as de unidades e localidades. Não é preciso substituir
-o arquivo SQLite nem preencher correspondências antecipadamente.
+O banco existente é preservado. As tabelas de De/Para de itens, modelos e
+unidades são criadas vazias quando ausentes; localidade não tem De/Para. Não é
+preciso substituir o arquivo SQLite nem preencher correspondências
+antecipadamente.
 
 `npm run test:imports` testa HTTP real em uma instância e banco descartáveis:
 prévia sem publicação, correspondências, rejeições sem alteração de negócio,
