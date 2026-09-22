@@ -1,3 +1,5 @@
+import { parseCookies } from './cookies.ts';
+export { parseCookies } from './cookies.ts';
 import { env } from 'cloudflare:workers';
 import { type Role, validatePassword } from '@/lib/domain';
 
@@ -186,9 +188,6 @@ async function initialize() {
   await db.prepare('PRAGMA optimize').run();
 }
 
-export function parseCookies(request: Request) {
-  return Object.fromEntries((request.headers.get('cookie') || '').split(';').map((part) => part.trim().split('=').map(decodeURIComponent)).filter((x) => x.length === 2));
-}
 
 export async function currentUser(request: Request) {
   await ensureDatabase();
