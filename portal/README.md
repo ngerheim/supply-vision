@@ -225,7 +225,6 @@ sozinho. Veja `docs/OPERAR.md`.
 | `public/` | Ícone público |
 | `scripts/` | Operação, atualização, testes, backup e monitoramento |
 | `tests/` | Testes automatizados |
-| `.openai/hosting.json` | Declaração lógica do banco D1 |
 | `dist/` | Versão compilada em uso |
 | `node_modules/` | Dependências |
 | `work/versao-*/anterior/` | Único build anterior, para retorno |
