@@ -461,10 +461,17 @@ def _processar_periodo(df_base, df_acordo):
 CORTE_VIGENCIA_ACORDOS = pd.Timestamp(sv_paths.CORTE_VIGENCIA_ACORDOS)
 
 
-def _acordos_vigentes_em(df_acordo, data_compra):
+def _preparar_vigencia(df_acordo):
+    """Converte inicio, fim e situacao uma vez so; processar() usa o resultado
+    para cada data de compra, em vez de reconverter as colunas a cada data."""
     inicio = pd.to_datetime(df_acordo["INICIO_VIGENCIA"], format="mixed", dayfirst=True, errors="coerce").dt.normalize()
     fim = pd.to_datetime(df_acordo["FIM_VIGENCIA"], format="mixed", dayfirst=True, errors="coerce").dt.normalize()
     status = df_acordo["STATUS_ACORDO"].fillna("").astype(str).str.lower()
+    return inicio, fim, status
+
+
+def _acordos_vigentes_em(df_acordo, data_compra, vigencia=None):
+    inicio, fim, status = vigencia if vigencia is not None else _preparar_vigencia(df_acordo)
     return df_acordo[(status == "active") & inicio.notna() & (inicio <= data_compra) &
                      (fim.isna() | (fim >= data_compra))]
 
@@ -490,9 +497,10 @@ def processar(df_base, df_acordo):
     invalidas = datas.isna()
     anteriores = datas.notna() & (datas < CORTE_VIGENCIA_ACORDOS)
     grupos = [(anteriores | invalidas, df_acordo)]
+    vigencia = _preparar_vigencia(df_acordo)
     for data_compra in sorted(datas[~(anteriores | invalidas)].unique()):
         data_compra = pd.Timestamp(data_compra)
-        grupos.append((datas == data_compra, _acordos_vigentes_em(df_acordo, data_compra)))
+        grupos.append((datas == data_compra, _acordos_vigentes_em(df_acordo, data_compra, vigencia)))
     for mascara, universo in grupos:
         indices = df_base.index[mascara]
         if not len(indices):
