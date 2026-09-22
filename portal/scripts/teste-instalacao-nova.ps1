@@ -1,9 +1,7 @@
 # Teste de instalacao nova: banco vazio, criacao do administrador e login real.
 #
-# Existe porque os testes automatizados recriam PBKDF2 e SHA-256 localmente.
-# Eles provam que os algoritmos estao certos, nao que o portal grava o valor
-# certo -- foi essa lacuna que deixou passar o bug do password_iterations, que
-# travava qualquer instalacao nova para fora.
+# Complementa os testes das funcoes criptograficas com as rotas e o banco
+# reais, incluindo os valores gravados durante a criacao do administrador.
 #
 # Sobe uma instancia descartavel em outra porta, com banco vazio, e exercita o
 # caminho real. Nao encosta no banco de producao.
@@ -80,8 +78,15 @@ if ($UsarBuildExistente) {
   Write-Host '  Testando a compilacao existente; o codigo-fonte nao sera recompilado.' -ForegroundColor Yellow
 } else {
 Write-Host '  Compilando...' -ForegroundColor DarkGray
-npm run build *> $logBuild
-if ($LASTEXITCODE -ne 0) {
+# Windows PowerShell trata avisos em stderr como erros quando redirecionados.
+# O resultado do compilador e seu codigo de saida, nao a presenca de avisos.
+$preferenciaAnterior = $ErrorActionPreference
+try {
+  $ErrorActionPreference = 'Continue'
+  npm run build *> $logBuild
+  $codigoBuild = $LASTEXITCODE
+} finally { $ErrorActionPreference = $preferenciaAnterior }
+if ($codigoBuild -ne 0) {
   Write-Host '  [FALHA] a compilacao nao passou.' -ForegroundColor Red
   Get-Content $logBuild -ErrorAction SilentlyContinue | Select-Object -Last 10
   exit 1
@@ -93,6 +98,10 @@ if ($LASTEXITCODE -ne 0) {
 # vazio. Precisa ir como --var: uma variavel do shell nao chega ao Worker, que
 # roda isolado no workerd.
 $comando = "Set-Location '$projeto'; " +
+  "`$env:MINIFLARE_REGISTRY_PATH='$temp/registry'; " +
+  "`$env:WRANGLER_REGISTRY_PATH='$temp/wrangler-registry'; " +
+  "`$env:WRANGLER_LOG_PATH='$temp/wrangler-logs'; " +
+  "`$env:WRANGLER_SEND_METRICS='false'; " +
   "npx wrangler dev --config dist/server/wrangler.json --persist-to '$temp' " +
   "--var INITIAL_ADMIN_PASSWORD:'$senhaTeste' --ip 127.0.0.1 --port $porta *> '$logServidor'"
 $script:processoServidor = (Start-Process powershell.exe -ArgumentList '-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', $comando -WindowStyle Hidden -PassThru).Id
@@ -193,10 +202,11 @@ Verifica 'Novo andamento avisa solicitante e responsavel' {
   if($n.Count -eq 2){$true}else{"atualizacoes: $($n.Count)"}
 }
 
-Verifica 'Conclusao sem resultado e recusada' {
+# A tela define a mensagem como opcional, inclusive na conclusao.
+Verifica 'Conclusao aceita mensagem opcional' {
   try { Invoke-WebRequest "$baseUrl/api/tickets/$($chamadoEmail.id)" -Method PUT -WebSession $script:sessao -ContentType 'application/json' -UseBasicParsing -TimeoutSec 60 -Body '{"status":"fechado"}'|Out-Null; $c=200 }
   catch { $c=[int]$_.Exception.Response.StatusCode.value__ }
-  if($c -eq 400){$true}else{"esperado 400, veio $c"}
+  if($c -eq 200){$true}else{"esperado 200, veio $c"}
 }
 Invoke-WebRequest "$baseUrl/api/tickets/$($chamadoEmail.id)" -Method PUT -WebSession $script:sessao -ContentType 'application/json' -UseBasicParsing -TimeoutSec 60 -Body '{"status":"fechado","statusMessage":"Negociacao concluida"}'|Out-Null
 Verifica 'Conclusao avisa solicitante e responsavel' {

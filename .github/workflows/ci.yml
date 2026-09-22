@@ -36,6 +36,23 @@ jobs:
       # dependencia de producao precisa aparecer no PR, nao na instalacao.
       - run: npm audit --omit=dev
 
+  portal-integracao:
+    name: Portal - instalacao nova e autenticacao real
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: portal/package-lock.json
+      - run: npm ci
+        working-directory: portal
+      - name: Validar portal compilado com banco descartavel
+        shell: powershell
+        run: ./portal/scripts/teste-instalacao-nova.ps1
+
   alertas:
     name: Alertas
     runs-on: windows-latest
