@@ -47,6 +47,7 @@ CHAVE_ACORDO = ["_fornec_norm", "_cidade_norm", "_modelo_norm", "_peca_norm"]
 
 STATUS_AMBIGUO         = "ACORDO AMBÍGUO"
 STATUS_PRECO_INVALIDO  = "ACORDO SEM PREÇO VÁLIDO"
+STATUS_DATA_INVALIDA   = "DATA DE ABERTURA INVÁLIDA"
 
 
 
@@ -282,6 +283,7 @@ MOTIVO_ITEM           = "Item"
 
 MOTIVO_AMBIGUO         = "Acordo ambíguo — preços divergentes"
 MOTIVO_PRECO_INVALIDO  = "Acordo com preço inválido"
+MOTIVO_DATA_INVALIDA   = "Data de abertura inválida"
 
 ORDEM_MOTIVOS = [MOTIVO_FORNECEDOR, MOTIVO_CIDADE, MOTIVO_MODELO,
                  MOTIVO_ITEM, MOTIVO_ITEM_MAPEAR, MOTIVO_NAO_COMPARAVEL,
@@ -362,18 +364,25 @@ def _processar_periodo(df_base, df_acordo):
     e_sem_preco = pd.Series([c in chaves_sem_preco for c in chave_linha], index=m.index)
     e_ambigua   &= ~m["_sin_none"]
     e_sem_preco &= ~m["_sin_none"]
+    # Sem data de abertura valida nao ha como saber qual regra de vigencia vale
+    # para a compra. Ela vai para a quarentena, contada no resumo, em vez de
+    # ser comparada como se fosse anterior ao corte.
+    e_data_invalida = pd.to_datetime(m["Data Abertura"], dayfirst=True, errors="coerce").isna()
+    e_ambigua   &= ~e_data_invalida
+    e_sem_preco &= ~e_data_invalida
 
     po  = m["Valor Unitario"]
     pa  = m["PRECO"].where(~e_ambigua)
     qtd = pd.to_numeric(m["OS Quantidade"], errors="coerce")
 
-    quarentena = e_ambigua | e_sem_preco
+    quarentena = e_ambigua | e_sem_preco | e_data_invalida
 
     com_ac = pa.notna() & ~quarentena
     sem_ac = ~com_ac & ~quarentena
     motivo = _motivo_sem_acordo(m, df_acordo, sem_ac)
     motivo[e_ambigua]   = MOTIVO_AMBIGUO
     motivo[e_sem_preco] = MOTIVO_PRECO_INVALIDO
+    motivo[e_data_invalida] = MOTIVO_DATA_INVALIDA
 
     dif_unit  = pd.Series(np.nan, index=m.index)
     dif_unit[com_ac] = (po[com_ac] - pa[com_ac]).round(2)
@@ -385,6 +394,7 @@ def _processar_periodo(df_base, df_acordo):
     status[com_ac & (dif_unit  < 0)] = "ABAIXO DO ACORDO"
     status[e_ambigua]                = STATUS_AMBIGUO
     status[e_sem_preco]              = STATUS_PRECO_INVALIDO
+    status[e_data_invalida]          = STATUS_DATA_INVALIDA
     dif_unit[status == "CONFORME"]   = 0.0
 
     preco_total        = (po * qtd).round(2)
@@ -475,9 +485,12 @@ def processar(df_base, df_acordo):
 
     datas = pd.to_datetime(df_base["Data Abertura"], dayfirst=True, errors="coerce").dt.normalize()
     partes = []
-    anteriores = datas.isna() | (datas < CORTE_VIGENCIA_ACORDOS)
-    grupos = [(anteriores, df_acordo)]
-    for data_compra in sorted(datas[~anteriores].dropna().unique()):
+    # Compra sem data valida nao e "anterior ao corte": ela segue com a tabela
+    # inteira so para passar pelo _processar_periodo, que a poe em quarentena.
+    invalidas = datas.isna()
+    anteriores = datas.notna() & (datas < CORTE_VIGENCIA_ACORDOS)
+    grupos = [(anteriores | invalidas, df_acordo)]
+    for data_compra in sorted(datas[~(anteriores | invalidas)].unique()):
         data_compra = pd.Timestamp(data_compra)
         grupos.append((datas == data_compra, _acordos_vigentes_em(df_acordo, data_compra)))
     for mascara, universo in grupos:
@@ -490,7 +503,7 @@ def processar(df_base, df_acordo):
     return pd.concat(partes).sort_index() if partes else _processar_periodo(df_base, df_acordo)
 
 
-STATUS_QUARENTENA = {STATUS_AMBIGUO, STATUS_PRECO_INVALIDO}
+STATUS_QUARENTENA = {STATUS_AMBIGUO, STATUS_PRECO_INVALIDO, STATUS_DATA_INVALIDA}
 
 
 def resumir_status(df):
@@ -498,9 +511,9 @@ def resumir_status(df):
     total_bruto = len(df)
     contagens = {st: int((df["Status"] == st).sum()) for st in (
         "CONFORME", "ACIMA DO ACORDO", "ABAIXO DO ACORDO", "SEM ACORDO",
-        STATUS_AMBIGUO, STATUS_PRECO_INVALIDO,
+        STATUS_AMBIGUO, STATUS_PRECO_INVALIDO, STATUS_DATA_INVALIDA,
     )}
-    total_quarentena = contagens[STATUS_AMBIGUO] + contagens[STATUS_PRECO_INVALIDO]
+    total_quarentena = sum(contagens[st] for st in STATUS_QUARENTENA)
     total_elegivel = total_bruto - total_quarentena
     percentuais = {
         st: round(contagens[st] / total_elegivel * 100, 1) if total_elegivel else 0.0
@@ -537,7 +550,7 @@ def imprimir_resumo(resumo):
     if resumo["total_quarentena"]:
         print(f"  Em quarentena: {resumo['total_quarentena']:,} "
               f"({resumo['percentual_quarentena_bruto']}% do total bruto)")
-        for status in (STATUS_AMBIGUO, STATUS_PRECO_INVALIDO):
+        for status in (STATUS_AMBIGUO, STATUS_PRECO_INVALIDO, STATUS_DATA_INVALIDA):
             if resumo["contagens"][status]:
                 print(f"    {status:<26}{resumo['contagens'][status]:>7,}")
     if resumo["motivos_sem_acordo"]:

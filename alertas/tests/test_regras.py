@@ -53,6 +53,17 @@ def test_a_partir_do_corte_respeita_status_e_inicio_da_vigencia(rodar):
     assert resultado["Status"].tolist() == ["SEM ACORDO", "CONFORME", "CONFORME"]
 
 
+def test_data_de_abertura_invalida_vai_para_quarentena(rodar):
+    compras = base(qtd=3, preco=10)
+    compras["Data Abertura"] = ["17/09/2026", "", "31/02/2026"]
+    resultado = rodar.processar(compras, com_vigencia(acordo([10])))
+    assert resultado["Status"].tolist() == ["CONFORME", rodar.STATUS_DATA_INVALIDA, rodar.STATUS_DATA_INVALIDA]
+    assert resultado.loc[1, "Motivo Sem Acordo"] == rodar.MOTIVO_DATA_INVALIDA
+    resumo = rodar.resumir_status(resultado)
+    assert resumo["total_quarentena"] == 2
+    assert resumo["contagens"][rodar.STATUS_DATA_INVALIDA] == 2
+
+
 def test_fim_da_vigencia_e_inclusivo(rodar):
     compras = base(qtd=2, preco=10)
     compras["Data Abertura"] = ["30/09/2026", "01/10/2026"]
