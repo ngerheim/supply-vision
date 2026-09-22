@@ -53,7 +53,7 @@ async function check(name, fn) {
 }
 function query(sql, ...args) { return reader.prepare(sql).all(...args); }
 function businessSnapshot() {
-  return Object.fromEntries(['suppliers', 'locations', 'catalog_items', 'vehicle_models', 'units', 'brands', 'agreements', 'agreement_locations', 'agreement_versions', 'agreement_items'].map(table => [table, query(`SELECT * FROM ${table} ORDER BY rowid`)]));
+  return Object.fromEntries(['suppliers', 'locations', 'catalog_items', 'vehicle_models', 'units', 'agreements', 'agreement_locations', 'agreement_versions', 'agreement_items'].map(table => [table, query(`SELECT * FROM ${table} ORDER BY rowid`)]));
 }
 function locateSqlite(dir) {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {

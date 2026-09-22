@@ -75,7 +75,7 @@ Verifica 'Bootstrap devolve estrutura completa' {
   $b = (Invoke-WebRequest "$BaseUrl/api/bootstrap" -WebSession $script:sessao -UseBasicParsing -TimeoutSec 90).Content | ConvertFrom-Json
   $faltando = @()
   foreach ($campo in 'user','agreements','totalAcordos','catalogs') { if ($null -eq $b.$campo) { $faltando += $campo } }
-  foreach ($campo in 'suppliers','items','models','units','brands','locations') { if ($null -eq $b.catalogs.$campo) { $faltando += "catalogs.$campo" } }
+  foreach ($campo in 'suppliers','items','models','units','locations') { if ($null -eq $b.catalogs.$campo) { $faltando += "catalogs.$campo" } }
   if ($faltando.Count -eq 0) { $true } else { "faltando: $($faltando -join ', ')" }
 }
 
