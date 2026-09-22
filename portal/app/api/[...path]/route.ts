@@ -721,6 +721,18 @@ async function updateAgreement(request: Request, user: User, agreementId: string
   if (!supplier) return fail(trocaFornecedor ? 'Fornecedor não encontrado ou inativo.' : 'Fornecedor não encontrado.');
   const locations = await first<{ n: number }>(`SELECT COUNT(*) n FROM locations WHERE id IN (${body.locationIds.map(() => '?').join(',')})`, body.locationIds);
   if (Number(locations?.n || 0) !== body.locationIds.length) return fail('Uma ou mais localidades não existem.');
+  // Retirar do acordo uma localidade que ainda tem condicoes na versao vigente
+  // criava duas verdades: o acordo dizia nao atender a cidade, mas a busca de
+  // precos, que parte das condicoes, continuava mostrando o preco dela. A
+  // remocao e recusada; as condicoes daquela cidade saem ou mudam antes.
+  // Versoes anteriores nao contam: sao historico.
+  const emUso = await all<{ city: string; state: string }>(`SELECT DISTINCT l.city,l.state
+    FROM agreements a JOIN agreement_items ai ON ai.version_id=a.current_version_id JOIN locations l ON l.id=ai.location_id
+    WHERE a.id=? AND ai.location_id NOT IN (SELECT value FROM json_each(?)) ORDER BY l.state,l.city`, [agreementId, JSON.stringify(body.locationIds)]);
+  if (emUso.length) {
+    const nomes = emUso.slice(0, 5).map((local) => `${local.city}/${local.state}`).join(', ') + (emUso.length > 5 ? ` e mais ${emUso.length - 5}` : '');
+    return fail(`Não é possível retirar ${nomes} do acordo: há condições vigentes nessa(s) localidade(s). Remova ou substitua essas condições antes de alterar a abrangência.`, 409);
+  }
   try {
     await rawDb().batch([
       rawDb().prepare('UPDATE agreements SET number=?,supplier_id=?,status=?,start_date=?,end_date=?,notes=?,updated_at=? WHERE id=?').bind(body.number, body.supplierId, body.status, body.startDate, body.endDate, body.notes, now(), agreementId),
