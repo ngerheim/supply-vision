@@ -14,7 +14,7 @@ import { env } from 'cloudflare:workers';
 import {
   audit, currentUser, ensureDatabase, id, normalizeCnpj, normalizeText, now,
   PBKDF2_ITERACOES_ATUAL, TRAVA_IMPORTACAO, adquirirTrava, liberarTrava,
-  passwordHash, rawDb, tokenHash,
+  parseCookies, passwordHash, rawDb, tokenHash,
 } from '@/lib/database';
 import {
   AGREEMENT_STATUSES,
@@ -576,7 +576,10 @@ async function authenticate(request: Request, texto: string) {
 }
 
 async function logout(request: Request) {
-  const token = request.headers.get('cookie')?.match(/acordos_session=([^;]+)/)?.[1];
+  // Mesmo leitor do currentUser. A expressao regular que estava aqui casava
+  // tambem com um cookie como x_acordos_session vindo antes: o navegador
+  // perdia o cookie, mas a sessao verdadeira continuava valida no banco.
+  const token = parseCookies(request).acordos_session;
   const user = token ? await currentUser(request) : null;
   if (token) await rawDb().prepare('DELETE FROM sessions WHERE token=?').bind(await tokenHash(token)).run();
   if (user) await audit(user.id, 'LOGOUT', 'session', null, 'Sessão encerrada pelo usuário');
