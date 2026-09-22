@@ -1,0 +1,39 @@
+# Atualizacao de dependencias por PR, para o CI provar cada uma antes de
+# qualquer coisa chegar ao servidor.
+#
+# Agrupado e semanal de proposito: PR solto por pacote vira ruido e acaba
+# ignorado, que e o mesmo que nao ter. Majors ficam de fora dos grupos --
+# elas merecem ser lidas uma a uma.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /portal
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 3
+    groups:
+      producao:
+        patterns: ['*']
+        exclude-patterns: ['vinext', 'wrangler', '@cloudflare/*']
+        update-types: [minor, patch]
+      plataforma:
+        patterns: ['vinext', 'wrangler', '@cloudflare/*']
+        update-types: [minor, patch]
+
+  - package-ecosystem: pip
+    directory: /alertas/config
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 2
+    groups:
+      alertas:
+        patterns: ['*']
+        update-types: [minor, patch]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 2
