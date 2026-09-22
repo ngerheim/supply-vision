@@ -1,3 +1,4 @@
+import { ATUALIZAR_USUARIO_SQL } from '@/lib/usuarios-sql';
 import { NextRequest, NextResponse } from 'next/server';
 import * as XLSX from 'xlsx';
 import { lerPlanilha } from '@/lib/planilha';
@@ -1594,17 +1595,14 @@ async function updateUser(request:Request,actor:User,userId:string){
   if(!/^([01]\d|2[0-3]):[0-5]\d$/.test(dailyReportTime)) return fail('Informe um horário válido para o relatório diário.');
   const name=textValue(body.name) || target.name;
   if(target.id===actor.id&&(active===0||role!=='admin')) return fail('Você não pode desativar nem rebaixar a própria conta.');
-  if(active===0||(role!=='admin'&&target.role==='admin')){
-    const admins=Number((await first<{n:number}>(`SELECT COUNT(*) n FROM users WHERE role='admin' AND active=1 AND id<>?`,[userId]))?.n||0);
-    if(admins===0) return fail('Este é o último administrador ativo. Promova outro antes de alterar este.');
-  }
   const changes:string[]=[];
   if(name!==target.name) changes.push(`nome: ${target.name} → ${name}`);
   if(role!==target.role) changes.push(`perfil: ${target.role} → ${role}`);
   if(active!==target.active) changes.push(active?'reativado':'desativado');
   if(dailyReportEnabled!==target.dailyReportEnabled) changes.push(dailyReportEnabled?'relatório diário ativado':'relatório diário desativado');
   if(dailyReportTime!==target.dailyReportTime) changes.push(`horário do relatório: ${target.dailyReportTime} → ${dailyReportTime}`);
-  await rawDb().prepare('UPDATE users SET name=?,role=?,active=?,daily_report_enabled=?,daily_report_time=? WHERE id=?').bind(exigeTexto(name,LIMITES_CAMPO.nome,'nome'),role,active,dailyReportEnabled,dailyReportTime,userId).run();
+  const atualizado = await rawDb().prepare(ATUALIZAR_USUARIO_SQL).bind(exigeTexto(name,LIMITES_CAMPO.nome,'nome'),role,active,dailyReportEnabled,dailyReportTime,userId,role,active).run();
+  if (!atualizado.meta.changes) return fail('Este é o último administrador ativo. Promova outro antes de alterar este.',409);
   if(password !== null){
     const salt=crypto.randomUUID(), hash=await passwordHash(password,salt,PBKDF2_ITERACOES_ATUAL);
     await rawDb().batch([
