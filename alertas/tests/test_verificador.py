@@ -1,7 +1,7 @@
 import importlib.util
 import sys
 import types
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 
 
@@ -19,6 +19,7 @@ def carregar_verificador(monkeypatch, tmp_path):
     fake.REMETENTE = "teste@example.com"
     fake.DESTINATARIO_ALERTA = "alerta@example.com"
     fake.QLIK_TENANT = "tenant.example.com"
+    fake.CHAVE_QLIK_EXPIRA = date(2027, 6, 23)
     monkeypatch.setitem(sys.modules, "sv_paths", fake)
     spec = importlib.util.spec_from_file_location(
         "verificador_test", ROOT / "processo" / "verificar_saude.py"

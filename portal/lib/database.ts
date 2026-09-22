@@ -82,12 +82,23 @@ const columnMigrations: Array<[string, string, string]> = [
 
 async function applyColumnMigrations() {
   for (const [table, column, type] of columnMigrations) {
+    let info: { results?: Array<{ name: string }> };
     try {
-      const info = await env.DB.prepare(`PRAGMA table_info(${table})`).all<{ name: string }>();
-      const exists = (info.results || []).some((c) => c.name === column);
-      if (!exists) await env.DB.prepare(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`).run();
+      info = await env.DB.prepare(`PRAGMA table_info(${table})`).all<{ name: string }>();
     } catch {
-      // Tabela ainda nao existe ou coluna ja foi criada por outra instancia.
+      // Tabela ainda nao existe nesta base: nada a migrar.
+      continue;
+    }
+    if ((info.results || []).some((c) => c.name === column)) continue;
+    try {
+      await env.DB.prepare(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`).run();
+    } catch (erro) {
+      // Coluna criada em paralelo por outra instancia e resultado aceitavel.
+      // Qualquer outra falha precisa aparecer AGORA: engolindo tudo, uma
+      // coluna que nunca foi criada so se manifestava depois, como erro de
+      // consulta em producao.
+      const mensagem = String((erro as Error)?.message || '').toLowerCase();
+      if (!mensagem.includes('duplicate column')) throw erro;
     }
   }
 }
@@ -118,7 +129,16 @@ let ready: Promise<void> | null = null;
 export const MEDIDAS_PADRAO = ['UNIDADE', 'LITRO', 'PAR', 'JOGO', 'HORA'] as const;
 
 export function ensureDatabase() {
-  if (!ready) ready = initialize();
+  // A promise era memorizada mesmo quando falhava: uma unica falha na subida
+  // -- base vazia sem INITIAL_ADMIN_PASSWORD, erro transitorio do D1 -- fazia
+  // TODA requisicao seguinte reaproveitar a promise rejeitada ate o processo
+  // reiniciar. Zerando aqui, a proxima requisicao tenta de novo.
+  if (!ready) {
+    ready = initialize().catch((erro) => {
+      ready = null;
+      throw erro;
+    });
+  }
   return ready;
 }
 

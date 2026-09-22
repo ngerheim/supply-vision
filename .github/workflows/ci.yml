@@ -32,6 +32,9 @@ jobs:
       - run: npm run typecheck
       - run: npm run lint
       - run: npm run build
+      # O instalador ja cobrava isto na maquina; o CI nao. Vulnerabilidade em
+      # dependencia de producao precisa aparecer no PR, nao na instalacao.
+      - run: npm audit --omit=dev
 
   alertas:
     name: Alertas
@@ -46,6 +49,10 @@ jobs:
             alertas/config/requirements.txt
             alertas/config/requirements-dev.txt
       - run: pip install -r alertas/config/requirements.txt -r alertas/config/requirements-dev.txt
+      - name: Auditar dependencias Python
+        run: |
+          pip install pip-audit
+          pip-audit -r alertas/config/requirements.txt
       - name: Preparar configuração fictícia
         shell: pwsh
         run: |
