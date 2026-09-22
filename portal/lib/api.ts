@@ -19,24 +19,23 @@ export async function api<T = JsonData>(
   const timeout = AbortSignal.timeout(leitura ? 30000 : 180000);
   const signal = options?.signal ? AbortSignal.any([options.signal, timeout]) : timeout;
   let response: Response;
+  let data: JsonData;
   try {
     response = await fetch(path, { ...options, signal });
+    if (
+      response.status === 401 &&
+      !path.endsWith('/session') &&
+      !path.endsWith('/login')
+    )
+      window.dispatchEvent(new Event('portal:session-expired'));
+    const type = response.headers.get('content-type') || '';
+    data = type.includes('json') ? await response.json() : await response.text();
   } catch (error) {
     if (options?.signal?.aborted) throw error;
     throw new ApiError({ error: timeout.aborted
       ? leitura ? 'O servidor demorou para responder. Tente novamente.' : 'A confirmação demorou. Confira o resultado antes de repetir a operação.'
       : leitura ? 'Não foi possível conectar ao portal. Verifique sua conexão e tente novamente.' : 'A conexão foi interrompida. Confira o resultado antes de repetir a operação.' });
   }
-  const type = response.headers.get('content-type') || '';
-  const data: JsonData = type.includes('json')
-    ? await response.json()
-    : await response.text();
-  if (
-    response.status === 401 &&
-    !path.endsWith('/session') &&
-    !path.endsWith('/login')
-  )
-    window.dispatchEvent(new Event('portal:session-expired'));
   if (!response.ok) {
     if (response.status === 429 || response.status === 503) {
       const espera = Number(response.headers.get('retry-after'));
