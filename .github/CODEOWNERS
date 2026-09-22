@@ -1,0 +1,5 @@
+# Revisao obrigatoria de quem responde pela operacao.
+#
+# Vale sobretudo para PR aberto por automacao: sem isto, uma atualizacao de
+# dependencia poderia entrar sozinha com o auto-merge ligado.
+* @ngerheim
