@@ -16,11 +16,12 @@ const PBI_URL_PADRAO = '';
 const PBI_PAGINA_PADRAO = '';
 
 // Uma chave repetida no portal.env e o pior caso: cada leitor escolhe uma
-// ocorrencia diferente e ninguem percebe. Este build pegava a primeira e o
-// rodar.py dos Alertas pega a ultima; com dois PORTAL_API_TOKEN diferentes, a
-// rota interna respondia 401 sem nada no arquivo parecer errado. Aqui a
-// duplicidade derruba a compilacao, e o valor adotado e o ultimo — a mesma
-// regra do lado Python.
+// ocorrencia diferente e ninguem percebe. Aqui a duplicidade derruba a
+// compilacao, e o valor adotado e o ultimo — a mesma regra do lado Python.
+//
+// Nenhum segredo passa por aqui. O PORTAL_API_TOKEN ja foi embutido na
+// compilacao e ficava gravado em texto puro em dist/server; hoje ele chega ao
+// Worker so em tempo de execucao, pelo scripts/iniciar-portal.mjs.
 function lerPortalEnv(chave: string, padrao: string): string {
   const encontrados: string[] = [];
   try {
@@ -87,7 +88,6 @@ export default defineConfig(async () => {
     define: {
       __PBI_RELATORIO_URL__: JSON.stringify(lerPortalEnv('PBI_RELATORIO_URL', PBI_URL_PADRAO)),
       __PBI_PAGINA__: JSON.stringify(lerPortalEnv('PBI_PAGINA', PBI_PAGINA_PADRAO)),
-      __PORTAL_API_TOKEN__: JSON.stringify(lerPortalEnv('PORTAL_API_TOKEN', '')),
     },
     css: { postcss: { plugins: [tailwindcss()] } },
     server: {

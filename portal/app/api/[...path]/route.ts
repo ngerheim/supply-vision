@@ -103,15 +103,13 @@ function rejectCrossOrigin(request: Request) {
 
 // A credencial interna vem do ambiente do Worker, entregue pelo
 // scripts/iniciar-portal.mjs a partir do portal.env -- o mesmo arquivo que o
-// rodar.py dos Alertas le a cada execucao. Enquanto ela era apenas embutida na
-// compilacao, trocar o token sem recompilar deixava os dois lados
-// discordando, e o sintoma era 401 no meio do pipeline.
+// rodar.py dos Alertas le a cada execucao.
 //
-// O valor compilado permanece como reserva: uma instalacao que ainda suba o
-// Portal pelo caminho antigo continua funcionando ate ser atualizada.
+// Nao ha mais valor compilado de reserva: ele deixava o segredo em texto puro
+// em dist/server, e qualquer copia da pasta levava o token junto. Sem a
+// variavel, a rota interna recusa tudo com 401.
 function credencialInterna() {
-  const doAmbiente = String((env as unknown as { PORTAL_API_TOKEN?: string }).PORTAL_API_TOKEN || '').trim();
-  return doAmbiente || __PORTAL_API_TOKEN__;
+  return String((env as unknown as { PORTAL_API_TOKEN?: string }).PORTAL_API_TOKEN || '').trim();
 }
 
 function tokenInternoValido(request: Request) {

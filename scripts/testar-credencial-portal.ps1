@@ -36,8 +36,9 @@ try {
 }
 
 # A credencial e entregue ao Worker em tempo de execucao, a partir do mesmo
-# portal.env que os Alertas leem. Se ela sair da lista de variaveis, o Portal
-# volta a depender so do valor compilado e o 401 silencioso pode voltar.
+# portal.env que os Alertas leem. Se ela sair da lista de variaveis, a rota
+# interna passa a responder 401 para os Alertas. E ela nunca volta a ser
+# embutida na compilacao, que a deixava em texto puro em dist/server.
 $iniciar = Get-Content -LiteralPath (Join-Path $PSScriptRoot '..\portal\scripts\iniciar-portal.mjs') -Raw
 if ($iniciar -notmatch "PORTAL_API_TOKEN") {
   throw 'O Portal nao recebe mais o PORTAL_API_TOKEN do ambiente.'
@@ -45,6 +46,9 @@ if ($iniciar -notmatch "PORTAL_API_TOKEN") {
 $rota = Get-Content -LiteralPath (Join-Path $PSScriptRoot '..\portal\app\api\[...path]\route.ts') -Raw
 if ($rota -notmatch 'env as unknown as \{ PORTAL_API_TOKEN') {
   throw 'A rota interna nao le mais a credencial do ambiente.'
+}
+if ($rota -match '__PORTAL_API_TOKEN__') {
+  throw 'A credencial voltou a ser embutida na compilacao.'
 }
 Write-Host '[OK] credencial entregue e lida em tempo de execucao'
 Write-Host 'Credencial do Portal: 4 conferencias aprovadas.' -ForegroundColor Green
