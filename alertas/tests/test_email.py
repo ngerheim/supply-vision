@@ -104,3 +104,35 @@ def test_modo_sem_envio_salva_preview_sem_abrir_smtp(monkeypatch, tmp_path):
     destino = mod.enviar_email("Teste", "Corpo", [], ["teste@example.com"])
     assert destino.is_file()
     assert b"Subject: Teste" in destino.read_bytes()
+
+def test_import_nao_le_destinatarios(monkeypatch, tmp_path):
+    """Importar o modulo nao pode depender de destinatarios.txt existir.
+
+    A lista era carregada no nivel do modulo: um `import` abria o arquivo e,
+    faltando ele, encerrava o processo.
+    """
+    fake = types.ModuleType("sv_paths")
+    fake.SMTP_SERVIDOR = "smtp.example.com"; fake.SMTP_PORTA = 587
+    fake.SMTP_USUARIO = "teste@example.com"; fake.REMETENTE = "teste@example.com"
+    fake.SMTP_SENHA = "segredo-teste"; fake.NOME_REMETENTE = "Portal Suprimentos"
+    fake.DESTINATARIOS = tmp_path / "nao-existe.txt"
+    fake.RELATORIOS_DIARIOS = tmp_path / "relatorios"
+    monkeypatch.setitem(sys.modules, "sv_paths", fake)
+    spec = importlib.util.spec_from_file_location("email_sem_lista", ROOT / "processo" / "enviar_email.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)  # nao pode levantar SystemExit
+    assert callable(mod.montar_assunto)
+
+    # A falta so aparece quando a lista e realmente necessaria.
+    with pytest.raises(SystemExit):
+        mod.obter_destinatarios()
+
+
+def test_copia_oculta_entra_na_entrega(monkeypatch, tmp_path):
+    mod = carregar_email(monkeypatch, tmp_path)
+    dest = tmp_path / "com-cco.txt"
+    dest.write_text("[PARA]\npara@example.com\n[CCO]\noculto@example.com\n", encoding="utf-8")
+    mod._destinatarios = None
+    para, cco = mod.obter_destinatarios(str(dest))
+    assert para == ["para@example.com"]
+    assert cco == ["oculto@example.com"]
