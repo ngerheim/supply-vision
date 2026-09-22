@@ -47,31 +47,11 @@ Chaves-Repetidas $portalEnv
 Chaves-Repetidas (Join-Path $privado 'comum\smtp.env')
 Chaves-Repetidas (Join-Path $privado 'comum\operacao.env')
 
-# O PORTAL_API_TOKEN e embutido no bundle na compilacao, enquanto os Alertas o
-# leem do arquivo a cada execucao. Trocar o token sem recompilar deixa os dois
-# lados discordando, e o unico sintoma e a rota interna recusando o pipeline.
-$dist=Join-Path $Raiz 'portal\dist'
-$tokenArquivo=''
-try{
- $linhaToken=@(Get-Content -LiteralPath $portalEnv -ErrorAction Stop)|Where-Object{$_ -match '^\s*PORTAL_API_TOKEN\s*=\s*\S'}|Select-Object -Last 1
- if($linhaToken){$tokenArquivo=($linhaToken -split '=',2)[1].Trim()}
-}catch{}
-if($tokenArquivo -and (Test-Path -LiteralPath $dist)){
- # -Include e ignorado quando o caminho vem por -LiteralPath sem curinga: ele
- # devolvia a arvore inteira, inclusive o wrangler.json, e a conferencia
- # reprovava um Portal compilado corretamente. -Filter e avaliado pelo proprio
- # provedor e funciona aqui.
- $bundles=@(Get-ChildItem -LiteralPath $dist -Recurse -File -Filter *.js -ErrorAction SilentlyContinue)
- # Sem nenhum .js nao ha bundle com que comparar (arvore de teste, dist ainda
- # nao gerado). A existencia do build em si ja e cobrada em outro item; aqui so
- # se confere a coerencia entre dois valores que existem.
- if($bundles.Count){
-  $noBundle=@($bundles|Select-String -Pattern ([regex]::Escape($tokenArquivo)) -List -ErrorAction SilentlyContinue).Count
-  if(!$noBundle){
-   Falha 'O PORTAL_API_TOKEN do portal.env nao esta no Portal compilado. Recompile (Atualizar sistema, ou atualizar-servidor.ps1 -Reaplicar) antes de operar: os Alertas receberao 401.'
-  }
- }
-}
+# Aqui existia uma conferencia do PORTAL_API_TOKEN contra o Portal compilado.
+# Ela deixou de fazer sentido quando a credencial passou a ser entregue ao
+# Worker em tempo de execucao, a partir do mesmo portal.env que os Alertas
+# leem: nao ha mais dois valores para divergir. Mantida so a recusa de chave
+# repetida, que continua sendo o unico jeito de os dois lados discordarem.
 $amb=Ler-Chaves (Join-Path $privado 'alertas\config\cfg_ambiente.txt') @('QLIK_TENANT','QLIK_APP_ID','QLIK_OBJ_ID','DESTINATARIO_ALERTA')
 Exigir-Arquivo (Join-Path $privado 'alertas\config\cfg_qlik.txt');Exigir-Arquivo (Join-Path $privado 'alertas\config\destinatarios.txt')
 Exigir-Arquivo (Join-Path $privado 'alertas\parametros\de_para\itens.csv');Exigir-Arquivo (Join-Path $privado 'alertas\parametros\de_para\modelos.csv')

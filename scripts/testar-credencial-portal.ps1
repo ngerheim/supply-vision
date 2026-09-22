@@ -35,11 +35,16 @@ try {
   Remove-Item -LiteralPath $temp -Recurse -Force -ErrorAction SilentlyContinue
 }
 
-# A conferencia entre o token do arquivo e o token compilado e o que apanha
-# "trocou a credencial e nao recompilou"; se sair do validador, o sintoma volta
-# a ser um 401 no meio do pipeline.
-if ($fonte -notmatch 'nao esta no Portal compilado') {
-  throw 'O validador nao confere mais o token contra o Portal compilado.'
+# A credencial e entregue ao Worker em tempo de execucao, a partir do mesmo
+# portal.env que os Alertas leem. Se ela sair da lista de variaveis, o Portal
+# volta a depender so do valor compilado e o 401 silencioso pode voltar.
+$iniciar = Get-Content -LiteralPath (Join-Path $PSScriptRoot '..\portal\scripts\iniciar-portal.mjs') -Raw
+if ($iniciar -notmatch "PORTAL_API_TOKEN") {
+  throw 'O Portal nao recebe mais o PORTAL_API_TOKEN do ambiente.'
 }
-Write-Host '[OK] validador confere o token contra o bundle'
+$rota = Get-Content -LiteralPath (Join-Path $PSScriptRoot '..\portal\app\api\[...path]\route.ts') -Raw
+if ($rota -notmatch 'env as unknown as \{ PORTAL_API_TOKEN') {
+  throw 'A rota interna nao le mais a credencial do ambiente.'
+}
+Write-Host '[OK] credencial entregue e lida em tempo de execucao'
 Write-Host 'Credencial do Portal: 4 conferencias aprovadas.' -ForegroundColor Green
