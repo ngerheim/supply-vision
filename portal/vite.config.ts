@@ -1,9 +1,7 @@
 import { readFileSync } from 'node:fs';
-import { sites } from '@openai/sites-vite-plugin';
 import tailwindcss from '@tailwindcss/postcss';
 import vinext from 'vinext';
 import { defineConfig } from 'vite';
-import hostingConfig from './.openai/hosting.json' with { type: 'json' };
 
 // A aba "Manutencao" emoldura um relatorio publicado no Power BI. O endereco
 // dele nao e codigo: muda quando o relatorio e republicado, e quem troca e o
@@ -43,35 +41,22 @@ function lerPortalEnv(chave: string, padrao: string): string {
   return encontrados.at(-1) ?? padrao;
 }
 
-const SITE_CREATOR_PLACEHOLDER_DATABASE_ID =
-  '00000000-0000-4000-8000-000000000000';
-
-const { d1, r2 } = hostingConfig;
-
-// macOS Seatbelt blocks FSEvents, so Codex previews need polling for HMR.
-const isCodexSeatbeltSandbox = process.env.CODEX_SANDBOX === 'seatbelt';
-
+// Banco D1 local. NAO altere database_name nem database_id: o Miniflare usa
+// esses valores para localizar o arquivo do banco em
+// privado/portal/banco/estado. Mudar qualquer um faria o Portal subir com uma
+// base vazia, como se os dados tivessem sumido. Os nomes vieram do modelo de
+// projeto original e ficam por compatibilidade com as bases ja existentes.
 const localBindingConfig = {
   main: 'vinext/server/fetch-handler',
   compatibility_flags: ['nodejs_compat'],
   observability: { enabled: false },
-  d1_databases: d1
-    ? [
-        {
-          binding: d1,
-          database_name: 'site-creator-d1',
-          database_id: SITE_CREATOR_PLACEHOLDER_DATABASE_ID,
-        },
-      ]
-    : [],
-  r2_buckets: r2
-    ? [
-        {
-          binding: r2,
-          bucket_name: 'site-creator-r2',
-        },
-      ]
-    : [],
+  d1_databases: [
+    {
+      binding: 'DB',
+      database_name: 'site-creator-d1',
+      database_id: '00000000-0000-4000-8000-000000000000',
+    },
+  ],
 };
 
 export default defineConfig(async () => {
@@ -103,13 +88,9 @@ export default defineConfig(async () => {
           '**/.npmrc', '**/*.ps1', '**/*.cmd', '**/*.sqlite*', '**/drizzle/**',
         ],
       },
-      ...(isCodexSeatbeltSandbox
-        ? { watch: { useFsEvents: false, usePolling: true } }
-        : {}),
     },
     plugins: [
       vinext(),
-      sites(),
       cloudflare({
         viteEnvironment: { name: 'rsc', childEnvironments: ['ssr'] },
         config: localBindingConfig,
