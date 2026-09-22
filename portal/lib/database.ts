@@ -1,18 +1,10 @@
+import { passwordHash, tokenHash, PBKDF2_ITERACOES_ATUAL, PBKDF2_ITERACOES_LEGADO } from './criptografia.ts';
+export { passwordHash, tokenHash, PBKDF2_ITERACOES_ATUAL, PBKDF2_ITERACOES_LEGADO } from './criptografia.ts';
 import { parseCookies } from './cookies.ts';
 export { parseCookies } from './cookies.ts';
 import { env } from 'cloudflare:workers';
 import { type Role, validatePassword } from '@/lib/domain';
 
-// Custo do PBKDF2. A recomendacao atual da OWASP para PBKDF2-HMAC-SHA256 e
-// 600 mil iteracoes; medido nesta maquina, 600k leva ~220ms, o que cabe no
-// login sem incomodar.
-//
-// O numero de iteracoes fica gravado JUNTO de cada hash. Sem isso, elevar o
-// custo invalidaria todas as senhas existentes de uma vez -- ninguem
-// conseguiria mais entrar. Assim, hashes antigos continuam sendo conferidos
-// com o custo antigo e sao regravados no proximo login bem-sucedido.
-export const PBKDF2_ITERACOES_ATUAL = 600000;
-export const PBKDF2_ITERACOES_LEGADO = 120000;
 // Duas horas parado encerra a sessao, mesmo dentro das 12h de validade.
 export const SESSAO_INATIVIDADE_MS = 2 * 60 * 60 * 1000;
 
@@ -111,21 +103,6 @@ const hex = (bytes: Uint8Array) => Array.from(bytes).map((b) => b.toString(16).p
 const randomHex = (length = 16) => { const bytes = new Uint8Array(length); crypto.getRandomValues(bytes); return hex(bytes); };
 export const id = (prefix: string) => `${prefix}_${crypto.randomUUID().replaceAll('-', '')}`;
 export const now = () => new Date().toISOString();
-
-export async function passwordHash(password: string, salt: string, iterations = PBKDF2_ITERACOES_ATUAL) {
-  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveBits']);
-  const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', salt: new TextEncoder().encode(salt), iterations }, key, 256);
-  return hex(new Uint8Array(bits));
-}
-
-// O token da sessao passa a ser guardado apenas como hash. Se o banco vazar,
-// os tokens nao podem ser reaproveitados: o valor real so existe no cookie.
-// SHA-256 simples basta porque o token ja tem 256 bits de entropia aleatoria,
-// entao nao ha o que forcar por dicionario.
-export async function tokenHash(token: string) {
-  const bits = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(token));
-  return hex(new Uint8Array(bits));
-}
 
 let ready: Promise<void> | null = null;
 export const MEDIDAS_PADRAO = ['UNIDADE', 'LITRO', 'PAR', 'JOGO', 'HORA'] as const;

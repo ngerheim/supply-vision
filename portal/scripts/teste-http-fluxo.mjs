@@ -20,6 +20,15 @@ const verifica = (nome, condicao, detalhe = '') => {
 console.log('\n  TESTES HTTP EM FLUXO\n  --------------------');
 
 {
+  const r = await pedir({ metodo: 'GET', caminho: '/api/bootstrap',
+    cabecalhos: { cookie: `outro=%; ${cookie}` } });
+  verifica('Cookie malformado nao interrompe a sessao real', r.status === 200 || detalhe(r));
+  const invalida = await pedir({ metodo: 'GET', caminho: '/api/bootstrap',
+    cabecalhos: { cookie: 'acordos_session=%' } });
+  verifica('Cookie de sessao malformado devolve 401', invalida.status === 401 || detalhe(invalida));
+}
+
+{
   const pedacos = ['{"name":"', ...Array.from({ length: 12 }, () => 'B'.repeat(8192)), '"}'];
   const r = await pedir({ caminho: '/api/catalogs/brands', pedacos,
     cabecalhos: { cookie, 'content-type': 'application/json', 'transfer-encoding': 'chunked' } });
