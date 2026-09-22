@@ -254,35 +254,15 @@ padrão. Depois de criar as contas reais, desative a conta semente
 `TRUSTED_PROXY=true` segue o mesmo caminho, e só deve ser ligado quando existir
 um proxy reverso confiável à frente do Portal.
 
-## Backup
+## Backup e recuperação
 
-`scripts/backup.mjs` localiza o banco, usa `VACUUM INTO` para gerar uma cópia
-consistente mesmo com o portal em uso, roda `PRAGMA integrity_check` e
-substitui atomicamente o backup. A cópia vai para o disco local e para o
-compartilhamento de rede (`BACKUP_NETWORK_DIR`, com conferência SHA-256), e o
-e-mail (`BACKUP_EMAIL_TO`) recebe o comprovante: data, tamanho, hash e onde a
-cópia está. O banco não é anexado enquanto houver cópia de rede — ele carrega
-hashes de senha e toda a base comercial. Sem cópia de rede o anexo volta, com
-aviso, para não ficar sem redundância; `BACKUP_ANEXAR_BANCO=true` força o
-anexo.
-
-Cada execução substitui a anterior — **não há histórico rotativo**, por decisão
-operacional. Os horários são definidos pelo supervisor em
-`privado/comum/operacao.env`.
+A rotina de backup (cópia local e na rede, histórico de 7 dias, comprovante por
+e-mail) e a restauração pela central estão em
+[`docs/OPERAR.md`](../docs/OPERAR.md#backup), que é a única fonte desse
+assunto; este arquivo não repete o procedimento para os dois não divergirem.
 
 O botão de exportação da interface gera dados de negócio em JSON, sem senhas
 nem sessões, e **não substitui** o backup SQLite.
-
-## Recuperação
-
-Se o banco for perdido: encerre a operação, confira o hash e rode
-`PRAGMA integrity_check` na cópia, e restaure `portal-atual.sqlite` no local do
-banco D1. Se a cópia local não estiver disponível, use a de rede ou o último
-anexo recebido por e-mail.
-
-> O nome do arquivo do banco é derivado do binding pelo miniflare. Restaurar
-> com outro nome faz o miniflare ignorar a cópia e criar um banco vazio ao
-> lado — o sintoma parece perda total de dados, mas é só o nome errado.
 
 Se apenas a interface falhar após uma atualização, use o build `anterior` em
 `work/`. O atualizador já faz esse retorno sozinho quando a verificação
