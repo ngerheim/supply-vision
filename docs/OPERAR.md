@@ -72,9 +72,13 @@ validação logo após uma versão passar a exigir uma chave nova.
 
 ## Backup
 
-Cada horário grava uma versão atual do banco em três vias: local em
-`privado/portal/backups/`, no compartilhamento de `BACKUP_NETWORK_DIR` com
-conferência SHA-256, e como anexo de e-mail. A troca é atômica. Não há
+Cada horário grava uma versão atual do banco em `privado/portal/backups/` e,
+se `BACKUP_NETWORK_DIR` estiver configurado, no compartilhamento de rede, com
+conferência SHA-256. O e-mail de backup sempre sai com o comprovante; o banco
+só vai anexado quando não há cópia de rede (por falta de outra cópia fora da
+máquina) ou quando `BACKUP_ANEXAR_BANCO=true`. O banco contém hashes de senha
+e toda a base comercial, então configurar a pasta de rede é o caminho
+recomendado. A troca é atômica. Não há
 histórico rotativo, por decisão operacional — o que significa que uma
 corrupção lógica se propaga para a cópia seguinte.
 

@@ -66,10 +66,14 @@ Em ordem de importância:
 - **Credencial persistente** para o compartilhamento de rede (`cmdkey`), senão
   o backup em rede e a planilha de acordos falham depois de reiniciar.
 - **Windows Update** com horário ativo cobrindo o expediente.
-- **Antivírus** com exclusão da pasta do projeto: SQLite e Node fazem muita
-  escrita pequena.
+- **Antivírus** com exclusão só de `privado\portal\banco\`, onde o SQLite faz
+  muita escrita pequena. Não exclua a pasta inteira do projeto: ela guarda os
+  `.bat` e `.ps1` que a agenda executa sozinha, e um arquivo adulterado ali
+  rodaria sem ser examinado. Se o build ou o `npm ci` ficarem lentos demais,
+  `portal\node_modules\` é a segunda candidata, com a mesma ressalva.
 - **Login automático**, se a operação precisar subir sem alguém sentar na
-  máquina. É a única desta lista com contrapartida de segurança.
+  máquina. Junto com a exclusão do antivírus, são os itens desta lista com
+  contrapartida de segurança.
 
 ## Teste que fecha a instalação
 
