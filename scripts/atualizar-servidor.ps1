@@ -175,7 +175,7 @@ function Reverter([string]$motivo) {
     try { & npm ci --no-audit --no-fund | Out-Null; if ($LASTEXITCODE -ne 0) { throw 'Falha ao restaurar dependencias Node.' } } finally { Pop-Location }
   }
   if ($mexeuPython) {
-    & $Python -m pip install -r (Join-Path $Alertas 'config\requirements.txt') --quiet
+    & $Python -m pip install -r (Join-Path $Alertas 'config\requirements.txt') -r (Join-Path $Alertas 'config\requirements-dev.txt') --quiet
     if ($LASTEXITCODE -ne 0) { throw 'Falha ao restaurar dependencias Python.' }
   }
   Push-Location $Portal
@@ -216,9 +216,12 @@ if ($mexeuNode) {
   Ok 'dependencias Node atualizadas'
 } else { Aviso 'dependencias Node inalteradas — npm ci dispensado' }
 
+# requirements-dev.txt entra junto, como no instalador e no CI: a suite de
+# testes logo abaixo roda pytest, e uma versao nova dele so chegaria ao
+# servidor numa reinstalacao completa. O mesmo vale para o Reverter.
 if ($mexeuPython) {
   Etapa 'Dependencias Python mudaram: pip install'
-  & $Python -m pip install -r (Join-Path $Alertas 'config\requirements.txt') --quiet
+  & $Python -m pip install -r (Join-Path $Alertas 'config\requirements.txt') -r (Join-Path $Alertas 'config\requirements-dev.txt') --quiet
   if ($LASTEXITCODE -ne 0) { Reverter 'pip install falhou.' }
   Ok 'dependencias Python atualizadas'
 } else { Aviso 'dependencias Python inalteradas — pip install dispensado' }
