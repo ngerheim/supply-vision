@@ -57,9 +57,19 @@ try{
  if($linhaToken){$tokenArquivo=($linhaToken -split '=',2)[1].Trim()}
 }catch{}
 if($tokenArquivo -and (Test-Path -LiteralPath $dist)){
- $noBundle=@(Get-ChildItem -LiteralPath $dist -Recurse -File -Include *.js -ErrorAction SilentlyContinue|Select-String -Pattern ([regex]::Escape($tokenArquivo)) -List -ErrorAction SilentlyContinue).Count
- if(!$noBundle){
-  Falha 'O PORTAL_API_TOKEN do portal.env nao esta no Portal compilado. Recompile (Atualizar sistema, ou atualizar-servidor.ps1 -Reaplicar) antes de operar: os Alertas receberao 401.'
+ # -Include e ignorado quando o caminho vem por -LiteralPath sem curinga: ele
+ # devolvia a arvore inteira, inclusive o wrangler.json, e a conferencia
+ # reprovava um Portal compilado corretamente. -Filter e avaliado pelo proprio
+ # provedor e funciona aqui.
+ $bundles=@(Get-ChildItem -LiteralPath $dist -Recurse -File -Filter *.js -ErrorAction SilentlyContinue)
+ # Sem nenhum .js nao ha bundle com que comparar (arvore de teste, dist ainda
+ # nao gerado). A existencia do build em si ja e cobrada em outro item; aqui so
+ # se confere a coerencia entre dois valores que existem.
+ if($bundles.Count){
+  $noBundle=@($bundles|Select-String -Pattern ([regex]::Escape($tokenArquivo)) -List -ErrorAction SilentlyContinue).Count
+  if(!$noBundle){
+   Falha 'O PORTAL_API_TOKEN do portal.env nao esta no Portal compilado. Recompile (Atualizar sistema, ou atualizar-servidor.ps1 -Reaplicar) antes de operar: os Alertas receberao 401.'
+  }
  }
 }
 $amb=Ler-Chaves (Join-Path $privado 'alertas\config\cfg_ambiente.txt') @('QLIK_TENANT','QLIK_APP_ID','QLIK_OBJ_ID','DESTINATARIO_ALERTA')
