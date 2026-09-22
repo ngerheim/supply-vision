@@ -495,6 +495,27 @@ try {
     assert.equal(query('SELECT COUNT(*) n FROM travas')[0].n, 0);
   });
   await check('Depois do estresse uma nova importação funciona', async () => assert.equal((await upload(file([row()], { name: 'apos-estresse' }), replace)).status, 200));
+  await check('Importação interrompida no meio é limpa pela próxima', async () => {
+    // Reproduz o que sobra quando o processo morre durante a gravacao: a
+    // importacao em 'processing', uma versao em preparo e condicoes nela.
+    assert.ok(sqlitePath.startsWith(path.join(output, 'state') + path.sep));
+    const modelo = query(`SELECT i.location_id,i.catalog_item_id,i.vehicle_model_id,i.unit_id FROM agreement_items i JOIN agreements a ON a.current_version_id=i.version_id WHERE a.id=? LIMIT 1`, agreementId)[0];
+    const usuario = query('SELECT id FROM users LIMIT 1')[0].id;
+    const versao = query('SELECT COALESCE(MAX(version_number),0)+1 n FROM agreement_versions WHERE agreement_id=?', agreementId)[0].n;
+    const agora = new Date().toISOString();
+    const fixture = new DatabaseSync(sqlitePath);
+    try {
+      fixture.exec('PRAGMA busy_timeout=10000; BEGIN IMMEDIATE');
+      fixture.prepare(`INSERT INTO imports (id,agreement_id,filename,mode,status,created_by,created_at) VALUES ('imp-interrompida',?,'interrompida.xlsx','replace','processing',?,?)`).run(agreementId, usuario, agora);
+      fixture.prepare(`INSERT INTO agreement_versions (id,agreement_id,version_number,import_id,status,published_at,created_by,created_at) VALUES ('ver-interrompida',?,?,'imp-interrompida','processing',NULL,?,?)`).run(agreementId, versao, usuario, agora);
+      fixture.prepare(`INSERT INTO agreement_items (id,version_id,location_id,catalog_item_id,vehicle_model_id,unit_id,price,created_at,updated_at) VALUES ('itm-interrompida','ver-interrompida',?,?,?,?,1,?,?)`).run(modelo.location_id, modelo.catalog_item_id, modelo.vehicle_model_id, modelo.unit_id, agora, agora);
+      fixture.exec('COMMIT');
+    } finally { fixture.close(); }
+    assert.equal((await upload(file([row()], { name: 'apos-interrupcao' }), replace)).status, 200);
+    assert.equal(query(`SELECT status FROM imports WHERE id='imp-interrompida'`)[0].status, 'error');
+    assert.equal(query(`SELECT COUNT(*) n FROM agreement_versions WHERE id='ver-interrompida'`)[0].n, 0);
+    assert.equal(query(`SELECT COUNT(*) n FROM agreement_items WHERE id='itm-interrompida'`)[0].n, 0);
+  });
   await check('Exportação conserva os De/Para', async () => {
     const exported = await good('/api/export');
     assert.equal(exported.tables.importItemMappings.length, query('SELECT COUNT(*) n FROM import_item_mappings')[0].n);

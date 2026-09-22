@@ -1018,6 +1018,7 @@ async function importWorkbook(request: Request, user: User, agreementId: string 
     return fail('Já existe uma importação em andamento. Aguarde ela terminar e tente de novo.', 409);
   }
   try {
+    await recuperarImportacoesInterrompidas();
     return await importWorkbookComTrava(request, user, agreementId, legacy);
   } finally {
     // finally cobre sucesso, planilha invalida e excecao inesperada.
@@ -1354,6 +1355,25 @@ async function cleanupFailedImport(importId:string){
       db.prepare('DELETE FROM agreement_locations WHERE agreement_id=?').bind(agreementId),
       db.prepare('DELETE FROM agreements WHERE id=?').bind(agreementId),
     ]);
+  }
+}
+
+// Quem segura a trava de importacao e o unico que pode estar importando. Uma
+// importacao ainda em 'processing' neste momento e resto de um processo que
+// morreu no meio (queda de energia, portal encerrado): sem esta varredura ela
+// ficava assim para sempre, com a versao em preparo e as condicoes gravadas
+// ate ali. A trava vence em 30 min; uma importacao real leva segundos.
+async function recuperarImportacoesInterrompidas(){
+  const presas=await all<{id:string}>(`SELECT id FROM imports WHERE status='processing'`);
+  for(const {id:importId} of presas){
+    try{
+      await cleanupFailedImport(importId);
+      await rawDb().prepare('UPDATE imports SET status=?,summary_json=?,completed_at=? WHERE id=?')
+        .bind('error',JSON.stringify({error:'Importação interrompida antes de concluir; os dados parciais foram removidos.'}),now(),importId).run();
+    }catch(erro){
+      // Nao bloqueia a importacao nova: a varredura tenta de novo na proxima.
+      console.error(`[portal] nao foi possivel limpar a importacao interrompida ${importId}:`,erro);
+    }
   }
 }
 
