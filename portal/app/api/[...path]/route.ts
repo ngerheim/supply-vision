@@ -266,7 +266,7 @@ async function POSTInterno(request: NextRequest) {
   if (parts[0] === 'tickets' && parts[1] && parts[2] === 'events') return addTicketEvent(request, user, parts[1]);
   if (parts[0] === 'tickets' && parts.length === 1) return createTicket(request, user);
   if (parts[0] === 'email-notifications' && parts[1] && parts[2] === 'retry') return retryEmailNotification(user, parts[1]);
-  if (parts[0] === 'imports' && parts[1] === 'agreement' && parts[2]) return importWorkbook(request, user, parts[2], false);
+  if (parts[0] === 'imports' && parts[1] === 'agreement' && parts[2]) return importWorkbook(request, user, parts[2]);
   if (parts[0] === 'mappings' && parts[1]) return createMapping(request, user, parts[1]);
   return fail('Rota não encontrada.', 404);
 }
@@ -1007,7 +1007,7 @@ async function search(params: URLSearchParams) {
   return ok({ rows, total, truncated: total > rows.length, limit });
 }
 
-async function importWorkbook(request: Request, user: User, agreementId: string | null, legacy: boolean) {
+async function importWorkbook(request: Request, user: User, agreementId: string) {
   // A trava e adquirida ANTES de ler o multipart: sem isso, uma segunda
   // importacao gastaria memoria materializando o corpo inteiro so para ser
   // recusada depois.
@@ -1020,7 +1020,7 @@ async function importWorkbook(request: Request, user: User, agreementId: string 
   }
   try {
     await recuperarImportacoesInterrompidas();
-    return await importWorkbookComTrava(request, user, agreementId, legacy);
+    return await importWorkbookComTrava(request, user, agreementId);
   } finally {
     // finally cobre sucesso, planilha invalida e excecao inesperada.
     // Falha ao liberar nao pode transformar uma importacao ja publicada em
@@ -1031,7 +1031,7 @@ async function importWorkbook(request: Request, user: User, agreementId: string 
   }
 }
 
-async function importWorkbookComTrava(request: Request, user: User, agreementId: string | null, legacy: boolean) {
+async function importWorkbookComTrava(request: Request, user: User, agreementId: string) {
   // Limite REAL do multipart. Content-Length pode vir ausente, mentiroso ou a
   // requisicao pode ser fragmentada, entao conferir so o cabecalho deixaria o
   // formData() materializar o corpo inteiro na memoria.
@@ -1057,28 +1057,19 @@ async function importWorkbookComTrava(request: Request, user: User, agreementId:
   if (!/\.(xlsx|xls)$/i.test(file.name)) return fail('Use uma planilha com extensão .xlsx ou .xls.');
   if (file.size <= 0) return fail('A planilha está vazia.');
   if (file.size > MAX_IMPORT_BYTES) return fail('A planilha ultrapassa o limite de 15 MB.');
-  if (!legacy) {
-    if (!agreementId || !await first('SELECT 1 ok FROM agreements WHERE id=?', [agreementId])) return fail('Acordo de destino não encontrado.', 404);
-  }
+  if (!await first('SELECT 1 ok FROM agreements WHERE id=?', [agreementId])) return fail('Acordo de destino não encontrado.', 404);
   const preview = new URL(request.url).searchParams.get('preview') === '1';
   const importId = id('imp'), timestamp = now();
-  if (!preview) await rawDb().prepare(`INSERT INTO imports (id,agreement_id,filename,mode,status,created_by,created_at) VALUES (?,?,?,?,?,?,?)`).bind(importId, agreementId, safeFilename(file.name), legacy ? 'legacy' : 'replace', 'processing', user.id, timestamp).run();
+  if (!preview) await rawDb().prepare(`INSERT INTO imports (id,agreement_id,filename,mode,status,created_by,created_at) VALUES (?,?,?,?,?,?,?)`).bind(importId, agreementId, safeFilename(file.name), 'replace', 'processing', user.id, timestamp).run();
   try {
     const leitura = await lerPlanilha(file);
     if (!leitura.ok) throw new Error(leitura.erro);
     const sourceRows = leitura.linhas as Row[];
     if (!sourceRows.length) throw new Error('A planilha não contém linhas de dados.');
-    const ausentes = colunasAusentes(sourceRows[0], legacy);
+    const ausentes = colunasAusentes(sourceRows[0]);
     if (ausentes.length) throw new Error(`A planilha não tem ${ausentes.length === 1 ? 'a coluna' : 'as colunas'} ${ausentes.join(', ')}. Confira o cabeçalho da primeira aba.`);
-    const parsed = sourceRows.map((row, index) => parseImportRow(row, leitura.numerosLinhas[index], legacy));
-    // A base so e semeada depois que o arquivo inteiro passa. Semear antes
-    // faria uma importacao recusada deixar fornecedor, item e localidade para
-    // tras, quebrando a promessa de que nada e gravado quando ha erro. Por isso
-    // a primeira resolucao trata o que falta como referencia provisoria, e a
-    // gravacao — com nova resolucao, ja com os identificadores reais — so
-    // acontece se nao sobrar nenhum erro.
-    const faltante = legacy ? await referenciasFaltantes(parsed) : null;
-    await applyImportMappings(parsed, legacy, faltante);
+    const parsed = sourceRows.map((row, index) => parseImportRow(row, leitura.numerosLinhas[index]));
+    await applyImportMappings(parsed);
     const errors = parsed.filter((r) => r.error);
     if (errors.length) {
       const summary = summarizeImportErrors(parsed, leitura.aba);
@@ -1086,18 +1077,8 @@ async function importWorkbookComTrava(request: Request, user: User, agreementId:
       await rawDb().prepare('UPDATE imports SET status=?,total_rows=?,valid_rows=?,error_rows=?,summary_json=?,completed_at=? WHERE id=?').bind('error', parsed.length, parsed.length-errors.length, errors.length, JSON.stringify(summary), now(), importId).run();
       return ok({ error: `A planilha possui ${errors.length} linha(s) inválida(s). Nenhum dado foi publicado.`, importId, ...summary }, { status: 400 });
     }
-    // O zero à esquerda recuperado altera um dado do arquivo: o resumo precisa
-    // dizer quantos fornecedores passaram por isso, para a conferência não
-    // depender de o operador reparar sozinho.
-    const semear = faltante && (faltante.localidades.size || faltante.itens.size || faltante.modelos.size || faltante.fornecedores.size);
-    if (semear && !preview) {
-      await semearBaseInicial(faltante);
-      await reidentificarSemeadas(parsed);
-    }
-    const cnpjsRecuperados = new Set(parsed.filter((r) => r.cnpjRecuperado).map((r) => r.cnpj)).size;
-    const prepared = deduplicateImportRows(parsed, legacy);
-    const criadas = semear ? { baseCriada: resumoDaBase(faltante) } : {};
-    const baseSummary = { ...prepared.summary, ...(cnpjsRecuperados ? { cnpjsRecuperados } : {}), ...criadas };
+    const prepared = deduplicateImportRows(parsed);
+    const baseSummary = prepared.summary;
     if (preview) return ok({ preview: true, valid: true, sheet: leitura.aba, totalRows: parsed.length, summary: baseSummary, sample: prepared.rows.slice(0, 20).map(row => ({ linha: row.rowNumber, fornecedor: row.supplier, cidade: row.city, uf: row.state, item: row.item, modelo: row.model, unidade: row.unit, preco: row.price })) });
     const publish: PublishImport = async (statements, details) => {
       const summary = { ...details, ...baseSummary }, db = rawDb(), timestamp = now();
@@ -1105,11 +1086,11 @@ async function importWorkbookComTrava(request: Request, user: User, agreementId:
       await db.batch([
         ...statements,
         db.prepare('UPDATE imports SET status=?,total_rows=?,valid_rows=?,error_rows=0,summary_json=?,completed_at=? WHERE id=?').bind('completed', parsed.length, parsed.length, JSON.stringify(summary), timestamp, importId),
-        db.prepare('INSERT INTO audit_logs (id,user_id,action,entity,entity_id,details,created_at) VALUES (?,?,?,?,?,?,?)').bind(id('aud'), user.id, 'IMPORT', legacy ? 'legacy_base' : 'agreement', agreementId, `${file.name}: ${parsed.length} linhas publicadas`, timestamp),
+        db.prepare('INSERT INTO audit_logs (id,user_id,action,entity,entity_id,details,created_at) VALUES (?,?,?,?,?,?,?)').bind(id('aud'), user.id, 'IMPORT', 'agreement', agreementId, `${file.name}: ${parsed.length} linhas publicadas`, timestamp),
       ]);
       return summary;
     };
-    const summary = legacy ? await processLegacy(prepared.rows, user, importId, publish) : await processAgreementImport(prepared.rows, user, importId, agreementId!, publish);
+    const summary = await processAgreementImport(prepared.rows, user, importId, agreementId, publish);
     return ok({ success: true, summary });
   } catch (error: unknown) {
     if (preview) return ok({ preview: true, valid: false, error: errorMessage(error, 'Arquivo inválido.') });
@@ -1120,119 +1101,12 @@ async function importWorkbookComTrava(request: Request, user: User, agreementId:
   }
 }
 
-// A carga inicial e o que define o vocabulario: nao existe base anterior com
-// que comparar, e exigir cadastro previo de tudo obrigaria a digitar de novo o
-// que a propria planilha ja declara. Entao as referencias que faltam nascem
-// dela, e o resumo lista o que foi criado para conferencia. Da segunda
-// importacao em diante a exigencia volta, porque ai existe base de comparacao.
-// Prefixo do identificador provisorio. Cada referencia recebe um sufixo
-// proprio porque a deduplicacao compara identificadores: um valor unico para
-// todas faria itens distintos colidirem na mesma chave e a previa acusaria
-// medidas divergentes que nao existem.
-const PREVIA = 'previa:';
-
-type BaseFaltante = {
-  localidades: Map<string, { city: string; state: string }>;
-  itens: Map<string, string>;
-  modelos: Map<string, string>;
-  fornecedores: Map<string, { nome: string; local: { city: string; state: string } | null }>;
-};
-
-async function referenciasFaltantes(rows: ReturnType<typeof parseImportRow>[]): Promise<BaseFaltante> {
-  // O que conta como "ja existe" e o que a importacao consegue resolver, e ela
-  // resolve pelo De/Para, nao pelo nome do catalogo. Conferir o catalogo criaria
-  // um item novo para toda nomenclatura que hoje e traduzida para outro nome.
-  // A correspondencia inativa tambem conta: recria-la esbarraria na origem unica
-  // e deixaria um cadastro orfao.
-  const [locais, itens, modelos, fornecedores] = await Promise.all([
-    all<{ city: string; state: string }>('SELECT city,state FROM locations'),
-    all<{ chave: string }>('SELECT source_key AS chave FROM import_item_mappings'),
-    all<{ chave: string }>('SELECT source_key AS chave FROM import_model_mappings'),
-    all<{ cnpj: string }>('SELECT cnpj FROM suppliers'),
-  ]);
-  const temLocal = new Set(locais.map((linha) => chaveLocalidade(linha.city, linha.state)));
-  const temItem = new Set(itens.map((linha) => linha.chave));
-  const temModelo = new Set(modelos.map((linha) => linha.chave));
-  const temFornecedor = new Set(fornecedores.map((linha) => linha.cnpj));
-  const faltante: BaseFaltante = { localidades: new Map(), itens: new Map(), modelos: new Map(), fornecedores: new Map() };
-  for (const row of rows) {
-    if (row.error) continue;
-    const chave = chaveLocalidade(row.city, row.state);
-    if (row.city && isValidState(row.state) && !temLocal.has(chave)) faltante.localidades.set(chave, { city: row.city, state: row.state });
-    if (row.item && !temItem.has(row.item)) faltante.itens.set(row.item, row.rawItem || row.item);
-    if (row.model && !temModelo.has(row.model)) faltante.modelos.set(row.model, row.rawModel || row.model);
-    if (row.cnpj && isValidCnpj(row.cnpj) && row.supplier && !temFornecedor.has(row.cnpj)) {
-      const atual = faltante.fornecedores.get(row.cnpj);
-      // Cidade e UF so entram quando o fornecedor aparece numa unica praca na
-      // planilha. Atendendo mais de uma, escolher uma seria arbitrario, e o
-      // campo fica em branco para alguem informar.
-      const mesmaPraca = !atual || (atual.local !== null && atual.local.city === row.city && atual.local.state === row.state);
-      faltante.fornecedores.set(row.cnpj, { nome: atual?.nome ?? row.supplier, local: mesmaPraca ? { city: row.city, state: row.state } : null });
-    }
-  }
-  return faltante;
-}
-
-async function semearBaseInicial(faltante: BaseFaltante) {
-  const db = rawDb(), timestamp = now();
-  await batch([
-    ...Array.from(faltante.localidades.values()).map((local) => db.prepare('INSERT OR IGNORE INTO locations (id,city,state) VALUES (?,?,?)').bind(id('loc'), local.city, local.state)),
-    ...Array.from(faltante.itens.keys()).map((nome) => db.prepare('INSERT OR IGNORE INTO catalog_items (id,name,active) VALUES (?,?,1)').bind(id('ite'), nome)),
-    ...Array.from(faltante.modelos.keys()).map((nome) => db.prepare('INSERT OR IGNORE INTO vehicle_models (id,name,active) VALUES (?,?,1)').bind(id('mod'), nome)),
-    ...Array.from(faltante.fornecedores).map(([cnpj, dados]) => db.prepare('INSERT OR IGNORE INTO suppliers (id,legal_name,trade_name,cnpj,city,state,active,created_at,updated_at) VALUES (?,?,?,?,?,?,1,?,?)').bind(id('sup'), dados.nome, dados.nome, cnpj, dados.local?.city ?? null, dados.local?.state ?? null, timestamp, timestamp)),
-  ], 80);
-  // O De/Para nasce como espelho: origem igual ao destino. Fica visivel e
-  // editavel na tela, e a importacao continua resolvendo so pelo dicionario.
-  const [itens, modelos] = await Promise.all([
-    all<{ id: string; name: string }>('SELECT id,name FROM catalog_items WHERE active=1'),
-    all<{ id: string; name: string }>('SELECT id,name FROM vehicle_models WHERE active=1'),
-  ]);
-  await batch([
-    ...itens.filter((item) => faltante.itens.has(normalizeImportText(item.name)))
-      .map((item) => db.prepare('INSERT OR IGNORE INTO import_item_mappings (id,source_text,source_key,target_id,active,notes,created_at,updated_at) VALUES (?,?,?,?,1,?,?,?)').bind(id('map'), item.name, normalizeImportText(item.name), item.id, 'Criado pela carga inicial', timestamp, timestamp)),
-    ...modelos.filter((modelo) => faltante.modelos.has(normalizeImportText(modelo.name)))
-      .map((modelo) => db.prepare('INSERT OR IGNORE INTO import_model_mappings (id,source_text,source_key,target_id,active,notes,created_at,updated_at) VALUES (?,?,?,?,1,?,?,?)').bind(id('map'), modelo.name, normalizeImportText(modelo.name), modelo.id, 'Criado pela carga inicial', timestamp, timestamp)),
-  ], 80);
-}
-
-// A primeira resolucao ja reescreveu item, modelo e cidade para a forma
-// canonica, entao repeti-la procuraria o destino como se fosse origem e nao
-// acharia. Aqui so trocamos o identificador provisorio pelo real.
-async function reidentificarSemeadas(rows: ReturnType<typeof parseImportRow>[]) {
-  if (!rows.some((row) => row.itemId.startsWith(PREVIA) || row.modelId.startsWith(PREVIA) || row.locationId.startsWith(PREVIA))) return;
-  const [itens, modelos, locais] = await Promise.all([
-    all<{ id: string; name: string }>('SELECT id,name FROM catalog_items'),
-    all<{ id: string; name: string }>('SELECT id,name FROM vehicle_models'),
-    all<{ id: string; city: string; state: string }>('SELECT id,city,state FROM locations'),
-  ]);
-  const porItem = new Map(itens.map((linha) => [normalizeImportText(linha.name), linha.id]));
-  const porModelo = new Map(modelos.map((linha) => [normalizeImportText(linha.name), linha.id]));
-  const porLocal = new Map(locais.map((linha) => [chaveLocalidade(linha.city, linha.state), linha.id]));
-  for (const row of rows) {
-    if (row.itemId.startsWith(PREVIA)) row.itemId = porItem.get(row.item) ?? '';
-    if (row.modelId.startsWith(PREVIA)) row.modelId = porModelo.get(row.model) ?? '';
-    if (row.locationId.startsWith(PREVIA)) row.locationId = porLocal.get(chaveLocalidade(row.city, row.state)) ?? '';
-  }
-  const pendente = rows.find((row) => !row.itemId || !row.modelId || !row.locationId);
-  if (pendente) throw new Error(`Não foi possível criar as referências da carga inicial (linha ${pendente.rowNumber}).`);
-}
-
-function resumoDaBase(faltante: BaseFaltante) {
-  const lista = (mapa: Map<string, unknown>, limite = 200) => Array.from(mapa.keys()).slice(0, limite);
-  return {
-    localidades: faltante.localidades.size, itens: faltante.itens.size,
-    modelos: faltante.modelos.size, fornecedores: faltante.fornecedores.size,
-    amostra: { localidades: lista(faltante.localidades), itens: lista(faltante.itens), modelos: lista(faltante.modelos), fornecedores: lista(faltante.fornecedores) },
-  };
-}
-
-async function applyImportMappings(rows: ReturnType<typeof parseImportRow>[], legacy: boolean, virtuais: BaseFaltante | null = null) {
-  const [itemRows, modelRows, unitRows, locationRows, supplierRows, unitAliases] = await Promise.all([
+async function applyImportMappings(rows: ReturnType<typeof parseImportRow>[]) {
+  const [itemRows, modelRows, unitRows, locationRows, unitAliases] = await Promise.all([
     all<{ sourceKey: string; name: string; id: string }>('SELECT m.source_key AS sourceKey,c.name,c.id FROM import_item_mappings m JOIN catalog_items c ON c.id=m.target_id WHERE m.active=1 AND c.active=1'),
     all<{ sourceKey: string; name: string; id: string }>('SELECT m.source_key AS sourceKey,v.name,v.id FROM import_model_mappings m JOIN vehicle_models v ON v.id=m.target_id WHERE m.active=1 AND v.active=1'),
     all<{ id: string; code: string; name: string }>('SELECT id,code,name FROM units WHERE active=1'),
     all<{ id: string; city: string; state: string }>('SELECT id,city,state FROM locations'),
-    legacy ? all<{ cnpj: string; name: string }>('SELECT cnpj,trade_name AS name FROM suppliers WHERE active=1') : [],
     all<{ sourceKey: string; id: string; name: string }>('SELECT m.source_key AS sourceKey,u.id,u.code AS name FROM import_unit_mappings m JOIN units u ON u.id=m.target_id WHERE m.active=1 AND u.active=1'),
   ]);
   const units = uniqueIndex<ImportTarget>(unitRows.flatMap(unit => [...new Set([normalizeImportText(unit.code), normalizeImportText(unit.name)])].map(key => [key, { id: unit.id, name: unit.code }] as [string, ImportTarget])));
@@ -1243,75 +1117,10 @@ async function applyImportMappings(rows: ReturnType<typeof parseImportRow>[], le
   // cidade para outra.
   const items = new Map<string, ImportTarget>(itemRows.map(item => [item.sourceKey, { id: item.id, name: item.name }]));
   const models = new Map<string, ImportTarget>(modelRows.map(model => [model.sourceKey, { id: model.id, name: model.name }]));
-  const suppliers = new Map(supplierRows.map(supplier => [supplier.cnpj, supplier.name]));
-  // Na previa nada e gravado, entao o que a carga inicial criaria entra como
-  // referencia provisoria: o operador ve o resultado real, nao 200 erros.
-  if (virtuais) {
-    for (const [chave, nome] of virtuais.itens) items.set(chave, { id: PREVIA + chave, name: nome });
-    for (const [chave, nome] of virtuais.modelos) models.set(chave, { id: PREVIA + chave, name: nome });
-    for (const [chave, dados] of virtuais.fornecedores) suppliers.set(chave, dados.nome);
-    for (const [chave, local] of virtuais.localidades) locations.set(chave, { id: PREVIA + chave, city: local.city, state: local.state });
-  }
-  resolveImportRows(rows, { items, models, units, locations, suppliers }, legacy);
+  resolveImportRows(rows, { items, models, units, locations });
 }
 
 type PublishImport = (statements: D1PreparedStatement[], details: Record<string, unknown>) => Promise<Record<string, unknown>>;
-
-async function processLegacy(rows: ReturnType<typeof parseImportRow>[], user: User, importId: string, publish: PublishImport) {
-  const suppliers = new Map((await all<{id:string;cnpj:string}>('SELECT id,cnpj FROM suppliers WHERE active=1')).map((supplier) => [supplier.cnpj,supplier.id]));
-  const db = rawDb(), timestamp = now();
-  const cnpjs = Array.from(new Set(rows.map((r) => r.cnpj)));
-  type StagedAgreement = {
-    agreementId: string;
-    versionId: string;
-    versionNumber: number;
-  };
-  const agreements = new Map<string, StagedAgreement>();
-  // A numeracao segue a ordem de aparicao do fornecedor na planilha e continua
-  // de onde a base parou, para o numero nunca se repetir nem ser reaproveitado.
-  const ultimo = await first<{ n: number }>(`SELECT COALESCE(MAX(CAST(substr(number,4) AS INTEGER)),0) n FROM agreements WHERE number LIKE 'LF-%'`);
-  let sequencia = Number(ultimo?.n || 0);
-  const proximoNumero = () => { sequencia += 1; return `LF-${sequencia}`; };
-  for (const cnpj of cnpjs) {
-    const supplierId = suppliers.get(cnpj)!;
-    const agreement = await first<{id:string;current_version_id:string|null}>('SELECT id,current_version_id FROM agreements WHERE supplier_id=? AND provisional=1', [supplierId]);
-    if (!agreement) {
-      const agreementId=id('agr'), versionId=id('ver'), number=proximoNumero();
-      await db.batch([
-        db.prepare(`INSERT INTO agreements (id,number,supplier_id,status,start_date,end_date,owner_user_id,notes,provisional,current_version_id,created_at,updated_at) VALUES (?,?,?,'active',?,NULL,?,'Importado da base histórica; completar dados do acordo.',1,NULL,?,?)`).bind(agreementId,number,supplierId,timestamp.slice(0,10),user.id,timestamp,timestamp),
-        db.prepare(`INSERT INTO agreement_versions (id,agreement_id,version_number,import_id,status,published_at,created_by,created_at) VALUES (?,?,1,?,'processing',NULL,?,?)`).bind(versionId,agreementId,importId,user.id,timestamp),
-      ]);
-      agreements.set(cnpj,{agreementId,versionId,versionNumber:1});
-    } else {
-      const max=await first<{n:number}>('SELECT COALESCE(MAX(version_number),0) n FROM agreement_versions WHERE agreement_id=?',[agreement.id]);
-      const versionNumber=Number(max?.n||0)+1, versionId=id('ver');
-      await db.prepare(`INSERT INTO agreement_versions (id,agreement_id,version_number,import_id,status,published_at,created_by,created_at) VALUES (?,?,?,?,'processing',NULL,?,?)`)
-        .bind(versionId,agreement.id,versionNumber,importId,user.id,timestamp).run();
-      agreements.set(cnpj,{agreementId:agreement.id,versionId,versionNumber});
-    }
-  }
-  const locationLinks = new Map<string,[string,string]>();
-  // As linhas ja foram resolvidas e deduplicadas pela mesma regra da conferencia.
-  const statements = rows.map((row) => {
-    const agreement=agreements.get(row.cnpj)!, locationId=row.locationId!;
-    locationLinks.set(`${agreement.agreementId}|${locationId}`,[agreement.agreementId,locationId]);
-    return db.prepare(`INSERT INTO agreement_items (id,version_id,location_id,catalog_item_id,vehicle_model_id,unit_id,price,courtesy,brands_text,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)`).bind(id('itm'),agreement.versionId,locationId,row.itemId,row.modelId,row.unitId,row.price,row.price===0?1:0,row.brands||null,timestamp,timestamp);
-  });
-  await batch(statements,80);
-  // Publica todos os fornecedores na mesma transacao: nenhum lote parcial fica visivel.
-  const publication: D1PreparedStatement[]=[];
-  for(const agreement of agreements.values()){
-    const newLocationIds=Array.from(locationLinks.values()).filter(([agreementId])=>agreementId===agreement.agreementId).map(([,locationId])=>locationId);
-    publication.push(
-      db.prepare('DELETE FROM agreement_locations WHERE agreement_id=?').bind(agreement.agreementId),
-      ...newLocationIds.map((locationId)=>db.prepare('INSERT INTO agreement_locations (agreement_id,location_id) VALUES (?,?)').bind(agreement.agreementId,locationId)),
-      db.prepare('UPDATE agreements SET current_version_id=?,updated_at=? WHERE id=?').bind(agreement.versionId,timestamp,agreement.agreementId),
-      db.prepare(`UPDATE agreement_versions SET status='published',published_at=? WHERE id=?`).bind(timestamp,agreement.versionId),
-    );
-  }
-  return publish(publication, { agreements: agreements.size });
-
-}
 
 async function processAgreementImport(rows: ReturnType<typeof parseImportRow>[], user: User, importId: string, agreementId: string, publish: PublishImport) {
   const agreement = await first<{id:string;number:string}>('SELECT id,number FROM agreements WHERE id=?',[agreementId]); if(!agreement) throw new Error('Acordo não encontrado');
@@ -1348,6 +1157,9 @@ async function cleanupFailedImport(importId:string){
       db.prepare('DELETE FROM agreement_versions WHERE id=?').bind(version.id),
     ]);
   }
+  // Acordos provisorios so nasciam na carga inicial, que saiu do Portal. O
+  // trecho fica para a varredura de importacoes interrompidas ainda conseguir
+  // limpar o que uma carga inicial antiga tenha deixado pela metade.
   for(const agreementId of new Set(staged.map((version)=>version.agreementId))){
     const orphan=await first<{id:string}>(`SELECT a.id FROM agreements a
       WHERE a.id=? AND a.provisional=1 AND a.current_version_id IS NULL

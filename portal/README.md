@@ -76,17 +76,14 @@ Nos campos de texto, acentos e maiúsculas não fazem diferença: `peca` encontr
 
 Lê a **primeira aba** de um `.xlsx` ou `.xls`, com cabeçalho na primeira linha.
 É tolerante: a ordem das colunas não importa, nomes parecidos são aceitos
-(`PEÇA/SERVIÇO`, `PECA_SERVICO`, `ITEM`), preço aceita número ou `R$ 1.234,56`,
-e CNPJ com zero truncado pelo Excel é corrigido.
+(`PEÇA/SERVIÇO`, `PECA_SERVICO`, `ITEM`) e preço aceita número ou `R$ 1.234,56`.
 
-Colunas obrigatórias: `CIDADE`, `UF`, `MODELO`, `PECA_SERVICO`, `PRECO`, `MEDIDA`
-e, na carga inicial, `CNPJ`. `MARCAS` e `FORNECEDOR` são opcionais.
-O fornecedor é identificado pelo CNPJ e precisa estar cadastrado e ativo;
-na substituição de um acordo. A carga inicial é excepcional: cria fornecedores,
-itens, modelos e localidades ausentes após a validação. Ao atualizar um acordo,
-o fornecedor é o do acordo escolhido, independentemente dessas colunas.
+Colunas obrigatórias: `CIDADE`, `UF`, `MODELO`, `PECA_SERVICO`, `PRECO` e
+`MEDIDA`. `MARCAS` e `FORNECEDOR` são opcionais. O fornecedor é sempre o do
+acordo escolhido, independentemente dessas colunas, e a importação não cria
+fornecedores, itens, modelos nem localidades: o que faltar é cadastrado antes.
 
-1. Escolha o tipo de importação, o acordo de destino quando aplicável e o arquivo.
+1. Escolha o acordo de destino e o arquivo.
    O botão **Baixar modelo** entrega um Excel com os cabeçalhos necessários.
 2. Clique em **Conferir arquivo**. Essa etapa não publica acordos nem preços.
 3. Confira as pendências agrupadas por nome. Administradores podem escolher
@@ -295,14 +292,14 @@ pós-troca reprova a candidata.
 
 Aceita `.xlsx` e `.xls`, lê a primeira aba e exige todas as linhas válidas; uma
 falha aborta a planilha inteira. Preço aceita número, moeda brasileira e zero
-para cortesia; CNPJ é normalizado e validado.
+para cortesia.
 
-A conferência e a publicação usam a mesma regra de duplicatas. A troca das
-versões de todos os fornecedores, o histórico de conclusão e a auditoria são
+A conferência e a publicação usam a mesma regra de duplicatas. A troca da
+versão do acordo, o histórico de conclusão e a auditoria são
 confirmados na mesma transação. Marcas da planilha ficam como texto da condição
 comercial, sem cadastrar automaticamente novas marcas no catálogo.
 
-Há carga inicial e substituição integral de um acordo. A substituição cria uma
+A importação é sempre a substituição integral de um acordo. Ela cria uma
 versão nova e preserva a anterior **dentro do banco**, para rastreabilidade do
 negócio — isso não é backup histórico do arquivo.
 

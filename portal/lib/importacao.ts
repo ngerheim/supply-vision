@@ -1,8 +1,5 @@
 import {
-  isValidCnpj,
   isValidState,
-  normalizeCnpj,
-  normalizeImportCnpj,
   normalizeImportColumn,
   normalizeImportText,
   normalizeText,
@@ -22,7 +19,7 @@ export function chaveLocalidade(cidade: unknown, uf: unknown) {
   return `${normalizeImportText(cidade)}/${normalizeImportText(uf)}`;
 }
 
-export function colunasAusentes(row: Record<string, unknown>, legacy: boolean) {
+export function colunasAusentes(row: Record<string, unknown>) {
   const presentes = new Set(Object.keys(row).map(normalizeImportColumn));
   return [
     'CIDADE',
@@ -31,14 +28,12 @@ export function colunasAusentes(row: Record<string, unknown>, legacy: boolean) {
     'PECA_SERVICO',
     'MEDIDA',
     'PRECO',
-    ...(legacy ? ['CNPJ'] : []),
   ].filter((coluna) => !presentes.has(coluna));
 }
 
 export function parseImportRow(
   row: Record<string, unknown>,
   rowNumber: number,
-  legacy: boolean,
 ) {
   const values = new Map(
     Object.entries(row).map(([key, value]) => [
@@ -47,8 +42,6 @@ export function parseImportRow(
     ]),
   );
   const find = (key: string) => values.get(key) ?? '';
-  const rawCnpj = legacy ? find('CNPJ') : '',
-    cnpj = normalizeImportCnpj(rawCnpj);
   const rawCity = textoSeguro(find('CIDADE')),
     city = normalizeImportText(rawCity),
     state = normalizeImportText(find('UF'));
@@ -72,19 +65,11 @@ export function parseImportRow(
       });
   }
   if (price.error) issues.push({ campo: '', valor: '', erro: price.error });
-  if (legacy && !isValidCnpj(cnpj))
-    issues.push({
-      campo: '',
-      valor: '',
-      erro: `CNPJ inválido: "${textoSeguro(rawCnpj)}".`,
-    });
   return {
     rowNumber,
     city,
     state,
     rawCity,
-    cnpj,
-    cnpjRecuperado: cnpj !== normalizeCnpj(rawCnpj),
     supplier: normalizeImportText(find('FORNECEDOR')),
     model: normalizeImportText(rawModel),
     item: normalizeImportText(rawItem),
@@ -120,13 +105,11 @@ export type ImportReferences = {
     string,
     { id: string; city: string; state: string } | null
   >;
-  suppliers: ReadonlyMap<string, string>;
 };
 
 export function resolveImportRows(
   rows: ImportRow[],
   refs: ImportReferences,
-  legacy: boolean,
 ) {
   for (const row of rows) {
     const issue = (
@@ -135,15 +118,6 @@ export function resolveImportRows(
       erro: string,
       tipo?: MappingType,
     ) => row.issues.push({ campo, valor, erro, ...(tipo ? { tipo } : {}) });
-    if (legacy && isValidCnpj(row.cnpj)) {
-      if (!refs.suppliers.has(row.cnpj))
-        issue(
-          'CNPJ',
-          row.cnpj,
-          `Fornecedor sem cadastro ativo para o CNPJ ${row.cnpj}. Cadastre ou reative o fornecedor.`,
-        );
-      else row.supplier = refs.suppliers.get(row.cnpj)!;
-    }
     if (row.city && row.state) {
       const key = chaveLocalidade(row.city, row.state),
         location = refs.locations.get(key);
@@ -240,13 +214,12 @@ export type Duplicate = {
   motivo: string;
 };
 
-// A mesma regra serve a previa, carga inicial e substituicao.
-export function deduplicateImportRows(rows: ImportRow[], legacy: boolean) {
+// A mesma regra serve a previa e a substituicao.
+export function deduplicateImportRows(rows: ImportRow[]) {
   const unique = new Map<string, ImportRow>(),
     duplicates: Duplicate[] = [];
   for (const row of rows) {
     const key = JSON.stringify([
-      legacy ? row.cnpj : '',
       row.locationId,
       row.itemId,
       row.modelId,
@@ -282,12 +255,6 @@ export function deduplicateImportRows(rows: ImportRow[], legacy: boolean) {
       duplicatas: duplicates.length,
       amostraDuplicatas: duplicates.slice(0, 50),
       locations: new Set(effectiveRows.map((row) => row.locationId)).size,
-      ...(legacy
-        ? {
-            agreements: new Set(effectiveRows.map((row) => row.cnpj)).size,
-            suppliers: new Set(effectiveRows.map((row) => row.cnpj)).size,
-          }
-        : {}),
     },
   };
 }

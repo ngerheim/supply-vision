@@ -45,7 +45,6 @@ const names: Record<string, string> = {
   models: 'Modelo',
   units: 'Unidade',
   locations: 'Cidade/UF',
-  CNPJ: 'Fornecedor',
 };
 function optionsFor(
   catalogs: AnyRow,
@@ -427,7 +426,6 @@ function ResolveIssue({
     () => (issue.tipo === 'locations' || issue.tipo === 'units' ? [] : suggestMatches(issue.valor, options)),
     [issue.valor, issue.tipo, options],
   );
-  const type = issue.tipo || (issue.campo === 'CNPJ' ? 'suppliers' : '');
   return (
     <div className="space-y-3 rounded-xl border p-4">
       <p className="font-medium">
@@ -475,17 +473,13 @@ function ResolveIssue({
           planilha.
         </p>
       ) : null}
-      {type && (
+      {issue.tipo && (
         <Button
           variant="outline"
           disabled={busy}
-          onClick={() =>
-            onCatalog(type, type === 'suppliers' ? { cnpj: issue.valor } : {})
-          }
+          onClick={() => onCatalog(issue.tipo)}
         >
-          {type === 'suppliers'
-            ? 'Cadastrar fornecedor'
-            : 'Cadastrar opção ausente'}
+          Cadastrar opção ausente
         </Button>
       )}
     </div>
@@ -504,9 +498,9 @@ const TITULO_BASE: Record<Estado, string> = {
 };
 
 function BaseCriada({ base, estado }: { base: AnyRow; estado: Estado }) {
-  // A carga inicial cria cadastro a partir do proprio arquivo. Sem esta
-  // conferencia previa, o operador so descobre uma nomenclatura que escapou do
-  // de/para depois que ela ja virou item no catalogo.
+  // A carga inicial saiu do Portal, mas o historico ainda guarda importacoes
+  // dela: este bloco e o aviso de CNPJ abaixo so aparecem para esses registros
+  // antigos, e ficam para o historico continuar mostrando o que foi criado.
   const grupos: { chave: string; singular: string; rotulo: string }[] = [
     { chave: 'localidades', singular: 'localidade', rotulo: 'localidades' },
     { chave: 'itens', singular: 'item', rotulo: 'itens' },
