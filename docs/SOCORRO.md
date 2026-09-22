@@ -73,7 +73,7 @@ Para conferir à mão qual dos dois é:
 $arq = (Resolve-Path '.\privado\portal\configuracao\portal.env').Path
 @(Get-Content $arq | Where-Object { $_ -match '^\s*PORTAL_API_TOKEN\s*=' })
 $t = (((Get-Content $arq) | Where-Object { $_ -match '^\s*PORTAL_API_TOKEN\s*=' }) -split '=',2)[1].Trim()
-@(Get-ChildItem .\portal\dist -Recurse -File -Include *.js | Select-String $t -List).Count
+@(Get-ChildItem .\portal\dist -Recurse -File -Filter *.js | Select-String $t -List).Count
 ```
 
 Uma linha só e contagem maior que zero: token e Portal estão de acordo.
