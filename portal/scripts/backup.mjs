@@ -4,6 +4,7 @@ import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 
 import { criarTransportador, lerConfig, portalPrivado } from './configuracao.mjs';
+import { DIAS_RETENCAO, guardarNoHistorico } from './retencao-backup.mjs';
 import { montarCasca, escapar, paleta } from '../lib/email-visual.ts';
 
 const pastaBanco = path.join(portalPrivado, 'banco', 'estado', 'state', 'v3', 'd1', 'miniflare-D1DatabaseObject');
@@ -37,6 +38,8 @@ function criarCopiaIntegra(origem) {
     throw erro;
   }
   fs.rmSync(arquivoAnterior, { force: true });
+  const { apagados } = guardarNoHistorico(pastaBackup, arquivoFinal);
+  console.log(`Historico local: copia do dia guardada (${DIAS_RETENCAO} dias)${apagados.length ? `; removidos: ${apagados.join(', ')}` : ''}.`);
 }
 
 function replicarNaRede(config) {
@@ -57,6 +60,9 @@ function replicarNaRede(config) {
   catch (erro) { if (fs.existsSync(anterior)) fs.renameSync(anterior, final); throw erro; }
   fs.rmSync(anterior, { force: true });
   console.log(`Copia atual na rede confirmada (SHA-256 ${hashRede.slice(0, 16)}).`);
+  // O historico tambem vai para a rede: se o notebook for perdido, e dela
+  // que se volta a um dia anterior ao erro.
+  guardarNoHistorico(pastaRede, final);
   return final;
 }
 async function enviar() {

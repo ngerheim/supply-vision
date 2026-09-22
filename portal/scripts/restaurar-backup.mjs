@@ -5,10 +5,14 @@
 // -wal/-shm e sobrescrever. Errar um desses passos corrompe o banco, e ninguem
 // devia ter de acertar isso sob pressao.
 //
-//   node scripts/restaurar-backup.mjs [--anterior] [--sim]
+//   node scripts/restaurar-backup.mjs [--anterior | --data AAAA-MM-DD] [--sim]
 //
-// --anterior usa a geracao mais velha (portal-atual.anterior.sqlite), que e a
-// que interessa quando um backup novo ja empurrou o bom para tras.
+// Sem opcao, usa a copia mais recente (portal-atual.sqlite).
+// --anterior usa a copia do dia anterior mais recente do historico de 7 dias,
+// que e a que interessa quando um erro ja entrou no backup de hoje. (Antes
+// apontava para portal-atual.anterior.sqlite, que o backup apaga logo depois
+// da troca e por isso nunca existia na hora de restaurar.)
+// --data escolhe um dia especifico do historico.
 // --sim dispensa a confirmacao digitada, para quem chama pela central.
 import fs from 'node:fs';
 import path from 'node:path';
@@ -16,12 +20,30 @@ import readline from 'node:readline';
 import { DatabaseSync } from 'node:sqlite';
 
 import { portalPrivado } from './configuracao.mjs';
+import { listarHistorico, nomeDoDia } from './retencao-backup.mjs';
 
 const pastaBanco = path.join(portalPrivado, 'banco', 'estado', 'state', 'v3', 'd1', 'miniflare-D1DatabaseObject');
 const pastaBackup = path.join(portalPrivado, 'backups');
 const anterior = process.argv.includes('--anterior');
 const semPergunta = process.argv.includes('--sim');
-const origem = path.join(pastaBackup, anterior ? 'portal-atual.anterior.sqlite' : 'portal-atual.sqlite');
+const posicaoData = process.argv.indexOf('--data');
+const dataPedida = posicaoData > 0 ? String(process.argv[posicaoData + 1] || '') : '';
+
+function escolherOrigem() {
+  if (dataPedida) {
+    const item = listarHistorico(pastaBackup).find((entrada) => entrada.dia === dataPedida);
+    if (!item) throw new Error(`Nao ha backup de ${dataPedida} no historico. Disponiveis: ${listarHistorico(pastaBackup).map((entrada) => entrada.dia).join(', ') || 'nenhum'}.`);
+    return item.arquivo;
+  }
+  if (anterior) {
+    const hoje = nomeDoDia();
+    const item = listarHistorico(pastaBackup).find((entrada) => entrada.dia < hoje);
+    if (!item) throw new Error('Ainda nao ha backup de um dia anterior no historico.');
+    return item.arquivo;
+  }
+  return path.join(pastaBackup, 'portal-atual.sqlite');
+}
+const origem = escolherOrigem();
 
 const TABELAS = ['users', 'tickets', 'agreements', 'agreement_items', 'suppliers', 'catalog_items', 'units'];
 

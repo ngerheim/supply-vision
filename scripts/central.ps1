@@ -48,7 +48,7 @@ $restaurar.Add_Click({try{$saida=& node.exe (Join-Path $Raiz 'portal\scripts\tes
 $voltar.Add_Click({
  $aviso="Isto substitui o banco atual por uma copia de backup.`n`nA operacao sera parada, o estado atual sera guardado numa copia datada e os acordos, cadastros e chamados voltarao ao que eram no momento do backup.`n`nDeseja continuar?"
  if([Windows.Forms.MessageBox]::Show($aviso,'Restaurar backup','YesNo','Warning')-ne[Windows.Forms.DialogResult]::Yes){return}
- $qual=[Windows.Forms.MessageBox]::Show("Usar a copia mais recente?`n`nSim = mais recente (portal-atual)`nNao = geracao anterior (portal-atual.anterior)",'Qual backup','YesNoCancel','Question')
+ $qual=[Windows.Forms.MessageBox]::Show("Usar a copia mais recente?`n`nSim = mais recente (portal-atual)`nNao = ultimo backup de um dia anterior (historico de 7 dias)",'Qual backup','YesNoCancel','Question')
  if($qual-eq[Windows.Forms.DialogResult]::Cancel){return}
  try{
   if(!(Parar-Operacao)){throw 'A operacao nao encerrou. Restauracao cancelada para nao mexer no banco com o portal no ar.'}

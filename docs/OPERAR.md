@@ -78,9 +78,16 @@ conferência SHA-256. O e-mail de backup sempre sai com o comprovante; o banco
 só vai anexado quando não há cópia de rede (por falta de outra cópia fora da
 máquina) ou quando `BACKUP_ANEXAR_BANCO=true`. O banco contém hashes de senha
 e toda a base comercial, então configurar a pasta de rede é o caminho
-recomendado. A troca é atômica. Não há
-histórico rotativo, por decisão operacional — o que significa que uma
-corrupção lógica se propaga para a cópia seguinte.
+recomendado. A troca é atômica.
+
+Além da cópia atual, fica um **histórico de 7 dias**: a última cópia de cada
+dia, em `privado/portal/backups/historico/portal-AAAA-MM-DD.sqlite` e na mesma
+subpasta da pasta de rede. Os dias além da janela são apagados sozinhos. É o
+que permite voltar a um ponto anterior a um erro que já entrou no backup do
+dia (um acordo apagado por engano, por exemplo). Para restaurar, a central
+oferece a cópia mais recente ou a do último dia anterior; um dia específico
+sai por `node portal\scripts\restaurar-backup.mjs --data AAAA-MM-DD`, com a
+operação parada.
 
 ## Limpeza
 
