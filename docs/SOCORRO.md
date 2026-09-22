@@ -53,6 +53,31 @@ A central mostra o espaço livre e o supervisor registra alerta abaixo de
 lixo estrutural, rode `scripts\faxina.ps1` (com a operação parada, para que ele
 também recolha o rastreamento do wrangler).
 
+## Alertas param com "HTTP Error 401" ao carregar os acordos
+
+O `PORTAL_API_TOKEN` é embutido no Portal durante a compilação, enquanto os
+Alertas leem o mesmo valor do `portal.env` a cada execução. Quando os dois
+discordam, a rota interna recusa o pipeline e o único sintoma é o 401.
+
+Duas causas, ambas apanhadas hoje pela **Validar configuração** da central:
+
+- **Chave repetida no `portal.env`.** Com duas linhas `PORTAL_API_TOKEN` de
+  valores diferentes, cada lado adota uma. Deixe apenas uma linha.
+- **Token trocado sem recompilar.** O arquivo tem um valor e o Portal em
+  execução foi compilado com outro. Rode **Atualizar sistema**, ou
+  `.\scripts\atualizar-servidor.ps1 -Reaplicar`.
+
+Para conferir à mão qual dos dois é:
+
+```powershell
+$arq = (Resolve-Path '.\privado\portal\configuracao\portal.env').Path
+@(Get-Content $arq | Where-Object { $_ -match '^\s*PORTAL_API_TOKEN\s*=' })
+$t = (((Get-Content $arq) | Where-Object { $_ -match '^\s*PORTAL_API_TOKEN\s*=' }) -split '=',2)[1].Trim()
+@(Get-ChildItem .\portal\dist -Recurse -File -Include *.js | Select-String $t -List).Count
+```
+
+Uma linha só e contagem maior que zero: token e Portal estão de acordo.
+
 ## Recuperar a instalação do zero
 
 Se o notebook morrer, o caminho é o mesmo da primeira instalação:
