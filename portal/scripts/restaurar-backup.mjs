@@ -15,6 +15,7 @@
 // --data escolhe um dia especifico do historico.
 // --sim dispensa a confirmacao digitada, para quem chama pela central.
 import fs from 'node:fs';
+import net from 'node:net';
 import path from 'node:path';
 import readline from 'node:readline';
 import { DatabaseSync } from 'node:sqlite';
@@ -66,6 +67,19 @@ function resumir(arquivo) {
   } finally { db.close(); }
 }
 
+// O PID do supervisor nao basta: o Portal pode ter sido iniciado a mao ou o
+// arquivo pode estar ausente ou velho. Se algo responde na porta do Portal, o
+// banco esta aberto por alguem, e a restauracao nao pode seguir.
+function portalRespondendo(porta = 3000) {
+  return new Promise((resolve) => {
+    const conexao = net.connect({ host: '127.0.0.1', port: porta });
+    const fim = (resposta) => { conexao.destroy(); resolve(resposta); };
+    conexao.setTimeout(1500, () => fim(false));
+    conexao.once('connect', () => fim(true));
+    conexao.once('error', () => fim(false));
+  });
+}
+
 function operacaoNoAr() {
   // Com o portal no ar o arquivo esta aberto: sobrescrever deixaria o banco
   // inconsistente e o processo continuaria escrevendo no que foi substituido.
@@ -87,7 +101,7 @@ async function confirmar(pergunta) {
 }
 
 if (!fs.existsSync(origem)) throw new Error(`Backup nao encontrado: ${origem}`);
-if (operacaoNoAr()) throw new Error('A operacao esta no ar. Pare a operacao antes de restaurar.');
+if (operacaoNoAr() || await portalRespondendo()) throw new Error('A operacao esta no ar (supervisor ativo ou Portal respondendo na porta 3000). Pare a operacao antes de restaurar.');
 
 const alvo = localizarBanco();
 const totaisBackup = resumir(origem);
@@ -110,12 +124,20 @@ try { db.exec(`VACUUM INTO '${guardado.replaceAll("'", "''").replaceAll('\\', '/
 finally { db.close(); }
 console.log(`Estado atual guardado em ${path.basename(guardado)}`);
 
+// O backup e copiado ao lado do banco e conferido ali; so entao troca de
+// lugar com o banco, num rename. Copiar direto por cima deixava o banco pela
+// metade se a energia caisse durante a copia.
+const restaurando = `${alvo}.restaurando`;
+fs.rmSync(restaurando, { force: true });
+fs.copyFileSync(origem, restaurando);
+const totaisRestaurado = resumir(restaurando);
+console.log(`Restaurado: ${JSON.stringify(totaisRestaurado)}`);
+if (JSON.stringify(totaisRestaurado) !== JSON.stringify(totaisBackup)) {
+  fs.rmSync(restaurando, { force: true });
+  throw new Error('A copia do backup nao confere com o original. O banco atual nao foi alterado.');
+}
 // -wal e -shm carregam transacoes do banco antigo; deixa-los ao lado do
 // arquivo novo corrompe a base restaurada.
 for (const sufixo of ['-wal', '-shm']) fs.rmSync(alvo + sufixo, { force: true });
-fs.copyFileSync(origem, alvo);
-
-const totaisRestaurado = resumir(alvo);
-console.log(`Restaurado: ${JSON.stringify(totaisRestaurado)}`);
-if (JSON.stringify(totaisRestaurado) !== JSON.stringify(totaisBackup)) throw new Error('O banco restaurado nao confere com o backup.');
+fs.renameSync(restaurando, alvo);
 console.log('\nRestauracao concluida. Inicie a operacao novamente.');
