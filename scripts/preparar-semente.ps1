@@ -33,45 +33,54 @@ if ($portalNoAr) {
   Write-Host '   operacao parada: o banco vivo sera copiado direto' -ForegroundColor Green
 }
 
-Etapa 'Montando a semente'
-Remove-Item $temp -Recurse -Force -ErrorAction SilentlyContinue
-foreach ($d in @('comum', 'portal\configuracao', 'alertas\config', 'alertas\parametros', 'banco')) {
-  New-Item -ItemType Directory -Force (Join-Path $temp $d) | Out-Null
+# A copia em %TEMP% tem credenciais e o banco inteiro: o finally a remove
+# mesmo quando algo falha no meio. Um zip que ficou pela metade tambem sai,
+# para nao sobrar um arquivo com segredos que nem serve para restaurar.
+$concluida = $false
+try {
+  Etapa 'Montando a semente'
+  Remove-Item $temp -Recurse -Force -ErrorAction SilentlyContinue
+  foreach ($d in @('comum', 'portal\configuracao', 'alertas\config', 'alertas\parametros', 'banco')) {
+    New-Item -ItemType Directory -Force (Join-Path $temp $d) | Out-Null
+  }
+
+  Copy-Item (Join-Path $Privado 'comum\*.env') (Join-Path $temp 'comum') -Force
+  Copy-Item (Join-Path $Privado 'portal\configuracao\portal.env') (Join-Path $temp 'portal\configuracao') -Force
+  Copy-Item (Join-Path $Privado 'alertas\config\*') (Join-Path $temp 'alertas\config') -Recurse -Force
+  Copy-Item (Join-Path $Privado 'alertas\parametros\*') (Join-Path $temp 'alertas\parametros') -Recurse -Force
+
+  # O banco: um unico arquivo .sqlite dentro do diretorio do D1.
+  $d1 = Join-Path $Privado 'portal\banco\estado\state\v3\d1\miniflare-D1DatabaseObject'
+  # O nome do arquivo do D1 e derivado do binding pelo miniflare e precisa ser
+  # preservado, mesmo quando o CONTEUDO vem do backup. Gravar com outro nome
+  # faria o miniflare ignorar o banco e criar um vazio ao lado.
+  $nomeD1 = @(Get-ChildItem $d1 -Filter '*.sqlite' -File | Where-Object { $_.Name -ne 'metadata.sqlite' })
+  if ($nomeD1.Count -ne 1) { throw "Esperado exatamente 1 banco em $d1, encontrados $($nomeD1.Count)." }
+  $origemBanco = if ($portalNoAr) { $backup } else { $nomeD1[0].FullName }
+  Copy-Item $origemBanco (Join-Path $temp 'banco\portal.sqlite') -Force
+  $sha = (Get-FileHash (Join-Path $temp 'banco\portal.sqlite') -Algorithm SHA256).Hash
+
+  @{
+    gerado = (Get-Date).ToString('o')
+    origem = [Environment]::MachineName
+    banco = @{ arquivo = $nomeD1[0].Name; sha256 = $sha; deBackup = $portalNoAr }
+    versao = (git -C $Raiz rev-parse HEAD).Trim()
+    revisar = @(
+      'privado\portal\configuracao\portal.env -> PORTAL_URL (IP desta maquina)',
+      'privado\portal\configuracao\portal.env -> BACKUP_NETWORK_DIR (acesso a rede)',
+      'privado\portal\configuracao\portal.env -> PORTAL_API_TOKEN (gerado automaticamente na atualizacao)',
+      'privado\comum\operacao.env -> LIMPEZA_HORARIO deve cair na janela em que a maquina fica logada'
+    )
+  } | ConvertTo-Json -Depth 4 | Set-Content (Join-Path $temp 'semente.json') -Encoding UTF8
+
+  Etapa 'Compactando'
+  Remove-Item $zip -Force -ErrorAction SilentlyContinue
+  Compress-Archive -Path (Join-Path $temp '*') -DestinationPath $zip -CompressionLevel Optimal
+  $concluida = $true
+} finally {
+  Remove-Item $temp -Recurse -Force -ErrorAction SilentlyContinue
+  if (-not $concluida) { Remove-Item $zip -Force -ErrorAction SilentlyContinue }
 }
-
-Copy-Item (Join-Path $Privado 'comum\*.env') (Join-Path $temp 'comum') -Force
-Copy-Item (Join-Path $Privado 'portal\configuracao\portal.env') (Join-Path $temp 'portal\configuracao') -Force
-Copy-Item (Join-Path $Privado 'alertas\config\*') (Join-Path $temp 'alertas\config') -Recurse -Force
-Copy-Item (Join-Path $Privado 'alertas\parametros\*') (Join-Path $temp 'alertas\parametros') -Recurse -Force
-
-# O banco: um unico arquivo .sqlite dentro do diretorio do D1.
-$d1 = Join-Path $Privado 'portal\banco\estado\state\v3\d1\miniflare-D1DatabaseObject'
-# O nome do arquivo do D1 e derivado do binding pelo miniflare e precisa ser
-# preservado, mesmo quando o CONTEUDO vem do backup. Gravar com outro nome
-# faria o miniflare ignorar o banco e criar um vazio ao lado.
-$nomeD1 = @(Get-ChildItem $d1 -Filter '*.sqlite' -File | Where-Object { $_.Name -ne 'metadata.sqlite' })
-if ($nomeD1.Count -ne 1) { throw "Esperado exatamente 1 banco em $d1, encontrados $($nomeD1.Count)." }
-$origemBanco = if ($portalNoAr) { $backup } else { $nomeD1[0].FullName }
-Copy-Item $origemBanco (Join-Path $temp 'banco\portal.sqlite') -Force
-$sha = (Get-FileHash (Join-Path $temp 'banco\portal.sqlite') -Algorithm SHA256).Hash
-
-@{
-  gerado = (Get-Date).ToString('o')
-  origem = [Environment]::MachineName
-  banco = @{ arquivo = $nomeD1[0].Name; sha256 = $sha; deBackup = $portalNoAr }
-  versao = (git -C $Raiz rev-parse HEAD).Trim()
-  revisar = @(
-    'privado\portal\configuracao\portal.env -> PORTAL_URL (IP desta maquina)',
-    'privado\portal\configuracao\portal.env -> BACKUP_NETWORK_DIR (acesso a rede)',
-    'privado\portal\configuracao\portal.env -> PORTAL_API_TOKEN (gerado automaticamente na atualizacao)',
-    'privado\comum\operacao.env -> LIMPEZA_HORARIO deve cair na janela em que a maquina fica logada'
-  )
-} | ConvertTo-Json -Depth 4 | Set-Content (Join-Path $temp 'semente.json') -Encoding UTF8
-
-Etapa 'Compactando'
-Remove-Item $zip -Force -ErrorAction SilentlyContinue
-Compress-Archive -Path (Join-Path $temp '*') -DestinationPath $zip -CompressionLevel Optimal
-Remove-Item $temp -Recurse -Force -ErrorAction SilentlyContinue
 
 $tam = (Get-Item $zip).Length / 1KB
 Write-Host ''
