@@ -604,30 +604,31 @@ function relatorioManutencao() {
   return montarPowerBiUrl(vars.PBI_RELATORIO_URL, vars.PBI_PAGINA);
 }
 
+// A lista de acordos para em 500 (agreementList). O total vai junto para a
+// tela avisar quando ela estiver incompleta, em vez de o 501o sumir calado.
+async function totalDeAcordos() {
+  return Number((await first<{ n: number }>('SELECT COUNT(*) n FROM agreements'))?.n || 0);
+}
+
 async function bootstrap(user: User) {
   if (!canWrite(user)) {
-    const [metrics, agreements, suppliers, items, models, locations] = await Promise.all([
-      first('SELECT COUNT(*) AS agreements FROM agreements'), agreementList(),
+    const [total, agreements, suppliers, items, models, locations] = await Promise.all([
+      totalDeAcordos(), agreementList(),
       all('SELECT id,trade_name AS tradeName FROM suppliers ORDER BY trade_name'),
       all('SELECT id,name FROM catalog_items ORDER BY name'),
       all('SELECT id,name FROM vehicle_models ORDER BY name'),
       all('SELECT id,city,state FROM locations ORDER BY state,city'),
     ]);
-    return ok({ user, metrics, agreements, catalogs: { suppliers, items, models, locations, units: [], brands: [] }, imports: [], manutencao: relatorioManutencao() });
+    return ok({ user, agreements, totalAcordos: total, catalogs: { suppliers, items, models, locations, units: [], brands: [] }, imports: [], manutencao: relatorioManutencao() });
   }
-  const [metrics, agreements, suppliers, items, models, units, brands, locations, imports] = await Promise.all([
-    first(`SELECT
-      (SELECT COUNT(*) FROM agreements) agreements,
-      (SELECT COUNT(*) FROM agreements WHERE status='active' AND date(start_date)<=date(?1) AND (end_date IS NULL OR date(end_date)>=date(?1))) activeAgreements,
-      (SELECT COUNT(*) FROM agreement_items ai JOIN agreements a ON a.current_version_id=ai.version_id WHERE a.status='active' AND date(a.start_date)<=date(?1) AND (a.end_date IS NULL OR date(a.end_date)>=date(?1))) searchableItems,
-      (SELECT COUNT(*) FROM suppliers WHERE active=1) suppliers,
-      (SELECT COUNT(*) FROM agreements WHERE status='active' AND end_date IS NOT NULL AND date(end_date) BETWEEN date(?1) AND date(?1,'+60 day')) expiring`, [dataDeNegocio()]),
+  const [total, agreements, suppliers, items, models, units, brands, locations, imports] = await Promise.all([
+    totalDeAcordos(),
     agreementList(), all('SELECT id,legal_name AS legalName,trade_name AS tradeName,cnpj,city,state,active FROM suppliers ORDER BY trade_name'),
     all('SELECT id,name,active FROM catalog_items ORDER BY name'), all('SELECT id,name,active FROM vehicle_models ORDER BY name'),
     all('SELECT id,code,name,active FROM units ORDER BY code'), all('SELECT id,name,active FROM brands ORDER BY name'),
     all('SELECT id,city,state FROM locations ORDER BY state,city'), canWrite(user) ? importList() : Promise.resolve([]),
   ]);
-  return ok({ user, metrics, agreements, catalogs: { suppliers, items, models, units, brands, locations }, imports, manutencao: relatorioManutencao() });
+  return ok({ user, agreements, totalAcordos: total, catalogs: { suppliers, items, models, units, brands, locations }, imports, manutencao: relatorioManutencao() });
 }
 
 async function agreementList() {
