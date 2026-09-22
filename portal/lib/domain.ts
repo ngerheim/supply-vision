@@ -73,16 +73,6 @@ export function normalizeCnpj(value: unknown) {
   return text.replace(/\D/g, '');
 }
 
-// O Excel grava CNPJ como número quando a célula não está formatada como
-// texto, e o zero à esquerda se perde no caminho. Como CNPJ tem 14 dígitos
-// fixos, um valor com 12 ou 13 dígitos é reconstituível sem ambiguidade.
-// Abaixo disso não há o que presumir: não é CNPJ encurtado pela planilha,
-// é dado errado, e preencher com zeros transformaria lixo em CNPJ plausível.
-export function normalizeImportCnpj(value: unknown) {
-  const digits = normalizeCnpj(value);
-  return digits.length === 12 || digits.length === 13 ? digits.padStart(14, '0') : digits;
-}
-
 export function isValidCnpj(value: unknown) {
   const digits = normalizeCnpj(value);
   if (digits.length !== 14 || /^(\d)\1{13}$/.test(digits)) return false;

@@ -18,7 +18,6 @@ const source = {
   PECA_SERVICO: 'Bieleta',
   PRECO: 120,
   MEDIDA: 'UNIDADE',
-  CNPJ: '11222333000181',
 };
 const refs: ImportReferences = {
   items: new Map([['BIELETA', { id: 'item', name: 'BIELETA' }]]),
@@ -27,19 +26,18 @@ const refs: ImportReferences = {
   locations: new Map([
     ['ALMAS/TO', { id: 'location', city: 'ALMAS', state: 'TO' }],
   ]),
-  suppliers: new Map([['11222333000181', 'FORNECEDOR CADASTRADO']]),
 };
 const resolved = (changes = {}) => {
-  const row = parseImportRow({ ...source, ...changes }, 2, true);
-  resolveImportRows([row], refs, true);
+  const row = parseImportRow({ ...source, ...changes }, 2);
+  resolveImportRows([row], refs);
   return row;
 };
 
-void test('carga inicial usa CNPJ sem exigir nome do fornecedor', () => {
-  assert.deepEqual(colunasAusentes(source, true), []);
-  const row = resolved();
-  assert.equal(row.error, '');
-  assert.equal(row.supplier, 'FORNECEDOR CADASTRADO');
+void test('substituicao exige so as colunas da tabela, sem CNPJ nem fornecedor', () => {
+  assert.deepEqual(colunasAusentes(source), []);
+  const { PRECO: _preco, ...semPreco } = source;
+  assert.deepEqual(colunasAusentes(semPreco), ['PRECO']);
+  assert.equal(resolved().error, '');
 });
 void test('conferencia apresenta todos os campos desconhecidos de uma linha', () => {
   const row = resolved({
@@ -67,7 +65,7 @@ void test('erros de preco e nomenclatura aparecem juntos', () => {
   assert.equal(report.totalErros, 1);
 });
 void test('somente alias confirmado resolve cidade e UF digitadas incorretamente', () => {
-  const row = parseImportRow({ ...source, CIDADE: 'Alms', UF: 'TI' }, 2, true);
+  const row = parseImportRow({ ...source, CIDADE: 'Alms', UF: 'TI' }, 2);
   resolveImportRows(
     [row],
     {
@@ -77,7 +75,6 @@ void test('somente alias confirmado resolve cidade e UF digitadas incorretamente
         ['ALMS/TI', { id: 'location', city: 'ALMAS', state: 'TO' }],
       ]),
     },
-    true,
   );
   assert.equal(row.error, '');
   assert.equal(row.city, 'ALMAS');
@@ -89,10 +86,10 @@ void test('preco ausente nao vira cortesia e zero explicito continua valido', ()
   assert.equal(resolved({ PRECO: 0 }).error, '');
 });
 void test('substituicao ignora CNPJ da planilha', () => {
-  const row = parseImportRow({ ...source, CNPJ: 'errado' }, 2, false);
-  resolveImportRows([row], refs, false);
+  const row = parseImportRow({ ...source, CNPJ: 'errado' }, 2);
+  resolveImportRows([row], refs);
   assert.equal(row.error, '');
-  assert.equal(row.cnpj, '');
+  assert.ok(!('cnpj' in row));
 });
 void test('chaves canonicas ambiguas exigem escolha explicita', () => {
   assert.equal(
@@ -107,7 +104,7 @@ void test('deduplicacao preserva localidades e mantem o menor preco', () => {
   const first = resolved(),
     cheaper = { ...first, rowNumber: 3, price: 90 },
     elsewhere = { ...first, locationId: 'other', rowNumber: 4 };
-  const result = deduplicateImportRows([first, cheaper, elsewhere], true);
+  const result = deduplicateImportRows([first, cheaper, elsewhere]);
   assert.equal(result.rows.length, 2);
   assert.equal(result.rows[0].price, 90);
   assert.equal(result.summary.amostraDuplicatas[0].linhaDescartada, 2);
@@ -118,7 +115,6 @@ void test('medidas divergentes sao rejeitadas antes de publicar', () => {
     () =>
       deduplicateImportRows(
         [row, { ...row, unitId: 'litro', rowNumber: 3 }],
-        false,
       ),
     /Medidas diferentes/,
   );

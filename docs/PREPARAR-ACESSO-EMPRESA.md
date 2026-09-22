@@ -67,7 +67,6 @@ de localidades da fixture também é maior que a da base inicial da operação.
 - Paginação da lista geral de acordos e filtro de detalhes diretamente no servidor.
 - Limites por rota e cache de catálogos, guiados pelas medições de capacidade.
 - Revogação administrativa explícita de sessões sem trocar a senha.
-- Encerramento da carga inicial e transação única para cadastros/publicação.
 - Recuperação resistente a interrupções e política de retenção de backups.
   A retenção atual sem histórico foi uma decisão operacional documentada.
 - Correções de localidades, endereço de fornecedores e papel do catálogo de marcas.
