@@ -167,7 +167,9 @@ function validateAgreementInput(body: AgreementInput): { value?: ValidAgreementI
   const supplierId = textValue(body.supplierId);
   const startDate = textValue(body.startDate);
   const endDate = nullableText(body.endDate);
-  const status = body.status ?? 'draft';
+  // Sem status, o acordo nasce vigente, como na tela. 'draft' nao e mais uma
+  // situacao valida e so produzia a mensagem de situacao invalida.
+  const status = body.status ?? 'active';
   const locationIds = Array.from(new Set(stringList(body.locationIds)));
   if (!number || !supplierId || !startDate) return { error: 'Número, fornecedor e início da vigência são obrigatórios.' };
   if (number.length > 80) return { error: 'O número do acordo deve ter no máximo 80 caracteres.' };
@@ -730,10 +732,14 @@ async function updateAgreement(request: Request, user: User, agreementId: string
   const parsed = validateAgreementInput(await jsonBody<AgreementInput>(request));
   if (!parsed.value) return fail(parsed.error || 'Dados do acordo inválidos.');
   const body = parsed.value;
-  const existing = await first<{ id: string }>('SELECT id FROM agreements WHERE id=?', [agreementId]);
+  const existing = await first<{ id: string; supplierId: string }>('SELECT id,supplier_id AS supplierId FROM agreements WHERE id=?', [agreementId]);
   if (!existing) return fail('Acordo não encontrado.', 404);
-  const supplier = await first<{ id: string }>('SELECT id FROM suppliers WHERE id=?', [body.supplierId]);
-  if (!supplier) return fail('Fornecedor não encontrado.');
+  // Trocar de fornecedor exige um fornecedor ativo, como na criacao. Manter o
+  // fornecedor atual continua permitido mesmo que ele tenha sido inativado
+  // depois: editar as datas de um acordo antigo nao pode ficar bloqueado.
+  const trocaFornecedor = body.supplierId !== existing.supplierId;
+  const supplier = await first<{ id: string }>(`SELECT id FROM suppliers WHERE id=?${trocaFornecedor ? ' AND active=1' : ''}`, [body.supplierId]);
+  if (!supplier) return fail(trocaFornecedor ? 'Fornecedor não encontrado ou inativo.' : 'Fornecedor não encontrado.');
   const locations = await first<{ n: number }>(`SELECT COUNT(*) n FROM locations WHERE id IN (${body.locationIds.map(() => '?').join(',')})`, body.locationIds);
   if (Number(locations?.n || 0) !== body.locationIds.length) return fail('Uma ou mais localidades não existem.');
   try {
