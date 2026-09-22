@@ -61,7 +61,21 @@ def carregar_destinatarios(path=DESTINATARIOS_PATH):
         sys.exit(1)
     return para, cco
 
-DESTINATARIOS, COPIA_OCULTA = carregar_destinatarios()
+_destinatarios = None
+
+
+def obter_destinatarios(path=DESTINATARIOS_PATH):
+    """Lê a lista uma vez e guarda o resultado.
+
+    Antes isto rodava na importação do módulo: abrir o arquivo -- e, faltando
+    ele, encerrar o processo -- era efeito colateral de um `import`. Qualquer
+    ferramenta que só quisesse inspecionar as funções daqui morria, e os
+    testes precisavam de um sv_paths falso apontando para um arquivo real.
+    """
+    global _destinatarios
+    if _destinatarios is None:
+        _destinatarios = carregar_destinatarios(path)
+    return _destinatarios
 
 
 def carregar_contexto():
@@ -228,7 +242,7 @@ def enviar_email(assunto, corpo, anexos, destinatarios, html=None):
             )
             print(f"  Anexo adicionado: {caminho.name}")
 
-    entrega = list(destinatarios) + list(COPIA_OCULTA)
+    entrega = list(destinatarios) + list(obter_destinatarios()[1])
 
     if os.environ.get("SUPPLY_VISION_SEM_ENVIO") == "1":
         pasta = pathlib.Path(getattr(sv_paths, "RELATORIOS_DIARIOS", pathlib.Path.cwd())) / "previews-email"
@@ -247,8 +261,9 @@ def enviar_email(assunto, corpo, anexos, destinatarios, html=None):
         servidor.send_message(msg, to_addrs=entrega)
 
     print(f"E-mail enviado para: {', '.join(destinatarios)}")
-    if COPIA_OCULTA:
-        print(f"  (Cco: {', '.join(COPIA_OCULTA)})")
+    copia_oculta = obter_destinatarios()[1]
+    if copia_oculta:
+        print(f"  (Cco: {', '.join(copia_oculta)})")
 
 
 def montar_aviso(situacao, datas):
@@ -265,6 +280,9 @@ def montar_aviso(situacao, datas):
 
 
 if __name__ == "__main__":
+    # A lista e lida aqui, no inicio da execucao de verdade: faltando o
+    # arquivo, o erro aparece antes de qualquer trabalho.
+    destinatarios_para, _ = obter_destinatarios()
     contexto, datas, output = carregar_contexto()
 
     situacao = sys.argv[4] if len(sys.argv) > 4 else ""
@@ -290,4 +308,4 @@ if __name__ == "__main__":
     if qualidade:
         avisos.append("A base de acordos tem pendências a corrigir; veja o CSV anexo.")
     html = email_visual.montar_html("Conformidade de Preços", [corpo.strip()] + avisos)
-    enviar_email(assunto, corpo, [com_acordo, qualidade], DESTINATARIOS, html=html)
+    enviar_email(assunto, corpo, [com_acordo, qualidade], destinatarios_para, html=html)
