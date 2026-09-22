@@ -111,7 +111,9 @@ Consequências práticas:
   branco, o problema é acesso à internet do cliente, não o Portal. O botão
   *Abrir em nova aba* confirma o diagnóstico em dois cliques.
 - **O relatório é publicado na web.** Quem tiver o link o vê sem passar pelo
-  login do Portal. Estar embutido aqui não acrescenta proteção nenhuma.
+  login do Portal. O Portal só evita espalhar o link: ele não fica mais no
+  JavaScript da página e só é entregue depois do login. Se ele vazar, exclua o
+  código de inserção no Power BI e gere outro; o antigo para de funcionar.
 - **Se o relatório for republicado**, o endereço e o identificador da página
   mudam. Os dois ficam em `privado\portal\configuracao\portal.env`, nas chaves
   `PBI_RELATORIO_URL` (o link de *Publicar na web*) e `PBI_PAGINA`. Quando o
@@ -119,9 +121,9 @@ Consequências práticas:
   mensagem de erro** — é o primeiro lugar a conferir se alguém reclamar que
   abriu a tabela errada.
 
-Para configurar ou trocar o relatório: edite as duas chaves no `portal.env` e use **Atualizar
-sistema** na central. Os valores entram no Portal na compilação, então editar o
-arquivo sem recompilar não muda nada. Se as chaves estiverem ausentes ou forem
+Para configurar ou trocar o relatório: edite as duas chaves no `portal.env` e
+reinicie a operação pela central. Os valores são lidos quando o Portal sobe;
+não é preciso recompilar. Se as chaves estiverem ausentes ou forem
 inválidas, a aba informa que o relatório está temporariamente indisponível. O
 endereço real nunca deve ser colocado em arquivo versionado.
 
