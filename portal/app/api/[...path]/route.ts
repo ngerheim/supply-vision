@@ -141,7 +141,11 @@ async function jsonBody<T>(request: Request, maximo = CORPO_MAX_JSON) {
   let value: unknown;
   try { value = JSON.parse(texto); }
   catch { throw new EntradaInvalida('O conteúdo enviado não é um JSON válido.'); }
-  return (isRecord(value) ? value : {}) as T;
+  // Lista, texto ou numero sao JSON valido, mas nenhuma rota espera isso.
+  // Converter em {} fazia a resposta acusar "campo obrigatorio" em vez do
+  // problema real.
+  if (!isRecord(value)) throw new EntradaInvalida('O conteúdo enviado deve ser um objeto JSON.');
+  return value as T;
 }
 
 const textValue = (value: unknown) => (typeof value === 'string' ? value.trim() : '');
