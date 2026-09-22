@@ -8,9 +8,9 @@
   "scripts": {
     "dev": "vinext dev --host 0.0.0.0",
     "build": "node scripts/verificar-porta-build.mjs && vinext build",
-    "start": "wrangler dev --config dist/server/wrangler.json --persist-to ../privado/portal/banco/estado/state",
-    "start:local": "wrangler dev --config dist/server/wrangler.json --persist-to ../privado/portal/banco/estado/state --ip 127.0.0.1 --port 3000",
-    "start:lan": "wrangler dev --config dist/server/wrangler.json --persist-to ../privado/portal/banco/estado/state --ip 0.0.0.0 --port 3000",
+    "start": "node scripts/iniciar-portal.mjs",
+    "start:local": "node scripts/iniciar-portal.mjs local",
+    "start:lan": "node scripts/iniciar-portal.mjs lan",
     "email:once": "node --experimental-strip-types scripts/processar-emails.mjs",
     "email:watch": "node --experimental-strip-types scripts/processar-emails.mjs --watch",
     "lint": "oxlint",

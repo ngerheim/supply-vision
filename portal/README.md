@@ -248,17 +248,27 @@ perigosas. A publicação é transacional, com trava contra importações
 concorrentes.
 
 Em instalação vazia, a senha inicial é entregue ao Worker pela variável
-`INITIAL_ADMIN_PASSWORD` — definir a variável só no PowerShell não a entrega.
-Não há senha padrão. Depois de criar as contas reais, desative a conta semente
-`admin@portal.local`.
+`INITIAL_ADMIN_PASSWORD`, declarada em `privado/portal/configuracao/portal.env`
+— definir a variável só no PowerShell não a entrega. Quem repassa é o
+`scripts/iniciar-portal.mjs`, usado pelos comandos `start`, `start:local` e
+`start:lan`; só as chaves dessa lista fechada chegam ao Worker. Não há senha
+padrão. Depois de criar as contas reais, desative a conta semente
+`admin@portal.local` e apague a chave do `portal.env`.
+
+`TRUSTED_PROXY=true` segue o mesmo caminho, e só deve ser ligado quando existir
+um proxy reverso confiável à frente do Portal.
 
 ## Backup
 
 `scripts/backup.mjs` localiza o banco, usa `VACUUM INTO` para gerar uma cópia
 consistente mesmo com o portal em uso, roda `PRAGMA integrity_check` e
-substitui atomicamente o backup. A mesma cópia vai para três destinos: local,
-compartilhamento de rede (`BACKUP_NETWORK_DIR`, com conferência SHA-256) e
-anexo de e-mail (`BACKUP_EMAIL_TO`).
+substitui atomicamente o backup. A cópia vai para o disco local e para o
+compartilhamento de rede (`BACKUP_NETWORK_DIR`, com conferência SHA-256), e o
+e-mail (`BACKUP_EMAIL_TO`) recebe o comprovante: data, tamanho, hash e onde a
+cópia está. O banco não é anexado enquanto houver cópia de rede — ele carrega
+hashes de senha e toda a base comercial. Sem cópia de rede o anexo volta, com
+aviso, para não ficar sem redundância; `BACKUP_ANEXAR_BANCO=true` força o
+anexo.
 
 Cada execução substitui a anterior — **não há histórico rotativo**, por decisão
 operacional. Os horários são definidos pelo supervisor em

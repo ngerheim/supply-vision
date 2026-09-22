@@ -33,6 +33,14 @@ export function lerConfig() {
   return config;
 }
 
+// Mesma leitura, sem exigir o que so o envio de e-mail precisa: quem sobe o
+// Portal nao deveria ser impedido por falta de SMTP.
+export function lerConfigBruta() {
+  const comum = path.join(privado, 'comum', 'smtp.env');
+  const especifica = path.join(portalPrivado, 'configuracao', 'portal.env');
+  return { ...lerArquivo(comum), ...lerArquivo(especifica) };
+}
+
 export function criarTransportador(config) {
   return nodemailer.createTransport({
     host: config.SMTP_HOST,
