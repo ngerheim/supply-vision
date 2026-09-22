@@ -148,10 +148,7 @@ export function Imports({
     setError('');
     try {
       const mappings = await api('/api/mappings');
-      const key =
-        issue.tipo === 'locations'
-          ? issue.valor.split('/').map(normalizeImportText).join('/')
-          : normalizeImportText(issue.valor);
+      const key = normalizeImportText(issue.valor);
       const existing = mappings[issue.tipo]?.find(
         (mapping: AnyRow) => mapping.sourceKey === key,
       );
@@ -419,9 +416,11 @@ function ResolveIssue({
   // pessoa confere batendo o olho; medida, nao — LITRO nao se parece com nada,
   // e aceitar a mais proxima grava preco de litro como preco de unidade em toda
   // a carga, sem travar e sem avisar. Sem cadastro correto, a importacao para.
-  // Localidade e unidade nao aceitam correspondencia: a primeira porque cidade
-  // se cadastra, nao se traduz; a segunda porque medida errada corrompe o preco
-  // em silencio. Nos dois casos o caminho e cadastrar o que falta.
+  // Unidade aceita correspondencia confirmada por um administrador, mas nunca
+  // por sugestao: medida errada corrompe o preco em silencio. Localidade nao
+  // aceita correspondencia nenhuma (o servidor recusa): cidade se cadastra,
+  // nao se traduz, entao o unico caminho e cadastrar o que falta.
+  const aceitaDePara = Boolean(issue.tipo) && issue.tipo !== 'locations';
   const suggestions = useMemo(
     () => (issue.tipo === 'locations' || issue.tipo === 'units' ? [] : suggestMatches(issue.valor, options)),
     [issue.valor, issue.tipo, options],
@@ -435,7 +434,7 @@ function ResolveIssue({
         {issue.linhas} linha(s), primeira ocorrência na linha{' '}
         {issue.primeiraLinha}. {issue.erro}
       </p>
-      {issue.tipo && isAdmin ? (
+      {aceitaDePara && isAdmin ? (
         <>
           {suggestions.length > 0 && (
             <div className="flex flex-wrap items-center gap-2">
@@ -467,7 +466,7 @@ function ResolveIssue({
             Confirmar e lembrar correspondência
           </Button>
         </>
-      ) : issue.tipo ? (
+      ) : aceitaDePara ? (
         <p className="text-sm">
           Peça a um administrador para confirmar o De/Para ou corrija o valor na
           planilha.
