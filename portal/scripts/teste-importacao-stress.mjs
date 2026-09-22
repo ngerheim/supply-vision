@@ -516,6 +516,25 @@ try {
     assert.equal(query(`SELECT COUNT(*) n FROM agreement_versions WHERE id='ver-interrompida'`)[0].n, 0);
     assert.equal(query(`SELECT COUNT(*) n FROM agreement_items WHERE id='itm-interrompida'`)[0].n, 0);
   });
+  await check('Localidade com condições vigentes não sai da abrangência do acordo', async () => {
+    const detalhe = await good(`/api/agreements/${agreementId}`);
+    const a = detalhe.agreement;
+    const corpo = (locationIds) => ({ number: a.number, supplierId: a.supplier_id, status: a.status, startDate: a.start_date, endDate: a.end_date, notes: a.notes, locationIds });
+    const abrangencia = () => query('SELECT location_id FROM agreement_locations WHERE agreement_id=? ORDER BY location_id', agreementId).map((linha) => linha.location_id);
+    const atuais = detalhe.locations.map((local) => local.id), comPreco = detalhe.items[0].locationId;
+    // Localidade sem condicoes entra livremente...
+    const nova = await catalog('locations', { city: 'ABRANGENCIA TESTE', state: 'GO' });
+    await good(`/api/agreements/${agreementId}`, { method: 'PUT', body: corpo([...atuais, nova.id]) });
+    const antes = abrangencia();
+    // ...mas a que tem preco vigente nao sai, e nada muda.
+    const recusa = await request(`/api/agreements/${agreementId}`, { method: 'PUT', body: corpo([nova.id, ...atuais.filter((id) => id !== comPreco)]) });
+    assert.equal(recusa.status, 409, JSON.stringify(recusa.data));
+    assert.match(recusa.data.error, /condições vigentes/);
+    assert.deepEqual(abrangencia(), antes);
+    // ...e a sem condicoes sai livremente.
+    await good(`/api/agreements/${agreementId}`, { method: 'PUT', body: corpo(atuais) });
+    assert.deepEqual(abrangencia(), [...atuais].sort((x, y) => x.localeCompare(y)));
+  });
   await check('Exportação conserva os De/Para', async () => {
     const exported = await good('/api/export');
     assert.equal(exported.tables.importItemMappings.length, query('SELECT COUNT(*) n FROM import_item_mappings')[0].n);
