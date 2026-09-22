@@ -188,7 +188,7 @@ function validateAgreementInput(body: AgreementInput): { value?: ValidAgreementI
 export async function GET(request: NextRequest) {
   await ensureDatabase();
   const parts = partsOf(request);
-  if (parts[0] === 'health') return ok({ app: 'portal-suprimentos', status: 'ok', schemaVersion: 1 });
+  if (parts[0] === 'health') return ok({ app: 'portal-suprimentos', status: 'ok' });
   if (parts[0] === 'session') return ok({ user: await currentUser(request) });
   if (parts[0] === 'internal' && parts[1] === 'agreements') {
     if (!tokenInternoValido(request)) return fail('Credencial interna inválida.', 401);
@@ -835,17 +835,12 @@ async function validateMappingInput(request: Request, type: string) {
   const cfg = mappingConfig[type];
   if (!cfg) return { error: 'Tipo de De/Para inválido.' };
   const source = textValue(body.source), targetId = textValue(body.targetId);
-  const sourceKey = type === 'locations' ? source.split('/').map(normalizeImportText).join('/') : normalizeImportText(source);
+  const sourceKey = normalizeImportText(source);
   exigeTexto(body.source, LIMITES_CAMPO.nome, 'nomenclatura de origem');
   exigeTexto(body.notes, LIMITES_CAMPO.observacoes, 'observações');
   if (!sourceKey || !targetId) return { error: 'Informe a nomenclatura de origem e o destino.' };
-  if (type === 'locations' && (!/^[^/]+\/[^/]+$/.test(sourceKey))) return { error: 'Informe a localidade original no formato CIDADE/UF, como aparece na planilha.' };
-  const target = await first(`SELECT 1 ok FROM ${cfg.targetTable} WHERE id=?${type === 'locations' ? '' : ' AND active=1'}`, [targetId]);
+  const target = await first(`SELECT 1 ok FROM ${cfg.targetTable} WHERE id=? AND active=1`, [targetId]);
   if (!target) return { error: `O ${cfg.label} de destino não existe ou está inativo.` };
-  if (type === 'locations') {
-    const locations = await all<{ id: string; city: string; state: string }>('SELECT id,city,state FROM locations');
-    if (locations.some(location => chaveLocalidade(location.city,location.state) === sourceKey && location.id !== targetId)) return { error: 'Essa origem já identifica outra localidade cadastrada. Confira cidade e UF.' };
-  }
   if (type === 'units') {
     // Inclusive as inativas: uma medida desativada continua sendo uma medida, e
     // redirecionar LITRO para UNIDADE muda o significado de todo preco da carga
