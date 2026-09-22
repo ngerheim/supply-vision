@@ -25,7 +25,9 @@ export function pastaHistorico(pastaBase) {
 }
 
 // Copia a origem para o arquivo do dia (via temporario + rename, para nunca
-// deixar um arquivo do dia pela metade) e apaga o que passou da janela.
+// deixar um arquivo do dia pela metade) e apaga o que passou da janela. O
+// rename substitui o arquivo do dia de uma vez, inclusive no Windows; apagar
+// antes abria um instante em que o dia ficava sem copia.
 export function guardarNoHistorico(pastaBase, origem, agora = new Date(), dias = DIAS_RETENCAO) {
   const pasta = pastaHistorico(pastaBase);
   fs.mkdirSync(pasta, { recursive: true });
@@ -33,7 +35,6 @@ export function guardarNoHistorico(pastaBase, origem, agora = new Date(), dias =
   const temporario = `${destino}.tmp`;
   fs.rmSync(temporario, { force: true });
   fs.copyFileSync(origem, temporario);
-  fs.rmSync(destino, { force: true });
   fs.renameSync(temporario, destino);
   const apagados = podarHistorico(pastaBase, agora, dias);
   return { destino, apagados };
