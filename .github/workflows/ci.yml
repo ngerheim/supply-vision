@@ -21,8 +21,8 @@ jobs:
       run:
         working-directory: portal
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 22
           cache: npm
@@ -32,17 +32,20 @@ jobs:
       - run: npm run typecheck
       - run: npm run lint
       - run: npm run build
-      # O instalador ja cobrava isto na maquina; o CI nao. Vulnerabilidade em
-      # dependencia de producao precisa aparecer no PR, nao na instalacao.
-      - run: npm audit --omit=dev
+      # O instalador ja cobrava isto na maquina; o CI nao. Vulnerabilidade
+      # precisa aparecer no PR, nao na instalacao. A auditoria e completa de
+      # proposito: no servidor o Portal sobe com wrangler/miniflare, que sao
+      # devDependencies. (O --omit=dev de antes ja era anulado pelo include=dev
+      # do portal/.npmrc; agora o comando diz o que de fato faz.)
+      - run: npm audit
 
   portal-integracao:
     name: Portal - instalacao nova e autenticacao real
     runs-on: windows-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 22
           cache: npm
@@ -57,18 +60,19 @@ jobs:
     name: Alertas
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"
           cache: pip
           cache-dependency-path: |
             alertas/config/requirements.txt
             alertas/config/requirements-dev.txt
+            alertas/config/requirements-ci.txt
       - run: pip install -r alertas/config/requirements.txt -r alertas/config/requirements-dev.txt
       - name: Auditar dependencias Python
         run: |
-          pip install pip-audit
+          pip install -r alertas/config/requirements-ci.txt
           pip-audit -r alertas/config/requirements.txt
       - name: Preparar configuração fictícia
         shell: pwsh
