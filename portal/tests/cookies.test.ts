@@ -11,3 +11,7 @@ void test('sessão inválida é ignorada e valores preservam sinal de igual', ()
   assert.deepEqual({ ...parseCookies(request) }, { token: 'a=b=', vazio: '' });
   assert.deepEqual({ ...parseCookies(new Request('http://localhost')) }, {});
 });
+void test('nome que apenas termina em acordos_session não se passa pela sessão', () => {
+  const request = new Request('http://localhost', { headers: { cookie: 'x_acordos_session=velho; acordos_session=novo' } });
+  assert.equal(parseCookies(request).acordos_session, 'novo');
+});
