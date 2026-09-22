@@ -521,7 +521,7 @@ try {
     assert.equal(exported.tables.importItemMappings.length, query('SELECT COUNT(*) n FROM import_item_mappings')[0].n);
     assert.equal(exported.tables.importModelMappings.length, query('SELECT COUNT(*) n FROM import_model_mappings')[0].n);
     assert.equal(exported.tables.importUnitMappings.length, query('SELECT COUNT(*) n FROM import_unit_mappings')[0].n);
-    assert.equal(exported.tables.importLocationMappings.length, query('SELECT COUNT(*) n FROM import_location_mappings')[0].n);
+    assert.equal(exported.tables.importLocationMappings, undefined);
   });
   await check('Reinicialização conserva acordos e correspondências', async () => {
     const before = businessSnapshot(), mappings = await good('/api/mappings');

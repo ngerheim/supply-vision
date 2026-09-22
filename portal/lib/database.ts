@@ -27,8 +27,6 @@ const schema = [
   `CREATE INDEX IF NOT EXISTS idx_import_model_mappings_target ON import_model_mappings(target_id)`,
   `CREATE TABLE IF NOT EXISTS import_unit_mappings (id TEXT PRIMARY KEY, source_text TEXT NOT NULL, source_key TEXT NOT NULL UNIQUE, target_id TEXT NOT NULL REFERENCES units(id), active INTEGER NOT NULL DEFAULT 1, notes TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`,
   `CREATE INDEX IF NOT EXISTS idx_import_unit_mappings_target ON import_unit_mappings(target_id)`,
-  `CREATE TABLE IF NOT EXISTS import_location_mappings (id TEXT PRIMARY KEY, source_text TEXT NOT NULL, source_key TEXT NOT NULL UNIQUE, target_id TEXT NOT NULL REFERENCES locations(id), active INTEGER NOT NULL DEFAULT 1, notes TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`,
-  `CREATE INDEX IF NOT EXISTS idx_import_location_mappings_target ON import_location_mappings(target_id)`,
   `CREATE TABLE IF NOT EXISTS agreements (id TEXT PRIMARY KEY, number TEXT NOT NULL UNIQUE, supplier_id TEXT NOT NULL REFERENCES suppliers(id), status TEXT NOT NULL DEFAULT 'active', start_date TEXT NOT NULL, end_date TEXT, owner_user_id TEXT REFERENCES users(id), notes TEXT, provisional INTEGER NOT NULL DEFAULT 0, current_version_id TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`,
   `CREATE INDEX IF NOT EXISTS idx_agreements_supplier_status ON agreements(supplier_id, status)`,
   `CREATE TABLE IF NOT EXISTS agreement_locations (agreement_id TEXT NOT NULL REFERENCES agreements(id), location_id TEXT NOT NULL REFERENCES locations(id), PRIMARY KEY(agreement_id, location_id))`,
@@ -154,6 +152,15 @@ async function initialize() {
     await db.batch([
       db.prepare("UPDATE tickets SET code='SUP-' || substr(code,4) WHERE code LIKE 'CH-%'"),
       db.prepare('INSERT INTO schema_migrations (version,applied_at) VALUES (2,?)').bind(now()),
+    ]);
+  }
+  // Versao 4: localidade deixou de ter De/Para (a cidade se cadastra), e a
+  // tabela ficou sem nenhum leitor. O indice cai junto com ela.
+  const semDeParaDeLocalidade = await db.prepare('SELECT 1 ok FROM schema_migrations WHERE version=4').first();
+  if (!semDeParaDeLocalidade) {
+    await db.batch([
+      db.prepare('DROP TABLE IF EXISTS import_location_mappings'),
+      db.prepare('INSERT INTO schema_migrations (version,applied_at) VALUES (4,?)').bind(now()),
     ]);
   }
   const relatorioConfigurado = await db.prepare('SELECT 1 ok FROM schema_migrations WHERE version=3').first();
