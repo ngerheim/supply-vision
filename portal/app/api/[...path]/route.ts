@@ -1,3 +1,4 @@
+import { condicoesBusca } from '@/lib/filtros-busca';
 import { ATUALIZAR_USUARIO_SQL } from '@/lib/usuarios-sql';
 import { montarPowerBiUrl } from '@/lib/powerbi';
 import { dataDeNegocio } from '@/lib/data-negocio';
@@ -1023,9 +1024,9 @@ async function search(params: URLSearchParams) {
     `date(a.start_date)<=date(?1)`,
     `(a.end_date IS NULL OR date(a.end_date)>=date(?1))`,
   ];
-  const state = normalizeText((params.get('state') || '').slice(0, LIMITES_CAMPO.busca));
-  if (state) { conditions.push(`l.state=?`); values.push(state); }
-  for (const [key, column] of [['item','ci.id'],['model','vm.id'],['supplier','s.id'],['location','l.id']] as const) { const value = params.get(key); if (value) { conditions.push(`${column}=?`); values.push(value); } }
+  const filtros = condicoesBusca(params);
+  conditions.push(...filtros.conditions);
+  values.push(...filtros.values);
   const total = Number((await first<{ n: number }>(`SELECT COUNT(*) n
     FROM agreement_items ai JOIN agreements a ON a.current_version_id=ai.version_id JOIN suppliers s ON s.id=a.supplier_id
     JOIN catalog_items ci ON ci.id=ai.catalog_item_id JOIN vehicle_models vm ON vm.id=ai.vehicle_model_id JOIN units un ON un.id=ai.unit_id JOIN locations l ON l.id=ai.location_id

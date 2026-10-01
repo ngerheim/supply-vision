@@ -40,7 +40,7 @@ proteção de recursos, ainda sujeitos à homologação no notebook-servidor.
 ## As abas
 
 - **Buscar** — preços por Estado, cidade, peça/serviço, modelo e fornecedor.
-  Combine os filtros; não existe busca por texto livre. Acima de 1.000
+  Selecione várias opções em cada filtro; as opções do mesmo campo são alternativas, e os campos são combinados. É possível marcar até 80 opções no total. A pesquisa de nomes dentro de cada filtro mantém as seleções anteriores. Ao mudar os Estados, cidades fora deles são desmarcadas. Acima de 1.000
   resultados o portal avisa e sugere refinar.
 - **Chamados** — fornecedores a negociar. Cada um tem código (`SUP-0001`) e
   passa por Aberto → Aguardando fornecedor → Fechado ou Cancelado, com linha
