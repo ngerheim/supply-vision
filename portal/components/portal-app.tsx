@@ -1,5 +1,8 @@
 'use client';
 
+import { TopNavigation } from '@/components/top-navigation';
+import { Pagination } from '@/components/pagination';
+import { usePagedList } from '@/lib/use-paged-list';
 import { api, errorText } from '@/lib/api';
 import { Imports } from '@/components/imports';
 import { AgreementDialog, ItemDialog } from '@/components/agreement-dialogs';
@@ -11,63 +14,318 @@ import { BRAZILIAN_STATES } from '@/lib/domain';
 import { correspondeBusca } from '@/lib/busca';
 import { dataDeNegocio } from '@/lib/data-negocio';
 import { normalizeImportText } from '@/lib/domain';
-import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  AlertTriangle, CheckCircle2, Database, Download, Factory, FileUp, Handshake, History,
-  ExternalLink, LoaderCircle, LogOut, MessageSquare, PackageSearch, PanelLeftClose, PanelLeftOpen, Pencil, Plus, RefreshCw, Search, Settings, ShieldCheck,
-  Trash2, Upload, Wrench, ArrowDown, ArrowUp, ArrowUpDown,
+  createContext,
+  useContext,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from 'react';
+import {
+  AlertTriangle,
+  CheckCircle2,
+  Download,
+  ExternalLink,
+  LoaderCircle,
+  MessageSquare,
+  Pencil,
+  Plus,
+  RefreshCw,
+  Search,
+  ShieldCheck,
+  Trash2,
+  Upload,
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
 } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import {
+  NativeSelect,
+  NativeSelectOption,
+} from '@/components/ui/native-select';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
 
 type JsonData = ReturnType<typeof JSON.parse>;
 type AnyRow = Record<string, JsonData>;
-type Nav = 'search'|'tickets'|'agreements'|'maintenance'|'suppliers'|'imports'|'mappings'|'catalogs'|'history'|'admin';
+type Nav =
+  | 'search'
+  | 'tickets'
+  | 'agreements'
+  | 'maintenance'
+  | 'suppliers'
+  | 'imports'
+  | 'mappings'
+  | 'catalogs'
+  | 'history'
+  | 'admin';
 
-const money = (value: number) => new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(value ?? 0);
-const date = (value?: string|null) => value ? new Intl.DateTimeFormat('pt-BR').format(new Date(`${value.slice(0,10)}T12:00:00`)) : 'Indeterminado';
-const cnpj = (value: string) => (value || '').replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5');
+const money = (value: number) =>
+  new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(
+    value ?? 0,
+  );
+const date = (value?: string | null) =>
+  value
+    ? new Intl.DateTimeFormat('pt-BR').format(
+        new Date(`${value.slice(0, 10)}T12:00:00`),
+      )
+    : 'Indeterminado';
+const cnpj = (value: string) =>
+  (value || '').replace(
+    /^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/,
+    '$1.$2.$3/$4-$5',
+  );
+
+const MutationBusy = createContext(false);
 
 export default function PortalApp() {
-  const [user,setUser]=useState<AnyRow|null|undefined>(undefined), [data,setData]=useState<AnyRow|null>(null), [nav,setNav]=useState<Nav>('search');
-  const [busy,setBusy]=useState(false), [notice,setNotice]=useState<{type:'ok'|'error';text:string}|null>(null), [agreementId,setAgreementId]=useState<string|null>(null);
-  const [agreementModal,setAgreementModal]=useState<AnyRow|null>(null), [itemModal,setItemModal]=useState<AnyRow|null>(null), [catalogModal,setCatalogModal]=useState<AnyRow|null>(null);
-  const [userList,setUserList]=useState<AnyRow[]>([]), [ticketLink,setTicketLink]=useState<string|null>(null);
-  const [importAgreement,setImportAgreement]=useState('');
-  const [sidebarCollapsed,setSidebarCollapsed]=useState(false);
-  const intentionalLogout=useRef(false);
-  const [loadError,setLoadError]=useState('');
-  const [searchFilters,setSearchFilters]=useState(filtrosVazios);
+  const [user, setUser] = useState<AnyRow | null | undefined>(undefined),
+    [data, setData] = useState<AnyRow | null>(null),
+    [nav, setNav] = useState<Nav>('search');
+  const [busy, setBusy] = useState(false),
+    [notice, setNotice] = useState<{
+      type: 'ok' | 'error';
+      text: string;
+    } | null>(null),
+    [agreementId, setAgreementId] = useState<string | null>(null);
+  const [agreementModal, setAgreementModal] = useState<AnyRow | null>(null),
+    [itemModal, setItemModal] = useState<AnyRow | null>(null),
+    [catalogModal, setCatalogModal] = useState<AnyRow | null>(null);
+  const [userList, setUserList] = useState<AnyRow[]>([]),
+    [ticketLink, setTicketLink] = useState<string | null>(null);
+  const [importAgreement, setImportAgreement] = useState('');
 
-  const notify=(type:'ok'|'error',text:string)=>{setNotice({type,text});setTimeout(()=>setNotice(null),5000)};
-  const refresh=useCallback(async()=>{setLoadError('');try{const next=await api('/api/bootstrap');setUser(next.user);setData(next);if(next.user.role==='admin'||next.user.role==='editor')void api('/api/users').then(x=>setUserList(x.users||[])).catch(()=>setUserList([]));else setUserList([])}catch(error){setLoadError(errorText(error));throw error}},[]);
-  const initialize=useCallback(async()=>{setLoadError('');try{const x=await api('/api/session');setUser(x.user);if(x.user)await refresh()}catch(error){setLoadError(errorText(error))}},[refresh]);
-  useEffect(()=>{let active=true;queueMicrotask(()=>{if(active)void initialize()});return()=>{active=false}},[initialize]);
-  useEffect(()=>{if(!user)return;let active=true;const linked=new URLSearchParams(window.location.search).get('chamado');if(linked)queueMicrotask(()=>{if(active){if(user.role==='admin'||user.role==='editor'){setTicketLink(linked);setNav('tickets')}else{setNav('search');setNotice({type:'error',text:'Seu perfil permite consultar preços e acordos. O acesso a chamados é restrito.'})}}});return()=>{active=false}},[user]);
-  useEffect(()=>{const expired=()=>{if(intentionalLogout.current)return;setUser(null);setData(null);setLoadError('');setNotice({type:'error',text:'Sua sessão expirou. Entre novamente.'})};window.addEventListener('portal:session-expired',expired);return()=>window.removeEventListener('portal:session-expired',expired)},[]);
-  const run=async(fn:()=>Promise<JsonData>,success?:string)=>{setBusy(true);try{return await salvarEAtualizar(fn,refresh,()=>{if(success)notify('ok',success)},()=>notify('error','Alteração salva, mas não foi possível atualizar a tela. Use Atualizar dados para conferir.'))}catch(error:unknown){notify('error',errorText(error))}finally{setBusy(false)}};
+  const intentionalLogout = useRef(false);
+  const mutationLock = useRef(false);
+  const [loadError, setLoadError] = useState('');
+  const [searchFilters, setSearchFilters] = useState(filtrosVazios);
 
-  if(loadError&&!data&&user!==null) return <main className="grid min-h-screen place-items-center p-6"><Card className="max-w-md"><CardContent className="space-y-4 pt-6"><p role="alert">{loadError}</p><Button onClick={()=>void initialize()}>Tentar novamente</Button></CardContent></Card></main>;
-  if(user===undefined) return <Loading label="Preparando sua base de acordos…"/>;
-  if(!user) return <Login message={notice?.text} onLogin={(u)=>{intentionalLogout.current=false;setNotice(null);setUser(u);void refresh().catch(()=>{})}}/>;
-  if(!data) return <Loading label="Carregando acordos…"/>;
-  const catalogs=data.catalogs;
-  const canWrite=user.role==='admin'||user.role==='editor';
-  const isAdmin=user.role==='admin';
-  const navigate=(next:Nav)=>{if((next==='history'||next==='admin'||next==='mappings')&&!isAdmin)return;if(['tickets','suppliers','imports','catalogs'].includes(next)&&!canWrite)return;setNav(next);setAgreementId(null);setImportAgreement('')};
-  const openAgreement=(id:string)=>{setAgreementId(id);setNav('agreements')};
-  const logout=()=>void (async()=>{intentionalLogout.current=true;setBusy(true);try{await api('/api/logout',{method:'POST'});setNotice(null);setUser(null);setData(null)}catch(error:unknown){intentionalLogout.current=false;notify('error',errorText(error))}finally{setBusy(false)}})();
-  const removerAcordo=(a:AnyRow,detalhe:AnyRow)=>{
-    const condicoes=Number(detalhe?.totalItems??(detalhe?.items||[]).length), versoes=(detalhe?.versions||[]).length;
-    const aviso=[
+  const notify = (type: 'ok' | 'error', text: string) => {
+    setNotice({ type, text });
+    setTimeout(() => setNotice(null), 5000);
+  };
+  const refresh = useCallback(async () => {
+    setLoadError('');
+    try {
+      const next = await api('/api/bootstrap');
+      setUser(next.user);
+      setData(next);
+      if (next.user.role === 'admin' || next.user.role === 'editor')
+        void api('/api/users')
+          .then((x) => setUserList(x.users || []))
+          .catch(() => setUserList([]));
+      else setUserList([]);
+    } catch (error) {
+      setLoadError(errorText(error));
+      throw error;
+    }
+  }, []);
+  const initialize = useCallback(async () => {
+    setLoadError('');
+    try {
+      const x = await api('/api/session');
+      setUser(x.user);
+      if (x.user) await refresh();
+    } catch (error) {
+      setLoadError(errorText(error));
+    }
+  }, [refresh]);
+  useEffect(() => {
+    let active = true;
+    queueMicrotask(() => {
+      if (active) void initialize();
+    });
+    return () => {
+      active = false;
+    };
+  }, [initialize]);
+  useEffect(() => {
+    if (!user) return;
+    let active = true;
+    const linked = new URLSearchParams(window.location.search).get('chamado');
+    if (linked)
+      queueMicrotask(() => {
+        if (active) {
+          if (user.role === 'admin' || user.role === 'editor') {
+            setTicketLink(linked);
+            setNav('tickets');
+          } else {
+            setNav('search');
+            setNotice({
+              type: 'error',
+              text: 'Seu perfil permite consultar preços e acordos. O acesso a chamados é restrito.',
+            });
+          }
+        }
+      });
+    return () => {
+      active = false;
+    };
+  }, [user]);
+  useEffect(() => {
+    const expired = () => {
+      if (intentionalLogout.current) return;
+      setUser(null);
+      setData(null);
+      setLoadError('');
+      setNotice({
+        type: 'error',
+        text: 'Sua sessão expirou. Entre novamente.',
+      });
+    };
+    window.addEventListener('portal:session-expired', expired);
+    return () => window.removeEventListener('portal:session-expired', expired);
+  }, []);
+
+  useEffect(() => {
+    const restore = () => {
+      const p = new URLSearchParams(window.location.search),
+        next = p.get('tab');
+      const allowed = [
+        'search',
+        'agreements',
+        'maintenance',
+        ...(user?.role === 'admin' || user?.role === 'editor'
+          ? ['tickets', 'suppliers', 'imports', 'catalogs']
+          : []),
+        ...(user?.role === 'admin' ? ['mappings', 'history', 'admin'] : []),
+      ];
+      if (next && allowed.includes(next)) {
+        setNav(next as Nav);
+        setAgreementId(p.get('agreement'));
+      }
+    };
+    restore();
+    window.addEventListener('popstate', restore);
+    return () => window.removeEventListener('popstate', restore);
+  }, [user?.role]);
+
+  const run = async (fn: () => Promise<JsonData>, success?: string) => {
+    if (mutationLock.current) return;
+    mutationLock.current = true;
+    setBusy(true);
+    try {
+      return await salvarEAtualizar(
+        fn,
+        refresh,
+        () => {
+          if (success) notify('ok', success);
+        },
+        () =>
+          notify(
+            'error',
+            'Alteração salva, mas não foi possível atualizar a tela. Use Atualizar dados para conferir.',
+          ),
+      );
+    } catch (error: unknown) {
+      notify('error', errorText(error));
+    } finally {
+      mutationLock.current = false;
+      setBusy(false);
+    }
+  };
+
+  if (loadError && !data && user !== null)
+    return (
+      <main className="grid min-h-screen place-items-center p-6">
+        <Card className="max-w-md">
+          <CardContent className="space-y-4 pt-6">
+            <p role="alert">{loadError}</p>
+            <Button onClick={() => void initialize()}>Tentar novamente</Button>
+          </CardContent>
+        </Card>
+      </main>
+    );
+  if (user === undefined)
+    return <Loading label="Preparando sua base de acordos…" />;
+  if (!user)
+    return (
+      <Login
+        message={notice?.text}
+        onLogin={(u) => {
+          intentionalLogout.current = false;
+          setNotice(null);
+          setUser(u);
+          void refresh().catch(() => {});
+        }}
+      />
+    );
+  if (!data) return <Loading label="Carregando acordos…" />;
+  const catalogs = data.catalogs;
+  const canWrite = user.role === 'admin' || user.role === 'editor';
+  const isAdmin = user.role === 'admin';
+  const navigate = (next: Nav) => {
+    if (
+      (next === 'history' || next === 'admin' || next === 'mappings') &&
+      !isAdmin
+    )
+      return;
+    if (
+      ['tickets', 'suppliers', 'imports', 'catalogs'].includes(next) &&
+      !canWrite
+    )
+      return;
+    setNav(next);
+    setAgreementId(null);
+    setImportAgreement('');
+    const p = new URLSearchParams(window.location.search);
+    p.set('tab', next);
+    p.delete('agreement');
+    p.delete('chamado');
+    window.history.pushState({}, '', `?${p}`);
+  };
+  const openAgreement = (id: string) => {
+    setAgreementId(id);
+    setNav('agreements');
+    const p = new URLSearchParams(window.location.search);
+    p.set('tab', 'agreements');
+    p.set('agreement', id);
+    window.history.pushState({}, '', `?${p}`);
+  };
+  const logout = () =>
+    void (async () => {
+      intentionalLogout.current = true;
+      setBusy(true);
+      try {
+        await api('/api/logout', { method: 'POST' });
+        setNotice(null);
+        setUser(null);
+        setData(null);
+      } catch (error: unknown) {
+        intentionalLogout.current = false;
+        notify('error', errorText(error));
+      } finally {
+        setBusy(false);
+      }
+    })();
+  const removerAcordo = (a: AnyRow, detalhe: AnyRow) => {
+    const condicoes = Number(
+        detalhe?.totalItems ?? (detalhe?.items || []).length,
+      ),
+      versoes = (detalhe?.versions || []).length;
+    const aviso = [
       `Excluir o acordo ${a.number} de ${a.supplier}?`,
       '',
       `Serão apagadas ${condicoes.toLocaleString('pt-BR')} condição(ões) e ${versoes} versão(ões).`,
@@ -75,259 +333,3249 @@ export default function PortalApp() {
       '',
       'Chamados ligados a ele são preservados, apenas perdem o vínculo.',
     ].join('\n');
-    if(!confirm(aviso))return;
-    void run(async()=>{
-      await api(`/api/agreements/${a.id}`,{method:'DELETE'});
+    if (!confirm(aviso)) return;
+    void run(async () => {
+      await api(`/api/agreements/${a.id}`, { method: 'DELETE' });
       setAgreementId(null);
-    },'Acordo excluído.');
+    }, 'Acordo excluído.');
   };
-  const removeCatalog=(type:string,row:AnyRow)=>{const nome=row.tradeName||row.name||row.code||`${row.city} / ${row.state}`;if(!confirm(`Excluir "${nome}" definitivamente?\n\nSe estiver em uso por algum acordo, a exclusão será recusada.`))return;void run(async()=>{await api(`/api/catalogs/${type}/${row.id}`,{method:'DELETE'})},'Cadastro excluído.')};
+  const removeCatalog = (type: string, row: AnyRow) => {
+    const nome =
+      row.tradeName || row.name || row.code || `${row.city} / ${row.state}`;
+    if (
+      !confirm(
+        `Excluir "${nome}" definitivamente?\n\nSe estiver em uso por algum acordo, a exclusão será recusada.`,
+      )
+    )
+      return;
+    void run(async () => {
+      await api(`/api/catalogs/${type}/${row.id}`, { method: 'DELETE' });
+    }, 'Cadastro excluído.');
+  };
 
-  return <main className="min-h-screen bg-background text-foreground">
-    <Sidebar nav={nav} setNav={navigate} user={user} onLogout={logout} collapsed={sidebarCollapsed} onToggle={()=>setSidebarCollapsed(value=>!value)}/>
-    <section className={`min-w-0 pl-16 transition-[padding] duration-300 ${sidebarCollapsed?'lg:pl-16':'lg:pl-56'}`}><div className="mx-auto max-w-[1550px] p-4 sm:p-8">
-      {nav==='search'&&<SearchPage catalogs={catalogs} openAgreement={openAgreement} filters={searchFilters} setFilters={setSearchFilters}/>}
-      {nav==='agreements'&&(agreementId?<AgreementDetail revision={data} id={agreementId} canWrite={canWrite} isAdmin={isAdmin} onDelete={removerAcordo} onBack={()=>setAgreementId(null)} onEdit={(a:AnyRow)=>setAgreementModal(a)} onItem={(i:AnyRow)=>setItemModal({...i,agreementId})} onImport={()=>{navigate('imports');setImportAgreement(agreementId)}} run={run}/>:<Agreements data={data} canWrite={canWrite} onOpen={setAgreementId} onNew={()=>setAgreementModal({locationIds:[],status:'active',startDate:dataDeNegocio()})}/>)}
-      {nav==='maintenance'&&<Maintenance url={String(data.manutencao||'')}/>}
-      {canWrite&&nav==='suppliers'&&<CatalogPage type="suppliers" rows={catalogs.suppliers} onAdd={()=>setCatalogModal({type:'suppliers'})} onEdit={(row:AnyRow)=>setCatalogModal({type:'suppliers',...row})} onDelete={(row:AnyRow)=>removeCatalog('suppliers',row)}/>}
-      {canWrite&&nav==='imports'&&<Imports data={data} isAdmin={isAdmin} initialAgreement={importAgreement} onUpdated={refresh} onCatalog={(type,values)=>setCatalogModal({type,...values})}/>}
-      {isAdmin&&nav==='mappings'&&<Mappings catalogs={catalogs} run={run}/>}
-      {canWrite&&nav==='catalogs'&&<Catalogs data={data} onAdd={(type:string)=>setCatalogModal({type})} onEdit={(type:string,row:AnyRow)=>setCatalogModal({type,...row})} onDelete={removeCatalog}/>}
-      {canWrite&&nav==='tickets'&&<Tickets users={userList} agreements={data.agreements||[]} run={run} initialDetail={ticketLink}/>}
-      {isAdmin&&nav==='history'&&<ChangeHistory users={userList}/>}
-      {isAdmin&&nav==='admin'&&<Administration user={user} initialUsers={userList} run={run}/>}
-      {isAdmin&&nav==='admin'&&<EmailQueue run={run}/>}
-    </div></section>
-    {loadError&&data&&<div className="fixed bottom-20 right-5 z-[100] max-w-md rounded-xl border bg-card p-4 shadow-lg"><p role="alert" className="text-sm">Não foi possível atualizar os dados.</p><Button className="mt-2" variant="outline" onClick={()=>void refresh().catch(()=>{})}>Atualizar dados</Button></div>}
-    {notice&&<output className={`fixed bottom-5 right-5 z-[100] flex max-w-md items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium text-white shadow-2xl ${notice.type==='ok'?'bg-emerald-700':'bg-red-700'}`}>{notice.type==='ok'?<CheckCircle2 className="size-5"/>:<AlertTriangle className="size-5"/>}{notice.text}</output>}
-    {agreementModal&&<AgreementDialog open value={agreementModal} catalogs={catalogs} busy={busy} onClose={()=>setAgreementModal(null)} onSave={(body:AnyRow)=>run(async()=>{if(body.id)await api(`/api/agreements/${body.id}`,{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify(body)});else {const created=await api('/api/agreements',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});openAgreement(created.id)};setAgreementModal(null)},body.id?'Acordo atualizado.':'Acordo criado.')}/>}
-    {itemModal&&<ItemDialog open value={itemModal} catalogs={catalogs} busy={busy} onClose={()=>setItemModal(null)} onSave={(body:AnyRow)=>run(async()=>{if(body.id)await api(`/api/items/${body.id}`,{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify(body)});else await api(`/api/agreements/${body.agreementId}/items`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});setItemModal(null)},'Condição salva.')}/>}
-    {catalogModal&&<CatalogDialog open value={catalogModal} busy={busy} onClose={()=>setCatalogModal(null)} onSave={(body:AnyRow)=>run(async()=>{const path=body.id?`/api/catalogs/${body.type}/${body.id}`:`/api/catalogs/${body.type}`;await api(path,{method:body.id?'PUT':'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});setCatalogModal(null)},'Cadastro salvo.')}/>}
-  </main>;
+  return (
+    <MutationBusy.Provider value={busy}>
+      <main className="min-h-screen bg-background text-foreground">
+        <TopNavigation
+          nav={nav}
+          onNavigate={(next) => navigate(next as Nav)}
+          user={{ name: user.name, role: user.role }}
+          onLogout={logout}
+        />
+        <section className="min-w-0">
+          <div className="mx-auto max-w-[1550px] p-4 sm:p-6">
+            {nav === 'search' && (
+              <SearchPage
+                catalogs={catalogs}
+                openAgreement={openAgreement}
+                filters={searchFilters}
+                setFilters={setSearchFilters}
+              />
+            )}
+            {nav === 'agreements' && (
+              <>
+                <div hidden={!!agreementId}>
+                  <Agreements
+                    data={data}
+                    canWrite={canWrite}
+                    onOpen={openAgreement}
+                    onNew={() =>
+                      setAgreementModal({
+                        locationIds: [],
+                        status: 'active',
+                        startDate: dataDeNegocio(),
+                      })
+                    }
+                  />
+                </div>
+                {agreementId && (
+                  <AgreementDetail
+                    revision={data}
+                    id={agreementId}
+                    canWrite={canWrite}
+                    isAdmin={isAdmin}
+                    onDelete={removerAcordo}
+                    onBack={() => navigate('agreements')}
+                    onEdit={(a: AnyRow) => setAgreementModal(a)}
+                    onItem={(i: AnyRow) => setItemModal({ ...i, agreementId })}
+                    onImport={() => {
+                      navigate('imports');
+                      setImportAgreement(agreementId);
+                    }}
+                    run={run}
+                  />
+                )}
+              </>
+            )}
+            {nav === 'maintenance' && (
+              <Maintenance url={String(data.manutencao || '')} />
+            )}
+            {canWrite && nav === 'suppliers' && (
+              <CatalogPage
+                type="suppliers"
+                rows={catalogs.suppliers}
+                onAdd={() => setCatalogModal({ type: 'suppliers' })}
+                onEdit={(row: AnyRow) =>
+                  setCatalogModal({ type: 'suppliers', ...row })
+                }
+                onDelete={(row: AnyRow) => removeCatalog('suppliers', row)}
+              />
+            )}
+            {canWrite && nav === 'imports' && (
+              <Imports
+                data={data}
+                isAdmin={isAdmin}
+                initialAgreement={importAgreement}
+                onUpdated={refresh}
+                onCatalog={(type, values) =>
+                  setCatalogModal({ type, ...values })
+                }
+              />
+            )}
+            {isAdmin && nav === 'mappings' && (
+              <Mappings catalogs={catalogs} run={run} />
+            )}
+            {canWrite && nav === 'catalogs' && (
+              <Catalogs
+                data={data}
+                onAdd={(type: string) => setCatalogModal({ type })}
+                onEdit={(type: string, row: AnyRow) =>
+                  setCatalogModal({ type, ...row })
+                }
+                onDelete={removeCatalog}
+              />
+            )}
+            {canWrite && nav === 'tickets' && (
+              <Tickets
+                users={userList}
+                agreements={data.agreements || []}
+                run={run}
+                initialDetail={ticketLink}
+              />
+            )}
+            {isAdmin && nav === 'history' && <ChangeHistory users={userList} />}
+            {isAdmin && nav === 'admin' && (
+              <Administration user={user} initialUsers={userList} run={run} />
+            )}
+            {isAdmin && nav === 'admin' && <EmailQueue run={run} />}
+          </div>
+        </section>
+        {loadError && data && (
+          <div className="fixed bottom-20 right-5 z-[100] max-w-md rounded-xl border bg-card p-4 shadow-lg">
+            <p role="alert" className="text-sm">
+              Não foi possível atualizar os dados.
+            </p>
+            <Button
+              className="mt-2"
+              variant="outline"
+              onClick={() => void refresh().catch(() => {})}
+            >
+              Atualizar dados
+            </Button>
+          </div>
+        )}
+        {notice && (
+          <output
+            className={`fixed bottom-5 right-5 z-[100] flex max-w-md items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium text-white shadow-2xl ${notice.type === 'ok' ? 'bg-emerald-700' : 'bg-red-700'}`}
+          >
+            {notice.type === 'ok' ? (
+              <CheckCircle2 className="size-5" />
+            ) : (
+              <AlertTriangle className="size-5" />
+            )}
+            {notice.text}
+          </output>
+        )}
+        {agreementModal && (
+          <AgreementDialog
+            open
+            value={agreementModal}
+            catalogs={catalogs}
+            busy={busy}
+            onClose={() => setAgreementModal(null)}
+            onSave={(body: AnyRow) =>
+              run(
+                async () => {
+                  if (body.id)
+                    await api(`/api/agreements/${body.id}`, {
+                      method: 'PUT',
+                      headers: { 'content-type': 'application/json' },
+                      body: JSON.stringify(body),
+                    });
+                  else {
+                    const created = await api('/api/agreements', {
+                      method: 'POST',
+                      headers: { 'content-type': 'application/json' },
+                      body: JSON.stringify(body),
+                    });
+                    openAgreement(created.id);
+                  }
+                  setAgreementModal(null);
+                },
+                body.id ? 'Acordo atualizado.' : 'Acordo criado.',
+              )
+            }
+          />
+        )}
+        {itemModal && (
+          <ItemDialog
+            open
+            value={itemModal}
+            catalogs={catalogs}
+            busy={busy}
+            onClose={() => setItemModal(null)}
+            onSave={(body: AnyRow) =>
+              run(async () => {
+                if (body.id)
+                  await api(`/api/items/${body.id}`, {
+                    method: 'PUT',
+                    headers: { 'content-type': 'application/json' },
+                    body: JSON.stringify(body),
+                  });
+                else
+                  await api(`/api/agreements/${body.agreementId}/items`, {
+                    method: 'POST',
+                    headers: { 'content-type': 'application/json' },
+                    body: JSON.stringify(body),
+                  });
+                setItemModal(null);
+              }, 'Condição salva.')
+            }
+          />
+        )}
+        {catalogModal && (
+          <CatalogDialog
+            open
+            value={catalogModal}
+            busy={busy}
+            onClose={() => setCatalogModal(null)}
+            onSave={(body: AnyRow) =>
+              run(async () => {
+                const path = body.id
+                  ? `/api/catalogs/${body.type}/${body.id}`
+                  : `/api/catalogs/${body.type}`;
+                await api(path, {
+                  method: body.id ? 'PUT' : 'POST',
+                  headers: { 'content-type': 'application/json' },
+                  body: JSON.stringify(body),
+                });
+                setCatalogModal(null);
+              }, 'Cadastro salvo.')
+            }
+          />
+        )}
+      </main>
+    </MutationBusy.Provider>
+  );
 }
 
-function Loading({label}:{label:string}){return <div className="grid min-h-screen place-items-center bg-[#eef2f5]"><div className="flex items-center gap-3 rounded-2xl bg-white px-6 py-5 shadow-lg"><LoaderCircle className="size-5 animate-spin text-primary"/><span className="text-sm font-medium">{label}</span></div></div>}
-function Login({onLogin,message}:{onLogin:(u:AnyRow)=>void;message?:string}){const [email,setEmail]=useState(''),[password,setPassword]=useState(''),[error,setError]=useState(''),[busy,setBusy]=useState(false);const submit=async(e:React.SyntheticEvent<HTMLFormElement>)=>{e.preventDefault();setBusy(true);setError('');try{const x=await api('/api/login',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({email,password})});onLogin(x.user)}catch(err:unknown){setError(errorText(err))}finally{setBusy(false)}};return <main className="relative grid min-h-screen place-items-center overflow-hidden bg-[#0a1420] p-6"><div className="pointer-events-none absolute inset-0 opacity-70 [background-image:radial-gradient(ellipse_at_15%_10%,rgba(45,212,191,.20)_0,transparent_45%),radial-gradient(ellipse_at_85%_80%,rgba(56,189,248,.16)_0,transparent_45%)]"/><div className="pointer-events-none absolute inset-0 opacity-[.05] [background-image:linear-gradient(rgba(255,255,255,.6)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,.6)_1px,transparent_1px)] [background-size:56px_56px]"/><section className="relative w-full max-w-md space-y-6 animate-in fade-in zoom-in-95 duration-500"><h1 className="text-center text-4xl font-semibold tracking-[-.04em] text-white sm:text-5xl">Portal Suprimentos</h1><Card className="border-white/10 bg-white p-3 text-foreground shadow-[0_30px_80px_-20px_rgb(0_0_0/.55)]"><CardContent className="pt-6"><form className="space-y-4" onSubmit={submit}>{message&&<output className="block text-sm text-muted-foreground">{message}</output>}<Field label="E-mail"><Input className="h-11" type="email" autoComplete="username" value={email} onChange={e=>setEmail(e.target.value)}/></Field><Field label="Senha"><Input className="h-11" type="password" autoComplete="current-password" value={password} onChange={e=>setPassword(e.target.value)}/></Field>{error&&<Alert variant="destructive" className="animate-in fade-in slide-in-from-top-1"><AlertTriangle/><AlertTitle>Não foi possível entrar</AlertTitle><AlertDescription>{error}</AlertDescription></Alert>}<Button type="submit" className="h-11 w-full transition-transform active:scale-[.985]" disabled={busy||!email||!password}>{busy?<LoaderCircle className="animate-spin"/>:<ShieldCheck/>} Entrar</Button></form></CardContent></Card></section></main>}
+function ListError({ error, onRetry }: { error: string; onRetry: () => void }) {
+  return (
+    <Alert variant="destructive">
+      <AlertTriangle />
+      <AlertTitle>Não foi possível carregar os dados</AlertTitle>
+      <AlertDescription>
+        {error}
+        <Button variant="outline" className="mt-2" onClick={onRetry}>
+          Tentar novamente
+        </Button>
+      </AlertDescription>
+    </Alert>
+  );
+}
+function Loading({ label }: { label: string }) {
+  return (
+    <div className="grid min-h-screen place-items-center bg-[#eef2f5]">
+      <div className="flex items-center gap-3 rounded-2xl bg-white px-6 py-5 shadow-lg">
+        <LoaderCircle className="size-5 animate-spin text-primary" />
+        <span className="text-sm font-medium">{label}</span>
+      </div>
+    </div>
+  );
+}
+function Login({
+  onLogin,
+  message,
+}: {
+  onLogin: (u: AnyRow) => void;
+  message?: string;
+}) {
+  const [email, setEmail] = useState(''),
+    [password, setPassword] = useState(''),
+    [error, setError] = useState(''),
+    [busy, setBusy] = useState(false);
+  const submit = async (e: React.SyntheticEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setBusy(true);
+    setError('');
+    try {
+      const x = await api('/api/login', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+      onLogin(x.user);
+    } catch (err: unknown) {
+      setError(errorText(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <main className="relative grid min-h-screen place-items-center overflow-hidden bg-[#0a1420] p-6">
+      <div className="pointer-events-none absolute inset-0 opacity-70 [background-image:radial-gradient(ellipse_at_15%_10%,rgba(45,212,191,.20)_0,transparent_45%),radial-gradient(ellipse_at_85%_80%,rgba(56,189,248,.16)_0,transparent_45%)]" />
+      <div className="pointer-events-none absolute inset-0 opacity-[.05] [background-image:linear-gradient(rgba(255,255,255,.6)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,.6)_1px,transparent_1px)] [background-size:56px_56px]" />
+      <section className="relative w-full max-w-md space-y-6 animate-in fade-in zoom-in-95 duration-500">
+        <h1 className="text-center text-4xl font-semibold tracking-[-.04em] text-white sm:text-5xl">
+          Portal Suprimentos
+        </h1>
+        <Card className="border-white/10 bg-white p-3 text-foreground shadow-[0_30px_80px_-20px_rgb(0_0_0/.55)]">
+          <CardContent className="pt-6">
+            <form className="space-y-4" onSubmit={submit}>
+              {message && (
+                <output className="block text-sm text-muted-foreground">
+                  {message}
+                </output>
+              )}
+              <Field label="E-mail">
+                <Input
+                  className="h-11"
+                  type="email"
+                  autoComplete="username"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                />
+              </Field>
+              <Field label="Senha">
+                <Input
+                  className="h-11"
+                  type="password"
+                  autoComplete="current-password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                />
+              </Field>
+              {error && (
+                <Alert
+                  variant="destructive"
+                  className="animate-in fade-in slide-in-from-top-1"
+                >
+                  <AlertTriangle />
+                  <AlertTitle>Não foi possível entrar</AlertTitle>
+                  <AlertDescription>{error}</AlertDescription>
+                </Alert>
+              )}
+              <Button
+                type="submit"
+                className="h-11 w-full transition-transform active:scale-[.985]"
+                disabled={busy || !email || !password}
+              >
+                {busy ? (
+                  <LoaderCircle className="animate-spin" />
+                ) : (
+                  <ShieldCheck />
+                )}{' '}
+                Entrar
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
+      </section>
+    </main>
+  );
+}
 
-const navItems=[{id:'search',label:'Buscar',icon:PackageSearch},{id:'tickets',label:'Chamados',icon:MessageSquare},{id:'agreements',label:'Acordos',icon:Handshake},{id:'maintenance',label:'Manutenção',icon:Wrench},{id:'suppliers',label:'Fornecedores',icon:Factory},{id:'imports',label:'Importações',icon:FileUp}] as const;
-function Sidebar({nav,setNav,user,onLogout,collapsed,onToggle}:JsonData){const canWrite=user.role==='admin'||user.role==='editor',isAdmin=user.role==='admin';const visible=navItems.filter((x:JsonData)=>canWrite||x.id==='search'||x.id==='agreements'||x.id==='maintenance');const nameParts=user.name.trim().split(/\s+/),firstName=nameParts[0]||user.name,initials=nameParts.length>1?nameParts[0][0]+(nameParts.at(-1)?.[0]||''):firstName.slice(0,2);return <aside className={`fixed inset-y-0 left-0 z-30 flex w-16 flex-col overflow-hidden border-r border-sidebar-border bg-sidebar text-sidebar-foreground transition-[width] duration-300 ${collapsed?'lg:w-16':'lg:w-56'}`}><div className="pointer-events-none absolute inset-0 opacity-60 [background-image:radial-gradient(ellipse_at_20%_0%,rgba(45,212,191,.14)_0,transparent_55%)]"/><nav className="relative flex-1 space-y-1 overflow-y-auto px-2 py-5 text-sm lg:px-3"><button type="button" onClick={onToggle} title={collapsed?'Expandir barra lateral':'Recolher barra lateral'} aria-label={collapsed?'Expandir barra lateral':'Recolher barra lateral'} aria-expanded={!collapsed} className="mb-3 hidden w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-xs opacity-45 transition-colors hover:bg-sidebar-accent hover:opacity-100 lg:flex">{collapsed?<PanelLeftOpen className="size-4 shrink-0"/>:<PanelLeftClose className="size-4 shrink-0"/>}{!collapsed&&<span className="truncate">Recolher menu</span>}</button><div className="mb-3 hidden h-px bg-sidebar-border lg:block"/>{visible.map((x:JsonData)=><NavButton key={x.id} {...x} active={nav===x.id} onClick={()=>setNav(x.id)} collapsed={collapsed}/>)}{canWrite&&<>{!collapsed&&<p className="hidden px-3 pb-2 pt-6 text-[10px] font-bold uppercase tracking-[.15em] opacity-30 lg:block">Gestão</p>}<div className={`my-3 h-px bg-sidebar-border ${collapsed?'':'lg:hidden'}`}/><NavButton label="Cadastros" icon={Database} active={nav==='catalogs'} onClick={()=>setNav('catalogs')} collapsed={collapsed}/>{isAdmin&&<><NavButton label="De/Para" icon={RefreshCw} active={nav==='mappings'} onClick={()=>setNav('mappings')} collapsed={collapsed}/><NavButton label="Histórico" icon={History} active={nav==='history'} onClick={()=>setNav('history')} collapsed={collapsed}/><NavButton label="Usuários" icon={Settings} active={nav==='admin'} onClick={()=>setNav('admin')} collapsed={collapsed}/></>}</>}</nav><div className={`relative border-t border-sidebar-border p-2 ${collapsed?'lg:p-2':'lg:p-3'}`}><div className={`flex items-center gap-3 rounded-xl bg-sidebar-accent p-2 ${collapsed?'lg:flex-col':'lg:p-3'}`}><div className="grid size-8 shrink-0 place-items-center rounded-full bg-gradient-to-br from-teal-300 to-cyan-400 text-xs font-bold text-[#06202b]">{initials}</div>{!collapsed&&<div className="hidden min-w-0 flex-1 lg:block"><p className="truncate text-sm font-semibold">{firstName}</p></div>}<Button className="hidden lg:inline-flex" size="icon-sm" variant="ghost" onClick={onLogout} aria-label="Sair" title="Sair"><LogOut/></Button></div><Button className="mt-2 w-full lg:hidden" size="icon-sm" variant="ghost" onClick={onLogout} aria-label="Sair"><LogOut/></Button></div></aside>}
-function NavButton({label,icon:Icon,active,onClick,collapsed}:JsonData){return <button onClick={onClick} title={label} aria-label={label} aria-current={active?'page':undefined} className={`group relative flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-all duration-200 ${active?'bg-sidebar-primary text-sidebar-primary-foreground shadow-sm':'opacity-55 hover:translate-x-0.5 hover:bg-sidebar-accent hover:opacity-100'}`}>{active&&<span className="absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-full bg-teal-300"/>}<Icon className="size-4 shrink-0"/>{!collapsed&&<span className="hidden flex-1 truncate lg:block">{label}</span>}</button>}
-
-
-
-function SearchPage({catalogs,openAgreement,filters,setFilters}:JsonData){const [rows,setRows]=useState<AnyRow[]>([]),[meta,setMeta]=useState<AnyRow>({}),[loading,setLoading]=useState(false),[searched,setSearched]=useState(false),[searchError,setSearchError]=useState('');const states=Array.from(new Set((catalogs.locations||[]).map((x:AnyRow)=>x.state).filter(Boolean))).sort((a,b)=>String(a).localeCompare(String(b),'pt-BR')).map((uf)=>({id:String(uf),name:String(uf)}));const locationRows=filters.state.length?(catalogs.locations||[]).filter((x:AnyRow)=>filters.state.includes(x.state)):catalogs.locations;const search=async()=>{setLoading(true);setSearchError('');try{const p=parametrosBusca(filters);const x=await api(`/api/search?${p}`);setRows(x.rows);setMeta({total:x.total,truncated:x.truncated,limit:x.limit});setSearched(true)}catch(error){setSearchError(errorText(error));setSearched(false);setRows([])}finally{setLoading(false)}};return <div className="space-y-5"><Card className="overflow-hidden"><CardContent className="grid gap-3 pt-5 md:grid-cols-2 xl:grid-cols-5"><SearchMultiSelect label="Estado" value={filters.state} onChange={(v:string[])=>setFilters({...filters,state:v,location:filters.location.filter((id:string)=>(catalogs.locations||[]).some((x:AnyRow)=>x.id===id&&(!v.length||v.includes(x.state))))})} options={states}/><SearchMultiSelect label="Cidade" value={filters.location} onChange={(v:string[])=>setFilters({...filters,location:v})} options={(locationRows||[]).map((x:AnyRow)=>({id:x.id,name:x.city+' / '+x.state}))}/><SearchMultiSelect label="Peça ou serviço" value={filters.item} onChange={(v:string[])=>setFilters({...filters,item:v})} options={catalogs.items}/><SearchMultiSelect label="Modelo" value={filters.model} onChange={(v:string[])=>setFilters({...filters,model:v})} options={catalogs.models}/><SearchMultiSelect label="Fornecedor" value={filters.supplier} onChange={(v:string[])=>setFilters({...filters,supplier:v})} options={catalogs.suppliers.map((x:AnyRow)=>({id:x.id,name:x.tradeName}))}/><div className="flex items-center justify-between gap-3 md:col-span-2 xl:col-span-5"><Button variant="ghost" className="text-muted-foreground" onClick={()=>{setFilters(filtrosVazios());setSearched(false);setRows([])}}>Limpar filtros</Button><Button size="lg" className="transition-transform active:scale-[.97]" onClick={search} disabled={loading}>{loading?<LoaderCircle className="animate-spin"/>:<Search/>} Pesquisar</Button></div></CardContent></Card>{searchError&&<Alert variant="destructive"><AlertTriangle/><AlertTitle>Não foi possível pesquisar</AlertTitle><AlertDescription>{searchError}</AlertDescription></Alert>}{searched?<Card><CardHeader className="border-b"><CardTitle>{meta.truncated?`Mostrando ${rows.length.toLocaleString('pt-BR')} de ${Number(meta.total).toLocaleString('pt-BR')} condições`:`${Number(meta.total??rows.length).toLocaleString('pt-BR')} condições encontradas`}</CardTitle>{meta.truncated&&<Alert variant="destructive" className="mt-3"><AlertTriangle/><AlertTitle>Resultado incompleto</AlertTitle><AlertDescription>A consulta encontrou {Number(meta.total).toLocaleString('pt-BR')} condições e apenas as {rows.length.toLocaleString('pt-BR')} primeiras estão na tabela. Use os filtros de item, modelo, cidade ou fornecedor para reduzir a lista antes de comparar preços.</AlertDescription></Alert>}</CardHeader><CardContent className="px-0 pb-0"><Table><TableHeader><TableRow><TableHead>Peça / serviço</TableHead><TableHead>Modelo</TableHead><TableHead>Fornecedor</TableHead><TableHead>Cidade</TableHead><TableHead>Marcas</TableHead><TableHead>Unidade</TableHead><TableHead className="text-right">Preço</TableHead></TableRow></TableHeader><TableBody>{rows.map(r=><TableRow key={r.id}><TableCell className="font-medium"><button className="text-left text-primary hover:underline" onClick={()=>openAgreement(r.agreementId)}>{r.item}</button></TableCell><TableCell>{r.model}</TableCell><TableCell><p className="font-medium">{r.supplier}</p><p className="text-xs text-muted-foreground">{r.number}</p></TableCell><TableCell>{r.city} / {r.state}</TableCell><TableCell className="max-w-64 truncate text-muted-foreground">{r.brands||'Livre'}</TableCell><TableCell>{r.unit}</TableCell><TableCell className="text-right font-semibold tabular-nums">{r.courtesy?<Badge className="bg-sky-50 text-sky-700">Cortesia</Badge>:money(r.price)}</TableCell></TableRow>)}</TableBody></Table></CardContent></Card>:<Empty icon={Search} title="Monte sua pesquisa" text="Use um ou mais filtros para consultar as condições vigentes."/>}</div>}
+function SearchPage({
+  catalogs,
+  openAgreement,
+  filters,
+  setFilters,
+}: JsonData) {
+  const [rows, setRows] = useState<AnyRow[]>([]),
+    [meta, setMeta] = useState<AnyRow>({}),
+    [loading, setLoading] = useState(false),
+    [searched, setSearched] = useState(false),
+    [searchError, setSearchError] = useState(''),
+    [pageSize, setPageSize] = useState(25);
+  const applied = useRef(filters),
+    sequence = useRef(0);
+  const states = Array.from(
+    new Set(
+      (catalogs.locations || []).map((x: AnyRow) => x.state).filter(Boolean),
+    ),
+  )
+    .sort((a, b) => String(a).localeCompare(String(b), 'pt-BR'))
+    .map((uf) => ({ id: String(uf), name: String(uf) }));
+  const locationRows = filters.state.length
+    ? (catalogs.locations || []).filter((x: AnyRow) =>
+        filters.state.includes(x.state),
+      )
+    : catalogs.locations;
+  const search = async (page = 1, size = pageSize, useApplied = false) => {
+    const current = ++sequence.current;
+    if (!useApplied) applied.current = filters;
+    setLoading(true);
+    setSearchError('');
+    try {
+      const p = parametrosBusca(applied.current);
+      p.set('page', String(page));
+      p.set('pageSize', String(size));
+      const x = await api(`/api/search?${p}`);
+      if (current !== sequence.current) return;
+      setRows(x.rows);
+      setMeta(x);
+      setSearched(true);
+    } catch (error) {
+      if (current !== sequence.current) return;
+      setSearchError(errorText(error));
+      setSearched(false);
+      setRows([]);
+    } finally {
+      if (current === sequence.current) setLoading(false);
+    }
+  };
+  return (
+    <div className="space-y-5">
+      <Card className="overflow-hidden">
+        <CardContent className="grid gap-3 pt-5 md:grid-cols-2 xl:grid-cols-5">
+          <SearchMultiSelect
+            label="Estado"
+            value={filters.state}
+            onChange={(v: string[]) =>
+              setFilters({
+                ...filters,
+                state: v,
+                location: filters.location.filter((id: string) =>
+                  (catalogs.locations || []).some(
+                    (x: AnyRow) =>
+                      x.id === id && (!v.length || v.includes(x.state)),
+                  ),
+                ),
+              })
+            }
+            options={states}
+          />
+          <SearchMultiSelect
+            label="Cidade"
+            value={filters.location}
+            onChange={(v: string[]) => setFilters({ ...filters, location: v })}
+            options={(locationRows || []).map((x: AnyRow) => ({
+              id: x.id,
+              name: x.city + ' / ' + x.state,
+            }))}
+          />
+          <SearchMultiSelect
+            label="Peça ou serviço"
+            value={filters.item}
+            onChange={(v: string[]) => setFilters({ ...filters, item: v })}
+            options={catalogs.items}
+          />
+          <SearchMultiSelect
+            label="Modelo"
+            value={filters.model}
+            onChange={(v: string[]) => setFilters({ ...filters, model: v })}
+            options={catalogs.models}
+          />
+          <SearchMultiSelect
+            label="Fornecedor"
+            value={filters.supplier}
+            onChange={(v: string[]) => setFilters({ ...filters, supplier: v })}
+            options={catalogs.suppliers.map((x: AnyRow) => ({
+              id: x.id,
+              name: x.tradeName,
+            }))}
+          />
+          <div className="flex items-center justify-between gap-3 md:col-span-2 xl:col-span-5">
+            <Button
+              variant="ghost"
+              className="text-muted-foreground"
+              onClick={() => {
+                sequence.current++;
+                setLoading(false);
+                setSearchError('');
+                setFilters(filtrosVazios());
+                setSearched(false);
+                setRows([]);
+              }}
+            >
+              Limpar filtros
+            </Button>
+            <Button
+              size="lg"
+              className="transition-transform active:scale-[.97]"
+              onClick={() => void search()}
+              disabled={loading}
+            >
+              {loading ? <LoaderCircle className="animate-spin" /> : <Search />}{' '}
+              Pesquisar
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+      {searchError && (
+        <Alert variant="destructive">
+          <AlertTriangle />
+          <AlertTitle>Não foi possível pesquisar</AlertTitle>
+          <AlertDescription>{searchError}</AlertDescription>
+        </Alert>
+      )}
+      {searched ? (
+        <Card>
+          <CardHeader className="border-b">
+            <CardTitle>
+              {meta.truncated
+                ? `Mostrando ${rows.length.toLocaleString('pt-BR')} de ${Number(meta.total).toLocaleString('pt-BR')} condições`
+                : `${Number(meta.total ?? rows.length).toLocaleString('pt-BR')} condições encontradas`}
+            </CardTitle>
+            {meta.truncated && (
+              <Alert variant="destructive" className="mt-3">
+                <AlertTriangle />
+                <AlertTitle>Resultado incompleto</AlertTitle>
+                <AlertDescription>
+                  A consulta encontrou{' '}
+                  {Number(meta.total).toLocaleString('pt-BR')} condições e
+                  apenas as {rows.length.toLocaleString('pt-BR')} primeiras
+                  estão na tabela. Use os filtros de item, modelo, cidade ou
+                  fornecedor para reduzir a lista antes de comparar preços.
+                </AlertDescription>
+              </Alert>
+            )}
+          </CardHeader>
+          <CardContent className="max-h-[calc(100dvh-24rem)] overflow-auto px-0 pb-0">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Peça / serviço</TableHead>
+                  <TableHead>Modelo</TableHead>
+                  <TableHead>Fornecedor</TableHead>
+                  <TableHead>Cidade</TableHead>
+                  <TableHead>Marcas</TableHead>
+                  <TableHead>Unidade</TableHead>
+                  <TableHead className="text-right">Preço</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {rows.map((r) => (
+                  <TableRow key={r.id}>
+                    <TableCell className="font-medium">
+                      <button
+                        className="text-left text-primary hover:underline"
+                        onClick={() => openAgreement(r.agreementId)}
+                      >
+                        {r.item}
+                      </button>
+                    </TableCell>
+                    <TableCell>{r.model}</TableCell>
+                    <TableCell>
+                      <p className="font-medium">{r.supplier}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {r.number}
+                      </p>
+                    </TableCell>
+                    <TableCell>
+                      {r.city} / {r.state}
+                    </TableCell>
+                    <TableCell className="max-w-64 truncate text-muted-foreground">
+                      {r.brands || 'Livre'}
+                    </TableCell>
+                    <TableCell>{r.unit}</TableCell>
+                    <TableCell className="text-right font-semibold tabular-nums">
+                      {r.courtesy ? (
+                        <Badge className="bg-sky-50 text-sky-700">
+                          Cortesia
+                        </Badge>
+                      ) : (
+                        money(r.price)
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+          <Pagination
+            page={meta.page || 1}
+            pageSize={pageSize}
+            total={meta.total || 0}
+            busy={loading}
+            onPage={(page) => void search(page, pageSize, true)}
+            onPageSize={(size) => {
+              setPageSize(size);
+              void search(1, size, true);
+            }}
+          />
+        </Card>
+      ) : (
+        <Empty
+          icon={Search}
+          title="Monte sua pesquisa"
+          text="Use um ou mais filtros para consultar as condições vigentes."
+        />
+      )}
+    </div>
+  );
+}
 
 /* A aba nao guarda copia nem consulta banco: ela emoldura uma pagina do
    relatorio publicado no Power BI. O endereco chega pelo bootstrap, so depois
    do login, e e montado no servidor (lib/powerbi.ts). */
-function Maintenance({url}:{url:string}){
+function Maintenance({ url }: { url: string }) {
   /* Trocar a key remonta o iframe do zero. E a unica forma de recarregar um
      quadro de outra origem: o portal nao consegue falar com o conteudo dele. */
-  const [recarga,setRecarga]=useState(0);
-  if(!url)return <div className="space-y-5"><h1 className="text-2xl font-semibold">Histórico de Manutenção</h1><Alert><AlertTriangle/><AlertTitle>Relatório temporariamente indisponível</AlertTitle><AlertDescription>O endereço do Power BI ainda não foi configurado neste servidor. Avise a equipe responsável pelo Portal.</AlertDescription></Alert></div>;
-  return <div className="space-y-4">
-    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-      <div><h1 className="text-2xl font-semibold">Histórico de Manutenção</h1></div>
-      <div className="flex flex-wrap gap-2 sm:justify-end">
-        <Button variant="outline" onClick={()=>setRecarga(valor=>valor+1)}><RefreshCw/> Recarregar</Button>
-        <Button variant="outline" onClick={()=>window.open(url,'_blank','noopener,noreferrer')}><ExternalLink/> Abrir em nova aba</Button>
+  const [recarga, setRecarga] = useState(0);
+  if (!url)
+    return (
+      <div className="space-y-5">
+        <h1 className="text-2xl font-semibold">Histórico de Manutenção</h1>
+        <Alert>
+          <AlertTriangle />
+          <AlertTitle>Relatório temporariamente indisponível</AlertTitle>
+          <AlertDescription>
+            O endereço do Power BI ainda não foi configurado neste servidor.
+            Avise a equipe responsável pelo Portal.
+          </AlertDescription>
+        </Alert>
       </div>
+    );
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold">Histórico de Manutenção</h1>
+        </div>
+        <div className="flex flex-wrap gap-2 sm:justify-end">
+          <Button
+            variant="outline"
+            onClick={() => setRecarga((valor) => valor + 1)}
+          >
+            <RefreshCw /> Recarregar
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => window.open(url, '_blank', 'noopener,noreferrer')}
+          >
+            <ExternalLink /> Abrir em nova aba
+          </Button>
+        </div>
+      </div>
+      <Card className="overflow-hidden shadow-sm">
+        <CardContent className="p-0">
+          <iframe
+            key={recarga}
+            src={url}
+            title="Histórico de Manutenção — relatório do Power BI"
+            className="h-[calc(100vh-11rem)] min-h-[640px] w-full border-0"
+            allowFullScreen
+            sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-forms allow-downloads"
+          />
+        </CardContent>
+      </Card>
     </div>
-    <Card className="overflow-hidden shadow-sm">
-      <CardContent className="p-0">
-        <iframe key={recarga} src={url} title="Histórico de Manutenção — relatório do Power BI" className="h-[calc(100vh-11rem)] min-h-[640px] w-full border-0" allowFullScreen sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-forms allow-downloads"/>
-      </CardContent>
-    </Card>
-  </div>;
+  );
 }
 
-function Agreements({data,onOpen,onNew,canWrite}:JsonData){const [q,setQ]=useState(''),[status,setStatus]=useState('');const rows=data.agreements.filter((r:AnyRow)=>(!q||correspondeBusca(`${r.number} ${r.supplier} ${r.cnpj} ${r.locations}`,q))&&(!status||r.effectiveStatus===status));return <div className="space-y-5"><div className="flex flex-wrap gap-3"><div className="relative min-w-0 basis-64 flex-1"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"/><Input className="pl-9" placeholder="Número, fornecedor, CNPJ ou cidade" value={q} onChange={e=>setQ(e.target.value)}/></div><NativeSelect className="w-48" value={status} onChange={e=>setStatus(e.target.value)}><NativeSelectOption value="">Todas as situações</NativeSelectOption><NativeSelectOption value="active">Vigente</NativeSelectOption><NativeSelectOption value="expired">Expirado</NativeSelectOption><NativeSelectOption value="suspended">Suspenso</NativeSelectOption></NativeSelect>{canWrite&&<Button variant="outline" onClick={()=>{window.location.href='/api/export/agreements'}}><Download/> Exportar acordos</Button>}{canWrite&&<Button onClick={onNew}><Plus/> Novo</Button>}</div>{Number(data.totalAcordos||0)>data.agreements.length&&<Alert><AlertTriangle/><AlertTitle>Lista incompleta</AlertTitle><AlertDescription>Mostrando os {data.agreements.length} acordos atualizados mais recentemente, de {Number(data.totalAcordos).toLocaleString('pt-BR')}. Use a busca de preços ou o filtro para achar os demais.</AlertDescription></Alert>}<AgreementTable rows={rows} onOpen={onOpen} title={`${rows.length} acordos`}/></div>}
+function Agreements({ data, onOpen, onNew, canWrite }: JsonData) {
+  const [q, setQ] = useState(''),
+    [status, setStatus] = useState(''),
+    [page, setPage] = useState(1),
+    [pageSize, setPageSize] = useState(25),
+    [ordem, setOrdem] = useState<{ coluna: number; direcao: number } | null>(
+      null,
+    );
+  const sortKeys = [
+    'number',
+    'supplier',
+    'locations',
+    'itemCount',
+    'effectiveStatus',
+    'endDate',
+  ];
+  const alternar = (coluna: number) => {
+    setPage(1);
+    setOrdem(
+      !ordem || ordem.coluna !== coluna
+        ? { coluna, direcao: 1 }
+        : ordem.direcao === 1
+          ? { coluna, direcao: -1 }
+          : null,
+    );
+  };
+  const result = usePagedList(
+    '/api/agreements',
+    {
+      q,
+      status,
+      page: String(page),
+      pageSize: String(pageSize),
+      sort: ordem ? sortKeys[ordem.coluna] : 'updatedAt',
+      direction: ordem?.direcao === 1 ? 'asc' : 'desc',
+    },
+    data,
+  );
+  const rows = result.data?.rows || [];
+  return (
+    <div className="space-y-5">
+      <div className="flex flex-wrap gap-3">
+        <div className="relative min-w-0 basis-64 flex-1">
+          <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            className="pl-9"
+            placeholder="Número, fornecedor, CNPJ ou cidade"
+            value={q}
+            onChange={(e) => {
+              setQ(e.target.value);
+              setPage(1);
+            }}
+          />
+        </div>
+        <NativeSelect
+          className="w-48"
+          value={status}
+          onChange={(e) => {
+            setStatus(e.target.value);
+            setPage(1);
+          }}
+        >
+          <NativeSelectOption value="">Todas as situações</NativeSelectOption>
+          <NativeSelectOption value="active">Vigente</NativeSelectOption>
+          <NativeSelectOption value="expiring">A vencer</NativeSelectOption>
+          <NativeSelectOption value="scheduled">Programado</NativeSelectOption>
+          <NativeSelectOption value="expired">Expirado</NativeSelectOption>
+          <NativeSelectOption value="suspended">Suspenso</NativeSelectOption>
+        </NativeSelect>
+        {canWrite && (
+          <Button
+            variant="outline"
+            onClick={() => {
+              window.location.href = '/api/export/agreements';
+            }}
+          >
+            <Download /> Exportar acordos
+          </Button>
+        )}
+        {canWrite && (
+          <Button onClick={onNew}>
+            <Plus /> Novo
+          </Button>
+        )}
+      </div>
+      {result.error && (
+        <ListError error={result.error} onRetry={() => void result.load()} />
+      )}{' '}
+      {result.loading && (
+        <output className="text-sm text-muted-foreground">
+          Atualizando acordos…
+        </output>
+      )}
+      <AgreementTable
+        ordem={ordem}
+        alternar={alternar}
+        rows={rows}
+        onOpen={onOpen}
+        title={`${result.data?.total || 0} acordos`}
+      />
+      <Pagination
+        page={result.data?.page || page}
+        pageSize={pageSize}
+        total={result.data?.total || 0}
+        busy={result.loading}
+        onPage={setPage}
+        onPageSize={(size) => {
+          setPageSize(size);
+          setPage(1);
+        }}
+      />
+    </div>
+  );
+}
 
-function AgreementTable({rows,onOpen,title}:JsonData){const {ordem,alternar,ordenar}=useOrdenacao('agreements');/* Itens e vigencia sao numero e data: ordenar pelo texto exibido poria "10" antes de "9" e 01/12 antes de 02/01, entao ordena-se pelo valor de origem. */const ordenadas=ordenar(rows,(r:AnyRow)=>[r.number,r.supplier,r.locations,Number(r.itemCount),r.effectiveStatus||r.status,r.endDate||'']);return <Card><CardHeader className="border-b"><CardTitle>{title}</CardTitle></CardHeader><CardContent className="px-0 pb-0"><Table><TableHeader><CabecalhoOrdenavel acoes={false} titulos={['Acordo','Fornecedor','Localidades','Itens','Situação','Vigência']} ordem={ordem} onAlternar={alternar}/></TableHeader><TableBody>{ordenadas.map((r:AnyRow)=><TableRow key={r.id}><TableCell><button className="text-left" onClick={()=>onOpen(r.id)}><span className="block font-mono text-xs font-semibold text-primary hover:underline">{r.number}</span></button></TableCell><TableCell><p className="font-medium">{r.supplier}</p><p className="text-xs text-muted-foreground">{cnpj(r.cnpj)}</p></TableCell><TableCell className="max-w-72 truncate">{r.locations||'—'}</TableCell><TableCell>{Number(r.itemCount).toLocaleString('pt-BR')}</TableCell><TableCell><Status value={r.effectiveStatus||r.status}/></TableCell><TableCell>{date(r.endDate)}</TableCell></TableRow>)}</TableBody></Table></CardContent></Card>}
+function AgreementTable({ rows, onOpen, title, ordem, alternar }: JsonData) {
+  const ordenadas = rows;
+  return (
+    <Card>
+      <CardHeader className="border-b">
+        <CardTitle>{title}</CardTitle>
+      </CardHeader>
+      <CardContent className="max-h-[calc(100dvh-21rem)] overflow-auto px-0 pb-0">
+        <Table>
+          <TableHeader>
+            <CabecalhoOrdenavel
+              acoes={false}
+              titulos={[
+                'Acordo',
+                'Fornecedor',
+                'Localidades',
+                'Itens',
+                'Situação',
+                'Vigência',
+              ]}
+              ordem={ordem}
+              onAlternar={alternar}
+            />
+          </TableHeader>
+          <TableBody>
+            {ordenadas.map((r: AnyRow) => (
+              <TableRow key={r.id}>
+                <TableCell>
+                  <button className="text-left" onClick={() => onOpen(r.id)}>
+                    <span className="block font-mono text-xs font-semibold text-primary hover:underline">
+                      {r.number}
+                    </span>
+                  </button>
+                </TableCell>
+                <TableCell>
+                  <p className="font-medium">{r.supplier}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {cnpj(r.cnpj)}
+                  </p>
+                </TableCell>
+                <TableCell className="max-w-72 truncate">
+                  {r.locations || '—'}
+                </TableCell>
+                <TableCell>
+                  {Number(r.itemCount).toLocaleString('pt-BR')}
+                </TableCell>
+                <TableCell>
+                  <Status value={r.effectiveStatus || r.status} />
+                </TableCell>
+                <TableCell>{date(r.endDate)}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </CardContent>
+    </Card>
+  );
+}
 
-function AgreementDetail({id,revision,canWrite,isAdmin,onBack,onEdit,onItem,onImport,onDelete,run}:JsonData){const [detail,setDetail]=useState<AnyRow|null>(null),[q,setQ]=useState(''),[loadError,setLoadError]=useState(''),[moreBusy,setMoreBusy]=useState(false),[ordem,setOrdem]=useState({coluna:0,direcao:1});const sortKeys=['item','model','location','brands','unit','price'];const querySort=`sort=${sortKeys[ordem.coluna]}&direction=${ordem.direcao===1?'asc':'desc'}`;const alternar=(coluna:number)=>setOrdem(atual=>({coluna,direcao:atual.coluna===coluna?-atual.direcao:1}));const loadMore=async()=>{if(!detail||moreBusy)return;setMoreBusy(true);try{const next=await api(`/api/agreements/${id}?${querySort}&offset=${detail.items.length}`);if(next.version!==detail.version||next.totalItems!==detail.totalItems){setDetail(null);await load();return}setDetail({...next,items:[...detail.items,...next.items]})}catch(error){setLoadError(errorText(error))}finally{setMoreBusy(false)}};const load=useCallback(async()=>{try{const next=await api(`/api/agreements/${id}?${querySort}`);setDetail(next);setLoadError('')}catch(error){setLoadError(errorText(error))}},[id,querySort]);useEffect(()=>{void load()},[load,revision]);if(loadError)return <div className="space-y-4"><p role="alert">{loadError}</p><Button onClick={()=>void load()}>Tentar novamente</Button><Button variant="outline" onClick={onBack}>← Voltar</Button></div>;if(!detail)return <Loading label="Abrindo acordo…"/>;const a=detail.agreement, items=detail.items.filter((x:AnyRow)=>!q||correspondeBusca(`${x.item} ${x.model} ${x.city} ${x.brands}`,q));return <div className="space-y-5"><div className="flex flex-wrap items-center gap-3"><Button variant="outline" onClick={onBack}>← Voltar</Button><div className="min-w-0 flex-1"><div className="flex items-center gap-2"><h2 className="truncate text-2xl font-semibold">{a.number}</h2><Status value={a.effectiveStatus||a.status}/></div><p className="text-sm text-muted-foreground">{a.supplier} · {cnpj(a.cnpj)}</p></div>{canWrite&&<><Button variant="outline" onClick={()=>onEdit({...a,locationIds:detail.locations.map((x:AnyRow)=>x.id),supplierId:a.supplier_id,startDate:a.start_date,endDate:a.end_date})}><Pencil/> Editar acordo</Button><Button variant="outline" onClick={onImport}><Upload/> Substituir tabela</Button>{isAdmin&&<Button variant="outline" className="text-destructive hover:bg-destructive/10" onClick={()=>onDelete(a,detail)}><Trash2/> Excluir acordo</Button>}<Button onClick={()=>onItem({agreementId:id,modelIds:[],price:'',locationIds:detail.locations.map((x:AnyRow)=>x.id),locationId:detail.locations.length===1?detail.locations[0].id:''})}><Plus/> Nova condição</Button></>}</div><section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"><Info label="Situação" value={statusName(a.effectiveStatus||a.status)}/><Info label="Início" value={date(a.start_date)}/><Info label="Fim" value={date(a.end_date)}/><Info label="Versões" value={String(detail.versions.length)}/></section><Card><CardHeader className="border-b sm:grid-cols-[1fr_auto]"><div><CardTitle>Tabela vigente</CardTitle><p className="mt-1 text-sm text-muted-foreground">{detail.items.length.toLocaleString('pt-BR')} de {Number(detail.totalItems??detail.items.length).toLocaleString('pt-BR')} condições carregadas em {detail.locations.length} localidades.</p></div><div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"/><Input className="pl-9" placeholder="Filtrar condições carregadas" aria-label="Filtrar condições carregadas" value={q} onChange={e=>setQ(e.target.value)}/></div></CardHeader><CardContent className="max-h-[62vh] overflow-auto px-0 pb-0"><Table><TableHeader className="sticky top-0 z-10 bg-card"><CabecalhoOrdenavel titulos={['Item','Modelo','Local','Marcas','Unid.','Preço']} ordem={ordem} onAlternar={alternar} acoes={canWrite}/></TableHeader><TableBody>{items.map((r:AnyRow)=><TableRow key={r.id}><TableCell className="font-medium">{r.item}</TableCell><TableCell>{r.model}</TableCell><TableCell>{r.city} / {r.state}</TableCell><TableCell className="max-w-56 truncate text-muted-foreground">{r.brands||'Livre'}</TableCell><TableCell>{r.unit}</TableCell><TableCell className="text-right font-semibold">{r.courtesy?<Badge className="bg-sky-50 text-sky-700">Cortesia</Badge>:money(r.price)}</TableCell>{canWrite&&<TableCell><div className="flex justify-end gap-1"><Button size="icon-sm" variant="ghost" aria-label="Editar condição" onClick={()=>onItem({...r,agreementId:id,modelIds:[r.modelId],locationIds:detail.locations.map((x:AnyRow)=>x.id)})}><Pencil/></Button><Button size="icon-sm" variant="ghost" aria-label="Remover condição" className="text-destructive" onClick={()=>confirm('Remover esta condição?')&&run(async()=>{await api(`/api/items/${r.id}`,{method:'DELETE'});await load()},'Condição removida.')}><Trash2/></Button></div></TableCell>}</TableRow>)}</TableBody></Table></CardContent>{detail.items.length<detail.totalItems&&<div className="space-y-2 p-4"><p className="text-sm text-muted-foreground">A ordenação considera todas as condições. O filtro considera apenas as já carregadas.</p><Button variant="outline" disabled={moreBusy} onClick={()=>void loadMore()}>{moreBusy?'Carregando…':'Carregar mais condições'}</Button></div>}</Card></div>}
-function Info({label,value}:JsonData){return <Card size="sm"><CardContent><p className="text-xs text-muted-foreground">{label}</p><p className="mt-1 font-semibold">{value}</p></CardContent></Card>}
+function AgreementDetail({
+  id,
+  revision,
+  canWrite,
+  isAdmin,
+  onBack,
+  onEdit,
+  onItem,
+  onImport,
+  onDelete,
+  run,
+}: JsonData) {
+  const [q, setQ] = useState(''),
+    [page, setPage] = useState(1),
+    [pageSize, setPageSize] = useState(25),
+    [ordem, setOrdem] = useState({ coluna: 0, direcao: 1 });
+  const sortKeys = ['item', 'model', 'location', 'brands', 'unit', 'price'];
+  const alternar = (coluna: number) => {
+    setPage(1);
+    setOrdem((atual) => ({
+      coluna,
+      direcao: atual.coluna === coluna ? -atual.direcao : 1,
+    }));
+  };
+  const result = usePagedList(
+    '/api/agreements/' + id,
+    {
+      page: String(page),
+      pageSize: String(pageSize),
+      q,
+      sort: sortKeys[ordem.coluna],
+      direction: ordem.direcao === 1 ? 'asc' : 'desc',
+    },
+    revision,
+  );
+  const { data: detail, error: loadError, load } = result;
+  if (loadError)
+    return (
+      <div className="space-y-4">
+        <p role="alert">{loadError}</p>
+        <Button onClick={() => void load()}>Tentar novamente</Button>
+        <Button variant="outline" onClick={onBack}>
+          ← Voltar
+        </Button>
+      </div>
+    );
+  if (!detail) return <Loading label="Abrindo acordo…" />;
+  const a = detail.agreement,
+    items = detail.items;
+  return (
+    <div className="space-y-5">
+      <div className="flex flex-wrap items-center gap-3">
+        <Button variant="outline" onClick={onBack}>
+          ← Voltar
+        </Button>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <h2 className="truncate text-2xl font-semibold">{a.number}</h2>
+            <Status value={a.effectiveStatus || a.status} />
+          </div>
+          <p className="text-sm text-muted-foreground">
+            {a.supplier} · {cnpj(a.cnpj)}
+          </p>
+        </div>
+        {canWrite && (
+          <>
+            <Button
+              variant="outline"
+              onClick={() =>
+                onEdit({
+                  ...a,
+                  locationIds: detail.locations.map((x: AnyRow) => x.id),
+                  supplierId: a.supplier_id,
+                  startDate: a.start_date,
+                  endDate: a.end_date,
+                })
+              }
+            >
+              <Pencil /> Editar acordo
+            </Button>
+            <Button variant="outline" onClick={onImport}>
+              <Upload /> Substituir tabela
+            </Button>
+            {isAdmin && (
+              <Button
+                variant="outline"
+                className="text-destructive hover:bg-destructive/10"
+                onClick={() => onDelete(a, detail)}
+              >
+                <Trash2 /> Excluir acordo
+              </Button>
+            )}
+            <Button
+              onClick={() =>
+                onItem({
+                  agreementId: id,
+                  modelIds: [],
+                  price: '',
+                  locationIds: detail.locations.map((x: AnyRow) => x.id),
+                  locationId:
+                    detail.locations.length === 1 ? detail.locations[0].id : '',
+                })
+              }
+            >
+              <Plus /> Nova condição
+            </Button>
+          </>
+        )}
+      </div>
+      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <Info
+          label="Situação"
+          value={statusName(a.effectiveStatus || a.status)}
+        />
+        <Info label="Início" value={date(a.start_date)} />
+        <Info label="Fim" value={date(a.end_date)} />
+        <Info label="Versões" value={String(detail.versions.length)} />
+      </section>
+      <Card>
+        <CardHeader className="border-b sm:grid-cols-[1fr_auto]">
+          <div>
+            <CardTitle>Tabela vigente</CardTitle>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {detail.items.length.toLocaleString('pt-BR')} de{' '}
+              {Number(detail.totalItems ?? detail.items.length).toLocaleString(
+                'pt-BR',
+              )}{' '}
+              condições carregadas em {detail.locations.length} localidades.
+            </p>
+          </div>
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              className="pl-9"
+              placeholder="Buscar em todas as condições"
+              aria-label="Buscar em todas as condições"
+              value={q}
+              onChange={(e) => {
+                setQ(e.target.value);
+                setPage(1);
+              }}
+            />
+          </div>
+        </CardHeader>
+        <CardContent className="max-h-[62vh] overflow-auto px-0 pb-0">
+          <Table>
+            <TableHeader className="sticky top-0 z-10 bg-card">
+              <CabecalhoOrdenavel
+                titulos={[
+                  'Item',
+                  'Modelo',
+                  'Local',
+                  'Marcas',
+                  'Unid.',
+                  'Preço',
+                ]}
+                ordem={ordem}
+                onAlternar={alternar}
+                acoes={canWrite}
+              />
+            </TableHeader>
+            <TableBody>
+              {items.map((r: AnyRow) => (
+                <TableRow key={r.id}>
+                  <TableCell className="font-medium">{r.item}</TableCell>
+                  <TableCell>{r.model}</TableCell>
+                  <TableCell>
+                    {r.city} / {r.state}
+                  </TableCell>
+                  <TableCell className="max-w-56 truncate text-muted-foreground">
+                    {r.brands || 'Livre'}
+                  </TableCell>
+                  <TableCell>{r.unit}</TableCell>
+                  <TableCell className="text-right font-semibold">
+                    {r.courtesy ? (
+                      <Badge className="bg-sky-50 text-sky-700">Cortesia</Badge>
+                    ) : (
+                      money(r.price)
+                    )}
+                  </TableCell>
+                  {canWrite && (
+                    <TableCell>
+                      <div className="flex justify-end gap-1">
+                        <Button
+                          size="icon-sm"
+                          variant="ghost"
+                          aria-label="Editar condição"
+                          onClick={() =>
+                            onItem({
+                              ...r,
+                              agreementId: id,
+                              modelIds: [r.modelId],
+                              locationIds: detail.locations.map(
+                                (x: AnyRow) => x.id,
+                              ),
+                            })
+                          }
+                        >
+                          <Pencil />
+                        </Button>
+                        <Button
+                          size="icon-sm"
+                          variant="ghost"
+                          aria-label="Remover condição"
+                          className="text-destructive"
+                          onClick={() =>
+                            confirm('Remover esta condição?') &&
+                            run(async () => {
+                              await api(`/api/items/${r.id}`, {
+                                method: 'DELETE',
+                              });
+                              await load();
+                            }, 'Condição removida.')
+                          }
+                        >
+                          <Trash2 />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  )}
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </CardContent>
+        <Pagination
+          page={detail.page || page}
+          pageSize={pageSize}
+          total={detail.total || 0}
+          busy={result.loading}
+          onPage={setPage}
+          onPageSize={(size) => {
+            setPageSize(size);
+            setPage(1);
+          }}
+        />
+      </Card>
+    </div>
+  );
+}
+function Info({ label, value }: JsonData) {
+  return (
+    <Card size="sm">
+      <CardContent>
+        <p className="text-xs text-muted-foreground">{label}</p>
+        <p className="mt-1 font-semibold">{value}</p>
+      </CardContent>
+    </Card>
+  );
+}
 
 // Ordenacao no cliente: a listagem ja vem inteira do servidor, entao nao ha
 // motivo para ida e volta. Sao tres estados por coluna — crescente, decrescente
 // e sem ordenacao — para dar como voltar a ordem original. A comparacao usa
 // colacao pt-BR com numeric, para "HILUX 2.10" vir depois de "HILUX 2.8" e
 // acento nao jogar a palavra para o fim da lista.
-function useOrdenacao(chave?:string){
-  const [escolha,setEscolha]=useState<AnyRow|null>(null);
+function useOrdenacao(chave?: string) {
+  const [escolha, setEscolha] = useState<AnyRow | null>(null);
   // A escolha guarda a aba em que foi feita. Trocar de aba muda o significado
   // das colunas, entao a escolha antiga passa a ser ignorada — derivado, sem
   // efeito colateral, que e o que o react-compiler exige.
-  const ordem=escolha&&escolha.chave===chave?escolha:null;
-  const alternar=(coluna:number)=>setEscolha(!ordem||ordem.coluna!==coluna?{chave,coluna,direcao:1}:ordem.direcao===1?{chave,coluna,direcao:-1}:null);
+  const ordem = escolha && escolha.chave === chave ? escolha : null;
+  const alternar = (coluna: number) =>
+    setEscolha(
+      !ordem || ordem.coluna !== coluna
+        ? { chave, coluna, direcao: 1 }
+        : ordem.direcao === 1
+          ? { chave, coluna, direcao: -1 }
+          : null,
+    );
   // Converte so o que tem representacao textual obvia. String() sobre valor de
   // tipo desconhecido produziria "[object Object]" numa celula que fosse um no
   // de JSX, e a ordenacao sairia errada sem ninguem notar.
-  const texto=(valor:unknown)=>typeof valor==='string'?valor:typeof valor==='number'||typeof valor==='boolean'?String(valor):'';
-  const ordenar=(linhas:AnyRow[],valores:(linha:AnyRow)=>unknown[])=>{
-    if(!ordem) return linhas;
-    const colacao=new Intl.Collator('pt-BR',{numeric:true,sensitivity:'base'});
-    return [...linhas].sort((a,b)=>colacao.compare(texto(valores(a)[ordem.coluna]),texto(valores(b)[ordem.coluna]))*ordem.direcao);
+  const texto = (valor: unknown) =>
+    typeof valor === 'string'
+      ? valor
+      : typeof valor === 'number' || typeof valor === 'boolean'
+        ? String(valor)
+        : '';
+  const ordenar = (linhas: AnyRow[], valores: (linha: AnyRow) => unknown[]) => {
+    if (!ordem) return linhas;
+    const colacao = new Intl.Collator('pt-BR', {
+      numeric: true,
+      sensitivity: 'base',
+    });
+    return [...linhas].sort(
+      (a, b) =>
+        colacao.compare(
+          texto(valores(a)[ordem.coluna]),
+          texto(valores(b)[ordem.coluna]),
+        ) * ordem.direcao,
+    );
   };
-  return {ordem,alternar,ordenar};
+  return { ordem, alternar, ordenar };
 }
 
-function CabecalhoOrdenavel({titulos,ordem,onAlternar,acoes=true}:JsonData){
-  return <TableRow>{titulos.map((titulo:string,indice:number)=><TableHead key={titulo}>
-    <button type="button" className="flex items-center gap-1 hover:text-foreground" onClick={()=>onAlternar(indice)} aria-label={`Ordenar por ${titulo}`}>
-      {titulo}{ordem?.coluna===indice?(ordem.direcao===1?<ArrowUp className="size-3"/>:<ArrowDown className="size-3"/>):<ArrowUpDown className="size-3 opacity-40"/>}
-    </button>
-  </TableHead>)}{acoes&&<TableHead/>}</TableRow>;
+function CabecalhoOrdenavel({
+  titulos,
+  ordem,
+  onAlternar,
+  acoes = true,
+}: JsonData) {
+  return (
+    <TableRow>
+      {titulos.map((titulo: string, indice: number) => (
+        <TableHead key={titulo}>
+          <button
+            type="button"
+            className="flex items-center gap-1 hover:text-foreground"
+            onClick={() => onAlternar(indice)}
+            aria-label={`Ordenar por ${titulo}`}
+          >
+            {titulo}
+            {ordem?.coluna === indice ? (
+              ordem.direcao === 1 ? (
+                <ArrowUp className="size-3" />
+              ) : (
+                <ArrowDown className="size-3" />
+              )
+            ) : (
+              <ArrowUpDown className="size-3 opacity-40" />
+            )}
+          </button>
+        </TableHead>
+      ))}
+      {acoes && <TableHead />}
+    </TableRow>
+  );
 }
 
-function CatalogPage({type,rows,onAdd,onEdit,onDelete}:JsonData){const [q,setQ]=useState('');const {ordem,alternar,ordenar}=useOrdenacao(type);const names:AnyRow={suppliers:['Fornecedores'],items:['Peças e serviços'],models:['Modelos de veículos'],units:['Unidades de medida'],locations:['Localidades']};const list=rows.filter((r:AnyRow)=>correspondeBusca(JSON.stringify(r),q));return <div className="space-y-5"><div className="flex gap-3"><div className="relative flex-1"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"/><Input className="pl-9" placeholder={`Pesquisar ${names[type][0].toLowerCase()}`} value={q} onChange={e=>setQ(e.target.value)}/></div><Button onClick={onAdd}><Plus/> Novo</Button></div><Card><CardHeader className="border-b"><CardTitle>{names[type][0]} · {list.length}</CardTitle></CardHeader><CardContent className="px-0 pb-0"><Table><TableHeader><CabecalhoOrdenavel titulos={catalogHeaders(type)} ordem={ordem} onAlternar={alternar}/></TableHeader><TableBody>{ordenar(list,(r:AnyRow)=>catalogCells(type,r)).map((r:AnyRow)=><TableRow key={r.id}>{catalogCells(type,r).map((x,i)=><TableCell key={i} className={i===0?'font-medium':''}>{x}</TableCell>)}<TableCell><div className="flex justify-end gap-1"><Button size="icon-sm" variant="ghost" aria-label="Editar" onClick={()=>onEdit(r)}><Pencil/></Button>{onDelete&&<Button size="icon-sm" variant="ghost" aria-label="Excluir" className="text-destructive hover:bg-destructive/10" onClick={()=>onDelete(r)}><Trash2/></Button>}</div></TableCell></TableRow>)}</TableBody></Table></CardContent></Card></div>}
-function Catalogs({data,onAdd,onEdit,onDelete}:JsonData){const [type,setType]=useState('items');const labels:AnyRow={items:'Peças e serviços',models:'Modelos',units:'Unidades',locations:'Localidades'};return <div className="space-y-5"><div className="flex flex-wrap gap-2">{Object.entries(labels).map(([k,v])=><Button key={k} variant={type===k?'default':'outline'} onClick={()=>setType(k)}>{String(v)}</Button>)}</div><CatalogPage type={type} rows={data.catalogs[type]} onAdd={()=>onAdd(type)} onEdit={(row:AnyRow)=>onEdit(type,row)} onDelete={(row:AnyRow)=>onDelete(type,row)}/></div>}
-function catalogHeaders(type:string){if(type==='suppliers')return['Nome','Razão social','CNPJ','Cidade','UF','Situação'];if(type==='locations')return['UF','Cidade'];if(type==='units')return['Unidade','Situação'];if(type==='items')return['Nome','Situação'];return['Nome','Situação']}
-function catalogCells(type:string,r:AnyRow){if(type==='suppliers')return[r.tradeName,r.legalName,cnpj(r.cnpj),r.city||'—',r.state||'—',r.active?'Ativo':'Inativo'];if(type==='locations')return[r.state,r.city];if(type==='units')return[r.code,r.active?'Ativa':'Inativa'];if(type==='items')return[r.name,r.active?'Ativo':'Inativo'];return[r.name,r.active?'Ativo':'Inativo']}
-
-const ticketStatusMap:AnyRow={aberto:['Aberto','bg-sky-50 text-sky-700 ring-1 ring-sky-200'],aguardando_fornecedor:['Aguardando fornecedor','bg-violet-50 text-violet-700 ring-1 ring-violet-200'],fechado:['Fechado','bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200'],cancelado:['Cancelado','bg-slate-100 text-slate-600 ring-1 ring-slate-200']};
-const priorityMap:AnyRow={alta:['Alta','bg-red-50 text-red-700'],media:['Média','bg-amber-50 text-amber-700'],baixa:['Baixa','bg-slate-100 text-slate-600']};
-function tempoEmAberto(criadoEm:string,fechadoEm?:string|null){
-  const inicio=new Date(criadoEm).getTime(), fim=fechadoEm?new Date(fechadoEm).getTime():Date.now();
-  const ms=Math.max(fim-inicio,0), horas=Math.floor(ms/3600000), dias=Math.floor(horas/24);
-  const rotulo=dias>=1?`${dias}d ${horas%24}h`:horas>=1?`${horas}h ${Math.floor((ms%3600000)/60000)}min`:`${Math.floor(ms/60000)}min`;
-  return {dias,horas,rotulo,encerrado:!!fechadoEm};
-}
-function Sla({createdAt,closedAt}:JsonData){
-  const t=tempoEmAberto(createdAt,closedAt);
-  if(t.encerrado) return <div><p className="font-medium tabular-nums">{t.rotulo}</p><p className="text-[11px] text-muted-foreground">até o encerramento</p></div>;
-  const tom=t.dias>=15?'text-red-700':t.dias>=7?'text-amber-700':'text-foreground';
-  const aviso=t.dias>=15?'acima de 15 dias':t.dias>=7?'acima de 7 dias':'em andamento';
-  return <div><p className={`font-semibold tabular-nums ${tom}`}>{t.rotulo}</p><p className={`text-[11px] ${t.dias>=7?tom:'text-muted-foreground'}`}>{aviso}</p></div>;
-}
-function TicketStatus({value}:JsonData){const x=ticketStatusMap[value]||[value,'bg-slate-100'];return <Badge className={x[1]}>{x[0]}</Badge>}
-
-function Tickets({users,agreements,run,initialDetail}:JsonData){
-  const [data,setData]=useState<AnyRow|null>(null),[group,setGroup]=useState<'ativos'|'fechados'|'cancelados'>('ativos'),[sortBy,setSortBy]=useState('updatedAt'),[sortDirection,setSortDirection]=useState('desc'),[q,setQ]=useState(''),[open,setOpen]=useState<AnyRow|null>(null),[detail,setDetail]=useState<string|null>(initialDetail||null);
-  const load=useCallback(()=>api('/api/tickets').then(setData),[]);
-  useEffect(()=>{void load()},[load]);
-  if(!data) return <Loading label="Carregando chamados…"/>;
-  if(detail) return <TicketDetail id={detail} users={users} agreements={agreements} onBack={()=>{setDetail(null);void load()}} run={run}/>;
-  const s=data.stats||{};
-  const prioridade:AnyRow={alta:1,media:2,baixa:3};
-  const valorOrdenacao=(r:AnyRow)=>sortBy==='code'?Number(String(r.code).replace(/\D/g,'')):sortBy==='priority'?prioridade[r.priority]||9:sortBy==='openTime'?Date.parse(r.closedAt||new Date().toISOString())-Date.parse(r.createdAt):sortBy==='updatedAt'?Date.parse(r.updatedAt):String(r[sortBy]||'');
-  const groupStatuses:AnyRow={ativos:['aberto','aguardando_fornecedor'],fechados:['fechado'],cancelados:['cancelado']};
-  const rows=(data.tickets||[]).filter((r:AnyRow)=>groupStatuses[group].includes(r.status)&&(!q||correspondeBusca(`${r.code} ${r.supplierName} ${r.city}`,q))).sort((a:AnyRow,b:AnyRow)=>{const av=valorOrdenacao(a),bv=valorOrdenacao(b);const result=typeof av==='number'&&typeof bv==='number'?av-bv:String(av).localeCompare(String(bv),'pt-BR',{sensitivity:'base'});return sortDirection==='asc'?result:-result});
-  const cards=[['Abertos',s.aberto],['Aguardando',s.aguardando],['Fechados',s.fechado]];
-  return <div className="space-y-6">
-    <section className="grid gap-3 sm:grid-cols-3">{cards.map(([label,value]:JsonData,i:number)=><Card key={label} className="overflow-hidden shadow-sm animate-in fade-in slide-in-from-bottom-2 fill-mode-both" style={{animationDelay:`${i*60}ms`}}><CardContent><p className="text-sm font-medium text-muted-foreground">{label}</p><p className="mt-2 text-4xl font-semibold tabular-nums tracking-[-.045em]">{Number(value||0)}</p></CardContent></Card>)}</section>
-    <div className="flex flex-wrap gap-2 rounded-xl border bg-muted/35 p-1.5" role="tablist" aria-label="Situação dos chamados">{([['ativos','Ativos',Number(s.aberto||0)+Number(s.aguardando||0)],['fechados','Finalizados',s.fechado],['cancelados','Cancelados',s.cancelado]] as const).map(([key,label,count])=><Button key={key} role="tab" aria-selected={group===key} variant={group===key?'default':'ghost'} onClick={()=>setGroup(key)}>{label}<Badge className={group===key?'bg-white/20 text-white':'bg-background text-foreground'}>{Number(count||0)}</Badge></Button>)}</div>
-    {Number(s.total||0)>(data.tickets||[]).length&&<Alert><AlertTriangle/><AlertTitle>Lista incompleta</AlertTitle><AlertDescription>Mostrando os {(data.tickets||[]).length} chamados atualizados mais recentemente, de {Number(s.total).toLocaleString('pt-BR')}.</AlertDescription></Alert>}
-    <div className="flex flex-wrap gap-3">
-      <div className="relative min-w-0 basis-64 flex-1"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"/><Input className="pl-9" placeholder="Código, fornecedor ou cidade" value={q} onChange={e=>setQ(e.target.value)}/></div>
-      <NativeSelect className="w-44" aria-label="Ordenar chamados por" value={sortBy} onChange={e=>setSortBy(e.target.value)}><NativeSelectOption value="updatedAt">Atualização</NativeSelectOption><NativeSelectOption value="code">Código</NativeSelectOption><NativeSelectOption value="supplierName">Fornecedor</NativeSelectOption><NativeSelectOption value="city">Cidade</NativeSelectOption><NativeSelectOption value="priority">Prioridade</NativeSelectOption><NativeSelectOption value="status">Situação</NativeSelectOption><NativeSelectOption value="openTime">Em aberto</NativeSelectOption><NativeSelectOption value="requestedBy">Solicitante</NativeSelectOption></NativeSelect>
-      <NativeSelect className="w-36" aria-label="Direção da ordenação" value={sortDirection} onChange={e=>setSortDirection(e.target.value)}><NativeSelectOption value="asc">Crescente</NativeSelectOption><NativeSelectOption value="desc">Decrescente</NativeSelectOption></NativeSelect>
-      <Button onClick={()=>setOpen({priority:'media'})}><Plus/> Novo chamado</Button>
+function CatalogPage({ type, rows, onAdd, onEdit, onDelete }: JsonData) {
+  const [q, setQ] = useState(''),
+    [page, setPage] = useState(1),
+    [pageSize, setPageSize] = useState(25);
+  const { ordem, alternar, ordenar } = useOrdenacao(type);
+  const names: AnyRow = {
+    suppliers: ['Fornecedores'],
+    items: ['Peças e serviços'],
+    models: ['Modelos de veículos'],
+    units: ['Unidades de medida'],
+    locations: ['Localidades'],
+  };
+  const list = rows.filter((r: AnyRow) =>
+    correspondeBusca(JSON.stringify(r), q),
+  );
+  return (
+    <div className="space-y-5">
+      <div className="flex gap-3">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            className="pl-9"
+            placeholder={`Pesquisar ${names[type][0].toLowerCase()}`}
+            value={q}
+            onChange={(e) => {
+              setQ(e.target.value);
+              setPage(1);
+            }}
+          />
+        </div>
+        <Button onClick={onAdd}>
+          <Plus /> Novo
+        </Button>
+      </div>
+      <Card>
+        <CardHeader className="border-b">
+          <CardTitle>
+            {names[type][0]} · {list.length}
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="px-0 pb-0">
+          <Table>
+            <TableHeader>
+              <CabecalhoOrdenavel
+                titulos={catalogHeaders(type)}
+                ordem={ordem}
+                onAlternar={alternar}
+              />
+            </TableHeader>
+            <TableBody>
+              {ordenar(list, (r: AnyRow) => catalogCells(type, r))
+                .slice(
+                  (Math.min(
+                    page,
+                    Math.max(1, Math.ceil(list.length / pageSize)),
+                  ) -
+                    1) *
+                    pageSize,
+                  Math.min(
+                    page,
+                    Math.max(1, Math.ceil(list.length / pageSize)),
+                  ) * pageSize,
+                )
+                .map((r: AnyRow) => (
+                  <TableRow key={r.id}>
+                    {catalogCells(type, r).map((x, i) => (
+                      <TableCell
+                        key={i}
+                        className={i === 0 ? 'font-medium' : ''}
+                      >
+                        {x}
+                      </TableCell>
+                    ))}
+                    <TableCell>
+                      <div className="flex justify-end gap-1">
+                        <Button
+                          size="icon-sm"
+                          variant="ghost"
+                          aria-label="Editar"
+                          onClick={() => onEdit(r)}
+                        >
+                          <Pencil />
+                        </Button>
+                        {onDelete && (
+                          <Button
+                            size="icon-sm"
+                            variant="ghost"
+                            aria-label="Excluir"
+                            className="text-destructive hover:bg-destructive/10"
+                            onClick={() => onDelete(r)}
+                          >
+                            <Trash2 />
+                          </Button>
+                        )}
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+      <Pagination
+        page={Math.min(page, Math.max(1, Math.ceil(list.length / pageSize)))}
+        pageSize={pageSize}
+        total={list.length}
+        onPage={setPage}
+        onPageSize={(size) => {
+          setPageSize(size);
+          setPage(1);
+        }}
+      />
     </div>
-    {rows.length?<Card className="min-w-0"><CardHeader className="border-b"><CardTitle>{rows.length} chamado(s)</CardTitle></CardHeader><CardContent className="min-w-0 px-0 pb-0"><Table className="min-w-[960px]"><TableHeader><TableRow><TableHead>Código</TableHead><TableHead>Fornecedor</TableHead><TableHead>Local</TableHead><TableHead>Prioridade</TableHead><TableHead>Situação</TableHead><TableHead>Em aberto</TableHead><TableHead>Solicitante</TableHead><TableHead>Atualizado</TableHead></TableRow></TableHeader><TableBody>{rows.map((r:AnyRow)=><TableRow key={r.id}><TableCell><button className="text-left" onClick={()=>setDetail(r.id)}><span className="block font-mono text-xs font-semibold text-primary hover:underline">{r.code}</span></button></TableCell><TableCell className="font-medium">{r.supplierName}{r.cnpj?<p className="text-xs font-normal text-muted-foreground">{cnpj(r.cnpj)}</p>:null}</TableCell><TableCell>{r.city?`${r.city} / ${r.state||''}`:'—'}</TableCell><TableCell><Badge className={(priorityMap[r.priority]||['—','bg-slate-100'])[1]}>{(priorityMap[r.priority]||['—'])[0]}</Badge></TableCell><TableCell><TicketStatus value={r.status}/></TableCell><TableCell className="text-sm"><Sla createdAt={r.createdAt} closedAt={r.closedAt}/></TableCell><TableCell className="text-sm">{r.requestedBy||'—'}</TableCell><TableCell className="text-sm text-muted-foreground">{new Date(r.updatedAt).toLocaleDateString('pt-BR')}</TableCell></TableRow>)}</TableBody></Table></CardContent></Card>:<Empty icon={MessageSquare} title="Nenhum chamado" text="Abra um chamado para registrar um fornecedor que precisa ser negociado."/>}
-    {open&&<TicketDialog open value={open} users={users} agreements={agreements} onClose={()=>setOpen(null)} onSave={(body:AnyRow)=>run(async()=>{await api('/api/tickets',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});setOpen(null);await load()},'Chamado aberto.')}/>}
-  </div>;
+  );
+}
+function Catalogs({ data, onAdd, onEdit, onDelete }: JsonData) {
+  const [type, setType] = useState('items');
+  const labels: AnyRow = {
+    items: 'Peças e serviços',
+    models: 'Modelos',
+    units: 'Unidades',
+    locations: 'Localidades',
+  };
+  return (
+    <div className="space-y-5">
+      <div className="flex flex-wrap gap-2">
+        {Object.entries(labels).map(([k, v]) => (
+          <Button
+            key={k}
+            variant={type === k ? 'default' : 'outline'}
+            onClick={() => setType(k)}
+          >
+            {String(v)}
+          </Button>
+        ))}
+      </div>
+      <CatalogPage
+        key={type}
+        type={type}
+        rows={data.catalogs[type]}
+        onAdd={() => onAdd(type)}
+        onEdit={(row: AnyRow) => onEdit(type, row)}
+        onDelete={(row: AnyRow) => onDelete(type, row)}
+      />
+    </div>
+  );
+}
+function catalogHeaders(type: string) {
+  if (type === 'suppliers')
+    return ['Nome', 'Razão social', 'CNPJ', 'Cidade', 'UF', 'Situação'];
+  if (type === 'locations') return ['UF', 'Cidade'];
+  if (type === 'units') return ['Unidade', 'Situação'];
+  if (type === 'items') return ['Nome', 'Situação'];
+  return ['Nome', 'Situação'];
+}
+function catalogCells(type: string, r: AnyRow) {
+  if (type === 'suppliers')
+    return [
+      r.tradeName,
+      r.legalName,
+      cnpj(r.cnpj),
+      r.city || '—',
+      r.state || '—',
+      r.active ? 'Ativo' : 'Inativo',
+    ];
+  if (type === 'locations') return [r.state, r.city];
+  if (type === 'units') return [r.code, r.active ? 'Ativa' : 'Inativa'];
+  if (type === 'items') return [r.name, r.active ? 'Ativo' : 'Inativo'];
+  return [r.name, r.active ? 'Ativo' : 'Inativo'];
 }
 
-function TicketDetail({id,users,agreements,onBack,run}:JsonData){
-  const [d,setD]=useState<AnyRow|null>(null),[msg,setMsg]=useState(''),[status,setStatus]=useState(''),[statusMessage,setStatusMessage]=useState(''),[editing,setEditing]=useState(false);
-  const load=useCallback(()=>api(`/api/tickets/${id}`).then(x=>{setD(x);setStatus(x.ticket.status);setStatusMessage('')}),[id]);
-  useEffect(()=>{void load()},[load]);
-  if(!d) return <Loading label="Abrindo chamado…"/>;
-  const t=d.ticket;
-  return <div className="space-y-5">
-    <div className="flex flex-wrap items-center gap-3"><Button variant="outline" onClick={onBack}>← Voltar</Button><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><h2 className="truncate text-2xl font-semibold tracking-[-.02em]">{t.supplier_name}</h2><TicketStatus value={t.status}/><Badge className={(priorityMap[t.priority]||['—','bg-slate-100'])[1]}>{(priorityMap[t.priority]||['—'])[0]}</Badge></div><p className="text-sm text-muted-foreground font-mono">{t.code}{t.cnpj?` · ${cnpj(t.cnpj)}`:''}</p></div><Button onClick={()=>setEditing(true)}><Pencil/> Editar chamado</Button></div>
-    <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"><Info label="Solicitante" value={t.requestedBy||'—'}/><Info label="Responsável" value={t.assignedTo||'Não atribuído'}/><Info label="Aberto em" value={new Date(t.created_at).toLocaleDateString('pt-BR')}/><Card size="sm"><CardContent><p className="text-xs text-muted-foreground">{t.closed_at?'Tempo até encerrar':'Tempo em aberto'}</p><div className="mt-1"><Sla createdAt={t.created_at} closedAt={t.closed_at}/></div></CardContent></Card><Info label="Local" value={t.city?`${t.city} / ${t.state||''}`:'—'}/></section>
-    {(t.scope||t.contact||t.notes)&&<Card><CardContent className="space-y-3 pt-5 text-sm">{t.scope&&<div><p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Escopo</p><p className="mt-1">{t.scope}</p></div>}{t.contact&&<div><p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Contato</p><p className="mt-1">{t.contact}</p></div>}{t.notes&&<div><p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Observações</p><p className="mt-1 whitespace-pre-wrap">{t.notes}</p></div>}</CardContent></Card>}
-    <Card><CardHeader className="border-b"><CardTitle>Situação</CardTitle></CardHeader><CardContent className="grid gap-3 pt-4 sm:grid-cols-[minmax(14rem,.6fr)_1fr_auto] sm:items-end"><SelectField label="Alterar para" value={status} onChange={setStatus} rows={Object.entries(ticketStatusMap).map(([k,v]:JsonData)=>({id:k,name:v[0]}))}/><Field label="Mensagem da alteração (opcional)"><Input placeholder="Se quiser, registre o motivo da mudança" value={statusMessage} onChange={e=>setStatusMessage(e.target.value)}/></Field><Button disabled={status===t.status} onClick={()=>run(async()=>{await api(`/api/tickets/${id}`,{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify({status,statusMessage})});await load()},'Situação atualizada.')}><RefreshCw/> Aplicar</Button></CardContent></Card>
-    <Card><CardHeader className="border-b"><CardTitle>Histórico e progresso</CardTitle><p className="mt-1 text-sm text-muted-foreground">{d.events.length} registro(s) neste chamado.</p></CardHeader><CardContent className="pt-5">
-      <ol className="relative space-y-5 border-l border-dashed pl-6">{d.events.map((e:AnyRow)=><li key={e.id} className="relative animate-in fade-in slide-in-from-left-2 fill-mode-both"><span className={`absolute -left-[31px] grid size-5 place-items-center rounded-full ring-4 ring-background ${e.kind==='status'?'bg-amber-500':e.kind==='created'?'bg-teal-500':'bg-slate-300'}`}/><div className="flex flex-wrap items-baseline gap-2"><span className="text-sm font-semibold">{e.user||'Sistema'}</span><span className="text-xs text-muted-foreground">{new Date(e.createdAt).toLocaleString('pt-BR')}</span></div>{e.kind==='status'?<p className="mt-1 text-sm">Situação alterada de <b>{(ticketStatusMap[e.fromStatus]||[e.fromStatus])[0]}</b> para <b>{(ticketStatusMap[e.toStatus]||[e.toStatus])[0]}</b>.</p>:<p className="mt-1 whitespace-pre-wrap text-sm">{e.message}</p>}</li>)}</ol>
-      <div className="mt-6 space-y-3 border-t pt-5"><Field label="Registrar andamento"><Textarea placeholder="O que aconteceu na tratativa?" value={msg} onChange={e=>setMsg(e.target.value)}/></Field><div className="flex justify-end"><Button disabled={!msg.trim()} onClick={()=>run(async()=>{await api(`/api/tickets/${id}/events`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({message:msg})});setMsg('');await load()},'Andamento registrado.')}><Plus/> Adicionar</Button></div></div>
-    </CardContent></Card>
-    {editing&&<TicketDialog open value={{id:t.id,supplierName:t.supplier_name,cnpj:t.cnpj,city:t.city,state:t.state,contact:t.contact,scope:t.scope,priority:t.priority,assignedTo:t.assigned_to,agreementId:t.agreement_id,notes:t.notes}} users={users} agreements={agreements} onClose={()=>setEditing(false)} onSave={(body:AnyRow)=>run(async()=>{await api(`/api/tickets/${id}`,{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify(body)});setEditing(false);await load()},'Chamado atualizado.')}/>}
-  </div>;
+const ticketStatusMap: AnyRow = {
+  aberto: ['Aberto', 'bg-sky-50 text-sky-700 ring-1 ring-sky-200'],
+  aguardando_fornecedor: [
+    'Aguardando fornecedor',
+    'bg-violet-50 text-violet-700 ring-1 ring-violet-200',
+  ],
+  fechado: [
+    'Fechado',
+    'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200',
+  ],
+  cancelado: ['Cancelado', 'bg-slate-100 text-slate-600 ring-1 ring-slate-200'],
+};
+const priorityMap: AnyRow = {
+  alta: ['Alta', 'bg-red-50 text-red-700'],
+  media: ['Média', 'bg-amber-50 text-amber-700'],
+  baixa: ['Baixa', 'bg-slate-100 text-slate-600'],
+};
+function tempoEmAberto(criadoEm: string, fechadoEm?: string | null) {
+  const inicio = new Date(criadoEm).getTime(),
+    fim = fechadoEm ? new Date(fechadoEm).getTime() : Date.now();
+  const ms = Math.max(fim - inicio, 0),
+    horas = Math.floor(ms / 3600000),
+    dias = Math.floor(horas / 24);
+  const rotulo =
+    dias >= 1
+      ? `${dias}d ${horas % 24}h`
+      : horas >= 1
+        ? `${horas}h ${Math.floor((ms % 3600000) / 60000)}min`
+        : `${Math.floor(ms / 60000)}min`;
+  return { dias, horas, rotulo, encerrado: !!fechadoEm };
+}
+function Sla({ createdAt, closedAt }: JsonData) {
+  const t = tempoEmAberto(createdAt, closedAt);
+  if (t.encerrado)
+    return (
+      <div>
+        <p className="font-medium tabular-nums">{t.rotulo}</p>
+        <p className="text-[11px] text-muted-foreground">até o encerramento</p>
+      </div>
+    );
+  const tom =
+    t.dias >= 15
+      ? 'text-red-700'
+      : t.dias >= 7
+        ? 'text-amber-700'
+        : 'text-foreground';
+  const aviso =
+    t.dias >= 15
+      ? 'acima de 15 dias'
+      : t.dias >= 7
+        ? 'acima de 7 dias'
+        : 'em andamento';
+  return (
+    <div>
+      <p className={`font-semibold tabular-nums ${tom}`}>{t.rotulo}</p>
+      <p
+        className={`text-[11px] ${t.dias >= 7 ? tom : 'text-muted-foreground'}`}
+      >
+        {aviso}
+      </p>
+    </div>
+  );
+}
+function TicketStatus({ value }: JsonData) {
+  const x = ticketStatusMap[value] || [value, 'bg-slate-100'];
+  return <Badge className={x[1]}>{x[0]}</Badge>;
 }
 
-function TicketDialog({open,value,users,agreements,onClose,onSave}:JsonData){const [form,setForm]=useState<AnyRow>(value||{priority:'media'}),editing=!!value?.id;return <Dialog open={open} onOpenChange={(x)=>!x&&onClose()}><DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl"><DialogHeader><DialogTitle>{editing?'Editar chamado':'Novo chamado de negociação'}</DialogTitle><DialogDescription>{editing?'Atualize os dados cadastrais e a responsabilidade pelo chamado.':'Registre o fornecedor com quem devemos tentar fechar acordo.'}</DialogDescription></DialogHeader><div className="grid gap-4 sm:grid-cols-2"><Field label="Fornecedor *" className="sm:col-span-2"><Input value={form.supplierName||''} onChange={e=>setForm({...form,supplierName:e.target.value})}/></Field><Field label="CNPJ"><Input value={form.cnpj||''} onChange={e=>setForm({...form,cnpj:e.target.value})}/></Field><Field label="Contato"><Input placeholder="Nome, telefone ou e-mail" value={form.contact||''} onChange={e=>setForm({...form,contact:e.target.value})}/></Field><Field label="Cidade"><Input value={form.city||''} onChange={e=>setForm({...form,city:e.target.value})}/></Field><Field label="UF"><Input maxLength={2} value={form.state||''} onChange={e=>setForm({...form,state:e.target.value.toUpperCase()})}/></Field><SelectField label="Prioridade" value={form.priority||'media'} onChange={(v:string)=>setForm({...form,priority:v})} rows={[{id:'alta',name:'Alta'},{id:'media',name:'Média'},{id:'baixa',name:'Baixa'}]}/><SelectField label="Responsável" value={form.assignedTo||''} onChange={(v:string)=>setForm({...form,assignedTo:v})} rows={users||[]}/>{editing&&<SelectField label="Acordo relacionado" value={form.agreementId||''} onChange={(v:string)=>setForm({...form,agreementId:v})} rows={agreements||[]}/>}<Field label="Escopo pretendido" className="sm:col-span-2"><Input placeholder="Ex.: pneus e alinhamento para a frota leve" value={form.scope||''} onChange={e=>setForm({...form,scope:e.target.value})}/></Field><Field label="Observações" className="sm:col-span-2"><Textarea value={form.notes||''} onChange={e=>setForm({...form,notes:e.target.value})}/></Field></div><DialogFooter><Button variant="outline" onClick={onClose}>Cancelar</Button><Button disabled={!form.supplierName} onClick={()=>onSave(form)}><CheckCircle2/> {editing?'Salvar alterações':'Abrir chamado'}</Button></DialogFooter></DialogContent></Dialog>}
+function Tickets({ users, agreements, run, initialDetail }: JsonData) {
+  const [page, setPage] = useState(1),
+    [pageSize, setPageSize] = useState(25),
+    [group, setGroup] = useState<'ativos' | 'fechados' | 'cancelados'>(
+      'ativos',
+    ),
+    [sortBy, setSortBy] = useState('updatedAt'),
+    [sortDirection, setSortDirection] = useState('desc'),
+    [q, setQ] = useState(''),
+    [open, setOpen] = useState<AnyRow | null>(null),
+    [detail, setDetail] = useState<string | null>(initialDetail || null),
+    [owner, setOwner] = useState('');
+  const result = usePagedList('/api/tickets', {
+    group,
+    q,
+    owner,
+    sort: sortBy,
+    direction: sortDirection,
+    page: String(page),
+    pageSize: String(pageSize),
+  });
+  const { data, load } = result;
+  if (!data)
+    return result.error ? (
+      <ListError error={result.error} onRetry={() => void load()} />
+    ) : (
+      <Loading label="Carregando chamados…" />
+    );
+  if (detail)
+    return (
+      <TicketDetail
+        id={detail}
+        users={users}
+        agreements={agreements}
+        onBack={() => {
+          setDetail(null);
+          void load();
+        }}
+        run={run}
+      />
+    );
+  const s = data.stats || {};
+  const rows = data.tickets || [];
+  const cards = [
+    ['Abertos', s.aberto],
+    ['Aguardando', s.aguardando],
+    ['Fechados', s.fechado],
+  ];
+  return (
+    <div className="space-y-6">
+      <section className="grid gap-3 sm:grid-cols-3">
+        {cards.map(([label, value]: JsonData, i: number) => (
+          <Card
+            size="sm"
+            key={label}
+            className="overflow-hidden shadow-sm animate-in fade-in slide-in-from-bottom-2 fill-mode-both"
+            style={{ animationDelay: `${i * 60}ms` }}
+          >
+            <CardContent>
+              <p className="text-sm font-medium text-muted-foreground">
+                {label}
+              </p>
+              <p className="mt-1 text-3xl font-semibold tabular-nums tracking-[-.045em]">
+                {Number(value || 0)}
+              </p>
+            </CardContent>
+          </Card>
+        ))}
+      </section>
+      <div
+        className="flex flex-wrap gap-2 rounded-xl border bg-muted/35 p-1.5"
+        role="tablist"
+        aria-label="Situação dos chamados"
+      >
+        {(
+          [
+            [
+              'ativos',
+              'Ativos',
+              Number(s.aberto || 0) + Number(s.aguardando || 0),
+            ],
+            ['fechados', 'Finalizados', s.fechado],
+            ['cancelados', 'Cancelados', s.cancelado],
+          ] as const
+        ).map(([key, label, count]) => (
+          <Button
+            key={key}
+            role="tab"
+            aria-selected={group === key}
+            variant={group === key ? 'default' : 'ghost'}
+            onClick={() => {
+              setGroup(key);
+              setPage(1);
+            }}
+          >
+            {label}
+            <Badge
+              className={
+                group === key
+                  ? 'bg-white/20 text-white'
+                  : 'bg-background text-foreground'
+              }
+            >
+              {Number(count || 0)}
+            </Badge>
+          </Button>
+        ))}
+      </div>
+      {result.error && (
+        <ListError error={result.error} onRetry={() => void load()} />
+      )}
+      <div className="flex flex-wrap gap-3">
+        <div className="relative min-w-0 basis-64 flex-1">
+          <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            className="pl-9"
+            placeholder="Código, fornecedor ou cidade"
+            value={q}
+            onChange={(e) => {
+              setQ(e.target.value);
+              setPage(1);
+            }}
+          />
+        </div>
+        <NativeSelect
+          className="w-44"
+          aria-label="Ordenar chamados por"
+          value={sortBy}
+          onChange={(e) => {
+            setSortBy(e.target.value);
+            setPage(1);
+          }}
+        >
+          <NativeSelectOption value="updatedAt">Atualização</NativeSelectOption>
+          <NativeSelectOption value="code">Código</NativeSelectOption>
+          <NativeSelectOption value="supplierName">
+            Fornecedor
+          </NativeSelectOption>
+          <NativeSelectOption value="city">Cidade</NativeSelectOption>
+          <NativeSelectOption value="priority">Prioridade</NativeSelectOption>
+          <NativeSelectOption value="status">Situação</NativeSelectOption>
+          <NativeSelectOption value="openTime">Em aberto</NativeSelectOption>
+          <NativeSelectOption value="requestedBy">
+            Solicitante
+          </NativeSelectOption>
+        </NativeSelect>
+        <NativeSelect
+          className="w-36"
+          aria-label="Direção da ordenação"
+          value={sortDirection}
+          onChange={(e) => {
+            setSortDirection(e.target.value);
+            setPage(1);
+          }}
+        >
+          <NativeSelectOption value="asc">Crescente</NativeSelectOption>
+          <NativeSelectOption value="desc">Decrescente</NativeSelectOption>
+        </NativeSelect>
+        <NativeSelect
+          aria-label="Filtrar por responsável"
+          value={owner}
+          onChange={(e) => {
+            setOwner(e.target.value);
+            setPage(1);
+          }}
+        >
+          <NativeSelectOption value="">
+            Todos os responsáveis
+          </NativeSelectOption>
+          <NativeSelectOption value="unassigned">
+            Sem responsável
+          </NativeSelectOption>
+          {users.map((user: AnyRow) => (
+            <NativeSelectOption key={user.id} value={user.id}>
+              {user.name}
+            </NativeSelectOption>
+          ))}
+        </NativeSelect>
+        <Button onClick={() => setOpen({ priority: 'media' })}>
+          <Plus /> Novo chamado
+        </Button>
+      </div>
+      {rows.length ? (
+        <Card className="min-w-0">
+          <CardHeader className="border-b">
+            <CardTitle>{rows.length} chamado(s)</CardTitle>
+          </CardHeader>
+          <CardContent className="max-h-[calc(100dvh-29rem)] min-w-0 overflow-auto px-0 pb-0">
+            <Table className="min-w-[960px]">
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Código</TableHead>
+                  <TableHead>Fornecedor</TableHead>
+                  <TableHead>Local</TableHead>
+                  <TableHead>Prioridade</TableHead>
+                  <TableHead>Situação</TableHead>
+                  <TableHead>Em aberto</TableHead>
+                  <TableHead>Solicitante</TableHead>
+                  <TableHead>Atualizado</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {rows.map((r: AnyRow) => (
+                  <TableRow key={r.id}>
+                    <TableCell>
+                      <button
+                        className="text-left"
+                        onClick={() => setDetail(r.id)}
+                      >
+                        <span className="block font-mono text-xs font-semibold text-primary hover:underline">
+                          {r.code}
+                        </span>
+                      </button>
+                    </TableCell>
+                    <TableCell className="font-medium">
+                      {r.supplierName}
+                      {r.cnpj ? (
+                        <p className="text-xs font-normal text-muted-foreground">
+                          {cnpj(r.cnpj)}
+                        </p>
+                      ) : null}
+                    </TableCell>
+                    <TableCell>
+                      {r.city ? `${r.city} / ${r.state || ''}` : '—'}
+                    </TableCell>
+                    <TableCell>
+                      <Badge
+                        className={
+                          (priorityMap[r.priority] || ['—', 'bg-slate-100'])[1]
+                        }
+                      >
+                        {(priorityMap[r.priority] || ['—'])[0]}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <TicketStatus value={r.status} />
+                    </TableCell>
+                    <TableCell className="text-sm">
+                      <Sla createdAt={r.createdAt} closedAt={r.closedAt} />
+                    </TableCell>
+                    <TableCell className="text-sm">
+                      {r.requestedBy || '—'}
+                    </TableCell>
+                    <TableCell className="text-sm text-muted-foreground">
+                      {new Date(r.updatedAt).toLocaleDateString('pt-BR')}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      ) : (
+        <Empty
+          icon={MessageSquare}
+          title="Nenhum chamado"
+          text="Abra um chamado para registrar um fornecedor que precisa ser negociado."
+        />
+      )}
+      <Pagination
+        page={data.page}
+        pageSize={pageSize}
+        total={data.total}
+        busy={result.loading}
+        onPage={setPage}
+        onPageSize={(size) => {
+          setPageSize(size);
+          setPage(1);
+        }}
+      />
+      {open && (
+        <TicketDialog
+          open
+          value={open}
+          users={users}
+          agreements={agreements}
+          onClose={() => setOpen(null)}
+          onSave={(body: AnyRow) =>
+            run(async () => {
+              await api('/api/tickets', {
+                method: 'POST',
+                headers: { 'content-type': 'application/json' },
+                body: JSON.stringify(body),
+              });
+              setOpen(null);
+              await load();
+            }, 'Chamado aberto.')
+          }
+        />
+      )}
+    </div>
+  );
+}
 
-function ChangeHistory({users}:JsonData){
-  const [logs,setLogs]=useState<AnyRow[]>([]),[meta,setMeta]=useState<AnyRow>({page:1,pageCount:1,total:0}),[page,setPage]=useState(1),[loading,setLoading]=useState(true),[recarregar,setRecarregar]=useState(0),[erro,setErro]=useState(''),[f,setFiltros]=useState({user:'',action:'',entity:'',q:'',from:'',to:''});
-  const setF=(next:AnyRow)=>{setFiltros(next as never);setPage(1)};
-  useEffect(()=>{
+function TicketDetail({ id, users, agreements, onBack, run }: JsonData) {
+  const [d, setD] = useState<AnyRow | null>(null),
+    [msg, setMsg] = useState(''),
+    [status, setStatus] = useState(''),
+    [statusMessage, setStatusMessage] = useState(''),
+    [editing, setEditing] = useState(false),
+    [loadError, setLoadError] = useState('');
+  const load = useCallback(
+    () =>
+      api(`/api/tickets/${id}`)
+        .then((x) => {
+          setLoadError('');
+          setD(x);
+          setStatus(x.ticket.status);
+          setStatusMessage('');
+        })
+        .catch((error) => setLoadError(errorText(error))),
+    [id],
+  );
+  useEffect(() => {
+    void load();
+  }, [load]);
+  if (loadError)
+    return <ListError error={loadError} onRetry={() => void load()} />;
+  if (!d) return <Loading label="Abrindo chamado…" />;
+  const t = d.ticket;
+  return (
+    <div className="space-y-5">
+      <div className="flex flex-wrap items-center gap-3">
+        <Button variant="outline" onClick={onBack}>
+          ← Voltar
+        </Button>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="truncate text-2xl font-semibold tracking-[-.02em]">
+              {t.supplier_name}
+            </h2>
+            <TicketStatus value={t.status} />
+            <Badge
+              className={(priorityMap[t.priority] || ['—', 'bg-slate-100'])[1]}
+            >
+              {(priorityMap[t.priority] || ['—'])[0]}
+            </Badge>
+          </div>
+          <p className="text-sm text-muted-foreground font-mono">
+            {t.code}
+            {t.cnpj ? ` · ${cnpj(t.cnpj)}` : ''}
+          </p>
+        </div>
+        <Button onClick={() => setEditing(true)}>
+          <Pencil /> Editar chamado
+        </Button>
+      </div>
+      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <Info label="Solicitante" value={t.requestedBy || '—'} />
+        <Info label="Responsável" value={t.assignedTo || 'Não atribuído'} />
+        <Info
+          label="Aberto em"
+          value={new Date(t.created_at).toLocaleDateString('pt-BR')}
+        />
+        <Card size="sm">
+          <CardContent>
+            <p className="text-xs text-muted-foreground">
+              {t.closed_at ? 'Tempo até encerrar' : 'Tempo em aberto'}
+            </p>
+            <div className="mt-1">
+              <Sla createdAt={t.created_at} closedAt={t.closed_at} />
+            </div>
+          </CardContent>
+        </Card>
+        <Info
+          label="Local"
+          value={t.city ? `${t.city} / ${t.state || ''}` : '—'}
+        />
+      </section>
+      {(t.scope || t.contact || t.notes) && (
+        <Card>
+          <CardContent className="space-y-3 pt-5 text-sm">
+            {t.scope && (
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Escopo
+                </p>
+                <p className="mt-1">{t.scope}</p>
+              </div>
+            )}
+            {t.contact && (
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Contato
+                </p>
+                <p className="mt-1">{t.contact}</p>
+              </div>
+            )}
+            {t.notes && (
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Observações
+                </p>
+                <p className="mt-1 whitespace-pre-wrap">{t.notes}</p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+      <Card>
+        <CardHeader className="border-b">
+          <CardTitle>Situação</CardTitle>
+        </CardHeader>
+        <CardContent className="grid gap-3 pt-4 sm:grid-cols-[minmax(14rem,.6fr)_1fr_auto] sm:items-end">
+          <SelectField
+            label="Alterar para"
+            value={status}
+            onChange={setStatus}
+            rows={Object.entries(ticketStatusMap).map(([k, v]: JsonData) => ({
+              id: k,
+              name: v[0],
+            }))}
+          />
+          <Field label="Mensagem da alteração (opcional)">
+            <Input
+              placeholder="Se quiser, registre o motivo da mudança"
+              value={statusMessage}
+              onChange={(e) => setStatusMessage(e.target.value)}
+            />
+          </Field>
+          <Button
+            disabled={status === t.status}
+            onClick={() =>
+              run(async () => {
+                await api(`/api/tickets/${id}`, {
+                  method: 'PUT',
+                  headers: { 'content-type': 'application/json' },
+                  body: JSON.stringify({ status, statusMessage }),
+                });
+                await load();
+              }, 'Situação atualizada.')
+            }
+          >
+            <RefreshCw /> Aplicar
+          </Button>
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader className="border-b">
+          <CardTitle>Histórico e progresso</CardTitle>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {d.events.length} registro(s) neste chamado.
+          </p>
+        </CardHeader>
+        <CardContent className="pt-5">
+          <ol className="relative space-y-5 border-l border-dashed pl-6">
+            {d.events.map((e: AnyRow) => (
+              <li
+                key={e.id}
+                className="relative animate-in fade-in slide-in-from-left-2 fill-mode-both"
+              >
+                <span
+                  className={`absolute -left-[31px] grid size-5 place-items-center rounded-full ring-4 ring-background ${e.kind === 'status' ? 'bg-amber-500' : e.kind === 'created' ? 'bg-teal-500' : 'bg-slate-300'}`}
+                />
+                <div className="flex flex-wrap items-baseline gap-2">
+                  <span className="text-sm font-semibold">
+                    {e.user || 'Sistema'}
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    {new Date(e.createdAt).toLocaleString('pt-BR')}
+                  </span>
+                </div>
+                {e.kind === 'status' ? (
+                  <p className="mt-1 text-sm">
+                    Situação alterada de{' '}
+                    <b>
+                      {(ticketStatusMap[e.fromStatus] || [e.fromStatus])[0]}
+                    </b>{' '}
+                    para{' '}
+                    <b>{(ticketStatusMap[e.toStatus] || [e.toStatus])[0]}</b>.
+                  </p>
+                ) : (
+                  <p className="mt-1 whitespace-pre-wrap text-sm">
+                    {e.message}
+                  </p>
+                )}
+              </li>
+            ))}
+          </ol>
+          <div className="mt-6 space-y-3 border-t pt-5">
+            <Field label="Registrar andamento">
+              <Textarea
+                placeholder="O que aconteceu na tratativa?"
+                value={msg}
+                onChange={(e) => setMsg(e.target.value)}
+              />
+            </Field>
+            <div className="flex justify-end">
+              <Button
+                disabled={!msg.trim()}
+                onClick={() =>
+                  run(async () => {
+                    await api(`/api/tickets/${id}/events`, {
+                      method: 'POST',
+                      headers: { 'content-type': 'application/json' },
+                      body: JSON.stringify({ message: msg }),
+                    });
+                    setMsg('');
+                    await load();
+                  }, 'Andamento registrado.')
+                }
+              >
+                <Plus /> Adicionar
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+      {editing && (
+        <TicketDialog
+          open
+          value={{
+            id: t.id,
+            supplierName: t.supplier_name,
+            cnpj: t.cnpj,
+            city: t.city,
+            state: t.state,
+            contact: t.contact,
+            scope: t.scope,
+            priority: t.priority,
+            assignedTo: t.assigned_to,
+            agreementId: t.agreement_id,
+            notes: t.notes,
+          }}
+          users={users}
+          agreements={agreements}
+          onClose={() => setEditing(false)}
+          onSave={(body: AnyRow) =>
+            run(async () => {
+              await api(`/api/tickets/${id}`, {
+                method: 'PUT',
+                headers: { 'content-type': 'application/json' },
+                body: JSON.stringify(body),
+              });
+              setEditing(false);
+              await load();
+            }, 'Chamado atualizado.')
+          }
+        />
+      )}
+    </div>
+  );
+}
+
+function TicketDialog({
+  open,
+  value,
+  users,
+  agreements,
+  onClose,
+  onSave,
+}: JsonData) {
+  const busy = useContext(MutationBusy);
+  const [form, setForm] = useState<AnyRow>(value || { priority: 'media' }),
+    editing = !!value?.id;
+  return (
+    <Dialog open={open} onOpenChange={(x) => !x && !busy && onClose()}>
+      <DialogContent
+        showCloseButton={!busy}
+        className="max-h-[90vh] overflow-y-auto sm:max-w-2xl"
+      >
+        <DialogHeader>
+          <DialogTitle>
+            {editing ? 'Editar chamado' : 'Novo chamado de negociação'}
+          </DialogTitle>
+          <DialogDescription>
+            {editing
+              ? 'Atualize os dados cadastrais e a responsabilidade pelo chamado.'
+              : 'Registre o fornecedor com quem devemos tentar fechar acordo.'}
+          </DialogDescription>
+        </DialogHeader>
+        <fieldset disabled={busy} className="grid gap-4 sm:grid-cols-2">
+          <Field label="Fornecedor *" className="sm:col-span-2">
+            <Input
+              value={form.supplierName || ''}
+              onChange={(e) =>
+                setForm({ ...form, supplierName: e.target.value })
+              }
+            />
+          </Field>
+          <Field label="CNPJ">
+            <Input
+              value={form.cnpj || ''}
+              onChange={(e) => setForm({ ...form, cnpj: e.target.value })}
+            />
+          </Field>
+          <Field label="Contato">
+            <Input
+              placeholder="Nome, telefone ou e-mail"
+              value={form.contact || ''}
+              onChange={(e) => setForm({ ...form, contact: e.target.value })}
+            />
+          </Field>
+          <Field label="Cidade">
+            <Input
+              value={form.city || ''}
+              onChange={(e) => setForm({ ...form, city: e.target.value })}
+            />
+          </Field>
+          <Field label="UF">
+            <Input
+              maxLength={2}
+              value={form.state || ''}
+              onChange={(e) =>
+                setForm({ ...form, state: e.target.value.toUpperCase() })
+              }
+            />
+          </Field>
+          <SelectField
+            label="Prioridade"
+            value={form.priority || 'media'}
+            onChange={(v: string) => setForm({ ...form, priority: v })}
+            rows={[
+              { id: 'alta', name: 'Alta' },
+              { id: 'media', name: 'Média' },
+              { id: 'baixa', name: 'Baixa' },
+            ]}
+          />
+          <SelectField
+            label="Responsável"
+            value={form.assignedTo || ''}
+            onChange={(v: string) => setForm({ ...form, assignedTo: v })}
+            rows={users || []}
+          />
+          {editing && (
+            <SelectField
+              label="Acordo relacionado"
+              value={form.agreementId || ''}
+              onChange={(v: string) => setForm({ ...form, agreementId: v })}
+              rows={agreements || []}
+            />
+          )}
+          <Field label="Escopo pretendido" className="sm:col-span-2">
+            <Input
+              placeholder="Ex.: pneus e alinhamento para a frota leve"
+              value={form.scope || ''}
+              onChange={(e) => setForm({ ...form, scope: e.target.value })}
+            />
+          </Field>
+          <Field label="Observações" className="sm:col-span-2">
+            <Textarea
+              value={form.notes || ''}
+              onChange={(e) => setForm({ ...form, notes: e.target.value })}
+            />
+          </Field>
+        </fieldset>
+        <DialogFooter>
+          <Button variant="outline" disabled={busy} onClick={onClose}>
+            Cancelar
+          </Button>
+          <Button
+            disabled={busy || !form.supplierName}
+            onClick={() => onSave(form)}
+          >
+            <CheckCircle2 /> {editing ? 'Salvar alterações' : 'Abrir chamado'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function ChangeHistory({ users }: JsonData) {
+  const [logs, setLogs] = useState<AnyRow[]>([]),
+    [meta, setMeta] = useState<AnyRow>({ page: 1, pageCount: 1, total: 0 }),
+    [page, setPage] = useState(1),
+    [loading, setLoading] = useState(true),
+    [recarregar, setRecarregar] = useState(0),
+    [erro, setErro] = useState(''),
+    [f, setFiltros] = useState({
+      user: '',
+      action: '',
+      entity: '',
+      q: '',
+      from: '',
+      to: '',
+    });
+  const setF = (next: AnyRow) => {
+    setFiltros(next as never);
+    setPage(1);
+  };
+  useEffect(() => {
     // Flag local por execucao do efeito. Trocar de pagina rapido dispara varias
     // consultas: sem isto, uma resposta lenta sobrescreveria outra mais nova.
     // O cleanup desliga a flag, o que tambem cobre o componente sair da tela
     // antes de a resposta chegar.
-    let ativa=true;
+    let ativa = true;
     // setState direto no corpo do efeito dispara renderizacao em cascata; o
     // microtask adia para depois do efeito e mantem o indicador de carregando.
-    queueMicrotask(()=>{ if(ativa){setLoading(true);setErro('')} });
-    const p=new URLSearchParams(Object.entries(f).filter(([,v])=>v));
-    p.set('page',String(page));p.set('pageSize','50');
-    void api(`/api/audit?${p}`).then((result:AnyRow)=>{
-      if(!ativa)return; // resposta superada: descarta
-      setLogs(result.logs);
-      setMeta({page:result.page,pageCount:result.pageCount,total:result.total,pageSize:result.pageSize});
-    }).catch((e:unknown)=>{
-      // Sem este catch, uma indisponibilidade momentanea do servidor virava
-      // rejeicao sem tratamento e a tela ficava carregando para sempre.
-      if(!ativa)return;
-      setErro(e instanceof Error?e.message:'Não foi possível carregar o histórico.');
-      setLogs([]);
-    }).finally(()=>{ if(ativa) setLoading(false); });
+    queueMicrotask(() => {
+      if (ativa) {
+        setLoading(true);
+        setErro('');
+      }
+    });
+    const p = new URLSearchParams(Object.entries(f).filter(([, v]) => v));
+    p.set('page', String(page));
+    p.set('pageSize', '50');
+    void api(`/api/audit?${p}`)
+      .then((result: AnyRow) => {
+        if (!ativa) return; // resposta superada: descarta
+        setLogs(result.logs);
+        setMeta({
+          page: result.page,
+          pageCount: result.pageCount,
+          total: result.total,
+          pageSize: result.pageSize,
+        });
+      })
+      .catch((e: unknown) => {
+        // Sem este catch, uma indisponibilidade momentanea do servidor virava
+        // rejeicao sem tratamento e a tela ficava carregando para sempre.
+        if (!ativa) return;
+        setErro(
+          e instanceof Error
+            ? e.message
+            : 'Não foi possível carregar o histórico.',
+        );
+        setLogs([]);
+      })
+      .finally(() => {
+        if (ativa) setLoading(false);
+      });
     // Invalida esta consulta se o componente sair da tela antes da resposta.
-    return ()=>{ativa=false};
-  },[f,page,recarregar]);
-  const load=()=>setRecarregar((n)=>n+1);
-  const actionTone=(a:string)=>a==='CREATE'?'bg-emerald-50 text-emerald-700':a==='DELETE'?'bg-red-50 text-red-700':a==='IMPORT'?'bg-violet-50 text-violet-700':a==='LOGIN'?'bg-slate-100 text-slate-600':'bg-sky-50 text-sky-700';
-  const entityName=(e:string)=>({agreement:'Acordo',agreement_item:'Condição',ticket:'Chamado',user:'Usuário',session:'Sessão',system:'Sistema',legacy_base:'Carga inicial',suppliers:'Fornecedor',items:'Item',models:'Modelo',units:'Unidade',brands:'Marca',locations:'Localidade'} as AnyRow)[e]||e;
-  return <div className="space-y-5">
-    <Card><CardHeader><CardTitle>Filtros</CardTitle></CardHeader><CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
-      <Field label="Busca" className="xl:col-span-2"><Input placeholder="Detalhe, registro ou usuário" value={f.q} onChange={e=>setF({...f,q:e.target.value})}/></Field>
-      <SelectField label="Usuário" value={f.user} onChange={(v:string)=>setF({...f,user:v})} rows={users||[]}/>
-      <SelectField label="Ação" value={f.action} onChange={(v:string)=>setF({...f,action:v})} rows={[{id:'CREATE',name:'Criação'},{id:'UPDATE',name:'Alteração'},{id:'DELETE',name:'Exclusão'},{id:'UPSERT',name:'Inclusão em lote'},{id:'IMPORT',name:'Importação'},{id:'COMMENT',name:'Andamento'},{id:'LOGIN',name:'Acesso'}]}/>
-      <Field label="De"><Input type="date" value={f.from} onChange={e=>setF({...f,from:e.target.value})}/></Field>
-      <Field label="Até"><Input type="date" value={f.to} onChange={e=>setF({...f,to:e.target.value})}/></Field>
-    </CardContent></Card>
-    <Card><CardHeader className="border-b sm:grid-cols-[1fr_auto]"><div><CardTitle>{loading?'Carregando…':`${Number(meta.total||0).toLocaleString('pt-BR')} modificação(ões)`}</CardTitle><p className="mt-1 text-sm text-muted-foreground">{meta.total?`Mostrando ${((meta.page-1)*meta.pageSize)+1}–${Math.min(meta.page*meta.pageSize,meta.total)} · página ${meta.page} de ${meta.pageCount}`:'Mais recentes primeiro.'}</p></div><Button variant="outline" onClick={load}><RefreshCw/> Atualizar</Button></CardHeader><CardContent className="max-h-[64vh] overflow-auto px-0 pb-0"><Table><TableHeader className="sticky top-0 z-10 bg-card"><TableRow><TableHead>Quando</TableHead><TableHead>Usuário</TableHead><TableHead>Ação</TableHead><TableHead>Registro</TableHead><TableHead>Detalhes</TableHead></TableRow></TableHeader><TableBody>{logs.map(r=><TableRow key={r.id}><TableCell className="whitespace-nowrap text-sm tabular-nums">{new Date(r.createdAt).toLocaleString('pt-BR')}</TableCell><TableCell><p className="text-sm font-medium">{r.user||'Sistema'}</p><p className="text-[11px] text-muted-foreground">{r.userEmail||''}</p></TableCell><TableCell><Badge className={actionTone(r.action)}>{r.action}</Badge></TableCell><TableCell className="text-sm">{entityName(r.entity)}</TableCell><TableCell className="max-w-[28rem] text-sm text-muted-foreground">{r.details}</TableCell></TableRow>)}</TableBody></Table>{!loading&&erro&&<div className="p-8"><Alert variant="destructive"><AlertTriangle/><AlertTitle>Não foi possível carregar o histórico</AlertTitle><AlertDescription><p>{erro}</p><Button className="mt-3" size="sm" variant="outline" onClick={load}><RefreshCw/> Tentar de novo</Button></AlertDescription></Alert></div>}{!loading&&!erro&&!logs.length&&<div className="p-10 text-center text-sm text-muted-foreground">Nenhuma modificação com esses filtros.</div>}</CardContent>{meta.pageCount>1&&<div className="flex flex-wrap items-center justify-between gap-3 border-t px-5 py-3"><p className="text-sm text-muted-foreground">Página <b className="text-foreground">{meta.page}</b> de {meta.pageCount}</p><div className="flex items-center gap-1"><Button size="sm" variant="outline" disabled={loading||meta.page<=1} onClick={()=>setPage(1)}>Primeira</Button><Button size="sm" variant="outline" disabled={loading||meta.page<=1} onClick={()=>setPage(meta.page-1)}>← Anterior</Button><Button size="sm" variant="outline" disabled={loading||meta.page>=meta.pageCount} onClick={()=>setPage(meta.page+1)}>Próxima →</Button><Button size="sm" variant="outline" disabled={loading||meta.page>=meta.pageCount} onClick={()=>setPage(meta.pageCount)}>Última</Button></div></div>}</Card>
-  </div>;
+    return () => {
+      ativa = false;
+    };
+  }, [f, page, recarregar]);
+  const load = () => setRecarregar((n) => n + 1);
+  const actionTone = (a: string) =>
+    a === 'CREATE'
+      ? 'bg-emerald-50 text-emerald-700'
+      : a === 'DELETE'
+        ? 'bg-red-50 text-red-700'
+        : a === 'IMPORT'
+          ? 'bg-violet-50 text-violet-700'
+          : a === 'LOGIN'
+            ? 'bg-slate-100 text-slate-600'
+            : 'bg-sky-50 text-sky-700';
+  const entityName = (e: string) =>
+    (
+      ({
+        agreement: 'Acordo',
+        agreement_item: 'Condição',
+        ticket: 'Chamado',
+        user: 'Usuário',
+        session: 'Sessão',
+        system: 'Sistema',
+        legacy_base: 'Carga inicial',
+        suppliers: 'Fornecedor',
+        items: 'Item',
+        models: 'Modelo',
+        units: 'Unidade',
+        brands: 'Marca',
+        locations: 'Localidade',
+      }) as AnyRow
+    )[e] || e;
+  return (
+    <div className="space-y-5">
+      <Card>
+        <CardHeader>
+          <CardTitle>Filtros</CardTitle>
+        </CardHeader>
+        <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
+          <Field label="Busca" className="xl:col-span-2">
+            <Input
+              placeholder="Detalhe, registro ou usuário"
+              value={f.q}
+              onChange={(e) => setF({ ...f, q: e.target.value })}
+            />
+          </Field>
+          <SelectField
+            label="Usuário"
+            value={f.user}
+            onChange={(v: string) => setF({ ...f, user: v })}
+            rows={users || []}
+          />
+          <SelectField
+            label="Ação"
+            value={f.action}
+            onChange={(v: string) => setF({ ...f, action: v })}
+            rows={[
+              { id: 'CREATE', name: 'Criação' },
+              { id: 'UPDATE', name: 'Alteração' },
+              { id: 'DELETE', name: 'Exclusão' },
+              { id: 'UPSERT', name: 'Inclusão em lote' },
+              { id: 'IMPORT', name: 'Importação' },
+              { id: 'COMMENT', name: 'Andamento' },
+              { id: 'LOGIN', name: 'Acesso' },
+            ]}
+          />
+          <Field label="De">
+            <Input
+              type="date"
+              value={f.from}
+              onChange={(e) => setF({ ...f, from: e.target.value })}
+            />
+          </Field>
+          <Field label="Até">
+            <Input
+              type="date"
+              value={f.to}
+              onChange={(e) => setF({ ...f, to: e.target.value })}
+            />
+          </Field>
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader className="border-b sm:grid-cols-[1fr_auto]">
+          <div>
+            <CardTitle>
+              {loading
+                ? 'Carregando…'
+                : `${Number(meta.total || 0).toLocaleString('pt-BR')} modificação(ões)`}
+            </CardTitle>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {meta.total
+                ? `Mostrando ${(meta.page - 1) * meta.pageSize + 1}–${Math.min(meta.page * meta.pageSize, meta.total)} · página ${meta.page} de ${meta.pageCount}`
+                : 'Mais recentes primeiro.'}
+            </p>
+          </div>
+          <Button variant="outline" onClick={load}>
+            <RefreshCw /> Atualizar
+          </Button>
+        </CardHeader>
+        <CardContent className="max-h-[64vh] overflow-auto px-0 pb-0">
+          <Table>
+            <TableHeader className="sticky top-0 z-10 bg-card">
+              <TableRow>
+                <TableHead>Quando</TableHead>
+                <TableHead>Usuário</TableHead>
+                <TableHead>Ação</TableHead>
+                <TableHead>Registro</TableHead>
+                <TableHead>Detalhes</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {logs.map((r) => (
+                <TableRow key={r.id}>
+                  <TableCell className="whitespace-nowrap text-sm tabular-nums">
+                    {new Date(r.createdAt).toLocaleString('pt-BR')}
+                  </TableCell>
+                  <TableCell>
+                    <p className="text-sm font-medium">{r.user || 'Sistema'}</p>
+                    <p className="text-[11px] text-muted-foreground">
+                      {r.userEmail || ''}
+                    </p>
+                  </TableCell>
+                  <TableCell>
+                    <Badge className={actionTone(r.action)}>{r.action}</Badge>
+                  </TableCell>
+                  <TableCell className="text-sm">
+                    {entityName(r.entity)}
+                  </TableCell>
+                  <TableCell className="max-w-[28rem] text-sm text-muted-foreground">
+                    {r.details}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+          {!loading && erro && (
+            <div className="p-8">
+              <Alert variant="destructive">
+                <AlertTriangle />
+                <AlertTitle>Não foi possível carregar o histórico</AlertTitle>
+                <AlertDescription>
+                  <p>{erro}</p>
+                  <Button
+                    className="mt-3"
+                    size="sm"
+                    variant="outline"
+                    onClick={load}
+                  >
+                    <RefreshCw /> Tentar de novo
+                  </Button>
+                </AlertDescription>
+              </Alert>
+            </div>
+          )}
+          {!loading && !erro && !logs.length && (
+            <div className="p-10 text-center text-sm text-muted-foreground">
+              Nenhuma modificação com esses filtros.
+            </div>
+          )}
+        </CardContent>
+        {meta.pageCount > 1 && (
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t px-5 py-3">
+            <p className="text-sm text-muted-foreground">
+              Página <b className="text-foreground">{meta.page}</b> de{' '}
+              {meta.pageCount}
+            </p>
+            <div className="flex items-center gap-1">
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={loading || meta.page <= 1}
+                onClick={() => setPage(1)}
+              >
+                Primeira
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={loading || meta.page <= 1}
+                onClick={() => setPage(meta.page - 1)}
+              >
+                ← Anterior
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={loading || meta.page >= meta.pageCount}
+                onClick={() => setPage(meta.page + 1)}
+              >
+                Próxima →
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={loading || meta.page >= meta.pageCount}
+                onClick={() => setPage(meta.pageCount)}
+              >
+                Última
+              </Button>
+            </div>
+          </div>
+        )}
+      </Card>
+    </div>
+  );
 }
 
-function EmailQueue({run}:JsonData){
-  const [data,setData]=useState<AnyRow|null>(null),[error,setError]=useState('');
-  const load=useCallback(()=>api('/api/email-notifications').then(setData).catch((e:unknown)=>setError(errorText(e))),[]);
-  useEffect(()=>{void load()},[load]);
-  const statusEmail:AnyRow={pending:['Pendente','bg-amber-50 text-amber-700'],processing:['Enviando','bg-sky-50 text-sky-700'],sent:['Enviado','bg-emerald-50 text-emerald-700'],failed:['Falhou','bg-red-50 text-red-700']};
-  const tipoEmail:AnyRow={atribuicao:'Atribuição',atualizacao:'Atualização',conclusao:'Conclusão',cancelamento:'Cancelamento'};
-  if(error)return <Alert variant="destructive" className="mt-5"><AlertTriangle/><AlertTitle>Não foi possível consultar os e-mails</AlertTitle><AlertDescription>{error}</AlertDescription></Alert>;
-  if(!data)return <Card className="mt-5"><CardContent className="flex items-center gap-3 py-5"><LoaderCircle className="size-4 animate-spin"/> Carregando envios de e-mail…</CardContent></Card>;
-  const s=data.stats||{};
-  return <Card className="mt-5"><CardHeader className="border-b"><div className="flex flex-wrap items-center justify-between gap-3"><div><CardTitle>Notificações por e-mail</CardTitle><p className="mt-1 text-sm text-muted-foreground">{Number(s.pending||0)} pendente(s), {Number(s.failed||0)} falha(s) e {Number(s.sent||0)} enviada(s).</p></div><Button variant="outline" onClick={()=>void load()}><RefreshCw/> Atualizar</Button></div></CardHeader><CardContent className="px-0 pb-0">{data.notifications?.length?<Table><TableHeader><TableRow><TableHead>Chamado</TableHead><TableHead>Tipo</TableHead><TableHead>Destinatário</TableHead><TableHead>Situação</TableHead><TableHead>Tentativas</TableHead><TableHead>Data</TableHead><TableHead/></TableRow></TableHeader><TableBody>{data.notifications.map((item:AnyRow)=>{const st=statusEmail[item.status]||[item.status,'bg-slate-100'];return <TableRow key={item.id}><TableCell><p className="font-mono text-xs font-semibold">{item.ticketCode}</p><p className="text-xs text-muted-foreground">{item.supplierName}</p></TableCell><TableCell>{tipoEmail[item.type]||item.type}</TableCell><TableCell><p>{item.recipientName}</p><p className="text-xs text-muted-foreground">{item.recipientEmail}</p></TableCell><TableCell><Badge className={st[1]}>{st[0]}</Badge>{item.lastError?<p className="mt-1 max-w-80 truncate text-xs text-red-700" title={item.lastError}>{item.lastError}</p>:null}</TableCell><TableCell>{item.attempts}</TableCell><TableCell className="text-xs text-muted-foreground">{new Date(item.sentAt||item.nextAttemptAt||item.createdAt).toLocaleString('pt-BR')}</TableCell><TableCell className="text-right">{item.status==='failed'&&<Button size="sm" variant="outline" onClick={()=>void run(async()=>{await api(`/api/email-notifications/${item.id}/retry`,{method:'POST'});await load()},'Reenvio colocado na fila.')}><RefreshCw/> Reenviar</Button>}</TableCell></TableRow>})}</TableBody></Table>:<div className="py-10 text-center text-sm text-muted-foreground">Nenhuma notificação foi criada ainda.</div>}</CardContent></Card>;
+function EmailQueue({ run }: JsonData) {
+  const [page, setPage] = useState(1),
+    [pageSize, setPageSize] = useState(25);
+  const result = usePagedList('/api/email-notifications', {
+    page: String(page),
+    pageSize: String(pageSize),
+  });
+  const { data, error, load } = result;
+  const statusEmail: AnyRow = {
+    pending: ['Pendente', 'bg-amber-50 text-amber-700'],
+    processing: ['Enviando', 'bg-sky-50 text-sky-700'],
+    sent: ['Enviado', 'bg-emerald-50 text-emerald-700'],
+    failed: ['Falhou', 'bg-red-50 text-red-700'],
+  };
+  const tipoEmail: AnyRow = {
+    atribuicao: 'Atribuição',
+    atualizacao: 'Atualização',
+    conclusao: 'Conclusão',
+    cancelamento: 'Cancelamento',
+  };
+  if (error)
+    return (
+      <Alert variant="destructive" className="mt-5">
+        <AlertTriangle />
+        <AlertTitle>Não foi possível consultar os e-mails</AlertTitle>
+        <AlertDescription>
+          {error}
+          <Button
+            variant="outline"
+            className="mt-2"
+            onClick={() => void load()}
+          >
+            Tentar novamente
+          </Button>
+        </AlertDescription>
+      </Alert>
+    );
+  if (!data)
+    return (
+      <Card className="mt-5">
+        <CardContent className="flex items-center gap-3 py-5">
+          <LoaderCircle className="size-4 animate-spin" /> Carregando envios de
+          e-mail…
+        </CardContent>
+      </Card>
+    );
+  const s = data.stats || {};
+  return (
+    <Card className="mt-5">
+      <CardHeader className="border-b">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <CardTitle>Notificações por e-mail</CardTitle>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {Number(s.pending || 0)} pendente(s), {Number(s.failed || 0)}{' '}
+              falha(s) e {Number(s.sent || 0)} enviada(s).
+            </p>
+          </div>
+          <Button variant="outline" onClick={() => void load()}>
+            <RefreshCw /> Atualizar
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent className="px-0 pb-0">
+        {data.notifications?.length ? (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Chamado</TableHead>
+                <TableHead>Tipo</TableHead>
+                <TableHead>Destinatário</TableHead>
+                <TableHead>Situação</TableHead>
+                <TableHead>Tentativas</TableHead>
+                <TableHead>Data</TableHead>
+                <TableHead />
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {data.notifications.map((item: AnyRow) => {
+                const st = statusEmail[item.status] || [
+                  item.status,
+                  'bg-slate-100',
+                ];
+                return (
+                  <TableRow key={item.id}>
+                    <TableCell>
+                      <p className="font-mono text-xs font-semibold">
+                        {item.ticketCode}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {item.supplierName}
+                      </p>
+                    </TableCell>
+                    <TableCell>{tipoEmail[item.type] || item.type}</TableCell>
+                    <TableCell>
+                      <p>{item.recipientName}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {item.recipientEmail}
+                      </p>
+                    </TableCell>
+                    <TableCell>
+                      <Badge className={st[1]}>{st[0]}</Badge>
+                      {item.lastError ? (
+                        <p
+                          className="mt-1 max-w-80 truncate text-xs text-red-700"
+                          title={item.lastError}
+                        >
+                          {item.lastError}
+                        </p>
+                      ) : null}
+                    </TableCell>
+                    <TableCell>{item.attempts}</TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
+                      {new Date(
+                        item.sentAt || item.nextAttemptAt || item.createdAt,
+                      ).toLocaleString('pt-BR')}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {item.status === 'failed' && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() =>
+                            void run(async () => {
+                              await api(
+                                `/api/email-notifications/${item.id}/retry`,
+                                { method: 'POST' },
+                              );
+                              await load();
+                            }, 'Reenvio colocado na fila.')
+                          }
+                        >
+                          <RefreshCw /> Reenviar
+                        </Button>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        ) : (
+          <div className="py-10 text-center text-sm text-muted-foreground">
+            Nenhuma notificação foi criada ainda.
+          </div>
+        )}
+      </CardContent>
+      <Pagination
+        page={data.page}
+        pageSize={pageSize}
+        total={data.total}
+        busy={result.loading}
+        onPage={setPage}
+        onPageSize={(size) => {
+          setPageSize(size);
+          setPage(1);
+        }}
+      />
+    </Card>
+  );
 }
 
-function Administration({user,initialUsers,run}:JsonData){const [users,setUsers]=useState<AnyRow[]>(initialUsers||[]),[open,setOpen]=useState(false),[edit,setEdit]=useState<AnyRow|null>(null);const load=useCallback(async()=>{const result=await api('/api/users');setUsers(result.users)},[]);const isAdmin=user.role==='admin';return <div className="space-y-5"><div className="flex flex-wrap justify-between gap-3"><p className="text-sm text-muted-foreground">{users.length} conta(s) · o histórico completo de alterações fica na aba <b>Histórico</b>.</p><div className="flex gap-2"><Button variant="outline" onClick={()=>window.open('/api/export','_blank','noopener,noreferrer')}><Download/> Exportar dados</Button>{isAdmin&&<Button onClick={()=>setOpen(true)}><Plus/> Novo usuário</Button>}</div></div><Card><CardContent className="px-0 pb-0"><Table><TableHeader><TableRow><TableHead>Nome</TableHead><TableHead>E-mail</TableHead><TableHead>Perfil</TableHead><TableHead>Relatório diário</TableHead><TableHead>Situação</TableHead><TableHead/></TableRow></TableHeader><TableBody>{users.map(r=><TableRow key={r.id} className={r.active?'':'opacity-50'}><TableCell className="font-medium">{r.name}{r.id===user.id?<Badge className="ml-2 bg-teal-50 text-teal-700">você</Badge>:null}</TableCell><TableCell className="text-sm">{r.email}</TableCell><TableCell><Badge className={r.role==='admin'?'bg-violet-50 text-violet-700':r.role==='editor'?'bg-sky-50 text-sky-700':'bg-slate-100 text-slate-600'}>{roleName(r.role)}</Badge></TableCell><TableCell>{r.dailyReportEnabled?<span className="text-sm font-medium">Diariamente às {r.dailyReportTime}</span>:<span className="text-sm text-muted-foreground">Não recebe</span>}</TableCell><TableCell><Badge className={r.active?'bg-emerald-50 text-emerald-700':'bg-slate-100 text-slate-600'}>{r.active?'Ativo':'Inativo'}</Badge></TableCell><TableCell className="text-right">{isAdmin&&<Button size="icon-sm" variant="ghost" onClick={()=>setEdit({...r})}><Pencil/></Button>}</TableCell></TableRow>)}</TableBody></Table></CardContent></Card><UserDialog open={open} onClose={()=>setOpen(false)} onSave={(body:AnyRow)=>run(async()=>{await api('/api/users',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});setOpen(false);await load()},'Usuário criado.')}/>{edit&&<UserEditDialog open value={edit} self={user} onClose={()=>setEdit(null)} onSave={(body:AnyRow)=>run(async()=>{await api(`/api/users/${body.id}`,{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify(body)});setEdit(null);await load()},'Usuário atualizado.')}/>}</div>}
-
-function UserEditDialog({open,value,self,onClose,onSave}:JsonData){const [form,setForm]=useState<AnyRow>({...value,password:''});const isSelf=value.id===self.id;return <Dialog open={open} onOpenChange={(x)=>!x&&onClose()}><DialogContent><DialogHeader><DialogTitle>Editar usuário</DialogTitle><DialogDescription>{value.email}</DialogDescription></DialogHeader><div className="space-y-4"><Field label="Nome"><Input value={form.name||''} onChange={e=>setForm({...form,name:e.target.value})}/></Field><SelectField label="Perfil" value={form.role||'viewer'} onChange={(v:string)=>setForm({...form,role:v})} rows={[{id:'viewer',name:'Consulta'},{id:'editor',name:'Comprador'},{id:'admin',name:'Administrador'}]}/><Field label="Nova senha"><Input type="password" placeholder="Deixe em branco para manter a atual" value={form.password||''} onChange={e=>setForm({...form,password:e.target.value})}/><p className="mt-1 text-xs text-muted-foreground">Ao redefinir, as sessões abertas deste usuário são encerradas.</p></Field><div className="rounded-lg border p-3"><div className="flex items-center gap-2"><Checkbox id="daily-report-enabled" checked={!!form.dailyReportEnabled} onCheckedChange={(c:JsonData)=>setForm({...form,dailyReportEnabled:!!c})}/><label htmlFor="daily-report-enabled" className="cursor-pointer text-sm font-medium">Receber relatório diário de chamados</label></div>{form.dailyReportEnabled?<Field label="Horário de envio" className="mt-3"><Input type="time" value={form.dailyReportTime||'17:45'} onChange={e=>setForm({...form,dailyReportTime:e.target.value})}/></Field>:null}</div><label className="flex cursor-pointer items-center gap-2 rounded-lg border p-3"><Checkbox checked={form.active!==false&&form.active!==0} onCheckedChange={(c:JsonData)=>setForm({...form,active:!!c})} disabled={isSelf}/><span className="text-sm">Conta ativa{isSelf?' (não é possível desativar a própria conta)':''}</span></label></div><DialogFooter><Button variant="outline" onClick={onClose}>Cancelar</Button><Button onClick={()=>onSave(form)}><CheckCircle2/> Salvar</Button></DialogFooter></DialogContent></Dialog>}
-
-function Mappings({catalogs,run}:JsonData){
-  const [data,setData]=useState<AnyRow>({items:[],models:[]}),[type,setType]=useState<'items'|'models'|'units'>('items'),[edit,setEdit]=useState<AnyRow|null>(null),[loading,setLoading]=useState(true);
-  const load=useCallback(async()=>{setData(await api('/api/mappings'))},[]);
-  useEffect(()=>{let active=true;void api('/api/mappings').then(result=>{if(active){setData(result);setLoading(false)}});return()=>{active=false}},[]);
-  const rows=data[type]||[], targets=catalogs[type].map((row:AnyRow)=>({...row,name:type==='units'?row.code:row.name,active:row.active}));
-  const {ordem,alternar,ordenar}=useOrdenacao(type);
-  const valoresDoMapeamento=(linha:AnyRow)=>[linha.source,linha.target,linha.active?'Ativa':'Inativa'];
-  const remove=(row:AnyRow)=>{if(!confirm(`Excluir a correspondência "${row.source}"?`))return;void run(async()=>{await api(`/api/mappings/${type}/${row.id}`,{method:'DELETE'});await load()},'Correspondência excluída.')};
-  return <div className="space-y-5"><div className="flex flex-wrap items-end justify-between gap-3"><div><h1 className="text-2xl font-semibold">De/Para da importação</h1><p className="mt-1 text-sm text-muted-foreground">Toda nomenclatura de item e modelo da planilha precisa ter uma correspondência ativa. A unidade aceita o nome cadastrado e as correspondências confirmadas; a localidade precisa estar no cadastro.</p></div><Button onClick={()=>setEdit({type,active:true})}><Plus/> Nova correspondência</Button></div><div className="flex flex-wrap gap-2">{(['items','models','units'] as const).map(value=><Button key={value} variant={type===value?'default':'outline'} onClick={()=>setType(value)}>{{items:'Itens',models:'Modelos',units:'Unidades'}[value]}</Button>)}</div><Card><CardContent className="px-0 pb-0">{loading?<div className="flex items-center gap-2 p-8 text-sm text-muted-foreground"><LoaderCircle className="size-4 animate-spin"/> Carregando correspondências…</div>:<Table><TableHeader><CabecalhoOrdenavel titulos={['Original','Correspondente','Situação']} ordem={ordem} onAlternar={alternar}/></TableHeader><TableBody>{ordenar(rows,valoresDoMapeamento).map((row:AnyRow)=><TableRow key={row.id} className={row.active?'':'opacity-50'}><TableCell><p className="font-medium">{row.source}</p>{normalizeImportText(row.source)!==row.sourceKey&&<p className="text-xs text-muted-foreground">Chave: {row.sourceKey}</p>}</TableCell><TableCell>{row.target}</TableCell><TableCell><Badge className={row.active?'bg-emerald-50 text-emerald-700':'bg-slate-100 text-slate-600'}>{row.active?'Ativa':'Inativa'}</Badge></TableCell><TableCell className="text-right"><Button size="icon-sm" variant="ghost" onClick={()=>setEdit({...row,type})}><Pencil/></Button><Button size="icon-sm" variant="ghost" onClick={()=>remove(row)}><Trash2/></Button></TableCell></TableRow>)}</TableBody></Table>}{!loading&&!rows.length&&<div className="p-10 text-center text-sm text-muted-foreground">{type==='units'?'Nenhuma correspondência cadastrada. As unidades ativas escritas com a nomenclatura correta já são reconhecidas direto. Cadastre uma correspondência apenas para abreviações, variações de grafia ou nomes alternativos.':'Nenhuma correspondência cadastrada. A importação será recusada até que os valores da planilha tenham De/Para.'}</div>}</CardContent></Card>{edit&&<MappingDialog value={edit} targets={targets} onClose={()=>setEdit(null)} onSave={(body:AnyRow)=>run(async()=>{const path=body.id?`/api/mappings/${body.type}/${body.id}`:`/api/mappings/${body.type}`;await api(path,{method:body.id?'PUT':'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});setEdit(null);await load()},'Correspondência salva.')}/>}</div>;
+function Administration({ user, initialUsers, run }: JsonData) {
+  const [users, setUsers] = useState<AnyRow[]>(initialUsers || []),
+    [open, setOpen] = useState(false),
+    [edit, setEdit] = useState<AnyRow | null>(null),
+    [loadError, setLoadError] = useState(''),
+    [page, setPage] = useState(1),
+    [pageSize, setPageSize] = useState(25);
+  const load = useCallback(async () => {
+    try {
+      const result = await api('/api/users');
+      setUsers(result.users);
+      setLoadError('');
+    } catch (error) {
+      setLoadError(errorText(error));
+    }
+  }, []);
+  const isAdmin = user.role === 'admin';
+  return (
+    <div className="space-y-5">
+      {loadError && <ListError error={loadError} onRetry={() => void load()} />}
+      <div className="flex flex-wrap justify-between gap-3">
+        <p className="text-sm text-muted-foreground">
+          {users.length} conta(s) · o histórico completo de alterações fica na
+          aba <b>Histórico</b>.
+        </p>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            onClick={() =>
+              window.open('/api/export', '_blank', 'noopener,noreferrer')
+            }
+          >
+            <Download /> Exportar dados
+          </Button>
+          {isAdmin && (
+            <Button onClick={() => setOpen(true)}>
+              <Plus /> Novo usuário
+            </Button>
+          )}
+        </div>
+      </div>
+      <Card>
+        <CardContent className="px-0 pb-0">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Nome</TableHead>
+                <TableHead>E-mail</TableHead>
+                <TableHead>Perfil</TableHead>
+                <TableHead>Relatório diário</TableHead>
+                <TableHead>Situação</TableHead>
+                <TableHead />
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {users.map((r) => (
+                <TableRow key={r.id} className={r.active ? '' : 'opacity-50'}>
+                  <TableCell className="font-medium">
+                    {r.name}
+                    {r.id === user.id ? (
+                      <Badge className="ml-2 bg-teal-50 text-teal-700">
+                        você
+                      </Badge>
+                    ) : null}
+                  </TableCell>
+                  <TableCell className="text-sm">{r.email}</TableCell>
+                  <TableCell>
+                    <Badge
+                      className={
+                        r.role === 'admin'
+                          ? 'bg-violet-50 text-violet-700'
+                          : r.role === 'editor'
+                            ? 'bg-sky-50 text-sky-700'
+                            : 'bg-slate-100 text-slate-600'
+                      }
+                    >
+                      {roleName(r.role)}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>
+                    {r.dailyReportEnabled ? (
+                      <span className="text-sm font-medium">
+                        Diariamente às {r.dailyReportTime}
+                      </span>
+                    ) : (
+                      <span className="text-sm text-muted-foreground">
+                        Não recebe
+                      </span>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    <Badge
+                      className={
+                        r.active
+                          ? 'bg-emerald-50 text-emerald-700'
+                          : 'bg-slate-100 text-slate-600'
+                      }
+                    >
+                      {r.active ? 'Ativo' : 'Inativo'}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {isAdmin && (
+                      <Button
+                        size="icon-sm"
+                        variant="ghost"
+                        onClick={() => setEdit({ ...r })}
+                      >
+                        <Pencil />
+                      </Button>
+                    )}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+      <Pagination
+        page={Math.min(page, Math.max(1, Math.ceil(users.length / pageSize)))}
+        pageSize={pageSize}
+        total={users.length}
+        onPage={setPage}
+        onPageSize={(size) => {
+          setPageSize(size);
+          setPage(1);
+        }}
+      />
+      {open && (
+        <UserDialog
+          open={open}
+          onClose={() => setOpen(false)}
+          onSave={(body: AnyRow) =>
+            run(async () => {
+              await api('/api/users', {
+                method: 'POST',
+                headers: { 'content-type': 'application/json' },
+                body: JSON.stringify(body),
+              });
+              setOpen(false);
+              await load();
+            }, 'Usuário criado.')
+          }
+        />
+      )}{' '}
+      {edit && (
+        <UserEditDialog
+          open
+          value={edit}
+          self={user}
+          onClose={() => setEdit(null)}
+          onSave={(body: AnyRow) =>
+            run(async () => {
+              await api(`/api/users/${body.id}`, {
+                method: 'PUT',
+                headers: { 'content-type': 'application/json' },
+                body: JSON.stringify(body),
+              });
+              setEdit(null);
+              await load();
+            }, 'Usuário atualizado.')
+          }
+        />
+      )}
+    </div>
+  );
 }
 
-function MappingDialog({value,targets,onClose,onSave}:JsonData){const [form,setForm]=useState<AnyRow>({...value});return <Dialog open onOpenChange={(open)=>!open&&onClose()}><DialogContent><DialogHeader><DialogTitle>{form.id?'Editar':'Nova'} correspondência de {{items:'item',models:'modelo',units:'unidade',locations:'localidade'}[form.type as string]}</DialogTitle><DialogDescription>O texto recebido será comparado em maiúsculas, sem acentos e com espaços normalizados.</DialogDescription></DialogHeader><div className="space-y-4"><Field label={form.type==='locations'?'Original (CIDADE/UF) *':'Original *'}><Input value={form.source||''} onChange={e=>setForm({...form,source:e.target.value})}/></Field><SelectField label="Correspondente *" value={form.targetId||''} onChange={(targetId:string)=>setForm({...form,targetId})} rows={targets.filter((row:AnyRow)=>row.active)}/>{form.id&&<div className="flex items-center gap-2 rounded-lg border p-3"><Checkbox id="mapping-active" checked={form.active!==false&&form.active!==0} onCheckedChange={(checked:JsonData)=>setForm({...form,active:!!checked})}/><label htmlFor="mapping-active" className="cursor-pointer text-sm">Correspondência ativa</label></div>}</div><DialogFooter><Button variant="outline" onClick={onClose}>Cancelar</Button><Button disabled={!form.source||!form.targetId} onClick={()=>onSave(form)}><CheckCircle2/> Salvar</Button></DialogFooter></DialogContent></Dialog>}
+function UserEditDialog({ open, value, self, onClose, onSave }: JsonData) {
+  const busy = useContext(MutationBusy);
+  const [form, setForm] = useState<AnyRow>({ ...value, password: '' });
+  const isSelf = value.id === self.id;
+  return (
+    <Dialog open={open} onOpenChange={(x) => !x && !busy && onClose()}>
+      <DialogContent showCloseButton={!busy}>
+        <DialogHeader>
+          <DialogTitle>Editar usuário</DialogTitle>
+          <DialogDescription>{value.email}</DialogDescription>
+        </DialogHeader>
+        <fieldset disabled={busy} className="space-y-4">
+          <Field label="Nome">
+            <Input
+              value={form.name || ''}
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
+            />
+          </Field>
+          <SelectField
+            label="Perfil"
+            value={form.role || 'viewer'}
+            onChange={(v: string) => setForm({ ...form, role: v })}
+            rows={[
+              { id: 'viewer', name: 'Consulta' },
+              { id: 'editor', name: 'Comprador' },
+              { id: 'admin', name: 'Administrador' },
+            ]}
+          />
+          <Field label="Nova senha">
+            <Input
+              type="password"
+              placeholder="Deixe em branco para manter a atual"
+              value={form.password || ''}
+              onChange={(e) => setForm({ ...form, password: e.target.value })}
+            />
+            <p className="mt-1 text-xs text-muted-foreground">
+              Ao redefinir, as sessões abertas deste usuário são encerradas.
+            </p>
+          </Field>
+          <div className="rounded-lg border p-3">
+            <div className="flex items-center gap-2">
+              <Checkbox
+                id="daily-report-enabled"
+                checked={!!form.dailyReportEnabled}
+                onCheckedChange={(c: JsonData) =>
+                  setForm({ ...form, dailyReportEnabled: !!c })
+                }
+              />
+              <label
+                htmlFor="daily-report-enabled"
+                className="cursor-pointer text-sm font-medium"
+              >
+                Receber relatório diário de chamados
+              </label>
+            </div>
+            {form.dailyReportEnabled ? (
+              <Field label="Horário de envio" className="mt-3">
+                <Input
+                  type="time"
+                  value={form.dailyReportTime || '17:45'}
+                  onChange={(e) =>
+                    setForm({ ...form, dailyReportTime: e.target.value })
+                  }
+                />
+              </Field>
+            ) : null}
+          </div>
+          <label className="flex cursor-pointer items-center gap-2 rounded-lg border p-3">
+            <Checkbox
+              checked={form.active !== false && form.active !== 0}
+              onCheckedChange={(c: JsonData) =>
+                setForm({ ...form, active: !!c })
+              }
+              disabled={isSelf}
+            />
+            <span className="text-sm">
+              Conta ativa
+              {isSelf ? ' (não é possível desativar a própria conta)' : ''}
+            </span>
+          </label>
+        </fieldset>
+        <DialogFooter>
+          <Button variant="outline" disabled={busy} onClick={onClose}>
+            Cancelar
+          </Button>
+          <Button onClick={() => onSave(form)} disabled={busy}>
+            <CheckCircle2 /> Salvar
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
 
-function CatalogDialog({open,value,busy,onClose,onSave}:JsonData){const [form,setForm]=useState<AnyRow>(value||{});const t=form.type;return <Dialog open={open} onOpenChange={(x)=>!x&&onClose()}><DialogContent><DialogHeader><DialogTitle>{form.id?'Editar':'Novo'} cadastro</DialogTitle><DialogDescription>Os dados ficarão disponíveis para acordos e importações.</DialogDescription></DialogHeader><div className="space-y-4">{t==='suppliers'&&<><Field label="Nome do fornecedor *"><Input value={form.tradeName||''} onChange={e=>setForm({...form,tradeName:e.target.value})}/></Field><Field label="Razão social"><Input value={form.legalName||''} onChange={e=>setForm({...form,legalName:e.target.value})}/></Field><Field label="CNPJ *"><Input value={form.cnpj||''} onChange={e=>setForm({...form,cnpj:e.target.value})}/></Field><Field label="Cidade"><Input value={form.city||''} onChange={e=>setForm({...form,city:e.target.value})}/></Field><Field label="UF"><Input maxLength={2} value={form.state||''} onChange={e=>setForm({...form,state:e.target.value.toUpperCase()})}/></Field></>}{['items','models'].includes(t)&&<Field label="Nome *"><Input value={form.name||''} onChange={e=>setForm({...form,name:e.target.value})}/></Field>}{t==='units'&&<Field label="Unidade *"><Input value={form.code||''} onChange={e=>setForm({...form,code:e.target.value})}/></Field>}{t==='locations'&&<><SelectField label="UF *" value={form.state||''} onChange={(state:string)=>setForm({...form,state})} rows={BRAZILIAN_STATES.map(state=>({id:state,name:state}))}/><Field label="Cidade *"><Input value={form.city||''} onChange={e=>setForm({...form,city:e.target.value})}/></Field></>}</div><DialogFooter><Button variant="outline" onClick={onClose}>Cancelar</Button><Button disabled={busy} onClick={()=>onSave(form)}>{busy?<LoaderCircle className="animate-spin"/>:<CheckCircle2/>} Salvar</Button></DialogFooter></DialogContent></Dialog>}
-function UserDialog({open,onClose,onSave}:JsonData){const [form,setForm]=useState({name:'',email:'',password:'',role:'viewer'});return <Dialog open={open} onOpenChange={(x)=>!x&&onClose()}><DialogContent><DialogHeader><DialogTitle>Novo usuário autorizado</DialogTitle></DialogHeader><div className="space-y-4"><Field label="Nome *"><Input value={form.name} onChange={e=>setForm({...form,name:e.target.value})}/></Field><Field label="E-mail *"><Input type="email" value={form.email} onChange={e=>setForm({...form,email:e.target.value})}/></Field><Field label="Senha inicial *"><Input type="password" value={form.password} onChange={e=>setForm({...form,password:e.target.value})}/></Field><SelectField label="Perfil" value={form.role} onChange={(v:string)=>setForm({...form,role:v})} rows={[{id:'viewer',name:'Consulta'},{id:'editor',name:'Comprador'},{id:'admin',name:'Administrador'}]}/></div><DialogFooter><Button variant="outline" onClick={onClose}>Cancelar</Button><Button onClick={()=>onSave(form)}>Criar usuário</Button></DialogFooter></DialogContent></Dialog>}
+function Mappings({ catalogs, run }: JsonData) {
+  const [data, setData] = useState<AnyRow>({ items: [], models: [] }),
+    [type, setType] = useState<'items' | 'models' | 'units'>('items'),
+    [edit, setEdit] = useState<AnyRow | null>(null),
+    [loading, setLoading] = useState(true),
+    [loadError, setLoadError] = useState('');
+  const load = useCallback(async () => {
+    setLoading(true);
+    setLoadError('');
+    try {
+      setData(await api('/api/mappings'));
+    } catch (error) {
+      setLoadError(errorText(error));
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+  useEffect(() => {
+    let active = true;
+    void api('/api/mappings')
+      .then((result) => {
+        if (active) {
+          setData(result);
+          setLoading(false);
+        }
+      })
+      .catch((error) => {
+        if (active) {
+          setLoadError(errorText(error));
+          setLoading(false);
+        }
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+  const rows = data[type] || [],
+    targets = catalogs[type].map((row: AnyRow) => ({
+      ...row,
+      name: type === 'units' ? row.code : row.name,
+      active: row.active,
+    }));
+  const { ordem, alternar, ordenar } = useOrdenacao(type);
+  if (loadError)
+    return <ListError error={loadError} onRetry={() => void load()} />;
+  const valoresDoMapeamento = (linha: AnyRow) => [
+    linha.source,
+    linha.target,
+    linha.active ? 'Ativa' : 'Inativa',
+  ];
+  const remove = (row: AnyRow) => {
+    if (!confirm(`Excluir a correspondência "${row.source}"?`)) return;
+    void run(async () => {
+      await api(`/api/mappings/${type}/${row.id}`, { method: 'DELETE' });
+      await load();
+    }, 'Correspondência excluída.');
+  };
+  return (
+    <div className="space-y-5">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold">De/Para da importação</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Toda nomenclatura de item e modelo da planilha precisa ter uma
+            correspondência ativa. A unidade aceita o nome cadastrado e as
+            correspondências confirmadas; a localidade precisa estar no
+            cadastro.
+          </p>
+        </div>
+        <Button onClick={() => setEdit({ type, active: true })}>
+          <Plus /> Nova correspondência
+        </Button>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        {(['items', 'models', 'units'] as const).map((value) => (
+          <Button
+            key={value}
+            variant={type === value ? 'default' : 'outline'}
+            onClick={() => setType(value)}
+          >
+            {{ items: 'Itens', models: 'Modelos', units: 'Unidades' }[value]}
+          </Button>
+        ))}
+      </div>
+      <Card>
+        <CardContent className="px-0 pb-0">
+          {loading ? (
+            <div className="flex items-center gap-2 p-8 text-sm text-muted-foreground">
+              <LoaderCircle className="size-4 animate-spin" /> Carregando
+              correspondências…
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <CabecalhoOrdenavel
+                  titulos={['Original', 'Correspondente', 'Situação']}
+                  ordem={ordem}
+                  onAlternar={alternar}
+                />
+              </TableHeader>
+              <TableBody>
+                {ordenar(rows, valoresDoMapeamento).map((row: AnyRow) => (
+                  <TableRow
+                    key={row.id}
+                    className={row.active ? '' : 'opacity-50'}
+                  >
+                    <TableCell>
+                      <p className="font-medium">{row.source}</p>
+                      {normalizeImportText(row.source) !== row.sourceKey && (
+                        <p className="text-xs text-muted-foreground">
+                          Chave: {row.sourceKey}
+                        </p>
+                      )}
+                    </TableCell>
+                    <TableCell>{row.target}</TableCell>
+                    <TableCell>
+                      <Badge
+                        className={
+                          row.active
+                            ? 'bg-emerald-50 text-emerald-700'
+                            : 'bg-slate-100 text-slate-600'
+                        }
+                      >
+                        {row.active ? 'Ativa' : 'Inativa'}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Button
+                        size="icon-sm"
+                        variant="ghost"
+                        onClick={() => setEdit({ ...row, type })}
+                      >
+                        <Pencil />
+                      </Button>
+                      <Button
+                        size="icon-sm"
+                        variant="ghost"
+                        onClick={() => remove(row)}
+                      >
+                        <Trash2 />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+          {!loading && !rows.length && (
+            <div className="p-10 text-center text-sm text-muted-foreground">
+              {type === 'units'
+                ? 'Nenhuma correspondência cadastrada. As unidades ativas escritas com a nomenclatura correta já são reconhecidas direto. Cadastre uma correspondência apenas para abreviações, variações de grafia ou nomes alternativos.'
+                : 'Nenhuma correspondência cadastrada. A importação será recusada até que os valores da planilha tenham De/Para.'}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+      {edit && (
+        <MappingDialog
+          value={edit}
+          targets={targets}
+          onClose={() => setEdit(null)}
+          onSave={(body: AnyRow) =>
+            run(async () => {
+              const path = body.id
+                ? `/api/mappings/${body.type}/${body.id}`
+                : `/api/mappings/${body.type}`;
+              await api(path, {
+                method: body.id ? 'PUT' : 'POST',
+                headers: { 'content-type': 'application/json' },
+                body: JSON.stringify(body),
+              });
+              setEdit(null);
+              await load();
+            }, 'Correspondência salva.')
+          }
+        />
+      )}
+    </div>
+  );
+}
 
-function Field({label,children,className=''}:JsonData){return <label className={`block ${className}`}><span className="mb-1.5 block text-sm font-medium">{label}</span>{children}</label>}
-function SelectField({label,value,onChange,rows,labelFn=(x:AnyRow)=>x.name}:JsonData){return <SearchSelect searchable={!label.includes('UF')} label={label} value={value} onChange={onChange} options={rows.map((row:AnyRow)=>({id:row.id,name:labelFn(row)}))}/>}
-function Status({value}:JsonData){const map:AnyRow={active:['Vigente','bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200'],expired:['Expirado','bg-red-50 text-red-700 ring-1 ring-red-200'],suspended:['Suspenso','bg-amber-50 text-amber-700 ring-1 ring-amber-200']};const x=map[value]||[value,'bg-slate-100'];return <Badge className={x[1]}>{x[0]}</Badge>}
-const statusName=(x:string)=>({active:'Vigente',expired:'Expirado',suspended:'Suspenso'} as AnyRow)[x]||x;
-const roleName=(x:string)=>({admin:'Administrador',editor:'Comprador',viewer:'Consulta'} as AnyRow)[x]||x;
-function Empty({icon:Icon,title,text}:JsonData){return <Card><CardContent className="grid min-h-72 place-items-center text-center"><div><div className="mx-auto grid size-12 place-items-center rounded-xl bg-muted text-muted-foreground"><Icon/></div><p className="mt-4 font-semibold">{title}</p><p className="mt-1 text-sm text-muted-foreground">{text}</p></div></CardContent></Card>}
+function MappingDialog({ value, targets, onClose, onSave }: JsonData) {
+  const [form, setForm] = useState<AnyRow>({ ...value });
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>
+            {form.id ? 'Editar' : 'Nova'} correspondência de{' '}
+            {
+              {
+                items: 'item',
+                models: 'modelo',
+                units: 'unidade',
+                locations: 'localidade',
+              }[form.type as string]
+            }
+          </DialogTitle>
+          <DialogDescription>
+            O texto recebido será comparado em maiúsculas, sem acentos e com
+            espaços normalizados.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4">
+          <Field
+            label={
+              form.type === 'locations'
+                ? 'Original (CIDADE/UF) *'
+                : 'Original *'
+            }
+          >
+            <Input
+              value={form.source || ''}
+              onChange={(e) => setForm({ ...form, source: e.target.value })}
+            />
+          </Field>
+          <SelectField
+            label="Correspondente *"
+            value={form.targetId || ''}
+            onChange={(targetId: string) => setForm({ ...form, targetId })}
+            rows={targets.filter((row: AnyRow) => row.active)}
+          />
+          {form.id && (
+            <div className="flex items-center gap-2 rounded-lg border p-3">
+              <Checkbox
+                id="mapping-active"
+                checked={form.active !== false && form.active !== 0}
+                onCheckedChange={(checked: JsonData) =>
+                  setForm({ ...form, active: !!checked })
+                }
+              />
+              <label
+                htmlFor="mapping-active"
+                className="cursor-pointer text-sm"
+              >
+                Correspondência ativa
+              </label>
+            </div>
+          )}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
+            Cancelar
+          </Button>
+          <Button
+            disabled={!form.source || !form.targetId}
+            onClick={() => onSave(form)}
+          >
+            <CheckCircle2 /> Salvar
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function CatalogDialog({ open, value, busy, onClose, onSave }: JsonData) {
+  const [form, setForm] = useState<AnyRow>(value || {});
+  const t = form.type;
+  return (
+    <Dialog open={open} onOpenChange={(x) => !x && !busy && onClose()}>
+      <DialogContent showCloseButton={!busy}>
+        <DialogHeader>
+          <DialogTitle>{form.id ? 'Editar' : 'Novo'} cadastro</DialogTitle>
+          <DialogDescription>
+            Os dados ficarão disponíveis para acordos e importações.
+          </DialogDescription>
+        </DialogHeader>
+        <fieldset disabled={busy} className="space-y-4">
+          {t === 'suppliers' && (
+            <>
+              <Field label="Nome do fornecedor *">
+                <Input
+                  value={form.tradeName || ''}
+                  onChange={(e) =>
+                    setForm({ ...form, tradeName: e.target.value })
+                  }
+                />
+              </Field>
+              <Field label="Razão social">
+                <Input
+                  value={form.legalName || ''}
+                  onChange={(e) =>
+                    setForm({ ...form, legalName: e.target.value })
+                  }
+                />
+              </Field>
+              <Field label="CNPJ *">
+                <Input
+                  value={form.cnpj || ''}
+                  onChange={(e) => setForm({ ...form, cnpj: e.target.value })}
+                />
+              </Field>
+              <Field label="Cidade">
+                <Input
+                  value={form.city || ''}
+                  onChange={(e) => setForm({ ...form, city: e.target.value })}
+                />
+              </Field>
+              <Field label="UF">
+                <Input
+                  maxLength={2}
+                  value={form.state || ''}
+                  onChange={(e) =>
+                    setForm({ ...form, state: e.target.value.toUpperCase() })
+                  }
+                />
+              </Field>
+            </>
+          )}
+          {['items', 'models'].includes(t) && (
+            <Field label="Nome *">
+              <Input
+                value={form.name || ''}
+                onChange={(e) => setForm({ ...form, name: e.target.value })}
+              />
+            </Field>
+          )}
+          {t === 'units' && (
+            <Field label="Unidade *">
+              <Input
+                value={form.code || ''}
+                onChange={(e) => setForm({ ...form, code: e.target.value })}
+              />
+            </Field>
+          )}
+          {t === 'locations' && (
+            <>
+              <SelectField
+                label="UF *"
+                value={form.state || ''}
+                onChange={(state: string) => setForm({ ...form, state })}
+                rows={BRAZILIAN_STATES.map((state) => ({
+                  id: state,
+                  name: state,
+                }))}
+              />
+              <Field label="Cidade *">
+                <Input
+                  value={form.city || ''}
+                  onChange={(e) => setForm({ ...form, city: e.target.value })}
+                />
+              </Field>
+            </>
+          )}
+          {form.id && t !== 'locations' && (
+            <label
+              htmlFor="catalog-active"
+              className="flex items-center gap-2 rounded-lg border p-3"
+            >
+              <Checkbox
+                id="catalog-active"
+                checked={form.active !== false && form.active !== 0}
+                onCheckedChange={(checked) =>
+                  setForm({ ...form, active: !!checked })
+                }
+              />
+              <span className="text-sm">Cadastro ativo</span>
+            </label>
+          )}
+        </fieldset>
+        <DialogFooter>
+          <Button variant="outline" disabled={busy} onClick={onClose}>
+            Cancelar
+          </Button>
+          <Button disabled={busy} onClick={() => onSave(form)}>
+            {busy ? (
+              <LoaderCircle className="animate-spin" />
+            ) : (
+              <CheckCircle2 />
+            )}{' '}
+            Salvar
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+function UserDialog({ open, onClose, onSave }: JsonData) {
+  const busy = useContext(MutationBusy);
+  const [form, setForm] = useState({
+    name: '',
+    email: '',
+    password: '',
+    role: 'viewer',
+  });
+  return (
+    <Dialog open={open} onOpenChange={(x) => !x && !busy && onClose()}>
+      <DialogContent showCloseButton={!busy}>
+        <DialogHeader>
+          <DialogTitle>Novo usuário autorizado</DialogTitle>
+        </DialogHeader>
+        <fieldset disabled={busy} className="space-y-4">
+          <Field label="Nome *">
+            <Input
+              value={form.name}
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
+            />
+          </Field>
+          <Field label="E-mail *">
+            <Input
+              type="email"
+              value={form.email}
+              onChange={(e) => setForm({ ...form, email: e.target.value })}
+            />
+          </Field>
+          <Field label="Senha inicial *">
+            <Input
+              type="password"
+              value={form.password}
+              onChange={(e) => setForm({ ...form, password: e.target.value })}
+            />
+          </Field>
+          <SelectField
+            label="Perfil"
+            value={form.role}
+            onChange={(v: string) => setForm({ ...form, role: v })}
+            rows={[
+              { id: 'viewer', name: 'Consulta' },
+              { id: 'editor', name: 'Comprador' },
+              { id: 'admin', name: 'Administrador' },
+            ]}
+          />
+        </fieldset>
+        <DialogFooter>
+          <Button variant="outline" disabled={busy} onClick={onClose}>
+            Cancelar
+          </Button>
+          <Button onClick={() => onSave(form)} disabled={busy}>
+            Criar usuário
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function Field({ label, children, className = '' }: JsonData) {
+  return (
+    <label className={`block ${className}`}>
+      <span className="mb-1.5 block text-sm font-medium">{label}</span>
+      {children}
+    </label>
+  );
+}
+function SelectField({
+  label,
+  value,
+  onChange,
+  rows,
+  labelFn = (x: AnyRow) => x.name,
+}: JsonData) {
+  return (
+    <SearchSelect
+      searchable={!label.includes('UF')}
+      label={label}
+      value={value}
+      onChange={onChange}
+      options={rows.map((row: AnyRow) => ({ id: row.id, name: labelFn(row) }))}
+    />
+  );
+}
+function Status({ value }: JsonData) {
+  const map: AnyRow = {
+    active: [
+      'Vigente',
+      'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200',
+    ],
+    expired: ['Expirado', 'bg-red-50 text-red-700 ring-1 ring-red-200'],
+    suspended: ['Suspenso', 'bg-amber-50 text-amber-700 ring-1 ring-amber-200'],
+  };
+  const x = map[value] || [value, 'bg-slate-100'];
+  return <Badge className={x[1]}>{x[0]}</Badge>;
+}
+const statusName = (x: string) =>
+  (
+    ({
+      active: 'Vigente',
+      expired: 'Expirado',
+      suspended: 'Suspenso',
+    }) as AnyRow
+  )[x] || x;
+const roleName = (x: string) =>
+  (
+    ({
+      admin: 'Administrador',
+      editor: 'Comprador',
+      viewer: 'Consulta',
+    }) as AnyRow
+  )[x] || x;
+function Empty({ icon: Icon, title, text }: JsonData) {
+  return (
+    <Card>
+      <CardContent className="grid min-h-72 place-items-center text-center">
+        <div>
+          <div className="mx-auto grid size-12 place-items-center rounded-xl bg-muted text-muted-foreground">
+            <Icon />
+          </div>
+          <p className="mt-4 font-semibold">{title}</p>
+          <p className="mt-1 text-sm text-muted-foreground">{text}</p>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}

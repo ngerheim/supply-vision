@@ -32,6 +32,10 @@ jobs:
       - run: npm run typecheck
       - run: npm run lint
       - run: npm run build
+      - name: Instalar navegador de teste
+        run: npx playwright install --with-deps chromium
+      - name: Validar UX com banco descartável
+        run: npm run test:ux
       # O instalador ja cobrava isto na maquina; o CI nao. Vulnerabilidade
       # precisa aparecer no PR, nao na instalacao. A auditoria e completa de
       # proposito: no servidor o Portal sobe com wrangler/miniflare, que sao

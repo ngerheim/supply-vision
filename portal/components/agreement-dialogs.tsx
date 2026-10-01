@@ -239,7 +239,7 @@ export function ItemDialog({
     selected: string[] = form.modelIds || [];
   const options = (type: string) =>
     catalogs[type]
-      .filter((row: AnyRow) => row.active)
+      .filter((row: AnyRow) => row.active || (editing && row.id===value[type==='items'?'catalogItemId':type==='models'?'modelId':'unitId']))
       .map((row: AnyRow) => ({
         id: row.id,
         name: type === 'units' ? row.code : row.name,

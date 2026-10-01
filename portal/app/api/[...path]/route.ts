@@ -1,3 +1,6 @@
+import { paginacao, paginaEfetiva } from '@/lib/paginacao';
+import { padraoBuscaSql, textoBuscaSql } from '@/lib/busca-sql';
+import { flag } from '@/lib/flags';
 import { condicoesBusca } from '@/lib/filtros-busca';
 import { ATUALIZAR_USUARIO_SQL } from '@/lib/usuarios-sql';
 import { montarPowerBiUrl } from '@/lib/powerbi';
@@ -15,7 +18,7 @@ import {
 } from '@/lib/limites-entrada';
 import { env } from 'cloudflare:workers';
 import {
-  audit, currentUser, ensureDatabase, id, normalizeCnpj, normalizeText, now,
+  audit, auditStatement, currentUser, ensureDatabase, id, normalizeCnpj, normalizeText, now,
   PBKDF2_ITERACOES_ATUAL, TRAVA_IMPORTACAO, adquirirTrava, liberarTrava,
   parseCookies, passwordHash, rawDb, tokenHash,
 } from '@/lib/database';
@@ -187,6 +190,11 @@ function validateAgreementInput(body: AgreementInput): { value?: ValidAgreementI
 }
 
 export async function GET(request: NextRequest) {
+  try { return await GETInterno(request); }
+  catch (erro: unknown) { return respostaDeErro(erro); }
+}
+
+async function GETInterno(request: NextRequest) {
   await ensureDatabase();
   const parts = partsOf(request);
   if (parts[0] === 'health') return ok({ app: 'portal-suprimentos', status: 'ok' });
@@ -200,6 +208,7 @@ export async function GET(request: NextRequest) {
 
   if (parts[0] === 'bootstrap') return bootstrap(user);
   if (parts[0] === 'search') return search(request.nextUrl.searchParams);
+  if (parts[0] === 'agreements' && !parts[1]) return ok(await agreementList(request.nextUrl.searchParams));
   if (parts[0] === 'agreements' && parts[1]) return agreementDetail(parts[1], user, request.nextUrl.searchParams);
 
   // Daqui para baixo, somente quem tem perfil de escrita (admin/editor).
@@ -207,7 +216,7 @@ export async function GET(request: NextRequest) {
   if (!canWrite(user)) return fail('Seu perfil permite apenas consultar acordos e preços.', 403);
 
   if (parts[0] === 'imports' && parts[1]) return importDetail(parts[1]);
-  if (parts[0] === 'imports') return ok({ imports: await importList() });
+  if (parts[0] === 'imports') return importPage(request.nextUrl.searchParams);
   if (parts[0] === 'mappings') {
     if (user.role !== 'admin') return fail('Somente administradores podem gerenciar o De/Para.', 403);
     return mappingList();
@@ -218,13 +227,13 @@ export async function GET(request: NextRequest) {
   }
   if (parts[0] === 'email-notifications') {
     if (user.role !== 'admin') return fail('Somente administradores podem consultar os envios de e-mail.', 403);
-    return ok(await emailNotificationList());
+    return ok(await emailNotificationList(request.nextUrl.searchParams));
   }
   if (parts[0] === 'users') return ok({ users: user.role === 'admin'
     ? await all('SELECT id,name,email,role,active,daily_report_enabled AS dailyReportEnabled,daily_report_time AS dailyReportTime,created_at AS createdAt FROM users ORDER BY name')
     : await all('SELECT id,name FROM users WHERE active=1 ORDER BY name') });
   if (parts[0] === 'tickets' && parts[1]) return ticketDetail(parts[1]);
-  if (parts[0] === 'tickets') return ok({ tickets: await ticketList(), stats: await ticketStats() });
+  if (parts[0] === 'tickets') return ok({ ...(await ticketList(request.nextUrl.searchParams)), stats: await ticketStats() });
   if (parts[0] === 'export' && parts[1] === 'agreements') {
     const resposta = await exportAgreements();
     await audit(user.id, 'EXPORT', 'agreement', null, 'Planilha de acordos gerada para download');
@@ -317,8 +326,7 @@ async function DELETEInterno(request: NextRequest) {
   if (parts[0] === 'items' && parts[1]) {
     const item = await first<{ id: string }>('SELECT ai.id FROM agreement_items ai JOIN agreements a ON a.current_version_id=ai.version_id WHERE ai.id=?', [parts[1]]);
     if (!item) return fail('Condição não encontrada na versão vigente.', 404);
-    await rawDb().prepare('DELETE FROM agreement_items WHERE id=?').bind(parts[1]).run();
-    await audit(user.id, 'DELETE', 'agreement_item', parts[1], 'Item removido manualmente');
+    await rawDb().batch([rawDb().prepare('DELETE FROM agreement_items WHERE id=?').bind(parts[1]), auditStatement(user.id, 'DELETE', 'agreement_item', parts[1], 'Item removido manualmente')]);
     return ok({ success: true });
   }
   if (parts[0] === 'agreements' && parts[1] && parts.length === 2) return deleteAgreement(user, parts[1]);
@@ -364,6 +372,8 @@ async function deleteAgreement(user: User, agreementId: string) {
   const chamados = Number((await first<{ n: number }>(
     'SELECT COUNT(*) n FROM tickets WHERE agreement_id=?', [agreementId]))?.n || 0);
 
+  const detalhe = `Acordo ${acordo.number} (${acordo.supplier}) excluído: ${condicoes} condição(ões) e ${versoes} versão(ões) apagadas` +
+    (chamados > 0 ? `; ${chamados} chamado(s) preservado(s), sem o vínculo` : '');
   const db = rawDb();
   await db.batch([
     // current_version_id aponta para agreement_versions: precisa sair antes,
@@ -376,11 +386,9 @@ async function deleteAgreement(user: User, agreementId: string) {
     db.prepare('UPDATE imports SET agreement_id=NULL WHERE agreement_id=?').bind(agreementId),
     db.prepare('UPDATE tickets SET agreement_id=NULL WHERE agreement_id=?').bind(agreementId),
     db.prepare('DELETE FROM agreements WHERE id=?').bind(agreementId),
+    auditStatement(user.id, 'DELETE', 'agreement', agreementId, detalhe),
   ]);
 
-  const detalhe = `Acordo ${acordo.number} (${acordo.supplier}) excluído: ${condicoes} condição(ões) e ${versoes} versão(ões) apagadas` +
-    (chamados > 0 ? `; ${chamados} chamado(s) preservado(s), sem o vínculo` : '');
-  await audit(user.id, 'DELETE', 'agreement', agreementId, detalhe);
   return ok({ success: true, condicoes, versoes, chamadosDesvinculados: chamados });
 }
 
@@ -398,7 +406,7 @@ const catalogDependencies: Record<string, { table: string; queries: Array<[strin
 async function deleteCatalog(user: User, type: string, recordId: string) {
   const cfg = catalogDependencies[type];
   if (!cfg) return fail('Cadastro inválido.');
-  const existing = await first<{ id: string }>(`SELECT id FROM ${cfg.table} WHERE id=?`, [recordId]);
+  const existing = await first<{ id: string; active?: number }>(`SELECT * FROM ${cfg.table} WHERE id=?`, [recordId]);
   if (!existing) return fail('Cadastro não encontrado.', 404);
 
   const blockers: string[] = [];
@@ -416,8 +424,7 @@ async function deleteCatalog(user: User, type: string, recordId: string) {
     : type === 'locations' ? `SELECT city || ' / ' || state AS nome FROM locations WHERE id=?`
     : `SELECT name AS nome FROM ${cfg.table} WHERE id=?`, [recordId]);
 
-  await rawDb().prepare(`DELETE FROM ${cfg.table} WHERE id=?`).bind(recordId).run();
-  await audit(user.id, 'DELETE', type, recordId, `${label?.nome || recordId} excluído do cadastro`);
+  await rawDb().batch([rawDb().prepare(`DELETE FROM ${cfg.table} WHERE id=?`).bind(recordId), auditStatement(user.id, 'DELETE', type, recordId, `${label?.nome || recordId} excluído do cadastro`)]);
   return ok({ success: true });
 }
 
@@ -552,14 +559,14 @@ async function authenticate(request: Request, texto: string) {
   const token = crypto.randomUUID().replaceAll('-', '') + crypto.randomUUID().replaceAll('-', '');
   const guardado = await tokenHash(token);
   const expires = new Date(Date.now() + 12 * 60 * 60 * 1000).toISOString();
-  await rawDb().batch([
+  const statements=[
     rawDb().prepare('INSERT INTO sessions (token,user_id,expires_at,last_seen_at) VALUES (?,?,?,?)').bind(guardado, record!.id, expires, agora),
     // Acerto limpa o historico de erros daquele e-mail nesta origem.
     rawDb().prepare('DELETE FROM login_attempts WHERE ip=? AND email IS ? AND success=0').bind(ip, email || null),
     // Higiene: sessoes vencidas e tentativas antigas.
     rawDb().prepare('DELETE FROM sessions WHERE expires_at<?').bind(now()),
     rawDb().prepare('DELETE FROM login_attempts WHERE created_at<?').bind(new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()),
-  ]);
+  ];
 
   // Migracao silenciosa do custo: quem entrou com uma senha de custo antigo tem
   // o hash regravado agora, com a senha em maos e ja validada. Cada usuario se
@@ -567,10 +574,11 @@ async function authenticate(request: Request, texto: string) {
   if (iteracoesDoHash < PBKDF2_ITERACOES_ATUAL && typeof body.password === 'string') {
     const salNovo = crypto.randomUUID();
     const hashNovo = await passwordHash(body.password, salNovo, PBKDF2_ITERACOES_ATUAL);
-    await rawDb().prepare('UPDATE users SET password_salt=?,password_hash=?,password_iterations=? WHERE id=?')
-      .bind(salNovo, hashNovo, PBKDF2_ITERACOES_ATUAL, record!.id).run();
+    statements.push(rawDb().prepare('UPDATE users SET password_salt=?,password_hash=?,password_iterations=? WHERE id=?')
+      .bind(salNovo, hashNovo, PBKDF2_ITERACOES_ATUAL, record!.id));
   }
-  await audit(record!.id, 'LOGIN', 'session', null, `Acesso realizado de ${ip}`);
+  statements.push(auditStatement(record!.id, 'LOGIN', 'session', null, `Acesso realizado de ${ip}`));
+  await rawDb().batch(statements);
   const response = ok({ user: { id: record!.id, name: record!.name, email: record!.email, role: record!.role } });
   response.cookies.set('acordos_session', token, {
     httpOnly: true,
@@ -588,8 +596,7 @@ async function logout(request: Request) {
   // perdia o cookie, mas a sessao verdadeira continuava valida no banco.
   const token = parseCookies(request).acordos_session;
   const user = token ? await currentUser(request) : null;
-  if (token) await rawDb().prepare('DELETE FROM sessions WHERE token=?').bind(await tokenHash(token)).run();
-  if (user) await audit(user.id, 'LOGOUT', 'session', null, 'Sessão encerrada pelo usuário');
+  if(token)await rawDb().batch([rawDb().prepare('DELETE FROM sessions WHERE token=?').bind(await tokenHash(token)),...(user?[auditStatement(user.id, 'LOGOUT', 'session', null, 'Sessão encerrada pelo usuário')]:[])]);
   const response = ok({ success: true });
   response.cookies.set('acordos_session', '', {
     httpOnly: true,
@@ -635,8 +642,8 @@ async function bootstrap(user: User) {
   return ok({ user, agreements, totalAcordos: total, catalogs: { suppliers, items, models, units, locations }, imports, manutencao: relatorioManutencao() });
 }
 
-async function agreementList() {
-  return all(`SELECT a.id,a.number,a.status,a.start_date AS startDate,a.end_date AS endDate,a.updated_at AS updatedAt,
+async function agreementList(params?: URLSearchParams) {
+  const sql = `SELECT a.id,a.number,a.status,a.start_date AS startDate,a.end_date AS endDate,a.updated_at AS updatedAt,
     CASE WHEN a.status='active' AND date(a.start_date)>date(?1) THEN 'scheduled'
       WHEN a.status='active' AND a.end_date IS NOT NULL AND date(a.end_date)<date(?1) THEN 'expired'
       WHEN a.status='active' AND a.end_date IS NOT NULL AND date(a.end_date) BETWEEN date(?1) AND date(?1,'+60 day') THEN 'expiring'
@@ -646,13 +653,20 @@ async function agreementList() {
     (SELECT COUNT(*) FROM agreement_items ai WHERE ai.version_id=a.current_version_id) AS itemCount,
     (SELECT GROUP_CONCAT(l.city || ' / ' || l.state) FROM agreement_locations al JOIN locations l ON l.id=al.location_id WHERE al.agreement_id=a.id) AS locations
     FROM agreements a JOIN suppliers s ON s.id=a.supplier_id
-    ORDER BY a.updated_at DESC LIMIT 500`, [dataDeNegocio()]);
+    `;
+  if (!params) return all(`${sql} ORDER BY a.updated_at DESC,a.id DESC`, [dataDeNegocio()]);
+  return listPage(sql, [dataDeNegocio()], params, 'agreements');
 }
 
 async function agreementDetail(agreementId: string, user: User, params: URLSearchParams) {
   const requestedOffset = Number(params.get('offset') || 0);
-  const offset = Number.isSafeInteger(requestedOffset) && requestedOffset >= 0 ? requestedOffset : 0;
-  const limit = 500;
+  let offset = Number.isSafeInteger(requestedOffset) && requestedOffset >= 0 ? requestedOffset : 0;
+  const paging=params.has('page')?paginacao(params):null;
+  const limit = paging?.pageSize||500;
+  const q=exigeTexto(params.get('q'),LIMITES_CAMPO.busca,'busca');
+  const term=padraoBuscaSql(q);
+  const filter=q?' AND ('+['ci.name','vm.name','l.city','ai.brands_text'].map(column=>`instr(${textoBuscaSql(column)},?)>0`).join(' OR ')+')':'';
+  const binds:unknown[]=[agreementId,...(q?[term,term,term,term]:[])];
   const sortColumns: Record<string, string> = {
     item: 'ci.name', model: 'vm.name', location: "l.state || '/' || l.city",
     brands: "COALESCE(ai.brands_text,'')", unit: 'un.code', price: 'ai.price',
@@ -668,24 +682,27 @@ async function agreementDetail(agreementId: string, user: User, params: URLSearc
     s.trade_name AS supplier,s.legal_name AS legalName,s.cnpj,u.name AS owner
     FROM agreements a JOIN suppliers s ON s.id=a.supplier_id LEFT JOIN users u ON u.id=a.owner_user_id WHERE a.id=?2`, [dataDeNegocio(), agreementId]);
   if (!agreement) return fail('Acordo não encontrado.', 404);
+  const filteredTotal=Number((await first<{n:number}>(`SELECT COUNT(*) n FROM agreements a JOIN agreement_items ai ON ai.version_id=a.current_version_id JOIN catalog_items ci ON ci.id=ai.catalog_item_id JOIN vehicle_models vm ON vm.id=ai.vehicle_model_id JOIN locations l ON l.id=ai.location_id WHERE a.id=?${filter}`,binds))?.n||0);
+  const page=paging?paginaEfetiva(paging.page,limit,filteredTotal):1;
+  if(paging)offset=(page-1)*limit;
   const [locations, rows, versions] = await Promise.all([
     all(`SELECT l.id,l.city,l.state FROM agreement_locations al JOIN locations l ON l.id=al.location_id WHERE al.agreement_id=? ORDER BY l.state,l.city`, [agreementId]),
     all(`SELECT ai.id,ai.price,ai.courtesy,ai.brands_text AS brands,ai.notes,ci.id AS catalogItemId,ci.name AS item,
       vm.id AS modelId,vm.name AS model,un.id AS unitId,un.code AS unit,l.id AS locationId,l.city,l.state
       FROM agreements a JOIN agreement_items ai ON ai.version_id=a.current_version_id JOIN catalog_items ci ON ci.id=ai.catalog_item_id
       JOIN vehicle_models vm ON vm.id=ai.vehicle_model_id JOIN units un ON un.id=ai.unit_id JOIN locations l ON l.id=ai.location_id
-      WHERE a.id=? ORDER BY ${sortColumn} ${sortDirection},ai.id ASC LIMIT ? OFFSET ?`, [agreementId, limit, offset]),
+      WHERE a.id=?${filter} ORDER BY ${sortColumn} ${sortDirection},ai.id ASC LIMIT ? OFFSET ?`, [...binds, limit, offset]),
     all(`SELECT version_number AS versionNumber,status,published_at AS publishedAt,created_at AS createdAt FROM agreement_versions WHERE agreement_id=? ORDER BY version_number DESC`, [agreementId]),
   ]);
   if (!canWrite(user)) {
     const { id, number, status, start_date, end_date, effectiveStatus, supplier, cnpj } = agreement;
     return ok({ agreement: { id, number, status, start_date, end_date, effectiveStatus, supplier, cnpj }, locations,
-      totalItems: agreement.totalItems, offset, limit, version: agreement.current_version_id,
+      totalItems: agreement.totalItems, total:filteredTotal, page, pageSize:limit, offset, limit, version: agreement.current_version_id,
       items: rows.map(({ notes: _notes, ...item }) => item),
       versions: versions.map(({ versionNumber }) => ({ versionNumber })),
     });
   }
-  return ok({ agreement, locations, items: rows, versions, totalItems: agreement.totalItems, offset, limit, version: agreement.current_version_id });
+  return ok({ agreement, locations, items: rows, versions, totalItems: agreement.totalItems, total:filteredTotal, page, pageSize:limit, offset, limit, version: agreement.current_version_id });
 }
 
 async function createAgreement(request: Request, user: User) {
@@ -702,8 +719,8 @@ async function createAgreement(request: Request, user: User) {
       rawDb().prepare(`INSERT INTO agreements (id,number,supplier_id,status,start_date,end_date,owner_user_id,notes,provisional,current_version_id,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,0,?,?,?)`).bind(agreementId, body.number, body.supplierId, body.status, body.startDate, body.endDate, user.id, body.notes, versionId, timestamp, timestamp),
       rawDb().prepare(`INSERT INTO agreement_versions (id,agreement_id,version_number,status,published_at,created_by,created_at) VALUES (?,?,1,'published',?,?,?)`).bind(versionId, agreementId, timestamp, user.id, timestamp),
       ...body.locationIds.map((locationId) => rawDb().prepare('INSERT INTO agreement_locations (agreement_id,location_id) VALUES (?,?)').bind(agreementId, locationId)),
+    auditStatement(user.id, 'CREATE', 'agreement', agreementId, `Acordo ${body.number} criado`),
     ]);
-    await audit(user.id, 'CREATE', 'agreement', agreementId, `Acordo ${body.number} criado`);
     return ok({ id: agreementId }, { status: 201 });
   } catch (error: unknown) { return fail(errorMessage(error).includes('UNIQUE') ? 'Já existe um acordo com esse número.' : 'Não foi possível criar o acordo.'); }
 }
@@ -774,8 +791,8 @@ async function updateAgreement(request: Request, user: User, agreementId: string
       rawDb().prepare('UPDATE agreements SET number=?,supplier_id=?,status=?,start_date=?,end_date=?,notes=?,updated_at=? WHERE id=?').bind(body.number, body.supplierId, body.status, body.startDate, body.endDate, body.notes, now(), agreementId),
       rawDb().prepare('DELETE FROM agreement_locations WHERE agreement_id=?').bind(agreementId),
       ...body.locationIds.map((locationId) => rawDb().prepare('INSERT INTO agreement_locations (agreement_id,location_id) VALUES (?,?)').bind(agreementId, locationId)),
+    auditStatement(user.id, 'UPDATE', 'agreement', agreementId, 'Dados gerais atualizados'),
     ]);
-    await audit(user.id, 'UPDATE', 'agreement', agreementId, 'Dados gerais atualizados');
     return ok({ success: true });
   } catch (error: unknown) {
     return fail(errorMessage(error).includes('UNIQUE') ? 'Já existe um acordo com esse número.' : 'Não foi possível atualizar o acordo.');
@@ -802,10 +819,9 @@ async function addAgreementItems(request: Request, user: User, agreementId: stri
   ]);
   if (!references[0] || !references[1] || Number(references[2]?.n || 0) !== modelIds.length) return fail('Item, unidade ou modelo inválido/inativo.');
   const timestamp = now();
-  await rawDb().batch(modelIds.map((modelId) => rawDb().prepare(`INSERT INTO agreement_items (id,version_id,location_id,catalog_item_id,vehicle_model_id,unit_id,price,courtesy,brands_text,notes,created_at,updated_at)
+  await rawDb().batch([...modelIds.map((modelId) => rawDb().prepare(`INSERT INTO agreement_items (id,version_id,location_id,catalog_item_id,vehicle_model_id,unit_id,price,courtesy,brands_text,notes,created_at,updated_at)
     VALUES (?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(version_id,location_id,catalog_item_id,vehicle_model_id,unit_id) DO UPDATE SET price=excluded.price,courtesy=excluded.courtesy,brands_text=excluded.brands_text,notes=excluded.notes,updated_at=excluded.updated_at`)
-    .bind(id('itm'), agreement.current_version_id, locationId, catalogItemId, modelId, unitId, price, price === 0 ? 1 : 0, nullableText(body.brands), nullableText(body.notes), timestamp, timestamp)));
-  await audit(user.id, 'UPSERT', 'agreement_item', agreementId, `${modelIds.length} condição(ões) cadastrada(s)`);
+    .bind(id('itm'), agreement.current_version_id, locationId, catalogItemId, modelId, unitId, price, price === 0 ? 1 : 0, nullableText(body.brands), nullableText(body.notes), timestamp, timestamp)), auditStatement(user.id, 'UPSERT', 'agreement_item', agreementId, `${modelIds.length} condição(ões) cadastrada(s)`)]);
   return ok({ success: true });
 }
 
@@ -818,23 +834,22 @@ async function updateItem(request: Request, user: User, itemId: string) {
   const catalogItemId = textValue(body.catalogItemId), locationId = textValue(body.locationId), unitId = textValue(body.unitId), modelId = textValue(body.modelId);
   const price = toNonNegativeMoney(body.price);
   if (!catalogItemId || !locationId || !unitId || !modelId || price === null) return fail('Preencha item, localidade, modelo, unidade e um preço válido.');
-  const existing = await first<{ agreementId: string }>(`SELECT a.id AS agreementId FROM agreement_items ai JOIN agreements a ON a.current_version_id=ai.version_id WHERE ai.id=?`, [itemId]);
+  const existing = await first<{ agreementId: string; catalogItemId:string; modelId:string; unitId:string }>(`SELECT a.id AS agreementId,ai.catalog_item_id AS catalogItemId,ai.vehicle_model_id AS modelId,ai.unit_id AS unitId FROM agreement_items ai JOIN agreements a ON a.current_version_id=ai.version_id WHERE ai.id=?`, [itemId]);
   if (!existing) return fail('Condição não encontrada na versão vigente.', 404);
   const permittedLocation = await first('SELECT 1 ok FROM agreement_locations WHERE agreement_id=? AND location_id=?', [existing.agreementId, locationId]);
   if (!permittedLocation) return fail('A localidade selecionada não pertence à abrangência do acordo.');
   const references = await Promise.all([
-    first('SELECT 1 ok FROM catalog_items WHERE id=? AND active=1', [catalogItemId]),
-    first('SELECT 1 ok FROM vehicle_models WHERE id=? AND active=1', [modelId]),
-    first('SELECT 1 ok FROM units WHERE id=? AND active=1', [unitId]),
+    first('SELECT 1 ok FROM catalog_items WHERE id=? AND (active=1 OR id=?)', [catalogItemId,existing.catalogItemId]),
+    first('SELECT 1 ok FROM vehicle_models WHERE id=? AND (active=1 OR id=?)', [modelId,existing.modelId]),
+    first('SELECT 1 ok FROM units WHERE id=? AND (active=1 OR id=?)', [unitId,existing.unitId]),
   ]);
   if(references.some((reference)=>!reference)) return fail('Item, modelo ou unidade inválido/inativo.');
   try{
-    await rawDb().prepare('UPDATE agreement_items SET location_id=?,catalog_item_id=?,vehicle_model_id=?,unit_id=?,price=?,courtesy=?,brands_text=?,notes=?,updated_at=? WHERE id=?')
-      .bind(locationId, catalogItemId, modelId, unitId, price, price === 0 ? 1 : 0, nullableText(body.brands), nullableText(body.notes), now(), itemId).run();
+    await rawDb().batch([rawDb().prepare('UPDATE agreement_items SET location_id=?,catalog_item_id=?,vehicle_model_id=?,unit_id=?,price=?,courtesy=?,brands_text=?,notes=?,updated_at=? WHERE id=?')
+      .bind(locationId, catalogItemId, modelId, unitId, price, price === 0 ? 1 : 0, nullableText(body.brands), nullableText(body.notes), now(), itemId), auditStatement(user.id, 'UPDATE', 'agreement_item', itemId, 'Condição alterada manualmente')]);
   }catch(error:unknown){
     return fail(errorMessage(error).includes('UNIQUE')?'Já existe uma condição igual na versão vigente.':'Não foi possível atualizar a condição.');
   }
-  await audit(user.id, 'UPDATE', 'agreement_item', itemId, 'Condição alterada manualmente');
   return ok({ success: true });
 }
 
@@ -893,9 +908,8 @@ async function createMapping(request: Request, user: User, type: string) {
   if ('error' in value) return fail(value.error || 'De/Para inválido.');
   const recordId=id('map'), timestamp=now();
   try {
-    await rawDb().prepare(`INSERT INTO ${value.cfg.table} (id,source_text,source_key,target_id,active,notes,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?)`)
-      .bind(recordId,value.source,value.sourceKey,value.targetId,value.active,value.notes,timestamp,timestamp).run();
-    await audit(user.id,'CREATE','import_mapping',recordId,`De/Para de ${value.cfg.label} incluído: ${value.sourceKey}`);
+    await rawDb().batch([rawDb().prepare(`INSERT INTO ${value.cfg.table} (id,source_text,source_key,target_id,active,notes,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?)`)
+      .bind(recordId,value.source,value.sourceKey,value.targetId,value.active,value.notes,timestamp,timestamp), auditStatement(user.id,'CREATE','import_mapping',recordId,`De/Para de ${value.cfg.label} incluído: ${value.sourceKey}`)]);
     return ok({id:recordId},{status:201});
   } catch (error: unknown) {
     return fail(errorMessage(error).includes('UNIQUE')?'Já existe um De/Para para essa nomenclatura de origem.':'Não foi possível salvar o De/Para.');
@@ -909,9 +923,8 @@ async function updateMapping(request: Request, user: User, type: string, recordI
   const existing=await first(`SELECT 1 ok FROM ${value.cfg.table} WHERE id=?`,[recordId]);
   if(!existing) return fail('Correspondência não encontrada.',404);
   try {
-    await rawDb().prepare(`UPDATE ${value.cfg.table} SET source_text=?,source_key=?,target_id=?,active=?,notes=?,updated_at=? WHERE id=?`)
-      .bind(value.source,value.sourceKey,value.targetId,value.active,value.notes,now(),recordId).run();
-    await audit(user.id,'UPDATE','import_mapping',recordId,`De/Para de ${value.cfg.label} atualizado: ${value.sourceKey}`);
+    await rawDb().batch([rawDb().prepare(`UPDATE ${value.cfg.table} SET source_text=?,source_key=?,target_id=?,active=?,notes=?,updated_at=? WHERE id=?`)
+      .bind(value.source,value.sourceKey,value.targetId,value.active,value.notes,now(),recordId), auditStatement(user.id,'UPDATE','import_mapping',recordId,`De/Para de ${value.cfg.label} atualizado: ${value.sourceKey}`)]);
     return ok({success:true});
   } catch (error: unknown) {
     return fail(errorMessage(error).includes('UNIQUE')?'Já existe um De/Para para essa nomenclatura de origem.':'Não foi possível atualizar o De/Para.');
@@ -923,8 +936,7 @@ async function deleteMapping(user: User, type: string, recordId: string) {
   const cfg=mappingConfig[type]; if(!cfg) return fail('Tipo de De/Para inválido.');
   const existing=await first<{sourceKey:string}>(`SELECT source_key AS sourceKey FROM ${cfg.table} WHERE id=?`,[recordId]);
   if(!existing) return fail('Correspondência não encontrada.',404);
-  await rawDb().prepare(`DELETE FROM ${cfg.table} WHERE id=?`).bind(recordId).run();
-  await audit(user.id,'DELETE','import_mapping',recordId,`De/Para de ${cfg.label} excluído: ${existing.sourceKey}`);
+  await rawDb().batch([rawDb().prepare(`DELETE FROM ${cfg.table} WHERE id=?`).bind(recordId), auditStatement(user.id,'DELETE','import_mapping',recordId,`De/Para de ${cfg.label} excluído: ${existing.sourceKey}`)]);
   return ok({success:true});
 }
 
@@ -967,8 +979,8 @@ async function createCatalog(request: Request, user: User, type: string) {
     // planilha nunca encontraria.
     sql = 'INSERT INTO locations (id,city,state) VALUES (?,?,?)'; values = [recordId, normalizeImportText(body.city), state];
   }
-  try { await rawDb().prepare(sql).bind(...values).run(); await audit(user.id, 'CREATE', type, recordId, 'Cadastro incluído'); return ok({ id: recordId }, { status: 201 }); }
-  catch { return fail('Já existe um cadastro com esses dados.'); }
+  try { await rawDb().batch([rawDb().prepare(sql).bind(...values), auditStatement(user.id, 'CREATE', type, recordId, 'Cadastro incluído')]); return ok({ id: recordId }, { status: 201 }); }
+  catch(error:unknown){return fail(errorMessage(error).includes('UNIQUE')?'Já existe um cadastro com esses dados.':'Não foi possível incluir o cadastro.');}
 }
 
 async function updateCatalog(request: Request, user: User, type: string, recordId: string) {
@@ -976,28 +988,29 @@ async function updateCatalog(request: Request, user: User, type: string, recordI
   if (!cfg) return fail('Cadastro inválido.');
   const body = await jsonBody<CatalogInput>(request);
   exigeCamposDeCatalogo(body);
-  const existing = await first<{ id: string }>(`SELECT id FROM ${cfg.table} WHERE id=?`, [recordId]);
+  const existing = await first<{ id: string; active?: number }>(`SELECT * FROM ${cfg.table} WHERE id=?`, [recordId]);
   if (!existing) return fail('Cadastro não encontrado.', 404);
-  const active = body.active === false ? 0 : 1;
+  const active = flag(body.active, existing.active ?? 1);
+  let statement: D1PreparedStatement;
   try {
     if (type === 'suppliers') {
       if (!textValue(body.tradeName) || !isValidCnpj(body.cnpj)) return fail('Informe o nome e um CNPJ válido.');
-      await rawDb().prepare('UPDATE suppliers SET legal_name=?,trade_name=?,cnpj=?,city=?,state=?,active=?,updated_at=? WHERE id=?').bind(textValue(body.legalName) || textValue(body.tradeName), textValue(body.tradeName), normalizeCnpj(body.cnpj), nullableText(body.city), nullableText(body.state)?.toUpperCase().slice(0,2) ?? null, active, now(), recordId).run();
+      statement = rawDb().prepare('UPDATE suppliers SET legal_name=?,trade_name=?,cnpj=?,city=?,state=?,active=?,updated_at=? WHERE id=?').bind(textValue(body.legalName) || textValue(body.tradeName), textValue(body.tradeName), normalizeCnpj(body.cnpj), nullableText(body.city), nullableText(body.state)?.toUpperCase().slice(0,2) ?? null, active, now(), recordId);
     } else if (type === 'items') {
       if (!textValue(body.name)) return fail('Informe o nome da peça ou serviço.');
-      await rawDb().prepare('UPDATE catalog_items SET name=?,active=? WHERE id=?').bind(normalizeText(body.name), active, recordId).run();
+      statement = rawDb().prepare('UPDATE catalog_items SET name=?,active=? WHERE id=?').bind(normalizeText(body.name), active, recordId);
     } else if (type === 'models') {
       if (!textValue(body.name)) return fail('Informe o modelo.');
-      await rawDb().prepare('UPDATE vehicle_models SET name=?,active=? WHERE id=?').bind(normalizeText(body.name), active, recordId).run();
+      statement = rawDb().prepare('UPDATE vehicle_models SET name=?,active=? WHERE id=?').bind(normalizeText(body.name), active, recordId);
     } else if (type === 'units') {
       if (!textValue(body.code)) return fail('Informe a unidade de medida.');
-      await rawDb().prepare('UPDATE units SET code=?,name=?,active=? WHERE id=?').bind(normalizeText(body.code), normalizeText(body.code), active, recordId).run();
+      statement = rawDb().prepare('UPDATE units SET code=?,name=?,active=? WHERE id=?').bind(normalizeText(body.code), normalizeText(body.code), active, recordId);
     } else {
       const state = normalizeText(body.state);
       if (!normalizeImportText(body.city) || !isValidState(state)) return fail('Informe a cidade e selecione uma UF brasileira válida.');
-      await rawDb().prepare('UPDATE locations SET city=?,state=? WHERE id=?').bind(normalizeImportText(body.city), state, recordId).run();
+      statement = rawDb().prepare('UPDATE locations SET city=?,state=? WHERE id=?').bind(normalizeImportText(body.city), state, recordId);
     }
-    await audit(user.id, 'UPDATE', type, recordId, 'Cadastro atualizado'); return ok({ success: true });
+    await rawDb().batch([statement, auditStatement(user.id, 'UPDATE', type, recordId, 'Cadastro atualizado')]); return ok({ success: true });
   } catch (error: unknown) {
     return fail(errorMessage(error).includes('UNIQUE') ? 'Já existe um cadastro com esses dados.' : 'Não foi possível atualizar o cadastro.');
   }
@@ -1012,8 +1025,8 @@ async function createUser(request: Request, actor: User) {
   if (!validatePassword(body.password)) return fail('A senha deve ter entre 10 e 200 caracteres.');
   if (!isOneOf(role, ROLES)) return fail('Perfil de usuário inválido.');
   const salt = crypto.randomUUID(), hash = await passwordHash(body.password, salt, PBKDF2_ITERACOES_ATUAL), userId = id('usr');
-  try { await rawDb().prepare('INSERT INTO users (id,name,email,password_salt,password_hash,password_iterations,role,active,created_at) VALUES (?,?,?,?,?,?,?,1,?)').bind(userId, name, email, salt, hash, PBKDF2_ITERACOES_ATUAL, role, now()).run(); await audit(actor.id, 'CREATE', 'user', userId, `Usuário ${email} criado`); return ok({ id: userId }, { status: 201 }); }
-  catch { return fail('Esse e-mail já está cadastrado.'); }
+  try { await rawDb().batch([rawDb().prepare('INSERT INTO users (id,name,email,password_salt,password_hash,password_iterations,role,active,created_at) VALUES (?,?,?,?,?,?,?,1,?)').bind(userId, name, email, salt, hash, PBKDF2_ITERACOES_ATUAL, role, now()), auditStatement(actor.id, 'CREATE', 'user', userId, `Usuário ${email} criado`)]); return ok({ id: userId }, { status: 201 }); }
+  catch(error:unknown){return fail(errorMessage(error).includes('UNIQUE')?'Esse e-mail já está cadastrado.':'Não foi possível criar o usuário.');}
 }
 
 async function search(params: URLSearchParams) {
@@ -1031,13 +1044,15 @@ async function search(params: URLSearchParams) {
     FROM agreement_items ai JOIN agreements a ON a.current_version_id=ai.version_id JOIN suppliers s ON s.id=a.supplier_id
     JOIN catalog_items ci ON ci.id=ai.catalog_item_id JOIN vehicle_models vm ON vm.id=ai.vehicle_model_id JOIN units un ON un.id=ai.unit_id JOIN locations l ON l.id=ai.location_id
     WHERE ${conditions.join(' AND ')}`, values))?.n || 0);
-  const limit = 1000;
+  const paging = paginacao(params);
+  const page = paginaEfetiva(paging.page,paging.pageSize,total);
+  const limit = paging.pageSize;
   const rows = await all(`SELECT ai.id,ci.name AS item,vm.name AS model,ai.price,ai.courtesy,un.code AS unit,ai.brands_text AS brands,
     l.city,l.state,s.trade_name AS supplier,s.cnpj,a.id AS agreementId,a.number,a.end_date AS endDate
     FROM agreement_items ai JOIN agreements a ON a.current_version_id=ai.version_id JOIN suppliers s ON s.id=a.supplier_id
     JOIN catalog_items ci ON ci.id=ai.catalog_item_id JOIN vehicle_models vm ON vm.id=ai.vehicle_model_id JOIN units un ON un.id=ai.unit_id JOIN locations l ON l.id=ai.location_id
-    WHERE ${conditions.join(' AND ')} ORDER BY ci.name,vm.name,l.city,ai.price LIMIT ${limit}`, values);
-  return ok({ rows, total, truncated: total > rows.length, limit });
+    WHERE ${conditions.join(' AND ')} ORDER BY ci.name,vm.name,l.city,ai.price,ai.id LIMIT ${limit} OFFSET ${(page-1)*limit}`, values);
+  return ok({ rows, total, page, pageSize:limit, truncated:false, limit });
 }
 
 async function importWorkbook(request: Request, user: User, agreementId: string) {
@@ -1216,6 +1231,14 @@ async function recuperarImportacoesInterrompidas(){
   }
 }
 
+async function importPage(params:URLSearchParams){
+  const paging=paginacao(params);
+  const total=Number((await first<{n:number}>('SELECT COUNT(*) n FROM imports'))?.n||0);
+  const page=paginaEfetiva(paging.page,paging.pageSize,total);
+  const imports=await all(`SELECT i.id,i.filename,i.mode,i.status,i.total_rows AS totalRows,i.valid_rows AS validRows,i.error_rows AS errorRows,i.created_at AS createdAt,i.completed_at AS completedAt,a.number AS agreement,u.name AS user FROM imports i LEFT JOIN agreements a ON a.id=i.agreement_id LEFT JOIN users u ON u.id=i.created_by ORDER BY i.created_at DESC,i.id DESC LIMIT ${paging.pageSize} OFFSET ${(page-1)*paging.pageSize}`);
+  return ok({imports,total,page,pageSize:paging.pageSize});
+}
+
 async function importList(){ return all(`SELECT i.id,i.filename,i.mode,i.status,i.total_rows AS totalRows,i.valid_rows AS validRows,i.error_rows AS errorRows,i.created_at AS createdAt,i.completed_at AS completedAt,a.number AS agreement,u.name AS user FROM imports i LEFT JOIN agreements a ON a.id=i.agreement_id LEFT JOIN users u ON u.id=i.created_by ORDER BY i.created_at DESC LIMIT 100`); }
 async function importDetail(importId:string){
   const row=await first<{id:string;filename:string;mode:string;status:string;totalRows:number;validRows:number;errorRows:number;createdAt:string;completedAt:string|null;agreement:string|null;user:string|null;summaryJson:string|null}>(`SELECT i.id,i.filename,i.mode,i.status,i.total_rows AS totalRows,i.valid_rows AS validRows,i.error_rows AS errorRows,
@@ -1250,7 +1273,10 @@ async function auditList(params?: URLSearchParams){
   return { logs, total, page, pageSize, pageCount };
 }
 
-async function emailNotificationList(){
+async function emailNotificationList(params:URLSearchParams){
+  const paging=paginacao(params);
+  const total=Number((await first<{n:number}>('SELECT COUNT(*) n FROM email_notifications'))?.n||0);
+  const page=paginaEfetiva(paging.page,paging.pageSize,total);
   const [stats,notifications]=await Promise.all([
     first(`SELECT COUNT(*) total,
       SUM(CASE WHEN status='pending' THEN 1 ELSE 0 END) pending,
@@ -1261,9 +1287,9 @@ async function emailNotificationList(){
     all(`SELECT e.id,e.type,e.recipient_name AS recipientName,e.recipient_email AS recipientEmail,e.status,e.attempts,
       e.next_attempt_at AS nextAttemptAt,e.sent_at AS sentAt,e.last_error AS lastError,e.created_at AS createdAt,
       t.code AS ticketCode,t.supplier_name AS supplierName
-      FROM email_notifications e JOIN tickets t ON t.id=e.ticket_id ORDER BY e.created_at DESC LIMIT 100`),
+      FROM email_notifications e JOIN tickets t ON t.id=e.ticket_id ORDER BY e.created_at DESC,e.id DESC LIMIT ${paging.pageSize} OFFSET ${(page-1)*paging.pageSize}`),
   ]);
-  return {stats,notifications};
+  return {stats,notifications,total,page,pageSize:paging.pageSize};
 }
 
 async function retryEmailNotification(user:User,notificationId:string){
@@ -1281,12 +1307,51 @@ async function retryEmailNotification(user:User,notificationId:string){
   return ok({success:true});
 }
 
-async function ticketList(){
-  return all(`SELECT t.id,t.code,t.supplier_name AS supplierName,t.cnpj,t.city,t.state,t.contact,t.scope,t.priority,t.status,
-    t.created_at AS createdAt,t.updated_at AS updatedAt,t.closed_at AS closedAt,t.agreement_id AS agreementId,
+async function ticketList(params: URLSearchParams){
+  const sql = `SELECT t.id,t.code,t.supplier_name AS supplierName,t.cnpj,t.city,t.state,t.contact,t.scope,t.priority,t.status,
+    t.created_at AS createdAt,t.updated_at AS updatedAt,t.closed_at AS closedAt,t.agreement_id AS agreementId,t.assigned_to AS assignedToId,
     r.name AS requestedBy,a.name AS assignedTo,ag.number AS agreementNumber
     FROM tickets t LEFT JOIN users r ON r.id=t.requested_by LEFT JOIN users a ON a.id=t.assigned_to
-    LEFT JOIN agreements ag ON ag.id=t.agreement_id ORDER BY t.updated_at DESC LIMIT 500`);
+    LEFT JOIN agreements ag ON ag.id=t.agreement_id`;
+  const result = await listPage(sql, [], params, 'tickets');
+  return {...result, tickets: result.rows};
+}
+
+
+// Filtra e ordena antes de paginar; desempate por id mantém a ordem estável.
+async function listPage(sql: string, values: unknown[], params: URLSearchParams, kind: 'agreements'|'tickets') {
+  const paging=paginacao(params), conditions: string[]=[];
+  const binds=[...values];
+  const q=exigeTexto(params.get('q'),LIMITES_CAMPO.busca,'busca');
+  if(q){
+    const columns=kind==='agreements'?['number','supplier','cnpj','locations']:['code','supplierName','city','requestedBy','assignedTo'];
+    conditions.push('('+columns.map(column=>`instr(${textoBuscaSql(column)},?)>0`).join(' OR ')+')');
+    const term=padraoBuscaSql(q);
+    binds.push(...columns.map(()=>term));
+  }
+  const status=params.get('status');
+  if(kind==='agreements'&&status){
+    if(!['active','expiring','scheduled','expired','suspended'].includes(status))throw new EntradaInvalida('Situação inválida.');
+    conditions.push(status==='active'?"effectiveStatus IN ('active','expiring')":'effectiveStatus=?');
+    if(status!=='active')binds.push(status);
+  }
+  if(kind==='tickets'){
+    const groups:Record<string,string>={ativos:"status IN ('aberto','aguardando_fornecedor')",fechados:"status='fechado'",cancelados:"status='cancelado'"};
+    const group=params.get('group');
+    if(group){if(!groups[group])throw new EntradaInvalida('Grupo inválido.');conditions.push(groups[group]);}
+    const owner=params.get('owner');if(owner){conditions.push(owner==='unassigned'?'assignedToId IS NULL':'assignedToId=?');if(owner!=='unassigned')binds.push(owner);}
+  }
+  const where=conditions.length?' WHERE '+conditions.join(' AND '):'';
+  const source=`FROM (${sql}) list${where}`;
+  const total=Number((await first<{n:number}>(`SELECT COUNT(*) n ${source}`,binds))?.n||0);
+  const page=paginaEfetiva(paging.page,paging.pageSize,total);
+  const allowed=kind==='agreements'?['updatedAt','number','supplier','locations','itemCount','effectiveStatus','endDate']:['updatedAt','code','supplierName','city','priority','status','requestedBy','openTime'];
+  const requested=params.get('sort')||'updatedAt';
+  const sort=allowed.includes(requested)?requested:'updatedAt';
+  const sortExpression=kind==='tickets'&&sort==='priority'?"CASE priority WHEN 'alta' THEN 1 WHEN 'media' THEN 2 ELSE 3 END":kind==='tickets'&&sort==='code'?'CAST(substr(code,5) AS INTEGER)':sort==='openTime'?"julianday(COALESCE(closedAt,?))-julianday(createdAt)":sort;
+  const direction=params.get('direction')==='asc'?'ASC':'DESC';
+  const rows=await all(`SELECT * ${source} ORDER BY ${sortExpression} ${direction},id ${direction} LIMIT ${paging.pageSize} OFFSET ${(page-1)*paging.pageSize}`,[...binds,...(sort==='openTime'?[now()]:[])]);
+  return {rows,total,page,pageSize:paging.pageSize};
 }
 
 async function ticketStats(){
@@ -1448,8 +1513,8 @@ async function updateUser(request:Request,actor:User,userId:string){
   if(body.password !== undefined && body.password !== '' && typeof body.password !== 'string') return fail('A nova senha é inválida.');
   const password=typeof body.password === 'string' && body.password !== '' ? body.password : null;
   if(password !== null && !validatePassword(password)) return fail('A nova senha deve ter entre 10 e 200 caracteres.');
-  const active=body.active === undefined ? target.active : body.active === false ? 0 : 1;
-  const dailyReportEnabled=body.dailyReportEnabled === undefined ? target.dailyReportEnabled : body.dailyReportEnabled === true ? 1 : 0;
+  const active=flag(body.active,target.active);
+  const dailyReportEnabled=flag(body.dailyReportEnabled,target.dailyReportEnabled);
   const dailyReportTime=body.dailyReportTime === undefined ? target.dailyReportTime : textValue(body.dailyReportTime);
   if(!/^([01]\d|2[0-3]):[0-5]\d$/.test(dailyReportTime)) return fail('Informe um horário válido para o relatório diário.');
   const name=textValue(body.name) || target.name;
@@ -1460,17 +1525,18 @@ async function updateUser(request:Request,actor:User,userId:string){
   if(active!==target.active) changes.push(active?'reativado':'desativado');
   if(dailyReportEnabled!==target.dailyReportEnabled) changes.push(dailyReportEnabled?'relatório diário ativado':'relatório diário desativado');
   if(dailyReportTime!==target.dailyReportTime) changes.push(`horário do relatório: ${target.dailyReportTime} → ${dailyReportTime}`);
-  const atualizado = await rawDb().prepare(ATUALIZAR_USUARIO_SQL).bind(exigeTexto(name,LIMITES_CAMPO.nome,'nome'),role,active,dailyReportEnabled,dailyReportTime,userId,role,active).run();
-  if (!atualizado.meta.changes) return fail('Este é o último administrador ativo. Promova outro antes de alterar este.',409);
+  const statements=[rawDb().prepare(ATUALIZAR_USUARIO_SQL).bind(exigeTexto(name,LIMITES_CAMPO.nome,'nome'),role,active,dailyReportEnabled,dailyReportTime,userId,role,active)];
+  if(password !== null)changes.push('senha redefinida (sessões encerradas)');
+  statements.push(auditStatement(actor.id,'UPDATE','user',userId,`${target.email}: ${changes.join('; ')||'sem alterações'}`,true));
   if(password !== null){
-    const salt=crypto.randomUUID(), hash=await passwordHash(password,salt,PBKDF2_ITERACOES_ATUAL);
-    await rawDb().batch([
-      rawDb().prepare('UPDATE users SET password_salt=?,password_hash=?,password_iterations=? WHERE id=?').bind(salt,hash,PBKDF2_ITERACOES_ATUAL,userId),
-      rawDb().prepare('DELETE FROM sessions WHERE user_id=?').bind(userId),
-    ]);
-    changes.push('senha redefinida (sessões encerradas)');
+    const salt=crypto.randomUUID(),hash=await passwordHash(password,salt,PBKDF2_ITERACOES_ATUAL);
+    // Se a proteção do último administrador recusou a edição, estes predicados
+    // também recusam a troca de senha e o encerramento de suas sessões.
+    statements.push(rawDb().prepare('UPDATE users SET password_salt=?,password_hash=?,password_iterations=? WHERE id=? AND role=? AND active=?').bind(salt,hash,PBKDF2_ITERACOES_ATUAL,userId,role,active));
+    statements.push(rawDb().prepare('DELETE FROM sessions WHERE user_id=? AND EXISTS(SELECT 1 FROM users WHERE id=? AND role=? AND active=?)').bind(userId,userId,role,active));
   }
-  await audit(actor.id,'UPDATE','user',userId,`${target.email}: ${changes.join('; ')||'sem alterações'}`);
+  const [atualizado]=await rawDb().batch(statements);
+  if(!atualizado.meta.changes)return fail('Este é o último administrador ativo. Promova outro antes de alterar este.',409);
   return ok({ success:true });
 }
 

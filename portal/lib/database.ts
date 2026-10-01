@@ -216,7 +216,11 @@ export async function currentUser(request: Request) {
 }
 
 export async function audit(userId: string | null, action: string, entity: string, entityId: string | null, details: string) {
-  await rawDb().prepare('INSERT INTO audit_logs (id,user_id,action,entity,entity_id,details,created_at) VALUES (?,?,?,?,?,?,?)').bind(id('aud'), userId, action, entity, entityId, details, now()).run();
+  await auditStatement(userId, action, entity, entityId, details).run();
+}
+
+export function auditStatement(userId: string | null, action: string, entity: string, entityId: string | null, details: string, onlyIfChanged = false) {
+  return rawDb().prepare('INSERT INTO audit_logs (id,user_id,action,entity,entity_id,details,created_at) '+(onlyIfChanged ? 'SELECT ?,?,?,?,?,?,? WHERE changes()>0' : 'VALUES (?,?,?,?,?,?,?)')).bind(id('aud'), userId, action, entity, entityId, details, now());
 }
 
 // Trava de exclusao mutua garantida pelo banco.

@@ -18,7 +18,8 @@
     "test": "node --test --experimental-strip-types tests/*.test.ts tests/*.test.mjs",
     "format": "oxfmt",
     "test:restore": "node scripts/testar-restauracao.mjs",
-    "test:imports": "node scripts/teste-importacao-stress.mjs"
+    "test:imports": "node scripts/teste-importacao-stress.mjs",
+    "test:ux": "node scripts/testar-ux.mjs"
   },
   "dependencies": {
     "@base-ui/react": "1.7.0",
@@ -48,6 +49,7 @@
     "oxfmt": "0.70.0",
     "oxlint": "1.85.0",
     "oxlint-tsgolint": "7.0.2003",
+    "playwright": "1.63.0",
     "tailwindcss": "4.3.3",
     "typescript": "7.0.2",
     "vite": "^8.3.1",

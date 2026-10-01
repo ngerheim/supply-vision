@@ -12,6 +12,8 @@ import { api, ApiError, errorText } from '@/lib/api';
 import { normalizeImportText } from '@/lib/domain';
 import { suggestMatches } from '@/lib/sugestoes';
 import { SearchSelect } from '@/components/search-select';
+import { Pagination } from '@/components/pagination';
+import { usePagedList } from '@/lib/use-paged-list';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -83,11 +85,14 @@ export function Imports({
   const [busy, setBusy] = useState(false),
     [error, setError] = useState('');
   const [published, setPublished] = useState<AnyRow | null>(null);
+  const [refreshError, setRefreshError] = useState('');
+  const mutationLock = useRef(false);
   const fileInput = useRef<HTMLInputElement>(null);
   const reset = () => {
     setResult(null);
     setPublished(null);
     setError('');
+    setRefreshError('');
   };
   const choose = (candidate?: File) => {
     reset();
@@ -111,7 +116,8 @@ export function Imports({
     return api(path + (preview ? '?preview=1' : ''), { method: 'POST', body });
   };
   const analyze = async () => {
-    if (busy) return;
+    if (mutationLock.current) return;
+    mutationLock.current = true;
     setBusy(true);
     setError('');
     setPublished(null);
@@ -122,11 +128,18 @@ export function Imports({
       setError(errorText(cause));
       setResult(null);
     } finally {
+      mutationLock.current = false;
       setBusy(false);
     }
   };
   const publish = async () => {
-    if (busy || !result?.valid || checkedCatalogs !== data.catalogs) return;
+    if (
+      mutationLock.current ||
+      !result?.valid ||
+      checkedCatalogs !== data.catalogs
+    )
+      return;
+    mutationLock.current = true;
     setBusy(true);
     setError('');
     try {
@@ -135,15 +148,25 @@ export function Imports({
       setResult(null);
       setFile(null);
       if (fileInput.current) fileInput.current.value = '';
-      await onUpdated();
+      try {
+        await onUpdated();
+        setRefreshError('');
+      } catch {
+        setRefreshError(
+          'A importação foi publicada. Não foi possível atualizar o histórico. Atualize os dados para conferir.',
+        );
+      }
     } catch (cause) {
       setError(errorText(cause));
       setResult(cause instanceof ApiError ? cause.details : null);
     } finally {
+      mutationLock.current = false;
       setBusy(false);
     }
   };
   const save = async (issue: AnyRow, targetId: string) => {
+    if (mutationLock.current) return;
+    mutationLock.current = true;
     setBusy(true);
     setError('');
     try {
@@ -160,11 +183,19 @@ export function Imports({
           body: JSON.stringify({ source: issue.valor, targetId, active: true }),
         },
       );
-      setResult(await request(true));
-      setCheckedCatalogs(data.catalogs);
+      try {
+        setResult(await request(true));
+        setCheckedCatalogs(data.catalogs);
+      } catch {
+        setError(
+          'Correspondência salva. Não foi possível conferir o arquivo novamente. Clique em Conferir arquivo.',
+        );
+        setResult(null);
+      }
     } catch (cause) {
       setError(errorText(cause));
     } finally {
+      mutationLock.current = false;
       setBusy(false);
     }
   };
@@ -192,18 +223,97 @@ export function Imports({
   const ready = result?.valid && checkedCatalogs === data.catalogs;
   return (
     <div className="mx-auto max-w-5xl space-y-5">
+      <ol
+        aria-label="Etapas da importação"
+        className="grid grid-cols-3 gap-2 text-sm"
+      >
+        {['Escolher arquivo', 'Conferir dados', 'Publicar tabela'].map(
+          (label, index) => (
+            <li
+              key={label}
+              aria-current={
+                index === (published ? 2 : result ? 1 : 0) ? 'step' : undefined
+              }
+              className={`rounded-xl border p-3 ${index === (published ? 2 : result ? 1 : 0) ? 'border-teal-500 bg-teal-50 text-teal-900' : 'bg-card text-muted-foreground'}`}
+            >
+              <span className="mr-2 font-semibold">{index + 1}.</span>
+              {label}
+            </li>
+          ),
+        )}
+      </ol>
+      {refreshError && (
+        <Alert>
+          <AlertTriangle />
+          <AlertTitle>Publicação confirmada</AlertTitle>
+          <AlertDescription>
+            {refreshError}
+            <Button
+              variant="outline"
+              className="mt-2"
+              onClick={() =>
+                void onUpdated()
+                  .then(() => setRefreshError(''))
+                  .catch(() => {})
+              }
+            >
+              Atualizar histórico
+            </Button>
+          </AlertDescription>
+        </Alert>
+      )}
       <Card>
         <CardHeader>
-          <CardTitle>Importar acordos</CardTitle>
-          <p className="text-sm text-muted-foreground">
-            1. Escolha o arquivo · 2. Confira as correspondências · 3. Publique
-          </p>
+          <CardTitle>
+            {published
+              ? 'Importação concluída'
+              : result
+                ? 'Conferir tabela de preços'
+                : 'Importar tabela de preços'}
+          </CardTitle>
         </CardHeader>
         <CardContent className="space-y-5">
-          <fieldset disabled={busy} className="space-y-4">
+          {(result || published) && (
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-muted/40 p-3">
+              <div>
+                <p className="text-sm font-medium break-all">
+                  {file?.name || 'Arquivo publicado'}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {
+                    data.agreements.find((row: AnyRow) => row.id === agreement)
+                      ?.number
+                  }{' '}
+                  ·{' '}
+                  {
+                    data.agreements.find((row: AnyRow) => row.id === agreement)
+                      ?.supplier
+                  }
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                disabled={busy}
+                onClick={() => {
+                  reset();
+                  setCheckedCatalogs(null);
+                }}
+              >
+                {published ? 'Nova importação' : 'Trocar arquivo'}
+              </Button>
+            </div>
+          )}
+          <fieldset
+            hidden={!!result || !!published}
+            disabled={busy}
+            className="space-y-4"
+          >
             <div className="rounded-xl border border-primary bg-accent/40 p-4">
               <p className="font-semibold">Adicionar ou atualizar um acordo</p>
-              <p className="mt-1 text-sm text-muted-foreground">Substitui todas as condições do acordo escolhido. A versão anterior permanece no histórico.</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Substitui todas as condições do acordo escolhido. A versão
+                anterior permanece no histórico.
+              </p>
             </div>
             <SearchSelect
               label="Acordo de destino"
@@ -259,7 +369,10 @@ export function Imports({
               </Button>
             </div>
           </fieldset>
-          <p className="text-sm text-muted-foreground">
+          <p
+            hidden={!!result || !!published}
+            className="text-sm text-muted-foreground"
+          >
             A conferência não publica dados. Itens repetidos na mesma cidade/UF
             e modelo mantêm o menor preço; medidas diferentes exigem correção.
           </p>
@@ -365,8 +478,8 @@ export function Imports({
                 </Table>
               </div>
               <p className="text-xs text-muted-foreground">
-                Amostra das primeiras 20 condições.{' '}
-                Publicar substituirá toda a tabela atual; a versão anterior permanecerá no histórico.
+                Amostra das primeiras 20 condições. Publicar substituirá toda a
+                tabela atual; a versão anterior permanecerá no histórico.
               </p>
               <Button disabled={busy || !ready} onClick={() => void publish()}>
                 {busy ? <LoaderCircle className="animate-spin" /> : <Upload />}{' '}
@@ -422,7 +535,10 @@ function ResolveIssue({
   // nao se traduz, entao o unico caminho e cadastrar o que falta.
   const aceitaDePara = Boolean(issue.tipo) && issue.tipo !== 'locations';
   const suggestions = useMemo(
-    () => (issue.tipo === 'locations' || issue.tipo === 'units' ? [] : suggestMatches(issue.valor, options)),
+    () =>
+      issue.tipo === 'locations' || issue.tipo === 'units'
+        ? []
+        : suggestMatches(issue.valor, options),
     [issue.valor, issue.tipo, options],
   );
   return (
@@ -518,7 +634,10 @@ function BaseCriada({ base, estado }: { base: AnyRow; estado: Estado }) {
       <p className="font-medium">
         {TITULO_BASE[estado]}{' '}
         {presentes
-          .map((grupo) => `${quantos(grupo.chave).toLocaleString('pt-BR')} ${quantos(grupo.chave) === 1 ? grupo.singular : grupo.rotulo}`)
+          .map(
+            (grupo) =>
+              `${quantos(grupo.chave).toLocaleString('pt-BR')} ${quantos(grupo.chave) === 1 ? grupo.singular : grupo.rotulo}`,
+          )
           .join(', ')}
         .
       </p>
@@ -545,10 +664,18 @@ function BaseCriada({ base, estado }: { base: AnyRow; estado: Estado }) {
   );
 }
 
-function ImportSummary({ summary, estado }: { summary: AnyRow; estado: Estado }) {
+function ImportSummary({
+  summary,
+  estado,
+}: {
+  summary: AnyRow;
+  estado: Estado;
+}) {
   return (
     <div className="space-y-2 text-sm">
-      {!!summary.baseCriada && <BaseCriada base={summary.baseCriada} estado={estado} />}
+      {!!summary.baseCriada && (
+        <BaseCriada base={summary.baseCriada} estado={estado} />
+      )}
       {!!summary.cnpjsRecuperados && (
         <p>
           {summary.cnpjsRecuperados} CNPJ(s) tiveram zeros à esquerda
@@ -590,19 +717,49 @@ function Info({ label, value }: { label: string; value: string }) {
   );
 }
 
-function ImportHistory({ rows }: JsonData) {
+function ImportHistory({ rows: initialRows }: JsonData) {
   const [detail, setDetail] = useState<AnyRow | null>(null),
-    [loading, setLoading] = useState(false);
+    [loading, setLoading] = useState(false),
+    [error, setError] = useState(''),
+    [page, setPage] = useState(1),
+    [pageSize, setPageSize] = useState(25);
+  const history = usePagedList(
+    '/api/imports',
+    { page: String(page), pageSize: String(pageSize) },
+    initialRows,
+  );
+  const rows = history.data?.imports || [];
   const open = async (id: string) => {
     setLoading(true);
+    setError('');
     try {
       setDetail(await api(`/api/imports/${id}`));
+    } catch (error) {
+      setError(errorText(error));
     } finally {
       setLoading(false);
     }
   };
   return (
     <>
+      {(error || history.error) && (
+        <Alert variant="destructive">
+          <AlertTriangle />
+          <AlertTitle>Não foi possível carregar o histórico</AlertTitle>
+          <AlertDescription>
+            {error || history.error}
+            <Button
+              variant="outline"
+              onClick={() => {
+                setError('');
+                void history.load();
+              }}
+            >
+              Tentar novamente
+            </Button>
+          </AlertDescription>
+        </Alert>
+      )}
       <Card>
         <CardHeader className="border-b">
           <CardTitle>Histórico de importações</CardTitle>
@@ -666,6 +823,17 @@ function ImportHistory({ rows }: JsonData) {
             </div>
           )}
         </CardContent>
+        <Pagination
+          page={history.data?.page || page}
+          pageSize={pageSize}
+          total={history.data?.total || 0}
+          busy={history.loading}
+          onPage={setPage}
+          onPageSize={(size) => {
+            setPageSize(size);
+            setPage(1);
+          }}
+        />
       </Card>
       <Dialog
         open={!!detail || loading}
