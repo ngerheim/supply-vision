@@ -1,3 +1,4 @@
+import { filtrosNotificacoes } from '@/lib/filtros-notificacoes';
 import { condicoesBusca } from '@/lib/filtros-busca';
 import { fornecedorChamado } from '@/lib/chamados';
 import { ATUALIZAR_USUARIO_SQL } from '@/lib/usuarios-sql';
@@ -220,7 +221,7 @@ export async function GET(request: NextRequest) {
   }
   if (parts[0] === 'email-notifications') {
     if (user.role !== 'admin') return fail('Somente administradores podem consultar os envios de e-mail.', 403);
-    return ok(await emailNotificationList());
+    return ok(await emailNotificationList(request.nextUrl.searchParams));
   }
   if (parts[0] === 'users') return ok({ users: user.role === 'admin'
     ? await all('SELECT id,name,email,role,active,daily_report_enabled AS dailyReportEnabled,daily_report_time AS dailyReportTime,created_at AS createdAt FROM users ORDER BY name')
@@ -1270,20 +1271,19 @@ async function exportAudit(params: URLSearchParams){
   }});
 }
 
-async function emailNotificationList(){
-  const [stats,notifications]=await Promise.all([
-    first(`SELECT COUNT(*) total,
-      SUM(CASE WHEN status='pending' THEN 1 ELSE 0 END) pending,
-      SUM(CASE WHEN status='processing' THEN 1 ELSE 0 END) processing,
-      SUM(CASE WHEN status='sent' THEN 1 ELSE 0 END) sent,
-      SUM(CASE WHEN status='failed' THEN 1 ELSE 0 END) failed
-      FROM email_notifications`),
-    all(`SELECT e.id,e.type,e.recipient_name AS recipientName,e.recipient_email AS recipientEmail,e.status,e.attempts,
-      e.next_attempt_at AS nextAttemptAt,e.sent_at AS sentAt,e.last_error AS lastError,e.created_at AS createdAt,
-      t.code AS ticketCode,t.supplier_name AS supplierName
-      FROM email_notifications e JOIN tickets t ON t.id=e.ticket_id ORDER BY e.created_at DESC LIMIT 100`),
-  ]);
-  return {stats,notifications};
+async function emailNotificationList(params:URLSearchParams){
+  const {where,values,page:requestedPage,pageSize}=filtrosNotificacoes(params);
+  const join='FROM email_notifications e JOIN tickets t ON t.id=e.ticket_id';
+  const stats=await first<{total:number;pending:number;processing:number;sent:number;failed:number}>(`SELECT COUNT(*) total,
+    SUM(CASE WHEN e.status='pending' THEN 1 ELSE 0 END) pending,
+    SUM(CASE WHEN e.status='processing' THEN 1 ELSE 0 END) processing,
+    SUM(CASE WHEN e.status='sent' THEN 1 ELSE 0 END) sent,
+    SUM(CASE WHEN e.status='failed' THEN 1 ELSE 0 END) failed ${join} ${where}`,values);
+  const total=Number(stats?.total||0),pageCount=Math.max(1,Math.ceil(total/pageSize)),page=Math.min(requestedPage,pageCount);
+  const notifications=await all(`SELECT e.id,e.type,e.recipient_name AS recipientName,e.recipient_email AS recipientEmail,e.status,e.attempts,
+    e.next_attempt_at AS nextAttemptAt,e.sent_at AS sentAt,e.last_error AS lastError,e.created_at AS createdAt,
+    t.code AS ticketCode,t.supplier_name AS supplierName ${join} ${where} ORDER BY e.created_at DESC,e.id DESC LIMIT ? OFFSET ?`,[...values,pageSize,(page-1)*pageSize]);
+  return {stats,notifications,total,page,pageCount,pageSize};
 }
 
 async function retryEmailNotification(user:User,notificationId:string){
