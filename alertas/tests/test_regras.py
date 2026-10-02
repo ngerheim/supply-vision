@@ -263,3 +263,27 @@ def test_vigencia_iso_do_portal_nao_inverte_dia_mes(rodar):
     compras["Data Abertura"] = ["30/09/2026", "01/10/2026", "05/11/2026", "06/11/2026"]
     vigente = com_vigencia(acordo([10]), inicio="2026-10-01", fim="2026-11-05")
     assert rodar.processar(compras, vigente)["Status"].tolist() == ["SEM ACORDO", "CONFORME", "CONFORME", "SEM ACORDO"]
+
+
+def test_comparacao_distingue_uf_e_medida_inclusive_referencia(rodar):
+    compras = base(qtd=3, preco=100)
+    compras["Fornecedor por Estado"] = ["SP", "MG", "SP"]
+    compras["MEDIDA"] = ["PAR", "PAR", "UNIDADE"]
+    ac = acordo([100, 50, 80])
+    ac["UF"] = ["SP", "SP", "MG"]
+    ac["MEDIDA"] = ["PAR", "UNIDADE", "PAR"]
+    resultado = rodar.processar(compras, ac)
+    assert resultado["Preco Acordo"].tolist() == [100, 80, 50]
+    assert resultado["Menor Preco Acordo"].tolist() == [100, 80, 50]
+    assert resultado["Status"].tolist() == ["CONFORME", "ACIMA DO ACORDO", "ACIMA DO ACORDO"]
+
+
+def test_medida_ausente_nao_compara_nem_recomenda_preco(rodar):
+    compras = base(preco=100)
+    compras["Fornecedor por Estado"] = "SP"
+    ac = acordo([50]); ac["UF"] = "SP"; ac["MEDIDA"] = "UNIDADE"
+    resultado = rodar.processar(compras, ac)
+    assert resultado.loc[0, "Status"] == rodar.STATUS_DIMENSAO_PENDENTE
+    assert pd.isna(resultado.loc[0, "Menor Preco Acordo"])
+    assert pd.isna(resultado.loc[0, "Diferenca Unit."])
+    assert rodar.resumir_status(resultado)["total_quarentena"] == 1
