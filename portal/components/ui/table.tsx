@@ -4,17 +4,34 @@ import * as React from 'react';
 
 import { cn } from '@/lib/utils';
 
-function Table({ className, ...props }: React.ComponentProps<'table'>) {
+function Table({ className, horizontalControls=false, ...props }: React.ComponentProps<'table'> & {horizontalControls?:boolean}) {
+  const scrollRef=React.useRef<HTMLDivElement>(null);
+  const [scroll,setScroll]=React.useState({left:0,max:0});
+  React.useEffect(()=>{
+    if(!horizontalControls)return;
+    const node=scrollRef.current;
+    if(!node)return;
+    const update=()=>setScroll({left:node.scrollLeft,max:Math.max(0,node.scrollWidth-node.clientWidth)});
+    const wheel=(event:WheelEvent)=>{if(event.shiftKey&&event.deltaY){event.preventDefault();node.scrollLeft+=event.deltaY;}};
+    const observer=new ResizeObserver(update);observer.observe(node);
+    if(node.firstElementChild)observer.observe(node.firstElementChild);
+    node.addEventListener('scroll',update);node.addEventListener('wheel',wheel,{passive:false});update();
+    return()=>{observer.disconnect();node.removeEventListener('scroll',update);node.removeEventListener('wheel',wheel);};
+  },[horizontalControls]);
   return (
+    <div>
+    {horizontalControls&&scroll.max>0&&<div className="sticky top-0 z-20 bg-card px-3 py-1"><input aria-label="Rolar tabela horizontalmente" type="range" className="w-full" min={0} max={scroll.max} value={scroll.left} onChange={event=>{if(scrollRef.current)scrollRef.current.scrollLeft=Number(event.target.value);}}/></div>}
     <div
+      ref={scrollRef}
       data-slot="table-container"
-      className="relative w-full overflow-x-auto"
+      className={horizontalControls?'relative max-h-[60vh] w-full overflow-auto':'relative w-full overflow-x-auto'}
     >
       <table
         data-slot="table"
         className={cn('w-full caption-bottom text-sm', className)}
         {...props}
       />
+    </div>
     </div>
   );
 }
