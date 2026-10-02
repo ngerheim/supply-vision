@@ -105,7 +105,7 @@ async function localidades(nomes, state = 'GO') {
   assert.ok(sqlitePath.startsWith(path.join(output, 'state') + path.sep));
   const fixture = new DatabaseSync(sqlitePath);
   try {
-    fixture.exec('PRAGMA busy_timeout=10000; BEGIN IMMEDIATE');
+    fixture.exec('PRAGMA busy_timeout=999; BEGIN IMMEDIATE');
     const insert = fixture.prepare('INSERT INTO locations (id,city,state) VALUES (?,?,?)');
     for (const city of nomes) insert.run(`fixture-${state}-${city}`, city, state);
     fixture.exec('COMMIT');
@@ -457,26 +457,26 @@ try {
     ['arquivo-vazio', { filename: 'vazio.xlsx', bytes: Buffer.alloc(0) }],
     ['extensao-invalida', { ...file([row()], { name: 'extensao' }), filename: 'tabela.csv' }],
     ['zip-truncado', { ...file([row()], { name: 'antes-truncar' }), bytes: file([row()], { name: 'truncar' }).bytes.subarray(0, 100) }],
-    ['15mb-excedido', { filename: 'excessivo.xlsx', bytes: Buffer.alloc(15 * 1024 * 1024 + 1, 65) }],
-    ['linhas-excedidas', file([row()], { name: 'linhas-excedidas', range: 'A1:I50001' })],
+    ['2mb-excedido', { filename: 'excessivo.xlsx', bytes: Buffer.alloc(2 * 1024 * 1024 + 1, 65) }],
+    ['linhas-excedidas', file([row()], { name: 'linhas-excedidas', range: 'A1:I1001' })],
     ['colunas-excedidas', file([row()], { name: 'colunas-excedidas', range: 'A1:CW2' })],
-    ['area-excedida', file([row()], { name: 'area-excedida', range: 'A1:U50000' })],
+    ['area-excedida', file([row()], { name: 'area-excedida', range: 'A1:U1000' })],
   ]);
   for (const [name, document] of invalidFiles) await check(`${name}: rejeição preserva banco e libera trava`, () => rejected(document, replace));
   await check('Primeira aba é a única importada', async () => {
     const result = await upload(file([row()], { name: 'duas-abas', extraSheet: [row({ MEDIDA: 'lirto' })] }), replace);
     assert.equal(result.status, 200); assert.equal(result.data.summary.items, 1);
   });
-  await check('Limite real: 49.999 registros + cabeçalho passam', async () => {
-    const large = file(Array.from({ length: 49999 }, () => row()), { name: 'limite-50000-linhas' });
+  await check('Limite real: 999 registros + cabeçalho passam', async () => {
+    const large = file(Array.from({ length: 999 }, () => row()), { name: 'limite-1000-linhas' });
     const result = await upload(large, replace); assert.equal(result.status, 200, JSON.stringify(result.data)); assert.equal(result.data.summary.items, 1);
   });
-  await check('Erro na última das 49.999 linhas aborta a carga inteira', () => rejected(file(Array.from({ length: 49999 }, (_, index) => row(index === 49998 ? { MEDIDA: 'lirto' } : {})), { name: 'erro-no-fim-50000' }), replace, 400, data => assert.equal(data.nomenclaturas[0].primeiraLinha, 50000)));
-  await check('Carga de 10.000 condições distintas publica todas', async () => {
-    await localidades(serie('STRESS', 10000));
-    const large = file(Array.from({ length: 10000 }, (_, index) => row({ CIDADE: `STRESS ${index}`, PRECO: index / 100 })), { name: 'dez-mil-condicoes' });
-    const result = await upload(large, replace); assert.equal(result.status, 200, JSON.stringify(result.data)); assert.equal(result.data.summary.items, 10000);
-    assert.equal(query('SELECT COUNT(*) n FROM agreement_items WHERE version_id=(SELECT current_version_id FROM agreements WHERE id=?)', agreementId)[0].n, 10000);
+  await check('Erro na última das 999 linhas aborta a carga inteira', () => rejected(file(Array.from({ length: 999 }, (_, index) => row(index === 998 ? { MEDIDA: 'lirto' } : {})), { name: 'erro-no-fim-1000' }), replace, 400, data => assert.equal(data.nomenclaturas[0].primeiraLinha, 1000)));
+  await check('Carga de 999 condições distintas publica todas', async () => {
+    await localidades(serie('STRESS', 999));
+    const large = file(Array.from({ length: 999 }, (_, index) => row({ CIDADE: `STRESS ${index}`, PRECO: index / 100 })), { name: 'novecentas-condicoes' });
+    const result = await upload(large, replace); assert.equal(result.status, 200, JSON.stringify(result.data)); assert.equal(result.data.summary.items, 999);
+    assert.equal(query('SELECT COUNT(*) n FROM agreement_items WHERE version_id=(SELECT current_version_id FROM agreements WHERE id=?)', agreementId)[0].n, 999);
   });
   await verificarAcessoConsulta({ request, good, check, senha, agreementId, metrics });
   await check('20 concorrentes recebem 409 enquanto uma importação segura a trava', async () => {
@@ -505,7 +505,7 @@ try {
     const agora = new Date().toISOString();
     const fixture = new DatabaseSync(sqlitePath);
     try {
-      fixture.exec('PRAGMA busy_timeout=10000; BEGIN IMMEDIATE');
+      fixture.exec('PRAGMA busy_timeout=999; BEGIN IMMEDIATE');
       fixture.prepare(`INSERT INTO imports (id,agreement_id,filename,mode,status,created_by,created_at) VALUES ('imp-interrompida',?,'interrompida.xlsx','replace','processing',?,?)`).run(agreementId, usuario, agora);
       fixture.prepare(`INSERT INTO agreement_versions (id,agreement_id,version_number,import_id,status,published_at,created_by,created_at) VALUES ('ver-interrompida',?,?,'imp-interrompida','processing',NULL,?,?)`).run(agreementId, versao, usuario, agora);
       fixture.prepare(`INSERT INTO agreement_items (id,version_id,location_id,catalog_item_id,vehicle_model_id,unit_id,price,created_at,updated_at) VALUES ('itm-interrompida','ver-interrompida',?,?,?,?,1,?,?)`).run(modelo.location_id, modelo.catalog_item_id, modelo.vehicle_model_id, modelo.unit_id, agora, agora);
@@ -566,7 +566,7 @@ try {
     assert.ok(sqlitePath.startsWith(path.join(output, 'state') + path.sep));
     const fixture = new DatabaseSync(sqlitePath);
     try {
-      fixture.exec('PRAGMA busy_timeout=10000');
+      fixture.exec('PRAGMA busy_timeout=999');
       fixture.prepare('INSERT INTO travas (chave,dono,adquirida_em) VALUES (?,?,?)').run(`acordo:${agreementId}`, 'outra-operacao', new Date().toISOString());
     } finally { fixture.close(); }
     const abrangenciaTravada = query('SELECT COUNT(*) n FROM agreement_locations WHERE agreement_id=?', agreementId)[0].n;
@@ -576,7 +576,7 @@ try {
     assert.equal(query('SELECT COUNT(*) n FROM agreement_locations WHERE agreement_id=?', agreementId)[0].n, abrangenciaTravada);
     assert.equal(naCidadeExtra().length, 0);
     const soltar = new DatabaseSync(sqlitePath);
-    try { soltar.exec('PRAGMA busy_timeout=10000'); soltar.prepare('DELETE FROM travas WHERE chave=?').run(`acordo:${agreementId}`); } finally { soltar.close(); }
+    try { soltar.exec('PRAGMA busy_timeout=999'); soltar.prepare('DELETE FROM travas WHERE chave=?').run(`acordo:${agreementId}`); } finally { soltar.close(); }
     await good(`/api/agreements/${agreementId}`, { method: 'PUT', body: corpo(atuais) });
     assert.equal(query("SELECT COUNT(*) n FROM travas WHERE chave LIKE 'acordo:%'")[0].n, 0, 'Trava de acordo ficou presa');
     metrics.push({ concorrenciaAbrangencia: { retirar: [...status.retirar], incluir: [...status.incluir] } });

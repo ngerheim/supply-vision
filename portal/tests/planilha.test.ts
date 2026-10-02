@@ -119,3 +119,13 @@ void test('trunca valores de célula muito longos', async () => {
   assert.equal(r.ok, true);
   if (r.ok) assert.equal(String(r.linhas[0].MARCAS).length, 5000);
 });
+
+void test('aceita 999 dados com cabecalho e recusa a linha 1001', async () => {
+  assert.equal((await lerPlanilha(arquivoDe(Array.from({length:999},()=>LINHA_BOA)))).ok, true);
+  const excessivo=await lerPlanilha(arquivoDe(Array.from({length:1000},()=>LINHA_BOA)));
+  assert.equal(excessivo.ok,false);
+});
+void test('recusa arquivo maior que 2 MB antes de analisar conteudo', async () => {
+  const result=await lerPlanilha(new File([new Uint8Array(2*1024*1024+1)],'grande.xlsx'));
+  assert.equal(result.ok,false);
+});
