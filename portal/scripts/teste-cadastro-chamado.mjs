@@ -1,3 +1,4 @@
+import * as XLSX from 'xlsx';
 import assert from 'node:assert/strict';
 
 const porta = Number(process.env.PORTAL_TESTE_PORTA);
@@ -32,3 +33,18 @@ assert.equal(evento.message,mensagem);
 assert.equal(evento.fromStatus,'aberto');
 assert.equal(evento.toStatus,'aguardando_fornecedor');
 console.log('[OK] Fornecedor obrigatorio, cadastro sem titulo, mensagem de situacao e dados legados preservados.');
+
+const historico=await pedir('audit?q=OFICINA%20TESTE&pageSize=10');
+assert.equal(historico.status,200);
+const exported=await fetch(`http://127.0.0.1:${porta}/api/audit/export?q=OFICINA%20TESTE`,{headers});
+assert.equal(exported.status,200);
+assert.match(exported.headers.get('content-type'),/spreadsheetml/);
+const book=XLSX.read(await exported.arrayBuffer(),{type:'array'});
+const rows=XLSX.utils.sheet_to_json(book.Sheets.Historico);
+assert.equal(rows.length,historico.data.total);
+assert.ok(rows.length>0);
+assert.ok(rows.every(r=>String(r.Detalhes).includes('OFICINA TESTE')));
+const paged=await pedir('email-notifications?pageSize=10&status=failed');
+assert.equal(paged.status,200);
+assert.ok(paged.data.notifications.length<=10);
+assert.ok(paged.data.notifications.every(n=>n.status==='failed'));
