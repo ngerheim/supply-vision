@@ -102,7 +102,7 @@ Verifica 'Historico pagina de 50 em 50' {
 Verifica 'Rota de escrita valida a entrada sem gravar' {
   try {
     Invoke-WebRequest "$BaseUrl/api/tickets" -Method POST -Body '{"supplierName":""}' -ContentType 'application/json' -WebSession $script:sessao -UseBasicParsing -TimeoutSec 60 | Out-Null
-    'aceitou chamado sem título'
+    'aceitou chamado sem fornecedor'
   } catch {
     if ($_.Exception.Response.StatusCode.value__ -eq 400) { $true } else { "esperado 400, veio $($_.Exception.Response.StatusCode.value__)" }
   }
