@@ -1005,7 +1005,7 @@ async function updateCatalog(request: Request, user: User, type: string, recordI
   if (!cfg) return fail('Cadastro inválido.');
   const body = await jsonBody<CatalogInput>(request);
   exigeCamposDeCatalogo(body);
-  const existing = await first<{ id: string }>(`SELECT id FROM ${cfg.table} WHERE id=?`, [recordId]);
+  const existing = await first<{ id: string; active: number }>(`SELECT * FROM ${cfg.table} WHERE id=?`, [recordId]);
   if (!existing) return fail('Cadastro não encontrado.', 404);
   const active = body.active === undefined ? existing.active : body.active === false || body.active === 0 ? 0 : 1;
   try {

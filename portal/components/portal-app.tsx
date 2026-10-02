@@ -211,7 +211,7 @@ function Tickets({users,agreements,run,initialDetail}:JsonData){
   const [agora]=useState(()=>Date.now());
   const [loadError,setLoadError]=useState('');
   const load=useCallback(async()=>{setLoadError('');try{setData(await api('/api/tickets'))}catch(error){setLoadError(errorText(error))}},[]);
-  useEffect(()=>{void load()},[load]);
+  useEffect(()=>{let active=true;queueMicrotask(()=>{if(active)void load()});return()=>{active=false}},[load]);
   if(loadError)return <FalhaDeCarregamento erro={loadError} tentar={()=>void load()}/>;
   if(!data) return <Loading label="Carregando chamados…"/>;
   if(detail) return <TicketDetail id={detail} users={users} agreements={agreements} onBack={()=>{setDetail(null);void load()}} run={run}/>;
@@ -251,7 +251,7 @@ function TicketDetail({id,users,agreements,onBack,run}:JsonData){
   const [d,setD]=useState<AnyRow|null>(null),[msg,setMsg]=useState(''),[status,setStatus]=useState(''),[statusMessage,setStatusMessage]=useState(''),[editing,setEditing]=useState(false);
   const [loadError,setLoadError]=useState('');
   const load=useCallback(async()=>{setLoadError('');try{const x=await api(`/api/tickets/${id}`);setD(x);setStatus(x.ticket.status);setStatusMessage('')}catch(error){setLoadError(errorText(error))}},[id]);
-  useEffect(()=>{void load()},[load]);
+  useEffect(()=>{let active=true;queueMicrotask(()=>{if(active)void load()});return()=>{active=false}},[load]);
   if(loadError)return <FalhaDeCarregamento erro={loadError} tentar={()=>void load()} voltar={onBack}/>;
   if(!d) return <Loading label="Abrindo chamado…"/>;
   const t=d.ticket;
@@ -337,7 +337,7 @@ function Mappings({catalogs,run}:JsonData){
   const [data,setData]=useState<AnyRow>({items:[],models:[]}),[type,setType]=useState<'items'|'models'|'units'>('items'),[edit,setEdit]=useState<AnyRow|null>(null),[loading,setLoading]=useState(true);
   const [loadError,setLoadError]=useState('');
   const load=useCallback(async()=>{setLoading(true);setLoadError('');try{setData(await api('/api/mappings'))}catch(error){setLoadError(errorText(error))}finally{setLoading(false)}},[]);
-  useEffect(()=>{void load()},[load]);
+  useEffect(()=>{let active=true;queueMicrotask(()=>{if(active)void load()});return()=>{active=false}},[load]);
   const rows=data[type]||[], targets=catalogs[type].map((row:AnyRow)=>({...row,name:type==='units'?row.code:row.name,active:row.active}));
   const {ordem,alternar,ordenar}=useOrdenacao(type);
   const valoresDoMapeamento=(linha:AnyRow)=>[linha.source,linha.target];
