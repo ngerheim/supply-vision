@@ -265,37 +265,41 @@ def test_vigencia_iso_do_portal_nao_inverte_dia_mes(rodar):
     assert rodar.processar(compras, vigente)["Status"].tolist() == ["SEM ACORDO", "CONFORME", "CONFORME", "SEM ACORDO"]
 
 
-def test_comparacao_distingue_uf_e_medida_inclusive_referencia(rodar):
+def test_comparacao_distingue_uf_mas_ignora_medida(rodar):
     compras = base(qtd=3, preco=100)
-    compras["Fornecedor por Estado"] = ["SP", "MG", "SP"]
-    compras["MEDIDA"] = ["PAR", "PAR", "UNIDADE"]
-    ac = acordo([100, 50, 80])
-    ac["UF"] = ["SP", "SP", "MG"]
-    ac["MEDIDA"] = ["PAR", "UNIDADE", "PAR"]
+    compras["Fornecedor por Estado"] = ["SP", "MG", "São Paulo"]
+    compras["MEDIDA"] = ["PAR", "LITRO", "OUTRA"]
+    ac = acordo([50, 80]); ac["UF"] = ["SP", "MG"]; ac["MEDIDA"] = ["UNIDADE", "PAR"]
     resultado = rodar.processar(compras, ac)
-    assert resultado["Preco Acordo"].tolist() == [100, 80, 50]
-    assert resultado["Menor Preco Acordo"].tolist() == [100, 80, 50]
-    assert resultado["Status"].tolist() == ["CONFORME", "ACIMA DO ACORDO", "ACIMA DO ACORDO"]
+    assert resultado["Preco Acordo"].tolist() == [50, 80, 50]
+    assert resultado["Menor Preco Acordo"].tolist() == [50, 80, 50]
 
 
-def test_medida_ausente_nao_compara_nem_recomenda_preco(rodar):
-    compras = base(preco=100)
-    compras["Fornecedor por Estado"] = "SP"
+def test_medida_ausente_nao_impede_comparacao(rodar):
+    compras = base(preco=100); compras["Fornecedor por Estado"] = "SP"
     ac = acordo([50]); ac["UF"] = "SP"; ac["MEDIDA"] = "UNIDADE"
     resultado = rodar.processar(compras, ac)
-    assert resultado.loc[0, "Status"] == rodar.STATUS_DIMENSAO_PENDENTE
-    assert pd.isna(resultado.loc[0, "Menor Preco Acordo"])
-    assert pd.isna(resultado.loc[0, "Diferenca Unit."])
-    assert rodar.resumir_status(resultado)["total_quarentena"] == 1
+    assert resultado.loc[0, "Status"] == "ACIMA DO ACORDO"
+    assert resultado.loc[0, "Menor Preco Acordo"] == 50
+    assert rodar.resumir_status(resultado)["total_quarentena"] == 0
 
 
-def test_pendencia_sem_medida_tem_planilha_de_conferencia(rodar, tmp_path):
-    compras = base(); compras["Fornecedor por Estado"] = "SP"
+def test_medidas_distintas_nao_afetam_referencia(rodar):
+    compras = base(preco=100); compras["Fornecedor por Estado"] = "SP"
+    ac = acordo([50, 30]); ac["UF"] = "SP"; ac["MEDIDA"] = ["UNIDADE", "PAR"]
+    ac.loc[1, "_fornec_norm"] = "2"; ac.loc[1, "FORNECEDOR"] = "G"
+    resultado = rodar.processar(compras, ac)
+    assert resultado.loc[0, "Preco Acordo"] == 50
+    assert resultado.loc[0, "Menor Preco Acordo"] == 30
+
+
+def test_uf_ausente_ou_invalida_tem_planilha_de_conferencia(rodar, tmp_path):
+    compras = base(qtd=2); compras["Fornecedor por Estado"] = ["", "TI"]
     ac = acordo([50]); ac["UF"] = "SP"; ac["MEDIDA"] = "UNIDADE"
     resultado = rodar.processar(compras, ac)
+    assert resultado["Status"].tolist() == [rodar.STATUS_DIMENSAO_PENDENTE] * 2
     destino = tmp_path / "pendencias.xlsx"
     assert rodar.gerar_pendencias_comparacao(resultado, destino)
     wb = load_workbook(destino)
-    assert wb.active.max_row == 2
-    assert rodar.STATUS_DIMENSAO_PENDENTE in [cell.value for cell in wb.active[2]]
+    assert wb.active.max_row == 3
     wb.close()
