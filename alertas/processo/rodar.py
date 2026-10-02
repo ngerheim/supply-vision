@@ -822,6 +822,14 @@ def gerar_recorte_historico(df, path):
     return True
 
 
+def gerar_pendencias_comparacao(df, path):
+    dados = df[df["Status"] == STATUS_DIMENSAO_PENDENTE].reset_index(drop=True)
+    if dados.empty:
+        return False
+    _gerar_tabela_simples(dados, path, set(), "PendenciasComparacao", "Pendências")
+    return True
+
+
 def gerar_qualidade_acordos(df_acordo, path):
     """Gera fila operacional com todas as pendências da base de acordos."""
     chave_qualidade = CHAVE_ACORDO + [c for c in ["UF", "MEDIDA"] if c in df_acordo.columns]
@@ -875,6 +883,13 @@ if __name__ == "__main__":
     run_id = os.environ.get("SUPPLY_VISION_RUN_ID")
     stamp = run_id or datetime.now().strftime("%Y%m%d_%H%M%S")
     base  = pathlib.Path(OUTPUT_DIR)
+
+    if (df["Status"] == STATUS_DIMENSAO_PENDENTE).any():
+        pasta_pendencias = base / "pendencias_comparacao"
+        pasta_pendencias.mkdir(parents=True, exist_ok=True)
+        caminho_pendencias = pasta_pendencias / f"pendencias_comparacao_{stamp}.xlsx"
+        gerar_pendencias_comparacao(df, str(caminho_pendencias))
+        print(f"RELATORIO_PENDENCIAS_COMPARACAO={caminho_pendencias}")
 
     dados = df[df["Status"].isin(STATUS_DIVERGENCIA)].reset_index(drop=True)
     print(f"\nGerando DIVERGÊNCIAS COM ACORDO ({len(dados):,} linhas)...")

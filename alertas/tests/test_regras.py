@@ -287,3 +287,15 @@ def test_medida_ausente_nao_compara_nem_recomenda_preco(rodar):
     assert pd.isna(resultado.loc[0, "Menor Preco Acordo"])
     assert pd.isna(resultado.loc[0, "Diferenca Unit."])
     assert rodar.resumir_status(resultado)["total_quarentena"] == 1
+
+
+def test_pendencia_sem_medida_tem_planilha_de_conferencia(rodar, tmp_path):
+    compras = base(); compras["Fornecedor por Estado"] = "SP"
+    ac = acordo([50]); ac["UF"] = "SP"; ac["MEDIDA"] = "UNIDADE"
+    resultado = rodar.processar(compras, ac)
+    destino = tmp_path / "pendencias.xlsx"
+    assert rodar.gerar_pendencias_comparacao(resultado, destino)
+    wb = load_workbook(destino)
+    assert wb.active.max_row == 2
+    assert rodar.STATUS_DIMENSAO_PENDENTE in [cell.value for cell in wb.active[2]]
+    wb.close()
