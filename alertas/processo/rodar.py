@@ -518,6 +518,11 @@ def _preparar_vigencia(df_acordo):
     inicio = _data_vigencia(df_acordo["INICIO_VIGENCIA"])
     fim = _data_vigencia(df_acordo["FIM_VIGENCIA"])
     status = df_acordo["STATUS_ACORDO"].fillna("").astype(str).str.lower()
+    preenchido = df_acordo["FIM_VIGENCIA"].astype("string").str.strip().fillna("") != ""
+    fim_invalido = preenchido & fim.isna()
+    if fim_invalido.any():
+        print(f"AVISO: {int(fim_invalido.sum())} condição(ões) com fim de vigência ilegível ficaram fora da comparação; corrigir a data no Portal.")
+    status = status.where(~fim_invalido, "fim_invalido")
     return inicio, fim, status
 
 
