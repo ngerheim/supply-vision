@@ -15,3 +15,9 @@ void test('identidade do fornecedor opcional deve coincidir quando informada',()
  for(const extra of [{CNPJ:''},{CNPJ:'04252011000110'},{FORNECEDOR:'Outra'},{FORNECEDOR:''}]){
  const row=parseImportRow({...linha,...extra},2);validarFornecedorImportacao([row],destino);assert.ok(row.error);}
 });
+
+void test('CNPJ numerico recupera zero inicial e celulas vazias tem motivo proprio',()=>{
+ const destino={cnpj:'01234567000195',tradeName:'Oficina',legalName:'Oficina Ltda'};
+ for(const CNPJ of ['01234567000195','01.234.567/0001-95',1234567000195,'1234567000195']){const row=parseImportRow({...linha,CNPJ},2);validarFornecedorImportacao([row],destino);assert.equal(row.error,'')}
+ for(const CNPJ of ['',1234567000196]){const row=parseImportRow({...linha,CNPJ},2);validarFornecedorImportacao([row],destino);assert.match(row.error,CNPJ===''?/CNPJ não informado/:/não corresponde/);if(CNPJ==='')assert.equal(row.issues.at(-1)?.valor,'(vazio)')}
+});
