@@ -59,3 +59,8 @@ assert.equal(primeira.data.notifications.length,10);
 assert.equal(segunda.data.page,2);
 const ids=new Set(primeira.data.notifications.map(n=>n.id));
 assert.ok(segunda.data.notifications.every(n=>!ids.has(n.id)));
+
+for(const invalid of ['1.5','Infinity','-1','9007199254740992']){
+  const result=await pedir(`audit?page=${invalid}&pageSize=${invalid}`);
+  assert.equal(result.status,200);assert.equal(result.data.page,1);assert.equal(result.data.pageSize,50);
+}

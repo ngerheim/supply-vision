@@ -1,3 +1,4 @@
+import { paginaSolicitada } from '@/lib/paginacao';
 import { filtrosNotificacoes } from '@/lib/filtros-notificacoes';
 import { condicoesBusca } from '@/lib/filtros-busca';
 import { fornecedorChamado } from '@/lib/chamados';
@@ -1249,10 +1250,10 @@ async function auditList(params?: URLSearchParams, exportAll=false){
 
   // Paginacao real: o total vem do banco, entao a tela sabe quantas paginas
   // existem sem precisar carregar tudo.
-  const pageSize=Math.min(Math.max(Number(params?.get('pageSize'))||50,10),200);
+  const {page:requestedPage,pageSize}=paginaSolicitada(params||new URLSearchParams());
   const total=Number((await first<{n:number}>(`SELECT COUNT(*) n FROM audit_logs l LEFT JOIN users u ON u.id=l.user_id ${where}`, values))?.n||0);
   const pageCount=Math.max(Math.ceil(total/pageSize),1);
-  const page=Math.min(Math.max(Number(params?.get('page'))||1,1),pageCount);
+  const page=Math.min(requestedPage,pageCount);
   const offset=(page-1)*pageSize;
 
   const logs=await all(`SELECT l.id,l.action,l.entity,l.entity_id AS entityId,l.details,l.created_at AS createdAt,u.name AS user,u.email AS userEmail,l.user_id AS userId FROM audit_logs l LEFT JOIN users u ON u.id=l.user_id ${where} ORDER BY l.created_at DESC,l.id DESC ${exportAll?'':`LIMIT ${pageSize} OFFSET ${offset}`}`, values);
