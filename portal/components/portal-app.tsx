@@ -261,17 +261,17 @@ function TicketDetail({id,users,agreements,onBack,run}:JsonData){
   </div>;
 }
 
-function TicketDialog({open,value,users,agreements,onClose,onSave}:JsonData){
+function TicketDialog({open,value,users,onClose,onSave}:JsonData){
   const [form,setForm]=useState<AnyRow>(value||{priority:'media'}),editing=!!value?.id;
   return <Dialog open={open} onOpenChange={(x)=>!x&&onClose()}><DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
-    <DialogHeader><DialogTitle>{editing?'Editar chamado':'Novo chamado'}</DialogTitle>{editing&&<DialogDescription>Atualize os dados e a responsabilidade pelo chamado.</DialogDescription>}</DialogHeader>
+    <DialogHeader><DialogTitle>{editing?'Editar chamado':'Novo chamado'}</DialogTitle></DialogHeader>
     <div className="grid gap-4 sm:grid-cols-2">
       <Field label="Fornecedor *" className="sm:col-span-2"><Input required aria-label="Fornecedor" maxLength={120} value={form.supplierName||''} onChange={e=>setForm({...form,supplierName:e.target.value})}/></Field>
       <Field label="Cidade"><Input value={form.city||''} onChange={e=>setForm({...form,city:e.target.value})}/></Field>
       <Field label="UF"><Input maxLength={2} value={form.state||''} onChange={e=>setForm({...form,state:e.target.value.toUpperCase()})}/></Field>
       <SelectField label="Prioridade" value={form.priority||'media'} onChange={(v:string)=>setForm({...form,priority:v})} rows={[{id:'alta',name:'Alta'},{id:'media',name:'Média'},{id:'baixa',name:'Baixa'}]}/>
       <SelectField label="Responsável" value={form.assignedTo||''} onChange={(v:string)=>setForm({...form,assignedTo:v})} rows={users||[]}/>
-      {editing&&<SelectField label="Acordo relacionado" value={form.agreementId||''} onChange={(v:string)=>setForm({...form,agreementId:v})} rows={agreements||[]}/>}
+      
       <Field label="Escopo pretendido" className="sm:col-span-2"><Input value={form.scope||''} onChange={e=>setForm({...form,scope:e.target.value})}/></Field>
       <Field label="Observações" className="sm:col-span-2"><Textarea value={form.notes||''} onChange={e=>setForm({...form,notes:e.target.value})}/></Field>
     </div>
