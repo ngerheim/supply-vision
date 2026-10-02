@@ -330,10 +330,14 @@ function parsePrice(raw: unknown): { value: number; error: string } {
   return rounded===null ? {value:Number.NaN,error:'Preço fora do limite monetário.'} : {value:rounded,error:''};
 }
 
+export function cnpjComparavel(valor: unknown) {
+  const digitos=normalizeCnpj(valor);
+  return digitos && digitos.length<=14 ? digitos.padStart(14,'0') : digitos;
+}
 export function validarFornecedorImportacao(rows: ImportRow[], fornecedor: {cnpj:string;tradeName:string;legalName:string}) {
   const nomes=new Set([fornecedor.tradeName,fornecedor.legalName].map(normalizeImportText));
   for(const row of rows){
-    const erro=row.hasCnpj ? row.cnpj!==normalizeCnpj(fornecedor.cnpj) : row.hasSupplier && !nomes.has(row.supplier);
-    if(erro){row.issues.push({campo:row.hasCnpj?'CNPJ':'FORNECEDOR',valor:row.hasCnpj?row.cnpj:row.supplier,erro:'O fornecedor da linha não corresponde ao fornecedor do acordo de destino.'});row.error=row.issues[0]?.erro||'';}
+    const erro=row.hasCnpj ? !row.cnpj ? 'CNPJ não informado. Preencha o CNPJ do fornecedor do acordo ou remova a coluna.' : cnpjComparavel(row.cnpj)!==cnpjComparavel(fornecedor.cnpj) ? 'O CNPJ da linha não corresponde ao fornecedor do acordo de destino.' : '' : row.hasSupplier && !nomes.has(row.supplier) ? 'O fornecedor da linha não corresponde ao fornecedor do acordo de destino.' : '';
+    if(erro){row.issues.push({campo:row.hasCnpj?'CNPJ':'FORNECEDOR',valor:row.hasCnpj?row.cnpj||'(vazio)':row.supplier,erro});row.error=row.issues[0]?.erro||'';}
   }
 }
