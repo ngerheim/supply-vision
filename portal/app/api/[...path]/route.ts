@@ -1098,7 +1098,7 @@ async function importWorkbookComTrava(request: Request, user: User, agreementId:
   if (!(file instanceof File)) return fail('Selecione uma planilha Excel.');
   if (!/\.(xlsx|xls)$/i.test(file.name)) return fail('Use uma planilha com extensão .xlsx ou .xls.');
   if (file.size <= 0) return fail('A planilha está vazia.');
-  if (file.size > MAX_IMPORT_BYTES) return fail('A planilha ultrapassa o limite de 15 MB.');
+  if (file.size > MAX_IMPORT_BYTES) return fail('A planilha ultrapassa o limite de 2 MB.');
   if (!await first('SELECT 1 ok FROM agreements WHERE id=?', [agreementId])) return fail('Acordo de destino não encontrado.', 404);
   const preview = new URL(request.url).searchParams.get('preview') === '1';
   const importId = id('imp'), timestamp = now();

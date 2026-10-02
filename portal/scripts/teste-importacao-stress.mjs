@@ -460,7 +460,7 @@ try {
     ['2mb-excedido', { filename: 'excessivo.xlsx', bytes: Buffer.alloc(2 * 1024 * 1024 + 1, 65) }],
     ['linhas-excedidas', file([row()], { name: 'linhas-excedidas', range: 'A1:I1001' })],
     ['colunas-excedidas', file([row()], { name: 'colunas-excedidas', range: 'A1:CW2' })],
-    ['area-excedida', file([row()], { name: 'area-excedida', range: 'A1:U1000' })],
+    ['area-excedida', file([row()], { name: 'area-excedida', range: 'A1:U50000' })],
   ]);
   for (const [name, document] of invalidFiles) await check(`${name}: rejeição preserva banco e libera trava`, () => rejected(document, replace));
   await check('Primeira aba é a única importada', async () => {

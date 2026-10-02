@@ -272,7 +272,7 @@ function TicketDialog({open,value,users,onClose,onSave}:JsonData){
       <Field label="UF"><Input maxLength={2} value={form.state||''} onChange={e=>setForm({...form,state:e.target.value.toUpperCase()})}/></Field>
       <SelectField label="Prioridade" value={form.priority||'media'} onChange={(v:string)=>setForm({...form,priority:v})} rows={[{id:'alta',name:'Alta'},{id:'media',name:'Média'},{id:'baixa',name:'Baixa'}]}/>
       <SelectField label="Responsável" value={form.assignedTo||''} onChange={(v:string)=>setForm({...form,assignedTo:v})} rows={users||[]}/>
-      
+
       <Field label="Escopo pretendido" className="sm:col-span-2"><Input value={form.scope||''} onChange={e=>setForm({...form,scope:e.target.value})}/></Field>
       <Field label="Observações" className="sm:col-span-2"><Textarea value={form.notes||''} onChange={e=>setForm({...form,notes:e.target.value})}/></Field>
     </div>
