@@ -74,3 +74,9 @@ for(const body of [{name:'ITEM INATIVO A',active:false},{name:'ITEM INATIVO B',a
  const bootstrap=await pedir('bootstrap');assert.equal(bootstrap.data.catalogs.items.find(item=>item.id===cadastro.data.id).active,0);
 }
 console.log('[OK] GET traduz filtros invalidos e edicoes preservam cadastros inativos.');
+
+const atualizado=await pedir(`tickets/${ticketId}`),revision=atualizado.data.ticket.revision;
+assert.equal((await pedir(`tickets/${ticketId}`,'PUT',{scope:'edicao confirmada',expectedRevision:revision})).status,200);
+assert.equal((await pedir(`tickets/${ticketId}`,'PUT',{scope:'formulario antigo',expectedRevision:revision})).status,409);
+assert.equal((await pedir(`tickets/${ticketId}`)).data.ticket.scope,'edicao confirmada');
+console.log('[OK] Formulario antigo nao sobrescreve edicao confirmada.');

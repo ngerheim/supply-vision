@@ -1404,8 +1404,12 @@ async function createTicket(request:Request,user:User){
 
 async function updateTicket(request:Request,user:User,ticketId:string){
   const body=await jsonBody<TicketInput>(request);
-  const current=await first<{id:string;code:string;supplier_name:string;cnpj:string|null;city:string|null;state:string|null;contact:string|null;scope:string|null;priority:string;status:string;requested_by:string|null;assigned_to:string|null;agreement_id:string|null;notes:string|null;closed_at:string|null}>('SELECT * FROM tickets WHERE id=?',[ticketId]);
+  const current=await first<{id:string;code:string;supplier_name:string;cnpj:string|null;city:string|null;state:string|null;contact:string|null;scope:string|null;priority:string;status:string;requested_by:string|null;assigned_to:string|null;agreement_id:string|null;notes:string|null;closed_at:string|null;revision:number}>('SELECT * FROM tickets WHERE id=?',[ticketId]);
   if(!current) return fail('Chamado não encontrado.',404);
+  if(body.expectedRevision!==undefined){
+    if(typeof body.expectedRevision!=='number'||!Number.isSafeInteger(body.expectedRevision)||body.expectedRevision<0)return fail('Revisão do chamado inválida.');
+    if(body.expectedRevision!==current.revision)return fail('Este chamado foi alterado por outra pessoa. Atualize o chamado antes de salvar novamente.',409);
+  }
   const anterior=await contextoNotificacaoChamado(ticketId);
   if(!anterior) return fail('Chamado não encontrado.',404);
   const status=body.status ?? current.status, priority=body.priority ?? current.priority;
@@ -1453,7 +1457,7 @@ async function updateTicket(request:Request,user:User,ticketId:string){
   const camposRegra=alteracoes.filter((item)=>item!=='Responsável');
   const notificacoes=prepararNotificacoesChamado({eventId,anterior,atual,mudanca:{camposAlterados:camposRegra},autor:user,alteracoes,mensagem:nullableText(body.statusMessage),timestamp});
   await rawDb().batch([
-    rawDb().prepare(`UPDATE tickets SET supplier_name=?,cnpj=?,city=?,state=?,contact=?,scope=?,priority=?,status=?,assigned_to=?,agreement_id=?,notes=?,updated_at=?,closed_at=? WHERE id=?`)
+    rawDb().prepare(`UPDATE tickets SET supplier_name=?,cnpj=?,city=?,state=?,contact=?,scope=?,priority=?,status=?,assigned_to=?,agreement_id=?,notes=?,updated_at=?,closed_at=?,revision=revision+1 WHERE id=?`)
       .bind(supplierName,nextCnpj,city,nextState,contact,scope,priority,status,assignedTo,agreementId,notes,timestamp,closedAt,ticketId),
     rawDb().prepare(`INSERT INTO ticket_events (id,ticket_id,user_id,kind,from_status,to_status,message,created_at) VALUES (?,?,?,${status!==current.status?"'status'":"'updated'"},?,?,?,?)`)
       .bind(eventId,ticketId,user.id,status!==current.status?current.status:null,status!==current.status?status:null,nullableText(body.statusMessage)||`Alterado: ${alteracoes.join(', ')}`,timestamp),
@@ -1476,7 +1480,7 @@ async function addTicketEvent(request:Request,user:User,ticketId:string){
   const notificacoes=prepararNotificacoesChamado({eventId,anterior:ticket,atual:ticket,mudanca:{andamentoAdicionado:true},autor:user,alteracoes:['Novo andamento'],mensagem,timestamp});
   await rawDb().batch([
     rawDb().prepare(`INSERT INTO ticket_events (id,ticket_id,user_id,kind,message,created_at) VALUES (?,?,?,'note',?,?)`).bind(eventId,ticketId,user.id,mensagem,timestamp),
-    rawDb().prepare('UPDATE tickets SET updated_at=? WHERE id=?').bind(timestamp,ticketId),
+    rawDb().prepare('UPDATE tickets SET updated_at=?,revision=revision+1 WHERE id=?').bind(timestamp,ticketId),
     rawDb().prepare('INSERT INTO audit_logs (id,user_id,action,entity,entity_id,details,created_at) VALUES (?,?,?,?,?,?,?)').bind(id('aud'),user.id,'COMMENT','ticket',ticketId,`Andamento no chamado ${ticket.codigo}`,timestamp),
     ...notificacoes,
   ]);
