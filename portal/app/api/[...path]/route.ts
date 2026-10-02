@@ -413,7 +413,7 @@ const catalogDependencies: Record<string, { table: string; queries: Array<[strin
 async function deleteCatalog(user: User, type: string, recordId: string) {
   const cfg = catalogDependencies[type];
   if (!cfg) return fail('Cadastro inválido.');
-  const existing = await first<{ id: string }>(`SELECT id FROM ${cfg.table} WHERE id=?`, [recordId]);
+  const existing = await first<{ id: string; active: number }>(`SELECT * FROM ${cfg.table} WHERE id=?`, [recordId]);
   if (!existing) return fail('Cadastro não encontrado.', 404);
 
   const blockers: string[] = [];
@@ -422,7 +422,7 @@ async function deleteCatalog(user: User, type: string, recordId: string) {
     if (count > 0) blockers.push(`${count} ${label}`);
   }
   if (blockers.length) {
-    return fail(`Não é possível excluir: este cadastro está em uso por ${blockers.join(' e ')}. Inative-o para tirá-lo das novas seleções sem perder o histórico.`, 409);
+    return fail(`Não é possível excluir: este cadastro está em uso por ${blockers.join(' e ')}. Remova as referências antes de excluir; o cadastro foi preservado.`, 409);
   }
 
   const label = await first<{ nome: string }>(
@@ -997,7 +997,7 @@ async function createCatalog(request: Request, user: User, type: string) {
     sql = 'INSERT INTO locations (id,city,state) VALUES (?,?,?)'; values = [recordId, normalizeImportText(body.city), state];
   }
   try { await rawDb().prepare(sql).bind(...values).run(); await audit(user.id, 'CREATE', type, recordId, 'Cadastro incluído'); return ok({ id: recordId }, { status: 201 }); }
-  catch { return fail('Já existe um cadastro com esses dados.'); }
+  catch (erro: unknown) { if(errorMessage(erro).includes('UNIQUE'))return fail('Já existe um cadastro com esses dados.'); throw erro; }
 }
 
 async function updateCatalog(request: Request, user: User, type: string, recordId: string) {
@@ -1007,7 +1007,7 @@ async function updateCatalog(request: Request, user: User, type: string, recordI
   exigeCamposDeCatalogo(body);
   const existing = await first<{ id: string }>(`SELECT id FROM ${cfg.table} WHERE id=?`, [recordId]);
   if (!existing) return fail('Cadastro não encontrado.', 404);
-  const active = body.active === false ? 0 : 1;
+  const active = body.active === undefined ? existing.active : body.active === false || body.active === 0 ? 0 : 1;
   try {
     if (type === 'suppliers') {
       if (!textValue(body.tradeName) || !isValidCnpj(body.cnpj)) return fail('Informe o nome e um CNPJ válido.');
