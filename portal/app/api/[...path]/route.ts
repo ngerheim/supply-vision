@@ -215,6 +215,7 @@ export async function GET(request: NextRequest) {
   }
   if (parts[0] === 'audit') {
     if (user.role !== 'admin') return fail('Somente administradores podem consultar a auditoria.', 403);
+    if (parts[1] === 'export') return exportAudit(request.nextUrl.searchParams);
     return ok(await auditList(request.nextUrl.searchParams));
   }
   if (parts[0] === 'email-notifications') {
@@ -1235,7 +1236,7 @@ async function importDetail(importId:string){
   void _;
   return ok({...detail,summary});
 }
-async function auditList(params?: URLSearchParams){
+async function auditList(params?: URLSearchParams, exportAll=false){
   const values:unknown[]=[], conditions:string[]=[];
   const userId=params?.get('user'); if(userId){conditions.push('l.user_id=?');values.push(userId)}
   const action=params?.get('action'); if(action){conditions.push('l.action=?');values.push(action)}
@@ -1253,8 +1254,20 @@ async function auditList(params?: URLSearchParams){
   const page=Math.min(Math.max(Number(params?.get('page'))||1,1),pageCount);
   const offset=(page-1)*pageSize;
 
-  const logs=await all(`SELECT l.id,l.action,l.entity,l.entity_id AS entityId,l.details,l.created_at AS createdAt,u.name AS user,u.email AS userEmail,l.user_id AS userId FROM audit_logs l LEFT JOIN users u ON u.id=l.user_id ${where} ORDER BY l.created_at DESC LIMIT ${pageSize} OFFSET ${offset}`, values);
+  const logs=await all(`SELECT l.id,l.action,l.entity,l.entity_id AS entityId,l.details,l.created_at AS createdAt,u.name AS user,u.email AS userEmail,l.user_id AS userId FROM audit_logs l LEFT JOIN users u ON u.id=l.user_id ${where} ORDER BY l.created_at DESC,l.id DESC ${exportAll?'':`LIMIT ${pageSize} OFFSET ${offset}`}`, values);
   return { logs, total, page, pageSize, pageCount };
+}
+
+async function exportAudit(params: URLSearchParams){
+  const {logs}=await auditList(params,true);
+  const sheet=XLSX.utils.aoa_to_sheet([['Quando','Usuario','Email','Acao','Registro','ID do registro','Detalhes'],...logs.map(r=>[r.createdAt,r.user||'Sistema',r.userEmail||'',r.action,r.entity,r.entityId||'',r.details])]);
+  sheet['!cols']=[24,28,36,16,24,40,80].map(wch=>({wch}));
+  sheet['!autofilter']={ref:`A1:G${logs.length+1}`};
+  const workbook=XLSX.utils.book_new();XLSX.utils.book_append_sheet(workbook,sheet,'Historico');
+  return new NextResponse(XLSX.write(workbook,{bookType:'xlsx',type:'array'}) as ArrayBuffer,{headers:{
+    'cache-control':'no-store','content-type':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'content-disposition':`attachment; filename="historico-${now().slice(0,10)}.xlsx"`,'x-content-type-options':'nosniff',
+  }});
 }
 
 async function emailNotificationList(){
