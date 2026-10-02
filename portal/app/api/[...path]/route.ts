@@ -662,7 +662,7 @@ async function agreementList() {
     (SELECT COUNT(*) FROM agreement_items ai WHERE ai.version_id=a.current_version_id) AS itemCount,
     (SELECT GROUP_CONCAT(l.city || ' / ' || l.state) FROM agreement_locations al JOIN locations l ON l.id=al.location_id WHERE al.agreement_id=a.id) AS locations
     FROM agreements a JOIN suppliers s ON s.id=a.supplier_id
-    ORDER BY a.updated_at DESC LIMIT 500`, [dataDeNegocio()]);
+    ORDER BY a.updated_at DESC`, [dataDeNegocio()]);
 }
 
 async function agreementDetail(agreementId: string, user: User, params: URLSearchParams) {
@@ -1333,7 +1333,7 @@ async function ticketList(){
     t.created_at AS createdAt,t.updated_at AS updatedAt,t.closed_at AS closedAt,t.agreement_id AS agreementId,
     r.name AS requestedBy,a.name AS assignedTo,ag.number AS agreementNumber
     FROM tickets t LEFT JOIN users r ON r.id=t.requested_by LEFT JOIN users a ON a.id=t.assigned_to
-    LEFT JOIN agreements ag ON ag.id=t.agreement_id ORDER BY t.updated_at DESC LIMIT 500`);
+    LEFT JOIN agreements ag ON ag.id=t.agreement_id ORDER BY t.updated_at DESC`);
 }
 
 async function ticketStats(){
