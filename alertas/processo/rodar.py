@@ -40,6 +40,7 @@ ACORDO_TENTATIVAS  = 5
 ACORDO_INTERVALO_S = 15
 
 LIMITE_ALERTA_SEM_ACORDO = 75.0
+LIMITE_ALERTA_PENDENCIAS = 50.0
 
 MIN_LINHAS_DESTINO = 10
 
@@ -592,6 +593,8 @@ def resumir_status(df):
         "motivos_sem_acordo": motivos,
         "alerta_sem_acordo": percentuais["SEM ACORDO"] > LIMITE_ALERTA_SEM_ACORDO,
         "limite_alerta_sem_acordo": LIMITE_ALERTA_SEM_ACORDO,
+        "alerta_pendencias": pct_quarentena > LIMITE_ALERTA_PENDENCIAS,
+        "limite_alerta_pendencias": LIMITE_ALERTA_PENDENCIAS,
         "comparavel": total_elegivel > 0,
     }
 
@@ -618,6 +621,8 @@ def imprimir_resumo(resumo):
             n = resumo["motivos_sem_acordo"].get(motivo, 0)
             if n:
                 print(f"    {motivo:<24}{n:>7,} ({n / total_sem * 100:.1f}% do sem acordo)")
+    if resumo.get("alerta_pendencias"):
+        print(f"ALERTA: {resumo['percentual_quarentena_bruto']:.1f}% das compras em pendência. Conferir os dados antes de confiar nos indicadores.")
     if resumo["alerta_sem_acordo"]:
         print(f"ALERTA: SEM ACORDO em {resumo['percentuais_elegiveis']['SEM ACORDO']:.1f}% "
               f"dos elegíveis, acima do limite de {resumo['limite_alerta_sem_acordo']:.1f}%.")

@@ -189,11 +189,11 @@ def main():
         concluir_sem_envio("SEM_DADOS_FILTRO")
 
     resumo = extrair_resumo(output_rodar)
-    if resumo["total_elegivel"] == 0:
+    if resumo["total_elegivel"] == 0 and not resumo.get("alerta_pendencias"):
         concluir_sem_envio("SEM_LINHAS_COMPARAVEIS")
 
     contagens = resumo["contagens"]
-    if contagens["ACIMA DO ACORDO"] + contagens["ABAIXO DO ACORDO"] == 0:
+    if contagens["ACIMA DO ACORDO"] + contagens["ABAIXO DO ACORDO"] == 0 and not resumo.get("alerta_pendencias"):
         concluir_sem_envio("SEM_DIVERGENCIAS")
 
     caminho_com = extrair_relatorio(output_rodar)

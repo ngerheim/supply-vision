@@ -136,3 +136,19 @@ def test_copia_oculta_entra_na_entrega(monkeypatch, tmp_path):
     para, cco = mod.obter_destinatarios(str(dest))
     assert para == ["para@example.com"]
     assert cco == ["oculto@example.com"]
+
+
+def test_corpo_avisa_pendencias_sem_sugerir_periodo_limpo(monkeypatch, tmp_path):
+    mod = carregar_email(monkeypatch, tmp_path)
+    corpo = mod.montar_corpo("parcial", ["01/08/2026"], resumo(alerta_pendencias=True))
+    assert "100.0% das compras ficaram em pendência" in corpo
+    assert "Não foi possível comparar" in corpo
+    assert "Nenhum registro fora" not in corpo
+
+
+def test_corpo_preserva_resumo_antigo_sem_alerta(monkeypatch, tmp_path):
+    mod = carregar_email(monkeypatch, tmp_path)
+    for alteracoes in ({}, {"alerta_pendencias": False}):
+        corpo = mod.montar_corpo("parcial", ["01/08/2026"], resumo(**alteracoes))
+        assert "Nenhum registro" in corpo
+        assert "ATENÇÃO" not in corpo

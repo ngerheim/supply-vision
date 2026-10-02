@@ -303,3 +303,12 @@ def test_uf_ausente_ou_invalida_tem_planilha_de_conferencia(rodar, tmp_path):
     wb = load_workbook(destino)
     assert wb.active.max_row == 3
     wb.close()
+
+
+def test_alerta_pendencias_apenas_acima_de_metade(rodar):
+    for faltantes in (1, 2, 3, 4):
+        compras = base(qtd=4, preco=50)
+        compras["Fornecedor por Estado"] = [""] * faltantes + ["SP"] * (4-faltantes)
+        ac = acordo([50]); ac["UF"] = "SP"
+        resumo = rodar.resumir_status(rodar.processar(compras, ac))
+        assert resumo["alerta_pendencias"] == (faltantes > 2)

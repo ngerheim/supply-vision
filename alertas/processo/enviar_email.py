@@ -175,6 +175,11 @@ def montar_corpo(contexto, datas, output, com_acordo=None):
     else:
         linha = f"{fora} registros fora do acordo em {periodo}. Detalhes no anexo."
 
+    if dados.get("alerta_pendencias"):
+        if dados["total_elegivel"] == 0:
+            linha = f"Não foi possível comparar as compras em {periodo}."
+        linha += (f"\nATENÇÃO: {dados['percentual_quarentena_bruto']}% das compras ficaram em pendência e não foram comparadas. "
+                  "Os indicadores se referem apenas às compras comparáveis. Confira a extração do Qlik e as pendências de cadastro.")
     return linha + "\n"
 
 
