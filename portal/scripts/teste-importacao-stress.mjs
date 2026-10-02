@@ -351,10 +351,9 @@ try {
       assert.deepEqual(items.map(x => [x.state, x.price]), [['GO', 42.5], ['MG', 90]]);
     }
   });
-  await check('Substituicao ignora fornecedor da planilha e conserva o fornecedor do acordo', async () => {
+  await check('Substituicao rejeita fornecedor divergente sem publicar', async () => {
     const before = query('SELECT * FROM suppliers');
-    const result = await upload(file([row({ CNPJ: '04.252.011/0001-10', FORNECEDOR: 'MEGATRNS' })], { name: 'fornecedor-do-acordo' }), replace);
-    assert.equal(result.status, 200);
+    await rejected(file([row({ CNPJ: '04.252.011/0001-10', FORNECEDOR: 'MEGATRNS' })], { name: 'fornecedor-do-acordo' }), replace);
     assert.deepEqual(query('SELECT * FROM suppliers'), before);
     assert.equal(query('SELECT supplier_id FROM agreements WHERE id=?', agreementId)[0].supplier_id, supplier.id);
   });
