@@ -136,3 +136,8 @@ export function errorMessage(error: unknown, fallback = 'Falha inesperada.') {
 export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
+
+export function situacaoAtiva(enviado: unknown, atual: number) {
+  if (enviado === undefined) return atual ? 1 : 0;
+  return enviado === false || enviado === 0 ? 0 : 1;
+}
