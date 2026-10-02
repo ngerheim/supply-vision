@@ -256,3 +256,10 @@ def test_planilha_historica_e_unica_e_contem_coluna_com_acordo(rodar, tmp_path):
     coluna_fornecedor = ws.cell(1, cabecalhos.index("Fornecedor") + 1).column_letter
     assert ws.column_dimensions[coluna_item].width >= 42
     assert ws.column_dimensions[coluna_fornecedor].width >= 26
+
+
+def test_vigencia_iso_do_portal_nao_inverte_dia_mes(rodar):
+    compras = base(qtd=4, preco=10)
+    compras["Data Abertura"] = ["30/09/2026", "01/10/2026", "05/11/2026", "06/11/2026"]
+    vigente = com_vigencia(acordo([10]), inicio="2026-10-01", fim="2026-11-05")
+    assert rodar.processar(compras, vigente)["Status"].tolist() == ["SEM ACORDO", "CONFORME", "CONFORME", "SEM ACORDO"]
