@@ -64,3 +64,13 @@ for(const invalid of ['1.5','Infinity','-1','9007199254740992']){
   const result=await pedir(`audit?page=${invalid}&pageSize=${invalid}`);
   assert.equal(result.status,200);assert.equal(result.data.page,1);assert.equal(result.data.pageSize,50);
 }
+
+for(const filtro of ['state='+ 'X'.repeat(1000),Array.from({length:81},(_,i)=>'item='+i).join('&')]){
+ const result=await pedir('search?'+filtro);assert.equal(result.status,400);assert.equal(typeof result.data.error,'string');
+}
+const cadastro=await pedir('catalogs/items','POST',{name:'ITEM INATIVO '+Date.now()});assert.equal(cadastro.status,201);
+for(const body of [{name:'ITEM INATIVO A',active:false},{name:'ITEM INATIVO B',active:0},{name:'ITEM INATIVO C'}]){
+ assert.equal((await pedir('catalogs/items/'+cadastro.data.id,'PUT',body)).status,200);
+ const bootstrap=await pedir('bootstrap');assert.equal(bootstrap.data.catalogs.items.find(item=>item.id===cadastro.data.id).active,0);
+}
+console.log('[OK] GET traduz filtros invalidos e edicoes preservam cadastros inativos.');
