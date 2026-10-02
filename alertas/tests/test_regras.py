@@ -312,3 +312,12 @@ def test_alerta_pendencias_apenas_acima_de_metade(rodar):
         ac = acordo([50]); ac["UF"] = "SP"
         resumo = rodar.resumir_status(rodar.processar(compras, ac))
         assert resumo["alerta_pendencias"] == (faltantes > 2)
+
+
+def test_fim_ilegivel_nao_vira_acordo_eterno(rodar):
+    compras = base(preco=10); compras["Data Abertura"] = "01/10/2026"
+    ac = com_vigencia(acordo([10]), inicio="2026-09-18", fim="31/13/2026")
+    assert rodar.processar(compras, ac).loc[0, "Status"] == "SEM ACORDO"
+    for fim in (None, "", "  "):
+        ac = com_vigencia(acordo([10]), inicio="2026-09-18", fim=fim)
+        assert rodar.processar(compras, ac).loc[0, "Status"] == "CONFORME"
