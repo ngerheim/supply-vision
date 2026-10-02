@@ -50,3 +50,11 @@ const paged=await pedir('email-notifications?pageSize=10&status=failed');
 assert.equal(paged.status,200);
 assert.ok(paged.data.notifications.length<=10);
 assert.ok(paged.data.notifications.every(n=>n.status==='failed'));
+
+const primeira=await pedir('email-notifications?pageSize=10');
+const segunda=await pedir('email-notifications?pageSize=10&page=2');
+assert.ok(primeira.data.total>10);
+assert.equal(primeira.data.notifications.length,10);
+assert.equal(segunda.data.page,2);
+const ids=new Set(primeira.data.notifications.map(n=>n.id));
+assert.ok(segunda.data.notifications.every(n=>!ids.has(n.id)));
