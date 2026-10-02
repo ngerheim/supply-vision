@@ -50,7 +50,7 @@ try {
   assert.equal(criado.status,201);const ticketId=(await criado.json()).id;
   const chave=`chamado:${ticketId}`;
   db.prepare('INSERT INTO travas VALUES (?,?,?)').run(chave,prefixo,stamp);
-  for(const [rota,method,body] of [[`tickets/${ticketId}`,'PUT',{scope:'escopo novo'}],[`tickets/${ticketId}/events`,'POST',{message:'andamento'}]]){
+  for(const {rota,method,body} of [{rota:`tickets/${ticketId}`,method:'PUT',body:{scope:'escopo novo'}},{rota:`tickets/${ticketId}/events`,method:'POST',body:{message:'andamento'}}]){
     const response=await fetch(`${url}/api/${rota}`,{method,headers:jsonHeaders,body:JSON.stringify(body)});
     assert.equal(response.status,409,await response.text());
   }
