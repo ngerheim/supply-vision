@@ -125,3 +125,16 @@ def test_conclusao_sem_linhas_nao_executa_modulo_de_email(
 
     assert saida.value.code == 0
     assert chamadas == ["Download Qlik (filtrado)", "Geração de relatórios"]
+
+
+def test_pendencias_em_massa_nao_sao_silenciadas_sem_divergencias(monkeypatch, tmp_path):
+    mod = carregar_pipeline(monkeypatch, tmp_path)
+    chamadas = []
+    respostas = iter([(True, "CONTEXTO_EMAIL=parcial\nDATAS_EMAIL=15/09/2026"),
+                      (True, "RESUMO_JSON=" + json.dumps({"total_elegivel": 0, "alerta_pendencias": True,
+                       "contagens": {"ACIMA DO ACORDO": 0, "ABAIXO DO ACORDO": 0}})), (True, "")])
+    monkeypatch.setattr(mod, "adquirir_lock", lambda: None)
+    monkeypatch.setattr(mod, "configurar_log", lambda: str(tmp_path / "pipeline.log"))
+    monkeypatch.setattr(mod, "rodar_script", lambda caminho, nome, args=None: chamadas.append(nome) or next(respostas))
+    mod.main()
+    assert chamadas[-1] == "Envio de e-mail"
