@@ -40,6 +40,7 @@ ACORDO_TENTATIVAS  = 5
 ACORDO_INTERVALO_S = 15
 
 LIMITE_ALERTA_SEM_ACORDO = 75.0
+LIMITE_ALERTA_PENDENCIAS = 50.0
 
 MIN_LINHAS_DESTINO = 10
 
@@ -48,7 +49,7 @@ CHAVE_ACORDO = ["_fornec_norm", "_cidade_norm", "_modelo_norm", "_peca_norm"]
 STATUS_AMBIGUO         = "ACORDO AMBÍGUO"
 STATUS_PRECO_INVALIDO  = "ACORDO SEM PREÇO VÁLIDO"
 STATUS_DATA_INVALIDA   = "DATA DE ABERTURA INVÁLIDA"
-STATUS_DIMENSAO_PENDENTE = "UF OU MEDIDA NÃO INFORMADA"
+STATUS_DIMENSAO_PENDENTE = "UF NÃO INFORMADA"
 
 
 
@@ -258,7 +259,7 @@ def _validar_parametros(df_acordo):
             print(f"       {chave!r} -> {destino!r} ({nv} linhas); usar {alvo!r} ({na} linhas)")
 
 
-    chave_qualidade = CHAVE_ACORDO + [c for c in ["UF", "MEDIDA"] if c in df_acordo.columns]
+    chave_qualidade = CHAVE_ACORDO + [c for c in ["UF"] if c in df_acordo.columns]
     dup = (df_acordo[df_acordo["_preco_valido"]]
                     .groupby(chave_qualidade)["PRECO"]
                     .agg(["nunique", "min", "max"]))
@@ -336,36 +337,40 @@ def _motivo_sem_acordo(m, df_acordo, sem_ac):
     return pd.Series(motivos, index=m.index)
 
 
+_UF_NOMES = dict(zip(
+    "AC AL AP AM BA CE DF ES GO MA MT MS MG PA PB PR PE PI RJ RN RS RO RR SC SP SE TO".split(),
+    "ACRE|ALAGOAS|AMAPA|AMAZONAS|BAHIA|CEARA|DISTRITO FEDERAL|ESPIRITO SANTO|GOIAS|MARANHAO|MATO GROSSO|MATO GROSSO DO SUL|MINAS GERAIS|PARA|PARAIBA|PARANA|PERNAMBUCO|PIAUI|RIO DE JANEIRO|RIO GRANDE DO NORTE|RIO GRANDE DO SUL|RONDONIA|RORAIMA|SANTA CATARINA|SAO PAULO|SERGIPE|TOCANTINS".split("|")))
+_UF_POR_NOME = {nome: sigla for sigla, nome in _UF_NOMES.items()}
+
+
+def _uf(valor):
+    if pd.isna(valor):
+        return ""
+    texto = _norm(valor)
+    sigla = _UF_POR_NOME.get(texto, texto)
+    return sigla if sigla in _UF_NOMES else ""
+
+
 def _processar_periodo(df_base, df_acordo):
-    # A fonte antiga nao fornece medida. Nunca assumir unidade ou conversao.
-    dimensoes = [("UF", "Fornecedor por Estado"), ("MEDIDA", "MEDIDA")]
-    dimensoes = [(ac, base) for ac, base in dimensoes if ac in df_acordo.columns]
-    if not dimensoes or df_base.empty:
+    # Regra da operacao: medida nao participa da comparacao nem da referencia.
+    if "UF" not in df_acordo.columns or df_base.empty:
         return _processar_periodo_compativel(df_base, df_acordo)
     base = df_base.copy()
-    chaves = []
-    for ac, coluna in dimensoes:
-        chave = f"_comparacao_{ac}"
-        valores = base[coluna] if coluna in base.columns else base.get(ac, pd.Series("", index=base.index))
-        base[chave] = valores.fillna("").apply(_norm)
-        chaves.append(chave)
+    valores = base.get("Fornecedor por Estado", base.get("UF", pd.Series("", index=base.index)))
+    base["_comparacao_uf"] = valores.apply(_uf)
+    ufs_acordo = df_acordo["UF"].apply(_uf)
     partes = []
-    for chave, grupo in base.groupby(chaves, dropna=False, sort=False):
-        valores = chave if isinstance(chave, tuple) else (chave,)
-        universo = df_acordo
-        for (ac, _), valor in zip(dimensoes, valores):
-            universo = universo[universo[ac].fillna("").apply(_norm) == valor]
-        pendente = any(not valor for valor in valores)
-        resultado = _processar_periodo_compativel(grupo, universo.iloc[:0] if pendente else universo)
+    for uf, grupo in base.groupby("_comparacao_uf", sort=False):
+        universo = df_acordo[ufs_acordo == uf] if uf else df_acordo.iloc[:0]
+        resultado = _processar_periodo_compativel(grupo, universo)
         resultado.index = grupo.index
-        if pendente:
+        if not uf:
             mascara = resultado["Status"] != STATUS_DATA_INVALIDA
             resultado.loc[mascara, "Status"] = STATUS_DIMENSAO_PENDENTE
-            resultado.loc[mascara, "Motivo Sem Acordo"] = "Informe UF e medida da compra para comparar preços"
+            resultado.loc[mascara, "Motivo Sem Acordo"] = "Informe uma UF válida da compra para comparar preços"
             resultado.loc[mascara, ["Preco Acordo", "Preco Total Acordo", "Diferenca Unit.", "Diferenca Total", "Menor Preco Acordo", "Dif. p/ Menor Acordo"]] = np.nan
             resultado.loc[mascara, ["Tinha acordo?", "Fornecedor do Acordo"]] = ""
-        resultado["UF"] = grupo[chaves[0]].values if dimensoes[0][0] == "UF" else ""
-        resultado["Medida"] = grupo.get("MEDIDA", pd.Series("", index=grupo.index)).values
+        resultado["UF"] = uf
         partes.append(resultado)
     return pd.concat(partes).reindex(df_base.index)
 
@@ -513,6 +518,11 @@ def _preparar_vigencia(df_acordo):
     inicio = _data_vigencia(df_acordo["INICIO_VIGENCIA"])
     fim = _data_vigencia(df_acordo["FIM_VIGENCIA"])
     status = df_acordo["STATUS_ACORDO"].fillna("").astype(str).str.lower()
+    preenchido = df_acordo["FIM_VIGENCIA"].astype("string").str.strip().fillna("") != ""
+    fim_invalido = preenchido & fim.isna()
+    if fim_invalido.any():
+        print(f"AVISO: {int(fim_invalido.sum())} condição(ões) com fim de vigência ilegível ficaram fora da comparação; corrigir a data no Portal.")
+    status = status.where(~fim_invalido, "fim_invalido")
     return inicio, fim, status
 
 
@@ -588,6 +598,8 @@ def resumir_status(df):
         "motivos_sem_acordo": motivos,
         "alerta_sem_acordo": percentuais["SEM ACORDO"] > LIMITE_ALERTA_SEM_ACORDO,
         "limite_alerta_sem_acordo": LIMITE_ALERTA_SEM_ACORDO,
+        "alerta_pendencias": pct_quarentena > LIMITE_ALERTA_PENDENCIAS,
+        "limite_alerta_pendencias": LIMITE_ALERTA_PENDENCIAS,
         "comparavel": total_elegivel > 0,
     }
 
@@ -614,6 +626,8 @@ def imprimir_resumo(resumo):
             n = resumo["motivos_sem_acordo"].get(motivo, 0)
             if n:
                 print(f"    {motivo:<24}{n:>7,} ({n / total_sem * 100:.1f}% do sem acordo)")
+    if resumo.get("alerta_pendencias"):
+        print(f"ALERTA: {resumo['percentual_quarentena_bruto']:.1f}% das compras em pendência. Conferir os dados antes de confiar nos indicadores.")
     if resumo["alerta_sem_acordo"]:
         print(f"ALERTA: SEM ACORDO em {resumo['percentuais_elegiveis']['SEM ACORDO']:.1f}% "
               f"dos elegíveis, acima do limite de {resumo['limite_alerta_sem_acordo']:.1f}%.")
@@ -832,7 +846,7 @@ def gerar_pendencias_comparacao(df, path):
 
 def gerar_qualidade_acordos(df_acordo, path):
     """Gera fila operacional com todas as pendências da base de acordos."""
-    chave_qualidade = CHAVE_ACORDO + [c for c in ["UF", "MEDIDA"] if c in df_acordo.columns]
+    chave_qualidade = CHAVE_ACORDO + [c for c in ["UF"] if c in df_acordo.columns]
     validos = df_acordo[df_acordo["_preco_valido"]]
     stats = validos.groupby(chave_qualidade)["PRECO"].agg(["nunique", "min", "max"])
     ambiguas = set(stats[stats["nunique"] > 1].index)
