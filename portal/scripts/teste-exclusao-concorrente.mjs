@@ -39,6 +39,11 @@ try {
   assert.equal(db.prepare('SELECT COUNT(*) n FROM agreement_items WHERE id=?').get(item).n, 1);
   assert.equal(db.prepare('SELECT dono FROM travas WHERE chave=?').get(`acordo:${acordo}`).dono, prefixo);
   db.prepare('DELETE FROM travas WHERE chave=? AND dono=?').run(`acordo:${acordo}`, prefixo);
+
+  const edit=await fetch(`${url}/api/items/${item}`,{method:'PUT',headers:{...headers,'content-type':'application/json'},body:JSON.stringify({catalogItemId:prefixo,locationId:prefixo,unitId:prefixo,modelId:prefixo,price:12.5})});
+  assert.equal(edit.status,200,await edit.text());
+  const audit=JSON.parse(db.prepare("SELECT details FROM audit_logs WHERE entity_id=? AND action='UPDATE' ORDER BY created_at DESC LIMIT 1").get(item).details);
+  assert.equal(audit.antes.price,10);assert.equal(audit.depois.price,12.5);
   for (const rota of [`items/${item}`, `agreements/${acordo}`]) {
     const response = await fetch(`${url}/api/${rota}`, { method: 'DELETE', headers });
     assert.equal(response.status, 200, await response.text());
@@ -64,5 +69,22 @@ try {
     assert.equal(db.prepare('SELECT COUNT(*) n FROM travas WHERE chave=?').get(chave).n,0);
   }
   console.log('[OK] Edicoes e andamentos respeitam a trava do chamado e liberam apos validacao.');
+
+  db.exec('BEGIN');
+  try{
+    for(let i=0;i<501;i++){
+      const registro=`${prefixo}_lista_${i}`;
+      db.prepare('INSERT INTO agreements(id,number,supplier_id,start_date,created_at,updated_at) VALUES(?,?,?,?,?,?)').run(registro,registro,prefixo,'2000-01-01',stamp,'2000-01-01T00:00:00.000Z');
+      db.prepare("INSERT INTO tickets(id,code,supplier_name,priority,status,created_at,updated_at) VALUES(?,?,?,'media','aberto',?,?)").run(registro,`SUP-${900000+i}`,prefixo,stamp,'2000-01-01T00:00:00.000Z');
+    }
+    db.exec('COMMIT');
+  }catch(error){db.exec('ROLLBACK');throw error;}
+  const bootstrap=await (await fetch(`${url}/api/bootstrap`,{headers})).json();
+  const tickets=await (await fetch(`${url}/api/tickets`,{headers})).json();
+  for(let i=0;i<501;i++){
+    assert.ok(bootstrap.agreements.some(row=>row.id===`${prefixo}_lista_${i}`));
+    assert.ok(tickets.tickets.some(row=>row.id===`${prefixo}_lista_${i}`));
+  }
+  console.log('[OK] Acordos e chamados antigos permanecem acessiveis alem de 500 registros; auditoria preserva preco anterior.');
   console.log('[OK] Exclusoes respeitam a trava e funcionam depois de sua liberacao.');
 } finally { db.close(); }
