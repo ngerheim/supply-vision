@@ -357,14 +357,6 @@ export function ItemDialog({
                 }
               />
             </Field>
-            <Field label="Observações">
-              <Textarea
-                value={form.notes || ''}
-                onChange={(event) =>
-                  setForm({ ...form, notes: event.target.value })
-                }
-              />
-            </Field>
           </fieldset>
           <DialogFooter className="mt-5">
             <Button
