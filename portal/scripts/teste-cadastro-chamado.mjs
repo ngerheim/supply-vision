@@ -80,3 +80,11 @@ assert.equal((await pedir(`tickets/${ticketId}`,'PUT',{scope:'edicao confirmada'
 assert.equal((await pedir(`tickets/${ticketId}`,'PUT',{scope:'formulario antigo',expectedRevision:revision})).status,409);
 assert.equal((await pedir(`tickets/${ticketId}`)).data.ticket.scope,'edicao confirmada');
 console.log('[OK] Formulario antigo nao sobrescreve edicao confirmada.');
+
+const usuario=await pedir('users','POST',{name:'Usuario teste inativo',email:'inativo-'+Date.now()+'@example.com',role:'viewer',password:'Senha-de-teste-123456'});
+assert.equal(usuario.status,201);
+for(const body of [{active:false},{active:0,name:'Usuario renomeado'},{name:'Usuario sem situacao'}]){
+ assert.equal((await pedir('users/'+usuario.data.id,'PUT',body)).status,200);
+ const users=await pedir('users');assert.equal(users.data.users.find(user=>user.id===usuario.data.id).active,0);
+}
+console.log('[OK] Renomear usuario inativo nao reativa sua conta.');
