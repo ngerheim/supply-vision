@@ -1,26 +1,33 @@
 'use client';
-import { useId, useState } from 'react';
+import { useId } from 'react';
+import { Combobox } from '@base-ui/react/combobox';
+import { Check, ChevronDown, X } from 'lucide-react';
 import { correspondeBusca } from '@/lib/busca';
-import { Input } from '@/components/ui/input';
-import { Checkbox } from '@/components/ui/checkbox';
-
+type Option = { id: string; name: string };
 export function SearchMultiSelect({ label, value, onChange, options }: {
-  label: string; value: string[]; onChange: (value: string[]) => void;
-  options: { id: string; name: string }[];
+ label: string; value: string[]; onChange: (value: string[]) => void; options: Option[];
 }) {
-  const [query, setQuery] = useState('');
-  const id = useId();
-  const visible = options.filter(option => correspondeBusca(option.name, query));
-  return <fieldset className="min-w-0 space-y-2">
-    <legend className="text-sm font-medium">{label}</legend>
-    <Input id={id} aria-label={`Buscar ${label}`} placeholder="Digite para filtrar…" value={query} onChange={event => setQuery(event.target.value)}/>
-    <div className="h-40 overflow-y-auto rounded-lg border p-1">
-      {visible.map(option => <label key={option.id} className="flex cursor-pointer items-center gap-2 rounded p-2 text-sm hover:bg-muted">
-        <Checkbox checked={value.includes(option.id)} onCheckedChange={checked => onChange(checked ? [...value, option.id] : value.filter(selected => selected !== option.id))}/>
-        <span className="break-words">{option.name}</span>
-      </label>)}
-      {!visible.length && <p className="p-2 text-sm text-muted-foreground">Nenhum resultado</p>}
-    </div>
-    {!!value.length && <button type="button" className="text-xs text-primary hover:underline" onClick={() => onChange([])}>Limpar {label.toLowerCase()}</button>}
-  </fieldset>;
+ const id = useId();
+ return <div className="min-w-0 space-y-1.5">
+ <label htmlFor={id} className="text-sm font-medium">{label}</label>
+ <Combobox.Root multiple items={options} value={options.filter(o=>value.includes(o.id))}
+ onValueChange={next=>onChange(next.map(o=>o.id))} itemToStringLabel={o=>o.name}
+ isItemEqualToValue={(a,b)=>a.id===b.id} filter={(o,q)=>correspondeBusca(o.name,q)}>
+ <Combobox.Chips className="flex min-h-9 flex-wrap items-center gap-1 rounded-lg border bg-background px-2 py-1">
+ {options.filter(o=>value.includes(o.id)).map(o=><Combobox.Chip key={o.id} className="flex max-w-full items-center gap-1 rounded bg-muted px-1 text-xs">
+ <span className="truncate">{o.name}</span><Combobox.ChipRemove aria-label={`Remover ${o.name}`}><X className="size-3"/></Combobox.ChipRemove>
+ </Combobox.Chip>)}
+ <Combobox.Input id={id} aria-label={`Buscar ${label}`} className="min-w-8 flex-1 bg-transparent text-sm outline-none"/>
+ <Combobox.Trigger aria-label={`Selecionar ${label}`}><ChevronDown className="size-4"/></Combobox.Trigger>
+ </Combobox.Chips>
+ <Combobox.Portal><Combobox.Positioner sideOffset={4} className="z-[150]">
+ <Combobox.Popup className="max-h-64 w-[var(--anchor-width)] min-w-48 overflow-y-auto rounded-lg border bg-popover p-1 text-popover-foreground shadow-lg">
+ <Combobox.Empty className="p-2 text-sm text-muted-foreground">Nenhum resultado</Combobox.Empty>
+ <Combobox.List>{(o:Option)=><Combobox.Item key={o.id} value={o} className="flex cursor-pointer items-center gap-2 rounded p-2 text-sm data-[highlighted]:bg-muted">
+ <Combobox.ItemIndicator><Check className="size-4"/></Combobox.ItemIndicator><span className="break-words">{o.name}</span>
+ </Combobox.Item>}</Combobox.List>
+ </Combobox.Popup>
+ </Combobox.Positioner></Combobox.Portal>
+ </Combobox.Root>
+ </div>;
 }
