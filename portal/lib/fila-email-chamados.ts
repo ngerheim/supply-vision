@@ -21,14 +21,14 @@ export async function pessoaNotificacao(userId: string | null) {
 }
 
 export async function contextoNotificacaoChamado(ticketId: string): Promise<ContextoNotificacaoChamado | null> {
-  const registro = await rawDb().prepare(`SELECT t.id,t.code,t.title,t.supplier_name,t.priority,t.status,
+  const registro = await rawDb().prepare(`SELECT t.id,t.code,t.supplier_name,t.priority,t.status,
     r.id requested_id,r.name requested_name,r.email requested_email,
     a.id assigned_id,a.name assigned_name,a.email assigned_email
     FROM tickets t LEFT JOIN users r ON r.id=t.requested_by LEFT JOIN users a ON a.id=t.assigned_to WHERE t.id=?`)
     .bind(ticketId).first<Record<string, string | null>>();
   if (!registro) return null;
   return {
-    id: registro.id!, codigo: registro.code!, titulo: registro.title!, fornecedor: registro.supplier_name!,
+    id: registro.id!, codigo: registro.code!, fornecedor: registro.supplier_name!,
     prioridade: registro.priority!, status: registro.status as EstadoNotificacaoChamado['status'],
     solicitante: registro.requested_id ? { id: registro.requested_id, nome: registro.requested_name!, email: registro.requested_email! } : null,
     responsavel: registro.assigned_id ? { id: registro.assigned_id, nome: registro.assigned_name!, email: registro.assigned_email! } : null,

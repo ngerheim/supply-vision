@@ -134,10 +134,12 @@ dependências nem compile sobre o portal aberto.
 
 # Parte 2 — E-mails dos chamados
 
-Na aba **Chamados**, o título é obrigatório e o fornecedor é opcional.
-Clique nos cabeçalhos da tabela para alternar a ordenação, como em Acordos.
-O cadastro não solicita CNPJ ou contato. Registros antigos recebem o fornecedor
-como título inicial e preservam os dados e o histórico já gravados.
+Na aba **Chamados**, o fornecedor é obrigatório. Clique nos cabeçalhos para
+alternar a ordenação, como em Acordos. A lista ocupa a largura disponível e
+não exibe Título ou Local. O cadastro não solicita Título, CNPJ ou contato.
+As mensagens de alteração de situação aparecem no histórico, junto da mudança.
+Chamados antigos sem fornecedor recebem seu título anterior como identificação;
+os títulos legados e demais dados já gravados são preservados no banco.
 
 O portal avisa por e-mail quando um chamado muda:
 

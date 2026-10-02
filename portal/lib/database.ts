@@ -2,7 +2,7 @@ import { passwordHash, tokenHash, PBKDF2_ITERACOES_ATUAL, PBKDF2_ITERACOES_LEGAD
 export { passwordHash, tokenHash, PBKDF2_ITERACOES_ATUAL, PBKDF2_ITERACOES_LEGADO } from './criptografia.ts';
 import { parseCookies } from './cookies.ts';
 import { LIMPAR_TRAVAS_VENCIDAS_SQL, TRAVA_VALIDADE_MS } from './travas-sql.ts';
-import { MIGRAR_TITULOS_CHAMADOS_SQL } from './chamados.ts';
+import { MIGRAR_FORNECEDORES_CHAMADOS_SQL } from './chamados.ts';
 export { parseCookies } from './cookies.ts';
 import { env } from 'cloudflare:workers';
 import { type Role, validatePassword } from '@/lib/domain';
@@ -125,7 +125,7 @@ async function initialize() {
   const db = rawDb();
   await db.batch(schema.map((sql) => db.prepare(sql)));
   await applyColumnMigrations();
-  await db.prepare(MIGRAR_TITULOS_CHAMADOS_SQL).run();
+  await db.prepare(MIGRAR_FORNECEDORES_CHAMADOS_SQL).run();
   // Outra instancia pode estar trabalhando neste mesmo banco. A inicializacao
   // so limpa travas vencidas, com o mesmo prazo usado por adquirirTrava.
   await db.prepare(LIMPAR_TRAVAS_VENCIDAS_SQL)

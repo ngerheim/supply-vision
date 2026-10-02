@@ -43,7 +43,7 @@ export function montarEmailChamado(tipo: TipoNotificacaoChamado, dados: DadosEma
   const mudancas = dados.alteracoes.length ? dados.alteracoes.join(', ') : 'Andamento registrado';
   const mensagem = dados.mensagem?.trim();
   const texto = [
-    titulos[tipo], '', `${dados.codigo} — ${dados.titulo || dados.fornecedor}`, dados.resumo, '',
+    titulos[tipo], '', `${dados.codigo} — ${dados.fornecedor || dados.titulo || dados.codigo}`, dados.resumo, '',
     `Fornecedor: ${dados.fornecedor || 'Não informado'}`,
     `Situação: ${statusLegivel[dados.situacao] || dados.situacao}`,
     `Prioridade: ${prioridadeLegivel[dados.prioridade] || dados.prioridade}`,
@@ -75,7 +75,7 @@ export function montarEmailChamado(tipo: TipoNotificacaoChamado, dados: DadosEma
 
   const html = montarCasca(
     titulos[tipo],
-    `${dados.codigo} · ${dados.titulo || dados.fornecedor}`,
+    `${dados.codigo} · ${dados.fornecedor || dados.titulo || dados.codigo}`,
     conteudo,
     { texto: 'Abrir chamado', url },
   );
