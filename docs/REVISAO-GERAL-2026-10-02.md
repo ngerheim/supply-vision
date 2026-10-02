@@ -34,4 +34,4 @@ Também foi acrescentada a opção `-Porta` ao teste de instalação, para execu
 
 A revisão não equivale a uma prova de ausência de bugs. Não foram enviados e-mails reais nem executadas mudanças no servidor de produção; os testes de fila usam bancos locais descartáveis.
 
-As análises adicionais e as correções posteriores estão registradas em [AVALIACAO-ASTRA-CLAUDE.md](AVALIACAO-ASTRA-CLAUDE.md). Esse complemento atualiza os pontos sobre corte de 500 registros, formulários antigos e falhas de carregamento, além de registrar o efeito da medida ausente na extração do Qlik.
+As análises adicionais e as correções posteriores estão registradas em [AVALIACAO-ASTRA-CLAUDE.md](AVALIACAO-ASTRA-CLAUDE.md). Esse complemento atualiza os pontos sobre corte de 500 registros, formulários antigos e falhas de carregamento, além de registrar a regra final do usuário de não usar medida na comparação e os avisos de qualidade dos dados.
