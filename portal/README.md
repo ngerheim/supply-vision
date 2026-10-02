@@ -311,3 +311,12 @@ Arquivos e relatórios sintéticos ficam em `work/`, fora do Git.
 `Restringir Acesso da Rede.cmd` fecha o acesso pela LAN sem apagar dados.
 `scripts/abrir-firewall-lan.ps1` libera a porta 3000, que o instalador não abre
 por conta própria.
+
+
+### Consulta e importação
+
+Os filtros de busca reúnem seleção múltipla e digitação em um único campo. A importação mantém um acordo de destino por arquivo e aceita no máximo **1.000 linhas incluindo o cabeçalho** e **2 MB**, tanto na conferência quanto na publicação.
+
+As observações do acordo aparecem no detalhe. A aba **Histórico** permite exportar todos os registros que correspondem aos filtros em uma planilha `.xlsx`, disponível somente para administradores. A aba **E-mails**, também administrativa, pagina as notificações e permite filtrar por destinatário, situação, tipo, texto e período.
+
+Fornecedores são paginados em grupos de 25. Quando a tabela ultrapassa a largura da tela, a barra superior e Shift + rolagem permitem navegar horizontalmente em qualquer altura da lista. Dados de situação, correspondências de unidades e observações legadas continuam preservados, mesmo quando seus controles deixam de ser exibidos.
