@@ -65,3 +65,18 @@ void test('relatório diário respeita horário e não duplica o envio do dia',(
   assert.equal(registro.report_date,'2026-09-09');
   assert.equal(registro.status,'pending');
 }));
+
+void test('queda na quinta tentativa deixa falha explicita em vez de pendencia eterna',()=>comBanco(db=>{
+  db.prepare("UPDATE email_notifications SET status='processing',attempts=5,locked_at='2000-01-01T00:00:00.000Z'").run();
+  assert.equal(reservar(db).length,0);
+  assert.equal(db.prepare('SELECT status FROM email_notifications').get().status,'failed');
+}));
+void test('resultado atrasado de uma reserva nao altera a reserva de outro processo',()=>comBanco(db=>{
+  const antiga=reservar(db)[0];
+  db.prepare("UPDATE email_notifications SET locked_at='2000-01-01T00:00:00.000Z'").run();
+  const atual=reservar(db)[0];
+  concluir(db,antiga);falhar(db,antiga,new Error('resultado antigo'));
+  const row=db.prepare('SELECT * FROM email_notifications').get();
+  assert.equal(row.status,'processing');assert.equal(row.attempts,atual.attempts);
+  concluir(db,atual);assert.equal(db.prepare('SELECT status FROM email_notifications').get().status,'sent');
+}));
