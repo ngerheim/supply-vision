@@ -34,8 +34,10 @@ assert.equal(evento.fromStatus,'aberto');
 assert.equal(evento.toStatus,'aguardando_fornecedor');
 console.log('[OK] Fornecedor obrigatorio, cadastro sem titulo, mensagem de situacao e dados legados preservados.');
 
+for(let i=0;i<12;i++)assert.equal((await pedir(`tickets/${ticketId}/events`,'POST',{message:`OFICINA TESTE exportacao ${i}`})).status,201);
 const historico=await pedir('audit?q=OFICINA%20TESTE&pageSize=10');
 assert.equal(historico.status,200);
+assert.ok(historico.data.total>historico.data.logs.length);
 const exported=await fetch(`http://127.0.0.1:${porta}/api/audit/export?q=OFICINA%20TESTE`,{headers});
 assert.equal(exported.status,200);
 assert.match(exported.headers.get('content-type'),/spreadsheetml/);
