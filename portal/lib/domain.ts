@@ -105,9 +105,11 @@ export function isValidDateRange(startDate: unknown, endDate: unknown) {
 }
 
 export function toNonNegativeMoney(value: unknown) {
-  if (value === '' || value === null || value === undefined) return null;
+  if (typeof value !== 'number' && typeof value !== 'string') return null;
+  if (typeof value === 'string' && !value.trim()) return null;
   const parsed = typeof value === 'number' ? value : Number(value);
-  return Number.isFinite(parsed) && parsed >= 0 ? Math.round(parsed * 100) / 100 : null;
+  const cents = Math.round(parsed * 100);
+  return Number.isFinite(parsed) && parsed >= 0 && Number.isSafeInteger(cents) ? cents / 100 : null;
 }
 
 export function validatePassword(value: unknown) {

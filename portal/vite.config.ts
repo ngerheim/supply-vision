@@ -1,24 +1,13 @@
 import tailwindcss from '@tailwindcss/postcss';
 import vinext from 'vinext';
 import { defineConfig } from 'vite';
+import { configuracaoBinding } from './scripts/configuracao-hospedagem.mjs';
 
 // Banco D1 local. NAO altere database_name nem database_id: o Miniflare usa
 // esses valores para localizar o arquivo do banco em
 // privado/portal/banco/estado. Mudar qualquer um faria o Portal subir com uma
 // base vazia, como se os dados tivessem sumido. Os nomes vieram do modelo de
 // projeto original e ficam por compatibilidade com as bases ja existentes.
-const localBindingConfig = {
-  main: 'vinext/server/fetch-handler',
-  compatibility_flags: ['nodejs_compat'],
-  observability: { enabled: false },
-  d1_databases: [
-    {
-      binding: 'DB',
-      database_name: 'site-creator-d1',
-      database_id: '00000000-0000-4000-8000-000000000000',
-    },
-  ],
-};
 
 export default defineConfig(async () => {
   // Keep Wrangler and Miniflare state project-local. These are non-secret tool
@@ -50,7 +39,7 @@ export default defineConfig(async () => {
       vinext(),
       cloudflare({
         viteEnvironment: { name: 'rsc', childEnvironments: ['ssr'] },
-        config: localBindingConfig,
+        config: configuracaoBinding(),
       }),
     ],
   };

@@ -315,16 +315,22 @@ async function DELETEInterno(request: NextRequest) {
   if (!canWrite(user)) return fail('Seu perfil permite somente consulta.', 403);
   const parts = partsOf(request);
   if (parts[0] === 'items' && parts[1]) {
-    const item = await first<{ id: string }>('SELECT ai.id FROM agreement_items ai JOIN agreements a ON a.current_version_id=ai.version_id WHERE ai.id=?', [parts[1]]);
-    if (!item) return fail('Condição não encontrada na versão vigente.', 404);
-    await rawDb().prepare('DELETE FROM agreement_items WHERE id=?').bind(parts[1]).run();
-    await audit(user.id, 'DELETE', 'agreement_item', parts[1], 'Item removido manualmente');
-    return ok({ success: true });
+    return comTravaDoAcordo(request, await acordoDaCondicao(parts[1]), () => deleteItem(user, parts[1]));
   }
-  if (parts[0] === 'agreements' && parts[1] && parts.length === 2) return deleteAgreement(user, parts[1]);
+  if (parts[0] === 'agreements' && parts[1] && parts.length === 2) return comTravaDoAcordo(request, parts[1], () => deleteAgreement(user, parts[1]));
   if (parts[0] === 'catalogs' && parts[1] && parts[2]) return deleteCatalog(user, parts[1], parts[2]);
   if (parts[0] === 'mappings' && parts[1] && parts[2]) return deleteMapping(user, parts[1], parts[2]);
   return fail('Rota não encontrada.', 404);
+}
+
+async function deleteItem(user: User, itemId: string) {
+  // A versao vigente precisa ser conferida depois de adquirir a trava: uma
+  // publicacao concorrente nao pode trocar a versao entre a leitura e o DELETE.
+  const item = await first<{ id: string }>('SELECT ai.id FROM agreement_items ai JOIN agreements a ON a.current_version_id=ai.version_id WHERE ai.id=?', [itemId]);
+  if (!item) return fail('Condição não encontrada na versão vigente.', 404);
+  await rawDb().prepare('DELETE FROM agreement_items WHERE id=?').bind(itemId).run();
+  await audit(user.id, 'DELETE', 'agreement_item', itemId, 'Item removido manualmente');
+  return ok({ success: true });
 }
 
 // Exclusao de acordo. Só administrador: apaga preco negociado e todo o

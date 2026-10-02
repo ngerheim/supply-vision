@@ -46,3 +46,9 @@ servidor apenas recebe versões pelo `atualizar-servidor.ps1`; ele nunca deve
 ter alteração local.
 
 A versão em uso é o commit: a central mostra o hash e a data.
+
+## Preparacao de hospedagem pelo GitHub
+
+O GitHub prepara e valida o portal; a aplicacao completa exige um runtime
+com API e banco. A estrutura de homologacao para Workers + D1 e manual e
+nao publica nem altera o notebook-servidor. Veja [docs/HOSPEDAGEM.md](docs/HOSPEDAGEM.md).
