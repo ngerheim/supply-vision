@@ -229,7 +229,7 @@ export function Imports({
                 {file?.name || 'Arraste a planilha ou clique para selecionar'}
               </p>
               <p className="mt-1 text-xs text-muted-foreground">
-                Excel · até 15 MB · até 50 mil linhas, incluindo o cabeçalho
+                até 15 MB · até 50 mil linhas, incluindo o cabeçalho
               </p>
             </button>
             <div className="flex flex-wrap justify-between gap-3">
@@ -249,10 +249,6 @@ export function Imports({
               </Button>
             </div>
           </fieldset>
-          <p className="text-sm text-muted-foreground">
-            A conferência não publica dados. Itens repetidos na mesma cidade/UF
-            e modelo mantêm o menor preço; medidas diferentes exigem correção.
-          </p>
           {error && (
             <Alert variant="destructive">
               <AlertTriangle />
