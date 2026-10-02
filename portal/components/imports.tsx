@@ -193,18 +193,8 @@ export function Imports({
   return (
     <div className="mx-auto max-w-5xl space-y-5">
       <Card>
-        <CardHeader>
-          <CardTitle>Importar acordos</CardTitle>
-          <p className="text-sm text-muted-foreground">
-            1. Escolha o arquivo · 2. Confira as correspondências · 3. Publique
-          </p>
-        </CardHeader>
         <CardContent className="space-y-5">
           <fieldset disabled={busy} className="space-y-4">
-            <div className="rounded-xl border border-primary bg-accent/40 p-4">
-              <p className="font-semibold">Adicionar ou atualizar um acordo</p>
-              <p className="mt-1 text-sm text-muted-foreground">Substitui todas as condições do acordo escolhido. A versão anterior permanece no histórico.</p>
-            </div>
             <SearchSelect
               label="Acordo de destino"
               value={agreement}
