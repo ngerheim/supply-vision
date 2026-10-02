@@ -9,7 +9,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import * as XLSX from 'xlsx';
 import { lerPlanilha } from '@/lib/planilha';
 import { ConcurrencyGate } from '@/lib/concurrency';
-import { chaveLocalidade, colunasAusentes, parseImportRow, resolveImportRows, summarizeImportErrors, deduplicateImportRows, uniqueIndex, type ImportTarget } from '@/lib/importacao';
+import { chaveLocalidade, colunasAusentes, parseImportRow, resolveImportRows, summarizeImportErrors, deduplicateImportRows, validarFornecedorImportacao, uniqueIndex, type ImportTarget } from '@/lib/importacao';
 import { contextoNotificacaoChamado, pessoaNotificacao, prepararNotificacoesChamado, type ContextoNotificacaoChamado } from '@/lib/fila-email-chamados';
 import { corpoBinarioLimitado, corpoLimitado } from '@/lib/corpo-limitado';
 import {
@@ -1125,6 +1125,9 @@ async function importWorkbookComTrava(request: Request, user: User, agreementId:
     const ausentes = colunasAusentes(sourceRows[0]);
     if (ausentes.length) throw new Error(`A planilha não tem ${ausentes.length === 1 ? 'a coluna' : 'as colunas'} ${ausentes.join(', ')}. Confira o cabeçalho da primeira aba.`);
     const parsed = sourceRows.map((row, index) => parseImportRow(row, leitura.numerosLinhas[index]));
+    const fornecedor=await first<{cnpj:string;tradeName:string;legalName:string}>('SELECT s.cnpj,s.trade_name AS tradeName,s.legal_name AS legalName FROM agreements a JOIN suppliers s ON s.id=a.supplier_id WHERE a.id=?',[agreementId]);
+    if(!fornecedor)throw new Error('Acordo de destino não encontrado.');
+    validarFornecedorImportacao(parsed,fornecedor);
     await applyImportMappings(parsed);
     const errors = parsed.filter((r) => r.error);
     if (errors.length) {
@@ -1185,6 +1188,10 @@ type PublishImport = (statements: D1PreparedStatement[], details: Record<string,
 
 async function processAgreementImport(rows: ReturnType<typeof parseImportRow>[], user: User, importId: string, agreementId: string, publish: PublishImport) {
   const agreement = await first<{id:string;number:string}>('SELECT id,number FROM agreements WHERE id=?',[agreementId]); if(!agreement) throw new Error('Acordo não encontrado');
+  const fornecedor=await first<{cnpj:string;tradeName:string;legalName:string}>('SELECT s.cnpj,s.trade_name AS tradeName,s.legal_name AS legalName FROM agreements a JOIN suppliers s ON s.id=a.supplier_id WHERE a.id=?',[agreementId]);
+  if(!fornecedor)throw new Error('Fornecedor de destino não encontrado.');
+  validarFornecedorImportacao(rows,fornecedor);
+  if(rows.some(row=>row.error))throw new Error('O fornecedor do acordo mudou durante a conferência. Confira a planilha novamente.');
   const db=rawDb(), timestamp=now();
   const max=await first<{n:number}>('SELECT COALESCE(MAX(version_number),0) n FROM agreement_versions WHERE agreement_id=?',[agreementId]);
   const versionId=id('ver'), versionNumber=Number(max?.n||0)+1;
