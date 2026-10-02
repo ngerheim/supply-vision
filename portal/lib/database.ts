@@ -1,6 +1,7 @@
 import { passwordHash, tokenHash, PBKDF2_ITERACOES_ATUAL, PBKDF2_ITERACOES_LEGADO } from './criptografia.ts';
 export { passwordHash, tokenHash, PBKDF2_ITERACOES_ATUAL, PBKDF2_ITERACOES_LEGADO } from './criptografia.ts';
 import { parseCookies } from './cookies.ts';
+import { LIMPAR_TRAVAS_VENCIDAS_SQL, TRAVA_VALIDADE_MS } from './travas-sql.ts';
 export { parseCookies } from './cookies.ts';
 import { env } from 'cloudflare:workers';
 import { type Role, validatePassword } from '@/lib/domain';
@@ -122,10 +123,10 @@ async function initialize() {
   const db = rawDb();
   await db.batch(schema.map((sql) => db.prepare(sql)));
   await applyColumnMigrations();
-  // Travas de acordo vivem so durante uma requisicao. Na subida do Portal nao
-  // ha requisicao nenhuma em andamento: o que sobrou e de um processo que
-  // morreu, e ficaria prendendo o acordo ate vencer.
-  await db.prepare("DELETE FROM travas WHERE chave LIKE 'acordo:%'").run();
+  // Outra instancia pode estar trabalhando neste mesmo banco. A inicializacao
+  // so limpa travas vencidas, com o mesmo prazo usado por adquirirTrava.
+  await db.prepare(LIMPAR_TRAVAS_VENCIDAS_SQL)
+    .bind(new Date(Date.now() - TRAVA_VALIDADE_MS).toISOString()).run();
   const existing = await db.prepare('SELECT id FROM users LIMIT 1').first();
   if (!existing) {
     const initialPassword = (env as unknown as { INITIAL_ADMIN_PASSWORD?: string }).INITIAL_ADMIN_PASSWORD;
@@ -233,7 +234,6 @@ export async function audit(userId: string | null, action: string, entity: strin
 export const TRAVA_IMPORTACAO = 'importacao';
 // Uma importacao real leva segundos. 30 min so cobre o processo que morreu no
 // meio sem liberar.
-const TRAVA_VALIDADE_MS = 30 * 60 * 1000;
 
 export async function adquirirTrava(chave: string, dono: string): Promise<boolean> {
   const agora = now();

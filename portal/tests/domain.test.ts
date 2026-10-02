@@ -70,6 +70,14 @@ void test('aceita apenas valores monetários finitos e não negativos', () => {
   assert.equal(toNonNegativeMoney('não é preço'), null);
 });
 
+void test('preço inválido não vira zero, um ou infinito por coerção', () => {
+  for (const value of [false, true, [], [10], {}, ' ', '\t', null, undefined, NaN, Infinity, 1e308]) {
+    assert.equal(toNonNegativeMoney(value), null);
+  }
+  assert.equal(toNonNegativeMoney(' 0 '), 0);
+  assert.equal(toNonNegativeMoney(' 12.50 '), 12.5);
+});
+
 void test('aplica os limites de senha inicial', () => {
   assert.equal(validatePassword('123456789'), false);
   assert.equal(validatePassword('1234567890'), true);

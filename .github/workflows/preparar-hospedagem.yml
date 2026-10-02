@@ -1,0 +1,52 @@
+name: Preparar hospedagem (sem publicar)
+
+on:
+  workflow_dispatch:
+    inputs:
+      database_id:
+        description: UUID do D1 exclusivo de homologacao (nao usar a base de producao)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: preparar-hospedagem-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  preparar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: portal
+    env:
+      SUPPLY_VISION_TARGET: cloudflare-staging
+      CLOUDFLARE_D1_DATABASE_ID: ${{ inputs.database_id }}
+      WRANGLER_SEND_METRICS: 'false'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: portal/package-lock.json
+      - run: npm ci
+      - run: npm test
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm audit
+      - run: npm run build
+      # Valida o empacotamento sem enviar codigo ou acessar a base remota.
+      # Nao ha token Cloudflare nem senha de administrador neste workflow.
+      - run: npx wrangler deploy --config dist/server/wrangler.json --dry-run --outdir ../work/hospedagem
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: portal-homologacao-${{ github.sha }}
+          path: |
+            portal/dist/client
+            portal/dist/server
+          if-no-files-found: error
+          retention-days: 7

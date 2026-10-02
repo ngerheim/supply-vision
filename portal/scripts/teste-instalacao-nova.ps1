@@ -383,6 +383,10 @@ $cookieFluxo = $script:sessao.Cookies.GetCookies($baseUrl)['acordos_session'].Va
 $env:PORTAL_TESTE_COOKIE = "acordos_session=$cookieFluxo"
 $env:PORTAL_TESTE_PORTA = [string]$porta
 $env:PORTAL_TESTE_DESCARTAVEL = 'SIM'
+Verifica 'Exclusoes respeitam a trava de uma operacao concorrente' {
+  & node (Join-Path $PSScriptRoot 'teste-exclusao-concorrente.mjs') $temp $arquivoBanco | Out-Host
+  $LASTEXITCODE -eq 0
+}
 & node (Join-Path $PSScriptRoot 'teste-http-fluxo.mjs')
 $codigoFluxo = $LASTEXITCODE
 Remove-Item Env:PORTAL_TESTE_COOKIE, Env:PORTAL_TESTE_PORTA, Env:PORTAL_TESTE_DESCARTAVEL -ErrorAction SilentlyContinue
