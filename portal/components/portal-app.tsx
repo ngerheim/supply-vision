@@ -264,7 +264,7 @@ function TicketDetail({id,users,agreements,onBack,run}:JsonData){
 function TicketDialog({open,value,users,agreements,onClose,onSave}:JsonData){
   const [form,setForm]=useState<AnyRow>(value||{priority:'media'}),editing=!!value?.id;
   return <Dialog open={open} onOpenChange={(x)=>!x&&onClose()}><DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
-    <DialogHeader><DialogTitle>{editing?'Editar chamado':'Novo chamado de negociação'}</DialogTitle><DialogDescription>{editing?'Atualize os dados e a responsabilidade pelo chamado.':'Registre a necessidade de negociação. O fornecedor pode ser definido depois.'}</DialogDescription></DialogHeader>
+    <DialogHeader><DialogTitle>{editing?'Editar chamado':'Novo chamado'}</DialogTitle>{editing&&<DialogDescription>Atualize os dados e a responsabilidade pelo chamado.</DialogDescription>}</DialogHeader>
     <div className="grid gap-4 sm:grid-cols-2">
       <Field label="Título *" className="sm:col-span-2"><Input required aria-label="Título" maxLength={120} value={form.title||''} onChange={e=>setForm({...form,title:e.target.value})}/></Field>
       <Field label="Fornecedor" className="sm:col-span-2"><Input maxLength={120} value={form.supplierName||''} onChange={e=>setForm({...form,supplierName:e.target.value})}/></Field>
