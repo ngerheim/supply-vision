@@ -33,6 +33,7 @@ import {
   MAX_IMPORT_BYTES,
   ROLES,
   safeFilename,
+  situacaoAtiva,
   TICKET_PRIORITIES,
   TICKET_STATUSES,
   normalizeImportText,
@@ -1007,7 +1008,7 @@ async function updateCatalog(request: Request, user: User, type: string, recordI
   exigeCamposDeCatalogo(body);
   const existing = await first<{ id: string; active: number }>(`SELECT * FROM ${cfg.table} WHERE id=?`, [recordId]);
   if (!existing) return fail('Cadastro não encontrado.', 404);
-  const active = body.active === undefined ? existing.active : body.active === false || body.active === 0 ? 0 : 1;
+  const active = situacaoAtiva(body.active, existing.active);
   try {
     if (type === 'suppliers') {
       if (!textValue(body.tradeName) || !isValidCnpj(body.cnpj)) return fail('Informe o nome e um CNPJ válido.');
@@ -1497,7 +1498,7 @@ async function updateUser(request:Request,actor:User,userId:string){
   if(body.password !== undefined && body.password !== '' && typeof body.password !== 'string') return fail('A nova senha é inválida.');
   const password=typeof body.password === 'string' && body.password !== '' ? body.password : null;
   if(password !== null && !validatePassword(password)) return fail('A nova senha deve ter entre 10 e 200 caracteres.');
-  const active=body.active === undefined ? target.active : body.active === false ? 0 : 1;
+  const active=situacaoAtiva(body.active,target.active);
   const dailyReportEnabled=body.dailyReportEnabled === undefined ? target.dailyReportEnabled : body.dailyReportEnabled === true ? 1 : 0;
   const dailyReportTime=body.dailyReportTime === undefined ? target.dailyReportTime : textValue(body.dailyReportTime);
   if(!/^([01]\d|2[0-3]):[0-5]\d$/.test(dailyReportTime)) return fail('Informe um horário válido para o relatório diário.');
