@@ -461,11 +461,20 @@ def _processar_periodo(df_base, df_acordo):
 CORTE_VIGENCIA_ACORDOS = pd.Timestamp(sv_paths.CORTE_VIGENCIA_ACORDOS)
 
 
+def _data_vigencia(valores):
+    # ISO tem ano primeiro; dayfirst so se aplica ao formato brasileiro.
+    texto = valores.astype("string")
+    iso = texto.str.match(r"^\d{4}-\d{2}-\d{2}$", na=False)
+    resultado = pd.to_datetime(texto.where(iso), format="%Y-%m-%d", errors="coerce")
+    brasileiro = pd.to_datetime(texto.where(~iso), format="%d/%m/%Y", errors="coerce")
+    return resultado.fillna(brasileiro).dt.normalize()
+
+
 def _preparar_vigencia(df_acordo):
     """Converte inicio, fim e situacao uma vez so; processar() usa o resultado
     para cada data de compra, em vez de reconverter as colunas a cada data."""
-    inicio = pd.to_datetime(df_acordo["INICIO_VIGENCIA"], format="mixed", dayfirst=True, errors="coerce").dt.normalize()
-    fim = pd.to_datetime(df_acordo["FIM_VIGENCIA"], format="mixed", dayfirst=True, errors="coerce").dt.normalize()
+    inicio = _data_vigencia(df_acordo["INICIO_VIGENCIA"])
+    fim = _data_vigencia(df_acordo["FIM_VIGENCIA"])
     status = df_acordo["STATUS_ACORDO"].fillna("").astype(str).str.lower()
     return inicio, fim, status
 
