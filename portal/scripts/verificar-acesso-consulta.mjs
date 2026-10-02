@@ -32,8 +32,8 @@ export async function verificarAcessoConsulta({ request, good, check, senha, agr
     assert.equal(detail.totalItems, 999);
     assert.equal(detail.items.length, 500);
     const secondPage = (await request(`/api/agreements/${agreementId}?offset=500`, { session })).data;
-    assert.equal(secondPage.items.length, 500);
-    assert.equal(new Set([...detail.items, ...secondPage.items].map(item => item.id)).size, 1000);
+    assert.equal(secondPage.items.length, 499);
+    assert.equal(new Set([...detail.items, ...secondPage.items].map(item => item.id)).size, 999);
     assert.equal(secondPage.version, detail.version);
   });
   await check('Consulta: todas as famílias de escrita são bloqueadas', async () => {
