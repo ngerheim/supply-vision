@@ -48,6 +48,7 @@ CHAVE_ACORDO = ["_fornec_norm", "_cidade_norm", "_modelo_norm", "_peca_norm"]
 STATUS_AMBIGUO         = "ACORDO AMBÍGUO"
 STATUS_PRECO_INVALIDO  = "ACORDO SEM PREÇO VÁLIDO"
 STATUS_DATA_INVALIDA   = "DATA DE ABERTURA INVÁLIDA"
+STATUS_DIMENSAO_PENDENTE = "UF OU MEDIDA NÃO INFORMADA"
 
 
 
@@ -257,15 +258,17 @@ def _validar_parametros(df_acordo):
             print(f"       {chave!r} -> {destino!r} ({nv} linhas); usar {alvo!r} ({na} linhas)")
 
 
+    chave_qualidade = CHAVE_ACORDO + [c for c in ["UF", "MEDIDA"] if c in df_acordo.columns]
     dup = (df_acordo[df_acordo["_preco_valido"]]
-                    .groupby(CHAVE_ACORDO)["PRECO"]
+                    .groupby(chave_qualidade)["PRECO"]
                     .agg(["nunique", "min", "max"]))
     dup = dup[dup["nunique"] > 1]
     if len(dup):
         print(f"AVISO: {len(dup)} chave(s) do acordo com PREÇO DIVERGENTE — as "
               f"compras correspondentes saem como '{STATUS_AMBIGUO}' e ficam "
               f"fora dos indicadores; corrigir no Portal:")
-        for (_, cid, mod, peca), r in dup.head(20).iterrows():
+        for chave, r in dup.head(20).iterrows():
+            _, cid, mod, peca = chave[:4]
             print(f"       {cid} | {mod} | {peca}: R$ {r['min']:,.2f} vs R$ {r['max']:,.2f}")
         if len(dup) > 20:
             print(f"       (+{len(dup) - 20} não listadas)")
@@ -334,6 +337,40 @@ def _motivo_sem_acordo(m, df_acordo, sem_ac):
 
 
 def _processar_periodo(df_base, df_acordo):
+    # A fonte antiga nao fornece medida. Nunca assumir unidade ou conversao.
+    dimensoes = [("UF", "Fornecedor por Estado"), ("MEDIDA", "MEDIDA")]
+    dimensoes = [(ac, base) for ac, base in dimensoes if ac in df_acordo.columns]
+    if not dimensoes or df_base.empty:
+        return _processar_periodo_compativel(df_base, df_acordo)
+    base = df_base.copy()
+    chaves = []
+    for ac, coluna in dimensoes:
+        chave = f"_comparacao_{ac}"
+        valores = base[coluna] if coluna in base.columns else base.get(ac, pd.Series("", index=base.index))
+        base[chave] = valores.fillna("").apply(_norm)
+        chaves.append(chave)
+    partes = []
+    for chave, grupo in base.groupby(chaves, dropna=False, sort=False):
+        valores = chave if isinstance(chave, tuple) else (chave,)
+        universo = df_acordo
+        for (ac, _), valor in zip(dimensoes, valores):
+            universo = universo[universo[ac].fillna("").apply(_norm) == valor]
+        pendente = any(not valor for valor in valores)
+        resultado = _processar_periodo_compativel(grupo, universo.iloc[:0] if pendente else universo)
+        resultado.index = grupo.index
+        if pendente:
+            mascara = resultado["Status"] != STATUS_DATA_INVALIDA
+            resultado.loc[mascara, "Status"] = STATUS_DIMENSAO_PENDENTE
+            resultado.loc[mascara, "Motivo Sem Acordo"] = "Informe UF e medida da compra para comparar preços"
+            resultado.loc[mascara, ["Preco Acordo", "Preco Total Acordo", "Diferenca Unit.", "Diferenca Total", "Menor Preco Acordo", "Dif. p/ Menor Acordo"]] = np.nan
+            resultado.loc[mascara, ["Tinha acordo?", "Fornecedor do Acordo"]] = ""
+        resultado["UF"] = grupo[chaves[0]].values if dimensoes[0][0] == "UF" else ""
+        resultado["Medida"] = grupo.get("MEDIDA", pd.Series("", index=grupo.index)).values
+        partes.append(resultado)
+    return pd.concat(partes).reindex(df_base.index)
+
+
+def _processar_periodo_compativel(df_base, df_acordo):
     df = df_base.copy()
     df["_modelo_ac"]  = df["Modelo"].map(MODELOS).fillna(df["Modelo"]).apply(_norm)
     sin_map  = {k: v for k, v in SINONIMOS.items() if v is not None}
@@ -520,7 +557,7 @@ def processar(df_base, df_acordo):
     return pd.concat(partes).sort_index() if partes else _processar_periodo(df_base, df_acordo)
 
 
-STATUS_QUARENTENA = {STATUS_AMBIGUO, STATUS_PRECO_INVALIDO, STATUS_DATA_INVALIDA}
+STATUS_QUARENTENA = {STATUS_AMBIGUO, STATUS_PRECO_INVALIDO, STATUS_DATA_INVALIDA, STATUS_DIMENSAO_PENDENTE}
 
 
 def resumir_status(df):
@@ -528,7 +565,7 @@ def resumir_status(df):
     total_bruto = len(df)
     contagens = {st: int((df["Status"] == st).sum()) for st in (
         "CONFORME", "ACIMA DO ACORDO", "ABAIXO DO ACORDO", "SEM ACORDO",
-        STATUS_AMBIGUO, STATUS_PRECO_INVALIDO, STATUS_DATA_INVALIDA,
+        STATUS_AMBIGUO, STATUS_PRECO_INVALIDO, STATUS_DATA_INVALIDA, STATUS_DIMENSAO_PENDENTE,
     )}
     total_quarentena = sum(contagens[st] for st in STATUS_QUARENTENA)
     total_elegivel = total_bruto - total_quarentena
@@ -567,7 +604,7 @@ def imprimir_resumo(resumo):
     if resumo["total_quarentena"]:
         print(f"  Em quarentena: {resumo['total_quarentena']:,} "
               f"({resumo['percentual_quarentena_bruto']}% do total bruto)")
-        for status in (STATUS_AMBIGUO, STATUS_PRECO_INVALIDO, STATUS_DATA_INVALIDA):
+        for status in STATUS_QUARENTENA:
             if resumo["contagens"][status]:
                 print(f"    {status:<26}{resumo['contagens'][status]:>7,}")
     if resumo["motivos_sem_acordo"]:
@@ -787,15 +824,16 @@ def gerar_recorte_historico(df, path):
 
 def gerar_qualidade_acordos(df_acordo, path):
     """Gera fila operacional com todas as pendências da base de acordos."""
+    chave_qualidade = CHAVE_ACORDO + [c for c in ["UF", "MEDIDA"] if c in df_acordo.columns]
     validos = df_acordo[df_acordo["_preco_valido"]]
-    stats = validos.groupby(CHAVE_ACORDO)["PRECO"].agg(["nunique", "min", "max"])
+    stats = validos.groupby(chave_qualidade)["PRECO"].agg(["nunique", "min", "max"])
     ambiguas = set(stats[stats["nunique"] > 1].index)
-    com_preco = set(map(tuple, validos[CHAVE_ACORDO].values))
-    sem_preco = set(map(tuple, df_acordo[CHAVE_ACORDO].values)) - com_preco
+    com_preco = set(map(tuple, validos[chave_qualidade].values))
+    sem_preco = set(map(tuple, df_acordo[chave_qualidade].values)) - com_preco
     colunas = ["Tipo de pendência", "CNPJ normalizado", "Cidade", "Modelo",
                "Item", "Preço original", "Menor preço", "Maior preço", "Ocorrências"]
     linhas = []
-    for chave, grupo in df_acordo.groupby(CHAVE_ACORDO, dropna=False):
+    for chave, grupo in df_acordo.groupby(chave_qualidade, dropna=False):
         tipo = STATUS_AMBIGUO if chave in ambiguas else (
             STATUS_PRECO_INVALIDO if chave in sem_preco else "")
         if not tipo:

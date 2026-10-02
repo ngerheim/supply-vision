@@ -35,6 +35,8 @@ COLUNAS = [
     'Criado Por',
 ]
 
+COLUNAS_OPCIONAIS = ['Fornecedor por Estado', 'UF', 'MEDIDA']
+
 COLUNAS_NUMERICAS = {'Valor Unitario', 'OS Quantidade'}
 
 
@@ -64,8 +66,9 @@ def tratar(df):
     if faltando:
         raise BaseInvalida(f'base sem as colunas: {", ".join(faltando)}')
 
-    descartadas = len(df.columns) - len(COLUNAS)
-    df = df[COLUNAS]
+    utilizadas = COLUNAS + [c for c in COLUNAS_OPCIONAIS if c in df.columns]
+    descartadas = len(df.columns) - len(utilizadas)
+    df = df[utilizadas]
 
     antes = len(df)
     df = df.drop_duplicates().reset_index(drop=True)
