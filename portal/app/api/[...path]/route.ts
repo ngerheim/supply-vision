@@ -1,4 +1,5 @@
 import { condicoesBusca } from '@/lib/filtros-busca';
+import { tituloChamado } from '@/lib/chamados';
 import { ATUALIZAR_USUARIO_SQL } from '@/lib/usuarios-sql';
 import { montarPowerBiUrl } from '@/lib/powerbi';
 import { dataDeNegocio } from '@/lib/data-negocio';
@@ -1288,7 +1289,7 @@ async function retryEmailNotification(user:User,notificationId:string){
 }
 
 async function ticketList(){
-  return all(`SELECT t.id,t.code,t.supplier_name AS supplierName,t.cnpj,t.city,t.state,t.contact,t.scope,t.priority,t.status,
+  return all(`SELECT t.id,t.code,t.title,t.supplier_name AS supplierName,t.cnpj,t.city,t.state,t.contact,t.scope,t.priority,t.status,
     t.created_at AS createdAt,t.updated_at AS updatedAt,t.closed_at AS closedAt,t.agreement_id AS agreementId,
     r.name AS requestedBy,a.name AS assignedTo,ag.number AS agreementNumber
     FROM tickets t LEFT JOIN users r ON r.id=t.requested_by LEFT JOIN users a ON a.id=t.assigned_to
@@ -1316,7 +1317,7 @@ async function ticketDetail(ticketId:string){
 
 async function createTicket(request:Request,user:User){
   const body=await jsonBody<TicketInput>(request);
-  if(!textValue(body.supplierName)) return fail('Informe o fornecedor que deve ser negociado.');
+  const title=tituloChamado(body.title);
   exigeTexto(body.supplierName,LIMITES_CAMPO.nome,'fornecedor');
   exigeTexto(body.contact,LIMITES_CAMPO.contato,'contato');
   exigeTexto(body.scope,LIMITES_CAMPO.escopo,'escopo');
@@ -1342,15 +1343,15 @@ async function createTicket(request:Request,user:User){
     const code=`SUP-${String(proximo).padStart(4,'0')}`;
     const ticketId=id('tck'), eventId=id('tev'), timestamp=now();
     try{
-      const contexto:ContextoNotificacaoChamado={id:ticketId,codigo:code,fornecedor:supplierName,prioridade:String(priority),status:'aberto',solicitante:{id:user.id,nome:user.name,email:user.email},responsavel};
+      const contexto:ContextoNotificacaoChamado={id:ticketId,codigo:code,titulo:title,fornecedor:supplierName,prioridade:String(priority),status:'aberto',solicitante:{id:user.id,nome:user.name,email:user.email},responsavel};
       const notificacoes=prepararNotificacoesChamado({eventId,anterior:null,atual:contexto,autor:user,alteracoes:['Chamado atribuído'],timestamp});
       await rawDb().batch([
-        rawDb().prepare(`INSERT INTO tickets (id,code,supplier_name,cnpj,city,state,contact,scope,priority,status,requested_by,assigned_to,notes,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,'aberto',?,?,?,?,?)`)
-          .bind(ticketId,code,supplierName,ticketCnpj,body.city?normalizeText(body.city):null,state,nullableText(body.contact),nullableText(body.scope),priority,user.id,assignedTo,nullableText(body.notes),timestamp,timestamp),
+        rawDb().prepare(`INSERT INTO tickets (id,code,title,supplier_name,cnpj,city,state,contact,scope,priority,status,requested_by,assigned_to,notes,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,'aberto',?,?,?,?,?)`)
+          .bind(ticketId,code,title,supplierName,ticketCnpj,body.city?normalizeText(body.city):null,state,nullableText(body.contact),nullableText(body.scope),priority,user.id,assignedTo,nullableText(body.notes),timestamp,timestamp),
         rawDb().prepare(`INSERT INTO ticket_events (id,ticket_id,user_id,kind,to_status,message,created_at) VALUES (?,?,?,'created','aberto',?,?)`)
-          .bind(eventId,ticketId,user.id,`Chamado aberto para ${supplierName}`,timestamp),
+          .bind(eventId,ticketId,user.id,`Chamado aberto: ${title}`,timestamp),
         rawDb().prepare('INSERT INTO audit_logs (id,user_id,action,entity,entity_id,details,created_at) VALUES (?,?,?,?,?,?,?)')
-          .bind(id('aud'),user.id,'CREATE','ticket',ticketId,`Chamado ${code} aberto: ${supplierName}`,timestamp),
+          .bind(id('aud'),user.id,'CREATE','ticket',ticketId,`Chamado ${code} aberto: ${title}`,timestamp),
         ...notificacoes,
       ]);
       return ok({ id:ticketId, code },{status:201});
@@ -1364,7 +1365,7 @@ async function createTicket(request:Request,user:User){
 
 async function updateTicket(request:Request,user:User,ticketId:string){
   const body=await jsonBody<TicketInput>(request);
-  const current=await first<{id:string;code:string;supplier_name:string;cnpj:string|null;city:string|null;state:string|null;contact:string|null;scope:string|null;priority:string;status:string;requested_by:string|null;assigned_to:string|null;agreement_id:string|null;notes:string|null;closed_at:string|null}>('SELECT * FROM tickets WHERE id=?',[ticketId]);
+  const current=await first<{id:string;code:string;title:string;supplier_name:string;cnpj:string|null;city:string|null;state:string|null;contact:string|null;scope:string|null;priority:string;status:string;requested_by:string|null;assigned_to:string|null;agreement_id:string|null;notes:string|null;closed_at:string|null}>('SELECT * FROM tickets WHERE id=?',[ticketId]);
   if(!current) return fail('Chamado não encontrado.',404);
   const anterior=await contextoNotificacaoChamado(ticketId);
   if(!anterior) return fail('Chamado não encontrado.',404);
@@ -1378,7 +1379,7 @@ async function updateTicket(request:Request,user:User,ticketId:string){
   const assignedTo=body.assignedTo === undefined ? current.assigned_to : textValue(body.assignedTo) || null;
   if(assignedTo && !await first('SELECT 1 ok FROM users WHERE id=? AND active=1',[assignedTo])) return fail('Responsável não encontrado ou inativo.');
   const supplierName=body.supplierName === undefined ? current.supplier_name : normalizeText(body.supplierName);
-  if(!supplierName) return fail('Informe o fornecedor que deve ser negociado.');
+  const title=tituloChamado(body.title === undefined ? current.title : body.title);
   exigeTexto(body.supplierName,LIMITES_CAMPO.nome,'fornecedor');
   exigeTexto(body.contact,LIMITES_CAMPO.contato,'contato');
   exigeTexto(body.scope,LIMITES_CAMPO.escopo,'escopo');
@@ -1395,6 +1396,7 @@ async function updateTicket(request:Request,user:User,ticketId:string){
   const scope=body.scope===undefined?current.scope:nullableText(body.scope);
   const notes=body.notes===undefined?current.notes:nullableText(body.notes);
   const alteracoes:string[]=[];
+  if(title!==current.title) alteracoes.push('Título');
   if(supplierName!==current.supplier_name) alteracoes.push('Fornecedor');
   if(nextCnpj!==current.cnpj) alteracoes.push('CNPJ');
   if(city!==current.city||nextState!==current.state) alteracoes.push('Localidade');
@@ -1410,12 +1412,12 @@ async function updateTicket(request:Request,user:User,ticketId:string){
   const closedAt=(status==='fechado'||status==='cancelado')?(current.closed_at||timestamp):null;
   const eventId=id('tev');
   const responsavel=await pessoaNotificacao(assignedTo);
-  const atual:ContextoNotificacaoChamado={...anterior,fornecedor:supplierName,prioridade:String(priority),status,responsavel};
+  const atual:ContextoNotificacaoChamado={...anterior,titulo:title,fornecedor:supplierName,prioridade:String(priority),status,responsavel};
   const camposRegra=alteracoes.filter((item)=>item!=='Responsável');
   const notificacoes=prepararNotificacoesChamado({eventId,anterior,atual,mudanca:{camposAlterados:camposRegra},autor:user,alteracoes,mensagem:nullableText(body.statusMessage),timestamp});
   await rawDb().batch([
-    rawDb().prepare(`UPDATE tickets SET supplier_name=?,cnpj=?,city=?,state=?,contact=?,scope=?,priority=?,status=?,assigned_to=?,agreement_id=?,notes=?,updated_at=?,closed_at=? WHERE id=?`)
-      .bind(supplierName,nextCnpj,city,nextState,contact,scope,priority,status,assignedTo,agreementId,notes,timestamp,closedAt,ticketId),
+    rawDb().prepare(`UPDATE tickets SET title=?,supplier_name=?,cnpj=?,city=?,state=?,contact=?,scope=?,priority=?,status=?,assigned_to=?,agreement_id=?,notes=?,updated_at=?,closed_at=? WHERE id=?`)
+      .bind(title,supplierName,nextCnpj,city,nextState,contact,scope,priority,status,assignedTo,agreementId,notes,timestamp,closedAt,ticketId),
     rawDb().prepare(`INSERT INTO ticket_events (id,ticket_id,user_id,kind,from_status,to_status,message,created_at) VALUES (?,?,?,${status!==current.status?"'status'":"'updated'"},?,?,?,?)`)
       .bind(eventId,ticketId,user.id,status!==current.status?current.status:null,status!==current.status?status:null,nullableText(body.statusMessage)||`Alterado: ${alteracoes.join(', ')}`,timestamp),
     rawDb().prepare('INSERT INTO audit_logs (id,user_id,action,entity,entity_id,details,created_at) VALUES (?,?,?,?,?,?,?)')

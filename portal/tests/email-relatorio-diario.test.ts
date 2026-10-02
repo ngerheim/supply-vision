@@ -14,3 +14,10 @@ void test('relatório informa quando não houve atualização',()=>{
   const email=montarEmailRelatorioDiario('09/09/2026',{aberto:0,aguardando:0,fechado:0,cancelado:0},[],'http://portal');
   assert.match(email.texto,/Nenhum chamado foi atualizado hoje/);
 });
+
+void test('relatorio identifica pelo titulo um chamado sem fornecedor',()=>{
+  const email=montarEmailRelatorioDiario('2026-10-02',{aberto:1,aguardando:0,fechado:0,cancelado:0},[{id:'t1',codigo:'SUP-0012',titulo:'Negociar <pneus>',fornecedor:'',situacao:'aberto',atualizacoes:[]}],'http://portal');
+  assert.match(email.texto,/SUP-0012 · Negociar <pneus>/);
+  assert.match(email.html,/Negociar &lt;pneus&gt;/);
+  assert.doesNotMatch(email.html,/<pneus>/);
+});
