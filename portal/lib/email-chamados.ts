@@ -4,6 +4,7 @@ import { montarCasca, escapar, paleta } from './email-visual.ts';
 export type DadosEmailChamado = {
   ticketId: string;
   codigo: string;
+  titulo?: string;
   fornecedor: string;
   prioridade: string;
   situacao: string;
@@ -42,7 +43,8 @@ export function montarEmailChamado(tipo: TipoNotificacaoChamado, dados: DadosEma
   const mudancas = dados.alteracoes.length ? dados.alteracoes.join(', ') : 'Andamento registrado';
   const mensagem = dados.mensagem?.trim();
   const texto = [
-    titulos[tipo], '', `${dados.codigo} — ${dados.fornecedor}`, dados.resumo, '',
+    titulos[tipo], '', `${dados.codigo} — ${dados.titulo || dados.fornecedor}`, dados.resumo, '',
+    `Fornecedor: ${dados.fornecedor || 'Não informado'}`,
     `Situação: ${statusLegivel[dados.situacao] || dados.situacao}`,
     `Prioridade: ${prioridadeLegivel[dados.prioridade] || dados.prioridade}`,
     `Solicitante: ${dados.solicitante || 'Não informado'}`,
@@ -54,6 +56,7 @@ export function montarEmailChamado(tipo: TipoNotificacaoChamado, dados: DadosEma
     ? `<ul style="margin:8px 0 0;padding-left:20px">${dados.alteracoes.map((item) => `<li>${escapar(item)}</li>`).join('')}</ul>`
     : '<p style="margin:8px 0 0">Andamento registrado</p>';
   const detalhes = [
+    ['Fornecedor', dados.fornecedor || 'Não informado'],
     ['Situação', statusLegivel[dados.situacao] || dados.situacao],
     ['Prioridade', prioridadeLegivel[dados.prioridade] || dados.prioridade],
     ['Solicitante', dados.solicitante || 'Não informado'],
@@ -72,7 +75,7 @@ export function montarEmailChamado(tipo: TipoNotificacaoChamado, dados: DadosEma
 
   const html = montarCasca(
     titulos[tipo],
-    `${dados.codigo} · ${dados.fornecedor}`,
+    `${dados.codigo} · ${dados.titulo || dados.fornecedor}`,
     conteudo,
     { texto: 'Abrir chamado', url },
   );

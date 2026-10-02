@@ -22,3 +22,11 @@ void test('usa intervalos crescentes e limita a ultima faixa', () => {
   assert.equal(proximaTentativa(4, agora), '2026-09-09T13:00:00.000Z');
   assert.equal(proximaTentativa(9, agora), '2026-09-09T16:00:00.000Z');
 });
+
+void test('chamado sem fornecedor e identificado pelo titulo no email', () => {
+  const email = montarEmailChamado('atribuicao', { ...dados, titulo: 'Negociar <pneus>', fornecedor: '' }, 'http://127.0.0.1:3000');
+  assert.match(email.texto, /SUP-0007 — Negociar <pneus>/);
+  assert.match(email.texto, /Fornecedor: Não informado/);
+  assert.match(email.html, /Negociar &lt;pneus&gt;/);
+  assert.doesNotMatch(email.html, /<pneus>/);
+});

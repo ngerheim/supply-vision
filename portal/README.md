@@ -134,6 +134,11 @@ dependências nem compile sobre o portal aberto.
 
 # Parte 2 — E-mails dos chamados
 
+Na aba **Chamados**, o título é obrigatório e o fornecedor é opcional.
+Clique nos cabeçalhos da tabela para alternar a ordenação, como em Acordos.
+O cadastro não solicita CNPJ ou contato. Registros antigos recebem o fornecedor
+como título inicial e preservam os dados e o histórico já gravados.
+
 O portal avisa por e-mail quando um chamado muda:
 
 - **atribuição e reatribuição** — apenas o novo responsável;

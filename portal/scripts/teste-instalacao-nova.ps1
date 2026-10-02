@@ -176,7 +176,7 @@ $u1 = (Invoke-WebRequest "$baseUrl/api/users" -Method POST -WebSession $script:s
 $u2 = (Invoke-WebRequest "$baseUrl/api/users" -Method POST -WebSession $script:sessao -ContentType 'application/json' -UseBasicParsing -TimeoutSec 60 `
   -Body (@{name='Novo Responsavel Email';email=$novoEmail;password='senha-email-teste-456';role='editor'}|ConvertTo-Json)).Content|ConvertFrom-Json
 $chamadoEmail = (Invoke-WebRequest "$baseUrl/api/tickets" -Method POST -WebSession $script:sessao -ContentType 'application/json' -UseBasicParsing -TimeoutSec 60 `
-  -Body (@{supplierName='FORNECEDOR TESTE EMAIL';assignedTo=$u1.id;priority='alta';scope='Teste da fila'}|ConvertTo-Json)).Content|ConvertFrom-Json
+  -Body (@{title='Teste da fila de email';supplierName='FORNECEDOR TESTE EMAIL';assignedTo=$u1.id;priority='alta';scope='Teste da fila'}|ConvertTo-Json)).Content|ConvertFrom-Json
 
 Verifica 'Primeiro chamado usa o codigo SUP-0001' {
   if ($chamadoEmail.code -eq 'SUP-0001') { $true } else { "codigo inesperado: $($chamadoEmail.code)" }
@@ -383,6 +383,10 @@ $cookieFluxo = $script:sessao.Cookies.GetCookies($baseUrl)['acordos_session'].Va
 $env:PORTAL_TESTE_COOKIE = "acordos_session=$cookieFluxo"
 $env:PORTAL_TESTE_PORTA = [string]$porta
 $env:PORTAL_TESTE_DESCARTAVEL = 'SIM'
+Verifica 'Titulo obrigatorio e fornecedor opcional no cadastro e edicao' {
+  & node (Join-Path $PSScriptRoot 'teste-titulo-chamado.mjs') | Out-Host
+  $LASTEXITCODE -eq 0
+}
 Verifica 'Exclusoes respeitam a trava de uma operacao concorrente' {
   & node (Join-Path $PSScriptRoot 'teste-exclusao-concorrente.mjs') $temp $arquivoBanco | Out-Host
   $LASTEXITCODE -eq 0
