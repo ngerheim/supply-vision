@@ -31,7 +31,7 @@ export const LIMITE_LISTA = 80;
 // pesada (PBKDF2) antes de qualquer validação.
 export const CORPO_MAX_JSON = 64 * 1024;
 export const CORPO_MAX_LOGIN = 2 * 1024;
-export const CORPO_MAX_UPLOAD = 16 * 1024 * 1024;
+export const CORPO_MAX_UPLOAD = 2 * 1024 * 1024 + 64 * 1024;
 
 // Erro que o cliente causou e pode corrigir: vira 400 com a mensagem real.
 // Qualquer outra exceção é falha nossa e não deve vazar detalhe interno.

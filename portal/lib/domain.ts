@@ -19,8 +19,8 @@ export type TicketStatus = (typeof TICKET_STATUSES)[number];
 export const TICKET_PRIORITIES = ['alta', 'media', 'baixa'] as const;
 export type TicketPriority = (typeof TICKET_PRIORITIES)[number];
 
-export const MAX_IMPORT_BYTES = 15 * 1024 * 1024;
-export const MAX_IMPORT_ROWS = 50_000;
+export const MAX_IMPORT_BYTES = 2 * 1024 * 1024;
+export const MAX_IMPORT_ROWS = 1_000;
 export const MIN_PASSWORD_LENGTH = 10;
 
 export function isOneOf<T extends string>(value: unknown, values: readonly T[]): value is T {

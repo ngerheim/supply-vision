@@ -9,7 +9,7 @@ import {
   Upload,
 } from 'lucide-react';
 import { api, ApiError, errorText } from '@/lib/api';
-import { normalizeImportText } from '@/lib/domain';
+import { MAX_IMPORT_BYTES, normalizeImportText } from '@/lib/domain';
 import { suggestMatches } from '@/lib/sugestoes';
 import { SearchSelect } from '@/components/search-select';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -97,8 +97,8 @@ export function Imports({
       setError('Selecione uma planilha Excel .xlsx ou .xls.');
       return;
     }
-    if (!candidate.size || candidate.size > 15 * 1024 * 1024) {
-      setError('O arquivo deve ter conteúdo e no máximo 15 MB.');
+    if (!candidate.size || candidate.size > MAX_IMPORT_BYTES) {
+      setError('O arquivo deve ter conteúdo e no máximo 2 MB.');
       return;
     }
     setFile(candidate);
@@ -229,7 +229,7 @@ export function Imports({
                 {file?.name || 'Arraste a planilha ou clique para selecionar'}
               </p>
               <p className="mt-1 text-xs text-muted-foreground">
-                até 15 MB · até 50 mil linhas, incluindo o cabeçalho
+                até 2 MB · até 1.000 linhas, incluindo o cabeçalho
               </p>
             </button>
             <div className="flex flex-wrap justify-between gap-3">

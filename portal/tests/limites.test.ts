@@ -64,8 +64,8 @@ void test('login tem teto menor que o das demais rotas JSON', () => {
   assert.ok(CORPO_MAX_LOGIN < CORPO_MAX_JSON);
 });
 
-void test('teto de upload comporta o arquivo de 15 MB mais o multipart', () => {
-  const arquivo = 15 * 1024 * 1024;
+void test('teto de upload comporta o arquivo de 2 MB mais o multipart', () => {
+  const arquivo = 2 * 1024 * 1024;
   assert.ok(CORPO_MAX_UPLOAD > arquivo, 'precisa de folga para os metadados do multipart');
   assert.ok(CORPO_MAX_UPLOAD < arquivo * 2, 'a folga não pode virar espaço livre');
 });

@@ -144,7 +144,7 @@ export async function inspecionarXlsxZip(bytes: Uint8Array): Promise<ResultadoZi
 
   // ZIP dividido em volumes não faz sentido para um .xlsx enviado pela tela.
   if (discoAtual !== 0 || discoCd !== 0 || entradasDisco !== entradas) return { ok: false, erro: ERRO_ESTRUTURA };
-  // ZIP64: recusado de propósito. O portal aceita 15 MB, então não é preciso.
+  // ZIP64: recusado de propósito. O portal aceita 2 MB, então não é preciso.
   if (entradas === MARCA_ZIP64_16 || tamanhoCd === MARCA_ZIP64_32 || inicioCd === MARCA_ZIP64_32) {
     return { ok: false, erro: ERRO_ESTRUTURA };
   }
