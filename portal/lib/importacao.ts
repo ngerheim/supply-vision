@@ -1,5 +1,7 @@
 import {
   isValidState,
+  normalizeCnpj,
+  toNonNegativeMoney,
   normalizeImportColumn,
   normalizeImportText,
   normalizeText,
@@ -71,6 +73,9 @@ export function parseImportRow(
     state,
     rawCity,
     supplier: normalizeImportText(find('FORNECEDOR')),
+    hasSupplier: values.has('FORNECEDOR'),
+    cnpj: normalizeCnpj(find('CNPJ')),
+    hasCnpj: values.has('CNPJ'),
     model: normalizeImportText(rawModel),
     item: normalizeImportText(rawItem),
     unit: normalizeImportText(rawUnit),
@@ -275,7 +280,8 @@ function parsePrice(raw: unknown): { value: number; error: string } {
       return { value: Number.NaN, error: 'O preço não é um número válido.' };
     if (raw < 0)
       return { value: Number.NaN, error: `Preço negativo (${raw}).` };
-    return { value: raw, error: '' };
+    const value=toNonNegativeMoney(raw);
+    return value===null ? {value:Number.NaN,error:'Preço fora do limite monetário.'} : {value,error:''};
   }
   const text = textoSeguro(raw).trim();
   if (!text) return { value: Number.NaN, error: 'A coluna PRECO está vazia.' };
@@ -305,6 +311,8 @@ function parsePrice(raw: unknown): { value: number; error: string } {
     };
 
   const limpo = text.replace(/^R\$\s*/i, '').replace(/\s/g, '');
+  if (/^\d{1,3}(\.\d{3})+$/.test(limpo))
+    return {value:Number.NaN,error:`Preço ambíguo: "${text}". Use vírgula decimal (1.500,00) ou uma célula numérica.`};
   // Formato brasileiro: ponto e separador de milhar, virgula e decimal.
   if (limpo.includes(',') && !/^(?:\d+|\d{1,3}(?:\.\d{3})+),\d+$/.test(limpo))
     return { value: Number.NaN, error: `Preço inválido: "${text}".` };
@@ -318,5 +326,14 @@ function parsePrice(raw: unknown): { value: number; error: string } {
     return { value: Number.NaN, error: `Preço inválido: "${text}".` };
   if (value < 0)
     return { value: Number.NaN, error: `Preço negativo: "${text}".` };
-  return { value, error: '' };
+  const rounded=toNonNegativeMoney(value);
+  return rounded===null ? {value:Number.NaN,error:'Preço fora do limite monetário.'} : {value:rounded,error:''};
+}
+
+export function validarFornecedorImportacao(rows: ImportRow[], fornecedor: {cnpj:string;tradeName:string;legalName:string}) {
+  const nomes=new Set([fornecedor.tradeName,fornecedor.legalName].map(normalizeImportText));
+  for(const row of rows){
+    const erro=row.hasCnpj ? row.cnpj!==normalizeCnpj(fornecedor.cnpj) : row.hasSupplier && !nomes.has(row.supplier);
+    if(erro){row.issues.push({campo:row.hasCnpj?'CNPJ':'FORNECEDOR',valor:row.hasCnpj?row.cnpj:row.supplier,erro:'O fornecedor da linha não corresponde ao fornecedor do acordo de destino.'});row.error=row.issues[0]?.erro||'';}
+  }
 }
