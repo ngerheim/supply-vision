@@ -275,7 +275,7 @@ async function POSTInterno(request: NextRequest) {
   if (parts[0] === 'agreements' && parts[2] === 'items') return comTravaDoAcordo(request, parts[1], () => addAgreementItems(request, user, parts[1]));
   if (parts[0] === 'catalogs' && parts[1]) return createCatalog(request, user, parts[1]);
   if (parts[0] === 'users') return createUser(request, user);
-  if (parts[0] === 'tickets' && parts[1] && parts[2] === 'events') return addTicketEvent(request, user, parts[1]);
+  if (parts[0] === 'tickets' && parts[1] && parts[2] === 'events') return comTravaDoChamado(request, parts[1], () => addTicketEvent(request, user, parts[1]));
   if (parts[0] === 'tickets' && parts.length === 1) return createTicket(request, user);
   if (parts[0] === 'email-notifications' && parts[1] && parts[2] === 'retry') return retryEmailNotification(user, parts[1]);
   if (parts[0] === 'imports' && parts[1] === 'agreement' && parts[2]) return importWorkbook(request, user, parts[2]);
@@ -300,7 +300,7 @@ async function PUTInterno(request: NextRequest) {
   if (parts[0] === 'items' && parts[1]) return comTravaDoAcordo(request, await acordoDaCondicao(parts[1]), () => updateItem(request, user, parts[1]));
   if (parts[0] === 'catalogs' && parts[1] && parts[2]) return updateCatalog(request, user, parts[1], parts[2]);
   if (parts[0] === 'users' && parts[1]) return updateUser(request, user, parts[1]);
-  if (parts[0] === 'tickets' && parts[1]) return updateTicket(request, user, parts[1]);
+  if (parts[0] === 'tickets' && parts[1]) return comTravaDoChamado(request, parts[1], () => updateTicket(request, user, parts[1]));
   if (parts[0] === 'mappings' && parts[1] && parts[2]) return updateMapping(request, user, parts[1], parts[2]);
   return fail('Rota não encontrada.', 404);
 }
@@ -725,6 +725,19 @@ async function createAgreement(request: Request, user: User) {
 // incluir ou editar condicao e publicar importacao pegam a trava do acordo
 // antes de verificar; quem chega com ela ocupada recebe 409 e tenta de novo.
 // E o mesmo mecanismo da trava de importacao (PRIMARY KEY em travas).
+async function comTravaDoChamado(request: Request, ticketId: string, operacao: () => Promise<Response>) {
+  const chave = `chamado:${ticketId}`, dono = id('lck');
+  if (!await adquirirTrava(chave, dono)) {
+    if (request.body) await corpoBinarioLimitado(request, CORPO_MAX_JSON);
+    return fail('Outro usuário está alterando este chamado neste momento. Tente de novo em instantes.', 409);
+  }
+  try { return await operacao(); }
+  finally {
+    try { await liberarTrava(chave, dono); }
+    catch (erro) { console.error('[portal] nao foi possivel liberar a trava do chamado:', erro); }
+  }
+}
+
 async function comTravaDoAcordo(request: Request, agreementId: string | null, operacao: () => Promise<Response>) {
   if (!agreementId) return operacao();
   const dono = await travarAcordo(agreementId);
