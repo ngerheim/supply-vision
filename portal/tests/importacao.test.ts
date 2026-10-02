@@ -85,11 +85,12 @@ void test('preco ausente nao vira cortesia e zero explicito continua valido', ()
     assert.ok(resolved({ PRECO: price }).error);
   assert.equal(resolved({ PRECO: 0 }).error, '');
 });
-void test('substituicao ignora CNPJ da planilha', () => {
+void test('parser preserva presenca do CNPJ para validar o destino', () => {
   const row = parseImportRow({ ...source, CNPJ: 'errado' }, 2);
   resolveImportRows([row], refs);
   assert.equal(row.error, '');
-  assert.ok(!('cnpj' in row));
+  assert.equal(row.hasCnpj,true);
+  assert.equal(row.cnpj,'');
 });
 void test('chaves canonicas ambiguas exigem escolha explicita', () => {
   assert.equal(
