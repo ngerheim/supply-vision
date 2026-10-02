@@ -190,9 +190,14 @@ function validateAgreementInput(body: AgreementInput): { value?: ValidAgreementI
 }
 
 export async function GET(request: NextRequest) {
+  try { return await GETInterno(request); }
+  catch (erro: unknown) { return respostaDeErro(erro); }
+}
+
+async function GETInterno(request: NextRequest) {
   await ensureDatabase();
   const parts = partsOf(request);
-  if (parts[0] === 'health') return ok({ app: 'portal-suprimentos', status: 'ok' });
+  if (parts[0] === 'health') { await first('SELECT COUNT(*) n FROM schema_migrations'); return ok({ app: 'portal-suprimentos', status: 'ok' }); }
   if (parts[0] === 'session') return ok({ user: await currentUser(request) });
   if (parts[0] === 'internal' && parts[1] === 'agreements') {
     if (!tokenInternoValido(request)) return fail('Credencial interna inválida.', 401);
