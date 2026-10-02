@@ -484,11 +484,11 @@ async function login(request: Request) {
   if (!release) {
     return ok({ error: 'Muitos acessos simultâneos. Tente novamente em alguns segundos.' }, { status: 503, headers: { 'Retry-After': '5' } });
   }
-  try { return await authenticate(request, texto); }
+  try { return await authenticate(request, texto, release); }
   finally { release(); }
 }
 
-async function authenticate(request: Request, texto: string) {
+async function authenticate(request: Request, texto: string, liberarHash: () => void) {
   const ip = clientIp(request);
   const agora = now();
   const since = new Date(Date.now() - LOGIN_WINDOW_MIN * 60 * 1000).toISOString();
@@ -544,6 +544,7 @@ async function authenticate(request: Request, texto: string) {
   const candidate = await passwordHash(typeof body.password === 'string' ? body.password : '', record?.password_salt || SALT_INEXISTENTE, iteracoesDoHash);
   const okLogin = !!record && equalHex(candidate, record.password_hash);
 
+  liberarHash();
   // O atraso pune apenas o erro; quem acerta nunca espera.
   if (!okLogin && fails >= LOGIN_SOFT_LIMIT) {
     await new Promise((r) => setTimeout(r, Math.min(LOGIN_DELAY_MAX_MS, 400 * (fails - LOGIN_SOFT_LIMIT + 1))));
