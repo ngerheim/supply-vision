@@ -326,6 +326,7 @@ function parsePrice(raw: unknown): { value: number; error: string } {
     return { value: Number.NaN, error: `Preço inválido: "${text}".` };
   if (value < 0)
     return { value: Number.NaN, error: `Preço negativo: "${text}".` };
+  if ((numerico.split('.')[1]||'').length>2) return {value:Number.NaN,error:`Preço com mais de duas casas decimais: "${text}". Confira o valor negociado.`};
   const rounded=toNonNegativeMoney(value);
   return rounded===null ? {value:Number.NaN,error:'Preço fora do limite monetário.'} : {value:rounded,error:''};
 }
