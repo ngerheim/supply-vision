@@ -45,5 +45,24 @@ try {
   }
   assert.equal(db.prepare('SELECT COUNT(*) n FROM agreements WHERE id=?').get(acordo).n, 0);
   assert.equal(db.prepare('SELECT COUNT(*) n FROM travas WHERE chave=?').get(`acordo:${acordo}`).n, 0);
+  const jsonHeaders={...headers,'content-type':'application/json'};
+  const criado=await fetch(`${url}/api/tickets`,{method:'POST',headers:jsonHeaders,body:JSON.stringify({supplierName:prefixo})});
+  assert.equal(criado.status,201);const ticketId=(await criado.json()).id;
+  const chave=`chamado:${ticketId}`;
+  db.prepare('INSERT INTO travas VALUES (?,?,?)').run(chave,prefixo,stamp);
+  for(const [rota,method,body] of [[`tickets/${ticketId}`,'PUT',{scope:'escopo novo'}],[`tickets/${ticketId}/events`,'POST',{message:'andamento'}]]){
+    const response=await fetch(`${url}/api/${rota}`,{method,headers:jsonHeaders,body:JSON.stringify(body)});
+    assert.equal(response.status,409,await response.text());
+  }
+  assert.equal(db.prepare('SELECT scope FROM tickets WHERE id=?').get(ticketId).scope,null);
+  assert.equal(db.prepare('SELECT COUNT(*) n FROM ticket_events WHERE ticket_id=?').get(ticketId).n,1);
+  assert.equal(db.prepare('SELECT dono FROM travas WHERE chave=?').get(chave).dono,prefixo);
+  db.prepare('DELETE FROM travas WHERE chave=? AND dono=?').run(chave,prefixo);
+  for(const [method,body,status] of [['PUT',{priority:'invalida'},400],['PUT',{scope:'escopo novo'},200]]){
+    const response=await fetch(`${url}/api/tickets/${ticketId}`,{method,headers:jsonHeaders,body:JSON.stringify(body)});
+    assert.equal(response.status,status,await response.text());
+    assert.equal(db.prepare('SELECT COUNT(*) n FROM travas WHERE chave=?').get(chave).n,0);
+  }
+  console.log('[OK] Edicoes e andamentos respeitam a trava do chamado e liberam apos validacao.');
   console.log('[OK] Exclusoes respeitam a trava e funcionam depois de sua liberacao.');
 } finally { db.close(); }
