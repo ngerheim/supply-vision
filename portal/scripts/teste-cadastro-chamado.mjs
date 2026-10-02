@@ -2,7 +2,7 @@ import * as XLSX from 'xlsx';
 import assert from 'node:assert/strict';
 
 const porta = Number(process.env.PORTAL_TESTE_PORTA);
-if (process.env.PORTAL_TESTE_DESCARTAVEL !== 'SIM' || porta !== 3199) throw new Error('Exige instalacao descartavel na porta 3199.');
+if (process.env.PORTAL_TESTE_DESCARTAVEL !== 'SIM' || (!Number.isInteger(porta) || porta < 1024 || porta > 65535)) throw new Error('Exige instalacao descartavel na porta informada.');
 const headers = { cookie: process.env.PORTAL_TESTE_COOKIE, 'content-type': 'application/json' };
 const pedir = async (path, method='GET', body) => {
   const response = await fetch(`http://127.0.0.1:${porta}/api/${path}`, { method, headers, ...(body === undefined ? {} : {body:JSON.stringify(body)}), signal:AbortSignal.timeout(30000) });

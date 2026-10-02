@@ -6,11 +6,11 @@
 # Sobe uma instancia descartavel em outra porta, com banco vazio, e exercita o
 # caminho real. Nao encosta no banco de producao.
 
-param([switch]$UsarBuildExistente, [string]$Relatorio)
+param([switch]$UsarBuildExistente, [string]$Relatorio, [ValidateRange(1024,65535)][int]$Porta = 3199)
 
 $ErrorActionPreference = 'Stop'
 $projeto = Split-Path -Parent $PSScriptRoot
-$porta = 3199
+$env:PORTAL_TESTE_PORTA = [string]$Porta
 $baseUrl = "http://127.0.0.1:$porta"
 $temp = Join-Path $env:TEMP "portal-teste-$(Get-Random)"
 $senhaTeste = 'senha-de-teste-do-ci-1234'
@@ -58,7 +58,7 @@ Write-Host '  ------------------------'
 # com outro programa e reportar o resultado dele como se fosse do portal.
 if (Get-NetTCPConnection -LocalPort $porta -State Listen -ErrorAction SilentlyContinue) {
   Write-Host "  A porta $porta ja esta em uso. Feche o programa que a ocupa" -ForegroundColor Red
-  Write-Host '  ou ajuste a variavel $porta no inicio deste script.' -ForegroundColor Red
+  Write-Host '  ou execute com -Porta e uma porta livre.' -ForegroundColor Red
   Write-Host ''
   exit 2
 }
