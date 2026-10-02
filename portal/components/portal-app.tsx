@@ -230,7 +230,7 @@ function Tickets({users,agreements,run,initialDetail}:JsonData){
       <TableBody>{rows.map((r:AnyRow)=><TableRow key={r.id}>
         <TableCell><button className="block w-full truncate text-left font-mono text-xs font-semibold text-primary hover:underline" title={r.code} onClick={()=>setDetail(r.id)}>{r.code}</button></TableCell>
 
-        <TableCell><button className="block w-full truncate text-left font-medium text-primary hover:underline" title={r.supplierName} onClick={()=>setDetail(r.id)}>{r.supplierName}</button></TableCell>
+        <TableCell><span className="block truncate font-medium" title={r.supplierName}>{r.supplierName||'Não informado'}</span></TableCell>
 
         <TableCell><Badge className={(priorityMap[r.priority]||['—','bg-slate-100'])[1]}>{(priorityMap[r.priority]||['—'])[0]}</Badge></TableCell>
         <TableCell><TicketStatus value={r.status}/></TableCell>
