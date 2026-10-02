@@ -203,12 +203,16 @@ function Sla({createdAt,closedAt}:JsonData){
 }
 function TicketStatus({value}:JsonData){const x=ticketStatusMap[value]||[value,'bg-slate-100'];return <Badge className={x[1]}>{x[0]}</Badge>}
 
+function FalhaDeCarregamento({erro,tentar,voltar}:{erro:string;tentar:()=>void;voltar?:()=>void}){return <Alert variant="destructive"><AlertTriangle/><AlertTitle>Não foi possível carregar</AlertTitle><AlertDescription><p>{erro}</p><div className="mt-3 flex gap-2"><Button variant="outline" onClick={tentar}>Tentar novamente</Button>{voltar&&<Button variant="outline" onClick={voltar}>← Voltar</Button>}</div></AlertDescription></Alert>}
+
 function Tickets({users,agreements,run,initialDetail}:JsonData){
   const [data,setData]=useState<AnyRow|null>(null),[group,setGroup]=useState<'ativos'|'fechados'|'cancelados'>('ativos'),[q,setQ]=useState(''),[open,setOpen]=useState<AnyRow|null>(null),[detail,setDetail]=useState<string|null>(initialDetail||null);
   const {ordem,alternar,ordenar}=useOrdenacao('tickets');
   const [agora]=useState(()=>Date.now());
-  const load=useCallback(()=>api('/api/tickets').then(setData),[]);
+  const [loadError,setLoadError]=useState('');
+  const load=useCallback(async()=>{setLoadError('');try{setData(await api('/api/tickets'))}catch(error){setLoadError(errorText(error))}},[]);
   useEffect(()=>{void load()},[load]);
+  if(loadError)return <FalhaDeCarregamento erro={loadError} tentar={()=>void load()}/>;
   if(!data) return <Loading label="Carregando chamados…"/>;
   if(detail) return <TicketDetail id={detail} users={users} agreements={agreements} onBack={()=>{setDetail(null);void load()}} run={run}/>;
   const s=data.stats||{};
@@ -245,8 +249,10 @@ function Tickets({users,agreements,run,initialDetail}:JsonData){
 
 function TicketDetail({id,users,agreements,onBack,run}:JsonData){
   const [d,setD]=useState<AnyRow|null>(null),[msg,setMsg]=useState(''),[status,setStatus]=useState(''),[statusMessage,setStatusMessage]=useState(''),[editing,setEditing]=useState(false);
-  const load=useCallback(()=>api(`/api/tickets/${id}`).then(x=>{setD(x);setStatus(x.ticket.status);setStatusMessage('')}),[id]);
+  const [loadError,setLoadError]=useState('');
+  const load=useCallback(async()=>{setLoadError('');try{const x=await api(`/api/tickets/${id}`);setD(x);setStatus(x.ticket.status);setStatusMessage('')}catch(error){setLoadError(errorText(error))}},[id]);
   useEffect(()=>{void load()},[load]);
+  if(loadError)return <FalhaDeCarregamento erro={loadError} tentar={()=>void load()} voltar={onBack}/>;
   if(!d) return <Loading label="Abrindo chamado…"/>;
   const t=d.ticket;
   return <div className="space-y-5">
@@ -329,12 +335,14 @@ function UserEditDialog({open,value,self,onClose,onSave}:JsonData){const [form,s
 
 function Mappings({catalogs,run}:JsonData){
   const [data,setData]=useState<AnyRow>({items:[],models:[]}),[type,setType]=useState<'items'|'models'|'units'>('items'),[edit,setEdit]=useState<AnyRow|null>(null),[loading,setLoading]=useState(true);
-  const load=useCallback(async()=>{setData(await api('/api/mappings'))},[]);
-  useEffect(()=>{let active=true;void api('/api/mappings').then(result=>{if(active){setData(result);setLoading(false)}});return()=>{active=false}},[]);
+  const [loadError,setLoadError]=useState('');
+  const load=useCallback(async()=>{setLoading(true);setLoadError('');try{setData(await api('/api/mappings'))}catch(error){setLoadError(errorText(error))}finally{setLoading(false)}},[]);
+  useEffect(()=>{void load()},[load]);
   const rows=data[type]||[], targets=catalogs[type].map((row:AnyRow)=>({...row,name:type==='units'?row.code:row.name,active:row.active}));
   const {ordem,alternar,ordenar}=useOrdenacao(type);
   const valoresDoMapeamento=(linha:AnyRow)=>[linha.source,linha.target];
   const remove=(row:AnyRow)=>{if(!confirm(`Excluir a correspondência "${row.source}"?`))return;void run(async()=>{await api(`/api/mappings/${type}/${row.id}`,{method:'DELETE'});await load()},'Correspondência excluída.')};
+  if(loadError)return <FalhaDeCarregamento erro={loadError} tentar={()=>void load()}/>;
   return <div className="space-y-5"><div className="flex flex-wrap items-end justify-between gap-3"><div><h1 className="text-2xl font-semibold">De/Para da importação</h1></div><Button onClick={()=>setEdit({type,active:true})}><Plus/> Nova correspondência</Button></div><div className="flex flex-wrap gap-2">{(['items','models'] as const).map(value=><Button key={value} variant={type===value?'default':'outline'} onClick={()=>setType(value)}>{{items:'Itens',models:'Modelos',units:'Unidades'}[value]}</Button>)}</div><Card><CardContent className="px-0 pb-0">{loading?<div className="flex items-center gap-2 p-8 text-sm text-muted-foreground"><LoaderCircle className="size-4 animate-spin"/> Carregando correspondências…</div>:<Table><TableHeader><CabecalhoOrdenavel titulos={['Original','Correspondente']} ordem={ordem} onAlternar={alternar}/></TableHeader><TableBody>{ordenar(rows,valoresDoMapeamento).map((row:AnyRow)=><TableRow key={row.id} className={row.active?'':'opacity-50'}><TableCell><p className="font-medium">{row.source}</p>{normalizeImportText(row.source)!==row.sourceKey&&<p className="text-xs text-muted-foreground">Chave: {row.sourceKey}</p>}</TableCell><TableCell>{row.target}</TableCell><TableCell className="text-right"><Button size="icon-sm" variant="ghost" onClick={()=>setEdit({...row,type})}><Pencil/></Button><Button size="icon-sm" variant="ghost" onClick={()=>remove(row)}><Trash2/></Button></TableCell></TableRow>)}</TableBody></Table>}{!loading&&!rows.length&&<div className="p-10 text-center text-sm text-muted-foreground">{type==='units'?'Nenhuma correspondência cadastrada. As unidades ativas escritas com a nomenclatura correta já são reconhecidas direto. Cadastre uma correspondência apenas para abreviações, variações de grafia ou nomes alternativos.':'Nenhuma correspondência cadastrada. A importação será recusada até que os valores da planilha tenham De/Para.'}</div>}</CardContent></Card>{edit&&<MappingDialog value={edit} targets={targets} onClose={()=>setEdit(null)} onSave={(body:AnyRow)=>run(async()=>{const path=body.id?`/api/mappings/${body.type}/${body.id}`:`/api/mappings/${body.type}`;await api(path,{method:body.id?'PUT':'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});setEdit(null);await load()},'Correspondência salva.')}/>}</div>;
 }
 
