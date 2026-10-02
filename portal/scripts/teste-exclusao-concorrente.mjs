@@ -29,6 +29,7 @@ try {
   db.prepare('INSERT INTO units (id,code,name) VALUES (?,?,?)').run(prefixo, prefixo, prefixo);
   db.prepare('INSERT INTO agreements (id,number,supplier_id,start_date,created_at,updated_at) VALUES (?,?,?,?,?,?)').run(acordo, acordo, prefixo, '2026-01-01', stamp, stamp);
   db.prepare('INSERT INTO agreement_versions (id,agreement_id,version_number,created_at) VALUES (?,?,1,?)').run(versao, acordo, stamp);
+  db.prepare('INSERT INTO agreement_locations (agreement_id,location_id) VALUES (?,?)').run(acordo,prefixo);
   db.prepare('UPDATE agreements SET current_version_id=? WHERE id=?').run(versao, acordo);
   db.prepare('INSERT INTO agreement_items (id,version_id,location_id,catalog_item_id,vehicle_model_id,unit_id,price,created_at,updated_at) VALUES (?,?,?,?,?,?,10,?,?)').run(item, versao, prefixo, prefixo, prefixo, prefixo, stamp, stamp);
   db.prepare('INSERT INTO travas VALUES (?,?,?)').run(`acordo:${acordo}`, prefixo, stamp);
