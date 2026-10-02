@@ -48,8 +48,9 @@ export function reservar(db, limite = 10) {
   const travaVencida = new Date(agora.getTime() - 10 * 60_000).toISOString();
   db.exec('BEGIN IMMEDIATE');
   try {
-    db.prepare("UPDATE email_notifications SET status='pending',locked_at=NULL,updated_at=? WHERE status='processing' AND locked_at<?")
+    db.prepare("UPDATE email_notifications SET status='pending',locked_at=NULL,updated_at=? WHERE status='processing' AND (locked_at<? OR locked_at IS NULL)")
       .run(agoraIso, travaVencida);
+    db.prepare("UPDATE email_notifications SET status='failed',locked_at=NULL,last_error=COALESCE(last_error,'Envio interrompido no limite de tentativas.'),updated_at=? WHERE status='pending' AND attempts>=?").run(agoraIso,maxTentativas);
     const candidatas = db.prepare("SELECT id FROM email_notifications WHERE status='pending' AND attempts<? AND next_attempt_at<=? ORDER BY created_at LIMIT ?")
       .all(maxTentativas, agoraIso, limite);
     const reservada = db.prepare("UPDATE email_notifications SET status='processing',attempts=attempts+1,locked_at=?,updated_at=? WHERE id=? AND status='pending'");
@@ -67,16 +68,16 @@ export function reservar(db, limite = 10) {
 
 export function concluir(db, item) {
   const agora = new Date().toISOString();
-  db.prepare("UPDATE email_notifications SET status='sent',sent_at=?,locked_at=NULL,last_error=NULL,updated_at=? WHERE id=?")
-    .run(agora, agora, item.id);
+  db.prepare("UPDATE email_notifications SET status='sent',sent_at=?,locked_at=NULL,last_error=NULL,updated_at=? WHERE id=? AND status='processing' AND attempts=? AND locked_at=?")
+    .run(agora, agora, item.id, item.attempts, item.locked_at);
 }
 
 export function falhar(db, item, erro) {
   const agora = new Date();
   const definitivo = Number(item.attempts) >= maxTentativas;
   const mensagem = (erro instanceof Error ? erro.message : 'Falha SMTP').replace(/[\r\n]+/g, ' ').slice(0, 500);
-  db.prepare('UPDATE email_notifications SET status=?,next_attempt_at=?,locked_at=NULL,last_error=?,updated_at=? WHERE id=?')
-    .run(definitivo ? 'failed' : 'pending', proximaTentativa(Number(item.attempts), agora), mensagem, agora.toISOString(), item.id);
+  db.prepare("UPDATE email_notifications SET status=?,next_attempt_at=?,locked_at=NULL,last_error=?,updated_at=? WHERE id=? AND status='processing' AND attempts=? AND locked_at=?")
+    .run(definitivo ? 'failed' : 'pending', proximaTentativa(Number(item.attempts), agora), mensagem, agora.toISOString(), item.id, item.attempts, item.locked_at);
 }
 
 function horarioSaoPaulo(data=new Date()){
@@ -96,11 +97,12 @@ function reservarRelatoriosDiarios(db,agora=new Date()){
   const agoraIso=agora.toISOString(),travaVencida=new Date(agora.getTime()-10*60_000).toISOString();
   db.exec('BEGIN IMMEDIATE');
   try{
-    db.prepare("UPDATE daily_report_deliveries SET status='pending',locked_at=NULL,updated_at=? WHERE status='processing' AND locked_at<?").run(agoraIso,travaVencida);
-    const itens=db.prepare("SELECT d.*,u.name recipient_name,u.email recipient_email FROM daily_report_deliveries d JOIN users u ON u.id=d.user_id WHERE d.status='pending' AND d.attempts<? AND d.next_attempt_at<=? AND u.active=1 AND u.daily_report_enabled=1 ORDER BY d.created_at LIMIT 5").all(maxTentativas,agoraIso);
+    db.prepare("UPDATE daily_report_deliveries SET status='pending',locked_at=NULL,updated_at=? WHERE status='processing' AND (locked_at<? OR locked_at IS NULL)").run(agoraIso,travaVencida);
+    db.prepare("UPDATE daily_report_deliveries SET status='failed',locked_at=NULL,last_error=COALESCE(last_error,'Envio interrompido no limite de tentativas.'),updated_at=? WHERE status='pending' AND attempts>=?").run(agoraIso,maxTentativas);
+    const itens=db.prepare("SELECT d.*,u.name recipient_name,u.email recipient_email FROM daily_report_deliveries d JOIN users u ON u.id=d.user_id WHERE d.status='pending' AND d.attempts<? AND d.next_attempt_at<=? AND u.active=1 AND u.daily_report_enabled=1 ORDER BY d.created_at LIMIT 1").all(maxTentativas,agoraIso);
     const reservar=db.prepare("UPDATE daily_report_deliveries SET status='processing',attempts=attempts+1,locked_at=?,updated_at=? WHERE id=? AND status='pending'");
     const escolhidos=[];
-    for(const item of itens)if(reservar.run(agoraIso,agoraIso,item.id).changes===1)escolhidos.push({...item,attempts:Number(item.attempts)+1});
+    for(const item of itens)if(reservar.run(agoraIso,agoraIso,item.id).changes===1)escolhidos.push({...item,attempts:Number(item.attempts)+1,locked_at:agoraIso});
     db.exec('COMMIT');return escolhidos;
   }catch(erro){db.exec('ROLLBACK');throw erro}
 }
@@ -114,12 +116,13 @@ function dadosRelatorioDiario(db,dataRelatorio,agora=new Date()){
   return {totais:{aberto:Number(totais.aberto||0),aguardando:Number(totais.aguardando||0),fechado:Number(totais.fechado||0),cancelado:Number(totais.cancelado||0)},chamados:chamados.map((chamado)=>({...chamado,atualizacoes:eventos.all(chamado.id,inicio,fim).map((evento)=>({horario:new Intl.DateTimeFormat('pt-BR',{timeZone:'America/Sao_Paulo',hour:'2-digit',minute:'2-digit'}).format(new Date(evento.created_at)),autor:evento.autor||'Sistema',descricao:evento.kind==='status'?`Situação alterada para ${nomesSituacao[evento.to_status]||evento.to_status}`:evento.message||'Chamado atualizado'}))}))};
 }
 
-function concluirRelatorio(db,item){const agora=new Date().toISOString();db.prepare("UPDATE daily_report_deliveries SET status='sent',sent_at=?,locked_at=NULL,last_error=NULL,updated_at=? WHERE id=?").run(agora,agora,item.id)}
-function falharRelatorio(db,item,erro){const agora=new Date(),definitivo=Number(item.attempts)>=maxTentativas,mensagem=(erro instanceof Error?erro.message:'Falha SMTP').replace(/[\r\n]+/g,' ').slice(0,500);db.prepare("UPDATE daily_report_deliveries SET status=?,next_attempt_at=?,locked_at=NULL,last_error=?,updated_at=? WHERE id=?").run(definitivo?'failed':'pending',proximaTentativa(Number(item.attempts),agora),mensagem,agora.toISOString(),item.id)}
+function concluirRelatorio(db,item){const agora=new Date().toISOString();db.prepare("UPDATE daily_report_deliveries SET status='sent',sent_at=?,locked_at=NULL,last_error=NULL,updated_at=? WHERE id=? AND status='processing' AND attempts=? AND locked_at=?").run(agora,agora,item.id,item.attempts,item.locked_at)}
+function falharRelatorio(db,item,erro){const agora=new Date(),definitivo=Number(item.attempts)>=maxTentativas,mensagem=(erro instanceof Error?erro.message:'Falha SMTP').replace(/[\r\n]+/g,' ').slice(0,500);db.prepare("UPDATE daily_report_deliveries SET status=?,next_attempt_at=?,locked_at=NULL,last_error=?,updated_at=? WHERE id=? AND status='processing' AND attempts=? AND locked_at=?").run(definitivo?'failed':'pending',proximaTentativa(Number(item.attempts),agora),mensagem,agora.toISOString(),item.id,item.attempts,item.locked_at)}
 
 async function processarRelatoriosDiarios(db,config,transportador){
   prepararRelatoriosDiarios(db);
-  for(const item of reservarRelatoriosDiarios(db)){
+  for(let indice=0;indice<5;indice++){
+    const [item]=reservarRelatoriosDiarios(db);if(!item)break;
     try{
       const dados=dadosRelatorioDiario(db,item.report_date),email=montarEmailRelatorioDiario(item.report_date,dados.totais,dados.chamados,config.PORTAL_URL);
       await transportador.sendMail({from:{name:config.EMAIL_FROM_NAME,address:config.SMTP_USER},to:{name:item.recipient_name,address:item.recipient_email},subject:email.assunto,text:email.texto,html:email.html});
@@ -132,8 +135,8 @@ async function ciclo(config, transportador) {
   const db = abrirBanco();
   if (!db) { registrar('Fila ainda nao disponivel; aguardando o portal inicializar a base.'); return; }
   try {
-    const itens = reservar(db);
-    for (const item of itens) {
+    for (let indice=0;indice<10;indice++) {
+      const [item]=reservar(db,1);if(!item)break;
       try {
         const dados = JSON.parse(item.payload_json);
         const email = montarEmailChamado(item.type, dados, config.PORTAL_URL);
