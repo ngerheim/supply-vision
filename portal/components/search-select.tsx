@@ -1,8 +1,9 @@
 'use client';
 
-import { useId, useState } from 'react';
+import { useId } from 'react';
 import { correspondeBusca } from '@/lib/busca';
-import { Input } from '@/components/ui/input';
+import { Combobox } from '@base-ui/react/combobox';
+import { ChevronDown, Check } from 'lucide-react';
 import {
   NativeSelect,
   NativeSelectOption,
@@ -23,25 +24,18 @@ export function SearchSelect({
   disabled?: boolean;
   searchable?: boolean;
 }) {
-  const [query, setQuery] = useState('');
   const id = useId();
-  const visible = options.filter(
-    (option) => option.id === value || correspondeBusca(option.name, query),
-  );
+  if (searchable) return <div className="min-w-0 space-y-1.5"><label htmlFor={id} className="text-sm font-medium">{label}</label>
+    <Combobox.Root items={options} value={options.find(o=>o.id===value)||null} disabled={disabled} itemToStringLabel={o=>o.name} isItemEqualToValue={(a,b)=>a.id===b.id} filter={(o,q)=>correspondeBusca(o.name,q)} onValueChange={o=>onChange(o?.id||'')}>
+      <div className="flex items-center rounded-lg border bg-background px-2"><Combobox.Input id={id} className="h-9 min-w-0 flex-1 bg-transparent text-sm outline-none"/><Combobox.Trigger aria-label={`Selecionar ${label}`}><ChevronDown className="size-4"/></Combobox.Trigger></div>
+      <Combobox.Portal><Combobox.Positioner sideOffset={4} className="z-[150]"><Combobox.Popup className="max-h-64 w-[var(--anchor-width)] min-w-48 overflow-auto rounded-lg border bg-popover p-1 shadow-lg"><Combobox.Empty className="p-2 text-sm">Nenhum resultado</Combobox.Empty><Combobox.List>{(o:{id:string;name:string})=><Combobox.Item key={o.id} value={o} className="flex items-center gap-2 rounded p-2 text-sm data-[highlighted]:bg-muted"><Combobox.ItemIndicator><Check className="size-4"/></Combobox.ItemIndicator><span>{o.name}</span></Combobox.Item>}</Combobox.List></Combobox.Popup></Combobox.Positioner></Combobox.Portal>
+    </Combobox.Root></div>;
+  const visible = options;
   return (
     <div className="space-y-1.5">
       <label className="block text-sm font-medium" htmlFor={id}>
         {label}
       </label>
-      {searchable && options.length > 8 && (
-        <Input
-          aria-label={`Buscar ${label}`}
-          placeholder="Digite para filtrar…"
-          value={query}
-          disabled={disabled}
-          onChange={(event) => setQuery(event.target.value)}
-        />
-      )}
       <NativeSelect
         id={id}
         className="w-full"
