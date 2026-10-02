@@ -847,7 +847,7 @@ async function updateItem(request: Request, user: User, itemId: string) {
   const catalogItemId = textValue(body.catalogItemId), locationId = textValue(body.locationId), unitId = textValue(body.unitId), modelId = textValue(body.modelId);
   const price = toNonNegativeMoney(body.price);
   if (!catalogItemId || !locationId || !unitId || !modelId || price === null) return fail('Preencha item, localidade, modelo, unidade e um preço válido.');
-  const existing = await first<{ agreementId: string }>(`SELECT a.id AS agreementId FROM agreement_items ai JOIN agreements a ON a.current_version_id=ai.version_id WHERE ai.id=?`, [itemId]);
+  const existing = await first<{ agreementId: string; price: number; unit_id: string; location_id: string; catalog_item_id: string; vehicle_model_id: string; brands_text: string|null; notes: string|null }>(`SELECT ai.*,a.id AS agreementId FROM agreement_items ai JOIN agreements a ON a.current_version_id=ai.version_id WHERE ai.id=?`, [itemId]);
   if (!existing) return fail('Condição não encontrada na versão vigente.', 404);
   const permittedLocation = await first('SELECT 1 ok FROM agreement_locations WHERE agreement_id=? AND location_id=?', [existing.agreementId, locationId]);
   if (!permittedLocation) return fail('A localidade selecionada não pertence à abrangência do acordo.');
@@ -858,12 +858,12 @@ async function updateItem(request: Request, user: User, itemId: string) {
   ]);
   if(references.some((reference)=>!reference)) return fail('Item, modelo ou unidade inválido/inativo.');
   try{
-    await rawDb().prepare('UPDATE agreement_items SET location_id=?,catalog_item_id=?,vehicle_model_id=?,unit_id=?,price=?,courtesy=?,brands_text=?,notes=?,updated_at=? WHERE id=?')
-      .bind(locationId, catalogItemId, modelId, unitId, price, price === 0 ? 1 : 0, nullableText(body.brands), nullableText(body.notes), now(), itemId).run();
+    await rawDb().batch([rawDb().prepare('UPDATE agreement_items SET location_id=?,catalog_item_id=?,vehicle_model_id=?,unit_id=?,price=?,courtesy=?,brands_text=?,notes=?,updated_at=? WHERE id=?')
+      .bind(locationId, catalogItemId, modelId, unitId, price, price === 0 ? 1 : 0, nullableText(body.brands), nullableText(body.notes), now(), itemId),
+      rawDb().prepare('INSERT INTO audit_logs (id,user_id,action,entity,entity_id,details,created_at) VALUES (?,?,?,?,?,?,?)').bind(id('aud'),user.id,'UPDATE','agreement_item',itemId,JSON.stringify({antes:existing,depois:{location_id:locationId,catalog_item_id:catalogItemId,vehicle_model_id:modelId,unit_id:unitId,price,brands_text:nullableText(body.brands),notes:nullableText(body.notes)}}),now())]);
   }catch(error:unknown){
     return fail(errorMessage(error).includes('UNIQUE')?'Já existe uma condição igual na versão vigente.':'Não foi possível atualizar a condição.');
   }
-  await audit(user.id, 'UPDATE', 'agreement_item', itemId, 'Condição alterada manualmente');
   return ok({ success: true });
 }
 
