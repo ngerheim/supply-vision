@@ -72,10 +72,6 @@ export function AgreementDialog({
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle>{form.id ? 'Editar acordo' : 'Novo acordo'}</DialogTitle>
-          <DialogDescription>
-            Identifique o acordo. Depois de salvar, inclua os preços manualmente
-            ou por planilha.
-          </DialogDescription>
         </DialogHeader>
         <form
           onSubmit={(event) => {
@@ -137,14 +133,8 @@ export function AgreementDialog({
                   { id: 'suspended', name: 'Suspenso' },
                 ]}
               />
-              <p className="self-end text-xs text-muted-foreground">
-                O acordo fica expirado automaticamente ao fim da vigência.
-              </p>
             </div>
             <div className="space-y-2">
-              <p className="text-sm font-medium">
-                Localidades abrangidas * · {selected.length} selecionada(s)
-              </p>
               <div className="grid gap-3 sm:grid-cols-2">
                 <SearchSelect
                   searchable={false}
@@ -175,7 +165,7 @@ export function AgreementDialog({
                       onCheckedChange={() => toggle(row.id)}
                     />
                     <span>
-                      {row.city} / {row.state}
+                      {row.city}
                     </span>
                   </label>
                 ))}
