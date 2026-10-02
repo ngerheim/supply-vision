@@ -4,6 +4,8 @@ import { createHash, randomUUID } from 'node:crypto';
 import { realpathSync } from 'node:fs';
 import { relative, isAbsolute } from 'node:path';
 
+const porta=Number(process.env.PORTAL_TESTE_PORTA);
+assert(Number.isInteger(porta) && porta>=1024 && porta<=65535, 'Porta de teste invalida');
 const [raiz, arquivo] = process.argv.slice(2);
 assert(raiz && arquivo, 'Informe a raiz descartavel e seu banco');
 const caminho = relative(realpathSync.native(raiz), realpathSync.native(arquivo));
@@ -17,7 +19,7 @@ try {
   assert(usuario, 'Usuario de teste ausente');
   db.prepare('INSERT INTO sessions(token,user_id,expires_at,last_seen_at) VALUES(?,?,?,?)')
     .run(hash, usuario.id, new Date(Date.now() + 60000).toISOString(), new Date().toISOString());
-  const consultar = async () => { const r = await fetch('http://127.0.0.1:3199/api/bootstrap', {
+  const consultar = async () => { const r = await fetch(`http://127.0.0.1:${porta}/api/bootstrap`, {
     headers: { cookie: `acordos_session=${token}` }, signal: AbortSignal.timeout(30000),
   }); await r.arrayBuffer(); return r; };
   assert.equal((await consultar()).status, 200, 'Controle: sessao valida deve autenticar');
@@ -29,7 +31,7 @@ try {
   const pedir = async (rota, cookie, body, method = body ? 'POST' : 'GET') => {
     const options = { method, headers: { cookie, 'content-type': 'application/json', connection: 'close' }, signal: AbortSignal.timeout(30000) };
     if (body && method !== 'GET') Object.assign(options, { body: JSON.stringify(body) });
-    const r = await fetch(`http://127.0.0.1:3199${rota}`, options);
+    const r = await fetch(`http://127.0.0.1:${porta}${rota}`, options);
     await r.arrayBuffer();
     return r;
   };

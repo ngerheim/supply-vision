@@ -6,8 +6,8 @@ import { isAbsolute, relative } from 'node:path';
 // Chamado somente pelo teste de instalacao nova, com seu banco descartavel.
 const porta = Number(process.env.PORTAL_TESTE_PORTA);
 const [raiz, arquivo] = process.argv.slice(2);
-if (process.env.PORTAL_TESTE_DESCARTAVEL !== 'SIM' || porta !== 3199 || !raiz || !arquivo) {
-  throw new Error('Este teste exige a instalacao descartavel na porta 3199.');
+if (process.env.PORTAL_TESTE_DESCARTAVEL !== 'SIM' || (!Number.isInteger(porta) || porta < 1024 || porta > 65535) || !raiz || !arquivo) {
+  throw new Error('Este teste exige a instalacao descartavel na porta informada.');
 }
 const caminho = relative(realpathSync.native(raiz), realpathSync.native(arquivo));
 assert(caminho && !caminho.startsWith('..') && !isAbsolute(caminho), 'Banco fora da instancia descartavel');
