@@ -1,4 +1,21 @@
-# Preparar a hospedagem pelo GitHub
+# Preparar a hospedagem completa do portal em Cloudflare Workers + D1
+
+## Objetivo e situacao atual
+
+O objetivo da futura migracao e executar o portal completo fora do
+notebook-servidor: entrar com usuario e senha, criar e editar acordos,
+gerenciar fornecedores e chamados, importar planilhas e salvar alteracoes
+em um banco persistente. A proposta nao e uma pagina apenas de visualizacao.
+
+A hospedagem proposta e na Cloudflare: Workers executa a interface e as APIs;
+D1 persiste os dados. O GitHub armazena o codigo e executa as verificacoes e
+a preparacao do pacote. **Nao existe adaptacao nem publicacao para GitHub Pages
+neste repositorio.**
+
+**A operacao atual continua local, via LAN.** A estrutura remota e opcional e
+preparatoria; ela ainda nao entrega um portal hospedado ou pronto para producao.
+Enquanto as etapas de homologacao e migracao abaixo nao forem concluidas, o
+notebook-servidor continua responsavel pelo portal, banco, e-mails e Alertas.
 
 ## O que esta etapa entrega
 
@@ -11,7 +28,7 @@ O notebook de desenvolvimento serve para alterar e testar codigo com dados
 ficticios. O notebook-servidor continua atendendo a empresa e guardando os
 dados reais em `privado/`. Nenhuma rotina desta etapa atualiza esse servidor.
 
-## Por que o portal completo nao cabe no GitHub Pages
+## Papel do GitHub e limite do GitHub Pages
 
 [GitHub Pages](https://docs.github.com/en/pages/getting-started-with-github-pages/what-is-github-pages)
 serve arquivos estaticos. Este portal precisa executar as rotas `/api`,
@@ -86,3 +103,12 @@ deve conferir que ele pertence a homologacao, pois nao consultamos a conta.
 O servidor atual so deve ser desativado depois de homologar portal, e-mails,
 Alertas e restauracao. Esta estrutura nao depende de deixar o notebook de
 desenvolvimento ligado.
+
+## Criterio para concluir a migracao
+
+A migracao so estara concluida quando um usuario autorizado conseguir acessar
+o endereco remoto, criar um acordo, editar suas condicoes e consultar os dados
+salvos depois de sair e entrar novamente. Perfis de acesso, importacoes,
+chamados, integracao dos Alertas, envio de e-mails e restauracao de backup
+tambem precisam ser aprovados. Uma interface que apenas abre no navegador ou
+um pacote compilado com sucesso nao atendem a esse criterio.

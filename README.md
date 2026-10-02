@@ -47,8 +47,14 @@ ter alteração local.
 
 A versão em uso é o commit: a central mostra o hash e a data.
 
-## Preparacao de hospedagem pelo GitHub
+## Operacao via LAN e futura hospedagem completa
 
-O GitHub prepara e valida o portal; a aplicacao completa exige um runtime
-com API e banco. A estrutura de homologacao para Workers + D1 e manual e
-nao publica nem altera o notebook-servidor. Veja [docs/HOSPEDAGEM.md](docs/HOSPEDAGEM.md).
+O portal continua funcionando no notebook-servidor, via LAN. A estrutura
+opcional de homologacao prepara uma futura hospedagem completa em
+Cloudflare Workers + D1, incluindo login, criacao e edicao de acordos e
+persistencia dos dados. O GitHub guarda o codigo e prepara o pacote;
+nao hospeda a aplicacao. Nao ha adaptacao para GitHub Pages.
+
+O workflow manual ainda nao publica o portal. E-mails, backups e demais
+etapas de migracao precisam ser concluidos antes de substituir a operacao
+local. Veja [docs/HOSPEDAGEM.md](docs/HOSPEDAGEM.md).
