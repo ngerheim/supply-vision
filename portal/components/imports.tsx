@@ -591,15 +591,13 @@ function ImportHistory({ rows }: JsonData) {
     <>
       <Card>
         <CardHeader className="border-b">
-          <CardTitle>Histórico de importações</CardTitle>
+          <CardTitle>Histórico</CardTitle>
         </CardHeader>
         <CardContent className="px-0 pb-0">
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>Arquivo</TableHead>
-                <TableHead>Tipo</TableHead>
-                <TableHead>Linhas</TableHead>
                 <TableHead>Situação</TableHead>
                 <TableHead>Data</TableHead>
               </TableRow>
@@ -617,12 +615,6 @@ function ImportHistory({ rows }: JsonData) {
                         {r.agreement || 'Base inicial'}
                       </span>
                     </button>
-                  </TableCell>
-                  <TableCell>
-                    {r.mode === 'legacy' ? 'Carga inicial' : 'Substituição'}
-                  </TableCell>
-                  <TableCell>
-                    {Number(r.totalRows).toLocaleString('pt-BR')}
                   </TableCell>
                   <TableCell>
                     <Badge
