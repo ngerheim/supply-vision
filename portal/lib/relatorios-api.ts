@@ -127,7 +127,7 @@ export async function solicitarRelatorio(body: unknown, userId: string) {
     const [inserida] = await rawDb().batch([
       rawDb()
         .prepare(
-          `INSERT INTO report_jobs(id,request_key,action,from_date,to_date,recipient,dry_run,created_by,created_at) SELECT ?,?,?,?,?,?,?,?,? WHERE (SELECT COUNT(*) FROM report_jobs WHERE status IN ('queued','running'))<5`,
+          `INSERT INTO report_jobs(id,request_key,action,from_date,to_date,recipient,dry_run,created_by,created_at) SELECT ?,?,?,?,?,?,?,?,? WHERE (SELECT COUNT(*) FROM report_jobs WHERE status='queued')<5`,
         )
         .bind(
           jobId,
