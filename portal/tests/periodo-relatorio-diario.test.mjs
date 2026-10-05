@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { DatabaseSync } from 'node:sqlite';
 import { dadosRelatorioDiario } from '../scripts/processar-emails.mjs';
-test('relatorio atrasado conserva o dia e as mensagens mesmo apos novas edicoes',()=>{
+void test('relatorio atrasado conserva o dia e as mensagens mesmo apos novas edicoes',()=>{
  const db=new DatabaseSync(':memory:');
  try{
  db.exec(`CREATE TABLE users(id TEXT,name TEXT);CREATE TABLE tickets(id TEXT,code TEXT,supplier_name TEXT,status TEXT,created_at TEXT,updated_at TEXT);CREATE TABLE ticket_events(ticket_id TEXT,user_id TEXT,kind TEXT,from_status TEXT,to_status TEXT,message TEXT,created_at TEXT);

@@ -4,7 +4,7 @@ import { createServer } from 'node:http';
 import { verificarSaude } from '../scripts/saude-completa.mjs';
 
 for (const caso of ['normal', 'js-ausente', 'html-no-css', 'api-alheia']) {
-  test(`saude completa: ${caso}`, async () => {
+  void test(`saude completa: ${caso}`, async () => {
     const servidor = createServer((req, res) => {
       if (req.url === '/api/health') {
         res.setHeader('Content-Type', 'application/json');

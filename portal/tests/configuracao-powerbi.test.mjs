@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import test from 'node:test';
 
-test('link publico do Power BI nao entra em arquivo versionado', () => {
+void test('link publico do Power BI nao entra em arquivo versionado', () => {
   const raiz = resolve(import.meta.dirname, '../..');
   const arquivos = execFileSync('git', ['ls-files', '-z'], {
     cwd: raiz,

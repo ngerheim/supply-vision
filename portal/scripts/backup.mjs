@@ -28,7 +28,7 @@ function criarCopiaIntegra(origem) {
   const copia = new DatabaseSync(arquivoTemporario, { readOnly: true });
   try {
     const resultado = Object.values(copia.prepare('PRAGMA integrity_check').get())[0];
-    if (resultado !== 'ok') throw new Error(`Copia reprovada na verificacao de integridade: ${resultado}`);
+    if (resultado !== 'ok') throw new Error(`Copia reprovada na verificacao de integridade: ${String(resultado)}`);
   } finally { copia.close(); }
   fs.rmSync(arquivoAnterior, { force: true });
   if (fs.existsSync(arquivoFinal)) fs.renameSync(arquivoFinal, arquivoAnterior);
