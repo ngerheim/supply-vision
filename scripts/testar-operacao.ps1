@@ -71,3 +71,18 @@ try {
 } finally { Remove-Item -LiteralPath $temp -Force -ErrorAction SilentlyContinue }
 
 Write-Host 'Logica operacional: 6 cenarios base + agenda semanal aprovados.' -ForegroundColor Green
+
+# Exercita a mesma resolução diária que o supervisor usa para backups.
+$backupSemana=@{BACKUP_HORARIOS='18:00';BACKUP_HORARIOS_SEG='09:00';BACKUP_HORARIOS_DOM=''}
+Igual '09:00' (Obter-SlotDoDia 'backup' $backupSemana 'BACKUP_HORARIOS' @{} ([datetime]'2026-10-05 10:00')).hora 'backup usa horario proprio de segunda'
+Igual $null (Obter-SlotDoDia 'backup' $backupSemana 'BACKUP_HORARIOS' @{} ([datetime]'2026-10-04 23:00')) 'backup respeita domingo vazio'
+Igual '18:00' (Obter-SlotDoDia 'backup' $backupSemana 'BACKUP_HORARIOS' @{} ([datetime]'2026-10-06 19:00')).hora 'backup usa padrao na terca'
+
+$privadoAnterior=$env:SUPPLY_VISION_PRIVADO
+try {
+  $env:SUPPLY_VISION_PRIVADO=Join-Path $PSScriptRoot 'dados alternativos'
+  Igual ([IO.Path]::GetFullPath($env:SUPPLY_VISION_PRIVADO)) (Obter-PastaPrivada 'C:\nao-usar') 'pasta privada alternativa'
+  $env:SUPPLY_VISION_PRIVADO=''
+  Igual (Join-Path $PSScriptRoot 'privado') (Obter-PastaPrivada $PSScriptRoot) 'pasta privada padrao'
+} finally { $env:SUPPLY_VISION_PRIVADO=$privadoAnterior }
+Write-Host '[OK] Agenda de backup e pasta privada alternativa.'

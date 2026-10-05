@@ -3,6 +3,7 @@ export { passwordHash, tokenHash, PBKDF2_ITERACOES_ATUAL, PBKDF2_ITERACOES_LEGAD
 import { parseCookies } from './cookies.ts';
 import { LIMPAR_TRAVAS_VENCIDAS_SQL, TRAVA_VALIDADE_MS } from './travas-sql.ts';
 import { MIGRAR_FORNECEDORES_CHAMADOS_SQL } from './chamados.ts';
+import { TRIGGERS_REVISAO } from './revisoes-sql.ts';
 export { parseCookies } from './cookies.ts';
 import { env } from 'cloudflare:workers';
 import { type Role, validatePassword } from '@/lib/domain';
@@ -73,6 +74,10 @@ const columnMigrations: Array<[string, string, string]> = [
   ['users', 'daily_report_time', "TEXT NOT NULL DEFAULT '17:45'"],
   ['tickets', 'revision', 'INTEGER NOT NULL DEFAULT 0'],
   ['tickets', 'title', "TEXT NOT NULL DEFAULT ''"],
+  ['agreements', 'revision', 'INTEGER NOT NULL DEFAULT 0'],
+  ['agreement_items', 'revision', 'INTEGER NOT NULL DEFAULT 0'],
+  ['tickets', 'request_key', 'TEXT'],
+  ['tickets', 'request_hash', 'TEXT'],
 ];
 
 async function applyColumnMigrations() {
@@ -126,6 +131,10 @@ async function initialize() {
   const db = rawDb();
   await db.batch(schema.map((sql) => db.prepare(sql)));
   await applyColumnMigrations();
+  await db.batch([
+    ...TRIGGERS_REVISAO.map((sql) => db.prepare(sql)),
+    db.prepare('CREATE UNIQUE INDEX IF NOT EXISTS idx_tickets_request_key ON tickets(requested_by,request_key)'),
+  ]);
   await db.prepare(MIGRAR_FORNECEDORES_CHAMADOS_SQL).run();
   // Outra instancia pode estar trabalhando neste mesmo banco. A inicializacao
   // so limpa travas vencidas, com o mesmo prazo usado por adquirirTrava.

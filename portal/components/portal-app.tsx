@@ -45,6 +45,7 @@ export default function PortalApp() {
   const [importAgreement,setImportAgreement]=useState('');
   const [sidebarCollapsed,setSidebarCollapsed]=useState(false);
   const intentionalLogout=useRef(false);
+  const busyRef=useRef(false);
   const [loadError,setLoadError]=useState('');
   const [searchFilters,setSearchFilters]=useState(filtrosVazios);
 
@@ -54,7 +55,7 @@ export default function PortalApp() {
   useEffect(()=>{let active=true;queueMicrotask(()=>{if(active)void initialize()});return()=>{active=false}},[initialize]);
   useEffect(()=>{if(!user)return;let active=true;const linked=new URLSearchParams(window.location.search).get('chamado');if(linked)queueMicrotask(()=>{if(active){if(user.role==='admin'||user.role==='editor'){setTicketLink(linked);setNav('tickets')}else{setNav('search');setNotice({type:'error',text:'Seu perfil permite consultar preços e acordos. O acesso a chamados é restrito.'})}}});return()=>{active=false}},[user]);
   useEffect(()=>{const expired=()=>{if(intentionalLogout.current)return;setUser(null);setData(null);setLoadError('');setNotice({type:'error',text:'Sua sessão expirou. Entre novamente.'})};window.addEventListener('portal:session-expired',expired);return()=>window.removeEventListener('portal:session-expired',expired)},[]);
-  const run=async(fn:()=>Promise<JsonData>,success?:string)=>{setBusy(true);try{return await salvarEAtualizar(fn,refresh,()=>{if(success)notify('ok',success)},()=>notify('error','Alteração salva, mas não foi possível atualizar a tela. Use Atualizar dados para conferir.'))}catch(error:unknown){notify('error',errorText(error))}finally{setBusy(false)}};
+  const run=async(fn:()=>Promise<JsonData>,success?:string)=>{if(busyRef.current)return;busyRef.current=true;setBusy(true);try{return await salvarEAtualizar(fn,refresh,()=>{if(success)notify('ok',success)},()=>notify('error','Alteração salva, mas não foi possível atualizar a tela. Use Atualizar dados para conferir.'))}catch(error:unknown){notify('error',errorText(error))}finally{busyRef.current=false;setBusy(false)}};
 
   if(loadError&&!data&&user!==null) return <main className="grid min-h-screen place-items-center p-6"><Card className="max-w-md"><CardContent className="space-y-4 pt-6"><p role="alert">{loadError}</p><Button onClick={()=>void initialize()}>Tentar novamente</Button></CardContent></Card></main>;
   if(user===undefined) return <Loading label="Preparando sua base de acordos…"/>;
@@ -88,13 +89,13 @@ export default function PortalApp() {
     <Sidebar nav={nav} setNav={navigate} user={user} onLogout={logout} collapsed={sidebarCollapsed} onToggle={()=>setSidebarCollapsed(value=>!value)}/>
     <section className={`min-w-0 pl-16 transition-[padding] duration-300 ${sidebarCollapsed?'lg:pl-16':'lg:pl-44'}`}><div className="mx-auto max-w-[1550px] p-4 sm:p-8">
       {nav==='search'&&<SearchPage catalogs={catalogs} openAgreement={openAgreement} filters={searchFilters} setFilters={setSearchFilters}/>}
-      {nav==='agreements'&&(agreementId?<AgreementDetail revision={data} id={agreementId} canWrite={canWrite} isAdmin={isAdmin} onDelete={removerAcordo} onBack={()=>setAgreementId(null)} onEdit={(a:AnyRow)=>setAgreementModal(a)} onItem={(i:AnyRow)=>setItemModal({...i,agreementId})} onImport={()=>{navigate('imports');setImportAgreement(agreementId)}} run={run}/>:<Agreements data={data} canWrite={canWrite} onOpen={setAgreementId} onNew={()=>setAgreementModal({locationIds:[],status:'active',startDate:dataDeNegocio()})}/>)}
+      {nav==='agreements'&&(agreementId?<AgreementDetail revision={data} id={agreementId} canWrite={canWrite} isAdmin={isAdmin} onDelete={removerAcordo} onBack={()=>setAgreementId(null)} onEdit={(a:AnyRow)=>setAgreementModal({...a,expectedRevision:a.revision})} onItem={(i:AnyRow)=>setItemModal({...i,agreementId,expectedRevision:i.revision})} onImport={()=>{navigate('imports');setImportAgreement(agreementId)}} run={run}/>:<Agreements data={data} canWrite={canWrite} onOpen={setAgreementId} onNew={()=>setAgreementModal({locationIds:[],status:'active',startDate:dataDeNegocio()})}/>)}
       {nav==='maintenance'&&<Maintenance url={String(data.manutencao||'')}/>}
       {canWrite&&nav==='suppliers'&&<CatalogPage type="suppliers" rows={catalogs.suppliers} onAdd={()=>setCatalogModal({type:'suppliers'})} onEdit={(row:AnyRow)=>setCatalogModal({type:'suppliers',...row})} onDelete={(row:AnyRow)=>removeCatalog('suppliers',row)}/>}
       {canWrite&&nav==='imports'&&<Imports data={data} isAdmin={isAdmin} initialAgreement={importAgreement} onUpdated={refresh} onCatalog={(type,values)=>setCatalogModal({type,...values})}/>}
       {isAdmin&&nav==='mappings'&&<Mappings catalogs={catalogs} run={run}/>}
       {canWrite&&nav==='catalogs'&&<Catalogs data={data} onAdd={(type:string)=>setCatalogModal({type})} onEdit={(type:string,row:AnyRow)=>setCatalogModal({type,...row})} onDelete={removeCatalog}/>}
-      {canWrite&&nav==='tickets'&&<Tickets users={userList} agreements={data.agreements||[]} run={run} initialDetail={ticketLink}/>}
+      {canWrite&&nav==='tickets'&&<Tickets busy={busy} users={userList} agreements={data.agreements||[]} run={run} initialDetail={ticketLink}/>}
       {isAdmin&&nav==='history'&&<ChangeHistory users={userList}/>}
       {isAdmin&&nav==='admin'&&<Administration user={user} initialUsers={userList} run={run}/>}
       {isAdmin&&nav==='notifications'&&<EmailNotifications users={userList} run={run}/>}
@@ -207,7 +208,7 @@ function PaginacaoDeLista({pagina,paginas,alterar}:{pagina:number;paginas:number
 
 function FalhaDeCarregamento({erro,tentar,voltar}:{erro:string;tentar:()=>void;voltar?:()=>void}){return <Alert variant="destructive"><AlertTriangle/><AlertTitle>Não foi possível carregar</AlertTitle><AlertDescription><p>{erro}</p><div className="mt-3 flex gap-2"><Button variant="outline" onClick={tentar}>Tentar novamente</Button>{voltar&&<Button variant="outline" onClick={voltar}>← Voltar</Button>}</div></AlertDescription></Alert>}
 
-function Tickets({users,agreements,run,initialDetail}:JsonData){
+function Tickets({busy,users,agreements,run,initialDetail}:JsonData){
   const [data,setData]=useState<AnyRow|null>(null),[group,setGroup]=useState<'ativos'|'fechados'|'cancelados'>('ativos'),[q,setQ]=useState(''),[open,setOpen]=useState<AnyRow|null>(null),[detail,setDetail]=useState<string|null>(initialDetail||null);
   const {ordem,alternar,ordenar}=useOrdenacao('tickets');
   const [page,setPage]=useState(1);
@@ -217,7 +218,7 @@ function Tickets({users,agreements,run,initialDetail}:JsonData){
   useEffect(()=>{let active=true;queueMicrotask(()=>{if(active)void load()});return()=>{active=false}},[load]);
   if(loadError)return <FalhaDeCarregamento erro={loadError} tentar={()=>void load()}/>;
   if(!data) return <Loading label="Carregando chamados…"/>;
-  if(detail) return <TicketDetail id={detail} users={users} agreements={agreements} onBack={()=>{setDetail(null);void load()}} run={run}/>;
+  if(detail) return <TicketDetail busy={busy} id={detail} users={users} agreements={agreements} onBack={()=>{setDetail(null);void load()}} run={run}/>;
   const s=data.stats||{};
   const prioridade:AnyRow={alta:1,media:2,baixa:3};
   const groupStatuses:AnyRow={ativos:['aberto','aguardando_fornecedor'],fechados:['fechado'],cancelados:['cancelado']};
@@ -247,11 +248,11 @@ function Tickets({users,agreements,run,initialDetail}:JsonData){
         <TableCell className="truncate text-sm" title={r.requestedBy||'Não informado'}>{r.requestedBy||'—'}</TableCell>
       </TableRow>)}</TableBody>
     </Table></CardContent><PaginacaoDeLista pagina={currentPage} paginas={pageCount} alterar={setPage}/></Card>:<Empty icon={MessageSquare} title="Nenhum chamado" text="Abra um chamado para registrar uma necessidade de negociação."/>}
-    {open&&<TicketDialog open value={open} users={users} agreements={agreements} onClose={()=>setOpen(null)} onSave={(body:AnyRow)=>run(async()=>{await api('/api/tickets',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});setOpen(null);await load()},'Chamado aberto.')}/>}
+    {open&&<TicketDialog busy={busy} open value={open} users={users} agreements={agreements} onClose={()=>setOpen(null)} onSave={(body:AnyRow,submissionKey:string)=>run(async()=>{await api('/api/tickets',{method:'POST',headers:{'content-type':'application/json','idempotency-key':submissionKey},body:JSON.stringify(body)});setOpen(null);await load()},'Chamado aberto.')}/>}
   </div>;
 }
 
-function TicketDetail({id,users,agreements,onBack,run}:JsonData){
+function TicketDetail({busy,id,users,agreements,onBack,run}:JsonData){
   const [d,setD]=useState<AnyRow|null>(null),[msg,setMsg]=useState(''),[status,setStatus]=useState(''),[statusMessage,setStatusMessage]=useState(''),[editing,setEditing]=useState(false);
   const [loadError,setLoadError]=useState('');
   const load=useCallback(async()=>{setLoadError('');try{const x=await api(`/api/tickets/${id}`);setD(x);setStatus(x.ticket.status);setStatusMessage('')}catch(error){setLoadError(errorText(error))}},[id]);
@@ -268,15 +269,16 @@ function TicketDetail({id,users,agreements,onBack,run}:JsonData){
       <ol className="relative space-y-5 border-l border-dashed pl-6">{d.events.map((e:AnyRow)=><li key={e.id} className="relative animate-in fade-in slide-in-from-left-2 fill-mode-both"><span className={`absolute -left-[31px] grid size-5 place-items-center rounded-full ring-4 ring-background ${e.kind==='status'?'bg-amber-500':e.kind==='created'?'bg-teal-500':'bg-slate-300'}`}/><div className="flex flex-wrap items-baseline gap-2"><span className="text-sm font-semibold">{e.user||'Sistema'}</span><span className="text-xs text-muted-foreground">{new Date(e.createdAt).toLocaleString('pt-BR')}</span></div>{e.kind==='status'&&<p className="mt-1 text-sm">Situação alterada de <b>{(ticketStatusMap[e.fromStatus]||[e.fromStatus])[0]}</b> para <b>{(ticketStatusMap[e.toStatus]||[e.toStatus])[0]}</b>.</p>}{e.message&&<p className="mt-1 whitespace-pre-wrap break-words text-sm">{e.message}</p>}</li>)}</ol>
       <div className="mt-6 space-y-3 border-t pt-5"><Field label="Registrar andamento"><Textarea value={msg} onChange={e=>setMsg(e.target.value)}/></Field><div className="flex justify-end"><Button disabled={!msg.trim()} onClick={()=>run(async()=>{await api(`/api/tickets/${id}/events`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({message:msg})});setMsg('');await load()},'Andamento registrado.')}><Plus/> Adicionar</Button></div></div>
     </CardContent></Card>
-    {editing&&<TicketDialog open value={{id:t.id,expectedRevision:t.revision,supplierName:t.supplier_name,city:t.city,state:t.state,scope:t.scope,priority:t.priority,assignedTo:t.assigned_to,agreementId:t.agreement_id,notes:t.notes}} users={users} agreements={agreements} onClose={()=>setEditing(false)} onSave={(body:AnyRow)=>run(async()=>{await api(`/api/tickets/${id}`,{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify(body)});setEditing(false);await load()},'Chamado atualizado.')}/>}
+    {editing&&<TicketDialog busy={busy} open value={{id:t.id,expectedRevision:t.revision,supplierName:t.supplier_name,city:t.city,state:t.state,scope:t.scope,priority:t.priority,assignedTo:t.assigned_to,agreementId:t.agreement_id,notes:t.notes}} users={users} agreements={agreements} onClose={()=>setEditing(false)} onSave={(body:AnyRow)=>run(async()=>{await api(`/api/tickets/${id}`,{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify(body)});setEditing(false);await load()},'Chamado atualizado.')}/>}
   </div>;
 }
 
-function TicketDialog({open,value,users,onClose,onSave}:JsonData){
+function TicketDialog({busy,open,value,users,onClose,onSave}:JsonData){
   const [form,setForm]=useState<AnyRow>(value||{priority:'media'}),editing=!!value?.id;
-  return <Dialog open={open} onOpenChange={(x)=>!x&&onClose()}><DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
+  const [submissionKey]=useState(()=>Array.from(crypto.getRandomValues(new Uint8Array(16)),byte=>byte.toString(16).padStart(2,'0')).join(''));
+  return <Dialog open={open} onOpenChange={(x)=>!x&&!busy&&onClose()}><DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
     <DialogHeader><DialogTitle>{editing?'Editar chamado':'Novo chamado'}</DialogTitle></DialogHeader>
-    <div className="grid gap-4 sm:grid-cols-2">
+    <fieldset disabled={busy} className="grid gap-4 sm:grid-cols-2">
       <Field label="Fornecedor *" className="sm:col-span-2"><Input required aria-label="Fornecedor" maxLength={120} value={form.supplierName||''} onChange={e=>setForm({...form,supplierName:e.target.value})}/></Field>
       <Field label="Cidade"><Input value={form.city||''} onChange={e=>setForm({...form,city:e.target.value})}/></Field>
       <Field label="UF"><Input maxLength={2} value={form.state||''} onChange={e=>setForm({...form,state:e.target.value.toUpperCase()})}/></Field>
@@ -285,8 +287,8 @@ function TicketDialog({open,value,users,onClose,onSave}:JsonData){
 
       <Field label="Escopo pretendido" className="sm:col-span-2"><Input value={form.scope||''} onChange={e=>setForm({...form,scope:e.target.value})}/></Field>
       <Field label="Observações" className="sm:col-span-2"><Textarea value={form.notes||''} onChange={e=>setForm({...form,notes:e.target.value})}/></Field>
-    </div>
-    <DialogFooter><Button variant="outline" onClick={onClose}>Cancelar</Button><Button disabled={!form.supplierName?.trim()} onClick={()=>onSave(form)}><CheckCircle2/> {editing?'Salvar alterações':'Abrir chamado'}</Button></DialogFooter>
+    </fieldset>
+    <DialogFooter><Button disabled={busy} variant="outline" onClick={onClose}>Cancelar</Button><Button disabled={busy||!form.supplierName?.trim()} onClick={()=>onSave(form,submissionKey)}><CheckCircle2/> {editing?'Salvar alterações':'Abrir chamado'}</Button></DialogFooter>
   </DialogContent></Dialog>;
 }
 

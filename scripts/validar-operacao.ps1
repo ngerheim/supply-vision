@@ -3,7 +3,7 @@ param([string]$Raiz)
 $ErrorActionPreference='Stop'
 if(!$Raiz){$Raiz=(Resolve-Path (Join-Path $PSScriptRoot '..')).Path}
 . (Join-Path $PSScriptRoot 'operacao-logica.ps1')
-$privado=Join-Path $Raiz 'privado';$erros=[Collections.Generic.List[string]]::new()
+$privado=Obter-PastaPrivada $Raiz;$erros=[Collections.Generic.List[string]]::new()
 function Falha([string]$m){$erros.Add($m)}
 function Exigir-Arquivo([string]$p){
  try{

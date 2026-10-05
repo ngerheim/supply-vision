@@ -4,7 +4,7 @@ $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'operacao-logica.ps1')
 . (Join-Path $PSScriptRoot 'notificacao.ps1')
 $Raiz=(Resolve-Path (Join-Path $PSScriptRoot '..')).Path
-$Privado=Join-Path $Raiz 'privado';$Portal=Join-Path $Raiz 'portal';$Alertas=Join-Path $Raiz 'alertas'
+$Privado=Obter-PastaPrivada $Raiz;$Portal=Join-Path $Raiz 'portal';$Alertas=Join-Path $Raiz 'alertas'
 $Operacao=Join-Path $Privado 'operacao';New-Item -ItemType Directory -Force $Operacao|Out-Null
 $ConfigOperacao=Join-Path $Privado 'comum\operacao.env'
 [void](Atualizar-AgendaAlertasLegada $ConfigOperacao)
@@ -55,7 +55,7 @@ try{
   $manutencao=Test-Path $ManutencaoFile
   if(!$manutencao-and!$alerta){$agoraAlerta=Get-Date;$d=Obter-SlotDevido 'alertas' (Obter-HorariosDoDia $config 'ALERTAS_HORARIOS' $agoraAlerta) $estado $agoraAlerta;if($d-and(Pode-Tentar 'alertas')){$estado['tentativa-alertas']=(Get-Date).ToString('o');$alertaChave=$d.chave;$alertaHora=$d.hora;$alertaRunId=(Get-Date).ToString('yyyyMMdd_HHmmss')+'_'+[guid]::NewGuid().ToString('N').Substring(0,6);$env:SUPPLY_VISION_RUN_ID=$alertaRunId;try{$alerta=Start-Process $Python -ArgumentList 'processo\pipeline.py' -WorkingDirectory $Alertas -WindowStyle Hidden -PassThru}finally{Remove-Item Env:SUPPLY_VISION_RUN_ID -ErrorAction SilentlyContinue};Log "Alertas iniciados para $($d.hora) (execucao $alertaRunId, PID $($alerta.Id)).";Salvar-Estado}}
   if($backup-and$backup.HasExited){if($backup.ExitCode-eq0){$estado[$backupChave]=(Get-Date).ToString('o');Log "Backup concluido: $backupChave."}else{Log "Backup falhou (codigo $($backup.ExitCode))."};$backup=$null;Salvar-Estado}
-  if(!$manutencao-and!$backup){$d=Obter-SlotDevido 'backup' $config.BACKUP_HORARIOS $estado (Get-Date);if($d-and(Pode-Tentar 'backup')){$estado['tentativa-backup']=(Get-Date).ToString('o');$backupChave=$d.chave;$backup=Start-Process $Node -ArgumentList 'scripts\backup.mjs' -WorkingDirectory $Portal -WindowStyle Hidden -PassThru;Log "Backup iniciado para $($d.hora) (PID $($backup.Id)).";Salvar-Estado}}
+  if(!$manutencao-and!$backup){$d=Obter-SlotDoDia 'backup' $config 'BACKUP_HORARIOS' $estado (Get-Date);if($d-and(Pode-Tentar 'backup')){$estado['tentativa-backup']=(Get-Date).ToString('o');$backupChave=$d.chave;$backup=Start-Process $Node -ArgumentList 'scripts\backup.mjs' -WorkingDirectory $Portal -WindowStyle Hidden -PassThru;Log "Backup iniciado para $($d.hora) (PID $($backup.Id)).";Salvar-Estado}}
   if($limpeza-and$limpeza.HasExited){if($limpeza.ExitCode-eq0){$estado[$limpezaChave]=(Get-Date).ToString('o');Log 'Limpeza concluida.'}else{Log "Limpeza falhou (codigo $($limpeza.ExitCode))."};$limpeza=$null;Salvar-Estado}
   if(!$manutencao-and!$limpeza){$d=Obter-SlotDevido 'limpeza' $config.LIMPEZA_HORARIO $estado (Get-Date);if($d-and(Pode-Tentar 'limpeza')){$estado['tentativa-limpeza']=(Get-Date).ToString('o');$limpezaChave=$d.chave;$limpeza=Start-Process $Python -ArgumentList 'processo\limpeza.py' -WorkingDirectory $Alertas -WindowStyle Hidden -PassThru;Log "Limpeza iniciada (PID $($limpeza.Id)).";Salvar-Estado}}
   $livreGb=[math]::Round((Get-Item $Raiz).PSDrive.Free/1GB,1);$disco=if($livreGb-lt[double]$config.ESPACO_MINIMO_GB){'baixo'}else{'ok'}

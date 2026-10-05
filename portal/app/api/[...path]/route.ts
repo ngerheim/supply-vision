@@ -5,6 +5,9 @@ import { fornecedorChamado } from '@/lib/chamados';
 import { ATUALIZAR_USUARIO_SQL } from '@/lib/usuarios-sql';
 import { montarPowerBiUrl } from '@/lib/powerbi';
 import { dataDeNegocio } from '@/lib/data-negocio';
+import { intervaloDatasNegocio } from '@/lib/periodo-auditoria';
+import { revisaoConfere } from '@/lib/revisoes-sql';
+import { chaveIdempotencia } from '@/lib/idempotencia';
 import { NextRequest, NextResponse } from 'next/server';
 import * as XLSX from 'xlsx';
 import { lerPlanilha } from '@/lib/planilha';
@@ -48,6 +51,7 @@ type User = { id: string; name: string; email: string; role: Role };
 type Row = Record<string, unknown>;
 
 type AgreementInput = {
+  expectedRevision?: unknown;
   number?: unknown;
   supplierId?: unknown;
   status?: unknown;
@@ -58,6 +62,7 @@ type AgreementInput = {
 };
 
 type AgreementItemInput = {
+  expectedRevision?: unknown;
   catalogItemId?: unknown;
   locationId?: unknown;
   unitId?: unknown;
@@ -687,7 +692,7 @@ async function agreementDetail(agreementId: string, user: User, params: URLSearc
   if (!agreement) return fail('Acordo não encontrado.', 404);
   const [locations, rows, versions] = await Promise.all([
     all(`SELECT l.id,l.city,l.state FROM agreement_locations al JOIN locations l ON l.id=al.location_id WHERE al.agreement_id=? ORDER BY l.state,l.city`, [agreementId]),
-    all(`SELECT ai.id,ai.price,ai.courtesy,ai.brands_text AS brands,ai.notes,ci.id AS catalogItemId,ci.name AS item,
+    all(`SELECT ai.id,ai.revision,ai.price,ai.courtesy,ai.brands_text AS brands,ai.notes,ci.id AS catalogItemId,ci.name AS item,
       vm.id AS modelId,vm.name AS model,un.id AS unitId,un.code AS unit,l.id AS locationId,l.city,l.state
       FROM agreements a JOIN agreement_items ai ON ai.version_id=a.current_version_id JOIN catalog_items ci ON ci.id=ai.catalog_item_id
       JOIN vehicle_models vm ON vm.id=ai.vehicle_model_id JOIN units un ON un.id=ai.unit_id JOIN locations l ON l.id=ai.location_id
@@ -774,11 +779,15 @@ async function acordoDaCondicao(itemId: string) {
 }
 
 async function updateAgreement(request: Request, user: User, agreementId: string) {
-  const parsed = validateAgreementInput(await jsonBody<AgreementInput>(request));
+  const entrada = await jsonBody<AgreementInput>(request);
+  const parsed = validateAgreementInput(entrada);
   if (!parsed.value) return fail(parsed.error || 'Dados do acordo inválidos.');
   const body = parsed.value;
-  const existing = await first<{ id: string; supplierId: string }>('SELECT id,supplier_id AS supplierId FROM agreements WHERE id=?', [agreementId]);
+  const existing = await first<{ id: string; supplierId: string; revision: number }>('SELECT id,supplier_id AS supplierId,revision FROM agreements WHERE id=?', [agreementId]);
   if (!existing) return fail('Acordo não encontrado.', 404);
+  // A trava já está adquirida: uma tela antiga não pode substituir o snapshot
+  // que outro usuário gravou. Ausência de revisão também exige recarregar.
+  if (!revisaoConfere(entrada.expectedRevision, existing.revision)) return fail('Este acordo foi alterado ou a tela está desatualizada. Reabra o acordo antes de salvar.', 409);
   // Trocar de fornecedor exige um fornecedor ativo, como na criacao. Manter o
   // fornecedor atual continua permitido mesmo que ele tenha sido inativado
   // depois: editar as datas de um acordo antigo nao pode ficar bloqueado.
@@ -848,8 +857,9 @@ async function updateItem(request: Request, user: User, itemId: string) {
   const catalogItemId = textValue(body.catalogItemId), locationId = textValue(body.locationId), unitId = textValue(body.unitId), modelId = textValue(body.modelId);
   const price = toNonNegativeMoney(body.price);
   if (!catalogItemId || !locationId || !unitId || !modelId || price === null) return fail('Preencha item, localidade, modelo, unidade e um preço válido.');
-  const existing = await first<{ agreementId: string; price: number; unit_id: string; location_id: string; catalog_item_id: string; vehicle_model_id: string; brands_text: string|null; notes: string|null }>(`SELECT ai.*,a.id AS agreementId FROM agreement_items ai JOIN agreements a ON a.current_version_id=ai.version_id WHERE ai.id=?`, [itemId]);
+  const existing = await first<{ agreementId: string; revision: number; price: number; unit_id: string; location_id: string; catalog_item_id: string; vehicle_model_id: string; brands_text: string|null; notes: string|null }>(`SELECT ai.*,a.id AS agreementId FROM agreement_items ai JOIN agreements a ON a.current_version_id=ai.version_id WHERE ai.id=?`, [itemId]);
   if (!existing) return fail('Condição não encontrada na versão vigente.', 404);
+  if (!revisaoConfere(body.expectedRevision, existing.revision)) return fail('Esta condição foi alterada ou a tela está desatualizada. Reabra o acordo antes de salvar.', 409);
   const permittedLocation = await first('SELECT 1 ok FROM agreement_locations WHERE agreement_id=? AND location_id=?', [existing.agreementId, locationId]);
   if (!permittedLocation) return fail('A localidade selecionada não pertence à abrangência do acordo.');
   const references = await Promise.all([
@@ -1271,8 +1281,9 @@ async function auditList(params?: URLSearchParams, exportAll=false){
   const action=params?.get('action'); if(action){conditions.push('l.action=?');values.push(action)}
   const entity=params?.get('entity'); if(entity){conditions.push('l.entity=?');values.push(entity)}
   const q=params?.get('q'); if(q){conditions.push('(l.details LIKE ? OR l.entity LIKE ? OR u.name LIKE ?)');values.push(`%${q}%`,`%${q}%`,`%${q}%`)}
-  const from=params?.get('from'); if(from){conditions.push('date(l.created_at)>=date(?)');values.push(from)}
-  const to=params?.get('to'); if(to){conditions.push('date(l.created_at)<=date(?)');values.push(to)}
+  const periodo=intervaloDatasNegocio(params?.get('from')||null,params?.get('to')||null);
+  if(periodo.inicio){conditions.push('l.created_at>=?');values.push(periodo.inicio)}
+  if(periodo.fim){conditions.push('l.created_at<?');values.push(periodo.fim)}
   const where=conditions.length?`WHERE ${conditions.join(' AND ')}`:'';
 
   // Paginacao real: o total vem do banco, entao a tela sabe quantas paginas
@@ -1358,6 +1369,17 @@ async function ticketDetail(ticketId:string){
 
 async function createTicket(request:Request,user:User){
   const body=await jsonBody<TicketInput>(request);
+  const requestKey=chaveIdempotencia(request);
+  const requestHash=requestKey ? await tokenHash(JSON.stringify(body)) : null;
+  const repetido=async()=>{
+    if(!requestKey)return null;
+    const anterior=await first<{id:string;code:string;request_hash:string}>('SELECT id,code,request_hash FROM tickets WHERE requested_by=? AND request_key=?',[user.id,requestKey]);
+    if(!anterior)return null;
+    if(anterior.request_hash!==requestHash)return fail('Esta tentativa já foi usada com outros dados. Confira o chamado criado antes de abrir outro.',409);
+    return ok({id:anterior.id,code:anterior.code},{status:201});
+  };
+  const respostaAnterior=await repetido();
+  if(respostaAnterior)return respostaAnterior;
   exigeTexto(body.supplierName,LIMITES_CAMPO.nome,'fornecedor');
   exigeTexto(body.contact,LIMITES_CAMPO.contato,'contato');
   exigeTexto(body.scope,LIMITES_CAMPO.escopo,'escopo');
@@ -1386,8 +1408,8 @@ async function createTicket(request:Request,user:User){
       const contexto:ContextoNotificacaoChamado={id:ticketId,codigo:code,fornecedor:supplierName,prioridade:String(priority),status:'aberto',solicitante:{id:user.id,nome:user.name,email:user.email},responsavel};
       const notificacoes=prepararNotificacoesChamado({eventId,anterior:null,atual:contexto,autor:user,alteracoes:['Chamado atribuído'],timestamp});
       await rawDb().batch([
-        rawDb().prepare(`INSERT INTO tickets (id,code,supplier_name,cnpj,city,state,contact,scope,priority,status,requested_by,assigned_to,notes,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,'aberto',?,?,?,?,?)`)
-          .bind(ticketId,code,supplierName,ticketCnpj,body.city?normalizeText(body.city):null,state,nullableText(body.contact),nullableText(body.scope),priority,user.id,assignedTo,nullableText(body.notes),timestamp,timestamp),
+        rawDb().prepare(`INSERT INTO tickets (id,code,supplier_name,cnpj,city,state,contact,scope,priority,status,requested_by,assigned_to,notes,created_at,updated_at,request_key,request_hash) VALUES (?,?,?,?,?,?,?,?,?,'aberto',?,?,?,?,?,?,?)`)
+          .bind(ticketId,code,supplierName,ticketCnpj,body.city?normalizeText(body.city):null,state,nullableText(body.contact),nullableText(body.scope),priority,user.id,assignedTo,nullableText(body.notes),timestamp,timestamp,requestKey,requestHash),
         rawDb().prepare(`INSERT INTO ticket_events (id,ticket_id,user_id,kind,to_status,message,created_at) VALUES (?,?,?,'created','aberto',?,?)`)
           .bind(eventId,ticketId,user.id,`Chamado aberto para ${supplierName}`,timestamp),
         rawDb().prepare('INSERT INTO audit_logs (id,user_id,action,entity,entity_id,details,created_at) VALUES (?,?,?,?,?,?,?)')
@@ -1397,6 +1419,8 @@ async function createTicket(request:Request,user:User){
       return ok({ id:ticketId, code },{status:201});
     }catch(error:unknown){
       if(!errorMessage(error).includes('UNIQUE')) throw error;
+      const resposta=await repetido();
+      if(resposta)return resposta;
       // Codigo tomado por outra pessoa no mesmo instante: tenta o proximo.
     }
   }

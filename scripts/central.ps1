@@ -2,7 +2,7 @@
 Add-Type -AssemblyName System.Drawing
 $Raiz=(Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 . (Join-Path $PSScriptRoot 'operacao-logica.ps1')
-$Op=Join-Path $Raiz 'privado\operacao';$PidFile=Join-Path $Op 'supervisor.pid.json';$StatusFile=Join-Path $Op 'status.json';$Manutencao=Join-Path $Op 'manutencao.sinal'
+$Op=Join-Path (Obter-PastaPrivada $Raiz) 'operacao';$PidFile=Join-Path $Op 'supervisor.pid.json';$StatusFile=Join-Path $Op 'status.json';$Manutencao=Join-Path $Op 'manutencao.sinal'
 $Inicio=Join-Path $Raiz 'INICIAR.bat';$Parar=Join-Path $Raiz 'PARAR.bat';$Atualizador=Join-Path $PSScriptRoot 'atualizar-servidor.ps1';$Startup=Join-Path ([Environment]::GetFolderPath('Startup')) 'Supply Vision.cmd'
 # A versao vem do Git, nao de um arquivo mantido a mao: um VERSAO.md so fica
 # correto enquanto alguem lembra de edita-lo, e ele ficava desatualizado.
