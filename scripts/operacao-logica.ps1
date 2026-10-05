@@ -1,3 +1,21 @@
+function Obter-PastaPrivada([string]$Raiz) {
+  if ($env:SUPPLY_VISION_PRIVADO) {
+    $env:SUPPLY_VISION_PRIVADO = [IO.Path]::GetFullPath($env:SUPPLY_VISION_PRIVADO)
+    return $env:SUPPLY_VISION_PRIVADO
+  }
+  return Join-Path $Raiz 'privado'
+}
+
+function Obter-SlotDoDia([string]$Tipo, [hashtable]$Config, [string]$Prefixo, [hashtable]$Estado, [datetime]$Agora) {
+  return Obter-SlotDevido $Tipo (Obter-HorariosDoDia $Config $Prefixo $Agora) $Estado $Agora
+}
+
+function Argumentos-ReexecucaoAtualizador([string]$Script, [string]$Anterior, [bool]$Reaplicar) {
+  $argumentos = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $Script, '-JaAtualizado', '-VersaoAnterior', $Anterior)
+  if ($Reaplicar) { $argumentos += '-Reaplicar' }
+  return $argumentos
+}
+
 function Ler-ConfigOperacao([string]$Caminho) {
   $config = @{}
   if (!(Test-Path -LiteralPath $Caminho)) { throw "Configuracao operacional ausente: $Caminho" }

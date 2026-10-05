@@ -12,6 +12,7 @@ carregar_base, carregar_acordo, processar e gerar_* daqui, então classificam
 identicamente.
 """
 import json, os, re, sys, time, pathlib, urllib.error, urllib.request, pandas as pd, numpy as np, xlsxwriter
+import heapq
 from datetime import datetime
 from xlsxwriter.utility import xl_col_to_name
 
@@ -49,6 +50,7 @@ CHAVE_ACORDO = ["_fornec_norm", "_cidade_norm", "_modelo_norm", "_peca_norm"]
 STATUS_AMBIGUO         = "ACORDO AMBÍGUO"
 STATUS_PRECO_INVALIDO  = "ACORDO SEM PREÇO VÁLIDO"
 STATUS_DATA_INVALIDA   = "DATA DE ABERTURA INVÁLIDA"
+STATUS_QUANTIDADE_INVALIDA = "QUANTIDADE INVÁLIDA"
 STATUS_DIMENSAO_PENDENTE = "UF NÃO INFORMADA"
 
 
@@ -259,14 +261,10 @@ def _validar_parametros(df_acordo):
             print(f"       {chave!r} -> {destino!r} ({nv} linhas); usar {alvo!r} ({na} linhas)")
 
 
-    chave_qualidade = CHAVE_ACORDO + [c for c in ["UF"] if c in df_acordo.columns]
-    dup = (df_acordo[df_acordo["_preco_valido"]]
-                    .groupby(chave_qualidade)["PRECO"]
-                    .agg(["nunique", "min", "max"]))
-    dup = dup[dup["nunique"] > 1]
+    _, _, dup, _ = _qualidade_por_vigencia(df_acordo)
     if len(dup):
         print(f"AVISO: {len(dup)} chave(s) do acordo com PREÇO DIVERGENTE — as "
-              f"compras correspondentes saem como '{STATUS_AMBIGUO}' e ficam "
+              f"compras na sobreposição saem como '{STATUS_AMBIGUO}' e ficam "
               f"fora dos indicadores; corrigir no Portal:")
         for chave, r in dup.head(20).iterrows():
             _, cid, mod, peca = chave[:4]
@@ -288,6 +286,7 @@ MOTIVO_ITEM           = "Item"
 MOTIVO_AMBIGUO         = "Acordo ambíguo — preços divergentes"
 MOTIVO_PRECO_INVALIDO  = "Acordo com preço inválido"
 MOTIVO_DATA_INVALIDA   = "Data de abertura inválida"
+MOTIVO_QUANTIDADE_INVALIDA = "Quantidade ausente, ilegível ou não finita"
 
 ORDEM_MOTIVOS = [MOTIVO_FORNECEDOR, MOTIVO_CIDADE, MOTIVO_MODELO,
                  MOTIVO_ITEM, MOTIVO_ITEM_MAPEAR, MOTIVO_NAO_COMPARAVEL,
@@ -414,16 +413,19 @@ def _processar_periodo_compativel(df_base, df_acordo):
     e_sem_preco &= ~e_data_invalida
 
     po  = m["Valor Unitario"]
-    pa  = m["PRECO"].where(~e_ambigua)
     qtd = pd.to_numeric(m["OS Quantidade"], errors="coerce")
+    e_quantidade_invalida = ~np.isfinite(qtd)
+    qtd = qtd.where(~e_quantidade_invalida)
 
-    quarentena = e_ambigua | e_sem_preco | e_data_invalida
+    quarentena = e_ambigua | e_sem_preco | e_data_invalida | e_quantidade_invalida
+    pa = m["PRECO"].where(~quarentena)
 
     com_ac = pa.notna() & ~quarentena
     sem_ac = ~com_ac & ~quarentena
     motivo = _motivo_sem_acordo(m, df_acordo, sem_ac)
     motivo[e_ambigua]   = MOTIVO_AMBIGUO
     motivo[e_sem_preco] = MOTIVO_PRECO_INVALIDO
+    motivo[e_quantidade_invalida] = MOTIVO_QUANTIDADE_INVALIDA
     motivo[e_data_invalida] = MOTIVO_DATA_INVALIDA
 
     dif_unit  = pd.Series(np.nan, index=m.index)
@@ -436,6 +438,7 @@ def _processar_periodo_compativel(df_base, df_acordo):
     status[com_ac & (dif_unit  < 0)] = "ABAIXO DO ACORDO"
     status[e_ambigua]                = STATUS_AMBIGUO
     status[e_sem_preco]              = STATUS_PRECO_INVALIDO
+    status[e_quantidade_invalida]     = STATUS_QUANTIDADE_INVALIDA
     status[e_data_invalida]          = STATUS_DATA_INVALIDA
     dif_unit[status == "CONFORME"]   = 0.0
 
@@ -567,7 +570,7 @@ def processar(df_base, df_acordo):
     return pd.concat(partes).sort_index() if partes else _processar_periodo(df_base, df_acordo)
 
 
-STATUS_QUARENTENA = {STATUS_AMBIGUO, STATUS_PRECO_INVALIDO, STATUS_DATA_INVALIDA, STATUS_DIMENSAO_PENDENTE}
+STATUS_QUARENTENA = {STATUS_AMBIGUO, STATUS_PRECO_INVALIDO, STATUS_DATA_INVALIDA, STATUS_DIMENSAO_PENDENTE, STATUS_QUANTIDADE_INVALIDA}
 
 
 def resumir_status(df):
@@ -575,7 +578,7 @@ def resumir_status(df):
     total_bruto = len(df)
     contagens = {st: int((df["Status"] == st).sum()) for st in (
         "CONFORME", "ACIMA DO ACORDO", "ABAIXO DO ACORDO", "SEM ACORDO",
-        STATUS_AMBIGUO, STATUS_PRECO_INVALIDO, STATUS_DATA_INVALIDA, STATUS_DIMENSAO_PENDENTE,
+        STATUS_AMBIGUO, STATUS_PRECO_INVALIDO, STATUS_DATA_INVALIDA, STATUS_DIMENSAO_PENDENTE, STATUS_QUANTIDADE_INVALIDA,
     )}
     total_quarentena = sum(contagens[st] for st in STATUS_QUARENTENA)
     total_elegivel = total_bruto - total_quarentena
@@ -837,25 +840,64 @@ def gerar_recorte_historico(df, path):
 
 
 def gerar_pendencias_comparacao(df, path):
-    dados = df[df["Status"] == STATUS_DIMENSAO_PENDENTE].reset_index(drop=True)
+    dados = df[df["Status"].isin(STATUS_QUARENTENA)].reset_index(drop=True)
     if dados.empty:
         return False
     _gerar_tabela_simples(dados, path, set(), "PendenciasComparacao", "Pendências")
     return True
 
 
-def gerar_qualidade_acordos(df_acordo, path):
-    """Gera fila operacional com todas as pendências da base de acordos."""
+def _qualidade_por_vigencia(df_acordo):
+    """Conflitos só existem quando preços diferentes podem valer no mesmo dia.
+
+    A qualidade considera os intervalos ativos a partir do corte de vigência,
+    inclusive históricos. A regra de transição anterior ao corte é preservada
+    no processamento de compras, sem transformar sucessão de preços em erro.
+    Entradas legadas sem campos de vigência mantêm o universo anterior.
+    """
     chave_qualidade = CHAVE_ACORDO + [c for c in ["UF"] if c in df_acordo.columns]
-    validos = df_acordo[df_acordo["_preco_valido"]]
+    universo = df_acordo.copy()
+    if {"INICIO_VIGENCIA", "FIM_VIGENCIA", "STATUS_ACORDO"}.issubset(universo.columns):
+        inicio, fim, status = _preparar_vigencia(universo)
+        aplicavel = (status == "active") & inicio.notna() & (fim.isna() | ((fim >= inicio) & (fim >= CORTE_VIGENCIA_ACORDOS)))
+        universo = universo[aplicavel].copy()
+        universo["_qualidade_inicio"] = inicio[aplicavel].clip(lower=CORTE_VIGENCIA_ACORDOS)
+        universo["_qualidade_fim"] = fim[aplicavel].fillna(pd.Timestamp.max)
+    else:
+        universo["_qualidade_inicio"] = pd.Timestamp.min
+        universo["_qualidade_fim"] = pd.Timestamp.max
+    validos = universo[universo["_preco_valido"]]
     stats = validos.groupby(chave_qualidade)["PRECO"].agg(["nunique", "min", "max"])
-    ambiguas = set(stats[stats["nunique"] > 1].index)
+    ambiguas = set()
+    for chave, grupo in validos.groupby(chave_qualidade):
+        ativos, precos_ativos = [], {}
+        for _, linha in grupo.sort_values("_qualidade_inicio").iterrows():
+            inicio, fim, preco = linha["_qualidade_inicio"].value, linha["_qualidade_fim"].value, linha["PRECO"]
+            # Fim inclusivo: dois acordos que incluem o mesmo dia se sobrepõem.
+            while ativos and ativos[0][0] < inicio:
+                _, removido = heapq.heappop(ativos)
+                precos_ativos[removido] -= 1
+                if precos_ativos[removido] == 0:
+                    del precos_ativos[removido]
+            if precos_ativos and (len(precos_ativos) > 1 or preco not in precos_ativos):
+                ambiguas.add(chave)
+                break
+            heapq.heappush(ativos, (fim, preco))
+            precos_ativos[preco] = precos_ativos.get(preco, 0) + 1
     com_preco = set(map(tuple, validos[chave_qualidade].values))
-    sem_preco = set(map(tuple, df_acordo[chave_qualidade].values)) - com_preco
+    sem_preco = set(map(tuple, universo[chave_qualidade].values)) - com_preco
+    conflitos = stats.loc[stats.index.isin(ambiguas)]
+    return universo, chave_qualidade, conflitos, sem_preco
+
+
+def gerar_qualidade_acordos(df_acordo, path):
+    """Gera pendências dos acordos com a mesma semântica de vigência do motor."""
+    universo, chave_qualidade, conflitos, sem_preco = _qualidade_por_vigencia(df_acordo)
+    ambiguas = set(conflitos.index)
     colunas = ["Tipo de pendência", "CNPJ normalizado", "Cidade", "Modelo",
                "Item", "Preço original", "Menor preço", "Maior preço", "Ocorrências"]
     linhas = []
-    for chave, grupo in df_acordo.groupby(chave_qualidade, dropna=False):
+    for chave, grupo in universo.groupby(chave_qualidade, dropna=False):
         tipo = STATUS_AMBIGUO if chave in ambiguas else (
             STATUS_PRECO_INVALIDO if chave in sem_preco else "")
         if not tipo:
@@ -898,7 +940,7 @@ if __name__ == "__main__":
     stamp = run_id or datetime.now().strftime("%Y%m%d_%H%M%S")
     base  = pathlib.Path(OUTPUT_DIR)
 
-    if (df["Status"] == STATUS_DIMENSAO_PENDENTE).any():
+    if df["Status"].isin(STATUS_QUARENTENA).any():
         pasta_pendencias = base / "pendencias_comparacao"
         pasta_pendencias.mkdir(parents=True, exist_ok=True)
         caminho_pendencias = pasta_pendencias / f"pendencias_comparacao_{stamp}.xlsx"
