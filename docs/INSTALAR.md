@@ -77,7 +77,7 @@ Em ordem de importância:
 
 O serviço manual de relatórios usa uma porta interna adicional (padrão 3001),
 restrita a localhost. Não exige abertura no firewall da LAN. Após iniciar,
-confira **Portal → Relatórios → Serviço disponível** com um administrador.
+confira **Portal → Relatórios → Pronto para executar** com um administrador.
 
 ## Teste que fecha a instalação
 

@@ -29,7 +29,7 @@ valor antigo significa supervisor morto, não operação saudável.
 2. Veja o último `pipeline_*.log` em `privado/alertas/logs`.
 3. Confirme se o dia tem agenda configurada.
 4. Valide configuração, chave Qlik, planilha de acordos e conectividade.
-5. Use **Portal → Relatórios → Gerar sem enviar**, ou `alertas\executar.bat paralelo` para suporte.
+5. Use `alertas\executar.bat paralelo` para gerar uma prévia sem enviar e-mail durante o suporte.
 
 ## Os e-mails pararam
 
