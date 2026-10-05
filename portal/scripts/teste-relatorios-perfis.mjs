@@ -19,12 +19,16 @@ if (
   !arquivo
 )
   throw new Error('Exige instalação descartável.');
-const relativa = path.relative(fs.realpathSync(raiz), fs.realpathSync(arquivo));
+// No Windows, TEMP pode usar o alias 8.3 e o banco vir com o caminho longo.
+// A resolução nativa expande ambos antes de verificar o confinamento.
+const raizReal = fs.realpathSync.native(raiz);
+const relativa = path.relative(raizReal, fs.realpathSync.native(arquivo));
 assert(
   relativa &&
     !relativa.startsWith('..') &&
     !path.isAbsolute(relativa) &&
-    raiz.includes('portal-teste-'),
+    raizReal.includes('portal-teste-'),
+  'Banco fora da instalação descartável.',
 );
 const db = new DatabaseSync(arquivo);
 db.exec('PRAGMA busy_timeout=5000;PRAGMA foreign_keys=ON');
