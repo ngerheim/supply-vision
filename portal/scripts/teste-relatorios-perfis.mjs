@@ -254,7 +254,20 @@ try {
     (await pedir('reports', { method: 'POST', body: pedido() })).status,
     409,
   );
-  assert.equal((await pedir('reports')).data.jobs.length, 7);
+  const emExecucao = reservarRelatorio(db);
+  assert.ok(emExecucao);
+  assert.equal(
+    (await pedir('reports', { method: 'POST', body: pedido() })).status,
+    202,
+  );
+  assert.equal(
+    (await pedir('reports', { method: 'POST', body: pedido() })).status,
+    409,
+  );
+  assert.equal(reservarRelatorio(db), null, 'Uma execução ativa impede iniciar outra');
+  assert.equal(db.prepare("SELECT COUNT(*) n FROM report_jobs WHERE status='queued'").get().n, 5);
+  assert.equal(db.prepare("SELECT COUNT(*) n FROM report_jobs WHERE status='running'").get().n, 1);
+  assert.equal((await pedir('reports')).data.jobs.length, 8);
   console.log(
     '[OK] Recorte preserva destinatário, cancelamento só vale na fila e o limite não aceita excesso de pedidos.',
   );
