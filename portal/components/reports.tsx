@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Download, FileText, LoaderCircle, RefreshCw } from 'lucide-react';
 import { api, errorText } from '@/lib/api';
+import { iniciarAtualizacaoPeriodica } from '@/lib/atualizacao-periodica';
 import {
   NOMES_ACAO,
   validarPedidoRelatorio,
@@ -62,50 +63,48 @@ export function Reports({ email }: { email: string }) {
     [online, setOnline] = useState(false),
     [loaded, setLoaded] = useState(false);
   const [selected, setSelected] = useState<string | null>(null),
-    [log, setLog] = useState('');
+    [log, setLog] = useState(''),
+    [loadError, setLoadError] = useState(''),
+    [logError, setLogError] = useState('');
   const key = useRef<string | null>(null),
     sending = useRef(false),
     mounted = useRef(false);
-  const load = useCallback(async () => {
-    const data = await api('/api/reports');
+  const load = useCallback(async (signal?: AbortSignal) => {
+    const data = await api('/api/reports', { signal });
     if (!mounted.current) return;
     setJobs(data.jobs);
     setOnline(data.runnerOnline);
     setLoaded(true);
+    setLoadError('');
   }, []);
   useEffect(() => {
     mounted.current = true;
-    const update = () =>
-      void load().catch((e) => {
-        if (mounted.current) setError(errorText(e));
-      });
-    update();
-    const timer = setInterval(update, 5000);
+    const parar = iniciarAtualizacaoPeriodica(load, (e) => {
+      setLoadError(errorText(e));
+      setOnline(false);
+    }, () => document.visibilityState !== 'hidden');
     return () => {
       mounted.current = false;
-      clearInterval(timer);
+      parar();
     };
   }, [load]);
   const selectedStatus = jobs.find((job) => job.id === selected)?.status;
   useEffect(() => {
     if (!selected) return;
     let active = true;
-    const update = () =>
-      void api(`/api/reports/${selected}`)
-        .then((data) => {
-          if (active) setLog(data.job.log);
-        })
-        .catch((e) => {
-          if (active) setError(errorText(e));
-        });
-    update();
-    const timer =
-      selectedStatus === 'queued' || selectedStatus === 'running'
-        ? setInterval(update, 5000)
-        : null;
+    const controller = new AbortController();
+    const update = async (signal: AbortSignal) => {
+      const data = await api(`/api/reports/${selected}`, { signal });
+      if (active) { setLog(data.job.log); setLogError(''); }
+    };
+    const falhou = (e: unknown) => { if (active) setLogError(errorText(e)); };
+    setLogError('');
+    const parar = selectedStatus === 'queued' || selectedStatus === 'running'
+      ? iniciarAtualizacaoPeriodica(update, falhou, () => document.visibilityState !== 'hidden')
+      : (() => { void update(controller.signal).catch(falhou); return () => controller.abort(); })();
     return () => {
       active = false;
-      if (timer) clearInterval(timer);
+      parar();
     };
   }, [selected, selectedStatus]);
   const changed = () => {
@@ -192,18 +191,18 @@ export function Reports({ email }: { email: string }) {
             : 'Verificando serviço…'}
         </Badge>
       </div>
-      {!online && loaded && (
+      {!online && loaded && !loadError && (
         <output className="block rounded-lg border p-3 text-sm">
           Inicie a operação na central Supply Vision para habilitar as execuções
           e os downloads.
         </output>
       )}
-      {error && (
+      {(error || loadError || logError) && (
         <p
           role="alert"
           className="rounded-lg border border-destructive p-3 text-sm text-destructive"
         >
-          {error}
+          {error || loadError || logError}
         </p>
       )}
       {notice && (
@@ -298,7 +297,7 @@ export function Reports({ email }: { email: string }) {
         <h2 className="text-lg font-semibold">Últimas execuções</h2>
         <Button
           variant="outline"
-          onClick={() => void load().catch((e) => setError(errorText(e)))}
+          onClick={() => void load().catch((e) => setLoadError(errorText(e)))}
         >
           <RefreshCw />
           Atualizar
