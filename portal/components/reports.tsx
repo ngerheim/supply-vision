@@ -7,6 +7,7 @@ import {
   ACOES_RELATORIO,
   NOMES_ACAO,
   validarPedidoRelatorio,
+  gerarChaveRelatorio,
   type AcaoRelatorio,
 } from '@/lib/relatorios';
 import { dataDeNegocio } from '@/lib/data-negocio';
@@ -125,7 +126,7 @@ export function Reports({ email }: { email: string }) {
         to,
         recipient,
         dryRun,
-        requestKey: (key.current ??= crypto.randomUUID()),
+        requestKey: (key.current ??= gerarChaveRelatorio()),
       });
       const mensagem =
         action === 'limpeza' && !dryRun
