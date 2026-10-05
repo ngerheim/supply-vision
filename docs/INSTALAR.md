@@ -75,6 +75,10 @@ Em ordem de importância:
   máquina. Junto com a exclusão do antivírus, são os itens desta lista com
   contrapartida de segurança.
 
+O serviço manual de relatórios usa uma porta interna adicional (padrão 3001),
+restrita a localhost. Não exige abertura no firewall da LAN. Após iniciar,
+confira **Portal → Relatórios → Serviço disponível** com um administrador.
+
 ## Teste que fecha a instalação
 
 Reinicie a máquina e confirme que o Portal sobe sozinho, sem clique e sem

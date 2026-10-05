@@ -1,7 +1,7 @@
+import { abrirBancoLocal } from './banco-local.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
-import { DatabaseSync } from 'node:sqlite';
 import { pathToFileURL } from 'node:url';
 
 import { montarEmailChamado, proximaTentativa } from '../lib/email-chamados.ts';
@@ -24,23 +24,7 @@ function registrar(texto) {
   if (linhas.length > 501) fs.writeFileSync(arquivoLog, `${linhas.slice(-500).join('\n')}\n`, 'utf8');
 }
 
-function localizarBanco() {
-  if (bancoInformado) return bancoInformado;
-  const diretorio = path.join(portalPrivado, 'banco', 'estado', 'state', 'v3', 'd1', 'miniflare-D1DatabaseObject');
-  if (!fs.existsSync(diretorio)) return null;
-  const nome = fs.readdirSync(diretorio).find((item) => item.endsWith('.sqlite') && item !== 'metadata.sqlite');
-  return nome ? path.join(diretorio, nome) : null;
-}
-
-function abrirBanco() {
-  const arquivo = localizarBanco();
-  if (!arquivo) return null;
-  const db = new DatabaseSync(arquivo);
-  db.exec('PRAGMA busy_timeout=5000');
-  const tabela = db.prepare("SELECT 1 ok FROM sqlite_schema WHERE type='table' AND name='email_notifications'").get();
-  if (!tabela) { db.close(); return null; }
-  return db;
-}
+const abrirBanco = () => abrirBancoLocal('email_notifications', bancoInformado);
 
 export function reservar(db, limite = 10) {
   const agora = new Date();

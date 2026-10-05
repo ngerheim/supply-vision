@@ -1,6 +1,7 @@
 # Socorro
 
-Abra `Supply Vision.bat`. Use **Validar configuração** e **Abrir registros**.
+Abra `Supply Vision.bat` e use **Validar configuração**. Consulte os arquivos em
+`privado/operacao/`; os registros de pedidos manuais também aparecem em **Portal → Relatórios**.
 **Não apague logs nem bancos durante o diagnóstico.**
 
 ## O Portal não responde na LAN
@@ -28,7 +29,7 @@ valor antigo significa supervisor morto, não operação saudável.
 2. Veja o último `pipeline_*.log` em `privado/alertas/logs`.
 3. Confirme se o dia tem agenda configurada.
 4. Valide configuração, chave Qlik, planilha de acordos e conectividade.
-5. Use `alertas\executar.bat paralelo` para testar sem enviar e-mails.
+5. Use **Portal → Relatórios → Gerar sem enviar**, ou `alertas\executar.bat paralelo` para suporte.
 
 ## Os e-mails pararam
 
@@ -109,3 +110,12 @@ Nunca mantenha duas instalações enviando e-mails ou processando Alertas ao
 mesmo tempo.
 
 Ao final, registre horário, sintoma, ação tomada e arquivos preservados.
+
+## Relatórios indisponíveis no Portal
+
+1. Confira se a operação foi iniciada na central e se o serviço aparece disponível na aba.
+2. Consulte `privado/operacao/relatorios-erro.log` e `relatorios-saida.log`.
+3. Confira Python em `alertas/.venv/Scripts/python.exe`, `PORTAL_API_TOKEN` e se a porta interna está livre (padrão 3001).
+4. Se a tarefa falhou por execução concorrente, aguarde a rotina automática terminar.
+5. Depois de reinício ou falha SMTP, confira a entrega antes de pedir novamente; não há reenvio automático.
+6. Um arquivo que já passou da retenção pode constar no histórico e não estar mais disponível para download.

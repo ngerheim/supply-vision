@@ -17,11 +17,11 @@ migrado para um servidor dedicado.
 
 ## O dia a dia
 
-Toda a operação passa pela central: abra **`Supply Vision.bat`**.
-
-Ela mostra se está no ar, atualiza o sistema, abre o Portal e os registros,
-valida a configuração e testa o backup. `INICIAR.bat`, `PARAR.bat` e os
-scripts existem para suporte, mas a rotina normal é pela central.
+Abra **`Supply Vision.bat`** para iniciar, parar e atualizar a operação, validar
+configuração e conferir backups. Acesse o Portal pelo endereço da instalação.
+Administradores executam os relatórios e recortes históricos na aba **Relatórios**,
+com destinatário informado, acompanhamento e download. `alertas/executar.bat`
+continua disponível para suporte. Veja [o guia de operação](docs/OPERAR.md).
 
 ## Os três verbos
 

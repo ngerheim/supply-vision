@@ -17,6 +17,11 @@ preparatoria; ela ainda nao entrega um portal hospedado ou pronto para producao.
 Enquanto as etapas de homologacao e migracao abaixo nao forem concluidas, o
 notebook-servidor continua responsavel pelo portal, banco, e-mails e Alertas.
 
+A aba Relatórios usa atualmente um executor Python e uma ponte de arquivos no
+mesmo computador do Portal. Essa parte depende do SQLite local e não é
+executada pelo Worker remoto; migrá-la requer serviço de processamento próprio.
+Na nuvem, sem esse executor, a aba informa serviço indisponível e recusa pedidos.
+
 ## O que esta etapa entrega
 
 O GitHub guarda o codigo, revisa as mudancas e prepara o pacote do portal.

@@ -3,19 +3,71 @@
 Um supervisor residente acompanha todos os módulos enquanto o notebook estiver
 ligado e o usuário operacional conectado. Não há tarefa agendada do Windows.
 
-Supervisionados: Portal na LAN, fila de e-mails, pipeline dos Alertas, backup
-do banco e limpeza diária.
+Supervisionados: Portal na LAN, fila de e-mails, serviço de relatórios manuais,
+pipeline dos Alertas, backup do banco e limpeza diária.
 
 ## Central
 
 `Supply Vision.bat` mostra o estado e oferece iniciar, parar, atualizar o
-sistema, abrir o Portal e os registros, validar a configuração, testar o
-backup, ligar a inicialização automática e o modo manutenção. Ela exibe o
+sistema, validar a configuração, testar/restaurar backup, ligar a inicialização
+automática e o modo manutenção. Portal é acessado pelo endereço da instalação;
+registros ficam em `privado/operacao/`. Ela exibe o
 commit em uso e o espaço livre em disco.
 
 O **modo manutenção** mantém Portal e e-mails no ar, mas pausa novos Alertas,
-backups e limpezas. Rotinas já iniciadas terminam. Use durante diagnóstico,
-atualização e execução paralela.
+backups e limpezas. Rotinas já iniciadas terminam. Use durante
+diagnóstico e execução manual. Pedidos manuais do Portal continuam disponíveis;
+a pausa não encerra rotinas em andamento e não substitui Parar operação para restaurar o banco.
+
+## Relatórios e rotinas no Portal
+
+Entre como **Administrador** e abra **Relatórios**. O grupo Consulta reúne Buscar
+e Manutenção (Power BI); Suprimentos acrescenta Chamados, Acordos, Fornecedores,
+Importações, Cadastros e De/Para. Administrador vê todos os grupos.
+
+| Operação | Resultado |
+|---|---|
+| Gerar e enviar relatório | Pipeline diário, com os destinatários configurados; só envia quando há divergências ou pendências |
+| Gerar sem enviar | Mesmo pipeline; relatórios e prévia `.eml`, sem SMTP |
+| Executar com diagnóstico | Mesma função do debug do bat, incluindo envio; registros visíveis na aba |
+| Recorte histórico | Datas inicial/final inclusivas e um e-mail informado; envio somente para esse endereço |
+| Limpeza de arquivos antigos | Simulação por padrão; exclusão real pede confirmação e segue a retenção existente |
+
+A fila aceita até cinco pedidos pendentes/em execução e roda um por vez. Fechar
+o navegador não cancela a tarefa. Atualização automática mostra o resultado;
+pedidos ainda na fila ou aguardando revisão podem ser cancelados. Repetir a mesma solicitação após
+falha de comunicação não cria outro trabalho. Uma rotina automática concorrente
+pode ocupar o lock: nesse caso o pedido falha antes de executar; tente depois.
+
+**Falhas ou reinício do serviço não provocam reenvio automático.** Confira os
+registros e a entrega antes de fazer uma nova solicitação, sobretudo se o SMTP
+já pode ter aceitado o e-mail. Pedidos na fila antes de reiniciar o serviço
+(inclusive os vindos de backup) ficam em **Revisão necessária**. Use **Usar estes
+parâmetros** para conferir e fazer uma nova solicitação; nenhum backup é alterado. Só há download de arquivos da própria execução;
+a limpeza pode torná-los indisponíveis após a retenção.
+
+O recorte não usa destinatários ou Cco do relatório diário. Sem dados elegíveis,
+nenhum arquivo/e-mail é produzido. A comparação usa os acordos disponíveis no
+Portal na execução e a regra de vigência configurada; não reconstrói uma tabela
+antiga de preços. Períodos longos podem levar vários minutos.
+
+O supervisor inicia `portal/scripts/processar-relatorios.mjs`. Ele acessa o
+SQLite local e executa o Python instalado em `alertas/.venv`. A ponte de arquivos
+escuta **somente 127.0.0.1:3001**, protegida por `PORTAL_API_TOKEN`; o navegador
+acessa tudo pela API autenticada do Portal. **Não abra essa porta na LAN.**
+Se necessário, `RELATORIOS_PORTA` em `privado/portal/configuracao/portal.env`
+altera a porta interna (1024–65535); reinicie a operação depois de mudar.
+O serviço é local e não acompanha automaticamente uma futura migração para nuvem.
+
+A limpeza não move para archive: planilhas, CSV e prévias são apagados após 24
+horas, logs após cinco dias, pela data de geração no nome. Arquivos sem timestamp
+reconhecido permanecem intocados. Os registros da aba guardam até 64 mil caracteres
+por tarefa, e a lista apresenta as últimas 100 execuções.
+
+**Validar configuração** confere arquivos/chaves obrigatórios, parâmetros da
+agenda, programas, build e escrita nas pastas privadas. Não testa autenticação
+Qlik/SMTP nem garante acesso à rede. A central apresenta falha se o verificador
+retornar erro, sem anunciar aprovação indevida.
 
 ## Agenda
 
@@ -141,7 +193,7 @@ quem mantém o relatório. Ele não é o nome visível da página; é um código
 
 ## Execução paralela
 
-`alertas\executar.bat` → **Execução paralela (sem enviar e-mail)**. Os
+**Portal → Relatórios → Gerar sem enviar** (ou `alertas\executar.bat paralelo` para suporte). Os
 relatórios saem normalmente, a mensagem fica em
 `privado/alertas/relatorios/diarios/previews-email` e nenhuma conexão SMTP é
 aberta. Útil para conferir o conteúdo antes de um envio real.

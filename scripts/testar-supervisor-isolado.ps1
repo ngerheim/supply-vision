@@ -3,6 +3,9 @@ $raizReal=(Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $temp=Join-Path $env:TEMP ('supply-vision-supervisor-'+[guid]::NewGuid().ToString('N'))
 $processos=@();$pathAnterior=$env:Path
 function Remover-DiretorioTemporario([string]$Caminho){
+ $alvoSeguro=[IO.Path]::GetFullPath($Caminho);$baseSegura=[IO.Path]::GetFullPath([IO.Path]::GetTempPath()).TrimEnd('\')+'\'
+ if(!$alvoSeguro.StartsWith($baseSegura,[StringComparison]::OrdinalIgnoreCase)-or!(Split-Path $alvoSeguro -Leaf).StartsWith('supply-vision-supervisor-')){throw 'Diretorio de teste fora da raiz temporaria.'}
+
  # taskkill retorna antes de o Windows liberar completamente o diretorio de
  # trabalho dos filhos. A limpeza faz parte do teste, mas essa pequena janela
  # nao pode transformar um supervisor aprovado em falha de atualizacao.
@@ -14,11 +17,12 @@ function Remover-DiretorioTemporario([string]$Caminho){
  }
 }
 try{
- $dirs=@('scripts','portal\dist\server','alertas\.venv\Scripts','privado\comum','privado\portal\configuracao','privado\portal\logs','privado\alertas\config','privado\alertas\logs','privado\alertas\relatorios\diarios','privado\alertas\parametros\de_para','privado\operacao','bin')
+ $dirs=@('scripts','portal\dist\server','portal\scripts','alertas\.venv\Scripts','privado\comum','privado\portal\configuracao','privado\portal\logs','privado\alertas\config','privado\alertas\logs','privado\alertas\relatorios\diarios','privado\alertas\parametros\de_para','privado\operacao','bin')
  $dirs|ForEach-Object{New-Item -ItemType Directory -Force (Join-Path $temp $_)|Out-Null}
  Copy-Item "$raizReal\scripts\supervisor.ps1","$raizReal\scripts\operacao-logica.ps1","$raizReal\scripts\validar-operacao.ps1","$raizReal\scripts\notificacao.ps1" "$temp\scripts"
  $conteudos=@{'portal\dist\server\wrangler.json'='{}';'portal\dist\server\index.js'='const PORTAL_API_TOKEN="x";';'alertas\.venv\Scripts\python.exe'='teste';'privado\alertas\config\cfg_qlik.txt'='token';'privado\alertas\config\destinatarios.txt'='destino';'privado\alertas\parametros\de_para\itens.csv'='origem,destino';'privado\alertas\parametros\de_para\modelos.csv'='origem,destino';'acordos.xlsx'='teste'}
  foreach($item in $conteudos.GetEnumerator()){[IO.File]::WriteAllText((Join-Path $temp $item.Key),$item.Value)}
+ [IO.File]::WriteAllText("$temp\portal\scripts\processar-relatorios.mjs", "import fs from 'node:fs';setInterval(()=>{if(fs.existsSync('../privado/operacao/parar.sinal'))process.exit(0)},500);")
  # Processo longo o bastante para o teste observar os modulos ativos, mas que
  # tambem respeita o sinal de parada. Assim uma maquina sem permissao para
  # taskkill /T nao deixa um cmd orfao prendendo a pasta temporaria.
@@ -37,7 +41,7 @@ try{
  $statusPath="$temp\privado\operacao\status.json";$apareceu=$false
  for($i=0;$i -lt 60;$i++){if(Test-Path $statusPath){$apareceu=$true;break};Start-Sleep -Milliseconds 500}
  if(!$apareceu){throw 'Supervisor nao gravou status.json dentro do prazo.'}
- $status=Get-Content $statusPath -Raw|ConvertFrom-Json;if(!$status.portal-or!$status.emails){throw 'Supervisor nao iniciou os processos simulados.'}
+ $status=Get-Content $statusPath -Raw|ConvertFrom-Json;if(!$status.portal-or!$status.emails-or!$status.relatorios){throw 'Supervisor nao iniciou os processos simulados.'}
  New-Item -ItemType File -Force "$temp\privado\operacao\parar.sinal"|Out-Null;$vivos[0].WaitForExit(25000)|Out-Null;if(!$vivos[0].HasExited){throw 'Supervisor nao encerrou.'}
  Write-Host 'Supervisor isolado: concorrencia, estado e encerramento aprovados.' -ForegroundColor Green
 }finally{$env:Path=$pathAnterior;foreach($p in $processos){if($p-and!$p.HasExited){& taskkill.exe /PID $p.Id /T /F 2>$null|Out-Null}};if(Test-Path $temp){Remover-DiretorioTemporario $temp}}
