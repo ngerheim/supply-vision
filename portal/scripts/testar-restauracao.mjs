@@ -13,7 +13,7 @@ try {
   const db = new DatabaseSync(copia, { readOnly: true });
   try {
     const integridade = Object.values(db.prepare('PRAGMA integrity_check').get())[0];
-    if (integridade !== 'ok') throw new Error(`Integridade reprovada: ${integridade}`);
+    if (integridade !== 'ok') throw new Error(`Integridade reprovada: ${String(integridade)}`);
     const obrigatorias = ['users', 'agreements', 'tickets', 'email_notifications'];
     const tabelas = new Set(db.prepare("SELECT name FROM sqlite_schema WHERE type='table'").all().map((x) => x.name));
     const faltando = obrigatorias.filter((nome) => !tabelas.has(nome));

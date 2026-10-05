@@ -59,7 +59,7 @@ function resumir(arquivo) {
   const db = new DatabaseSync(arquivo, { readOnly: true });
   try {
     const integridade = Object.values(db.prepare('PRAGMA integrity_check').get())[0];
-    if (integridade !== 'ok') throw new Error(`Integridade reprovada: ${integridade}`);
+    if (integridade !== 'ok') throw new Error(`Integridade reprovada: ${String(integridade)}`);
     const tabelas = new Set(db.prepare("SELECT name FROM sqlite_schema WHERE type='table'").all().map((linha) => linha.name));
     const totais = {};
     for (const nome of TABELAS) totais[nome] = tabelas.has(nome) ? Number(db.prepare(`SELECT COUNT(*) total FROM ${nome}`).get().total) : null;
