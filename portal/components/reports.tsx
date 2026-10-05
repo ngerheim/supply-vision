@@ -4,7 +4,6 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Download, FileText, LoaderCircle, RefreshCw } from 'lucide-react';
 import { api, errorText } from '@/lib/api';
 import {
-  ACOES_RELATORIO,
   NOMES_ACAO,
   validarPedidoRelatorio,
   gerarChaveRelatorio,
@@ -12,9 +11,8 @@ import {
 } from '@/lib/relatorios';
 import { dataDeNegocio } from '@/lib/data-negocio';
 import { Button } from './ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
+import { Card, CardContent } from './ui/card';
 import { Input } from './ui/input';
-import { Checkbox } from './ui/checkbox';
 import { Badge } from './ui/badge';
 
 type Job = {
@@ -39,13 +37,13 @@ const statusName: Record<string, string> = {
 };
 const descricao: Record<AcaoRelatorio, string> = {
   relatorio:
-    'Baixa as compras do Qlik, compara com os acordos e envia aos destinatários configurados. Sem divergências ou pendências, conclui sem e-mail.',
+    'Baixa o histórico de compras do Qlik, compara com os acordos vigentes e envia aos destinatários configurados. Conclui sem e-mail caso não haja dados elegíveis.',
   paralelo:
     'Executa a mesma análise e salva uma prévia do e-mail. Nenhuma mensagem é enviada.',
   debug:
     'Executa o relatório diário, incluindo o envio, e permite acompanhar os registros. Equivale ao diagnóstico do executar.bat.',
   recorte:
-    'Analisa um período com ambas as datas incluídas. O relatório será enviado apenas ao e-mail informado, sem usar a lista diária nem sua cópia oculta.',
+    'Analisa um período com ambas as datas inclusas. O relatório será enviado apenas ao e-mail informado.',
   limpeza:
     'Apaga planilhas e CSV com mais de 24 horas e logs com mais de cinco dias, conforme a data de geração no nome. Use a simulação para conferir antes de apagar.',
 };
@@ -53,12 +51,11 @@ const horario = (valor: string) =>
   new Date(valor).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
 
 export function Reports({ email }: { email: string }) {
-  const [action, setAction] = useState<AcaoRelatorio>('paralelo');
+  const [action, setAction] = useState<AcaoRelatorio>('relatorio');
   const [from, setFrom] = useState(dataDeNegocio()),
     [to, setTo] = useState(dataDeNegocio()),
     [recipient, setRecipient] = useState(email);
-  const [dryRun, setDryRun] = useState(true),
-    [busy, setBusy] = useState(false),
+  const [busy, setBusy] = useState(false),
     [error, setError] = useState(''),
     [notice, setNotice] = useState('');
   const [jobs, setJobs] = useState<Job[]>([]),
@@ -125,15 +122,12 @@ export function Reports({ email }: { email: string }) {
         from,
         to,
         recipient,
-        dryRun,
         requestKey: (key.current ??= gerarChaveRelatorio()),
       });
       const mensagem =
-        action === 'limpeza' && !dryRun
-          ? 'Apagar os arquivos vencidos pela retenção (planilhas e CSV após 24 horas, logs após cinco dias)? Esta ação não move arquivos para uma lixeira.'
-          : action === 'recorte'
+        action === 'recorte'
             ? `Gerar o recorte de ${from.split('-').reverse().join('/')} a ${to.split('-').reverse().join('/')} e enviar para ${recipient.trim()}?`
-            : action === 'relatorio' || action === 'debug'
+            : action === 'relatorio'
               ? 'Executar agora e enviar aos destinatários configurados quando houver divergências ou pendências?'
               : null;
       if (mensagem && !confirm(mensagem)) return;
@@ -189,17 +183,12 @@ export function Reports({ email }: { email: string }) {
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold">Relatórios e rotinas</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Execute as funções dos Alertas e acompanhe o resultado.
-          </p>
-        </div>
-        <Badge variant={online ? 'default' : 'secondary'}>
+        <h1 className="text-2xl font-semibold">Relatórios</h1>
+        <Badge variant={online ? 'default' : 'secondary'} title="Indica se o executor de relatórios respondeu nos últimos 30 segundos. Não valida a conexão com Qlik ou e-mail.">
           {loaded
             ? online
-              ? 'Serviço disponível'
-              : 'Serviço indisponível'
+              ? 'Pronto para executar'
+              : 'Executor indisponível'
             : 'Verificando serviço…'}
         </Badge>
       </div>
@@ -223,9 +212,6 @@ export function Reports({ email }: { email: string }) {
         </output>
       )}
       <Card>
-        <CardHeader>
-          <CardTitle>Nova execução</CardTitle>
-        </CardHeader>
         <CardContent className="space-y-4">
           <label className="block space-y-2 text-sm font-medium">
             Operação
@@ -239,7 +225,7 @@ export function Reports({ email }: { email: string }) {
               }}
               className="w-full rounded-md border bg-background px-3 py-2"
             >
-              {ACOES_RELATORIO.map((a) => (
+              {(['relatorio', 'recorte'] as const).map((a) => (
                 <option key={a} value={a}>
                   {NOMES_ACAO[a]}
                 </option>
@@ -299,27 +285,8 @@ export function Reports({ email }: { email: string }) {
               </label>
               <p className="text-xs text-muted-foreground">
                 A comparação usa os acordos disponíveis hoje e suas vigências.
-                Sem dados elegíveis, nenhum arquivo ou e-mail será gerado.
-                Períodos longos podem levar vários minutos.
               </p>
             </>
-          )}
-          {action === 'limpeza' && (
-            <label
-              htmlFor="report-dry-run"
-              className="flex items-center gap-2 text-sm"
-            >
-              <Checkbox
-                id="report-dry-run"
-                checked={dryRun}
-                disabled={busy}
-                onCheckedChange={(v) => {
-                  setDryRun(v === true);
-                  changed();
-                }}
-              />
-              Simular e listar os arquivos, sem apagá-los
-            </label>
           )}
           <Button disabled={busy || !online} onClick={() => void submit()}>
             {busy ? <LoaderCircle className="animate-spin" /> : <FileText />}
@@ -338,9 +305,9 @@ export function Reports({ email }: { email: string }) {
         </Button>
       </div>
       <p className="text-xs text-muted-foreground">
-        Até cinco pedidos na fila. As rotinas são executadas uma por vez; se uma
-        rotina automática já estiver usando os arquivos, a execução informa o
-        conflito. Falhas não são reenviadas automaticamente.
+        Uma execução por vez, com até cinco aguardando na fila. Sem dados
+        elegíveis, nenhum relatório ou e-mail é gerado. Períodos longos podem
+        levar mais tempo para processar.
       </p>
       {!jobs.length && (
         <p className="text-sm text-muted-foreground">
@@ -392,7 +359,8 @@ export function Reports({ email }: { email: string }) {
                   Cancelar pedido
                 </Button>
               )}
-              {(job.status === 'review' || job.status === 'failed') && (
+              {(job.status === 'review' || job.status === 'failed') &&
+                (job.action === 'relatorio' || job.action === 'recorte') && (
                 <Button
                   size="sm"
                   variant="outline"
@@ -402,7 +370,6 @@ export function Reports({ email }: { email: string }) {
                     setFrom(job.from || dataDeNegocio());
                     setTo(job.to || dataDeNegocio());
                     setRecipient(job.recipient || email);
-                    setDryRun(!!job.dryRun);
                     key.current = null;
                     setNotice(
                       'Parâmetros copiados. Confira os registros e a entrega anterior antes de solicitar uma nova execução.',
