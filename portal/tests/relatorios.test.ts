@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { validarPedidoRelatorio } from '../lib/relatorios.ts';
+import { gerarChaveRelatorio, validarPedidoRelatorio } from '../lib/relatorios.ts';
 import {
   GRUPOS_NAVEGACAO,
   NOMES_PERFIL,
@@ -14,6 +14,16 @@ const base = {
   recipient: 'destino@example.com',
   requestKey: '12345678-1234-1234-1234-123456789012',
 };
+void test('solicitações funcionam em HTTP quando Crypto não oferece randomUUID', () => {
+  const fonte = { getRandomValues: crypto.getRandomValues.bind(crypto) };
+  assert.equal('randomUUID' in fonte, false);
+  const requestKey = gerarChaveRelatorio(fonte);
+  assert.match(requestKey, /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/);
+  for (const action of ['relatorio', 'recorte', 'limpeza']) {
+    assert.equal(validarPedidoRelatorio({ ...base, action, requestKey }).requestKey, requestKey);
+  }
+  assert.notEqual(gerarChaveRelatorio(fonte), requestKey);
+});
 void test('perfis herdam exatamente os três conjuntos solicitados', () => {
   for (const grupo of GRUPOS_NAVEGACAO)
     for (const aba of grupo.abas) {
