@@ -408,7 +408,7 @@ def _processar_periodo_compativel(df_base, df_acordo):
     # Sem data de abertura valida nao ha como saber qual regra de vigencia vale
     # para a compra. Ela vai para a quarentena, contada no resumo, em vez de
     # ser comparada como se fosse anterior ao corte.
-    e_data_invalida = pd.to_datetime(m["Data Abertura"], dayfirst=True, errors="coerce").isna()
+    e_data_invalida = _data_vigencia(m["Data Abertura"]).isna()
     e_ambigua   &= ~e_data_invalida
     e_sem_preco &= ~e_data_invalida
 
@@ -445,7 +445,7 @@ def _processar_periodo_compativel(df_base, df_acordo):
     preco_total        = (po * qtd).round(2)
     preco_total_acordo = (pa * qtd).round(2)
     dif_total          = (preco_total - preco_total_acordo).round(2)
-    dt                 = pd.to_datetime(m["Data Abertura"], dayfirst=True, errors="coerce")
+    dt                 = _data_vigencia(m["Data Abertura"])
 
     os_col = pd.to_numeric(m.get("Codigo OS", pd.Series("", index=m.index)),
                            errors="coerce")
@@ -509,8 +509,9 @@ CORTE_VIGENCIA_ACORDOS = pd.Timestamp(sv_paths.CORTE_VIGENCIA_ACORDOS)
 def _data_vigencia(valores):
     # ISO tem ano primeiro; dayfirst so se aplica ao formato brasileiro.
     texto = valores.astype("string")
-    iso = texto.str.match(r"^\d{4}-\d{2}-\d{2}$", na=False)
-    resultado = pd.to_datetime(texto.where(iso), format="%Y-%m-%d", errors="coerce")
+    iso = texto.str.match(r"^\d{4}-\d{2}-\d{2}(?:$|[ T])", na=False)
+    # Excel pode devolver datetime; ISO explicito impede trocar mes por dia.
+    resultado = pd.to_datetime(texto.where(iso), format="ISO8601", errors="coerce")
     brasileiro = pd.to_datetime(texto.where(~iso), format="%d/%m/%Y", errors="coerce")
     return resultado.fillna(brasileiro).dt.normalize()
 
@@ -549,7 +550,7 @@ def processar(df_base, df_acordo):
     if not campos_vigencia.issubset(df_acordo.columns):
         return _processar_periodo(df_base, df_acordo)
 
-    datas = pd.to_datetime(df_base["Data Abertura"], dayfirst=True, errors="coerce").dt.normalize()
+    datas = _data_vigencia(df_base["Data Abertura"])
     partes = []
     # Compra sem data valida nao e "anterior ao corte": ela segue com a tabela
     # inteira so para passar pelo _processar_periodo, que a poe em quarentena.

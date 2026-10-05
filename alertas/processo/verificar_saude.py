@@ -26,6 +26,7 @@ import sys
 import re
 import pathlib
 import smtplib
+import ssl
 from email.message import EmailMessage
 from datetime import datetime, date
 
@@ -72,7 +73,7 @@ def _enviar_email(assunto, corpo):
 
         with smtplib.SMTP(SMTP_SERVIDOR, SMTP_PORTA, timeout=60) as servidor:
             servidor.ehlo()
-            servidor.starttls()
+            servidor.starttls(context=ssl.create_default_context())
             servidor.ehlo()
             servidor.login(SMTP_USUARIO, senha)
             servidor.send_message(msg, to_addrs=[DESTINATARIO_ALERTA])

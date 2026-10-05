@@ -73,3 +73,22 @@ def test_data_invalida_remove_todos_os_valores_comparativos(rodar):
     assert resultado.loc[0, "Preco Total OS"] == 100
     for coluna in ["Preco Acordo", "Preco Total Acordo", "Diferenca Unit.", "Diferenca Total", "Menor Preco Acordo", "Dif. p/ Menor Acordo"]:
         assert pd.isna(resultado.loc[0, coluna])
+
+
+@pytest.mark.parametrize("data", ["2026-09-05", "2026-09-05 00:00:00", "2026-09-05T15:20:00", pd.Timestamp("2026-09-05"), "05/09/2026"])
+def test_data_iso_e_excel_nao_invertem_mes_dia(rodar, data):
+    compra = base(preco=10)
+    compra["Data Abertura"] = data
+    futuro = com_vigencia(acordo([10]), inicio="2026-12-01", status="suspended")
+    resultado = rodar.processar(compra, futuro)
+    assert str(resultado.loc[0, "Data"]) == "2026-09-05"
+    assert resultado.loc[0, "Status"] == "CONFORME"  # regra anterior ao corte
+
+
+def test_formatos_mistos_respeitam_mes_e_corte(rodar):
+    compra = base(qtd=5, preco=10)
+    compra["Data Abertura"] = ["2026-09-05 00:00:00", "05/09/2026", "2026-10-05", pd.Timestamp("2026-10-05"), "invalida"]
+    vigente = com_vigencia(acordo([10]), inicio="2026-10-05", fim="2026-10-05")
+    resultado = rodar.processar(compra, vigente)
+    assert resultado["Status"].tolist() == ["CONFORME"] * 4 + [rodar.STATUS_DATA_INVALIDA]
+    assert resultado["Data"].astype(str).tolist()[:4] == ["2026-09-05"] * 2 + ["2026-10-05"] * 2
