@@ -31,6 +31,10 @@ await new Promise(resolve => socket.close(resolve));
 const base = `http://127.0.0.1:${port}`;
 
 async function request(url, { method = 'GET', body, session = cookie, headers = {} } = {}) {
+  if (method === 'PUT' && /^\/api\/agreements\/[^/]+$/.test(url) && body && body.expectedRevision === undefined) {
+    const detail = await request(url, { session });
+    if (detail.status === 200) body = { ...body, expectedRevision: detail.data.agreement.revision };
+  }
   const response = await fetch(base + url, {
     method, headers: { connection: 'close', ...(session ? { cookie: session } : {}), ...(body && !(body instanceof FormData) ? { 'content-type': 'application/json' } : {}), ...headers },
     ...(body === undefined ? {} : { body: body instanceof FormData ? body : JSON.stringify(body) }),
@@ -594,12 +598,17 @@ try {
   });
   await check('Atualização de banco anterior cria tabelas vazias e preserva dados', async () => {
     const before = businessSnapshot();
+    for (const table of ['agreements','agreement_items']) for (const row of before[table]) row.revision=0;
     reader.close(); reader = null; await stopServer();
     assert.ok(sqlitePath.startsWith(state + path.sep), 'Só permite alterar o banco desta execução');
-    execFileSync(process.execPath, [path.join(portal, 'node_modules/wrangler/bin/wrangler.js'), 'd1', 'execute', 'DB', '--local', '--config', path.join(runtime, 'server/wrangler.json'), '--persist-to', state, '--command', 'DROP TABLE import_item_mappings; DROP TABLE import_model_mappings;'], { cwd: output, windowsHide: true, stdio: ['ignore', serverLog, serverLog], env: { ...process.env, WRANGLER_SEND_METRICS: 'false', WRANGLER_WRITE_LOGS: 'false' } });
+    execFileSync(process.execPath, [path.join(portal, 'node_modules/wrangler/bin/wrangler.js'), 'd1', 'execute', 'DB', '--local', '--config', path.join(runtime, 'server/wrangler.json'), '--persist-to', state, '--command', 'DROP TABLE import_item_mappings; DROP TABLE import_model_mappings; DROP TRIGGER agreements_revision; DROP TRIGGER agreement_items_revision; DROP INDEX idx_tickets_request_key; ALTER TABLE agreements DROP COLUMN revision; ALTER TABLE agreement_items DROP COLUMN revision; ALTER TABLE tickets DROP COLUMN request_key; ALTER TABLE tickets DROP COLUMN request_hash;'], { cwd: output, windowsHide: true, stdio: ['ignore', serverLog, serverLog], env: { ...process.env, WRANGLER_SEND_METRICS: 'false', WRANGLER_WRITE_LOGS: 'false' } });
     await startServer(); reader = new DatabaseSync(sqlitePath, { readOnly: true });
     const after = await good('/api/mappings');
     assert.deepEqual(after.items, []); assert.deepEqual(after.models, []);
+    for(const table of ['agreements','agreement_items']) assert.ok(query(`PRAGMA table_info(${table})`).some(column=>column.name==='revision'));
+    assert.ok(query('PRAGMA table_info(tickets)').some(column=>column.name==='request_key'));
+    assert.equal(query("SELECT COUNT(*) n FROM sqlite_master WHERE type='trigger' AND name IN ('agreements_revision','agreement_items_revision')")[0].n,2);
+    assert.equal(query("SELECT COUNT(*) n FROM sqlite_master WHERE type='index' AND name='idx_tickets_request_key'")[0].n,1);
     assert.deepEqual(businessSnapshot(), before);
   });
   await check('Integridade final: sem órfãos, versões pendentes ou travas', async () => {

@@ -2,7 +2,8 @@
 param([switch]$SomenteVerificar,[switch]$SemTestes,[switch]$SemBuild)
 $ErrorActionPreference='Stop'
 $Raiz=(Resolve-Path (Join-Path $PSScriptRoot '..')).Path
-$Portal=Join-Path $Raiz 'portal'; $Alertas=Join-Path $Raiz 'alertas'; $Privado=Join-Path $Raiz 'privado'
+. (Join-Path $PSScriptRoot 'operacao-logica.ps1')
+$Portal=Join-Path $Raiz 'portal'; $Alertas=Join-Path $Raiz 'alertas'; $Privado=Obter-PastaPrivada $Raiz
 function Etapa([string]$m){Write-Host "`n==> $m" -ForegroundColor Cyan}
 function Localizar-Comando([string]$nome){
   foreach($c in @(Get-Command $nome -All -ErrorAction SilentlyContinue)){

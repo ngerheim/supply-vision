@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import path from 'node:path';
+import { execFileSync } from 'node:child_process';
+import { portalPrivado } from '../scripts/configuracao.mjs';
 
 import { ARQUIVO_VARS, VARIAVEIS_DO_WORKER, montarArgumentos, montarArquivoVars } from '../scripts/iniciar-portal.mjs';
 
@@ -52,8 +55,22 @@ void test('mantem o banco persistido na area privada em todos os modos', () => {
     assert.equal(args[0], 'dev');
     const persist = args.indexOf('--persist-to');
     assert.ok(persist > 0);
-    assert.equal(args[persist + 1], '../privado/portal/banco/estado/state');
+    assert.equal(args[persist + 1], path.join(portalPrivado, 'banco', 'estado', 'state'));
   }
+});
+
+void test('pasta privada alternativa e compartilhada pelo portal, fila e backup', () => {
+  const privado = path.resolve(import.meta.dirname, 'dados com espacos');
+  const script = `import { montarArgumentos } from './scripts/iniciar-portal.mjs';
+    import { portalPrivado } from './scripts/configuracao.mjs';
+    console.log(JSON.stringify({portalPrivado,args:montarArgumentos('lan')}));`;
+  const output = execFileSync(process.execPath, ['--input-type=module', '-e', script], {
+    cwd: path.resolve(import.meta.dirname, '..'),
+    env: { ...process.env, SUPPLY_VISION_PRIVADO: privado }, encoding: 'utf8',
+  });
+  const { portalPrivado: destino, args } = JSON.parse(output);
+  assert.equal(destino, path.join(privado, 'portal'));
+  assert.equal(args[args.indexOf('--persist-to') + 1], path.join(destino, 'banco', 'estado', 'state'));
 });
 
 void test('escolhe o endereco conforme o modo', () => {
