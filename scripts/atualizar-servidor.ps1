@@ -21,6 +21,7 @@ param([switch]$Simular,[switch]$Reaplicar,[switch]$JaAtualizado,[string]$VersaoA
 
 $ErrorActionPreference = 'Stop'
 $Raiz = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+. (Join-Path $PSScriptRoot 'operacao-logica.ps1')
 Set-Location $Raiz
 $Portal = Join-Path $Raiz 'portal'
 $Alertas = Join-Path $Raiz 'alertas'
@@ -30,7 +31,7 @@ function Etapa([string]$t) { Write-Host "`n== $t ==" -ForegroundColor Cyan }
 function Ok([string]$t) { Write-Host "   $t" -ForegroundColor Green }
 function Aviso([string]$t) { Write-Host "   $t" -ForegroundColor Yellow }
 function Garantir-CredencialPortal {
-  $portalEnv = Join-Path $Raiz 'privado\portal\configuracao\portal.env'
+  $portalEnv = Join-Path (Obter-PastaPrivada $Raiz) 'portal\configuracao\portal.env'
   if (-not (Test-Path -LiteralPath $portalEnv -PathType Leaf)) { throw "Configuracao do Portal ausente: $portalEnv" }
   $linha = @(Get-Content -LiteralPath $portalEnv) | Where-Object { $_ -match '^\s*PORTAL_API_TOKEN\s*=\s*(\S+)\s*$' } | Select-Object -Last 1
   $tokenAtual = if ($linha) { ($linha -split '=', 2)[1].Trim() } else { '' }
@@ -57,9 +58,9 @@ function Garantir-CredencialPortal {
 # e o que precisar de preenchimento apareca como aviso, nao como surpresa.
 function Reparar-ConfiguracaoPrivada {
   $pares = @(
-    @{ exemplo = Join-Path $Raiz 'portal\portal.env.example';            destino = Join-Path $Raiz 'privado\portal\configuracao\portal.env' },
-    @{ exemplo = Join-Path $Raiz 'compartilhado\smtp.env.example';       destino = Join-Path $Raiz 'privado\comum\smtp.env' },
-    @{ exemplo = Join-Path $Raiz 'compartilhado\operacao.env.example';   destino = Join-Path $Raiz 'privado\comum\operacao.env' }
+    @{ exemplo = Join-Path $Raiz 'portal\portal.env.example';            destino = Join-Path (Obter-PastaPrivada $Raiz) 'portal\configuracao\portal.env' },
+    @{ exemplo = Join-Path $Raiz 'compartilhado\smtp.env.example';       destino = Join-Path (Obter-PastaPrivada $Raiz) 'comum\smtp.env' },
+    @{ exemplo = Join-Path $Raiz 'compartilhado\operacao.env.example';   destino = Join-Path (Obter-PastaPrivada $Raiz) 'comum\operacao.env' }
   )
   $pendentes = @()
   foreach ($par in $pares) {
@@ -202,7 +203,8 @@ if (-not $JaAtualizado) {
   # parada e o backup ja foi feito; o processo filho cuida da reversao se
   # algo reprovar.
   Etapa 'Seguindo com o script da nova versao'
-  & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'atualizar-servidor.ps1') -JaAtualizado -VersaoAnterior $anterior
+  $argumentosReexecucao = Argumentos-ReexecucaoAtualizador (Join-Path $PSScriptRoot 'atualizar-servidor.ps1') $anterior ([bool]$Reaplicar)
+  & powershell.exe @argumentosReexecucao
   exit $LASTEXITCODE
 }
 
@@ -270,7 +272,7 @@ Etapa 'Religando a operacao'
 if ($LASTEXITCODE -ne 0) { Reverter 'Falha ao solicitar o inicio da nova versao.' }
 $url = 'http://127.0.0.1:3000'
 try {
-  $linha = @(Get-Content (Join-Path $Raiz 'privado\portal\configuracao\portal.env')) | Where-Object { $_ -like 'PORTAL_URL=*' } | Select-Object -First 1
+  $linha = @(Get-Content (Join-Path (Obter-PastaPrivada $Raiz) 'portal\configuracao\portal.env')) | Where-Object { $_ -like 'PORTAL_URL=*' } | Select-Object -First 1
   if ($linha) { $url = ($linha -split '=', 2)[1].Trim() }
 } catch { }
 

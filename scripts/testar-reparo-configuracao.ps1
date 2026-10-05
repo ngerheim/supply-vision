@@ -1,6 +1,7 @@
 # Confere o reparo da configuracao privada usando a funcao real do atualizador,
 # num diretorio de mentira: nada do servidor e tocado.
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'operacao-logica.ps1')
 $fonte = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'atualizar-servidor.ps1') -Raw
 $inicio = $fonte.IndexOf('function Reparar-ConfiguracaoPrivada')
 $fim = $fonte.IndexOf("Etapa 'Conferindo o repositorio'")
@@ -60,7 +61,7 @@ try {
 
 # A reexecucao e o que faz uma correcao no proprio atualizador valer ja na
 # atualizacao que a traz; se ela sumir, o teste avisa.
-if ($fonte -notmatch '(?m)^\s*&\s*powershell\.exe.*atualizar-servidor\.ps1.*-JaAtualizado') {
+if ($fonte -notmatch '(?m)^\s*&\s*powershell\.exe\s+@argumentosReexecucao' -or $fonte -notmatch 'Argumentos-ReexecucaoAtualizador.*atualizar-servidor\.ps1') {
   throw 'O atualizador nao se relanca com o codigo novo.'
 }
 if ($fonte -notmatch '(?m)^\s*Reparar-ConfiguracaoPrivada\s*$') { throw 'O reparo da configuracao nao e chamado na atualizacao.' }

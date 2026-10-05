@@ -1,5 +1,6 @@
 # Exercita a conferencia real do atualizador com Git simulado, sem parar servicos.
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'operacao-logica.ps1')
 $source = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'atualizar-servidor.ps1') -Raw
 $start = $source.IndexOf("Etapa 'Conferindo o repositorio'")
 $end = $source.IndexOf('$mudou = git diff')
@@ -30,3 +31,18 @@ foreach ($caso in @('status-falha','sujo','branch','head-falha','fetch-falha','r
   Write-Host "[OK] $caso"
 }
 Write-Host 'Atualizacao segura: 8 cenarios aprovados.' -ForegroundColor Green
+
+# A reexecução mantém a intenção do reparo, mesmo quando o diff é vazio.
+$argumentos=Argumentos-ReexecucaoAtualizador 'atualizador.ps1' ('1'*40) $true
+if ($argumentos -notcontains '-Reaplicar' -or $argumentos -notcontains '-JaAtualizado') { throw 'Reexecucao perdeu o modo de reparo.' }
+$normal=Argumentos-ReexecucaoAtualizador 'atualizador.ps1' ('1'*40) $false
+if ($normal -contains '-Reaplicar') { throw 'Atualizacao normal virou reparo.' }
+# Executa o bloco real que decide quais dependências reinstalar no filho.
+$inicioDependencias=$source.IndexOf('$mudou = git diff')
+$fimDependencias=$source.IndexOf('if ($Simular)')
+$decidir=[scriptblock]::Create($source.Substring($inicioDependencias,$fimDependencias-$inicioDependencias))
+function git { $global:LASTEXITCODE=0; if($args[0] -ne 'diff'){throw "Comando inesperado: $args"} }
+$Reaplicar=$argumentos -contains '-Reaplicar'
+. $decidir
+if (!$mexeuNode -or !$mexeuPython) { throw 'Reparo sem diff dispensou dependencias.' }
+Write-Host '[OK] Reexecucao do reparo reinstala Node e Python.'

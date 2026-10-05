@@ -41,8 +41,21 @@ try {
   assert.equal(db.prepare('SELECT dono FROM travas WHERE chave=?').get(`acordo:${acordo}`).dono, prefixo);
   db.prepare('DELETE FROM travas WHERE chave=? AND dono=?').run(`acordo:${acordo}`, prefixo);
 
-  const edit=await fetch(`${url}/api/items/${item}`,{method:'PUT',headers:{...headers,'content-type':'application/json'},body:JSON.stringify({catalogItemId:prefixo,locationId:prefixo,unitId:prefixo,modelId:prefixo,price:12.5})});
+  const edit=await fetch(`${url}/api/items/${item}`,{method:'PUT',headers:{...headers,'content-type':'application/json'},body:JSON.stringify({catalogItemId:prefixo,locationId:prefixo,unitId:prefixo,modelId:prefixo,price:12.5,expectedRevision:0})});
   assert.equal(edit.status,200,await edit.text());
+  const stale=await fetch(`${url}/api/items/${item}`,{method:'PUT',headers:{...headers,'content-type':'application/json'},body:JSON.stringify({catalogItemId:prefixo,locationId:prefixo,unitId:prefixo,modelId:prefixo,price:99,expectedRevision:0})});
+  assert.equal(stale.status,409,await stale.text());
+  assert.equal(db.prepare('SELECT price FROM agreement_items WHERE id=?').get(item).price,12.5);
+  const agreementBody={number:acordo,supplierId:prefixo,startDate:'2026-01-01',locationIds:[prefixo],expectedRevision:db.prepare('SELECT revision FROM agreements WHERE id=?').get(acordo).revision};
+  const editAgreement=await fetch(`${url}/api/agreements/${acordo}`,{method:'PUT',headers:{...headers,'content-type':'application/json'},body:JSON.stringify({...agreementBody,notes:'primeira edicao'})});
+  assert.equal(editAgreement.status,200,await editAgreement.text());
+  const staleAgreement=await fetch(`${url}/api/agreements/${acordo}`,{method:'PUT',headers:{...headers,'content-type':'application/json'},body:JSON.stringify({...agreementBody,notes:'edicao antiga'})});
+  assert.equal(staleAgreement.status,409,await staleAgreement.text());
+  const missingRevision={...agreementBody};delete missingRevision.expectedRevision;
+  const legacy=await fetch(`${url}/api/agreements/${acordo}`,{method:'PUT',headers:{...headers,'content-type':'application/json'},body:JSON.stringify(missingRevision)});
+  assert.equal(legacy.status,409,await legacy.text());
+  assert.equal(db.prepare('SELECT notes FROM agreements WHERE id=?').get(acordo).notes,'primeira edicao');
+  console.log('[OK] Revisoes impedem perda de edicoes em acordos e condicoes.');
   const audit=JSON.parse(db.prepare("SELECT details FROM audit_logs WHERE entity_id=? AND action='UPDATE' ORDER BY created_at DESC LIMIT 1").get(item).details);
   assert.equal(audit.antes.price,10);assert.equal(audit.depois.price,12.5);
   for (const rota of [`items/${item}`, `agreements/${acordo}`]) {
@@ -52,6 +65,20 @@ try {
   assert.equal(db.prepare('SELECT COUNT(*) n FROM agreements WHERE id=?').get(acordo).n, 0);
   assert.equal(db.prepare('SELECT COUNT(*) n FROM travas WHERE chave=?').get(`acordo:${acordo}`).n, 0);
   const jsonHeaders={...headers,'content-type':'application/json'};
+  const attempt=crypto.randomUUID();
+  const ticketBody={supplierName:prefixo};
+  const submit=body=>fetch(`${url}/api/tickets`,{method:'POST',headers:{...jsonHeaders,'idempotency-key':attempt},body:JSON.stringify(body)});
+  const duplicateResponses=await Promise.all([submit(ticketBody),submit(ticketBody)]);
+  const duplicates=[];
+  for(const response of duplicateResponses){assert.equal(response.status,201,await response.clone().text());duplicates.push(await response.json());}
+  assert.equal(duplicates[0].id,duplicates[1].id);
+  assert.equal(db.prepare('SELECT COUNT(*) n FROM tickets WHERE request_key=?').get(attempt).n,1);
+  assert.equal(db.prepare('SELECT COUNT(*) n FROM ticket_events WHERE ticket_id=?').get(duplicates[0].id).n,1);
+  assert.equal(db.prepare("SELECT COUNT(*) n FROM audit_logs WHERE entity_id=? AND action='CREATE'").get(duplicates[0].id).n,1);
+  const changed=await submit({...ticketBody,scope:'outro pedido'});
+  assert.equal(changed.status,409,await changed.text());
+  const retry=await submit(ticketBody);assert.equal(retry.status,201);assert.equal((await retry.json()).id,duplicates[0].id);
+  console.log('[OK] Reenvios concorrentes criam um unico chamado e preservam seu historico.');
   const criado=await fetch(`${url}/api/tickets`,{method:'POST',headers:jsonHeaders,body:JSON.stringify({supplierName:prefixo})});
   assert.equal(criado.status,201);const ticketId=(await criado.json()).id;
   const chave=`chamado:${ticketId}`;

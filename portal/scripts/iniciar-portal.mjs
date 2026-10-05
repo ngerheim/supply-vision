@@ -59,7 +59,7 @@ export function montarArgumentos(modo, arquivoVars = null) {
   const base = [
     'dev',
     '--config', 'dist/server/wrangler.json',
-    '--persist-to', '../privado/portal/banco/estado/state',
+    '--persist-to', path.join(portalPrivado, 'banco', 'estado', 'state'),
   ];
   if (arquivoVars) base.push('--env-file', arquivoVars);
   if (modo === 'local') base.push('--ip', '127.0.0.1', '--port', '3000');
