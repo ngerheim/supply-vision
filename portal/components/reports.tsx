@@ -36,23 +36,18 @@ const statusName: Record<string, string> = {
   failed: 'Falhou',
   cancelled: 'Cancelado',
 };
-const descricao: Record<AcaoRelatorio, string> = {
+type AcaoDisponivel = Extract<AcaoRelatorio, 'relatorio' | 'recorte'>;
+const descricao: Record<AcaoDisponivel, string> = {
   relatorio:
     'Baixa o histórico de compras do Qlik, compara com os acordos vigentes e envia aos destinatários configurados. Conclui sem e-mail caso não haja dados elegíveis.',
-  paralelo:
-    'Executa a mesma análise e salva uma prévia do e-mail. Nenhuma mensagem é enviada.',
-  debug:
-    'Executa o relatório diário, incluindo o envio, e permite acompanhar os registros. Equivale ao diagnóstico do executar.bat.',
   recorte:
     'Analisa um período com ambas as datas inclusas. O relatório será enviado apenas ao e-mail informado.',
-  limpeza:
-    'Apaga planilhas e CSV com mais de 24 horas e logs com mais de cinco dias, conforme a data de geração no nome. Use a simulação para conferir antes de apagar.',
 };
 const horario = (valor: string) =>
   new Date(valor).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
 
 export function Reports({ email }: { email: string }) {
-  const [action, setAction] = useState<AcaoRelatorio>('relatorio');
+  const [action, setAction] = useState<AcaoDisponivel>('relatorio');
   const [from, setFrom] = useState(dataDeNegocio()),
     [to, setTo] = useState(dataDeNegocio()),
     [recipient, setRecipient] = useState(email);
@@ -219,7 +214,7 @@ export function Reports({ email }: { email: string }) {
               value={action}
               disabled={busy}
               onChange={(e) => {
-                setAction(e.target.value as AcaoRelatorio);
+                setAction(e.target.value as AcaoDisponivel);
                 changed();
               }}
               className="w-full rounded-md border bg-background px-3 py-2"
@@ -365,6 +360,7 @@ export function Reports({ email }: { email: string }) {
                   variant="outline"
                   disabled={busy}
                   onClick={() => {
+                    if (job.action !== 'relatorio' && job.action !== 'recorte') return;
                     setAction(job.action);
                     setFrom(job.from || dataDeNegocio());
                     setTo(job.to || dataDeNegocio());
