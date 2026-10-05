@@ -93,7 +93,6 @@ export function Reports({ email }: { email: string }) {
       if (active) { setLog(data.job.log); setLogError(''); }
     };
     const falhou = (e: unknown) => { if (active) setLogError(errorText(e)); };
-    setLogError('');
     const parar = selectedStatus === 'queued' || selectedStatus === 'running'
       ? iniciarAtualizacaoPeriodica(update, falhou, () => document.visibilityState !== 'hidden')
       : (() => { void update(controller.signal).catch(falhou); return () => controller.abort(); })();
@@ -133,6 +132,7 @@ export function Reports({ email }: { email: string }) {
         body: JSON.stringify(pedido),
       });
       key.current = null;
+      setLogError('');
       setSelected(result.id);
       setNotice(
         'Solicitação registrada. Você pode sair desta aba; a execução continua no servidor.',
@@ -339,6 +339,7 @@ export function Reports({ email }: { email: string }) {
                 variant="outline"
                 onClick={() => {
                   setLog('');
+                  setLogError('');
                   setSelected(selected === job.id ? null : job.id);
                 }}
               >
