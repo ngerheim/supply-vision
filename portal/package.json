@@ -21,7 +21,7 @@
     "test:imports": "node scripts/teste-importacao-stress.mjs"
   },
   "dependencies": {
-    "@base-ui/react": "1.7.0",
+    "@base-ui/react": "1.8.0",
     "@fontsource-variable/jetbrains-mono": "^5.3.0",
     "@fontsource-variable/plus-jakarta-sans": "^5.3.0",
     "class-variance-authority": "0.7.1",
