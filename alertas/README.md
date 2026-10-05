@@ -17,8 +17,9 @@ Dados, credenciais, parâmetros reais e relatórios ficam em
 ## Operação
 
 A instalação e as execuções automáticas pertencem ao supervisor do produto.
-Administradores usam **Portal → Relatórios** para executar o relatório diário,
-gerar sem envio, executar com diagnóstico, pedir recortes e simular/realizar limpeza.
+Administradores usam **Portal → Relatórios** para executar o relatório diário
+e pedir recortes com destinatário exclusivo. A limpeza segue automática; as
+opções de simulação e diagnóstico continuam disponíveis no `executar.bat` para suporte.
 O recorte do portal exige o e-mail destinatário; a lista diária e seu Cco não são usados.
 
 Como alternativa de suporte, `executar.bat paralelo` gera sem envio e

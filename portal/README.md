@@ -59,8 +59,8 @@ novo nome sem migração de perfil. As permissões são verificadas também na A
 - **Histórico** *(Admin)* — tudo que foi alterado, por quem e quando, com
   filtros e paginação de 50.
 - **Manutenção** *(todos)* — relatório de manutenção no Power BI; não é o modo de pausa da central.
-- **Relatórios** *(Admin)* — funções do executar.bat, recorte com e-mail,
-  simulação de limpeza, fila, registros e download. Veja [operação](../docs/OPERAR.md#relatórios-e-rotinas-no-portal).
+- **Relatórios** *(Admin)* — gerar/enviar relatório e recorte com e-mail,
+  fila, registros e download. Veja [operação](../docs/OPERAR.md#relatórios-no-portal).
 - **E-mails** *(Admin)* — fila de notificações dos chamados.
 - **Usuários** *(Admin)* — contas, perfis, exportação da base e configuração do relatório diário de chamados.
 
