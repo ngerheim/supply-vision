@@ -1,12 +1,14 @@
+import { erroExportacaoAuditoria, BUSCA_LITERAL_AUDITORIA_SQL } from '@/lib/auditoria-limites';
 import { paginaSolicitada } from '@/lib/paginacao';
 import { filtrosNotificacoes } from '@/lib/filtros-notificacoes';
 import { condicoesBusca } from '@/lib/filtros-busca';
 import { fornecedorChamado } from '@/lib/chamados';
-import { ATUALIZAR_USUARIO_SQL } from '@/lib/usuarios-sql';
+import { ATUALIZAR_USUARIO_SQL, ATUALIZAR_USUARIO_COM_SENHA_SQL, ENCERRAR_SESSOES_REDEFINIDAS_SQL } from '@/lib/usuarios-sql';
 import { montarPowerBiUrl } from '@/lib/powerbi';
 import { dataDeNegocio } from '@/lib/data-negocio';
 import { intervaloDatasNegocio } from '@/lib/periodo-auditoria';
 import { revisaoConfere } from '@/lib/revisoes-sql';
+import { SITUACAO_EFETIVA_SQL } from '@/lib/situacao-acordos';
 import { chaveIdempotencia } from '@/lib/idempotencia';
 import { NextRequest, NextResponse } from 'next/server';
 import * as XLSX from 'xlsx';
@@ -341,10 +343,13 @@ async function DELETEInterno(request: NextRequest) {
 async function deleteItem(user: User, itemId: string) {
   // A versao vigente precisa ser conferida depois de adquirir a trava: uma
   // publicacao concorrente nao pode trocar a versao entre a leitura e o DELETE.
-  const item = await first<{ id: string }>('SELECT ai.id FROM agreement_items ai JOIN agreements a ON a.current_version_id=ai.version_id WHERE ai.id=?', [itemId]);
+  const item = await first<Row>('SELECT ai.* FROM agreement_items ai JOIN agreements a ON a.current_version_id=ai.version_id WHERE ai.id=?', [itemId]);
   if (!item) return fail('Condição não encontrada na versão vigente.', 404);
-  await rawDb().prepare('DELETE FROM agreement_items WHERE id=?').bind(itemId).run();
-  await audit(user.id, 'DELETE', 'agreement_item', itemId, 'Item removido manualmente');
+  await rawDb().batch([
+    rawDb().prepare('DELETE FROM agreement_items WHERE id=?').bind(itemId),
+    rawDb().prepare('INSERT INTO audit_logs (id,user_id,action,entity,entity_id,details,created_at) VALUES (?,?,?,?,?,?,?)')
+      .bind(id('aud'), user.id, 'DELETE', 'agreement_item', itemId, JSON.stringify({ antes: item, depois: null }), now()),
+  ]);
   return ok({ success: true });
 }
 
@@ -437,6 +442,8 @@ async function deleteCatalog(user: User, type: string, recordId: string) {
     : type === 'locations' ? `SELECT city || ' / ' || state AS nome FROM locations WHERE id=?`
     : `SELECT name AS nome FROM ${cfg.table} WHERE id=?`, [recordId]);
 
+  // A consulta acima melhora a mensagem; as FKs continuam sendo a garantia
+  // final se outra requisicao criar uma referencia antes deste DELETE.
   await rawDb().prepare(`DELETE FROM ${cfg.table} WHERE id=?`).bind(recordId).run();
   await audit(user.id, 'DELETE', type, recordId, `${label?.nome || recordId} excluído do cadastro`);
   return ok({ success: true });
@@ -630,8 +637,8 @@ function relatorioManutencao() {
   return montarPowerBiUrl(vars.PBI_RELATORIO_URL, vars.PBI_PAGINA);
 }
 
-// A lista de acordos para em 500 (agreementList). O total vai junto para a
-// tela avisar quando ela estiver incompleta, em vez de o 501o sumir calado.
+// A lista e completa; o total permanece no contrato de bootstrap.
+// A paginacao visual ocorre depois da busca e ordenacao de todos os acordos.
 async function totalDeAcordos() {
   return Number((await first<{ n: number }>('SELECT COUNT(*) n FROM agreements'))?.n || 0);
 }
@@ -659,10 +666,7 @@ async function bootstrap(user: User) {
 
 async function agreementList() {
   return all(`SELECT a.id,a.number,a.status,a.start_date AS startDate,a.end_date AS endDate,a.updated_at AS updatedAt,
-    CASE WHEN a.status='active' AND date(a.start_date)>date(?1) THEN 'scheduled'
-      WHEN a.status='active' AND a.end_date IS NOT NULL AND date(a.end_date)<date(?1) THEN 'expired'
-      WHEN a.status='active' AND a.end_date IS NOT NULL AND date(a.end_date) BETWEEN date(?1) AND date(?1,'+60 day') THEN 'expiring'
-      ELSE a.status END AS effectiveStatus,
+    ${SITUACAO_EFETIVA_SQL} AS effectiveStatus,
     s.trade_name AS supplier,s.cnpj,
     (SELECT COUNT(*) FROM agreement_locations al WHERE al.agreement_id=a.id) AS locationCount,
     (SELECT COUNT(*) FROM agreement_items ai WHERE ai.version_id=a.current_version_id) AS itemCount,
@@ -683,10 +687,7 @@ async function agreementDetail(agreementId: string, user: User, params: URLSearc
   const sortDirection = params.get('direction') === 'desc' ? 'DESC' : 'ASC';
   const agreement = await first(`SELECT a.*,
     (SELECT COUNT(*) FROM agreement_items ai WHERE ai.version_id=a.current_version_id) AS totalItems,
-    CASE WHEN a.status='active' AND date(a.start_date)>date(?1) THEN 'scheduled'
-      WHEN a.status='active' AND a.end_date IS NOT NULL AND date(a.end_date)<date(?1) THEN 'expired'
-      WHEN a.status='active' AND a.end_date IS NOT NULL AND date(a.end_date) BETWEEN date(?1) AND date(?1,'+60 day') THEN 'expiring'
-      ELSE a.status END AS effectiveStatus,
+    ${SITUACAO_EFETIVA_SQL} AS effectiveStatus,
     s.trade_name AS supplier,s.legal_name AS legalName,s.cnpj,u.name AS owner
     FROM agreements a JOIN suppliers s ON s.id=a.supplier_id LEFT JOIN users u ON u.id=a.owner_user_id WHERE a.id=?2`, [dataDeNegocio(), agreementId]);
   if (!agreement) return fail('Acordo não encontrado.', 404);
@@ -840,11 +841,23 @@ async function addAgreementItems(request: Request, user: User, agreementId: stri
     first<{ n: number }>(`SELECT COUNT(*) n FROM vehicle_models WHERE active=1 AND id IN (${modelIds.map(() => '?').join(',')})`, modelIds),
   ]);
   if (!references[0] || !references[1] || Number(references[2]?.n || 0) !== modelIds.length) return fail('Item, unidade ou modelo inválido/inativo.');
+  const duplicate = await first(`SELECT id FROM agreement_items
+    WHERE version_id=? AND location_id=? AND catalog_item_id=? AND unit_id=?
+    AND vehicle_model_id IN (${modelIds.map(() => '?').join(',')}) LIMIT 1`,
+    [agreement.current_version_id, locationId, catalogItemId, unitId, ...modelIds]);
+  if (duplicate) return fail('Já existe uma condição para um dos modelos selecionados. Edite a condição existente para alterar o preço.', 409);
   const timestamp = now();
-  await rawDb().batch(modelIds.map((modelId) => rawDb().prepare(`INSERT INTO agreement_items (id,version_id,location_id,catalog_item_id,vehicle_model_id,unit_id,price,courtesy,brands_text,notes,created_at,updated_at)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(version_id,location_id,catalog_item_id,vehicle_model_id,unit_id) DO UPDATE SET price=excluded.price,courtesy=excluded.courtesy,brands_text=excluded.brands_text,notes=excluded.notes,updated_at=excluded.updated_at`)
-    .bind(id('itm'), agreement.current_version_id, locationId, catalogItemId, modelId, unitId, price, price === 0 ? 1 : 0, nullableText(body.brands), nullableText(body.notes), timestamp, timestamp)));
-  await audit(user.id, 'UPSERT', 'agreement_item', agreementId, `${modelIds.length} condição(ões) cadastrada(s)`);
+  try {
+    await rawDb().batch([...modelIds.map((modelId) => rawDb().prepare(`INSERT INTO agreement_items (id,version_id,location_id,catalog_item_id,vehicle_model_id,unit_id,price,courtesy,brands_text,notes,created_at,updated_at)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`)
+    .bind(id('itm'), agreement.current_version_id, locationId, catalogItemId, modelId, unitId, price, price === 0 ? 1 : 0, nullableText(body.brands), nullableText(body.notes), timestamp, timestamp)),
+      rawDb().prepare('INSERT INTO audit_logs (id,user_id,action,entity,entity_id,details,created_at) VALUES (?,?,?,?,?,?,?)')
+        .bind(id('aud'), user.id, 'CREATE', 'agreement_item', agreementId, `${modelIds.length} condição(ões) cadastrada(s)`, timestamp),
+    ]);
+  } catch (error: unknown) {
+    if (errorMessage(error).includes('UNIQUE')) return fail('Já existe uma condição igual. Edite a condição existente para alterar o preço.', 409);
+    throw error;
+  }
   return ok({ success: true });
 }
 
@@ -1280,7 +1293,7 @@ async function auditList(params?: URLSearchParams, exportAll=false){
   const userId=params?.get('user'); if(userId){conditions.push('l.user_id=?');values.push(userId)}
   const action=params?.get('action'); if(action){conditions.push('l.action=?');values.push(action)}
   const entity=params?.get('entity'); if(entity){conditions.push('l.entity=?');values.push(entity)}
-  const q=params?.get('q'); if(q){conditions.push('(l.details LIKE ? OR l.entity LIKE ? OR u.name LIKE ?)');values.push(`%${q}%`,`%${q}%`,`%${q}%`)}
+  const q=params?.get('q'); if(q){exigeTexto(q,LIMITES_CAMPO.busca,'busca');conditions.push(BUSCA_LITERAL_AUDITORIA_SQL);values.push(q,q,q)}
   const periodo=intervaloDatasNegocio(params?.get('from')||null,params?.get('to')||null);
   if(periodo.inicio){conditions.push('l.created_at>=?');values.push(periodo.inicio)}
   if(periodo.fim){conditions.push('l.created_at<?');values.push(periodo.fim)}
@@ -1290,6 +1303,7 @@ async function auditList(params?: URLSearchParams, exportAll=false){
   // existem sem precisar carregar tudo.
   const {page:requestedPage,pageSize}=paginaSolicitada(params||new URLSearchParams());
   const total=Number((await first<{n:number}>(`SELECT COUNT(*) n FROM audit_logs l LEFT JOIN users u ON u.id=l.user_id ${where}`, values))?.n||0);
+  if(exportAll){const erro=erroExportacaoAuditoria(total);if(erro)throw new EntradaInvalida(erro);}
   const pageCount=Math.max(Math.ceil(total/pageSize),1);
   const page=Math.min(requestedPage,pageCount);
   const offset=(page-1)*pageSize;
@@ -1431,10 +1445,7 @@ async function updateTicket(request:Request,user:User,ticketId:string){
   const body=await jsonBody<TicketInput>(request);
   const current=await first<{id:string;code:string;supplier_name:string;cnpj:string|null;city:string|null;state:string|null;contact:string|null;scope:string|null;priority:string;status:string;requested_by:string|null;assigned_to:string|null;agreement_id:string|null;notes:string|null;closed_at:string|null;revision:number}>('SELECT * FROM tickets WHERE id=?',[ticketId]);
   if(!current) return fail('Chamado não encontrado.',404);
-  if(body.expectedRevision!==undefined){
-    if(typeof body.expectedRevision!=='number'||!Number.isSafeInteger(body.expectedRevision)||body.expectedRevision<0)return fail('Revisão do chamado inválida.');
-    if(body.expectedRevision!==current.revision)return fail('Este chamado foi alterado por outra pessoa. Atualize o chamado antes de salvar novamente.',409);
-  }
+  if (!revisaoConfere(body.expectedRevision, current.revision)) return fail('Este chamado foi alterado ou a tela está desatualizada. Atualize o chamado antes de salvar novamente.',409);
   const anterior=await contextoNotificacaoChamado(ticketId);
   if(!anterior) return fail('Chamado não encontrado.',404);
   const status=body.status ?? current.status, priority=body.priority ?? current.priority;
@@ -1445,7 +1456,7 @@ async function updateTicket(request:Request,user:User,ticketId:string){
   const nextState=body.state === undefined ? current.state : textValue(body.state) ? normalizeText(body.state) : null;
   if(nextState && !isValidState(nextState)) return fail('Selecione uma UF brasileira válida.');
   const assignedTo=body.assignedTo === undefined ? current.assigned_to : textValue(body.assignedTo) || null;
-  if(assignedTo && !await first('SELECT 1 ok FROM users WHERE id=? AND active=1',[assignedTo])) return fail('Responsável não encontrado ou inativo.');
+  if(assignedTo && assignedTo!==current.assigned_to && !await first('SELECT 1 ok FROM users WHERE id=? AND active=1',[assignedTo])) return fail('Responsável não encontrado ou inativo.');
   const supplierName=fornecedorChamado(body.supplierName === undefined ? current.supplier_name : body.supplierName);
   exigeTexto(body.supplierName,LIMITES_CAMPO.nome,'fornecedor');
   exigeTexto(body.contact,LIMITES_CAMPO.contato,'contato');
@@ -1534,16 +1545,16 @@ async function updateUser(request:Request,actor:User,userId:string){
   if(active!==target.active) changes.push(active?'reativado':'desativado');
   if(dailyReportEnabled!==target.dailyReportEnabled) changes.push(dailyReportEnabled?'relatório diário ativado':'relatório diário desativado');
   if(dailyReportTime!==target.dailyReportTime) changes.push(`horário do relatório: ${target.dailyReportTime} → ${dailyReportTime}`);
-  const atualizado = await rawDb().prepare(ATUALIZAR_USUARIO_SQL).bind(exigeTexto(name,LIMITES_CAMPO.nome,'nome'),role,active,dailyReportEnabled,dailyReportTime,userId,role,active).run();
+  const baseValues=[exigeTexto(name,LIMITES_CAMPO.nome,'nome'),role,active,dailyReportEnabled,dailyReportTime];
+  // O hash pode falhar: calcula-lo antes da escrita evita salvar metade do pedido.
+  const salt=password !== null ? crypto.randomUUID() : null;
+  const hash=password !== null ? await passwordHash(password,salt!,PBKDF2_ITERACOES_ATUAL) : null;
+  const statements=[rawDb().prepare(password !== null ? ATUALIZAR_USUARIO_COM_SENHA_SQL : ATUALIZAR_USUARIO_SQL)
+    .bind(...baseValues,...(password !== null ? [salt,hash,PBKDF2_ITERACOES_ATUAL] : []),userId,role,active)];
+  if(password !== null) statements.push(rawDb().prepare(ENCERRAR_SESSOES_REDEFINIDAS_SQL).bind(userId,userId,salt));
+  const [atualizado]=await rawDb().batch(statements);
   if (!atualizado.meta.changes) return fail('Este é o último administrador ativo. Promova outro antes de alterar este.',409);
-  if(password !== null){
-    const salt=crypto.randomUUID(), hash=await passwordHash(password,salt,PBKDF2_ITERACOES_ATUAL);
-    await rawDb().batch([
-      rawDb().prepare('UPDATE users SET password_salt=?,password_hash=?,password_iterations=? WHERE id=?').bind(salt,hash,PBKDF2_ITERACOES_ATUAL,userId),
-      rawDb().prepare('DELETE FROM sessions WHERE user_id=?').bind(userId),
-    ]);
-    changes.push('senha redefinida (sessões encerradas)');
-  }
+  if(password !== null) changes.push('senha redefinida (sessões encerradas)');
   await audit(actor.id,'UPDATE','user',userId,`${target.email}: ${changes.join('; ')||'sem alterações'}`);
   return ok({ success:true });
 }
@@ -1587,17 +1598,17 @@ async function exportDatabase(){
 
 async function exportAgreements(){
   const headers=['MODELO','PECA_SERVICO','CIDADE','UF','CNPJ','PRECO','FORNECEDOR','MEDIDA','MARCAS','INICIO_VIGENCIA','FIM_VIGENCIA','STATUS_ACORDO','SITUACAO_EFETIVA'];
-  const rows=await all<{modelo:string;item:string;cidade:string;uf:string;cnpj:string;preco:number;fornecedor:string;medida:string;marcas:string|null;inicio:string;fim:string|null;status:string}>(`SELECT
+  const rows=await all<{modelo:string;item:string;cidade:string;uf:string;cnpj:string;preco:number;fornecedor:string;medida:string;marcas:string|null;inicio:string;fim:string|null;status:string;effectiveStatus:string}>(`SELECT
     vm.name modelo,ci.name item,l.city cidade,l.state uf,s.cnpj,ai.price preco,s.trade_name fornecedor,
-    un.code medida,ai.brands_text marcas,a.start_date inicio,a.end_date fim,a.status
+    un.code medida,ai.brands_text marcas,a.start_date inicio,a.end_date fim,a.status,${SITUACAO_EFETIVA_SQL} AS effectiveStatus
     FROM agreements a JOIN suppliers s ON s.id=a.supplier_id
     JOIN agreement_items ai ON ai.version_id=a.current_version_id
     JOIN catalog_items ci ON ci.id=ai.catalog_item_id JOIN vehicle_models vm ON vm.id=ai.vehicle_model_id
     JOIN units un ON un.id=ai.unit_id JOIN locations l ON l.id=ai.location_id
-    ORDER BY s.trade_name,vm.name,ci.name,l.state,l.city,ai.id`);
+    ORDER BY s.trade_name,vm.name,ci.name,l.state,l.city,ai.id`,[dataDeNegocio()]);
   const excelDate=(value:string|null)=>value?new Date(`${value}T12:00:00.000Z`):null;
   const sheet=XLSX.utils.aoa_to_sheet([headers,...rows.map(row=>[
-    row.modelo,row.item,row.cidade,row.uf,String(row.cnpj).padStart(14,'0'),Number(row.preco),row.fornecedor,row.medida,row.marcas||'',excelDate(row.inicio),excelDate(row.fim),row.status,row.status!=='active'?row.status:row.inicio>dataDeNegocio()?'scheduled':row.fim&&row.fim<dataDeNegocio()?'expired':'active',
+    row.modelo,row.item,row.cidade,row.uf,String(row.cnpj).padStart(14,'0'),Number(row.preco),row.fornecedor,row.medida,row.marcas||'',excelDate(row.inicio),excelDate(row.fim),row.status,row.effectiveStatus,
   ])],{cellDates:true});
   sheet['!autofilter']={ref:`A1:M${rows.length+1}`};
   sheet['!cols']=[18,30,20,6,17,13,28,10,28,17,17,18,20].map(wch=>({wch}));

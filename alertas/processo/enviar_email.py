@@ -1,4 +1,5 @@
 import smtplib
+import ssl
 import os
 import pathlib
 import sys
@@ -260,7 +261,7 @@ def enviar_email(assunto, corpo, anexos, destinatarios, html=None):
 
     with smtplib.SMTP(SMTP_SERVIDOR, SMTP_PORTA, timeout=60) as servidor:
         servidor.ehlo()
-        servidor.starttls()
+        servidor.starttls(context=ssl.create_default_context())
         servidor.ehlo()
         servidor.login(SMTP_USUARIO, senha)
         servidor.send_message(msg, to_addrs=entrega)

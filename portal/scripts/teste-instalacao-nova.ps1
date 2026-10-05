@@ -18,6 +18,11 @@ $logServidor = Join-Path $temp 'servidor.log'
 $logBuild = Join-Path $temp 'build.log'
 $script:ok = 0; $script:falhou = 0
 
+function Revisao-Chamado([string]$ChamadoId) {
+  $detalhe = Invoke-WebRequest "$baseUrl/api/tickets/$ChamadoId" -WebSession $script:sessao -UseBasicParsing -TimeoutSec 60
+  return ($detalhe.Content | ConvertFrom-Json).ticket.revision
+}
+
 function Verifica($nome, [scriptblock]$teste) {
   try {
     $r = & $teste
@@ -188,7 +193,7 @@ Verifica 'Criacao atribuida coloca um e-mail de atribuicao na fila' {
   if($n.Count -eq 1 -and $n[0].type -eq 'atribuicao' -and $n[0].recipientEmail -eq $usuarioEmail){$true}else{"fila inesperada: $($n.Count)"}
 }
 
-Invoke-WebRequest "$baseUrl/api/tickets/$($chamadoEmail.id)" -Method PUT -WebSession $script:sessao -ContentType 'application/json' -UseBasicParsing -TimeoutSec 60 -Body (@{assignedTo=$u2.id}|ConvertTo-Json)|Out-Null
+Invoke-WebRequest "$baseUrl/api/tickets/$($chamadoEmail.id)" -Method PUT -WebSession $script:sessao -ContentType 'application/json' -UseBasicParsing -TimeoutSec 60 -Body (@{assignedTo=$u2.id;expectedRevision=(Revisao-Chamado $chamadoEmail.id)}|ConvertTo-Json)|Out-Null
 Verifica 'Reatribuicao isolada avisa somente o novo responsavel' {
   $f=(Invoke-WebRequest "$baseUrl/api/email-notifications" -WebSession $script:sessao -UseBasicParsing -TimeoutSec 60).Content|ConvertFrom-Json
   $n=@($f.notifications|Where-Object {$_.ticketCode -eq $chamadoEmail.code -and $_.type -eq 'atribuicao'})
@@ -204,16 +209,16 @@ Verifica 'Novo andamento avisa solicitante e responsavel' {
 
 # A tela define a mensagem como opcional, inclusive na conclusao.
 Verifica 'Conclusao aceita mensagem opcional' {
-  try { Invoke-WebRequest "$baseUrl/api/tickets/$($chamadoEmail.id)" -Method PUT -WebSession $script:sessao -ContentType 'application/json' -UseBasicParsing -TimeoutSec 60 -Body '{"status":"fechado"}'|Out-Null; $c=200 }
+  try { Invoke-WebRequest "$baseUrl/api/tickets/$($chamadoEmail.id)" -Method PUT -WebSession $script:sessao -ContentType 'application/json' -UseBasicParsing -TimeoutSec 60 -Body (@{status='fechado';expectedRevision=(Revisao-Chamado $chamadoEmail.id)}|ConvertTo-Json)|Out-Null; $c=200 }
   catch { $c=[int]$_.Exception.Response.StatusCode.value__ }
   if($c -eq 200){$true}else{"esperado 200, veio $c"}
 }
-Invoke-WebRequest "$baseUrl/api/tickets/$($chamadoEmail.id)" -Method PUT -WebSession $script:sessao -ContentType 'application/json' -UseBasicParsing -TimeoutSec 60 -Body '{"status":"fechado","statusMessage":"Negociacao concluida"}'|Out-Null
+Invoke-WebRequest "$baseUrl/api/tickets/$($chamadoEmail.id)" -Method PUT -WebSession $script:sessao -ContentType 'application/json' -UseBasicParsing -TimeoutSec 60 -Body (@{status='fechado';statusMessage='Negociacao concluida';expectedRevision=(Revisao-Chamado $chamadoEmail.id)}|ConvertTo-Json)|Out-Null
 Verifica 'Conclusao avisa solicitante e responsavel' {
   $f=(Invoke-WebRequest "$baseUrl/api/email-notifications" -WebSession $script:sessao -UseBasicParsing -TimeoutSec 60).Content|ConvertFrom-Json
   if(@($f.notifications|Where-Object {$_.ticketCode -eq $chamadoEmail.code -and $_.type -eq 'conclusao'}).Count -eq 2){$true}else{'conclusao nao gerou duas mensagens'}
 }
-Invoke-WebRequest "$baseUrl/api/tickets/$($chamadoEmail.id)" -Method PUT -WebSession $script:sessao -ContentType 'application/json' -UseBasicParsing -TimeoutSec 60 -Body '{"status":"cancelado","statusMessage":"Cancelado para teste"}'|Out-Null
+Invoke-WebRequest "$baseUrl/api/tickets/$($chamadoEmail.id)" -Method PUT -WebSession $script:sessao -ContentType 'application/json' -UseBasicParsing -TimeoutSec 60 -Body (@{status='cancelado';statusMessage='Cancelado para teste';expectedRevision=(Revisao-Chamado $chamadoEmail.id)}|ConvertTo-Json)|Out-Null
 Verifica 'Cancelamento avisa solicitante e responsavel' {
   $f=(Invoke-WebRequest "$baseUrl/api/email-notifications" -WebSession $script:sessao -UseBasicParsing -TimeoutSec 60).Content|ConvertFrom-Json
   if(@($f.notifications|Where-Object {$_.ticketCode -eq $chamadoEmail.code -and $_.type -eq 'cancelamento'}).Count -eq 2){$true}else{'cancelamento nao gerou duas mensagens'}
@@ -389,7 +394,9 @@ Verifica 'Fornecedor obrigatorio e mensagem de situacao preservada' {
 }
 Verifica 'Exclusoes respeitam a trava de uma operacao concorrente' {
   & node (Join-Path $PSScriptRoot 'teste-exclusao-concorrente.mjs') $temp $arquivoBanco | Out-Host
-  $LASTEXITCODE -eq 0
+  $codigoTeste=$LASTEXITCODE
+  if($codigoTeste -ne 0){Start-Sleep -Seconds 2; Get-Content $logServidor | Select-String -Pattern 'erro nao tratado' -Context 0,15 | Out-Host}
+  $codigoTeste -eq 0
 }
 & node (Join-Path $PSScriptRoot 'teste-http-fluxo.mjs')
 $codigoFluxo = $LASTEXITCODE

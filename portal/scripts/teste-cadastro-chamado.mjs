@@ -5,6 +5,9 @@ const porta = Number(process.env.PORTAL_TESTE_PORTA);
 if (process.env.PORTAL_TESTE_DESCARTAVEL !== 'SIM' || (!Number.isInteger(porta) || porta < 1024 || porta > 65535)) throw new Error('Exige instalacao descartavel na porta informada.');
 const headers = { cookie: process.env.PORTAL_TESTE_COOKIE, 'content-type': 'application/json' };
 const pedir = async (path, method='GET', body) => {
+  if(method==='PUT' && /^tickets\/[^/]+$/.test(path) && body && body.expectedRevision===undefined){
+    const detail=await pedir(path);body={...body,expectedRevision:detail.data.ticket.revision};
+  }
   const response = await fetch(`http://127.0.0.1:${porta}/api/${path}`, { method, headers, ...(body === undefined ? {} : {body:JSON.stringify(body)}), signal:AbortSignal.timeout(30000) });
   return { status:response.status, data:await response.json() };
 };
@@ -83,8 +86,20 @@ console.log('[OK] Formulario antigo nao sobrescreve edicao confirmada.');
 
 const usuario=await pedir('users','POST',{name:'Usuario teste inativo',email:'inativo-'+Date.now()+'@example.com',role:'viewer',password:'Senha-de-teste-123456'});
 assert.equal(usuario.status,201);
+assert.equal((await pedir(`tickets/${ticketId}`,'PUT',{assignedTo:usuario.data.id})).status,200);
 for(const body of [{active:false},{active:0,name:'Usuario renomeado'},{name:'Usuario sem situacao'}]){
  assert.equal((await pedir('users/'+usuario.data.id,'PUT',body)).status,200);
  const users=await pedir('users');assert.equal(users.data.users.find(user=>user.id===usuario.data.id).active,0);
 }
 console.log('[OK] Renomear usuario inativo nao reativa sua conta.');
+
+assert.equal((await pedir(`tickets/${ticketId}`,'PUT',{status:'fechado'})).status,200);
+assert.equal((await pedir(`tickets/${ticketId}`)).data.ticket.assigned_to,usuario.data.id);
+assert.equal((await pedir('tickets','POST',{supplierName:'outra oficina',assignedTo:usuario.data.id})).status,400);
+console.log('[OK] Responsavel inativo preservado permite concluir chamado; nova atribuicao e recusada.');
+const novaSenha='Senha-redefinida-123456';
+assert.equal((await pedir('users/'+usuario.data.id,'PUT',{active:true,name:'Nome e senha juntos',password:novaSenha})).status,200);
+const userDetails=(await pedir('users')).data.users.find(row=>row.id===usuario.data.id);
+assert.equal(userDetails.name,'Nome e senha juntos');assert.equal(userDetails.active,1);
+const novaSessao=await pedir('login','POST',{email:userDetails.email,password:novaSenha});assert.equal(novaSessao.status,200);
+console.log('[OK] Redefinicao salva cadastro e senha na mesma atualizacao.');
