@@ -56,6 +56,9 @@
   },
   "type": "module",
   "overrides": {
-    "fast-glob": "$fast-glob"
+    "fast-glob": "$fast-glob",
+    "satori": {
+      "fflate": "0.7.5"
+    }
   }
 }
