@@ -1,3 +1,4 @@
+import { SCHEMA_RELATORIOS } from './relatorios.ts';
 import { passwordHash, tokenHash, PBKDF2_ITERACOES_ATUAL, PBKDF2_ITERACOES_LEGADO } from './criptografia.ts';
 export { passwordHash, tokenHash, PBKDF2_ITERACOES_ATUAL, PBKDF2_ITERACOES_LEGADO } from './criptografia.ts';
 import { parseCookies } from './cookies.ts';
@@ -14,6 +15,7 @@ export const SESSAO_INATIVIDADE_MS = 2 * 60 * 60 * 1000;
 export { normalizeCnpj, normalizeText } from '@/lib/domain';
 
 const schema = [
+  ...SCHEMA_RELATORIOS,
   `CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, name TEXT NOT NULL, email TEXT NOT NULL UNIQUE, password_salt TEXT NOT NULL, password_hash TEXT NOT NULL, role TEXT NOT NULL DEFAULT 'viewer', active INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS sessions (token TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id), expires_at TEXT NOT NULL)`,
   `CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions(expires_at)`,

@@ -3,7 +3,7 @@ REM ===================================================================
 REM  SUPPLY VISION - ponto unico de execucao manual
 REM
 REM  Uso:  executar.bat relatorio   -> executa o relatorio agora
-REM        executar.bat limpeza     -> housekeeping (move p/ archive)
+REM        executar.bat limpeza     -> housekeeping (apaga conforme retencao)
 REM        executar.bat debug       -> roda o pipeline aqui, com console
 REM        executar.bat recorte     -> analise historica, pergunta o periodo
 REM        executar.bat paralelo    -> gera tudo sem enviar e-mail
@@ -23,7 +23,7 @@ echo    SUPPLY VISION
 echo  ========================================================
 echo.
 echo   [1] Gerar e enviar relatorio agora
-echo   [2] Limpeza de arquivos (mover para archive)
+echo   [2] Limpeza de arquivos vencidos (exclusao)
 echo   [3] Rodar pipeline aqui (debug, com console)
 echo   [4] Recorte historico (escolher periodo)
 echo   [5] Execucao paralela (sem enviar e-mail)

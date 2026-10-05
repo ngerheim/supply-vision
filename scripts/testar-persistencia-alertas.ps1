@@ -22,7 +22,7 @@ function Encerrar-ArvoreTeste($Processo) {
   $Processo.WaitForExit(15000) | Out-Null
 }
 try {
-  $dirs = @('scripts', 'portal\dist\server', 'alertas\processo', 'privado\comum',
+  $dirs = @('scripts', 'portal\dist\server','portal\scripts', 'alertas\processo', 'privado\comum',
             'privado\portal\configuracao', 'privado\portal\logs', 'privado\alertas\config',
             'privado\alertas\logs', 'privado\alertas\relatorios\diarios',
             'privado\alertas\parametros\de_para', 'privado\operacao', 'bin')
@@ -33,6 +33,7 @@ try {
   & cmd.exe /c mklink /J "$temp\alertas\.venv" "$raizReal\alertas\.venv" | Out-Null
   if (-not (Test-Path "$temp\alertas\.venv\Scripts\python.exe")) { throw 'Nao foi possivel preparar o Python de teste.' }
 
+ [IO.File]::WriteAllText("$temp\portal\scripts\processar-relatorios.mjs", "import fs from 'node:fs';setInterval(()=>{if(fs.existsSync('../privado/operacao/parar.sinal'))process.exit(0)},500);")
   # pipeline falso: termina imediatamente com sucesso.
   [IO.File]::WriteAllText("$temp\alertas\processo\pipeline.py", "import sys`nsys.exit(0)`n")
   # verificar_saude falso: segura a execucao, abrindo a janela do incidente.

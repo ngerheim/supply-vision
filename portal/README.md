@@ -33,9 +33,12 @@ proteção de recursos, ainda sujeitos à homologação no notebook-servidor.
 
 | Perfil | O que pode fazer |
 |---|---|
-| **Consulta** | Buscar preços e ver acordos. Não cadastra, não importa, não vê chamados nem histórico |
-| **Comprador** | Tudo do Consulta, mais cadastrar acordos, importar planilhas, abrir e tratar chamados e mexer nos cadastros |
-| **Administrador** | Tudo do Comprador, mais gerenciar usuários, ver o histórico de modificações e exportar a base |
+| **Consulta** | Grupo Consulta: Buscar e Manutenção. Pode abrir o detalhe de um preço a partir da busca; não acessa a lista de gestão de acordos |
+| **Suprimentos** | Grupo Consulta e grupo Suprimentos: Chamados, Acordos, Fornecedores, Importações, Cadastros e De/Para |
+| **Administrador** | Todos os grupos, incluindo Relatórios, Histórico, E-mails, Usuários e exportação da base |
+
+O identificador interno `editor` permanece o mesmo; contas existentes recebem o
+novo nome sem migração de perfil. As permissões são verificadas também na API.
 
 ## As abas
 
@@ -46,17 +49,20 @@ proteção de recursos, ainda sujeitos à homologação no notebook-servidor.
   passa por Aberto → Aguardando fornecedor → Fechado ou Cancelado, com linha
   do tempo de andamentos.
 - **Acordos** — lista, cadastro e edição. Vigente ou Suspenso é escolhido no
-  cadastro; **Expirado** aparece sozinho quando a data de fim vence.
+  cadastro; **Agendado**, **A vencer** (até 60 dias) e **Expirado** são calculados pelas datas. O filtro Vigente inclui os acordos a vencer.
 - **Fornecedores** — nome, razão social, CNPJ, cidade e UF.
 - **Importações** — carga de planilhas.
-- **De/Para** *(Admin)* — correspondências confirmadas para itens, modelos
+- **De/Para** *(Suprimentos/Admin)* — correspondências confirmadas para itens, modelos
   e unidades. Localidades são cadastradas diretamente.
-- **Cadastros** *(Comprador/Admin)* — peças e serviços, modelos, unidades
+- **Cadastros** *(Suprimentos/Admin)* — peças e serviços, modelos, unidades
   e localidades.
 - **Histórico** *(Admin)* — tudo que foi alterado, por quem e quando, com
   filtros e paginação de 50.
-- **Usuários** *(Admin)* — contas, perfis, exportação, fila de e-mails e
-  configuração do relatório diário.
+- **Manutenção** *(todos)* — relatório de manutenção no Power BI; não é o modo de pausa da central.
+- **Relatórios** *(Admin)* — funções do executar.bat, recorte com e-mail,
+  simulação de limpeza, fila, registros e download. Veja [operação](../docs/OPERAR.md#relatórios-e-rotinas-no-portal).
+- **E-mails** *(Admin)* — fila de notificações dos chamados.
+- **Usuários** *(Admin)* — contas, perfis, exportação da base e configuração do relatório diário de chamados.
 
 ## Pesquisa
 
@@ -86,11 +92,10 @@ fornecedores, itens, modelos nem localidades: o que faltar é cadastrado antes.
 1. Escolha o acordo de destino e o arquivo.
    O botão **Baixar modelo** entrega um Excel com os cabeçalhos necessários.
 2. Clique em **Conferir arquivo**. Essa etapa não publica acordos nem preços.
-3. Confira as pendências agrupadas por nome. Administradores podem escolher
+3. Confira as pendências agrupadas por nome. Suprimentos e administradores podem escolher
    uma sugestão ou pesquisar o cadastro e **Confirmar e lembrar correspondência**.
    A escolha fica no De/Para para as próximas importações. Sugestões nunca são
-   aplicadas automaticamente. Compradores podem corrigir a planilha ou solicitar
-   a confirmação a um administrador.
+   aplicadas automaticamente. Corrija a planilha ou confirme explicitamente a correspondência.
 4. Confira a amostra, os totais e as duplicatas, e então clique em **Publicar**.
    A publicação revalida todo o arquivo; uma prévia anterior não dispensa validação.
 
@@ -225,6 +230,9 @@ sozinho. Veja `docs/OPERAR.md`.
 | `lib/` | Banco, regras, validações, importação e e-mails |
 | `lib/importacao.ts` | Validação e deduplicação compartilhadas pela conferência e publicação |
 | `components/imports.tsx` | Conferência, resolução assistida e histórico de importações |
+| `components/reports.tsx` | Operações manuais, acompanhamento e arquivos |
+| `lib/navegacao.ts` | Grupos e nomes dos perfis |
+| `scripts/processar-relatorios.mjs` | Fila local e ponte autenticada para downloads |
 | `components/agreement-dialogs.tsx` | Cadastro manual de acordos e condições |
 | `public/` | Ícone público |
 | `scripts/` | Operação, atualização, testes, backup e monitoramento |

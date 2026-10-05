@@ -16,16 +16,14 @@ export async function verificarAcessoConsulta({ request, good, check, senha, agr
   assert.ok(sessions.length, 'Sem sessões para verificar consulta');
   const session = sessions[0];
   await check('Consulta: rotas administrativas não podem ser lidas diretamente', async () => {
-    for (const path of ['/api/imports', '/api/imports/inexistente', '/api/mappings', '/api/audit', '/api/audit/export', '/api/email-notifications', '/api/users', '/api/tickets', '/api/tickets/inexistente', '/api/export']) {
+    for (const path of ['/api/imports', '/api/imports/inexistente', '/api/mappings', '/api/audit', '/api/audit/export', '/api/email-notifications', '/api/users', '/api/tickets', '/api/tickets/inexistente', '/api/export', '/api/reports', '/api/reports/inexistente']) {
       assert.equal((await request(path, { session })).status, 403, path);
     }
     const initial = (await request('/api/bootstrap', { session })).data;
     assert.deepEqual(initial.imports, []);
     assert.deepEqual(initial.catalogs.units, []);
     assert.ok(initial.catalogs.suppliers.every(s => !('legalName' in s) && !('cnpj' in s)));
-    const agreement = initial.agreements.find(a => a.id === agreementId);
-    assert.equal(agreement.itemCount, 999);
-    assert.equal(agreement.locationCount, 999);
+    assert.deepEqual(initial.agreements, [], 'Consulta não carrega a aba de gestão de acordos');
     const detail = (await request(`/api/agreements/${agreementId}`, { session })).data;
     assert.ok(!('notes' in detail.agreement) && !('owner_user_id' in detail.agreement));
     assert.ok(detail.items.every(item => !('notes' in item)));

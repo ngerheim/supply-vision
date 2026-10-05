@@ -65,13 +65,13 @@ function optionsFor(
 
 export function Imports({
   data,
-  isAdmin,
+  canManageMappings,
   initialAgreement = '',
   onUpdated,
   onCatalog,
 }: {
   data: AnyRow;
-  isAdmin: boolean;
+  canManageMappings: boolean;
   initialAgreement?: string;
   onUpdated: () => Promise<void>;
   onCatalog: (type: string, values?: AnyRow) => void;
@@ -273,7 +273,7 @@ export function Imports({
                     key={`${issue.campo}-${issue.valor}`}
                     issue={issue}
                     catalogs={data.catalogs}
-                    isAdmin={isAdmin}
+                    canManageMappings={canManageMappings}
                     busy={busy}
                     onSave={(targetId) => save(issue, targetId)}
                     onCatalog={onCatalog}
@@ -381,14 +381,14 @@ export function Imports({
 function ResolveIssue({
   issue,
   catalogs,
-  isAdmin,
+  canManageMappings,
   busy,
   onSave,
   onCatalog,
 }: {
   issue: AnyRow;
   catalogs: AnyRow;
-  isAdmin: boolean;
+  canManageMappings: boolean;
   busy: boolean;
   onSave: (targetId: string) => Promise<void>;
   onCatalog: (type: string, values?: AnyRow) => void;
@@ -402,7 +402,7 @@ function ResolveIssue({
   // pessoa confere batendo o olho; medida, nao — LITRO nao se parece com nada,
   // e aceitar a mais proxima grava preco de litro como preco de unidade em toda
   // a carga, sem travar e sem avisar. Sem cadastro correto, a importacao para.
-  // Unidade aceita correspondencia confirmada por um administrador, mas nunca
+  // Unidade aceita correspondencia confirmada por Suprimentos ou um administrador, mas nunca
   // por sugestao: medida errada corrompe o preco em silencio. Localidade nao
   // aceita correspondencia nenhuma (o servidor recusa): cidade se cadastra,
   // nao se traduz, entao o unico caminho e cadastrar o que falta.
@@ -420,7 +420,7 @@ function ResolveIssue({
         {issue.linhas} linha(s), primeira ocorrência na linha{' '}
         {issue.primeiraLinha}. {issue.erro}
       </p>
-      {aceitaDePara && isAdmin ? (
+      {aceitaDePara && canManageMappings ? (
         <>
           {suggestions.length > 0 && (
             <div className="flex flex-wrap items-center gap-2">
@@ -454,7 +454,7 @@ function ResolveIssue({
         </>
       ) : aceitaDePara ? (
         <p className="text-sm">
-          Peça a um administrador para confirmar o De/Para ou corrija o valor na
+          Peça a Suprimentos ou a um administrador para confirmar o De/Para ou corrija o valor na
           planilha.
         </p>
       ) : null}

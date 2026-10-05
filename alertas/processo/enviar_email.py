@@ -216,7 +216,7 @@ def anexo_da_execucao(caminho, rotulo):
     return p
 
 
-def enviar_email(assunto, corpo, anexos, destinatarios, html=None):
+def enviar_email(assunto, corpo, anexos, destinatarios, html=None, copia_oculta=None):
     senha = SMTP_SENHA
 
     msg = EmailMessage()
@@ -248,7 +248,9 @@ def enviar_email(assunto, corpo, anexos, destinatarios, html=None):
             )
             print(f"  Anexo adicionado: {caminho.name}")
 
-    entrega = list(destinatarios) + list(obter_destinatarios()[1])
+    if copia_oculta is None:
+        copia_oculta = obter_destinatarios()[1]
+    entrega = list(destinatarios) + list(copia_oculta)
 
     if os.environ.get("SUPPLY_VISION_SEM_ENVIO") == "1":
         pasta = pathlib.Path(getattr(sv_paths, "RELATORIOS_DIARIOS", pathlib.Path.cwd())) / "previews-email"
@@ -267,7 +269,6 @@ def enviar_email(assunto, corpo, anexos, destinatarios, html=None):
         servidor.send_message(msg, to_addrs=entrega)
 
     print(f"E-mail enviado para: {', '.join(destinatarios)}")
-    copia_oculta = obter_destinatarios()[1]
     if copia_oculta:
         print(f"  (Cco: {', '.join(copia_oculta)})")
 

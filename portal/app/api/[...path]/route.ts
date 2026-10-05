@@ -1,3 +1,4 @@
+import { consultarRelatorios, solicitarRelatorio, cancelarRelatorio } from '@/lib/relatorios-api';
 import { erroExportacaoAuditoria, BUSCA_LITERAL_AUDITORIA_SQL } from '@/lib/auditoria-limites';
 import { paginaSolicitada } from '@/lib/paginacao';
 import { filtrosNotificacoes } from '@/lib/filtros-notificacoes';
@@ -222,10 +223,13 @@ async function GETInterno(request: NextRequest) {
   // O perfil de consulta enxerga apenas acordos e a busca de preços.
   if (!canWrite(user)) return fail('Seu perfil permite apenas consultar acordos e preços.', 403);
 
+  if (parts[0] === 'reports') {
+    if (user.role !== 'admin') return fail('Somente administradores podem executar e consultar relatórios.', 403);
+    return consultarRelatorios(parts[1], parts[2]);
+  }
   if (parts[0] === 'imports' && parts[1]) return importDetail(parts[1]);
   if (parts[0] === 'imports') return ok({ imports: await importList() });
   if (parts[0] === 'mappings') {
-    if (user.role !== 'admin') return fail('Somente administradores podem gerenciar o De/Para.', 403);
     return mappingList();
   }
   if (parts[0] === 'audit') {
@@ -292,6 +296,7 @@ async function POSTInterno(request: NextRequest) {
   if (parts[0] === 'tickets' && parts.length === 1) return createTicket(request, user);
   if (parts[0] === 'email-notifications' && parts[1] && parts[2] === 'retry') return retryEmailNotification(user, parts[1]);
   if (parts[0] === 'imports' && parts[1] === 'agreement' && parts[2]) return importWorkbook(request, user, parts[2]);
+  if (parts[0] === 'reports') {if(user.role!=='admin')return denyWrite(request,'Somente administradores podem executar relatórios.');return solicitarRelatorio(await jsonBody(request),user.id);}
   if (parts[0] === 'mappings' && parts[1]) return createMapping(request, user, parts[1]);
   return fail('Rota não encontrada.', 404);
 }
@@ -336,6 +341,7 @@ async function DELETEInterno(request: NextRequest) {
   }
   if (parts[0] === 'agreements' && parts[1] && parts.length === 2) return comTravaDoAcordo(request, parts[1], () => deleteAgreement(user, parts[1]));
   if (parts[0] === 'catalogs' && parts[1] && parts[2]) return deleteCatalog(user, parts[1], parts[2]);
+  if (parts[0] === 'reports' && parts[1]) {if(user.role!=='admin')return fail('Somente administradores podem cancelar relatórios.',403);return cancelarRelatorio(parts[1],user.id);}
   if (parts[0] === 'mappings' && parts[1] && parts[2]) return deleteMapping(user, parts[1], parts[2]);
   return fail('Rota não encontrada.', 404);
 }
@@ -637,31 +643,23 @@ function relatorioManutencao() {
   return montarPowerBiUrl(vars.PBI_RELATORIO_URL, vars.PBI_PAGINA);
 }
 
-// A lista e completa; o total permanece no contrato de bootstrap.
-// A paginacao visual ocorre depois da busca e ordenacao de todos os acordos.
-async function totalDeAcordos() {
-  return Number((await first<{ n: number }>('SELECT COUNT(*) n FROM agreements'))?.n || 0);
-}
-
 async function bootstrap(user: User) {
   if (!canWrite(user)) {
-    const [total, agreements, suppliers, items, models, locations] = await Promise.all([
-      totalDeAcordos(), agreementList(),
+    const [suppliers, items, models, locations] = await Promise.all([
       all('SELECT id,trade_name AS tradeName FROM suppliers ORDER BY trade_name'),
       all('SELECT id,name FROM catalog_items ORDER BY name'),
       all('SELECT id,name FROM vehicle_models ORDER BY name'),
       all('SELECT id,city,state FROM locations ORDER BY state,city'),
     ]);
-    return ok({ user, agreements, totalAcordos: total, catalogs: { suppliers, items, models, locations, units: [] }, imports: [], manutencao: relatorioManutencao() });
+    return ok({ user, agreements: [], totalAcordos: 0, catalogs: { suppliers, items, models, locations, units: [] }, imports: [], manutencao: relatorioManutencao() });
   }
-  const [total, agreements, suppliers, items, models, units, locations, imports] = await Promise.all([
-    totalDeAcordos(),
+  const [agreements, suppliers, items, models, units, locations, imports] = await Promise.all([
     agreementList(), all('SELECT id,legal_name AS legalName,trade_name AS tradeName,cnpj,city,state,active FROM suppliers ORDER BY trade_name'),
     all('SELECT id,name,active FROM catalog_items ORDER BY name'), all('SELECT id,name,active FROM vehicle_models ORDER BY name'),
     all('SELECT id,code,name,active FROM units ORDER BY code'),
     all('SELECT id,city,state FROM locations ORDER BY state,city'), canWrite(user) ? importList() : Promise.resolve([]),
   ]);
-  return ok({ user, agreements, totalAcordos: total, catalogs: { suppliers, items, models, units, locations }, imports, manutencao: relatorioManutencao() });
+  return ok({ user, agreements, totalAcordos: agreements.length, catalogs: { suppliers, items, models, units, locations }, imports, manutencao: relatorioManutencao() });
 }
 
 async function agreementList() {
@@ -941,7 +939,7 @@ async function validateMappingInput(request: Request, type: string) {
 }
 
 async function createMapping(request: Request, user: User, type: string) {
-  if (user.role !== 'admin') return denyWrite(request, 'Somente administradores podem gerenciar o De/Para.');
+  if (!canWrite(user)) return denyWrite(request, 'Seu perfil não permite gerenciar o De/Para.');
   const value = await validateMappingInput(request, type);
   if ('error' in value) return fail(value.error || 'De/Para inválido.');
   const recordId=id('map'), timestamp=now();
@@ -956,7 +954,7 @@ async function createMapping(request: Request, user: User, type: string) {
 }
 
 async function updateMapping(request: Request, user: User, type: string, recordId: string) {
-  if (user.role !== 'admin') return denyWrite(request, 'Somente administradores podem gerenciar o De/Para.');
+  if (!canWrite(user)) return denyWrite(request, 'Seu perfil não permite gerenciar o De/Para.');
   const value = await validateMappingInput(request, type);
   if ('error' in value) return fail(value.error || 'De/Para inválido.');
   const existing=await first(`SELECT 1 ok FROM ${value.cfg.table} WHERE id=?`,[recordId]);
@@ -972,7 +970,7 @@ async function updateMapping(request: Request, user: User, type: string, recordI
 }
 
 async function deleteMapping(user: User, type: string, recordId: string) {
-  if (user.role !== 'admin') return fail('Somente administradores podem gerenciar o De/Para.', 403);
+  if (!canWrite(user)) return fail('Seu perfil não permite gerenciar o De/Para.', 403);
   const cfg=mappingConfig[type]; if(!cfg) return fail('Tipo de De/Para inválido.');
   const existing=await first<{sourceKey:string}>(`SELECT source_key AS sourceKey FROM ${cfg.table} WHERE id=?`,[recordId]);
   if(!existing) return fail('Correspondência não encontrada.',404);

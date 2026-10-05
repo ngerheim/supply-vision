@@ -161,4 +161,10 @@ if __name__ == "__main__":
         help="Apenas lista o que apagaria, sem apagar nada",
     )
     args = parser.parse_args()
+    import pipeline
+    try:
+        pipeline.adquirir_lock()
+    except RuntimeError as erro:
+        print(f'ERRO: {erro}.')
+        raise SystemExit(2)
     limpar(dry_run=args.dry_run)

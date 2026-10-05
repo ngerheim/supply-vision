@@ -108,7 +108,7 @@ $comando = "Set-Location '$projeto'; " +
   "`$env:WRANGLER_LOG_PATH='$temp/wrangler-logs'; " +
   "`$env:WRANGLER_SEND_METRICS='false'; " +
   "npx wrangler dev --config dist/server/wrangler.json --persist-to '$temp' " +
-  "--var INITIAL_ADMIN_PASSWORD:'$senhaTeste' --ip 127.0.0.1 --port $porta *> '$logServidor'"
+  "--var INITIAL_ADMIN_PASSWORD:'$senhaTeste' --var PORTAL_API_TOKEN:'relatorios-token-ci' --var RELATORIOS_PORTA:$($porta+1) --ip 127.0.0.1 --port $porta *> '$logServidor'"
 $script:processoServidor = (Start-Process powershell.exe -ArgumentList '-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', $comando -WindowStyle Hidden -PassThru).Id
 
 $subiu = $false
@@ -396,6 +396,12 @@ Verifica 'Exclusoes respeitam a trava de uma operacao concorrente' {
   & node (Join-Path $PSScriptRoot 'teste-exclusao-concorrente.mjs') $temp $arquivoBanco | Out-Host
   $codigoTeste=$LASTEXITCODE
   if($codigoTeste -ne 0){Start-Sleep -Seconds 2; Get-Content $logServidor | Select-String -Pattern 'erro nao tratado' -Context 0,15 | Out-Host}
+  $codigoTeste -eq 0
+}
+Verifica 'Relatorios e perfis respeitam fila, idempotencia e acesso' {
+  & node (Join-Path $PSScriptRoot 'teste-relatorios-perfis.mjs') $temp $arquivoBanco | Out-Host
+  $codigoTeste=$LASTEXITCODE
+  if($codigoTeste-ne0){Start-Sleep -Seconds 2;Get-Content $logServidor | Select-String -Pattern 'download indisponivel' -Context 0,15 | Out-Host}
   $codigoTeste -eq 0
 }
 & node (Join-Path $PSScriptRoot 'teste-http-fluxo.mjs')

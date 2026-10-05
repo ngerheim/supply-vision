@@ -2,8 +2,9 @@
 
 ## Atualização sem migração
 
-Este pacote altera código, mensagens e testes. Não cria tabelas, colunas ou
-índices, não substitui o SQLite e não modifica os cadastros de produção.
+O ensaio de acesso registrado neste documento não substitui o SQLite nem
+os cadastros de produção. A funcionalidade atual de relatórios acrescenta
+as tabelas `report_jobs` e `report_runner` automaticamente, preservando os dados existentes.
 As operações normais de login continuam registrando sessões e auditoria.
 Após integrar os commits na main, atualizar pelo Supply Vision.bat no servidor.
 
@@ -16,7 +17,8 @@ O detalhe carrega condições em lotes de 500, com total e botão para carregar
 mais. O filtro textual é aplicado às condições já carregadas. Uma mudança de
 versão ou total durante a navegação reinicia a lista para evitar misturar versões.
 
-O perfil Consulta permanece restrito a Buscar e Acordos. A validação de acesso
+O perfil Consulta é restrito a Buscar e Manutenção. Detalhes de preços podem
+ser abertos dentro da busca; a lista de gestão de Acordos não é carregada. A validação de acesso
 é feita no servidor, inclusive quando alguém chama os endereços diretamente.
 Cada navegador tem sessão própria; sair de um não encerra os demais. A troca
 de senha invalida sessões anteriores e desativar a conta bloqueia seu acesso.

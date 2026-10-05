@@ -1,5 +1,5 @@
 """
-Gera um relatório consolidado para o recorte (processo\\base_periodo.xlsx).
+Gera um relatório consolidado da base histórica privada.
 
 NÃO duplica a lógica de negócio: importa carregar_base, carregar_acordo,
 processar e gerar_recorte_historico direto de processo\\rodar.py — os filtros
@@ -9,7 +9,8 @@ sincronizados com o pipeline diário.
 Consequência do acoplamento: se as assinaturas dessas funções mudarem no
 rodar.py, este script quebra — ajustar aqui.
 
-Sem e-mail. Saída em privado/alertas/relatorios/historicos, nomeada com o período.
+Retorna o caminho do arquivo atual; executar.py faz o envio opcional.
+Saída em privado/alertas/relatorios/historicos, nomeada com o período e execução.
 """
 
 import os, secrets, sys, pathlib
@@ -106,7 +107,9 @@ def gerar():
     gerou = rodar.gerar_recorte_historico(df, str(caminho))
 
     print('\nConcluído.')
-    return gerou
+    if gerou:
+        print(f"RELATORIO_HISTORICO={caminho}")
+    return caminho if gerou else False
 
 
 if __name__ == '__main__':

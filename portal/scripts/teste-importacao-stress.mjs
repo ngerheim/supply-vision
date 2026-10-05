@@ -303,10 +303,12 @@ try {
   for (const role of ['editor', 'viewer']) {
     await good('/api/users', { method: 'POST', body: { name: role, email: `${role}@teste.local`, password: senha, role } }, 201);
     const session = (await request('/api/login', { method: 'POST', body: { email: `${role}@teste.local`, password: senha } })).cookie;
-    for (const method of ['GET', 'POST', 'PUT', 'DELETE']) await check(`${role}: ${method} De/Para negado`, async () => {
-      const url = method === 'GET' ? '/api/mappings' : '/api/mappings/items' + (['PUT', 'DELETE'].includes(method) ? `/${itemMap.id}` : '');
+    let permissionMappingId = itemMap.id;
+    for (const method of ['GET', 'POST', 'PUT', 'DELETE']) await check(`${role}: ${method} De/Para respeita perfil`, async () => {
+      const url = method === 'GET' ? '/api/mappings' : '/api/mappings/items' + (['PUT', 'DELETE'].includes(method) ? `/${permissionMappingId}` : '');
       const result = await request(url, { method, session, ...(method === 'POST' || method === 'PUT' ? { body: { source: 'X', targetId: item.id } } : {}) });
-      assert.equal(result.status, 403, String(JSON.stringify(result.data)).slice(0, 500));
+      assert.equal(result.status, role === 'editor' ? (method === 'POST' ? 201 : 200) : 403, String(JSON.stringify(result.data)).slice(0, 500));
+      if (role === 'editor' && method === 'POST') permissionMappingId = result.data.id;
     });
     await check(`${role}: permissão de importar respeitada`, async () => assert.equal((await upload(file([row()], { name: `perfil-${role}` }), replace, session)).status, role === 'editor' ? 200 : 403));
   }
