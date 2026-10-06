@@ -28,6 +28,7 @@ Uso:
     python limpeza.py --dry-run    -> só LISTA o que apagaria, nada é apagado
 """
 import argparse
+import json
 import re
 import shutil
 from datetime import datetime, timedelta
@@ -38,6 +39,8 @@ import sv_paths
 RETENCAO_PLANILHAS = timedelta(hours=24)
 RETENCAO_LOGS = timedelta(days=5)
 EXT_LOG = {".log"}
+EXT_RELATORIOS = {".xlsx", ".xls", ".csv", ".eml"}
+RETENCAO_ENTREGAS = timedelta(days=30)
 
 """
 _TS_RE ancora no FIM do nome (sem extensao).
@@ -116,6 +119,8 @@ def limpar(dry_run: bool):
         for arq in sorted(pasta.rglob("*")):
             if not arq.is_file() or arq == log_path:
                 continue
+            if arq.suffix.lower() not in EXT_LOG | EXT_RELATORIOS and not (arq.suffix.lower() == ".txt" and arq.name.startswith("saida_rodar_")):
+                continue
             dt = extrair_timestamp(arq.name)
             if dt is None:
                 registrar(log_path, f"  [MANTIDO] sem timestamp reconhecível: {arq}")
@@ -143,6 +148,23 @@ def limpar(dry_run: bool):
                 bytes_livres += tamanho
             except Exception as e:
                 registrar(log_path, f"  [ERRO] {arq}: {e}")
+
+    # Somente slots agendados confirmados e antigos. Entregas parciais,
+    # incertas, manuais ou registros invalidos exigem conferencia e permanecem.
+    estados = sv_paths.OPERACAO / "estado-envios"
+    for arq in estados.glob("*.json"):
+        if not re.fullmatch(r"\d{4}-\d{2}-\d{2}_\d{4}\.json", arq.name):
+            continue
+        try:
+            registro = json.loads(arq.read_text(encoding="utf-8"))
+            atualizado = datetime.fromisoformat(registro["atualizado"])
+            if registro.get("estado") != "enviado" or agora - atualizado <= RETENCAO_ENTREGAS:
+                continue
+            if not dry_run:
+                arq.unlink()
+            registrar(log_path, f"  [ENTREGA CONFIRMADA] {'apagaria' if dry_run else 'apagado'}: {arq.name}")
+        except (OSError, ValueError, KeyError, TypeError, AttributeError) as erro:
+            registrar(log_path, f"  [MANTIDO] registro de entrega: {arq.name} ({type(erro).__name__})")
 
     for pycache in sv_paths.ALERTAS.rglob("__pycache__"):
         if ".venv" in pycache.parts:
