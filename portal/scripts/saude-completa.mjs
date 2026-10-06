@@ -2,10 +2,19 @@ import { pathToFileURL } from 'node:url';
 
 export async function verificarSaude(base = 'http://127.0.0.1:3000') {
   const origem = new URL(base).origin;
+  // Logo apos a partida o servidor ainda compila e migra sob demanda; um
+  // primeiro pedido lento nao e defeito. Tenta de novo antes de reprovar.
   const obter = async (url) => {
-    const r = await fetch(url, { signal: AbortSignal.timeout(5000), redirect: 'error', cache: 'no-store' });
-    if (r.status !== 200) throw new Error(`${new URL(url).pathname}: HTTP ${r.status}`);
-    return r;
+    for (let tentativa = 1; ; tentativa++) {
+      try {
+        const r = await fetch(url, { signal: AbortSignal.timeout(15000), redirect: 'error', cache: 'no-store' });
+        if (r.status !== 200) throw new Error(`${new URL(url).pathname}: HTTP ${r.status}`);
+        return r;
+      } catch (erro) {
+        if (tentativa >= 3) throw erro;
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+      }
+    }
   };
   const health = await (await obter(`${origem}/api/health`)).json();
   if (health.app !== 'portal-suprimentos' || health.status !== 'ok') throw new Error('Identidade ou saude da API invalida');
