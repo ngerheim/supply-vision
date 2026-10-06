@@ -163,6 +163,19 @@ try {
   });
 
   await check('De/Para inicia vazio', async () => assert.deepEqual(await good('/api/mappings'), { items: [], models: [], units: [] }));
+  await check('Falha na auditoria reverte edicao de usuario e suas sessoes', async () => {
+    const criado = await good('/api/users', { method: 'POST', body: { name: 'Usuario auditado', email: 'auditado@teste.local', password: senha, role: 'editor' } }, 201);
+    await good('/api/login', { method: 'POST', session: '', body: { email: 'auditado@teste.local', password: senha } });
+    const antigo = (await good('/api/users')).users.find(u => u.id === criado.id);
+    const antes = query('SELECT * FROM users WHERE id=?', criado.id), sessoes = query('SELECT * FROM sessions WHERE user_id=?', criado.id);
+    const db = new DatabaseSync(sqlitePath);
+    try {
+      db.exec("CREATE TRIGGER falha_auditoria_usuario BEFORE INSERT ON audit_logs WHEN NEW.entity='user' AND NEW.action='UPDATE' BEGIN SELECT RAISE(ABORT,'falha auditoria usuario'); END");
+      assert.equal((await request(`/api/users/${criado.id}`, { method: 'PUT', body: { role: 'viewer', expectedRevision: antigo.revision } })).status, 500);
+      assert.deepEqual(query('SELECT * FROM users WHERE id=?', criado.id), antes);
+      assert.deepEqual(query('SELECT * FROM sessions WHERE user_id=?', criado.id), sessoes);
+    } finally { db.exec('DROP TRIGGER IF EXISTS falha_auditoria_usuario'); db.close(); }
+  });
   // Nomes homonimos ficticios para conferir a separacao por UF.
   const location = await catalog('locations', { city: 'GOIANIA', state: 'GO' });
   await catalog('locations', { city: 'GOIANIA', state: 'MG' });

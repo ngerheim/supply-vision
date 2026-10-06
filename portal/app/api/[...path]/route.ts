@@ -5,7 +5,7 @@ import { paginaSolicitada } from '@/lib/paginacao';
 import { filtrosNotificacoes } from '@/lib/filtros-notificacoes';
 import { condicoesBusca } from '@/lib/filtros-busca';
 import { fornecedorChamado } from '@/lib/chamados';
-import { ATUALIZAR_USUARIO_SQL, ATUALIZAR_USUARIO_COM_SENHA_SQL, ENCERRAR_SESSOES_REDEFINIDAS_SQL, ENCERRAR_SESSOES_ALTERADAS_SQL } from '@/lib/usuarios-sql';
+import { AUDITAR_USUARIO_SQL, ATUALIZAR_USUARIO_SQL, ATUALIZAR_USUARIO_COM_SENHA_SQL, ENCERRAR_SESSOES_REDEFINIDAS_SQL, ENCERRAR_SESSOES_ALTERADAS_SQL } from '@/lib/usuarios-sql';
 import { montarPowerBiUrl } from '@/lib/powerbi';
 import { dataDeNegocio } from '@/lib/data-negocio';
 import { intervaloDatasNegocio } from '@/lib/periodo-auditoria';
@@ -1608,18 +1608,18 @@ async function updateUser(request:Request,actor:User,userId:string){
   // O hash pode falhar: calcula-lo antes da escrita evita salvar metade do pedido.
   const salt=password !== null ? crypto.randomUUID() : null;
   const hash=password !== null ? await passwordHash(password,salt!,PBKDF2_ITERACOES_ATUAL) : null;
+  const encerrarSessoes=(target.active===1&&active===0)||role!==target.role;
+  if(password !== null) changes.push('senha redefinida (sessões encerradas)');
+  else if(encerrarSessoes) changes.push('sessões encerradas');
   const statements=[rawDb().prepare(password !== null ? ATUALIZAR_USUARIO_COM_SENHA_SQL : ATUALIZAR_USUARIO_SQL)
-    .bind(...baseValues,...(password !== null ? [salt,hash,PBKDF2_ITERACOES_ATUAL] : []),userId,target.revision,role,active)];
+    .bind(...baseValues,...(password !== null ? [salt,hash,PBKDF2_ITERACOES_ATUAL] : []),userId,target.revision,role,active),
+    rawDb().prepare(AUDITAR_USUARIO_SQL).bind(id('aud'),actor.id,userId,`${target.email}: ${changes.join('; ')||'sem alterações'}`,now())];
   if(password !== null) statements.push(rawDb().prepare(ENCERRAR_SESSOES_REDEFINIDAS_SQL).bind(userId,userId,salt));
   // Desativar ou trocar o perfil derruba as sessoes abertas: o acesso antigo
   // nao pode continuar valendo ate o fim do prazo da sessao.
-  const encerrarSessoes=(target.active===1&&active===0)||role!==target.role;
   if(password === null && encerrarSessoes) statements.push(rawDb().prepare(ENCERRAR_SESSOES_ALTERADAS_SQL).bind(userId,userId,role,active));
   const [atualizado]=await rawDb().batch(statements);
   if (!atualizado.meta.changes) return fail('O usuario foi alterado por outra operacao ou e o ultimo administrador ativo. Atualize a lista; promova outro administrador antes de rebaixar o ultimo.',409);
-  if(password !== null) changes.push('senha redefinida (sessões encerradas)');
-  else if(encerrarSessoes) changes.push('sessões encerradas');
-  await audit(actor.id,'UPDATE','user',userId,`${target.email}: ${changes.join('; ')||'sem alterações'}`);
   return ok({ success:true });
 }
 

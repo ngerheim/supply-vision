@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 import test from 'node:test';
-import { ATUALIZAR_USUARIO_SQL, ATUALIZAR_USUARIO_COM_SENHA_SQL, ENCERRAR_SESSOES_REDEFINIDAS_SQL, ENCERRAR_SESSOES_ALTERADAS_SQL } from '../lib/usuarios-sql.ts';
+import { AUDITAR_USUARIO_SQL, ATUALIZAR_USUARIO_SQL, ATUALIZAR_USUARIO_COM_SENHA_SQL, ENCERRAR_SESSOES_REDEFINIDAS_SQL, ENCERRAR_SESSOES_ALTERADAS_SQL } from '../lib/usuarios-sql.ts';
 
 function banco() {
   const db = new DatabaseSync(':memory:');
@@ -11,6 +11,26 @@ function banco() {
     INSERT INTO sessions VALUES ('ta','a'),('tb','b');`);
   return db;
 }
+
+void test('falha da auditoria reverte cadastro e sessoes; guarda recusada nao deixa historico falso', () => {
+  const db=banco();
+  try {
+    db.exec(`CREATE TABLE audit_logs(id TEXT,user_id TEXT,action TEXT,entity TEXT,entity_id TEXT,details TEXT,created_at TEXT);
+      CREATE TRIGGER recusar_auditoria BEFORE INSERT ON audit_logs BEGIN SELECT RAISE(ABORT,'auditoria falhou'); END; BEGIN`);
+    const update=db.prepare(ATUALIZAR_USUARIO_SQL), audit=db.prepare(AUDITAR_USUARIO_SQL);
+    update.run('B','viewer',1,0,'17:45','b',0,'viewer',1);
+    assert.throws(()=>audit.run('aud','a','b','mudanca','agora'),/auditoria falhou/);db.exec('ROLLBACK');
+    assert.equal(db.prepare("SELECT role FROM users WHERE id='b'").get()?.role,'admin');
+    assert.equal(db.prepare('SELECT COUNT(*) n FROM sessions').get()?.n,2);
+    db.exec('DROP TRIGGER recusar_auditoria; BEGIN');
+    update.run('B','viewer',1,0,'17:45','b',0,'viewer',1);audit.run('aud','a','b','mudanca','agora');
+    db.prepare(ENCERRAR_SESSOES_ALTERADAS_SQL).run('b','b','viewer',1);db.exec('COMMIT');
+    assert.equal(db.prepare('SELECT COUNT(*) n FROM sessions').get()?.n,1);
+    update.run('Antigo','viewer',1,0,'17:45','b',0,'viewer',1);
+    assert.equal(audit.run('falso','a','b','mudanca','agora').changes,0);
+    assert.equal(db.prepare('SELECT COUNT(*) n FROM audit_logs').get()?.n,1);
+  } finally { db.close(); }
+});
 
 for (const [role, active] of [['admin', 0], ['viewer', 1]] as const) {
   void test(`escritas concorrentes preservam ultimo administrador (${role}/${active})`, () => {
