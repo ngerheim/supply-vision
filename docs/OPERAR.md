@@ -242,3 +242,16 @@ estado do último ciclo e os `.log` apoiam o diagnóstico.
 Antes de registrar a instância, o supervisor valida horários, arquivos
 privados, SMTP, Qlik, build, ambiente Python e permissões de escrita. Falha
 impede a partida e entra no log sem revelar valores sensíveis.
+
+## Alertas com entrega parcial ou incerta
+
+Antes de transmitir ao SMTP, o alerta registra a intenção de envio em
+`privado/alertas/estado-envios`. Depois preserva os destinatários aceitos e os
+recusados. Se houver recusa parcial, interrupção ou registro inválido, o slot
+fica `revisao-entrega` no estado da agenda e não é reenviado automaticamente.
+Os outros horários continuam disponíveis; consulte também o log do supervisor.
+
+Confira a entrega com os destinatários e o registro antes de qualquer reenvio
+manual. Em entrega parcial, reenvie somente aos recusados. Não apague registros
+incertos para liberar a lista inteira: isso pode duplicar uma mensagem aceita.
+Uma entrega já confirmada permite completar a agenda após reinício sem novo SMTP.

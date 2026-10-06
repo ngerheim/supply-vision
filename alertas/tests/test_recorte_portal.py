@@ -67,7 +67,9 @@ def test_smtp_historico_nao_acrescenta_copia_oculta_diaria(monkeypatch, tmp_path
         def ehlo(self): pass
         def starttls(self, **kwargs): pass
         def login(self, *args): pass
-        def send_message(self, msg, *, to_addrs): entregas.append((msg, to_addrs))
+        def send_message(self, msg, *, to_addrs):
+            entregas.append((msg, to_addrs))
+            return {}
     monkeypatch.setattr(mod.smtplib, 'SMTP', SMTP)
     monkeypatch.delenv('SUPPLY_VISION_SEM_ENVIO', raising=False)
     def nao_ler(): raise AssertionError('Não deve ler destinatários diários')

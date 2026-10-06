@@ -34,7 +34,9 @@ def test_tls_valida_certificado_antes_de_enviar_credenciais(monkeypatch, tmp_pat
             if not certificado_valido:
                 raise ssl.SSLCertVerificationError("certificado invalido")
         def login(self, *args): chamadas.append("login")
-        def send_message(self, *args, **kwargs): chamadas.append("envio")
+        def send_message(self, *args, **kwargs):
+            chamadas.append("envio")
+            return {}
 
     monkeypatch.setattr(mod.smtplib, "SMTP", SMTP)
     if saude:
