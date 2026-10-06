@@ -112,9 +112,11 @@ comparável ou nenhuma divergência de preço, o pipeline conclui normalmente
 sem enviar e-mail.
 
 Se o notebook estiver desligado num horário, ao voltar o supervisor executa
-**somente o slot mais recente** que ficou pendente — não dispara cópias
-atrasadas. Falhas são retentadas após dez minutos, e locks internos impedem
-pipelines concorrentes.
+primeiro o slot pendente da manhã (<10h), que cobre o dia anterior ou o fim
+de semana, e depois o slot mais recente do dia corrente. Slots intermediários
+com a mesma cobertura são dispensados. Uma execução concluída libera a próxima
+no ciclo seguinte; falhas mantêm o intervalo de dez minutos entre tentativas.
+Não há recuperação automática de dias anteriores.
 
 > `LIMPEZA_HORARIO` precisa cair dentro da janela em que a máquina fica ligada.
 > Fora dela, a limpeza só roda tarde, ao subir, competindo com os Alertas.

@@ -17,8 +17,20 @@ try{
   Igual $null (Obter-ProcessoRegistrado $pidTeste) 'registro corrompido nao vira operacao ativa'
 }finally{Remove-Item -LiteralPath $pidTeste -Force -ErrorAction SilentlyContinue}
 try{Validar-Horarios @{ALERTAS_HORARIOS='08:0012:00';BACKUP_HORARIOS='12:30';LIMPEZA_HORARIO='05:30'};throw 'Horario colado foi aceito'}catch{if($_.Exception.Message-eq'Horario colado foi aceito'){throw}}
-$estado=@{};$slot=Obter-SlotDevido 'alertas' $cfg.ALERTAS_HORARIOS $estado ([datetime]'2026-09-11 11:50');Igual '11:00' $slot.hora 'retorno antes das 14h'
-$estado=@{};$slot=Obter-SlotDevido 'alertas' $cfg.ALERTAS_HORARIOS $estado ([datetime]'2026-09-11 18:30');Igual '17:00' $slot.hora 'retorno apos quatro slots';Igual 3 (($estado.Keys|Where-Object{$_-like'alertas-*'}).Count) 'slots antigos marcados';$estado[$slot.chave]='ok';Igual $null (Obter-SlotDevido 'alertas' $cfg.ALERTAS_HORARIOS $estado ([datetime]'2026-09-11 18:31')) 'reinicio sem duplicidade'
+foreach($momento in @('2026-09-11 11:50','2026-09-11 18:30','2026-10-05 14:10')) {
+  $estado=@{};$agora=[datetime]$momento
+  $slot=Obter-SlotDevido 'alertas' $cfg.ALERTAS_HORARIOS $estado $agora
+  Igual '08:00' $slot.hora "manha recuperada em $momento"
+  Igual '08:00' (Obter-SlotDevido 'alertas' $cfg.ALERTAS_HORARIOS $estado $agora).hora 'falha permite repetir manha'
+  $estado[$slot.chave]='ok'
+  $ultimo=if($agora.Hour -ge 17){'17:00'}elseif($agora.Hour -ge 14){'14:00'}else{'11:00'}
+  $slot=Obter-SlotDevido 'alertas' $cfg.ALERTAS_HORARIOS $estado $agora
+  Igual $ultimo $slot.hora 'ultimo slot depois da manha'
+  $estado[$slot.chave]='ok'
+  Igual $null (Obter-SlotDevido 'alertas' $cfg.ALERTAS_HORARIOS $estado $agora) 'reinicio sem duplicidade'
+}
+$estado=@{};Igual '09:15' (Obter-SlotDevido 'alertas' '09:15,13:45' $estado ([datetime]'2026-10-05 14:10')).hora 'agenda personalizada preserva manha'
+$estado=@{};Igual '17:45' (Obter-SlotDevido 'backup' $cfg.BACKUP_HORARIOS $estado ([datetime]'2026-10-05 18:30')).hora 'backup recupera somente ultimo'
 $estado=@{'alertas-2026-09-11-08:00'='ok';'alertas-2026-09-11-11:00'='ok';'alertas-2026-09-11-14:00'='ok';'alertas-2026-09-11-17:00'='em-andamento'};Igual $null (Obter-SlotDevido 'alertas' $cfg.ALERTAS_HORARIOS $estado ([datetime]'2026-09-11 23:59')) 'execucao longa';$slot=Obter-SlotDevido 'alertas' $cfg.ALERTAS_HORARIOS $estado ([datetime]'2026-09-12 08:01');Igual '08:00' $slot.hora 'novo dia'
 # --- Agenda por dia da semana -------------------------------------------
 # Set 2026: 14=segunda, 17=quinta, 18=sexta, 19=sabado, 20=domingo.
@@ -41,7 +53,7 @@ foreach($dia in @('2026-09-19','2026-09-20')){
 }
 
 # Sexta as 14:30 ja cumpriu o ultimo slot; as 17:00 nada mais e devido.
-$estado=@{};$slot=Obter-SlotDevido 'alertas' (Obter-HorariosDoDia $sem 'ALERTAS_HORARIOS' ([datetime]'2026-09-18 14:30')) $estado ([datetime]'2026-09-18 14:30')
+$estado=@{'alertas-2026-09-18-08:00'='ok'};$slot=Obter-SlotDevido 'alertas' (Obter-HorariosDoDia $sem 'ALERTAS_HORARIOS' ([datetime]'2026-09-18 14:30')) $estado ([datetime]'2026-09-18 14:30')
 Igual '14:00' $slot.hora 'sexta encerra as 14:00';$estado[$slot.chave]='ok'
 Igual $null (Obter-SlotDevido 'alertas' (Obter-HorariosDoDia $sem 'ALERTAS_HORARIOS' ([datetime]'2026-09-18 17:05')) $estado ([datetime]'2026-09-18 17:05')) 'sexta nao dispara as 17:00'
 
