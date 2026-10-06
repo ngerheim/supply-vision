@@ -6,7 +6,7 @@ import { parseCookies } from './cookies.ts';
 import { registraAtividade } from './atualizacao-periodica.ts';
 import { LIMPAR_TRAVAS_VENCIDAS_SQL, RENOVAR_TRAVA_SQL, TravaPerdida, TRAVA_VALIDADE_MS } from './travas-sql.ts';
 import { MIGRAR_FORNECEDORES_CHAMADOS_SQL } from './chamados.ts';
-import { TRIGGERS_REVISAO } from './revisoes-sql.ts';
+import { TRIGGERS_REVISAO, TABELAS_CADASTRO } from './revisoes-sql.ts';
 export { parseCookies } from './cookies.ts';
 import { env } from 'cloudflare:workers';
 import { type Role, validatePassword } from '@/lib/domain';
@@ -68,6 +68,7 @@ const schema = [
 // precisam entrar aqui, senao bancos antigos ficam sem elas e as consultas
 // quebram. Cada entrada roda uma unica vez e ignora erro de coluna duplicada.
 const columnMigrations: Array<[string, string, string]> = [
+  ...TABELAS_CADASTRO.map((tabela): [string,string,string] => [tabela,'revision','INTEGER NOT NULL DEFAULT 0']),
   ['suppliers', 'city', 'TEXT'],
   ['suppliers', 'state', 'TEXT'],
   // Custo do PBKDF2 usado em cada senha. O padrao e o valor legado, porque

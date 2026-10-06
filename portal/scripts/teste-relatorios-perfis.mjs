@@ -125,6 +125,7 @@ try {
             method: 'PUT',
             cookie,
             body: {
+              expectedRevision: db.prepare('SELECT revision FROM import_unit_mappings WHERE id=?').get(mapping.data.id).revision,
               source: 'UNIDADE PERFIS TESTE',
               targetId: target.id,
               notes: 'alterada',
@@ -135,7 +136,7 @@ try {
       );
       assert.equal(
         (
-          await pedir(`mappings/units/${mapping.data.id}`, {
+          await pedir(`mappings/units/${mapping.data.id}?expectedRevision=${Number(db.prepare('SELECT revision FROM import_unit_mappings WHERE id=?').get(mapping.data.id).revision)}`, {
             method: 'DELETE',
             cookie,
           })
