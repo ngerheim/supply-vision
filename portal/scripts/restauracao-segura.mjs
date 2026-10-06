@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import { revisarPedidosInterrompidos } from './processar-relatorios.mjs';
 import { DatabaseSync } from 'node:sqlite';
 import { marcarFilasAposRestauracao } from './processar-emails.mjs';
 
@@ -16,6 +17,8 @@ export function prepararRestauracao(origem, temporario, validar) {
         if (db.prepare("SELECT 1 FROM sqlite_schema WHERE type='table' AND name='operacao_validacao'").get())
           db.exec('UPDATE operacao_validacao SET ativa=0');
         db.exec('COMMIT');
+        if (db.prepare("SELECT 1 FROM sqlite_schema WHERE type='table' AND name='report_jobs'").get())
+          revisarPedidosInterrompidos(db, true);
         return { resumo, marcados };
       } catch (erro) { db.exec('ROLLBACK'); throw erro; }
     } finally { db.close(); }

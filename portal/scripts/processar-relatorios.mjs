@@ -87,14 +87,16 @@ export function reservarRelatorio(db) {
     throw erro;
   }
 }
-export function revisarPedidosInterrompidos(db) {
-  // Preserva os pedidos e os backups: só a fila viva passa a exigir revisão.
-  // Uma cópia restaurada pode ter pedidos já executados depois daquele backup.
+export function revisarPedidosInterrompidos(db, restaurado = false) {
+  // Reinicio normal preserva pedidos que ainda nao iniciaram. Na restauracao,
+  // os pedidos da copia podem ja ter sido executados depois do backup.
   db.exec('BEGIN IMMEDIATE');
   try {
     const pedidos = db
       .prepare(
-        "SELECT id,status,created_by FROM report_jobs WHERE status IN ('queued','running')",
+        restaurado
+          ? "SELECT id,status,created_by FROM report_jobs WHERE status IN ('queued','running')"
+          : "SELECT id,status,created_by FROM report_jobs WHERE status='running'",
       )
       .all();
     const timestamp = new Date().toISOString();
@@ -102,7 +104,7 @@ export function revisarPedidosInterrompidos(db) {
       const mensagem =
         pedido.status === 'running'
           ? '\nExecução interrompida. Confira arquivos e entrega antes de solicitar novamente; não haverá reenvio automático.'
-          : '\nO serviço foi reiniciado ou o banco foi restaurado. Pedido preservado para revisão; use seus parâmetros em uma nova solicitação se ainda necessário.';
+          : '\nO banco foi restaurado. Pedido preservado para revisão; use seus parâmetros em uma nova solicitação se ainda necessário.';
       db.prepare(
         'UPDATE report_jobs SET status=?,completed_at=?,log=log||? WHERE id=?',
       ).run(
