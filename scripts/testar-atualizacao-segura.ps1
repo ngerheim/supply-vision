@@ -6,6 +6,7 @@ $start = $source.IndexOf("Etapa 'Conferindo o repositorio'")
 $end = $source.IndexOf('$mudou = git diff')
 if ($start -lt 0 -or $end -le $start) { throw 'Bloco de conferencia nao encontrado.' }
 $conferencia = [scriptblock]::Create($source.Substring($start, $end - $start))
+function Validar-PythonAlertas([string]$Executavel) {}
 function Etapa([string]$t) {}
 function Ok([string]$t) {}
 function git {

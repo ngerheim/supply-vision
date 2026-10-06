@@ -116,6 +116,14 @@ function Ler-EstadoOperacao([string]$Caminho) {
   } catch { throw "Estado operacional invalido em $Caminho. Operacao bloqueada para evitar reenvios; confira estado.json e estado.json.anterior antes de recuperar. $($_.Exception.Message)" }
 }
 
+function Validar-PythonAlertas([string]$Executavel) {
+  $saida = & $Executavel --version 2>&1 | Select-Object -First 1
+  if ($LASTEXITCODE -ne 0 -or $saida -notmatch 'Python (\d+\.\d+\.\d+)') { throw 'Nao foi possivel verificar o Python dos Alertas.' }
+  if ([version]$Matches[1] -lt [version]'3.12.0') {
+    throw 'Alertas exigem Python 3.12 ou superior. Instale-o e recrie alertas/.venv com a operacao parada antes de atualizar; preserve privado/.'
+  }
+}
+
 function Gravar-EstadoOperacao([string]$Caminho, [hashtable]$Estado) {
   $temporario = $Caminho + '.' + [guid]::NewGuid().ToString('N') + '.tmp'
   $bytes = (New-Object Text.UTF8Encoding($false)).GetBytes(($Estado | ConvertTo-Json -Depth 10))

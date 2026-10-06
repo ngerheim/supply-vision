@@ -52,7 +52,7 @@ function npm {
   $global:LASTEXITCODE=0
   if(!$global:resetou -and (($Caso -eq 'npm' -and $args[0] -eq 'ci') -or ($Caso -in @('build','legado','legado-repetido') -and $args[1] -eq 'build') -or ($Caso -eq 'teste' -and $args[0] -eq 'test'))) {$global:LASTEXITCODE=1}
 }
-function pythonmock { $global:LASTEXITCODE=0 }
+function pythonmock { $global:LASTEXITCODE=0; if($args[0] -eq '--version'){'Python 3.12.0'} }
 function npm.cmd { npm @args }
 function powershell.exe {
   $global:LASTEXITCODE=0
