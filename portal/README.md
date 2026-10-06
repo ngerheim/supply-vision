@@ -29,6 +29,12 @@ logins simultâneos a quatro em execução e dezesseis aguardando; além disso,
 responde que está ocupado e orienta tentar novamente. São limites iniciais de
 proteção de recursos, ainda sujeitos à homologação no notebook-servidor.
 
+Esse limite de concorrência é global, não por usuário: um único computador da
+rede enviando muitas tentativas pode ocupá-lo e fazer os demais receberem
+"ocupado" por alguns instantes. É um risco aceito para uso na rede interna
+(LAN), em troca de proteger a memória do servidor; não exponha o portal à
+internet sem um proxy que limite requisições por origem.
+
 ## Perfis
 
 | Perfil | O que pode fazer |
@@ -166,7 +172,7 @@ Administradores acompanham a fila na aba **Usuários** e podem reenviar
 ## Relatório diário
 
 Administradores escolhem, por usuário, quem recebe e em qual horário. O
-relatório traz os totais por situação e os eventos do dia, no fuso
+relatório traz os totais por situação e os eventos do período desde o envio anterior, no fuso
 `America/Sao_Paulo`. Cada destinatário recebe no máximo uma cópia por dia,
 mesmo que o serviço reinicie.
 
@@ -181,14 +187,14 @@ data, o que impede duplicidade após reinício.
 O portal no ar é a **versão compilada**. Alterar o código e reiniciar mantém a
 versão antiga.
 
-**`Atualizar Portal.cmd`** prepara o código numa pasta separada, verifica,
-compila e testa com banco descartável, e só então troca a versão em uso. A
-versão anterior fica em `work/versao-*/anterior`; se a candidata falhar ao
-iniciar, o atualizador restaura a anterior sozinho.
+Use **`Supply Vision.bat` → Atualizar sistema** (`scripts/atualizar-servidor.ps1`).
+Ele faz backup do banco, recebe a versão nova, reinstala dependências, compila,
+testa e religa a operação. Se algo falhar, volta ao código anterior e, se a
+versão nova já tiver rodado sobre o banco, restaura o backup feito antes da
+atualização. Veja [docs/OPERAR.md](../docs/OPERAR.md) e
+[docs/SOCORRO.md](../docs/SOCORRO.md).
 
-O retorno cobre **o build**, não alterações no banco nem em dependências.
-Migração de dados e mudança de dependência exigem procedimento próprio. Nunca
-instale pacotes com o portal em execução.
+Nunca instale pacotes com o portal em execução.
 
 ## Validação obrigatória antes de ativar
 
@@ -249,7 +255,8 @@ documentação, commit ou exportação.
 
 SQLite via D1 local. Senhas com PBKDF2, salt individual e 600.000 iterações.
 Sessões guardadas como hash, com expiração em 12 horas e também por
-inatividade. Limitação progressiva de tentativas de login, perfis `viewer`,
+inatividade (as atualizações automáticas da tela, marcadas com o cabeçalho
+`x-portal-poll: 1`, validam a sessão mas não contam como atividade). Limitação progressiva de tentativas de login, perfis `viewer`,
 `editor` e `admin`, trilha de auditoria e validação de limites de entrada.
 
 Uploads são limitados pelos bytes realmente recebidos, mesmo sem
@@ -325,6 +332,6 @@ por conta própria.
 
 Os filtros de busca reúnem seleção múltipla e digitação em um único campo. A importação mantém um acordo de destino por arquivo e aceita no máximo **1.000 linhas incluindo o cabeçalho** e **2 MB**, tanto na conferência quanto na publicação.
 
-As observações do acordo aparecem no detalhe. A aba **Histórico** permite exportar todos os registros que correspondem aos filtros em uma planilha `.xlsx`, disponível somente para administradores. A aba **E-mails**, também administrativa, pagina as notificações e permite filtrar por destinatário, situação, tipo, texto e período.
+As observações do acordo (e das condições) aparecem no detalhe somente para os perfis Suprimentos e Administrador; o perfil Consulta não as recebe nem pela API. A aba **Histórico** permite exportar todos os registros que correspondem aos filtros em uma planilha `.xlsx`, disponível somente para administradores. A aba **E-mails**, também administrativa, pagina as notificações e permite filtrar por destinatário, situação, tipo, texto e período.
 
 Fornecedores são paginados em grupos de 25. Quando a tabela ultrapassa a largura da tela, a barra superior e Shift + rolagem permitem navegar horizontalmente em qualquer altura da lista. Dados de situação, correspondências de unidades e observações legadas continuam preservados, mesmo quando seus controles deixam de ser exibidos.

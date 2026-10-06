@@ -99,3 +99,8 @@ jobs:
           & ./scripts/testar-reparo-configuracao.ps1
           & ./scripts/testar-credencial-portal.ps1
           & ./scripts/testar-operacao.ps1
+          # Autocontido: monta uma raiz falsa em %TEMP% com python/npm de mentira.
+          # testar-persistencia-alertas.ps1 (exige alertas/.venv real) e
+          # validar-operacao.ps1 (exige privado/ completo e portal compilado)
+          # continuam so no atualizador, que roda na maquina instalada.
+          & ./scripts/testar-supervisor-isolado.ps1
