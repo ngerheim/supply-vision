@@ -14,10 +14,12 @@ def carregar_email(monkeypatch, tmp_path):
     dest = tmp_path / "destinatarios.txt"
     dest.write_text("[PARA]\nteste@example.com\n", encoding="utf-8")
     fake = types.ModuleType("sv_paths")
+    fake.OPERACAO = tmp_path / "alertas"
     fake.SMTP_SERVIDOR = "smtp.example.com"; fake.SMTP_PORTA = 587
     fake.SMTP_USUARIO = "teste@example.com"; fake.REMETENTE = "teste@example.com"
     fake.SMTP_SENHA = "segredo-teste"; fake.NOME_REMETENTE = "Portal Suprimentos"; fake.DESTINATARIOS = dest; fake.RELATORIOS_DIARIOS = tmp_path / "relatorios"
     monkeypatch.setitem(sys.modules, "sv_paths", fake)
+    monkeypatch.delitem(sys.modules, "estado_entrega", raising=False)
     spec = importlib.util.spec_from_file_location("email_test", ROOT / "processo" / "enviar_email.py")
     mod = importlib.util.module_from_spec(spec); spec.loader.exec_module(mod)
     return mod
@@ -101,12 +103,14 @@ def test_import_nao_le_destinatarios(monkeypatch, tmp_path):
     faltando ele, encerrava o processo.
     """
     fake = types.ModuleType("sv_paths")
+    fake.OPERACAO = tmp_path / "alertas"
     fake.SMTP_SERVIDOR = "smtp.example.com"; fake.SMTP_PORTA = 587
     fake.SMTP_USUARIO = "teste@example.com"; fake.REMETENTE = "teste@example.com"
     fake.SMTP_SENHA = "segredo-teste"; fake.NOME_REMETENTE = "Portal Suprimentos"
     fake.DESTINATARIOS = tmp_path / "nao-existe.txt"
     fake.RELATORIOS_DIARIOS = tmp_path / "relatorios"
     monkeypatch.setitem(sys.modules, "sv_paths", fake)
+    monkeypatch.delitem(sys.modules, "estado_entrega", raising=False)
     spec = importlib.util.spec_from_file_location("email_sem_lista", ROOT / "processo" / "enviar_email.py")
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)  # nao pode levantar SystemExit
@@ -156,6 +160,7 @@ def test_destinatario_recusado_e_falha(monkeypatch, tmp_path):
     mod = carregar_email(monkeypatch, tmp_path)
     monkeypatch.delenv("SUPPLY_VISION_SEM_ENVIO", raising=False)
 
+    envios = []
     class SMTP:
         def __init__(self, *args, **kwargs): pass
         def __enter__(self): return self
@@ -164,8 +169,26 @@ def test_destinatario_recusado_e_falha(monkeypatch, tmp_path):
         def starttls(self, *, context): pass
         def login(self, *args): pass
         def send_message(self, *args, **kwargs):
+            envios.append(kwargs['to_addrs'])
             return {"ruim@example.com": (550, b"mailbox unavailable")}
 
     monkeypatch.setattr(mod.smtplib, "SMTP", SMTP)
     with pytest.raises(mod.DestinatariosRecusados, match="ruim@example.com"):
         mod.enviar_email("a", "b", [], ["teste@example.com", "ruim@example.com"], copia_oculta=[])
+    with pytest.raises(mod.estado_entrega.EntregaEmRevisao):
+        mod.enviar_email("a", "b", [], ["teste@example.com", "ruim@example.com"], copia_oculta=[])
+    registro = mod.estado_entrega.consultar_entrega()
+    assert registro['destinatarios'] == ['teste@example.com']
+    assert 'ruim@example.com' in registro['recusados']
+    assert len(envios) == 1
+
+
+def test_resultado_incerto_bloqueia_retentativa_e_confirmado_nao_reenvia(monkeypatch, tmp_path):
+    mod = carregar_email(monkeypatch, tmp_path)
+    monkeypatch.delenv('SUPPLY_VISION_SEM_ENVIO', raising=False)
+    mod.estado_entrega.registrar_entrega('incerto', ['teste@example.com'], exclusivo=True)
+    monkeypatch.setattr(mod.smtplib, 'SMTP', lambda *a, **k: (_ for _ in ()).throw(AssertionError('Nao deveria abrir SMTP')))
+    with pytest.raises(mod.estado_entrega.EntregaEmRevisao):
+        mod.enviar_email('a', 'b', [], ['teste@example.com'], copia_oculta=[])
+    mod.estado_entrega.registrar_entrega('enviado', ['teste@example.com'])
+    mod.enviar_email('a', 'b', [], ['teste@example.com'], copia_oculta=[])

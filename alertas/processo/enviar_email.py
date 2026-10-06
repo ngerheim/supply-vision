@@ -17,6 +17,7 @@ for _s in (sys.stdout, sys.stderr):
 
 import sv_paths
 import email_visual
+import estado_entrega
 
 SMTP_SERVIDOR  = sv_paths.SMTP_SERVIDOR
 SMTP_PORTA     = sv_paths.SMTP_PORTA
@@ -217,7 +218,7 @@ def anexo_da_execucao(caminho, rotulo):
     return p
 
 
-class DestinatariosRecusados(RuntimeError):
+class DestinatariosRecusados(estado_entrega.EntregaEmRevisao):
     """O SMTP aceitou a mensagem, mas recusou parte dos destinatários."""
 
 
@@ -266,12 +267,29 @@ def enviar_email(assunto, corpo, anexos, destinatarios, html=None, copia_oculta=
         print(f"MODO SEM ENVIO: e-mail salvo para conferencia em {destino}")
         return destino
 
+    anterior = estado_entrega.consultar_entrega()
+    if anterior:
+        if anterior['estado'] == 'enviado':
+            print('Entrega ja confirmada no registro; nenhum reenvio realizado.')
+            return
+        raise estado_entrega.EntregaEmRevisao('Entrega parcial ou incerta: confira estado-envios antes de reenviar.')
+
     with smtplib.SMTP(SMTP_SERVIDOR, SMTP_PORTA, timeout=60) as servidor:
         servidor.ehlo()
         servidor.starttls(context=ssl.create_default_context())
         servidor.ehlo()
         servidor.login(SMTP_USUARIO, senha)
-        recusados = servidor.send_message(msg, to_addrs=entrega)
+        estado_entrega.registrar_entrega('incerto', entrega, exclusivo=True)
+        try:
+            recusados = servidor.send_message(msg, to_addrs=entrega)
+        except (smtplib.SMTPRecipientsRefused, smtplib.SMTPDataError, smtplib.SMTPSenderRefused):
+            estado_entrega.cancelar_reserva_sem_entrega()
+            raise
+        except Exception as exc:
+            raise estado_entrega.EntregaEmRevisao('SMTP interrompido durante envio: resultado incerto, exige conferencia.') from exc
+        aceitos = [d for d in entrega if d not in recusados]
+        detalhes = {d: [c, m.decode('utf-8', 'replace') if isinstance(m, bytes) else str(m)] for d, (c, m) in recusados.items()}
+        estado_entrega.registrar_entrega('parcial' if recusados else 'enviado', aceitos, detalhes)
 
     # send_message só levanta exceção se TODOS forem recusados; recusa parcial
     # volta no dicionário e passaria como sucesso sem ninguém perceber.
@@ -300,7 +318,7 @@ if __name__ == "__main__":
         qualidade = anexo_da_execucao(sys.argv[6] if len(sys.argv) > 6 else "", "qualidade_acordos")
     except RelatorioAusente as e:
         print(f"ERRO: {e}")
-        sys.exit(1)
+        sys.exit(3)
 
     assunto = montar_assunto(contexto, datas)
     corpo   = montar_corpo(contexto, datas, output)
@@ -312,6 +330,6 @@ if __name__ == "__main__":
     html = email_visual.montar_html("Conformidade de Preços", [corpo.strip()] + avisos)
     try:
         enviar_email(assunto, corpo, [com_acordo, qualidade], destinatarios_para, html=html)
-    except DestinatariosRecusados as e:
+    except estado_entrega.EntregaEmRevisao as e:
         print(f"ERRO: {e}")
-        sys.exit(1)
+        sys.exit(3)

@@ -11,6 +11,7 @@ from datetime import datetime
 
 
 import sv_paths
+import estado_entrega
 
 LOG_DIR = str(sv_paths.LOG_DIR)
 PIPELINE_TIMEOUT_S = sv_paths.PIPELINE_TIMEOUT_S
@@ -167,6 +168,7 @@ def ler_slot_argv(argv):
 
 
 def main():
+    os.environ['SUPPLY_VISION_RUN_ID'] = RUN_ID
     if "--sem-envio" in sys.argv:
         os.environ["SUPPLY_VISION_SEM_ENVIO"] = "1"
     # Horário agendado do disparo: o baixar_base.py calcula datas e contexto
@@ -180,6 +182,17 @@ def main():
     except RuntimeError as e:
         print(f"ERRO: {e}.", file=sys.stderr)
         sys.exit(2)
+    if os.environ.get('SUPPLY_VISION_SEM_ENVIO') != '1':
+        try:
+            entrega = estado_entrega.consultar_entrega()
+            if entrega:
+                if entrega['estado'] == 'enviado':
+                    print('Entrega deste slot ja confirmada; nenhuma nova execucao necessaria.')
+                    sys.exit(0)
+                raise estado_entrega.EntregaEmRevisao('Entrega parcial/incerta do slot: revisao manual obrigatoria.')
+        except estado_entrega.EntregaEmRevisao as exc:
+            print(f'ERRO: {exc}', file=sys.stderr)
+            sys.exit(3)
     log_path = configurar_log()
     logging.info(f"Run ID: {RUN_ID}")
     logging.info(f"Pipeline iniciado — {datetime.now().strftime('%d/%m/%Y %H:%M')}")
@@ -232,6 +245,11 @@ def main():
     )
     if not ok:
         logging.error("Pipeline interrompido em: Envio de e-mail")
+        try:
+            if estado_entrega.consultar_entrega():
+                sys.exit(3)
+        except estado_entrega.EntregaEmRevisao:
+            sys.exit(3)
         sys.exit(1)
 
     logging.info("="*50)
