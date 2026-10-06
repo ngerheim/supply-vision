@@ -147,7 +147,7 @@ function Maintenance({url}:{url:string}){
   /* Trocar a key remonta o iframe do zero. E a unica forma de recarregar um
      quadro de outra origem: o portal nao consegue falar com o conteudo dele. */
   const [recarga,setRecarga]=useState(0);
-  if(!url)return <div className="space-y-5"><h1 className="text-2xl font-semibold">Histórico de Manutenção</h1><Alert><AlertTriangle/><AlertTitle>Relatório temporariamente indisponível</AlertTitle><AlertDescription>O endereço do Power BI ainda não foi configurado neste servidor. Avise a equipe responsável pelo Portal.</AlertDescription></Alert></div>;
+  if(!url)return <div className="space-y-5"><h1 className="text-2xl font-semibold">Histórico de Manutenção</h1><Alert><AlertTriangle/><AlertTitle>Relatório temporariamente indisponível</AlertTitle><AlertDescription>O endereço do Power BI está ausente ou inválido na configuração deste servidor. Avise a equipe responsável pelo Portal.</AlertDescription></Alert></div>;
   return <div className="space-y-4">
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
       <div><h1 className="text-2xl font-semibold">Histórico de Manutenção</h1></div>

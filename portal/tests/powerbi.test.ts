@@ -25,7 +25,17 @@ void test('recusa o que nao for https://app.powerbi.com', () => {
     assert.equal(montarPowerBiUrl(endereco, 'x'), '');
 });
 
-void test('recusa publicacao anonima e embed sem identificador', () => {
-  assert.equal(montarPowerBiUrl(['https://app.powerbi.com', '/view?r=ficticio'].join(''), ''), '');
+void test('aceita publicacao publica preservando token e pagina', () => {
+  const url = new URL(montarPowerBiUrl(['https://app.powerbi.com', '/view?r=ficticio'].join(''), 'pagina'));
+  assert.equal(url.searchParams.get('r'), 'ficticio');
+  assert.equal(url.searchParams.get('pageName'), 'pagina');
+  assert.equal(url.searchParams.get('navContentPaneEnabled'), 'false');
+  assert.equal(url.searchParams.get('filterPaneEnabled'), 'false');
+});
+
+void test('recusa caminhos desconhecidos, credenciais e identificadores ausentes', () => {
+  for (const caminho of ['/view', '/view?r=', '/view?r=%20', '/reportEmbed?reportId=%20', '/outro?r=ficticio'])
+    assert.equal(montarPowerBiUrl(`https://app.powerbi.com${caminho}`, ''), '');
+  assert.equal(montarPowerBiUrl(RELATORIO.replace('https://', 'https://usuario:senha@'), ''), '');
   assert.equal(montarPowerBiUrl('https://app.powerbi.com/reportEmbed', ''), '');
 });
