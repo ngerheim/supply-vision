@@ -522,7 +522,10 @@ CORTE_VIGENCIA_ACORDOS = pd.Timestamp(sv_paths.CORTE_VIGENCIA_ACORDOS)
 
 def _data_vigencia(valores):
     # ISO tem ano primeiro; dayfirst so se aplica ao formato brasileiro.
-    texto = valores.astype("string")
+    texto = valores.astype("string").str.strip()
+    # Vigencia usa a data civil informada, inclusive em ISO com fuso.
+    # Deslocar para UTC poderia mudar o dia de abertura da compra.
+    texto = texto.str.replace(r"(Z|[+-]\d{2}:?\d{2})$", "", regex=True)
     iso = texto.str.match(r"^\d{4}-\d{2}-\d{2}(?:$|[ T])", na=False)
     # Excel pode devolver datetime; ISO explicito impede trocar mes por dia.
     resultado = pd.to_datetime(texto.where(iso), format="ISO8601", errors="coerce")
@@ -539,7 +542,7 @@ def _preparar_vigencia(df_acordo):
     para cada data de compra, em vez de reconverter as colunas a cada data."""
     inicio = _data_vigencia(df_acordo["INICIO_VIGENCIA"])
     fim = _data_vigencia(df_acordo["FIM_VIGENCIA"])
-    status = df_acordo["STATUS_ACORDO"].fillna("").astype(str).str.lower()
+    status = df_acordo["STATUS_ACORDO"].fillna("").astype(str).str.strip().str.lower()
     preenchido = df_acordo["FIM_VIGENCIA"].astype("string").str.strip().fillna("") != ""
     fim_invalido = preenchido & fim.isna()
     if fim_invalido.any():

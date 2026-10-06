@@ -106,3 +106,10 @@ def test_preco_negativo_nao_vira_economia(rodar):
     resultado = rodar.processar(base(preco=-10), acordo([10]))
     assert resultado.loc[0, "Status"] == rodar.STATUS_PRECO_COMPRA_INVALIDO
     assert pd.isna(resultado.loc[0, "Diferenca Total"])
+
+
+def test_vigencia_iso_com_fuso_preserva_data_civil(rodar):
+    compra = base(qtd=3, preco=10)
+    compra["Data Abertura"] = ["2026-09-30T23:30:00-03:00", "2026-10-01T00:30:00+03:00", "2026-10-01T00:00:00Z"]
+    ac = com_vigencia(acordo([10]), inicio="2026-10-01T00:00:00-03:00", status=" ACTIVE ")
+    assert rodar.processar(compra, ac)["Status"].tolist() == ["SEM ACORDO", "CONFORME", "CONFORME"]
