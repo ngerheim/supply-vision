@@ -27,6 +27,17 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: portal/package-lock.json
+      # Arquivo gravado com CRLF no indice aparece como alterado no checkout
+      # do Windows e trava o atualizar-servidor.ps1 ("alteracoes locais").
+      - name: Conferir fim de linha no repositorio
+        working-directory: .
+        run: |
+          ruins=$(git ls-files --eol | grep -E '^i/(crlf|mixed)' || true)
+          if [ -n "$ruins" ]; then
+            echo "$ruins"
+            echo "::error::Arquivos com CRLF no indice. Rode: git add --renormalize ."
+            exit 1
+          fi
       - run: npm ci
       - run: npm test
       - run: npm run typecheck
