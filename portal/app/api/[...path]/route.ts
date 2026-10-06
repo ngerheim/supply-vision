@@ -5,7 +5,7 @@ import { paginaSolicitada } from '@/lib/paginacao';
 import { filtrosNotificacoes } from '@/lib/filtros-notificacoes';
 import { condicoesBusca } from '@/lib/filtros-busca';
 import { fornecedorChamado } from '@/lib/chamados';
-import { ATUALIZAR_USUARIO_SQL, ATUALIZAR_USUARIO_COM_SENHA_SQL, ENCERRAR_SESSOES_REDEFINIDAS_SQL } from '@/lib/usuarios-sql';
+import { ATUALIZAR_USUARIO_SQL, ATUALIZAR_USUARIO_COM_SENHA_SQL, ENCERRAR_SESSOES_REDEFINIDAS_SQL, ENCERRAR_SESSOES_ALTERADAS_SQL } from '@/lib/usuarios-sql';
 import { montarPowerBiUrl } from '@/lib/powerbi';
 import { dataDeNegocio } from '@/lib/data-negocio';
 import { intervaloDatasNegocio } from '@/lib/periodo-auditoria';
@@ -338,20 +338,35 @@ async function DELETEInterno(request: NextRequest) {
   if (!canWrite(user)) return fail('Seu perfil permite somente consulta.', 403);
   const parts = partsOf(request);
   if (parts[0] === 'items' && parts[1]) {
-    return comTravaDoAcordo(request, await acordoDaCondicao(parts[1]), () => deleteItem(user, parts[1]));
+    return comTravaDoAcordo(request, await acordoDaCondicao(parts[1]), () => deleteItem(user, parts[1], revisaoDaQuery(request)));
   }
-  if (parts[0] === 'agreements' && parts[1] && parts.length === 2) return comTravaDoAcordo(request, parts[1], () => deleteAgreement(user, parts[1]));
+  if (parts[0] === 'agreements' && parts[1] && parts.length === 2) return comTravaDoAcordo(request, parts[1], () => deleteAgreement(user, parts[1], revisaoDaQuery(request)));
   if (parts[0] === 'catalogs' && parts[1] && parts[2]) return deleteCatalog(user, parts[1], parts[2]);
   if (parts[0] === 'reports' && parts[1]) {if(user.role!=='admin')return fail('Somente administradores podem cancelar relatórios.',403);return cancelarRelatorio(parts[1],user.id);}
   if (parts[0] === 'mappings' && parts[1] && parts[2]) return deleteMapping(user, parts[1], parts[2]);
   return fail('Rota não encontrada.', 404);
 }
 
-async function deleteItem(user: User, itemId: string) {
+// Registro de auditoria como instrucao preparada, para entrar no MESMO batch
+// da escrita: se a escrita confirma, o registro confirma junto, e vice-versa.
+function auditoriaNoLote(userId: string | null, action: string, entity: string, entityId: string | null, details: string) {
+  return rawDb().prepare('INSERT INTO audit_logs (id,user_id,action,entity,entity_id,details,created_at) VALUES (?,?,?,?,?,?,?)').bind(id('aud'), userId, action, entity, entityId, details, now());
+}
+
+const ehErroUnique = (erro: unknown) => errorMessage(erro).includes('UNIQUE');
+
+// A revisao esperada vem na query string: DELETE nao tem corpo no cliente.
+function revisaoDaQuery(request: Request): number | null {
+  const valor = new URL(request.url).searchParams.get('expectedRevision');
+  return valor !== null && /^\d+$/.test(valor) ? Number(valor) : null;
+}
+
+async function deleteItem(user: User, itemId: string, expectedRevision: number | null) {
   // A versao vigente precisa ser conferida depois de adquirir a trava: uma
   // publicacao concorrente nao pode trocar a versao entre a leitura e o DELETE.
   const item = await first<Row>('SELECT ai.* FROM agreement_items ai JOIN agreements a ON a.current_version_id=ai.version_id WHERE ai.id=?', [itemId]);
   if (!item) return fail('Condição não encontrada na versão vigente.', 404);
+  if (!revisaoConfere(expectedRevision, Number(item.revision))) return fail('Esta condição foi alterada ou a tela está desatualizada. Reabra o acordo antes de remover.', 409);
   await rawDb().batch([
     rawDb().prepare('DELETE FROM agreement_items WHERE id=?').bind(itemId),
     rawDb().prepare('INSERT INTO audit_logs (id,user_id,action,entity,entity_id,details,created_at) VALUES (?,?,?,?,?,?,?)')
@@ -376,16 +391,17 @@ async function deleteItem(user: User, itemId: string) {
 //
 // Para as independentes a referencia e apenas anulada. Apagar um chamado
 // porque o acordo saiu seria destruir informacao que nao pertence ao acordo.
-async function deleteAgreement(user: User, agreementId: string) {
+async function deleteAgreement(user: User, agreementId: string, expectedRevision: number | null) {
   if (user.role !== 'admin') {
     return fail('Somente administradores podem excluir um acordo. Um acordo apagado leva consigo os preços e todo o histórico de versões.', 403);
   }
 
-  const acordo = await first<{ number: string; supplier: string }>(
-    'SELECT a.number, s.trade_name AS supplier FROM agreements a JOIN suppliers s ON s.id=a.supplier_id WHERE a.id=?',
+  const acordo = await first<{ number: string; supplier: string; revision: number }>(
+    'SELECT a.number, a.revision, s.trade_name AS supplier FROM agreements a JOIN suppliers s ON s.id=a.supplier_id WHERE a.id=?',
     [agreementId],
   );
   if (!acordo) return fail('Acordo não encontrado.', 404);
+  if (!revisaoConfere(expectedRevision, Number(acordo.revision))) return fail('Este acordo foi alterado ou a tela está desatualizada. Reabra o acordo antes de excluir.', 409);
 
   // Conta antes de apagar, para o registro de auditoria dizer o tamanho do
   // estrago e permitir conferir depois.
@@ -397,6 +413,8 @@ async function deleteAgreement(user: User, agreementId: string) {
   const chamados = Number((await first<{ n: number }>(
     'SELECT COUNT(*) n FROM tickets WHERE agreement_id=?', [agreementId]))?.n || 0);
 
+  const detalhe = `Acordo ${acordo.number} (${acordo.supplier}) excluído: ${condicoes} condição(ões) e ${versoes} versão(ões) apagadas` +
+    (chamados > 0 ? `; ${chamados} chamado(s) preservado(s), sem o vínculo` : '');
   const db = rawDb();
   await db.batch([
     // current_version_id aponta para agreement_versions: precisa sair antes,
@@ -409,11 +427,8 @@ async function deleteAgreement(user: User, agreementId: string) {
     db.prepare('UPDATE imports SET agreement_id=NULL WHERE agreement_id=?').bind(agreementId),
     db.prepare('UPDATE tickets SET agreement_id=NULL WHERE agreement_id=?').bind(agreementId),
     db.prepare('DELETE FROM agreements WHERE id=?').bind(agreementId),
+    auditoriaNoLote(user.id, 'DELETE', 'agreement', agreementId, detalhe),
   ]);
-
-  const detalhe = `Acordo ${acordo.number} (${acordo.supplier}) excluído: ${condicoes} condição(ões) e ${versoes} versão(ões) apagadas` +
-    (chamados > 0 ? `; ${chamados} chamado(s) preservado(s), sem o vínculo` : '');
-  await audit(user.id, 'DELETE', 'agreement', agreementId, detalhe);
   return ok({ success: true, condicoes, versoes, chamadosDesvinculados: chamados });
 }
 
@@ -451,8 +466,10 @@ async function deleteCatalog(user: User, type: string, recordId: string) {
 
   // A consulta acima melhora a mensagem; as FKs continuam sendo a garantia
   // final se outra requisicao criar uma referencia antes deste DELETE.
-  await rawDb().prepare(`DELETE FROM ${cfg.table} WHERE id=?`).bind(recordId).run();
-  await audit(user.id, 'DELETE', type, recordId, `${label?.nome || recordId} excluído do cadastro`);
+  await rawDb().batch([
+    rawDb().prepare(`DELETE FROM ${cfg.table} WHERE id=?`).bind(recordId),
+    auditoriaNoLote(user.id, 'DELETE', type, recordId, `${label?.nome || recordId} excluído do cadastro`),
+  ]);
   return ok({ success: true });
 }
 
@@ -724,8 +741,8 @@ async function createAgreement(request: Request, user: User) {
       rawDb().prepare(`INSERT INTO agreements (id,number,supplier_id,status,start_date,end_date,owner_user_id,notes,provisional,current_version_id,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,0,?,?,?)`).bind(agreementId, body.number, body.supplierId, body.status, body.startDate, body.endDate, user.id, body.notes, versionId, timestamp, timestamp),
       rawDb().prepare(`INSERT INTO agreement_versions (id,agreement_id,version_number,status,published_at,created_by,created_at) VALUES (?,?,1,'published',?,?,?)`).bind(versionId, agreementId, timestamp, user.id, timestamp),
       ...body.locationIds.map((locationId) => rawDb().prepare('INSERT INTO agreement_locations (agreement_id,location_id) VALUES (?,?)').bind(agreementId, locationId)),
+      auditoriaNoLote(user.id, 'CREATE', 'agreement', agreementId, `Acordo ${body.number} criado`),
     ]);
-    await audit(user.id, 'CREATE', 'agreement', agreementId, `Acordo ${body.number} criado`);
     return ok({ id: agreementId }, { status: 201 });
   } catch (error: unknown) { return fail(errorMessage(error).includes('UNIQUE') ? 'Já existe um acordo com esse número.' : 'Não foi possível criar o acordo.'); }
 }
@@ -783,7 +800,7 @@ async function updateAgreement(request: Request, user: User, agreementId: string
   const parsed = validateAgreementInput(entrada);
   if (!parsed.value) return fail(parsed.error || 'Dados do acordo inválidos.');
   const body = parsed.value;
-  const existing = await first<{ id: string; supplierId: string; revision: number }>('SELECT id,supplier_id AS supplierId,revision FROM agreements WHERE id=?', [agreementId]);
+  const existing = await first<{ id: string; number: string; supplierId: string; status: string; startDate: string; endDate: string; revision: number }>('SELECT id,number,supplier_id AS supplierId,status,start_date AS startDate,end_date AS endDate,revision FROM agreements WHERE id=?', [agreementId]);
   if (!existing) return fail('Acordo não encontrado.', 404);
   // A trava já está adquirida: uma tela antiga não pode substituir o snapshot
   // que outro usuário gravou. Ausência de revisão também exige recarregar.
@@ -808,13 +825,22 @@ async function updateAgreement(request: Request, user: User, agreementId: string
     const nomes = emUso.slice(0, 5).map((local) => `${local.city}/${local.state}`).join(', ') + (emUso.length > 5 ? ` e mais ${emUso.length - 5}` : '');
     return fail(`Não é possível retirar ${nomes} do acordo: há condições vigentes nessa(s) localidade(s). Remova ou substitua essas condições antes de alterar a abrangência.`, 409);
   }
+  // Auditoria no mesmo formato das condicoes: {antes, depois} so dos campos
+  // gerais que mudaram.
+  const localidadesAntes = (await all<{ id: string }>('SELECT location_id AS id FROM agreement_locations WHERE agreement_id=? ORDER BY location_id', [agreementId])).map((l) => l.id);
+  const novo: Record<string, unknown> = { number: body.number, supplierId: body.supplierId, status: body.status, startDate: body.startDate, endDate: body.endDate, locationIds: [...body.locationIds].sort() };
+  const anterior: Record<string, unknown> = { number: existing.number, supplierId: existing.supplierId, status: existing.status, startDate: existing.startDate, endDate: existing.endDate, locationIds: localidadesAntes };
+  const antes: Record<string, unknown> = {}, depois: Record<string, unknown> = {};
+  for (const campo of Object.keys(novo)) {
+    if (JSON.stringify(anterior[campo]) !== JSON.stringify(novo[campo])) { antes[campo] = anterior[campo]; depois[campo] = novo[campo]; }
+  }
   try {
     await rawDb().batch([
       rawDb().prepare('UPDATE agreements SET number=?,supplier_id=?,status=?,start_date=?,end_date=?,notes=?,updated_at=? WHERE id=?').bind(body.number, body.supplierId, body.status, body.startDate, body.endDate, body.notes, now(), agreementId),
       rawDb().prepare('DELETE FROM agreement_locations WHERE agreement_id=?').bind(agreementId),
       ...body.locationIds.map((locationId) => rawDb().prepare('INSERT INTO agreement_locations (agreement_id,location_id) VALUES (?,?)').bind(agreementId, locationId)),
+      auditoriaNoLote(user.id, 'UPDATE', 'agreement', agreementId, JSON.stringify({ antes, depois })),
     ]);
-    await audit(user.id, 'UPDATE', 'agreement', agreementId, 'Dados gerais atualizados');
     return ok({ success: true });
   } catch (error: unknown) {
     return fail(errorMessage(error).includes('UNIQUE') ? 'Já existe um acordo com esse número.' : 'Não foi possível atualizar o acordo.');
@@ -945,9 +971,11 @@ async function createMapping(request: Request, user: User, type: string) {
   if ('error' in value) return fail(value.error || 'De/Para inválido.');
   const recordId=id('map'), timestamp=now();
   try {
-    await rawDb().prepare(`INSERT INTO ${value.cfg.table} (id,source_text,source_key,target_id,active,notes,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?)`)
-      .bind(recordId,value.source,value.sourceKey,value.targetId,value.active,value.notes,timestamp,timestamp).run();
-    await audit(user.id,'CREATE','import_mapping',recordId,`De/Para de ${value.cfg.label} incluído: ${value.sourceKey}`);
+    await rawDb().batch([
+      rawDb().prepare(`INSERT INTO ${value.cfg.table} (id,source_text,source_key,target_id,active,notes,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?)`)
+        .bind(recordId,value.source,value.sourceKey,value.targetId,value.active,value.notes,timestamp,timestamp),
+      auditoriaNoLote(user.id,'CREATE','import_mapping',recordId,`De/Para de ${value.cfg.label} incluído: ${value.sourceKey}`),
+    ]);
     return ok({id:recordId},{status:201});
   } catch (error: unknown) {
     return fail(errorMessage(error).includes('UNIQUE')?'Já existe um De/Para para essa nomenclatura de origem.':'Não foi possível salvar o De/Para.');
@@ -961,9 +989,11 @@ async function updateMapping(request: Request, user: User, type: string, recordI
   const existing=await first(`SELECT 1 ok FROM ${value.cfg.table} WHERE id=?`,[recordId]);
   if(!existing) return fail('Correspondência não encontrada.',404);
   try {
-    await rawDb().prepare(`UPDATE ${value.cfg.table} SET source_text=?,source_key=?,target_id=?,active=?,notes=?,updated_at=? WHERE id=?`)
-      .bind(value.source,value.sourceKey,value.targetId,value.active,value.notes,now(),recordId).run();
-    await audit(user.id,'UPDATE','import_mapping',recordId,`De/Para de ${value.cfg.label} atualizado: ${value.sourceKey}`);
+    await rawDb().batch([
+      rawDb().prepare(`UPDATE ${value.cfg.table} SET source_text=?,source_key=?,target_id=?,active=?,notes=?,updated_at=? WHERE id=?`)
+        .bind(value.source,value.sourceKey,value.targetId,value.active,value.notes,now(),recordId),
+      auditoriaNoLote(user.id,'UPDATE','import_mapping',recordId,`De/Para de ${value.cfg.label} atualizado: ${value.sourceKey}`),
+    ]);
     return ok({success:true});
   } catch (error: unknown) {
     return fail(errorMessage(error).includes('UNIQUE')?'Já existe um De/Para para essa nomenclatura de origem.':'Não foi possível atualizar o De/Para.');
@@ -975,8 +1005,10 @@ async function deleteMapping(user: User, type: string, recordId: string) {
   const cfg=mappingConfig[type]; if(!cfg) return fail('Tipo de De/Para inválido.');
   const existing=await first<{sourceKey:string}>(`SELECT source_key AS sourceKey FROM ${cfg.table} WHERE id=?`,[recordId]);
   if(!existing) return fail('Correspondência não encontrada.',404);
-  await rawDb().prepare(`DELETE FROM ${cfg.table} WHERE id=?`).bind(recordId).run();
-  await audit(user.id,'DELETE','import_mapping',recordId,`De/Para de ${cfg.label} excluído: ${existing.sourceKey}`);
+  await rawDb().batch([
+    rawDb().prepare(`DELETE FROM ${cfg.table} WHERE id=?`).bind(recordId),
+    auditoriaNoLote(user.id,'DELETE','import_mapping',recordId,`De/Para de ${cfg.label} excluído: ${existing.sourceKey}`),
+  ]);
   return ok({success:true});
 }
 
@@ -1019,7 +1051,7 @@ async function createCatalog(request: Request, user: User, type: string) {
     // planilha nunca encontraria.
     sql = 'INSERT INTO locations (id,city,state) VALUES (?,?,?)'; values = [recordId, normalizeImportText(body.city), state];
   }
-  try { await rawDb().prepare(sql).bind(...values).run(); await audit(user.id, 'CREATE', type, recordId, 'Cadastro incluído'); return ok({ id: recordId }, { status: 201 }); }
+  try { await rawDb().batch([rawDb().prepare(sql).bind(...values), auditoriaNoLote(user.id, 'CREATE', type, recordId, 'Cadastro incluído')]); return ok({ id: recordId }, { status: 201 }); }
   catch (erro: unknown) { if(errorMessage(erro).includes('UNIQUE'))return fail('Já existe um cadastro com esses dados.'); throw erro; }
 }
 
@@ -1031,25 +1063,26 @@ async function updateCatalog(request: Request, user: User, type: string, recordI
   const existing = await first<{ id: string; active: number }>(`SELECT * FROM ${cfg.table} WHERE id=?`, [recordId]);
   if (!existing) return fail('Cadastro não encontrado.', 404);
   const active = situacaoAtiva(body.active, existing.active);
+  let escrita: D1PreparedStatement;
   try {
     if (type === 'suppliers') {
       if (!textValue(body.tradeName) || !isValidCnpj(body.cnpj)) return fail('Informe o nome e um CNPJ válido.');
-      await rawDb().prepare('UPDATE suppliers SET legal_name=?,trade_name=?,cnpj=?,city=?,state=?,active=?,updated_at=? WHERE id=?').bind(textValue(body.legalName) || textValue(body.tradeName), textValue(body.tradeName), normalizeCnpj(body.cnpj), nullableText(body.city), nullableText(body.state)?.toUpperCase().slice(0,2) ?? null, active, now(), recordId).run();
+      escrita = rawDb().prepare('UPDATE suppliers SET legal_name=?,trade_name=?,cnpj=?,city=?,state=?,active=?,updated_at=? WHERE id=?').bind(textValue(body.legalName) || textValue(body.tradeName), textValue(body.tradeName), normalizeCnpj(body.cnpj), nullableText(body.city), nullableText(body.state)?.toUpperCase().slice(0,2) ?? null, active, now(), recordId);
     } else if (type === 'items') {
       if (!textValue(body.name)) return fail('Informe o nome da peça ou serviço.');
-      await rawDb().prepare('UPDATE catalog_items SET name=?,active=? WHERE id=?').bind(normalizeText(body.name), active, recordId).run();
+      escrita = rawDb().prepare('UPDATE catalog_items SET name=?,active=? WHERE id=?').bind(normalizeText(body.name), active, recordId);
     } else if (type === 'models') {
       if (!textValue(body.name)) return fail('Informe o modelo.');
-      await rawDb().prepare('UPDATE vehicle_models SET name=?,active=? WHERE id=?').bind(normalizeText(body.name), active, recordId).run();
+      escrita = rawDb().prepare('UPDATE vehicle_models SET name=?,active=? WHERE id=?').bind(normalizeText(body.name), active, recordId);
     } else if (type === 'units') {
       if (!textValue(body.code)) return fail('Informe a unidade de medida.');
-      await rawDb().prepare('UPDATE units SET code=?,name=?,active=? WHERE id=?').bind(normalizeText(body.code), normalizeText(body.code), active, recordId).run();
+      escrita = rawDb().prepare('UPDATE units SET code=?,name=?,active=? WHERE id=?').bind(normalizeText(body.code), normalizeText(body.code), active, recordId);
     } else {
       const state = normalizeText(body.state);
       if (!normalizeImportText(body.city) || !isValidState(state)) return fail('Informe a cidade e selecione uma UF brasileira válida.');
-      await rawDb().prepare('UPDATE locations SET city=?,state=? WHERE id=?').bind(normalizeImportText(body.city), state, recordId).run();
+      escrita = rawDb().prepare('UPDATE locations SET city=?,state=? WHERE id=?').bind(normalizeImportText(body.city), state, recordId);
     }
-    await audit(user.id, 'UPDATE', type, recordId, 'Cadastro atualizado'); return ok({ success: true });
+    await rawDb().batch([escrita, auditoriaNoLote(user.id, 'UPDATE', type, recordId, 'Cadastro atualizado')]); return ok({ success: true });
   } catch (error: unknown) {
     return fail(errorMessage(error).includes('UNIQUE') ? 'Já existe um cadastro com esses dados.' : 'Não foi possível atualizar o cadastro.');
   }
@@ -1064,8 +1097,17 @@ async function createUser(request: Request, actor: User) {
   if (!validatePassword(body.password)) return fail('A senha deve ter entre 10 e 200 caracteres.');
   if (!isOneOf(role, ROLES)) return fail('Perfil de usuário inválido.');
   const salt = crypto.randomUUID(), hash = await passwordHash(body.password, salt, PBKDF2_ITERACOES_ATUAL), userId = id('usr');
-  try { await rawDb().prepare('INSERT INTO users (id,name,email,password_salt,password_hash,password_iterations,role,active,created_at) VALUES (?,?,?,?,?,?,?,1,?)').bind(userId, name, email, salt, hash, PBKDF2_ITERACOES_ATUAL, role, now()).run(); await audit(actor.id, 'CREATE', 'user', userId, `Usuário ${email} criado`); return ok({ id: userId }, { status: 201 }); }
-  catch { return fail('Esse e-mail já está cadastrado.'); }
+  try {
+    await rawDb().batch([
+      rawDb().prepare('INSERT INTO users (id,name,email,password_salt,password_hash,password_iterations,role,active,created_at) VALUES (?,?,?,?,?,?,?,1,?)').bind(userId, name, email, salt, hash, PBKDF2_ITERACOES_ATUAL, role, now()),
+      auditoriaNoLote(actor.id, 'CREATE', 'user', userId, `Usuário ${email} criado`),
+    ]);
+    return ok({ id: userId }, { status: 201 });
+  } catch (erro: unknown) {
+    // So a violacao de UNIQUE e e-mail repetido; o resto e falha real.
+    if (ehErroUnique(erro)) return fail('Esse e-mail já está cadastrado.');
+    throw erro;
+  }
 }
 
 async function search(params: URLSearchParams) {
@@ -1148,14 +1190,14 @@ async function importWorkbookComTrava(request: Request, user: User, agreementId:
   if (!preview) await rawDb().prepare(`INSERT INTO imports (id,agreement_id,filename,mode,status,created_by,created_at) VALUES (?,?,?,?,?,?,?)`).bind(importId, agreementId, safeFilename(file.name), 'replace', 'processing', user.id, timestamp).run();
   try {
     const leitura = await lerPlanilha(file);
-    if (!leitura.ok) throw new Error(leitura.erro);
+    if (!leitura.ok) throw new EntradaInvalida(leitura.erro);
     const sourceRows = leitura.linhas as Row[];
-    if (!sourceRows.length) throw new Error('A planilha não contém linhas de dados.');
+    if (!sourceRows.length) throw new EntradaInvalida('A planilha não contém linhas de dados.');
     const ausentes = colunasAusentes(sourceRows[0]);
-    if (ausentes.length) throw new Error(`A planilha não tem ${ausentes.length === 1 ? 'a coluna' : 'as colunas'} ${ausentes.join(', ')}. Confira o cabeçalho da primeira aba.`);
+    if (ausentes.length) throw new EntradaInvalida(`A planilha não tem ${ausentes.length === 1 ? 'a coluna' : 'as colunas'} ${ausentes.join(', ')}. Confira o cabeçalho da primeira aba.`);
     const parsed = sourceRows.map((row, index) => parseImportRow(row, leitura.numerosLinhas[index]));
     const fornecedor=await first<{cnpj:string;tradeName:string;legalName:string}>('SELECT s.cnpj,s.trade_name AS tradeName,s.legal_name AS legalName FROM agreements a JOIN suppliers s ON s.id=a.supplier_id WHERE a.id=?',[agreementId]);
-    if(!fornecedor)throw new Error('Acordo de destino não encontrado.');
+    if(!fornecedor)throw new EntradaInvalida('Acordo de destino não encontrado.');
     validarFornecedorImportacao(parsed,fornecedor);
     await applyImportMappings(parsed);
     const errors = parsed.filter((r) => r.error);
@@ -1180,17 +1222,21 @@ async function importWorkbookComTrava(request: Request, user: User, agreementId:
     };
     // A publicacao troca a abrangencia do acordo: pega a mesma trava da edicao.
     const donoAcordo = await travarAcordo(agreementId);
-    if (!donoAcordo) throw new Error('outro usuário está alterando este acordo neste momento. Tente de novo em instantes');
+    if (!donoAcordo) throw new EntradaInvalida('outro usuário está alterando este acordo neste momento. Tente de novo em instantes');
     let summary: Record<string, unknown>;
     try { summary = await processAgreementImport(prepared.rows, user, importId, agreementId, publish); }
     finally { await soltarAcordo(agreementId, donoAcordo); }
     return ok({ success: true, summary });
   } catch (error: unknown) {
-    if (preview) return ok({ preview: true, valid: false, error: errorMessage(error, 'Arquivo inválido.') });
+    // So erros de validacao conhecidos chegam ao usuario. O resto (banco,
+    // bug) vira mensagem generica e fica no log do servidor.
+    const conhecido = error instanceof EntradaInvalida;
+    if (!conhecido) console.error('[portal] falha inesperada na importacao:', error);
+    const message = conhecido ? errorMessage(error, 'arquivo inválido') : 'erro interno ao processar a planilha. Tente de novo; se persistir, avise o administrador.';
+    if (preview) return ok({ preview: true, valid: false, error: conhecido ? message : `Não foi possível conferir: ${message}` }, conhecido ? undefined : { status: 500 });
     await cleanupFailedImport(importId);
-    const message = errorMessage(error, 'arquivo inválido');
     await rawDb().prepare('UPDATE imports SET status=?,summary_json=?,completed_at=? WHERE id=?').bind('error', JSON.stringify({ error: message }), now(), importId).run();
-    return ok({ error: `Não foi possível importar: ${message}`, importId }, { status: 400 });
+    return ok({ error: `Não foi possível importar: ${message}`, importId }, { status: conhecido ? 400 : 500 });
   }
 }
 
@@ -1216,11 +1262,11 @@ async function applyImportMappings(rows: ReturnType<typeof parseImportRow>[]) {
 type PublishImport = (statements: D1PreparedStatement[], details: Record<string, unknown>) => Promise<Record<string, unknown>>;
 
 async function processAgreementImport(rows: ReturnType<typeof parseImportRow>[], user: User, importId: string, agreementId: string, publish: PublishImport) {
-  const agreement = await first<{id:string;number:string}>('SELECT id,number FROM agreements WHERE id=?',[agreementId]); if(!agreement) throw new Error('Acordo não encontrado');
+  const agreement = await first<{id:string;number:string}>('SELECT id,number FROM agreements WHERE id=?',[agreementId]); if(!agreement) throw new EntradaInvalida('Acordo não encontrado');
   const fornecedor=await first<{cnpj:string;tradeName:string;legalName:string}>('SELECT s.cnpj,s.trade_name AS tradeName,s.legal_name AS legalName FROM agreements a JOIN suppliers s ON s.id=a.supplier_id WHERE a.id=?',[agreementId]);
-  if(!fornecedor)throw new Error('Fornecedor de destino não encontrado.');
+  if(!fornecedor)throw new EntradaInvalida('Fornecedor de destino não encontrado.');
   validarFornecedorImportacao(rows,fornecedor);
-  if(rows.some(row=>row.error))throw new Error('O fornecedor do acordo mudou durante a conferência. Confira a planilha novamente.');
+  if(rows.some(row=>row.error))throw new EntradaInvalida('O fornecedor do acordo mudou durante a conferência. Confira a planilha novamente.');
   const db=rawDb(), timestamp=now();
   const max=await first<{n:number}>('SELECT COALESCE(MAX(version_number),0) n FROM agreement_versions WHERE agreement_id=?',[agreementId]);
   const versionId=id('ver'), versionNumber=Number(max?.n||0)+1;
@@ -1564,9 +1610,14 @@ async function updateUser(request:Request,actor:User,userId:string){
   const statements=[rawDb().prepare(password !== null ? ATUALIZAR_USUARIO_COM_SENHA_SQL : ATUALIZAR_USUARIO_SQL)
     .bind(...baseValues,...(password !== null ? [salt,hash,PBKDF2_ITERACOES_ATUAL] : []),userId,role,active)];
   if(password !== null) statements.push(rawDb().prepare(ENCERRAR_SESSOES_REDEFINIDAS_SQL).bind(userId,userId,salt));
+  // Desativar ou trocar o perfil derruba as sessoes abertas: o acesso antigo
+  // nao pode continuar valendo ate o fim do prazo da sessao.
+  const encerrarSessoes=(target.active===1&&active===0)||role!==target.role;
+  if(encerrarSessoes) statements.push(rawDb().prepare(ENCERRAR_SESSOES_ALTERADAS_SQL).bind(userId,userId,role,active));
   const [atualizado]=await rawDb().batch(statements);
   if (!atualizado.meta.changes) return fail('Este é o último administrador ativo. Promova outro antes de alterar este.',409);
   if(password !== null) changes.push('senha redefinida (sessões encerradas)');
+  else if(encerrarSessoes) changes.push('sessões encerradas');
   await audit(actor.id,'UPDATE','user',userId,`${target.email}: ${changes.join('; ')||'sem alterações'}`);
   return ok({ success:true });
 }
@@ -1592,6 +1643,11 @@ async function exportDatabase(){
     emailNotifications:await all('SELECT * FROM email_notifications ORDER BY created_at'),
     auditLogs:await all('SELECT * FROM audit_logs ORDER BY created_at'),
   };
+  // Tabelas criadas por migracoes posteriores entram so se existirem.
+  const extras:Record<string,string>={reportJobs:'report_jobs',dailyReportDeliveries:'daily_report_deliveries'};
+  for(const [nome,tabela] of Object.entries(extras)){
+    if(await first("SELECT 1 ok FROM sqlite_master WHERE type='table' AND name=?",[tabela])) (tables as Record<string,unknown[]>)[nome]=await all(`SELECT * FROM ${tabela}`);
+  }
   const data={
     format:'portal-suprimentos-data-export',
     formatVersion:1,
@@ -1600,7 +1656,7 @@ async function exportDatabase(){
     recordCounts:Object.fromEntries(Object.entries(tables).map(([name,records])=>[name,records.length])),
     tables,
   };
-  return new NextResponse(JSON.stringify(data,null,2),{headers:{
+  return new NextResponse(JSON.stringify(data),{headers:{
     'cache-control':'no-store',
     'content-type':'application/json; charset=utf-8',
     'content-disposition':`attachment; filename="exportacao-portal-suprimentos-${now().slice(0,10)}.json"`,

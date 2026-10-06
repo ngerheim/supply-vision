@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { setImmediate } from 'node:timers/promises';
-import { iniciarAtualizacaoPeriodica } from '../lib/atualizacao-periodica.ts';
+import { CABECALHO_ATUALIZACAO_AUTOMATICA, iniciarAtualizacaoPeriodica, registraAtividade } from '../lib/atualizacao-periodica.ts';
+import { api } from '../lib/api.ts';
 
 void test('consulta lenta não sobrepõe pedidos e a parada cancela o pedido ativo', async t => {
   t.mock.timers.enable({ apis: ['setTimeout'] });
@@ -45,4 +46,27 @@ void test('aba oculta não consulta e atualização retorna quando fica visível
   assert.equal(chamadas, 1);
   await setImmediate(); parar(); t.mock.timers.tick(5000);
   assert.equal(chamadas, 1);
+});
+
+void test('consulta automática valida a sessão sem renovar a atividade', () => {
+  const agora = Date.parse('2026-10-06T12:00:00Z');
+  const automatica = new Request('http://portal/api/reports', { headers: CABECALHO_ATUALIZACAO_AUTOMATICA });
+  const manual = new Request('http://portal/api/reports');
+  assert.equal(registraAtividade(automatica, agora - 10 * 60000, agora), false);
+  assert.equal(registraAtividade(automatica, 0, agora), false);
+  assert.equal(registraAtividade(manual, agora - 10 * 60000, agora), true);
+  // Continua gravando no máximo uma vez por minuto.
+  assert.equal(registraAtividade(manual, agora - 30000, agora), false);
+  assert.equal(registraAtividade(manual, 0, agora), true);
+});
+
+void test('cliente envia o cabeçalho de consulta automática só quando pedido', async t => {
+  const recebidos: (string | null)[] = [];
+  t.mock.method(globalThis, 'fetch', async (_path: string, init?: RequestInit) => {
+    recebidos.push(new Headers(init?.headers).get('x-portal-poll'));
+    return new Response('{}', { headers: { 'content-type': 'application/json' } });
+  });
+  await api('/api/reports', { headers: CABECALHO_ATUALIZACAO_AUTOMATICA });
+  await api('/api/reports');
+  assert.deepEqual(recebidos, ['1', null]);
 });

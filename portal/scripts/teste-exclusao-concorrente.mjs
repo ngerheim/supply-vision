@@ -81,8 +81,12 @@ try {
   console.log('[OK] Revisoes impedem perda de edicoes em acordos e condicoes.');
   const audit=JSON.parse(db.prepare("SELECT details FROM audit_logs WHERE entity_id=? AND action='UPDATE' ORDER BY created_at DESC LIMIT 1").get(item).details);
   assert.equal(audit.antes.price,10);assert.equal(audit.depois.price,12.5);
-  for (const rota of [`items/${item}`, `agreements/${acordo}`]) {
-    const response = await fetch(`${url}/api/${rota}`, { method: 'DELETE', headers });
+  for (const [rota, tabela, chave] of [[`items/${item}`, 'agreement_items', item], [`agreements/${acordo}`, 'agreements', acordo]]) {
+    const revisao = Number(db.prepare(`SELECT revision FROM ${tabela} WHERE id=?`).get(chave).revision);
+    // Revisao antiga e recusada sem apagar nada.
+    const antiga = await fetch(`${url}/api/${rota}?expectedRevision=${revisao + 1}`, { method: 'DELETE', headers });
+    assert.equal(antiga.status, 409, await antiga.text());
+    const response = await fetch(`${url}/api/${rota}?expectedRevision=${revisao}`, { method: 'DELETE', headers });
     assert.equal(response.status, 200, await response.text());
   }
   const removed=JSON.parse(db.prepare("SELECT details FROM audit_logs WHERE entity_id=? AND action='DELETE'").get(item).details);
