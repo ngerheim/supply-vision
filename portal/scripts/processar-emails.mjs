@@ -1,3 +1,4 @@
+import { validacaoAtiva } from './operacao-validacao.mjs';
 import { abrirBancoLocal } from './banco-local.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -198,6 +199,7 @@ function concluirRelatorio(db,item){const agora=new Date().toISOString();db.prep
 function falharRelatorio(db,item,erro){const agora=new Date(),definitivo=Number(item.attempts)>=maxTentativas||!falhaAntesEntrega(erro),mensagem=((!falhaAntesEntrega(erro)?MENSAGEM_INTERROMPIDO+' ':'')+(erro instanceof Error?erro.message:'Falha SMTP')).replace(/[\r\n]+/g,' ').slice(0,500);db.prepare("UPDATE daily_report_deliveries SET status=?,next_attempt_at=?,locked_at=NULL,last_error=?,updated_at=? WHERE id=? AND status='processing' AND attempts=? AND locked_at=?").run(definitivo?'failed':'pending',proximaTentativa(Number(item.attempts),agora),mensagem,agora.toISOString(),item.id,item.attempts,item.locked_at)}
 
 export async function processarRelatoriosDiarios(db,config,transportador,{concluir:confirmar=concluirRelatorio,esperas}={}){
+  if(validacaoAtiva(db))return;
   prepararRelatoriosDiarios(db);
   for(let indice=0;indice<5;indice++){
     const [item]=reservarRelatoriosDiarios(db);if(!item)break;
@@ -226,6 +228,7 @@ async function ciclo(config, transportador) {
 
 export async function processarNotificacoes(db, config, transportador, { concluir: confirmar = concluir, esperas } = {}) {
     for (let indice=0;indice<10;indice++) {
+      if(validacaoAtiva(db))break;
       const [item]=reservar(db,1);if(!item)break;
       try {
         const dados = JSON.parse(item.payload_json);

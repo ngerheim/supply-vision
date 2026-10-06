@@ -1,3 +1,4 @@
+import { validacaoAtiva } from './operacao-validacao.mjs';
 // Ponte local: o Worker só enfileira pedidos; este processo executa Python.
 import fs from 'node:fs';
 import path from 'node:path';
@@ -44,6 +45,7 @@ export function comandoRelatorio(job) {
   ];
 }
 export function reservarRelatorio(db) {
+  if (validacaoAtiva(db)) return null;
   // Leitura antes da transação de escrita: o ciclo roda a cada 3 s e a fila
   // quase sempre está vazia. Abrir BEGIN IMMEDIATE à toa disputava o arquivo
   // com o portal (miniflare/D1), que não espera o lock e responde 500.
@@ -407,6 +409,7 @@ async function principal() {
         revisarPedidosInterrompidos(db);
         inicializado = true;
       }
+      if (validacaoAtiva(db)) return;
       const job = reservarRelatorio(db);
       if (!job) return;
       try {
@@ -448,7 +451,7 @@ async function principal() {
         ).run(new Date().toISOString());
         ultimoPulso = Date.now();
       }
-      if (Date.now() - ultimaLimpeza >= 60_000) {
+      if (Date.now() - ultimaLimpeza >= 60_000 && !validacaoAtiva(db)) {
         const removidos = limparHistoricosExpirados(db);
         ultimaLimpeza = Date.now();
         if (removidos) console.log(`${removidos} arquivo(s) histórico(s) expirado(s) excluído(s).`);

@@ -13,6 +13,8 @@ export function prepararRestauracao(origem, temporario, validar) {
       db.exec('PRAGMA journal_mode=DELETE; BEGIN IMMEDIATE');
       try {
         const marcados = marcarFilasAposRestauracao(db);
+        if (db.prepare("SELECT 1 FROM sqlite_schema WHERE type='table' AND name='operacao_validacao'").get())
+          db.exec('UPDATE operacao_validacao SET ativa=0');
         db.exec('COMMIT');
         return { resumo, marcados };
       } catch (erro) { db.exec('ROLLBACK'); throw erro; }
