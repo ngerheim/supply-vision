@@ -100,7 +100,7 @@ def _linhas_uteis(caminho):
             if ln.strip() and not ln.lstrip().startswith('#')]
 
 
-def _checar_queda(nome, quantidade):
+def _checar_queda(nome, quantidade, registrar=True):
     """Bloqueia lista vazia e queda brusca; registra a contagem em disco.
 
     Na primeira carga não há com o que comparar: apenas registra.
@@ -134,7 +134,7 @@ def _checar_queda(nome, quantidade):
             f'   Uma lista de filtro vazia deixaria passar tudo, em silêncio.'
         )
 
-    if hist.get(nome) != quantidade:
+    if registrar and hist.get(nome) != quantidade:
         hist[nome] = quantidade
         tmp = CONTAGENS.with_suffix('.json.tmp')
         try:
@@ -146,14 +146,14 @@ def _checar_queda(nome, quantidade):
     return quantidade
 
 
-def carregar_lista(nome):
+def carregar_lista(nome, registrar=True):
     """Lê um .txt de filtros e devolve um set de strings."""
     valores = {ln.strip() for ln in _linhas_uteis(FILTROS / nome)}
-    _checar_queda(nome, len(valores))
+    _checar_queda(nome, len(valores), registrar=registrar)
     return valores
 
 
-def carregar_de_para(nome, col_de, col_para, normalizar_chave=True):
+def carregar_de_para(nome, col_de, col_para, normalizar_chave=True, registrar=True):
     """Lê um .csv de de-para e devolve {chave: destino ou None}.
 
     As chaves são normalizadas por padrão, porque quem consome compara contra
@@ -200,5 +200,5 @@ def carregar_de_para(nome, col_de, col_para, normalizar_chave=True):
             f'   A última venceria em silêncio, então o carregamento para aqui.\n{det}'
         )
 
-    _checar_queda(nome, len(mapa))
+    _checar_queda(nome, len(mapa), registrar=registrar)
     return mapa

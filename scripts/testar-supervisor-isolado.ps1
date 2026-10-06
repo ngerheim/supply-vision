@@ -22,6 +22,17 @@ try{
  Copy-Item "$raizReal\scripts\supervisor.ps1","$raizReal\scripts\operacao-logica.ps1","$raizReal\scripts\validar-operacao.ps1","$raizReal\scripts\notificacao.ps1" "$temp\scripts"
  $conteudos=@{'portal\dist\server\wrangler.json'='{}';'portal\dist\server\index.js'='const PORTAL_API_TOKEN="x";';'alertas\.venv\Scripts\python.exe'='teste';'privado\alertas\config\cfg_qlik.txt'='token';'privado\alertas\config\destinatarios.txt'='destino';'privado\alertas\parametros\de_para\itens.csv'='origem,destino';'privado\alertas\parametros\de_para\modelos.csv'='origem,destino';'acordos.xlsx'='teste'}
  foreach($item in $conteudos.GetEnumerator()){[IO.File]::WriteAllText((Join-Path $temp $item.Key),$item.Value)}
+ New-Item -ItemType Directory -Force "$temp\alertas\processo","$temp\privado\alertas\parametros\filtros"|Out-Null
+ Copy-Item "$raizReal\alertas\parametros" "$temp\alertas" -Recurse -Force
+ Copy-Item "$raizReal\alertas\processo\validar_parametros.py" "$temp\alertas\processo"
+ $parametros=Join-Path $raizReal 'alertas/parametros'
+ foreach($exemplo in @(Get-ChildItem $parametros -Recurse -File | Where-Object Name -Like '*.exemplo.*')){
+   $relativo=$exemplo.FullName.Substring($parametros.Length).TrimStart('\').Replace('.exemplo','')
+   Copy-Item $exemplo.FullName (Join-Path "$temp\privado\alertas\parametros" $relativo) -Force
+ }
+ Remove-Item -LiteralPath "$temp\alertas\.venv\Scripts\python.exe" -Force
+ & python.exe -m venv --without-pip "$temp\alertas\.venv"
+ if($LASTEXITCODE-ne0){throw 'Nao foi possivel criar Python real para validacao do supervisor.'}
  [IO.File]::WriteAllText("$temp\portal\scripts\processar-relatorios.mjs", "import fs from 'node:fs';setInterval(()=>{if(fs.existsSync('../privado/operacao/parar.sinal'))process.exit(0)},500);")
  # Processo longo o bastante para o teste observar os modulos ativos, mas que
  # tambem respeita o sinal de parada. Assim uma maquina sem permissao para
