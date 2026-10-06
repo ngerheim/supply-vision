@@ -69,6 +69,40 @@ function preparar() {
     },
   };
 }
+
+void test('segunda limpeza nao revisita mil recortes removidos e preserva metadados', () => {
+  const ctx=preparar(), agora=Date.now();
+  try {
+    const inserir=ctx.db.prepare("INSERT INTO report_jobs(id,request_key,action,status,created_by,created_at,completed_at,artifacts_json,log) VALUES(?,?,'recorte','done','admin',?,?,?,'historico preservado')");
+    ctx.db.exec('BEGIN');
+    for(let i=0;i<1000;i++)inserir.run(`antigo${i}`,`chave${i}`,new Date(agora-2*VALIDADE_HISTORICO_MS).toISOString(),new Date(agora-VALIDADE_HISTORICO_MS-1000).toISOString(),JSON.stringify([{name:`${i}.xlsx`,relativePath:`alertas/relatorios/historicos/${i}.xlsx`}]));
+    ctx.db.exec('COMMIT');
+    assert.equal(limparHistoricosExpirados(ctx.db,ctx.pasta,agora),0);
+    assert.equal(ctx.db.prepare('SELECT COUNT(*) n FROM report_jobs WHERE artifacts_cleaned_at IS NOT NULL').get().n,1000);
+    const lstat=fs.lstatSync;
+    try {
+      fs.lstatSync=()=>{throw new Error('Nao deve revisitar arquivos removidos')};
+      assert.equal(limparHistoricosExpirados(ctx.db,ctx.pasta,agora),0);
+    } finally { fs.lstatSync=lstat; }
+    assert.equal(ctx.db.prepare("SELECT COUNT(*) n FROM report_jobs WHERE log='historico preservado' AND artifacts_json!='[]'").get().n,1000);
+  } finally { ctx.close(); }
+});
+
+void test('falha ao excluir nao marca limpeza concluida e permite retentativa', () => {
+  const ctx=preparar(), agora=Date.now();
+  const pasta=path.join(ctx.pasta,'alertas/relatorios/historicos');fs.mkdirSync(pasta,{recursive:true});
+  const arquivo=path.join(pasta,'recorte_rptteste.xlsx');fs.writeFileSync(arquivo,'dados');
+  ctx.db.prepare("UPDATE report_jobs SET action='recorte',status='done',completed_at=?,artifacts_json=?").run(new Date(agora-VALIDADE_HISTORICO_MS-1000).toISOString(),JSON.stringify([{name:'recorte_rptteste.xlsx',relativePath:'alertas/relatorios/historicos/recorte_rptteste.xlsx'}]));
+  const unlink=fs.unlinkSync;
+  try {
+    fs.unlinkSync=()=>{throw Object.assign(new Error('sem permissao'),{code:'EACCES'})};
+    assert.equal(limparHistoricosExpirados(ctx.db,ctx.pasta,agora),0);
+    assert.equal(ctx.db.prepare('SELECT artifacts_cleaned_at FROM report_jobs').get().artifacts_cleaned_at,null);
+    fs.unlinkSync=unlink;
+    assert.equal(limparHistoricosExpirados(ctx.db,ctx.pasta,agora),1);
+    assert.ok(ctx.db.prepare('SELECT artifacts_cleaned_at FROM report_jobs').get().artifacts_cleaned_at);
+  } finally { fs.unlinkSync=unlink;ctx.close(); }
+});
 void test('runner monta argumentos sem shell e cobre todas as funções do bat', () => {
   assert.match(
     identificadorExecucao('rpt_abc123', new Date(2026, 9, 5, 11, 12, 13)),

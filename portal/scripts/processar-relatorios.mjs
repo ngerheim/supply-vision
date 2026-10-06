@@ -202,19 +202,39 @@ export function arquivoPermitido(job, nome, raiz = privado) {
   }
 }
 export function limparHistoricosExpirados(db, raiz = privado, agora = Date.now()) {
+  // O consumidor pode partir antes das migracoes do Portal em uma base antiga.
+  if (!db.prepare('PRAGMA table_info(report_jobs)').all().some(c => c.name === 'artifacts_cleaned_at')) {
+    try { db.exec('ALTER TABLE report_jobs ADD COLUMN artifacts_cleaned_at TEXT'); }
+    catch (erro) { if (!String(erro.message).includes('duplicate column')) throw erro; }
+  }
+  db.exec("CREATE INDEX IF NOT EXISTS idx_report_jobs_cleanup ON report_jobs(completed_at) WHERE action='recorte' AND completed_at IS NOT NULL AND status IN ('done','failed') AND artifacts_json!='[]' AND artifacts_cleaned_at IS NULL");
   let removidos = 0;
-  const jobs = db.prepare("SELECT action,completed_at,artifacts_json FROM report_jobs WHERE action='recorte' AND completed_at IS NOT NULL AND status IN ('done','failed') AND artifacts_json!='[]'").all();
+  const jobs = db.prepare("SELECT id,action,completed_at,artifacts_json FROM report_jobs WHERE action='recorte' AND completed_at IS NOT NULL AND status IN ('done','failed') AND artifacts_json!='[]' AND artifacts_cleaned_at IS NULL").all();
+  const marcar = db.prepare('UPDATE report_jobs SET artifacts_cleaned_at=? WHERE id=? AND artifacts_json=?');
   for (const job of jobs) {
+    let pendente = false;
     for (const artifact of JSON.parse(job.artifacts_json)) {
-      if (!arquivoHistoricoExpirado(job, artifact, agora)) continue;
-      const arquivo = arquivoPermitido(job, artifact.name, raiz);
-      if (!arquivo) continue;
-      const historicos = fs.realpathSync.native(path.join(raiz, 'alertas', 'relatorios', 'historicos'));
-      const relativa = path.relative(historicos, arquivo);
+      if (!arquivoHistoricoExpirado(job, artifact, agora)) { pendente = true; continue; }
+      const candidato = path.resolve(raiz, artifact.relativePath);
+      const pastaHistoricos = path.resolve(raiz, 'alertas', 'relatorios', 'historicos');
+      const relativa = path.relative(pastaHistoricos, candidato);
       if (relativa.startsWith('..') || path.isAbsolute(relativa)) continue;
-      try { fs.unlinkSync(arquivo); removidos++; }
-      catch (erro) { console.error('Não foi possível excluir histórico expirado:', erro.code); }
+      try {
+        fs.lstatSync(candidato);
+        const arquivo = arquivoPermitido(job, artifact.name, raiz);
+        if (!arquivo) { pendente = true; continue; }
+        const historicos = fs.realpathSync.native(pastaHistoricos);
+        const real = path.relative(historicos, arquivo);
+        if (real.startsWith('..') || path.isAbsolute(real)) continue;
+        fs.unlinkSync(arquivo); removidos++;
+      } catch (erro) {
+        if (!['ENOENT','ENOTDIR'].includes(erro.code)) {
+          pendente = true;
+          console.error('Nao foi possivel excluir historico expirado:', erro.code);
+        }
+      }
     }
+    if (!pendente) marcar.run(new Date(agora).toISOString(), job.id, job.artifacts_json);
   }
   return removidos;
 }
