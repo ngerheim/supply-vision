@@ -33,7 +33,8 @@ export async function consultarRelatorios(jobId?: string, arquivo?: string) {
     .first();
   if (!job) return resposta({ error: 'Execução não encontrada.' }, 404);
   if (!arquivo) return resposta({ job: { ...job, artifactsJson: informarValidadeArquivos(job) } });
-  const artifact = JSON.parse(String(job.artifacts_json)).find((a: { name: string }) => a.name === arquivo);
+  const artifact = JSON.parse(informarValidadeArquivos(job)).find((a: { name: string }) => a.name === arquivo);
+  if (!artifact) return resposta({ error: 'Arquivo não encontrado nesta execução.' }, 404);
   if (artifact && arquivoHistoricoExpirado(job, artifact)) return resposta({ error: 'Arquivo expirado. Os históricos ficam disponíveis por 24 horas. Gere um novo recorte.' }, 410);
   const vars = env as unknown as {
     PORTAL_API_TOKEN?: string;
