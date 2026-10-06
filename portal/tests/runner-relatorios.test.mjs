@@ -14,7 +14,33 @@ import {
   listarArquivos,
   arquivoPermitido,
   criarServidorArquivos,
+  limparHistoricosExpirados,
 } from '../scripts/processar-relatorios.mjs';
+import { VALIDADE_HISTORICO_MS } from '../lib/retencao-relatorios.ts';
+
+void test('histórico expirado retorna 410 e limpeza exclui só seus arquivos mantendo registros', async () => {
+  const ctx = preparar();
+  const pasta = path.join(ctx.pasta, 'alertas/relatorios/historicos');
+  fs.mkdirSync(pasta, { recursive: true });
+  const antigo = path.join(pasta, 'recorte_rptteste.xlsx');
+  const atual = path.join(pasta, 'atual_rptteste.xlsx');
+  fs.writeFileSync(antigo, 'antigo'); fs.writeFileSync(atual, 'atual');
+  const idade = new Date(Date.now() - VALIDADE_HISTORICO_MS - 1000);
+  fs.utimesSync(antigo, idade, idade);
+  const artifacts = listarArquivos('rpt_teste', ctx.pasta);
+  ctx.db.prepare("UPDATE report_jobs SET action='recorte',status='done',completed_at=?,log='Preservar este registro',artifacts_json=?").run(new Date().toISOString(), JSON.stringify(artifacts));
+  const server = criarServidorArquivos({ token: 'teste', raiz: ctx.pasta, abrirBanco: () => new DatabaseSync(ctx.arquivo) });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  const url = `http://127.0.0.1:${server.address().port}/rpt_teste/recorte_rptteste.xlsx`;
+  try {
+    assert.equal((await fetch(url, { headers: { authorization: 'Bearer teste' } })).status, 410);
+    assert.equal(limparHistoricosExpirados(ctx.db, ctx.pasta), 1);
+    assert.equal(fs.existsSync(antigo), false); assert.equal(fs.existsSync(atual), true);
+    assert.equal(ctx.db.prepare('SELECT log FROM report_jobs').get().log, 'Preservar este registro');
+    assert.equal((await fetch(url, { headers: { authorization: 'Bearer teste' } })).status, 410);
+    assert.equal(limparHistoricosExpirados(ctx.db, ctx.pasta), 0);
+  } finally { await new Promise(resolve => server.close(resolve)); ctx.close(); }
+});
 
 function preparar() {
   const pasta = fs.mkdtempSync(path.join(os.tmpdir(), 'sv-relatorio-')),
