@@ -156,9 +156,25 @@ def concluir_sem_envio(situacao):
     sys.exit(0)
 
 
+def ler_slot_argv(argv):
+    """Devolve o valor de --slot HH:MM (ou --slot=HH:MM), se informado."""
+    for i, arg in enumerate(argv):
+        if arg == "--slot" and i + 1 < len(argv):
+            return argv[i + 1]
+        if arg.startswith("--slot="):
+            return arg.split("=", 1)[1]
+    return ""
+
+
 def main():
     if "--sem-envio" in sys.argv:
         os.environ["SUPPLY_VISION_SEM_ENVIO"] = "1"
+    # Horário agendado do disparo: o baixar_base.py calcula datas e contexto
+    # a partir dele, não do relógio. Vai pelo ambiente, que os scripts filhos
+    # herdam em rodar_script().
+    slot = ler_slot_argv(sys.argv[1:])
+    if slot:
+        os.environ["SV_ALERTA_SLOT"] = slot
     try:
         adquirir_lock()
     except RuntimeError as e:
@@ -168,6 +184,8 @@ def main():
     logging.info(f"Run ID: {RUN_ID}")
     logging.info(f"Pipeline iniciado — {datetime.now().strftime('%d/%m/%Y %H:%M')}")
     logging.info(f"Log: {log_path}")
+    if os.environ.get("SV_ALERTA_SLOT"):
+        logging.info(f"Slot agendado: {os.environ['SV_ALERTA_SLOT']}")
 
     ok, output_baixar = rodar_script(SCRIPT_BAIXAR, "Download Qlik (filtrado)")
     if not ok:

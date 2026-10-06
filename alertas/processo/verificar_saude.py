@@ -183,7 +183,7 @@ def verificar(hhmm_esperado, run_id=None):
 
     conteudo = log.read_text(encoding="utf-8", errors="replace")
 
-    if "CONCLUÍDO COM SUCESSO" in conteudo or "AVISO ENVIADO" in conteudo:
+    if "CONCLUÍDO COM SUCESSO" in conteudo:
         registrar(f"OK — {log.name}")
         return
 

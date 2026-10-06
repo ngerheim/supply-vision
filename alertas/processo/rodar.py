@@ -134,9 +134,15 @@ def carregar_base(path):
         if n: print(f"  Filtro {motivo}: {n:,} linhas removidas ({n0:,} → {len(df):,})")
         return df
 
-    df = _filtra(df, df["Grupo Despesa"].isin(GRUPOS_EXCLUIR),          "Grupo Despesa")
-    df = _filtra(df, df["Modelo"].isin(MODELOS_EXCLUIR),                "Modelo excluído")
-    df = _filtra(df, df["Fornecedor"].isin(FORNECEDORES_EXCLUIR),       "Fornecedor excluído")
+    # Listas de exclusão comparadas na forma normalizada dos dois lados, como
+    # ITENS: acento, caixa ou espaço a mais não podem deixar a linha passar.
+    def _excluir(coluna, lista):
+        alvo = {_norm(i) for i in lista} - {""}
+        return df[coluna].apply(_norm).isin(alvo)
+
+    df = _filtra(df, _excluir("Grupo Despesa", GRUPOS_EXCLUIR),         "Grupo Despesa")
+    df = _filtra(df, _excluir("Modelo", MODELOS_EXCLUIR),               "Modelo excluído")
+    df = _filtra(df, _excluir("Fornecedor", FORNECEDORES_EXCLUIR),      "Fornecedor excluído")
     df = _filtra(df, df["_fornec_norm"] == "",                          "Sem CNPJ")
     df = _filtra(df, df["_desc_norm"].isin({_norm(i) for i in ITENS_EXCLUIR}), "Item excluído")
     df = _filtra(df, df["Valor Unitario"].isna() | (df["Valor Unitario"] == 0), "Sem valor")
@@ -512,7 +518,11 @@ def _data_vigencia(valores):
     iso = texto.str.match(r"^\d{4}-\d{2}-\d{2}(?:$|[ T])", na=False)
     # Excel pode devolver datetime; ISO explicito impede trocar mes por dia.
     resultado = pd.to_datetime(texto.where(iso), format="ISO8601", errors="coerce")
-    brasileiro = pd.to_datetime(texto.where(~iso), format="%d/%m/%Y", errors="coerce")
+    # Formato brasileiro aceita hora opcional (HH:MM ou HH:MM:SS) depois da data.
+    br = texto.where(~iso).str.strip()
+    brasileiro = pd.to_datetime(br, format="%d/%m/%Y", errors="coerce")
+    for formato in ("%d/%m/%Y %H:%M", "%d/%m/%Y %H:%M:%S"):
+        brasileiro = brasileiro.fillna(pd.to_datetime(br, format=formato, errors="coerce"))
     return resultado.fillna(brasileiro).dt.normalize()
 
 
@@ -539,7 +549,7 @@ def _acordos_vigentes_em(df_acordo, data_compra, vigencia=None):
 def processar(df_base, df_acordo):
     """Cruza cada compra com o universo de acordos válido para sua data.
 
-    Compras anteriores a 18/09/2026 usam toda a tabela vigente atual, conforme
+    Compras anteriores a 18/09/2026 usam todos os acordos ativos da tabela atual, conforme
     a regra de transição definida pela operação. Da data de corte em diante,
     situação e intervalo de vigência passam a ser respeitados.
     """
@@ -556,8 +566,11 @@ def processar(df_base, df_acordo):
     # inteira so para passar pelo _processar_periodo, que a poe em quarentena.
     invalidas = datas.isna()
     anteriores = datas.notna() & (datas < CORTE_VIGENCIA_ACORDOS)
-    grupos = [(anteriores | invalidas, df_acordo)]
     vigencia = _preparar_vigencia(df_acordo)
+    # Antes do corte vale a tabela atual inteira, mas só acordos ativos:
+    # suspenso ou encerrado não pode servir de referência em data nenhuma.
+    ativos = df_acordo[df_acordo["STATUS_ACORDO"].fillna("").astype(str).str.strip().str.lower() == "active"]
+    grupos = [(anteriores | invalidas, ativos)]
     for data_compra in sorted(datas[~(anteriores | invalidas)].unique()):
         data_compra = pd.Timestamp(data_compra)
         grupos.append((datas == data_compra, _acordos_vigentes_em(df_acordo, data_compra, vigencia)))
