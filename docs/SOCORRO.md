@@ -96,7 +96,19 @@ cd portal; npm run build; cd ..
 INICIAR.bat
 ```
 
-O banco não é afetado: ele vive em `privado/`, que o Git ignora.
+O `git reset` não mexe no banco (ele vive em `privado/`, que o Git ignora),
+mas isso não quer dizer que o banco esteja como antes: se a versão nova chegou
+a rodar, ela pode ter migrado ou gravado dados que a versão anterior não
+entende. Nesse caso, com a operação parada, restaure também o banco
+(`cd portal; node scripts/restaurar-backup.mjs`), escolhendo a cópia de antes
+da atualização (`--data AAAA-MM-DD` do dia anterior, se o backup de hoje já
+foi refeito pela versão nova).
+
+O `atualizar-servidor.ps1` faz isso sozinho quando reverte uma falha ocorrida
+depois de religar a versão nova: guarda `privado/portal/backups/pre-atualizacao.sqlite`
+antes da troca e o restaura junto com o código. Se essa restauração falhar,
+ele avisa em vermelho e deixa a operação parada — não religue antes de
+restaurar o banco.
 
 ## Reconciliação depois de um incidente
 

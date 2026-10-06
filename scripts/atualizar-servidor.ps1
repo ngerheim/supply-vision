@@ -4,8 +4,9 @@
 #   1. no notebook de desenvolvimento: commit e push
 #   2. no notebook servidor: este script
 #
-# O banco e os dados ficam em privado\, que o Git ignora. Eles nao sao
-# tocados aqui por construcao, nao por cuidado.
+# O banco e os dados ficam em privado\, que o Git ignora; a troca de codigo
+# nao os toca. A excecao e o Reverter: se a versao nova ja rodou contra o
+# banco real, ele restaura o banco da copia feita antes da troca.
 #
 #   .\scripts\atualizar-servidor.ps1            aplica
 #   .\scripts\atualizar-servidor.ps1 -Simular   so mostra o que viria
@@ -26,6 +27,9 @@ Set-Location $Raiz
 $Portal = Join-Path $Raiz 'portal'
 $Alertas = Join-Path $Raiz 'alertas'
 $Python = Join-Path $Alertas '.venv\Scripts\python.exe'
+$PastaBackupPortal = Join-Path (Obter-PastaPrivada $Raiz) 'portal\backups'
+$BackupAntesAtualizacaoOrigem = Join-Path $PastaBackupPortal 'portal-atual.sqlite'
+$BackupAntesAtualizacao = Join-Path $PastaBackupPortal 'pre-atualizacao.sqlite'
 
 function Etapa([string]$t) { Write-Host "`n== $t ==" -ForegroundColor Cyan }
 function Ok([string]$t) { Write-Host "   $t" -ForegroundColor Green }
@@ -167,7 +171,17 @@ if (-not $JaAtualizado) {
   & node (Join-Path $Portal 'scripts\backup.mjs')
   if ($LASTEXITCODE -ne 0) { throw 'O backup falhou. Atualizacao cancelada — nao se troca versao sem copia do banco.' }
   Ok 'backup concluido'
+  # portal-atual.sqlite e reescrito por todo backup, inclusive o diario do
+  # supervisor quando a versao nova sobe. Uma copia fixa guarda o estado de
+  # antes da troca para o Reverter, mesmo que outro backup rode no meio.
+  Copy-Item -LiteralPath $BackupAntesAtualizacaoOrigem -Destination $BackupAntesAtualizacao -Force
+  Ok "copia de antes da atualizacao: $BackupAntesAtualizacao"
 }
+
+# Vira $true quando a versao nova e iniciada contra o banco real. A partir
+# dai ela pode ter migrado ou gravado dados, e reverter so o codigo deixaria
+# a versao anterior com um banco que ela talvez nao entenda.
+$NovaVersaoIniciada = $false
 
 function Reverter([string]$motivo) {
   Write-Host "`n!! $motivo" -ForegroundColor Red
@@ -175,6 +189,32 @@ function Reverter([string]$motivo) {
   Parar-Operacao
   git reset --hard $anterior --quiet
   if ($LASTEXITCODE -ne 0) { throw 'Nao foi possivel restaurar o codigo anterior. Operacao permanece parada.' }
+  if ($NovaVersaoIniciada) {
+    # A versao nova ja rodou contra o banco real: o banco volta junto com o
+    # codigo, a partir da copia feita antes da troca. A operacao esta parada
+    # (Parar-Operacao acima), como restaurar-backup.mjs exige; ele guarda o
+    # estado atual como copia datada antes de sobrescrever.
+    Write-Host "!! a versao nova chegou a rodar com o banco real; restaurando o banco de $BackupAntesAtualizacao" -ForegroundColor Red
+    $restaurou = $false
+    try {
+      if (-not (Test-Path -LiteralPath $BackupAntesAtualizacao)) { throw "copia de antes da atualizacao nao encontrada: $BackupAntesAtualizacao" }
+      Copy-Item -LiteralPath $BackupAntesAtualizacao -Destination $BackupAntesAtualizacaoOrigem -Force
+      & node (Join-Path $Portal 'scripts\restaurar-backup.mjs') --sim
+      if ($LASTEXITCODE -ne 0) { throw "restaurar-backup.mjs terminou com codigo $LASTEXITCODE" }
+      $restaurou = $true
+    } catch {
+      Write-Host "!! FALHOU A RESTAURACAO DO BANCO: $($_.Exception.Message)" -ForegroundColor Red
+    }
+    if (-not $restaurou) {
+      Write-Host '!! ============================================================' -ForegroundColor Red
+      Write-Host '!! O BANCO NAO FOI RESTAURADO. A operacao permanece PARADA.' -ForegroundColor Red
+      Write-Host "!! Copia de antes da atualizacao: $BackupAntesAtualizacao" -ForegroundColor Red
+      Write-Host '!! Siga docs\SOCORRO.md (restauracao do banco) antes de religar.' -ForegroundColor Red
+      Write-Host '!! ============================================================' -ForegroundColor Red
+      throw 'Codigo revertido, mas o banco nao foi restaurado. Operacao permanece parada.'
+    }
+    Write-Host '!! banco restaurado para o estado de antes da atualizacao' -ForegroundColor Red
+  }
   if ($mexeuNode) {
     Push-Location $Portal
     try { & npm ci --no-audit --no-fund | Out-Null; if ($LASTEXITCODE -ne 0) { throw 'Falha ao restaurar dependencias Node.' } } finally { Pop-Location }
@@ -268,6 +308,7 @@ foreach ($t in @('validar-operacao.ps1', 'testar-operacao.ps1', 'testar-supervis
 Ok 'suites de operacao aprovadas'
 
 Etapa 'Religando a operacao'
+$NovaVersaoIniciada = $true
 & (Join-Path $Raiz 'INICIAR.bat') | Out-Null
 if ($LASTEXITCODE -ne 0) { Reverter 'Falha ao solicitar o inicio da nova versao.' }
 $url = 'http://127.0.0.1:3000'
