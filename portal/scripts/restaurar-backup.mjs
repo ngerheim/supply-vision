@@ -21,7 +21,7 @@ import readline from 'node:readline';
 import { DatabaseSync } from 'node:sqlite';
 
 import { lerConfigBruta, portalPrivado } from './configuracao.mjs';
-import { marcarFilasAposRestauracao } from './processar-emails.mjs';
+import { prepararRestauracao } from './restauracao-segura.mjs';
 import { listarHistorico, nomeDoDia } from './retencao-backup.mjs';
 
 const pastaBanco = path.join(portalPrivado, 'banco', 'estado', 'state', 'v3', 'd1', 'miniflare-D1DatabaseObject');
@@ -148,9 +148,7 @@ console.log(`Estado atual guardado em ${path.basename(guardado)}`);
 // lugar com o banco, num rename. Copiar direto por cima deixava o banco pela
 // metade se a energia caisse durante a copia.
 const restaurando = `${alvo}.restaurando`;
-fs.rmSync(restaurando, { force: true });
-fs.copyFileSync(origem, restaurando);
-const totaisRestaurado = resumir(restaurando);
+const { resumo: totaisRestaurado, marcados } = prepararRestauracao(origem, restaurando, resumir);
 console.log(`Restaurado: ${JSON.stringify(totaisRestaurado)}`);
 if (JSON.stringify(totaisRestaurado) !== JSON.stringify(totaisBackup)) {
   fs.rmSync(restaurando, { force: true });
@@ -161,15 +159,7 @@ if (JSON.stringify(totaisRestaurado) !== JSON.stringify(totaisBackup)) {
 for (const sufixo of ['-wal', '-shm']) fs.rmSync(alvo + sufixo, { force: true });
 fs.renameSync(restaurando, alvo);
 console.log('\nRestauracao concluida.');
-try {
-  const restaurado = new DatabaseSync(alvo);
-  try {
-    const marcados = marcarFilasAposRestauracao(restaurado);
-    if (marcados) console.log(`${marcados} e-mail(s) pendente(s) marcado(s) como falha: confirme o reenvio na tela de notificacoes.`);
-  } finally { restaurado.close(); }
-} catch (erro) {
-  console.warn(`AVISO: nao foi possivel marcar os e-mails pendentes do backup (${erro instanceof Error ? erro.message : String(erro)}). Confira a fila antes de iniciar o processador de e-mail.`);
-}
+if (marcados) console.log(`${marcados} e-mail(s) marcado(s) como falha: confirme o reenvio na tela de notificacoes.`);
 
 // Cada restauracao guarda o estado anterior como pre-restauracao-*.sqlite,
 // uma copia integral do banco. Fora da retencao de 7 dias do backup, elas se
