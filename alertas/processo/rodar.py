@@ -423,7 +423,7 @@ def _processar_periodo_compativel(df_base, df_acordo):
     e_sem_preco &= ~e_data_invalida
 
     po = pd.to_numeric(m["Valor Unitario"], errors="coerce")
-    e_preco_compra_invalido = ~np.isfinite(po)
+    e_preco_compra_invalido = ~np.isfinite(po) | (po < 0)
     po = po.where(~e_preco_compra_invalido)
     qtd = pd.to_numeric(m["OS Quantidade"], errors="coerce")
     e_quantidade_invalida = ~np.isfinite(qtd)

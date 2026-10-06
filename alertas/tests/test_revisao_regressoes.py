@@ -100,3 +100,9 @@ def test_uf_ausente_na_base_falha_com_nome_da_coluna(rodar):
         rodar.processar(base(preco=10), ac)
     compra = base(preco=10); compra["UF"] = "SP"
     assert rodar.processar(compra, ac).loc[0, "Status"] == "CONFORME"
+
+
+def test_preco_negativo_nao_vira_economia(rodar):
+    resultado = rodar.processar(base(preco=-10), acordo([10]))
+    assert resultado.loc[0, "Status"] == rodar.STATUS_PRECO_COMPRA_INVALIDO
+    assert pd.isna(resultado.loc[0, "Diferenca Total"])
