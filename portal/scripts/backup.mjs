@@ -1,3 +1,5 @@
+import { pathToFileURL } from 'node:url';
+import { comBackupExclusivo } from './backup-exclusivo.mjs';
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -19,7 +21,7 @@ function localizarBanco() {
   return path.join(pastaBanco, nome);
 }
 
-function criarCopiaIntegra(origem) {
+export function criarCopiaIntegra(origem) {
   fs.mkdirSync(pastaBackup, { recursive: true });
   fs.rmSync(arquivoTemporario, { force: true });
   const banco = new DatabaseSync(origem, { readOnly: true });
@@ -121,5 +123,7 @@ async function enviar() {
   console.log(`Backup atual confirmado (${tamanhoMb} MB, SHA-256 ${hash.slice(0, 16)}); comprovante enviado por e-mail${anexar ? ' com o banco anexado' : ''}.`);
 }
 
-try { criarCopiaIntegra(localizarBanco()); await enviar(); }
-catch (erro) { console.error(`ERRO: ${erro instanceof Error ? erro.message : 'falha inesperada'}`); process.exitCode = 1; }
+if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
+  try { await comBackupExclusivo(pastaBackup, async () => { criarCopiaIntegra(localizarBanco()); await enviar(); }); }
+  catch (erro) { console.error(`ERRO: ${erro instanceof Error ? erro.message : 'falha inesperada'}`); process.exitCode = 1; }
+}
