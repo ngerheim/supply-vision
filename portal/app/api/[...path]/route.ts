@@ -800,7 +800,7 @@ async function updateAgreement(request: Request, user: User, agreementId: string
   const parsed = validateAgreementInput(entrada);
   if (!parsed.value) return fail(parsed.error || 'Dados do acordo inválidos.');
   const body = parsed.value;
-  const existing = await first<{ id: string; number: string; supplierId: string; status: string; startDate: string; endDate: string; revision: number }>('SELECT id,number,supplier_id AS supplierId,status,start_date AS startDate,end_date AS endDate,revision FROM agreements WHERE id=?', [agreementId]);
+  const existing = await first<{ id: string; number: string; supplierId: string; status: string; startDate: string; endDate: string; notes: string | null; revision: number }>('SELECT id,number,supplier_id AS supplierId,status,start_date AS startDate,end_date AS endDate,notes,revision FROM agreements WHERE id=?', [agreementId]);
   if (!existing) return fail('Acordo não encontrado.', 404);
   // A trava já está adquirida: uma tela antiga não pode substituir o snapshot
   // que outro usuário gravou. Ausência de revisão também exige recarregar.
@@ -828,8 +828,8 @@ async function updateAgreement(request: Request, user: User, agreementId: string
   // Auditoria no mesmo formato das condicoes: {antes, depois} so dos campos
   // gerais que mudaram.
   const localidadesAntes = (await all<{ id: string }>('SELECT location_id AS id FROM agreement_locations WHERE agreement_id=? ORDER BY location_id', [agreementId])).map((l) => l.id);
-  const novo: Record<string, unknown> = { number: body.number, supplierId: body.supplierId, status: body.status, startDate: body.startDate, endDate: body.endDate, locationIds: [...body.locationIds].sort() };
-  const anterior: Record<string, unknown> = { number: existing.number, supplierId: existing.supplierId, status: existing.status, startDate: existing.startDate, endDate: existing.endDate, locationIds: localidadesAntes };
+  const novo: Record<string, unknown> = { number: body.number, supplierId: body.supplierId, status: body.status, startDate: body.startDate, endDate: body.endDate, notes: body.notes, locationIds: [...body.locationIds].sort() };
+  const anterior: Record<string, unknown> = { number: existing.number, supplierId: existing.supplierId, status: existing.status, startDate: existing.startDate, endDate: existing.endDate, notes: existing.notes, locationIds: localidadesAntes };
   const antes: Record<string, unknown> = {}, depois: Record<string, unknown> = {};
   for (const campo of Object.keys(novo)) {
     if (JSON.stringify(anterior[campo]) !== JSON.stringify(novo[campo])) { antes[campo] = anterior[campo]; depois[campo] = novo[campo]; }
