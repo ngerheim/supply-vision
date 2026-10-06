@@ -2,3 +2,4 @@ export const REENVIAR_NOTIFICACAO_SQL = `UPDATE email_notifications SET status='
  WHERE id=? AND status='failed' AND updated_at=? AND attempts=?`;
 export const AUDITAR_REENVIO_SQL = `INSERT INTO audit_logs (id,user_id,action,entity,entity_id,details,created_at)
  SELECT ?,?,?,?,?,?,? WHERE changes()=1`;
+export const REENVIAR_RELATORIO_DIARIO_SQL = REENVIAR_NOTIFICACAO_SQL.replace('email_notifications', 'daily_report_deliveries');

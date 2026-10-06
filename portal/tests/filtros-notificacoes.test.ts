@@ -13,11 +13,11 @@ void test('filtros combinam destinatario situacao tipo texto e periodo sem inter
       ('1','sent','atribuicao','u1','Pessoa','p@example.com','2026-10-01T12:00:00Z');`);
     const params=new URLSearchParams({recipient:'u1',status:'failed',type:'atribuicao',q:'OFICINA',from:'2026-10-02',to:'2026-10-02'});
     const {where,values}=filtrosNotificacoes(params);
-    const query=`SELECT e.status FROM email_notifications e JOIN tickets t ON t.id=e.ticket_id ${where}`;
+    const query=`SELECT e.status FROM (SELECT e.*,t.code ticket_code,t.supplier_name FROM email_notifications e JOIN tickets t ON t.id=e.ticket_id) e ${where}`;
     assert.deepEqual(db.prepare(query).all(...values).map(r=>r.status),['failed']);
     params.set('recipient',"u1' OR 1=1 --");
     const hostile=filtrosNotificacoes(params);
-    assert.equal(db.prepare(`SELECT e.status FROM email_notifications e JOIN tickets t ON t.id=e.ticket_id ${hostile.where}`).all(...hostile.values).length,0);
+    assert.equal(db.prepare(`SELECT e.status FROM (SELECT e.*,t.code ticket_code,t.supplier_name FROM email_notifications e JOIN tickets t ON t.id=e.ticket_id) e ${hostile.where}`).all(...hostile.values).length,0);
   } finally {db.close();}
 });
 void test('paginacao recusa numeros fracionarios infinitos e negativos',()=>{
