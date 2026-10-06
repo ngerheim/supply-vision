@@ -381,7 +381,10 @@ for ($i = 0; $i -lt 60; $i++) {
 }
 if (-not $noAr) { Reverter 'O Portal nao respondeu depois da atualizacao.' }
 
-Ok "Portal no ar em $url"
+Etapa 'Conferindo interface e consumidores da operacao'
+& node (Join-Path $Portal 'scripts/saude-operacao.mjs') $url
+if ($LASTEXITCODE -ne 0) { Reverter 'Interface ou consumidores obrigatorios nao ficaram saudaveis.' }
+Ok "Portal e consumidores no ar em $url"
 Write-Host "`n=== Atualizado: $($anterior.Substring(0,7)) -> $($remoto.Substring(0,7)) ===" -ForegroundColor Cyan
 Gravar-EstadoOperacao $ContextoArquivo @{anterior=$anterior;remoto=$remoto;fase='concluido'}
 git log -1 --pretty=format:'    %s'

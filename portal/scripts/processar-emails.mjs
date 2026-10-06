@@ -210,6 +210,8 @@ async function ciclo(config, transportador) {
   try {
     await processarNotificacoes(db, config, transportador);
     await processarRelatoriosDiarios(db,config,transportador);
+    db.exec('CREATE TABLE IF NOT EXISTS email_runner(id INTEGER PRIMARY KEY CHECK(id=1),heartbeat_at TEXT NOT NULL)');
+    db.prepare('INSERT INTO email_runner(id,heartbeat_at) VALUES(1,?) ON CONFLICT(id) DO UPDATE SET heartbeat_at=excluded.heartbeat_at').run(new Date().toISOString());
   } finally { db.close(); }
 }
 
