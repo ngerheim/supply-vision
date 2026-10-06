@@ -1,5 +1,4 @@
 import smtplib
-import ssl
 import os
 import pathlib
 import sys
@@ -16,6 +15,7 @@ for _s in (sys.stdout, sys.stderr):
 
 
 import sv_paths
+from smtp_conexao import conectar
 import email_visual
 import estado_entrega
 
@@ -274,11 +274,7 @@ def enviar_email(assunto, corpo, anexos, destinatarios, html=None, copia_oculta=
             return
         raise estado_entrega.EntregaEmRevisao('Entrega parcial ou incerta: confira estado-envios antes de reenviar.')
 
-    with smtplib.SMTP(SMTP_SERVIDOR, SMTP_PORTA, timeout=60) as servidor:
-        servidor.ehlo()
-        servidor.starttls(context=ssl.create_default_context())
-        servidor.ehlo()
-        servidor.login(SMTP_USUARIO, senha)
+    with conectar(SMTP_SERVIDOR, SMTP_PORTA, SMTP_USUARIO, senha, getattr(sv_paths, "SMTP_SEGURO", False)) as servidor:
         estado_entrega.registrar_entrega('incerto', entrega, exclusivo=True)
         try:
             recusados = servidor.send_message(msg, to_addrs=entrega)
