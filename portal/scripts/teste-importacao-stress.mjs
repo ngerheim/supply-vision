@@ -199,6 +199,14 @@ try {
   await mapping('models', 'Hilux teste', model.id);
   const unit = query("SELECT * FROM units WHERE code='LITRO'")[0];
   agreementId=(await good('/api/agreements',{method:'POST',body:{number:'STRESS-IMPORTACAO',supplierId:supplier.id,status:'active',startDate:'2026-01-01',locationIds:[location.id]}},201)).id;
+  await check('Observacoes do acordo preservam antes e depois no historico', async () => {
+    const detalhe = await good(`/api/agreements/${agreementId}`), a = detalhe.agreement;
+    await good(`/api/agreements/${agreementId}`, { method: 'PUT', body: { number:a.number,supplierId:a.supplier_id,status:a.status,startDate:a.start_date,endDate:a.end_date,notes:'Observacao revisada',locationIds:detalhe.locations.map(l=>l.id),expectedRevision:a.revision } });
+    const registro = query("SELECT details FROM audit_logs WHERE entity='agreement' AND entity_id=? AND action='UPDATE' ORDER BY rowid DESC LIMIT 1",agreementId)[0];
+    const dados=JSON.parse(registro.details);
+    assert.equal(dados.antes.notes,a.notes);assert.equal(dados.depois.notes,'Observacao revisada');
+    assert.equal((await good(`/api/agreements/${agreementId}`)).agreement.notes,'Observacao revisada');
+  });
   const replace = `/api/imports/agreement/${agreementId}`;
   for (const route of [replace]) {
     const mode = 'substituir';
