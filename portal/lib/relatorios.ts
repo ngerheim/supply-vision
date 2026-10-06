@@ -82,7 +82,7 @@ export function validarPedidoRelatorio(
   };
 }
 export const SCHEMA_RELATORIOS = [
-  `CREATE TABLE IF NOT EXISTS report_jobs (id TEXT PRIMARY KEY,request_key TEXT NOT NULL UNIQUE,action TEXT NOT NULL,from_date TEXT,to_date TEXT,recipient TEXT,dry_run INTEGER NOT NULL DEFAULT 0,status TEXT NOT NULL DEFAULT 'queued',created_by TEXT NOT NULL REFERENCES users(id),created_at TEXT NOT NULL,started_at TEXT,completed_at TEXT,log TEXT NOT NULL DEFAULT '',artifacts_json TEXT NOT NULL DEFAULT '[]',exit_code INTEGER)`,
+  `CREATE TABLE IF NOT EXISTS report_jobs (id TEXT PRIMARY KEY,request_key TEXT NOT NULL UNIQUE,action TEXT NOT NULL,from_date TEXT,to_date TEXT,recipient TEXT,dry_run INTEGER NOT NULL DEFAULT 0,status TEXT NOT NULL DEFAULT 'queued',created_by TEXT NOT NULL REFERENCES users(id),created_at TEXT NOT NULL,started_at TEXT,completed_at TEXT,log TEXT NOT NULL DEFAULT '',artifacts_json TEXT NOT NULL DEFAULT '[]',exit_code INTEGER,artifacts_cleaned_at TEXT)`,
   `CREATE INDEX IF NOT EXISTS idx_report_jobs_queue ON report_jobs(status,created_at)`,
   `CREATE TABLE IF NOT EXISTS report_runner (id INTEGER PRIMARY KEY CHECK(id=1),heartbeat_at TEXT NOT NULL)`,
 ];

@@ -76,6 +76,7 @@ const columnMigrations: Array<[string, string, string]> = [
   ['users', 'revision', 'INTEGER NOT NULL DEFAULT 0'],
   ['users', 'daily_report_enabled', 'INTEGER NOT NULL DEFAULT 0'],
   ['users', 'daily_report_time', "TEXT NOT NULL DEFAULT '17:45'"],
+  ['report_jobs', 'artifacts_cleaned_at', 'TEXT'],
   ['tickets', 'revision', 'INTEGER NOT NULL DEFAULT 0'],
   ['tickets', 'title', "TEXT NOT NULL DEFAULT ''"],
   ['agreements', 'revision', 'INTEGER NOT NULL DEFAULT 0'],
