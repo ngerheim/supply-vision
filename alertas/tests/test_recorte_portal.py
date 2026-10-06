@@ -27,13 +27,11 @@ def carregar_recorte(monkeypatch, tmp_path, *, linhas=1, arquivo=True, destinata
     return mod, chamadas, caminho
 
 
-def test_recorte_envia_so_anexo_atual_e_destinatario_informado(monkeypatch, tmp_path):
+def test_recorte_gera_arquivo_sem_email_mesmo_com_destinatario_antigo(monkeypatch, tmp_path):
     mod, chamadas, caminho = carregar_recorte(monkeypatch, tmp_path)
     mod.main()
     assert chamadas[:3] == ['lock', 'baixar', 'gerar']
-    _, args, kwargs = chamadas[3]
-    assert args[2:] == ([caminho], ['destino@example.com'])
-    assert kwargs['copia_oculta'] == []
+    assert chamadas == ['lock', 'baixar', 'gerar']
 
 
 @pytest.mark.parametrize('linhas,arquivo,destinatario', [(0, True, 'destino@example.com'), (1, False, 'destino@example.com'), (1, True, None)])
@@ -44,11 +42,10 @@ def test_recorte_sem_dados_arquivo_ou_destinatario_nao_envia(monkeypatch, tmp_pa
 
 
 @pytest.mark.parametrize('destinatario', ['', 'a@example.com;b@example.com', 'a@example.com\r\nBcc:b@example.com'])
-def test_destinatario_invalido_aborta_antes_do_download(monkeypatch, tmp_path, destinatario):
+def test_destinatario_antigo_nao_interfere_na_geracao_sem_email(monkeypatch, tmp_path, destinatario):
     mod, chamadas, _ = carregar_recorte(monkeypatch, tmp_path, destinatario=destinatario)
-    with pytest.raises(SystemExit) as erro: mod.main()
-    assert erro.value.code == 1
-    assert chamadas == []
+    mod.main()
+    assert chamadas == ['lock', 'baixar', 'gerar']
 
 
 def test_recorte_lock_ocupado_aborta_antes_do_download(monkeypatch, tmp_path):

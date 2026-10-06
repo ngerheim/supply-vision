@@ -101,7 +101,7 @@ export default function PortalApp() {
       {canWrite&&nav==='tickets'&&<Tickets busy={busy} users={userList} agreements={data.agreements||[]} run={run} initialDetail={ticketLink}/>}
       {isAdmin&&nav==='history'&&<ChangeHistory users={userList}/>}
       {isAdmin&&nav==='admin'&&<Administration user={user} initialUsers={userList} run={run}/>}
-      {isAdmin&&nav==='reports'&&<Reports email={String(user.email||'')}/>}
+      {isAdmin&&nav==='reports'&&<Reports/>}
       {isAdmin&&nav==='notifications'&&<EmailNotifications users={userList} run={run}/>}
     </div></section>
     {loadError&&data&&<div className="fixed bottom-20 right-5 z-[100] max-w-md rounded-xl border bg-card p-4 shadow-lg"><p role="alert" className="text-sm">Não foi possível atualizar os dados.</p><Button className="mt-2" variant="outline" onClick={()=>void refresh().catch(()=>{})}>Atualizar dados</Button></div>}

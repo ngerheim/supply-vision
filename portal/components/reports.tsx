@@ -42,16 +42,15 @@ const descricao: Record<AcaoDisponivel, string> = {
   relatorio:
     'Baixa o histórico de compras do Qlik, compara com os acordos vigentes e envia aos destinatários configurados. Conclui sem e-mail caso não haja dados elegíveis.',
   recorte:
-    'Analisa um período com ambas as datas inclusas. O relatório será enviado apenas ao e-mail informado.',
+    'Analisa um período com ambas as datas inclusas. O relatório fica disponível para download no Portal, sem envio de e-mail.',
 };
 const horario = (valor: string) =>
   new Date(valor).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
 
-export function Reports({ email }: { email: string }) {
+export function Reports() {
   const [action, setAction] = useState<AcaoDisponivel>('relatorio');
   const [from, setFrom] = useState(() => exibirDataBrasileira(dataDeNegocio())),
-    [to, setTo] = useState(() => exibirDataBrasileira(dataDeNegocio())),
-    [recipient, setRecipient] = useState(email);
+    [to, setTo] = useState(() => exibirDataBrasileira(dataDeNegocio()));
   const [busy, setBusy] = useState(false),
     [error, setError] = useState(''),
     [notice, setNotice] = useState('');
@@ -115,12 +114,11 @@ export function Reports({ email }: { email: string }) {
         action,
         from: action === 'recorte' ? dataBrasileiraParaIso(from) : undefined,
         to: action === 'recorte' ? dataBrasileiraParaIso(to) : undefined,
-        recipient,
         requestKey: (key.current ??= gerarChaveRelatorio()),
       });
       const mensagem =
         action === 'recorte'
-            ? `Gerar o recorte de ${from} a ${to} e enviar para ${recipient.trim()}?`
+            ? `Gerar o recorte de ${from} a ${to} para download no Portal?`
             : action === 'relatorio'
               ? 'Executar agora e enviar aos destinatários configurados quando houver divergências ou pendências?'
               : null;
@@ -264,28 +262,15 @@ export function Reports({ email }: { email: string }) {
                   />
                 </label>
               </div>
-              <label
-                htmlFor="report-recipient"
-                className="block space-y-2 text-sm"
-              >
-                E-mail destinatário
-                <Input
-                  id="report-recipient"
-                  type="email"
-                  value={recipient}
-                  maxLength={254}
-                  disabled={busy}
-                  onChange={(e) => {
-                    setRecipient(e.target.value);
-                    changed();
-                  }}
-                />
-              </label>
               <p className="text-xs text-muted-foreground">
                 A comparação usa os acordos disponíveis hoje e suas vigências.
               </p>
             </>
           )}
+          <p className="text-xs text-muted-foreground">
+            As nomenclaturas de itens e modelos extraídas do Qlik são padronizadas
+            conforme o De/Para para reduzir ruídos na comparação.
+          </p>
           <Button disabled={busy || !online} onClick={() => void submit()}>
             {busy ? <LoaderCircle className="animate-spin" /> : <FileText />}
             {busy ? 'Registrando…' : 'Solicitar execução'}
@@ -324,10 +309,10 @@ export function Reports({ email }: { email: string }) {
                 <p className="text-xs text-muted-foreground">
                   {horario(job.createdAt)} · {job.requestedBy}
                 </p>
-                {job.recipient && (
+                {job.action === 'recorte' && (
                   <p className="mt-1 text-sm">
                     {job.from?.split('-').reverse().join('/')} a{' '}
-                    {job.to?.split('-').reverse().join('/')} · {job.recipient}
+                    {job.to?.split('-').reverse().join('/')}
                   </p>
                 )}
               </div>
@@ -369,7 +354,6 @@ export function Reports({ email }: { email: string }) {
                     setAction(job.action);
                     setFrom(exibirDataBrasileira(job.from || dataDeNegocio()));
                     setTo(exibirDataBrasileira(job.to || dataDeNegocio()));
-                    setRecipient(job.recipient || email);
                     key.current = null;
                     setNotice(
                       'Parâmetros copiados. Confira os registros e a entrega anterior antes de solicitar uma nova execução.',

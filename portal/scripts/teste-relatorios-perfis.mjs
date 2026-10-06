@@ -143,7 +143,7 @@ try {
         method: 'POST',
         body: {
           ...pedido('recorte'),
-          from: '2020-01-01',
+          from: '2020-02-30',
           to: '2020-01-31',
           recipient: 'a@x.com\r\nBcc:b@x.com',
         },
@@ -239,7 +239,7 @@ try {
     db
       .prepare('SELECT recipient FROM report_jobs WHERE id=?')
       .get(historico.data.id).recipient,
-    'somente@example.com',
+    null,
   );
   assert.equal(
     (await pedir(`reports/${historico.data.id}`, { method: 'DELETE' })).status,
@@ -269,7 +269,7 @@ try {
   assert.equal(db.prepare("SELECT COUNT(*) n FROM report_jobs WHERE status='running'").get().n, 1);
   assert.equal((await pedir('reports')).data.jobs.length, 8);
   console.log(
-    '[OK] Recorte preserva destinatário, cancelamento só vale na fila e o limite não aceita excesso de pedidos.',
+    '[OK] Recorte sem destinatário, cancelamento só na fila e limite de cinco aguardando além da execução ativa.',
   );
 } finally {
   if (servidor) await new Promise((resolve) => servidor.close(resolve));

@@ -34,8 +34,6 @@ export function comandoRelatorio(job) {
       brasileira(pedido.from),
       '--fim',
       brasileira(pedido.to),
-      '--destinatario',
-      pedido.recipient,
     ];
   if (pedido.action === 'limpeza')
     return ['processo/limpeza.py', ...(pedido.dryRun ? ['--dry-run'] : [])];
