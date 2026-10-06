@@ -30,6 +30,14 @@ try {
   $dirs | ForEach-Object { New-Item -ItemType Directory -Force (Join-Path $temp $_) | Out-Null }
   Copy-Item "$raizReal\scripts\supervisor.ps1", "$raizReal\scripts\operacao-logica.ps1", "$raizReal\scripts\validar-operacao.ps1", "$raizReal\scripts\notificacao.ps1" "$temp\scripts"
 
+ New-Item -ItemType Directory -Force "$temp\alertas\processo","$temp\privado\alertas\parametros\filtros"|Out-Null
+ Copy-Item "$raizReal\alertas\parametros" "$temp\alertas" -Recurse -Force
+ Copy-Item "$raizReal\alertas\processo\validar_parametros.py" "$temp\alertas\processo"
+ $parametros=Join-Path $raizReal 'alertas/parametros'
+ foreach($exemplo in @(Get-ChildItem $parametros -Recurse -File | Where-Object Name -Like '*.exemplo.*')){
+   $relativo=$exemplo.FullName.Substring($parametros.Length).TrimStart('\').Replace('.exemplo','')
+   Copy-Item $exemplo.FullName (Join-Path "$temp\privado\alertas\parametros" $relativo) -Force
+ }
   # Python real, via juncao para o .venv do projeto (nao copia os 142 MB).
   & cmd.exe /c mklink /J "$temp\alertas\.venv" "$raizReal\alertas\.venv" | Out-Null
   if (-not (Test-Path "$temp\alertas\.venv\Scripts\python.exe")) { throw 'Nao foi possivel preparar o Python de teste.' }
@@ -44,8 +52,6 @@ try {
     'portal\dist\server\wrangler.json'                 = '{}'
     'privado\alertas\config\cfg_qlik.txt'              = 'token'
     'privado\alertas\config\destinatarios.txt'         = 'destino'
-    'privado\alertas\parametros\de_para\itens.csv'     = 'origem,destino'
-    'privado\alertas\parametros\de_para\modelos.csv'   = 'origem,destino'
     'acordos.xlsx'                                     = 'teste'
   }
   foreach ($item in $conteudos.GetEnumerator()) { [IO.File]::WriteAllText((Join-Path $temp $item.Key), $item.Value) }

@@ -56,6 +56,19 @@ $amb=Ler-Chaves (Join-Path $privado 'alertas\config\cfg_ambiente.txt') @('QLIK_T
 Exigir-Arquivo (Join-Path $privado 'alertas\config\cfg_qlik.txt');Exigir-Arquivo (Join-Path $privado 'alertas\config\destinatarios.txt')
 Exigir-Arquivo (Join-Path $privado 'alertas\parametros\de_para\itens.csv');Exigir-Arquivo (Join-Path $privado 'alertas\parametros\de_para\modelos.csv')
 Exigir-Arquivo (Join-Path $Raiz 'portal\dist\server\wrangler.json');Exigir-Arquivo (Join-Path $Raiz 'alertas\.venv\Scripts\python.exe')
+$python = Join-Path $Raiz 'alertas\.venv\Scripts\python.exe'
+if (Test-Path -LiteralPath $python -PathType Leaf) {
+ try {
+  Validar-PythonAlertas $python
+  $preferencia = $ErrorActionPreference
+  try {
+   $ErrorActionPreference = 'Continue'
+   $saida = (& $python -X utf8 (Join-Path $Raiz 'alertas\processo\validar_parametros.py') 2>&1 | Out-String).Trim()
+   $codigo = $LASTEXITCODE
+  } finally { $ErrorActionPreference = $preferencia }
+  if ($codigo -ne 0) { Falha "Parametros dos Alertas invalidos: $saida" }
+ } catch { Falha $_.Exception.Message }
+}
 foreach($d in @((Join-Path $privado 'operacao'),(Join-Path $privado 'portal\logs'),(Join-Path $privado 'alertas\logs'),(Join-Path $privado 'alertas\relatorios\diarios'),(Join-Path $privado 'alertas\relatorios\historicos'))){try{New-Item -ItemType Directory -Force $d|Out-Null;$t=Join-Path $d ('.escrita-'+[guid]::NewGuid().ToString('N'));[IO.File]::WriteAllText($t,'ok');Remove-Item $t -Force}catch{Falha "Sem permissao de escrita: $d"}}
 foreach($cmd in @('node.exe','npm.cmd')){if(!(Get-Command $cmd -ErrorAction SilentlyContinue)){Falha "Programa ausente: $cmd"}}
 if($erros.Count){$erros|ForEach-Object{Write-Error $_ -ErrorAction Continue};throw "Validacao operacional reprovada em $($erros.Count) item(ns)."}

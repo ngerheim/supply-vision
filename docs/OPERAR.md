@@ -280,3 +280,10 @@ O reenvio mantém o intervalo original; não altera a janela do próximo relató
 O conteúdo é calculado novamente a partir do histórico e do estado atual dos chamados.
 Após restauração de backup ou semente, confira também essas entregas: elas podem
 ter sido marcadas como falha para impedir duplicação automática.
+
+### Validação antes de iniciar
+
+A validação operacional confere Python 3.12 ou superior, os quatro filtros
+e os cabeçalhos e correspondências dos CSVs de parâmetros. Ela não acessa
+Qlik ou SMTP e não atualiza o arquivo de contagens. Arquivos inválidos
+impedem a partida, com indicação do parâmetro que precisa ser reparado.
