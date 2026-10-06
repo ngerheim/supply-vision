@@ -235,6 +235,11 @@ try {
     },
   });
   assert.equal(historico.status, 202);
+  db.prepare("UPDATE report_jobs SET status='done',completed_at=?,artifacts_json=? WHERE id=?").run(new Date(Date.now() - 25 * 3600000).toISOString(), JSON.stringify([{ name: nome, relativePath: path.relative(raiz, path.join(pasta, nome)) }]), historico.data.id);
+  const expirado = await fetch(`http://127.0.0.1:${porta}/api/reports/${historico.data.id}/${nome}`, { headers: { cookie: adminCookie } });
+  assert.equal(expirado.status, 410, await expirado.clone().text());
+  assert.match((await expirado.json()).error, /expirado/);
+  assert.equal(JSON.parse((await pedir('reports')).data.jobs.find(j => j.id === historico.data.id).artifactsJson)[0].expired, true);
   assert.equal(
     db
       .prepare('SELECT recipient FROM report_jobs WHERE id=?')
@@ -243,7 +248,7 @@ try {
   );
   assert.equal(
     (await pedir(`reports/${historico.data.id}`, { method: 'DELETE' })).status,
-    200,
+    409,
   );
   for (let n = 0; n < 5; n++)
     assert.equal(

@@ -3,7 +3,7 @@ limpeza.py - Housekeeping do SupplyVision
 
 Política de retenção (por IDADE, com base no timestamp NO NOME do arquivo):
 
-    planilhas e CSV  ->  24 horas
+    planilhas e CSV  ->  24 horas (históricos: data de gravação do arquivo)
     logs (.log)      ->  5 dias
 
 Os arquivos são APAGADOS, não movidos. A pasta logs/archive foi aposentada:
@@ -120,10 +120,17 @@ def limpar(dry_run: bool):
             if dt is None:
                 registrar(log_path, f"  [MANTIDO] sem timestamp reconhecível: {arq}")
                 continue
+            try:
+                info = arq.stat()
+            except FileNotFoundError:
+                continue  # O serviço do Portal pode ter excluído o histórico.
+            if pasta == sv_paths.RELATORIOS_HISTORICOS:
+                # O timestamp do nome pode anteceder a geração durante um recorte longo.
+                dt = datetime.fromtimestamp(info.st_mtime)
             idade = agora - dt
             if idade <= retencao_de(arq):
                 continue
-            tamanho = arq.stat().st_size
+            tamanho = info.st_size
             if dry_run:
                 registrar(log_path, f"  [TESTE] apagaria ({idade.days}d): {arq}")
                 apagados += 1

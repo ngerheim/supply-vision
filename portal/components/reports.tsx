@@ -264,6 +264,8 @@ export function Reports() {
               </div>
               <p className="text-xs text-muted-foreground">
                 A comparação usa os acordos disponíveis hoje e suas vigências.
+                {' '}Os arquivos históricos ficam disponíveis por 24 horas após a geração.
+                Depois desse prazo, expiram e são excluídos automaticamente. Baixe antes de expirar.
               </p>
             </>
           )}
@@ -364,19 +366,25 @@ export function Reports() {
                   Usar estes parâmetros
                 </Button>
               )}
-              {(JSON.parse(job.artifactsJson) as Array<{ name: string }>).map(
-                (file) => (
+              {(JSON.parse(job.artifactsJson) as Array<{ name: string; expiresAt?: string | null; expired?: boolean }>).map(
+                (file) => {
+                  const expirou = file.expired || (!!file.expiresAt && Date.now() >= Date.parse(file.expiresAt));
+                  return <div key={file.name} className="max-w-full space-y-1">
                   <Button
-                    key={file.name}
                     size="sm"
                     variant="outline"
-                    disabled={!online}
+                    disabled={!online || expirou}
+                    className="max-w-full"
                     onClick={() => void download(job, file.name)}
                   >
                     <Download />
-                    {file.name}
+                    <span className="truncate">{file.name}</span>
                   </Button>
-                ),
+                  {file.expiresAt && <p className={`text-xs ${expirou ? 'text-destructive' : 'text-muted-foreground'}`}>
+                    {expirou ? 'Arquivo expirado. Gere um novo recorte para baixar.' : `Disponível até ${horario(file.expiresAt)} (horário de Brasília).`}
+                  </p>}
+                  </div>;
+                },
               )}
             </div>
             {selected === job.id && (

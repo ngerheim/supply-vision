@@ -8,6 +8,7 @@ import { pathToFileURL } from 'node:url';
 import { abrirBancoLocal } from './banco-local.mjs';
 import { privado, lerConfigBruta } from './configuracao.mjs';
 import { validarPedidoRelatorio } from '../lib/relatorios.ts';
+import { VALIDADE_HISTORICO_MS, arquivoHistoricoExpirado } from '../lib/retencao-relatorios.ts';
 
 const produto = path.resolve(import.meta.dirname, '../..');
 const pastaAlertas = path.join(produto, 'alertas');
@@ -174,6 +175,7 @@ export function listarArquivos(jobId, raiz = privado) {
         arquivos.push({
           name: entrada.name,
           relativePath: path.relative(raiz, path.join(pasta, entrada.name)),
+          ...(subpasta === 'alertas/relatorios/historicos' ? { expiresAt: new Date(fs.statSync(path.join(pasta, entrada.name)).mtimeMs + VALIDADE_HISTORICO_MS).toISOString() } : {}),
         });
     }
   }
@@ -185,8 +187,8 @@ export function arquivoPermitido(job, nome, raiz = privado) {
   );
   if (!artifact) return null;
   try {
-    const arquivo = fs.realpathSync(path.resolve(raiz, artifact.relativePath));
-    const pasta = fs.realpathSync(path.join(raiz, 'alertas', 'relatorios'));
+    const arquivo = fs.realpathSync.native(path.resolve(raiz, artifact.relativePath));
+    const pasta = fs.realpathSync.native(path.join(raiz, 'alertas', 'relatorios'));
     const relativa = path.relative(pasta, arquivo);
     if (
       relativa.startsWith('..') ||
@@ -198,6 +200,23 @@ export function arquivoPermitido(job, nome, raiz = privado) {
   } catch {
     return null;
   }
+}
+export function limparHistoricosExpirados(db, raiz = privado, agora = Date.now()) {
+  let removidos = 0;
+  const jobs = db.prepare("SELECT action,completed_at,artifacts_json FROM report_jobs WHERE action='recorte' AND completed_at IS NOT NULL AND status IN ('done','failed') AND artifacts_json!='[]'").all();
+  for (const job of jobs) {
+    for (const artifact of JSON.parse(job.artifacts_json)) {
+      if (!arquivoHistoricoExpirado(job, artifact, agora)) continue;
+      const arquivo = arquivoPermitido(job, artifact.name, raiz);
+      if (!arquivo) continue;
+      const historicos = fs.realpathSync.native(path.join(raiz, 'alertas', 'relatorios', 'historicos'));
+      const relativa = path.relative(historicos, arquivo);
+      if (relativa.startsWith('..') || path.isAbsolute(relativa)) continue;
+      try { fs.unlinkSync(arquivo); removidos++; }
+      catch (erro) { console.error('Não foi possível excluir histórico expirado:', erro.code); }
+    }
+  }
+  return removidos;
 }
 function executarPython(db, job, segredo) {
   return new Promise((resolve, reject) => {
@@ -294,9 +313,13 @@ export function criarServidorArquivos({ token, abrirBanco, raiz = privado }) {
       }
       db = abrirBanco();
       const job = db
-        ?.prepare('SELECT artifacts_json FROM report_jobs WHERE id=?')
+        ?.prepare('SELECT action,completed_at,artifacts_json FROM report_jobs WHERE id=?')
         .get(partes[0]);
       const arquivo = job && arquivoPermitido(job, partes[1], raiz);
+      const artifact = job && JSON.parse(job.artifacts_json).find(a => a.name === partes[1]);
+      if (artifact && arquivoHistoricoExpirado(job, artifact)) {
+        res.writeHead(410, { 'cache-control': 'no-store' }); res.end(); return;
+      }
       if (!arquivo) {
         res.writeHead(404);
         res.end();
@@ -347,7 +370,8 @@ async function principal() {
         .find((l) => l && !l.startsWith('#'))
     : null;
   let inicializado = false,
-    ocupado = false;
+    ocupado = false,
+    ultimaLimpeza = 0;
   const ciclo = async () => {
     if (ocupado) return;
     const db = abrir();
@@ -394,6 +418,13 @@ async function principal() {
       db.prepare(
         'INSERT INTO report_runner(id,heartbeat_at) VALUES(1,?) ON CONFLICT(id) DO UPDATE SET heartbeat_at=excluded.heartbeat_at',
       ).run(new Date().toISOString());
+      if (Date.now() - ultimaLimpeza >= 60_000) {
+        const removidos = limparHistoricosExpirados(db);
+        ultimaLimpeza = Date.now();
+        if (removidos) console.log(`${removidos} arquivo(s) histórico(s) expirado(s) excluído(s).`);
+      }
+    } catch (erro) {
+      console.error('Disponibilidade/limpeza dos relatórios:', erro.message);
     } finally {
       db.close();
     }

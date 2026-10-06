@@ -1,6 +1,7 @@
 import { env } from 'cloudflare:workers';
 import { id, now, rawDb } from './database';
 import { validarPedidoRelatorio } from './relatorios.ts';
+import { informarValidadeArquivos, arquivoHistoricoExpirado } from './retencao-relatorios.ts';
 
 const resposta = (body: unknown, status = 200) =>
   Response.json(body, { status, headers: { 'cache-control': 'no-store' } });
@@ -19,7 +20,7 @@ export async function consultarRelatorios(jobId?: string, arquivo?: string) {
         .first<{ heartbeatAt: string }>(),
     ]);
     return resposta({
-      jobs: jobs.results,
+      jobs: jobs.results.map(job => ({ ...job, artifactsJson: informarValidadeArquivos(job) })),
       runnerOnline:
         !!runner && Date.now() - Date.parse(runner.heartbeatAt) < 30_000,
     });
@@ -31,7 +32,9 @@ export async function consultarRelatorios(jobId?: string, arquivo?: string) {
     .bind(jobId)
     .first();
   if (!job) return resposta({ error: 'Execução não encontrada.' }, 404);
-  if (!arquivo) return resposta({ job });
+  if (!arquivo) return resposta({ job: { ...job, artifactsJson: informarValidadeArquivos(job) } });
+  const artifact = JSON.parse(String(job.artifacts_json)).find((a: { name: string }) => a.name === arquivo);
+  if (artifact && arquivoHistoricoExpirado(job, artifact)) return resposta({ error: 'Arquivo expirado. Os históricos ficam disponíveis por 24 horas. Gere um novo recorte.' }, 410);
   const vars = env as unknown as {
     PORTAL_API_TOKEN?: string;
     RELATORIOS_PORTA?: string;
@@ -59,11 +62,13 @@ export async function consultarRelatorios(jobId?: string, arquivo?: string) {
       return resposta(
         {
           error:
-            download.status === 404
+            download.status === 410
+              ? 'Arquivo expirado. Gere um novo recorte para baixar.'
+              : download.status === 404
               ? 'Arquivo não disponível; pode ter sido apagado pela limpeza.'
               : 'Serviço de relatórios indisponível.',
         },
-        download.status === 404 ? 404 : 503,
+        download.status === 410 ? 410 : download.status === 404 ? 404 : 503,
       );
     return new Response(download.body, {
       headers: {
