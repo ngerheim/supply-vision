@@ -21,6 +21,7 @@ import readline from 'node:readline';
 import { DatabaseSync } from 'node:sqlite';
 
 import { lerConfigBruta, portalPrivado } from './configuracao.mjs';
+import { validarBanco as resumir } from './validar-banco.mjs';
 import { prepararRestauracao } from './restauracao-segura.mjs';
 import { listarHistorico, nomeDoDia } from './retencao-backup.mjs';
 
@@ -47,25 +48,12 @@ function escolherOrigem() {
 }
 const origem = escolherOrigem();
 
-const TABELAS = ['users', 'tickets', 'agreements', 'agreement_items', 'suppliers', 'catalog_items', 'units'];
 
 function localizarBanco() {
   if (!fs.existsSync(pastaBanco)) throw new Error(`Pasta do banco nao encontrada: ${pastaBanco}`);
   const nome = fs.readdirSync(pastaBanco).find((item) => item.endsWith('.sqlite') && item !== 'metadata.sqlite');
   if (!nome) throw new Error('Banco atual nao encontrado.');
   return path.join(pastaBanco, nome);
-}
-
-function resumir(arquivo) {
-  const db = new DatabaseSync(arquivo, { readOnly: true });
-  try {
-    const integridade = Object.values(db.prepare('PRAGMA integrity_check').get())[0];
-    if (integridade !== 'ok') throw new Error(`Integridade reprovada: ${String(integridade)}`);
-    const tabelas = new Set(db.prepare("SELECT name FROM sqlite_schema WHERE type='table'").all().map((linha) => linha.name));
-    const totais = {};
-    for (const nome of TABELAS) totais[nome] = tabelas.has(nome) ? Number(db.prepare(`SELECT COUNT(*) total FROM ${nome}`).get().total) : null;
-    return totais;
-  } finally { db.close(); }
 }
 
 // O PID do supervisor nao basta: o Portal pode ter sido iniciado a mao ou o
