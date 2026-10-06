@@ -28,7 +28,7 @@ SCRIPT_EMAIL  = str(sv_paths.SCRIPT_EMAIL)
 
 def configurar_log():
     pathlib.Path(LOG_DIR).mkdir(parents=True, exist_ok=True)
-    log_path = f"{LOG_DIR}\\pipeline_{RUN_ID}.log"
+    log_path = str(pathlib.Path(LOG_DIR) / f"pipeline_{RUN_ID}.log")
 
     try:
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -178,28 +178,30 @@ def main():
     slot = ler_slot_argv(sys.argv[1:])
     if slot:
         os.environ["SV_ALERTA_SLOT"] = slot
-    try:
-        adquirir_lock()
-    except RuntimeError as e:
-        print(f"ERRO: {e}.", file=sys.stderr)
-        sys.exit(2)
-    if os.environ.get('SUPPLY_VISION_SEM_ENVIO') != '1':
-        try:
-            entrega = estado_entrega.consultar_entrega()
-            if entrega:
-                if entrega['estado'] == 'enviado':
-                    print('Entrega deste slot ja confirmada; nenhuma nova execucao necessaria.')
-                    sys.exit(0)
-                raise estado_entrega.EntregaEmRevisao('Entrega parcial/incerta do slot: revisao manual obrigatoria.')
-        except estado_entrega.EntregaEmRevisao as exc:
-            print(f'ERRO: {exc}', file=sys.stderr)
-            sys.exit(3)
     log_path = configurar_log()
     logging.info(f"Run ID: {RUN_ID}")
     logging.info(f"Pipeline iniciado — {datetime.now().strftime('%d/%m/%Y %H:%M')}")
     logging.info(f"Log: {log_path}")
     if os.environ.get("SV_ALERTA_SLOT"):
         logging.info(f"Slot agendado: {os.environ['SV_ALERTA_SLOT']}")
+
+    try:
+        adquirir_lock()
+    except RuntimeError as e:
+        logging.error(f"ERRO: {e}.")
+        sys.exit(2)
+    if os.environ.get('SUPPLY_VISION_SEM_ENVIO') != '1':
+        try:
+            entrega = estado_entrega.consultar_entrega()
+            if entrega:
+                if entrega['estado'] == 'enviado':
+                    logging.info('Entrega deste slot ja confirmada; nenhuma nova execucao necessaria.')
+                    logging.info('PIPELINE CONCLUÍDO COM SUCESSO — ENTREGA JÁ CONFIRMADA')
+                    sys.exit(0)
+                raise estado_entrega.EntregaEmRevisao('Entrega parcial/incerta do slot: revisao manual obrigatoria.')
+        except estado_entrega.EntregaEmRevisao as exc:
+            logging.error(f'ERRO: {exc}')
+            sys.exit(3)
 
     ok, output_baixar = rodar_script(SCRIPT_BAIXAR, "Download Qlik (filtrado)")
     if not ok:
