@@ -52,6 +52,20 @@ const pedido = (action = 'paralelo') => ({
 });
 let servidor;
 try {
+  const itemTeste = 'ite_historico_legivel_teste';
+  db.prepare('INSERT OR IGNORE INTO catalog_items(id,name) VALUES(?,?)').run(itemTeste, 'Amortecedor para histórico de teste');
+  const usuarioAdmin = db.prepare("SELECT id FROM users WHERE role='admin' AND active=1 LIMIT 1").get();
+  const auditoriaId = `aud_${crypto.randomUUID()}`;
+  const detalhesBrutos = JSON.stringify({ antes: { id: 'itm_teste', catalog_item_id: itemTeste, price: 2028, revision: 0 }, depois: { catalog_item_id: itemTeste, price: 2000 } });
+  db.prepare("INSERT INTO audit_logs(id,user_id,action,entity,entity_id,details,created_at) VALUES(?,?,'UPDATE','agreement_item','itm_teste',?,?)").run(auditoriaId, usuarioAdmin.id, detalhesBrutos, new Date().toISOString());
+  const auditoria = await pedir('audit?q=itm_teste');
+  assert.equal(auditoria.status, 200);
+  const registro = auditoria.data.logs.find(r => r.id === auditoriaId);
+  assert.equal(registro.details, detalhesBrutos, 'O registro original permanece intacto');
+  assert.match(registro.detailsText, /Amortecedor para histórico de teste/);
+  assert.match(registro.detailsText, /Preço: R\$\s2\.028,00 → R\$\s2\.000,00/);
+  assert.doesNotMatch(registro.detailsText, /itm_teste|revision|ite_historico/);
+  console.log('[OK] Histórico traduz referências e valores, preservando o JSON original.');
   for (const role of ['viewer', 'editor']) {
     const email = `${role}-relatorios@teste.local`;
     assert.equal(

@@ -5,8 +5,9 @@ o intervalo consultado e, depois, o instante de geração. Ler a data errada
 fez a limpeza apagar, em 11/09/2026, um arquivo gerado no mesmo dia.
 """
 import importlib
+import os
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -15,6 +16,24 @@ RAIZ = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(RAIZ / "processo"))
 
 limpeza = importlib.import_module("limpeza")
+
+def test_historicos_usam_gravacao_e_nao_inicio_do_recorte(monkeypatch, tmp_path):
+    hist = tmp_path / 'historicos'; hist.mkdir()
+    logs = tmp_path / 'logs'; logs.mkdir()
+    monkeypatch.setattr(limpeza.sv_paths, 'RELATORIOS_HISTORICOS', hist)
+    monkeypatch.setattr(limpeza.sv_paths, 'LOG_DIR', logs)
+    monkeypatch.setattr(limpeza.sv_paths, 'RELATORIOS_DIARIOS', tmp_path / 'diarios')
+    monkeypatch.setattr(limpeza.sv_paths, 'ALERTAS', tmp_path / 'codigo')
+    inicio = (datetime.now() - timedelta(hours=30)).strftime('%Y%m%d_%H%M%S')
+    atual = hist / f'recorte_{inicio}_atual.xlsx'
+    antigo = hist / f'recorte_{inicio}_antigo.xlsx'
+    atual.write_text('atual'); antigo.write_text('antigo')
+    for arquivo, horas in [(atual, 23), (antigo, 25)]:
+        instante = (datetime.now() - timedelta(hours=horas)).timestamp()
+        os.utime(arquivo, (instante, instante))
+    limpeza.limpar(dry_run=False)
+    assert atual.exists()
+    assert not antigo.exists()
 
 
 @pytest.mark.parametrize("nome,esperado", [
