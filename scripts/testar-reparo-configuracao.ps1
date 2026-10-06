@@ -4,7 +4,7 @@ $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'operacao-logica.ps1')
 $fonte = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'atualizar-servidor.ps1') -Raw
 $inicio = $fonte.IndexOf('function Reparar-ConfiguracaoPrivada')
-$fim = $fonte.IndexOf("Etapa 'Conferindo o repositorio'")
+$fim = $fonte.IndexOf("$" + "ContextoArquivo =") # definicoes precedem o controle de fases
 if ($inicio -lt 0 -or $fim -le $inicio) { throw 'Funcao de reparo nao encontrada no atualizador.' }
 . ([scriptblock]::Create($fonte.Substring($inicio, $fim - $inicio)))
 
