@@ -1,3 +1,4 @@
+import { REENVIAR_NOTIFICACAO_SQL, AUDITAR_REENVIO_SQL } from '@/lib/reenvio-sql';
 import { CRIAR_SESSAO_AUTENTICADA_SQL, MIGRAR_SENHA_AUTENTICADA_SQL } from '@/lib/login-sql';
 import { consultarRelatorios, solicitarRelatorio, cancelarRelatorio } from '@/lib/relatorios-api';
 import { erroExportacaoAuditoria, BUSCA_LITERAL_AUDITORIA_SQL } from '@/lib/auditoria-limites';
@@ -1397,16 +1398,17 @@ async function emailNotificationList(params:URLSearchParams){
 
 async function retryEmailNotification(user:User,notificationId:string){
   if(user.role!=='admin') return fail('Somente administradores podem reenviar notificações.',403);
-  const notification=await first<{id:string;status:string}>('SELECT id,status FROM email_notifications WHERE id=?',[notificationId]);
+  const notification=await first<{id:string;status:string;updated_at:string;attempts:number}>('SELECT id,status,updated_at,attempts FROM email_notifications WHERE id=?',[notificationId]);
   if(!notification) return fail('Notificação não encontrada.',404);
   if(notification.status==='sent') return fail('Esta notificação já foi enviada.',409);
   if(notification.status==='processing') return fail('Esta notificação está sendo enviada. Atualize a lista antes de tentar novamente.',409);
   if(notification.status!=='failed') return fail('Somente notificações com falha podem ser reenviadas manualmente.',409);
   const timestamp=now();
-  await rawDb().batch([
-    rawDb().prepare("UPDATE email_notifications SET status='pending',attempts=0,next_attempt_at=?,locked_at=NULL,last_error=NULL,updated_at=? WHERE id=?").bind(timestamp,timestamp,notificationId),
-    rawDb().prepare('INSERT INTO audit_logs (id,user_id,action,entity,entity_id,details,created_at) VALUES (?,?,?,?,?,?,?)').bind(id('aud'),user.id,'RETRY','email_notification',notificationId,'Reenvio de notificação solicitado',timestamp),
+  const resultados=await rawDb().batch([
+    rawDb().prepare(REENVIAR_NOTIFICACAO_SQL).bind(timestamp,timestamp,notificationId,notification.updated_at,notification.attempts),
+    rawDb().prepare(AUDITAR_REENVIO_SQL).bind(id('aud'),user.id,'RETRY','email_notification',notificationId,'Reenvio de notificação solicitado',timestamp),
   ]);
+  if(!resultados[0].meta.changes) return fail('A entrega mudou. Atualize a lista antes de tentar novamente.',409);
   return ok({success:true});
 }
 
