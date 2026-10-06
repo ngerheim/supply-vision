@@ -5,7 +5,7 @@ $raizReal=(Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $pasta=Join-Path ([IO.Path]::GetTempPath()) ('sv-recuperacao-'+[guid]::NewGuid().ToString('N'))
 $privadoAnterior=$env:SUPPLY_VISION_PRIVADO
 try {
-  foreach($caso in @('legado','legado-repetido','prevoo','configuracao','credencial','npm','build','teste','partida','health','filho','restauracao')) {
+  foreach($caso in @('legado','legado-repetido','prevoo','configuracao','credencial','npm','build','teste','partida','health','filho','restauracao','saude-completa','consumidor')) {
     $raiz=Join-Path $pasta $caso
     foreach($dir in @('scripts','portal/scripts','alertas','compartilhado','privado/operacao','privado/portal/backups','privado/portal/configuracao','privado/comum')) { New-Item -ItemType Directory -Force (Join-Path $raiz $dir)|Out-Null }
     Copy-Item (Join-Path $raizReal 'scripts/operacao-logica.ps1') (Join-Path $raiz 'scripts')
@@ -43,9 +43,10 @@ function git {
 }
 function Get-NetTCPConnection {}
 function Start-Sleep {}
-function Invoke-RestMethod { throw 'health indisponivel' }
+function Invoke-RestMethod { if($Caso -in @('saude-completa','consumidor')) { @{status='ok'} } else { throw 'health indisponivel' } }
 function node {
   $global:LASTEXITCODE=0
+  if($args[0] -like '*saude-operacao*' -and $Caso -in @('saude-completa','consumidor')){$global:LASTEXITCODE=1}
   if($args[0] -like '*restaurar-backup*') { Add-Content (Join-Path $Raiz 'restore.log') 'restore'; if($Caso -eq 'restauracao'){$global:LASTEXITCODE=1} }
 }
 function npm {
@@ -74,7 +75,7 @@ exit $LASTEXITCODE
     $resets=@(Get-Content (Join-Path $raiz 'reset.log') -ErrorAction SilentlyContinue)
     if($resets.Count -ne $(if($caso -eq 'restauracao'){0}else{1})) { throw "Caso $caso nao reverteu exatamente uma vez: $saida" }
     $restaurou=Test-Path (Join-Path $raiz 'restore.log')
-    if($restaurou -ne ($caso -in @('partida','health','filho','restauracao'))) { throw "Restauracao incorreta em ${caso}: $saida" }
+    if($restaurou -ne ($caso -in @('partida','health','filho','restauracao','saude-completa','consumidor'))) { throw "Restauracao incorreta em ${caso}: $saida" }
     $fase=(Ler-EstadoOperacao (Join-Path $env:SUPPLY_VISION_PRIVADO 'operacao/atualizacao.json')).fase
     if($fase -ne $(if($caso -eq 'restauracao'){'recuperando'}else{'revertido'})) { throw "Recuperacao incompleta em ${caso}: $saida" }
     if($caso -eq 'restauracao' -and @(Get-Content (Join-Path $raiz 'inicio.log')).Count -ne 1) { throw 'Banco inseguro foi religado.' }

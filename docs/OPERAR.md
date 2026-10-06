@@ -255,3 +255,11 @@ Confira a entrega com os destinatários e o registro antes de qualquer reenvio
 manual. Em entrega parcial, reenvie somente aos recusados. Não apague registros
 incertos para liberar a lista inteira: isso pode duplicar uma mensagem aceita.
 Uma entrega já confirmada permite completar a agenda após reinício sem novo SMTP.
+
+### Saude exigida apos atualizar
+
+Além de `/api/health`, o atualizador confere identidade, HTML e arquivos CSS/JS
+com o verificador de saúde completa. Depois exige estado recente do supervisor
+e ciclos recentes dos consumidores de e-mail e relatórios, aguardando até um
+minuto para a primeira passagem. Falha aciona a recuperação da atualização.
+Esses sinais provam a partida local; não provam entrega SMTP nem acesso ao Qlik.
