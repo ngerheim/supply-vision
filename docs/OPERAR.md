@@ -206,18 +206,15 @@ Consequências práticas:
 - **Cada máquina precisa alcançar `app.powerbi.com`.** Se o quadro aparecer em
   branco, o problema é acesso à internet do cliente, não o Portal. O botão
   *Abrir em nova aba* confirma o diagnóstico em dois cliques.
-- **O relatório exige autenticação no Power BI.** Use *Inserir relatório > Site ou
-  portal*; o usuário precisa de acesso e licença adequada no Power BI além do login
-  do Portal. Links de *Publicar na web* são recusados por permitirem acesso anônimo.
-  Consulte https://learn.microsoft.com/en-us/power-bi/collaborate-share/service-embed-secure.
-- **Publicação histórica:** um link público foi removido do código em 21/09/2026,
-  mas continua no histórico Git. O administrador do Power BI deve verificar e
-  excluir o código de publicação antigo em *Gerenciar códigos de inserção* antes
-  de usar dados empresariais. Esta mudança não revoga a publicação remotamente.
-  Troque a configuração privada pelo link autenticado; não gere outro link público.
+- **O modo público foi mantido por decisão da operação.** O Portal aceita links
+  de *Publicar na web*, que permitem acesso anônimo também fora do Portal.
+  O login do Portal não restringe o acesso ao relatório público. O endereço
+  continua somente na configuração privada, sem ser incluído no código versionado.
+  Também é aceito *Inserir relatório > Site ou portal*, que exige autenticação,
+  permissão e licença adequada no Power BI.
 - **Se o relatório for republicado**, o endereço e o identificador da página
   mudam. Os dois ficam em `privado\portal\configuracao\portal.env`, nas chaves
-  `PBI_RELATORIO_URL` (o link de *Site ou portal*) e `PBI_PAGINA`. Quando o
+  `PBI_RELATORIO_URL` (o link de *Publicar na web* ou *Site ou portal*) e `PBI_PAGINA`. Quando o
   identificador deixa de casar, a aba abre na primeira página do relatório **sem
   mensagem de erro** — é o primeiro lugar a conferir se alguém reclamar que
   abriu a tabela errada.
