@@ -339,3 +339,15 @@ Os filtros de busca reúnem seleção múltipla e digitação em um único campo
 As observações do acordo (e das condições) aparecem no detalhe somente para os perfis Suprimentos e Administrador; o perfil Consulta não as recebe nem pela API. A aba **Histórico** permite exportar todos os registros que correspondem aos filtros em uma planilha `.xlsx`, disponível somente para administradores. A aba **E-mails**, também administrativa, pagina as notificações e permite filtrar por destinatário, situação, tipo, texto e período.
 
 Fornecedores são paginados em grupos de 25. Quando a tabela ultrapassa a largura da tela, a barra superior e Shift + rolagem permitem navegar horizontalmente em qualquer altura da lista. Dados de situação, correspondências de unidades e observações legadas continuam preservados, mesmo quando seus controles deixam de ser exibidos.
+
+### Prazo dos corpos HTTP
+
+O portal limita a leitura a 60 segundos e drena corpos excedidos por até cinco
+segundos ou 16 MB adicionais. Corpos normais excedidos continuam recebendo 413;
+um fluxo que não termina recebe 408 ou tem a conexão fechada pelo proxy local.
+No Wrangler local, liberar o leitor e a reserva não garante o fechamento
+imediato do socket enquanto o cliente mantém o corpo aberto. O prazo da
+conexão depende do runtime ou do proxy de implantação; não há um novo proxy
+HTTP incorporado nesta correção.
+A reserva de importação é liberada em qualquer caso e sua posse é renovada e
+conferida depois da leitura, antes de preparar e antes de publicar dados.

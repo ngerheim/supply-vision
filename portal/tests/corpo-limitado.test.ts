@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { corpoBinarioLimitado, corpoLimitado } from '../lib/corpo-limitado.ts';
+import { CorpoExpirado, corpoBinarioLimitado, corpoLimitado } from '../lib/corpo-limitado.ts';
 
 function requisicaoEmFluxo(pedacos: Array<string | Uint8Array>, contentLength?: string) {
   const codificador = new TextEncoder();
@@ -51,3 +51,13 @@ void test('preserva caracteres UTF-8 partidos entre pedacos', async () => {
   const { request } = requisicaoEmFluxo([cedilha.slice(0, 1), cedilha.slice(1)], '2');
   assert.equal(await corpoLimitado(request, 2), 'ç');
 });
+
+for (const excedido of [false, true]) {
+  void test(`corpo aberto ${excedido ? 'excedido' : 'lento'} termina no prazo e cancela leitura`, async () => {
+    let cancelou = false;
+    const stream=new ReadableStream<Uint8Array>({start(c){c.enqueue(new Uint8Array(excedido?2:1))},cancel(){cancelou=true}});
+    const request=new Request('http://portal.local',{method:'POST',body:stream,duplex:'half'} as RequestInit & {duplex:'half'});
+    await assert.rejects(corpoBinarioLimitado(request,1,{leituraMs:50,drenagemMs:10}),CorpoExpirado);
+    assert.equal(cancelou,true);assert.equal(stream.locked,false);
+  });
+}

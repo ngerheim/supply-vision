@@ -3,7 +3,7 @@ import { passwordHash, tokenHash, PBKDF2_ITERACOES_ATUAL, PBKDF2_ITERACOES_LEGAD
 export { passwordHash, tokenHash, PBKDF2_ITERACOES_ATUAL, PBKDF2_ITERACOES_LEGADO } from './criptografia.ts';
 import { parseCookies } from './cookies.ts';
 import { registraAtividade } from './atualizacao-periodica.ts';
-import { LIMPAR_TRAVAS_VENCIDAS_SQL, TRAVA_VALIDADE_MS } from './travas-sql.ts';
+import { LIMPAR_TRAVAS_VENCIDAS_SQL, RENOVAR_TRAVA_SQL, TravaPerdida, TRAVA_VALIDADE_MS } from './travas-sql.ts';
 import { MIGRAR_FORNECEDORES_CHAMADOS_SQL } from './chamados.ts';
 import { TRIGGERS_REVISAO } from './revisoes-sql.ts';
 export { parseCookies } from './cookies.ts';
@@ -279,6 +279,12 @@ export async function adquirirTrava(chave: string, dono: string): Promise<boolea
   ).bind(dono, agora, chave, limite).run();
 
   return (r.meta?.changes ?? 0) > 0;
+}
+
+export async function renovarTrava(chave: string, dono: string) {
+  const limite = new Date(Date.now() - TRAVA_VALIDADE_MS).toISOString();
+  const resultado = await rawDb().prepare(RENOVAR_TRAVA_SQL).bind(now(),chave,dono,limite).run();
+  if (!resultado.meta.changes) throw new TravaPerdida();
 }
 
 export async function liberarTrava(chave: string, dono: string) {

@@ -208,6 +208,43 @@ try {
     assert.equal((await good(`/api/agreements/${agreementId}`)).agreement.notes,'Observacao revisada');
   });
   const replace = `/api/imports/agreement/${agreementId}`;
+  await check('Upload excedido mantido aberto libera reserva em prazo limitado', async () => {
+    const antes=businessSnapshot(), inicio=performance.now();
+    const aberto=abrirRequisicao({porta:port,caminho:replace,timeoutMs:20000,cabecalhos:{cookie,'content-type':'multipart/form-data; boundary=aberto','transfer-encoding':'chunked'}});
+    try {
+      await aberto.escrever(Buffer.alloc(3*1024*1024,65));
+      for(let i=0;i<50&&!query('SELECT COUNT(*) n FROM travas')[0].n;i++)await pause(100);
+      assert.equal(query('SELECT COUNT(*) n FROM travas')[0].n,1,'Reserva nunca foi adquirida');
+      for(let i=0;i<100&&query('SELECT COUNT(*) n FROM travas')[0].n;i++)await pause(100);
+      assert.equal(query('SELECT COUNT(*) n FROM travas')[0].n,0,'Reserva nao foi liberada no prazo');
+      assert.ok(performance.now()-inicio<12000,'Leitura dependeu do timeout do cliente');
+      aberto.terminar();
+      const resultado=await aberto.resposta;
+      // Cancelar um fluxo que nao termina pode fechar a conexao no proxy.
+      assert.ok([0,408].includes(resultado.status),JSON.stringify(resultado));
+
+      for(let i=0;i<30&&query('SELECT COUNT(*) n FROM travas')[0].n;i++)await pause(100);
+      assert.equal(query('SELECT COUNT(*) n FROM travas')[0].n,0);
+      assert.deepEqual(businessSnapshot(),antes);
+      assert.equal((await request('/api/health')).status,200);
+    } finally { aberto.destruir(); }
+  });
+  await check('Upload que perdeu dono da reserva nao prepara nem publica dados', async () => {
+    const antes=businessSnapshot(), doc=file([row()],{name:'reserva-perdida'}), m=multipart(doc.filename,doc.bytes);
+    const aberto=abrirRequisicao({porta:port,caminho:replace,timeoutMs:15000,cabecalhos:{cookie,'content-type':m.tipo,'transfer-encoding':'chunked'}});
+    const db=new DatabaseSync(sqlitePath);
+    try {
+      const meio=Math.floor(m.corpo.length/2);
+      await aberto.escrever(m.corpo.subarray(0,meio));
+      for(let i=0;i<50&&!query("SELECT dono FROM travas WHERE chave='importacao'").length;i++)await pause(100);
+      assert.equal(query("SELECT COUNT(*) n FROM travas WHERE chave='importacao'")[0].n,1);
+      db.exec("UPDATE travas SET dono='outro-dono' WHERE chave='importacao'");
+      aberto.terminar(m.corpo.subarray(meio));
+      assert.equal((await aberto.resposta).status,409);
+      assert.deepEqual(businessSnapshot(),antes);
+      assert.equal(query("SELECT dono FROM travas WHERE chave='importacao'")[0].dono,'outro-dono');
+    } finally { aberto.destruir();db.exec("DELETE FROM travas WHERE dono='outro-dono'");db.close(); }
+  });
   for (const route of [replace]) {
     const mode = 'substituir';
     const invalidCases = /** @type {Array<[string, Record<string, unknown>, RegExp]>} */ ([

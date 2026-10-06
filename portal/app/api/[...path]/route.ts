@@ -18,7 +18,8 @@ import { lerPlanilha } from '@/lib/planilha';
 import { ConcurrencyGate } from '@/lib/concurrency';
 import { chaveLocalidade, colunasAusentes, parseImportRow, resolveImportRows, summarizeImportErrors, deduplicateImportRows, validarFornecedorImportacao, uniqueIndex, type ImportTarget } from '@/lib/importacao';
 import { contextoNotificacaoChamado, pessoaNotificacao, prepararNotificacoesChamado, type ContextoNotificacaoChamado } from '@/lib/fila-email-chamados';
-import { corpoBinarioLimitado, corpoLimitado } from '@/lib/corpo-limitado';
+import { TravaPerdida } from '@/lib/travas-sql';
+import { CorpoExpirado, corpoBinarioLimitado, corpoLimitado } from '@/lib/corpo-limitado';
 import {
   CORPO_MAX_JSON, CORPO_MAX_LOGIN, CORPO_MAX_UPLOAD, EntradaInvalida,
   LIMITES_CAMPO, LIMITE_LISTA, exigeTexto,
@@ -26,7 +27,7 @@ import {
 import { env } from 'cloudflare:workers';
 import {
   audit, currentUser, ensureDatabase, id, normalizeCnpj, normalizeText, now,
-  PBKDF2_ITERACOES_ATUAL, TRAVA_IMPORTACAO, adquirirTrava, liberarTrava,
+  PBKDF2_ITERACOES_ATUAL, TRAVA_IMPORTACAO, adquirirTrava, renovarTrava, liberarTrava,
   parseCookies, passwordHash, rawDb, tokenHash,
 } from '@/lib/database';
 import {
@@ -267,6 +268,8 @@ async function GETInterno(request: NextRequest) {
 // Traduz a excecao em resposta. So mensagens de erros conhecidos chegam ao
 // cliente; o resto vira 500 generico e fica registrado no log do servidor.
 function respostaDeErro(erro: unknown) {
+  if (erro instanceof CorpoExpirado) return fail(erro.message, 408);
+  if (erro instanceof TravaPerdida) return fail(erro.message, 409);
   if (erro instanceof CorpoGrandeDemais) return fail(erro.message, 413);
   if (erro instanceof EntradaInvalida) return fail(erro.message, 400);
   console.error('[portal] erro nao tratado:', erro);
@@ -1147,7 +1150,7 @@ async function importWorkbook(request: Request, user: User, agreementId: string)
   }
   try {
     await recuperarImportacoesInterrompidas();
-    return await importWorkbookComTrava(request, user, agreementId);
+    return await importWorkbookComTrava(request, user, agreementId, donoTrava);
   } finally {
     // finally cobre sucesso, planilha invalida e excecao inesperada.
     // Falha ao liberar nao pode transformar uma importacao ja publicada em
@@ -1158,7 +1161,7 @@ async function importWorkbook(request: Request, user: User, agreementId: string)
   }
 }
 
-async function importWorkbookComTrava(request: Request, user: User, agreementId: string) {
+async function importWorkbookComTrava(request: Request, user: User, agreementId: string, donoTrava: string) {
   // Limite REAL do multipart. Content-Length pode vir ausente, mentiroso ou a
   // requisicao pode ser fragmentada, entao conferir so o cabecalho deixaria o
   // formData() materializar o corpo inteiro na memoria.
@@ -1168,6 +1171,7 @@ async function importWorkbookComTrava(request: Request, user: User, agreementId:
   const bytes = await corpoBinarioLimitado(request, CORPO_MAX_UPLOAD);
   if (bytes === null) throw new CorpoGrandeDemais(CORPO_MAX_UPLOAD);
 
+  await renovarTrava(TRAVA_IMPORTACAO, donoTrava);
   // Reconstroi a requisicao a partir dos bytes ja conferidos.
   const requisicaoLimitada = new Request(request.url, {
     method: 'POST',
@@ -1212,6 +1216,7 @@ async function importWorkbookComTrava(request: Request, user: User, agreementId:
     if (preview) return ok({ preview: true, valid: true, sheet: leitura.aba, totalRows: parsed.length, summary: baseSummary, sample: prepared.rows.slice(0, 20).map(row => ({ linha: row.rowNumber, fornecedor: row.supplier, cidade: row.city, uf: row.state, item: row.item, modelo: row.model, unidade: row.unit, preco: row.price })) });
     const publish: PublishImport = async (statements, details) => {
       const summary = { ...details, ...baseSummary }, db = rawDb(), timestamp = now();
+      await renovarTrava(TRAVA_IMPORTACAO, donoTrava);
       // A publicacao e seus registros de conclusao precisam confirmar juntos.
       await db.batch([
         ...statements,
@@ -1224,19 +1229,20 @@ async function importWorkbookComTrava(request: Request, user: User, agreementId:
     const donoAcordo = await travarAcordo(agreementId);
     if (!donoAcordo) throw new EntradaInvalida('outro usuário está alterando este acordo neste momento. Tente de novo em instantes');
     let summary: Record<string, unknown>;
-    try { summary = await processAgreementImport(prepared.rows, user, importId, agreementId, publish); }
+    try { await renovarTrava(TRAVA_IMPORTACAO, donoTrava); summary = await processAgreementImport(prepared.rows, user, importId, agreementId, publish); }
     finally { await soltarAcordo(agreementId, donoAcordo); }
     return ok({ success: true, summary });
   } catch (error: unknown) {
     // So erros de validacao conhecidos chegam ao usuario. O resto (banco,
     // bug) vira mensagem generica e fica no log do servidor.
-    const conhecido = error instanceof EntradaInvalida;
+    const reservaPerdida = error instanceof TravaPerdida;
+    const conhecido = error instanceof EntradaInvalida || reservaPerdida;
     if (!conhecido) console.error('[portal] falha inesperada na importacao:', error);
     const message = conhecido ? errorMessage(error, 'arquivo inválido') : 'erro interno ao processar a planilha. Tente de novo; se persistir, avise o administrador.';
-    if (preview) return ok({ preview: true, valid: false, error: conhecido ? message : `Não foi possível conferir: ${message}` }, conhecido ? undefined : { status: 500 });
+    if (preview) return ok({ preview: true, valid: false, error: conhecido ? message : `Não foi possível conferir: ${message}` }, reservaPerdida ? { status: 409 } : conhecido ? undefined : { status: 500 });
     await cleanupFailedImport(importId);
     await rawDb().prepare('UPDATE imports SET status=?,summary_json=?,completed_at=? WHERE id=?').bind('error', JSON.stringify({ error: message }), now(), importId).run();
-    return ok({ error: `Não foi possível importar: ${message}`, importId }, { status: conhecido ? 400 : 500 });
+    return ok({ error: `Não foi possível importar: ${message}`, importId }, { status: reservaPerdida ? 409 : conhecido ? 400 : 500 });
   }
 }
 
