@@ -29,7 +29,7 @@ valor antigo significa supervisor morto, não operação saudável.
 2. Veja o último `pipeline_*.log` em `privado/alertas/logs`.
 3. Confirme se o dia tem agenda configurada.
 4. Valide configuração, chave Qlik, planilha de acordos e conectividade.
-5. Use `alertas\executar.bat paralelo` para gerar uma prévia sem enviar e-mail durante o suporte.
+5. Na pasta `alertas/`, use `.venv\Scripts\python.exe processo\pipeline.py --sem-envio` para gerar uma prévia diária sem enviar e-mail durante o suporte.
 
 ## Os e-mails pararam
 
@@ -118,4 +118,4 @@ Ao final, registre horário, sintoma, ação tomada e arquivos preservados.
 3. Confira Python em `alertas/.venv/Scripts/python.exe`, `PORTAL_API_TOKEN` e se a porta interna está livre (padrão 3001).
 4. Se a tarefa falhou por execução concorrente, aguarde a rotina automática terminar.
 5. Depois de reinício ou falha SMTP, confira a entrega antes de pedir novamente; não há reenvio automático.
-6. Um arquivo que já passou da retenção pode constar no histórico e não estar mais disponível para download.
+6. Recortes são exclusivamente para download. Após 24 horas, a aba indica **Arquivo expirado**; gere outro recorte se precisar do arquivo. O serviço exclui arquivos vencidos em verificações de até um minuto quando a operação está ativa.
