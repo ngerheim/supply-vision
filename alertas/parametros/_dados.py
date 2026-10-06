@@ -18,8 +18,9 @@ from pathlib import Path
 
 CODIGO = Path(__file__).resolve().parent
 PRODUTO = CODIGO.parents[1]
+PRIVADO = Path(os.environ.get('SUPPLY_VISION_PRIVADO', PRODUTO / 'privado')).resolve()
 BASE = Path(os.environ.get('SUPPLY_VISION_PARAMETROS_DIR',
-                           PRODUTO / 'privado' / 'alertas' / 'parametros')).resolve()
+                            PRIVADO / 'alertas' / 'parametros')).resolve()
 FILTROS = BASE / 'filtros'
 DE_PARA = BASE / 'de_para'
 CONTAGENS = BASE / '.contagens.json'
