@@ -376,7 +376,7 @@ function revisaoDaQuery(request: Request): number | null {
 async function deleteItem(user: User, itemId: string, expectedRevision: number | null) {
   // A versao vigente precisa ser conferida depois de adquirir a trava: uma
   // publicacao concorrente nao pode trocar a versao entre a leitura e o DELETE.
-  const item = await first<Row>('SELECT ai.* FROM agreement_items ai JOIN agreements a ON a.current_version_id=ai.version_id WHERE ai.id=?', [itemId]);
+  const item = await first<Row>('SELECT ai.*,a.id AS agreementId,a.number AS agreementNumber FROM agreement_items ai JOIN agreements a ON a.current_version_id=ai.version_id WHERE ai.id=?', [itemId]);
   if (!item) return fail('Condição não encontrada na versão vigente.', 404);
   if (!revisaoConfere(expectedRevision, Number(item.revision))) return fail('Esta condição foi alterada ou a tela está desatualizada. Reabra o acordo antes de remover.', 409);
   await rawDb().batch([
@@ -1375,12 +1375,13 @@ async function auditList(params?: URLSearchParams, exportAll=false){
     ['catalog_item_id', 'catalog_items', 'name'], ['vehicle_model_id', 'vehicle_models', 'name'],
     ['location_id', 'locations', "city||' / '||state"], ['unit_id', 'units', 'code'],
     ['supplier_id', 'suppliers', 'trade_name'], ['agreementId', 'agreements', 'number'],
+    ['version_id', 'agreement_versions', '(SELECT number FROM agreements WHERE id=agreement_versions.agreement_id)'],
   ] as const;
   const nomes: Record<string, string> = {};
   await Promise.all(fontes.map(async ([campo, tabela, coluna]) => {
     if (!referencias[campo]?.length) return;
-    const rows = await all<{ id: string; nome: string }>(`SELECT id,${coluna} AS nome FROM ${tabela} WHERE id IN (SELECT value FROM json_each(?))`, [JSON.stringify(referencias[campo])]);
-    for (const row of rows) nomes[`${campo}:${row.id}`] = row.nome;
+    const rows = await all<{ id: string; nome: string | null }>(`SELECT id,${coluna} AS nome FROM ${tabela} WHERE id IN (SELECT value FROM json_each(?))`, [JSON.stringify(referencias[campo])]);
+    for (const row of rows) if (row.nome !== null) nomes[`${campo}:${row.id}`] = row.nome;
   }));
   return { logs: logs.map(r => ({ ...r, detailsText: detalhesHistorico(r.details, nomes) })), total, page, pageSize, pageCount };
 }

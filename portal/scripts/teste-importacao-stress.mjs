@@ -701,6 +701,32 @@ try {
     assert.equal(query("SELECT COUNT(*) n FROM travas WHERE chave LIKE 'acordo:%'")[0].n, 0, 'Trava de acordo ficou presa');
     metrics.push({ concorrenciaAbrangencia: { retirar: [...status.retirar], incluir: [...status.incluir] } });
   });
+  await check('Histórico identifica o acordo da condição excluída e preserva seu número', async () => {
+    const acordo = query('SELECT number FROM agreements WHERE id=?', agreementId)[0];
+    const item = query('SELECT id,revision FROM agreement_items WHERE version_id=(SELECT current_version_id FROM agreements WHERE id=?) LIMIT 1', agreementId)[0];
+    await good(`/api/items/${item.id}?expectedRevision=${item.revision}`, { method: 'DELETE' });
+    const registro = (await good(`/api/audit?q=${item.id}`)).logs.find(log => log.action === 'DELETE');
+    assert.ok(registro);
+    assert.ok(registro.detailsText.includes(`Acordo: ${acordo.number}`));
+    assert.equal(JSON.parse(registro.details).antes.agreementNumber, acordo.number);
+    const fixture = new DatabaseSync(sqlitePath);
+    try {
+      fixture.prepare('UPDATE agreements SET number=? WHERE id=?').run('NUMERO ALTERADO', agreementId);
+      const atualizado = (await good(`/api/audit?q=${item.id}`)).logs.find(log => log.id === registro.id);
+      assert.ok(atualizado.detailsText.includes(`Acordo: ${acordo.number}`));
+      assert.ok(!atualizado.detailsText.includes('NUMERO ALTERADO'));
+      // Simula o formato anterior, que guardava somente a versão da condição.
+      const legado = JSON.parse(registro.details);
+      delete legado.antes.agreementId; delete legado.antes.agreementNumber;
+      fixture.prepare('UPDATE audit_logs SET details=? WHERE id=?').run(JSON.stringify(legado), registro.id);
+      const antigo = (await good(`/api/audit?q=${item.id}`)).logs.find(log => log.id === registro.id);
+      assert.ok(antigo.detailsText.includes('Acordo: NUMERO ALTERADO'));
+    } finally {
+      fixture.prepare('UPDATE agreements SET number=? WHERE id=?').run(acordo.number, agreementId);
+      fixture.prepare('UPDATE audit_logs SET details=? WHERE id=?').run(registro.details, registro.id);
+      fixture.close();
+    }
+  });
   await check('Exportação conserva os De/Para', async () => {
     const exported = await good('/api/export');
     assert.equal(exported.tables.importItemMappings.length, query('SELECT COUNT(*) n FROM import_item_mappings')[0].n);

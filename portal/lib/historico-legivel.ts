@@ -17,12 +17,12 @@ function normalizar(obj: unknown): Record<string, unknown> {
   return isRecord(obj) ? Object.fromEntries(Object.entries(obj).map(([key, value]) => [aliases[key] || key, value])) : {};
 }
 export function referenciasHistorico(textos: unknown[]): Record<string, string[]> {
-  const refs = Object.fromEntries(CAMPOS_REFERENCIAS.map(c => [c, new Set<string>()]));
+  const refs = Object.fromEntries([...CAMPOS_REFERENCIAS, 'version_id'].map(c => [c, new Set<string>()]));
   for (const texto of textos) {
     const parsed = ler(texto);
     for (const obj of [parsed, parsed?.antes, parsed?.depois]) {
       const row = normalizar(obj);
-      for (const c of CAMPOS_REFERENCIAS) if (typeof row[c] === 'string') refs[c].add(row[c]);
+      for (const c of [...CAMPOS_REFERENCIAS, 'version_id']) if (typeof row[c] === 'string') refs[c].add(row[c]);
     }
   }
   return Object.fromEntries(Object.entries(refs).map(([c, valores]) => [c, [...valores]]));
@@ -31,8 +31,12 @@ export function detalhesHistorico(texto: unknown, nomes: Record<string, string> 
   if (typeof texto !== 'string' || !texto) return 'Sem detalhes adicionais.';
   const parsed = ler(texto);
   if (!parsed) return texto.trim().startsWith('{') || texto.trim().startsWith('[') ? 'Detalhes técnicos não disponíveis para exibição.' : texto;
+  const antes = normalizar(parsed.antes), depois = normalizar(parsed.depois);
+  const numeroAcordo = typeof antes.agreementNumber === 'string' && antes.agreementNumber.trim() ? antes.agreementNumber : null;
+  const acordoLegado = typeof antes.version_id === 'string' ? nomes[`version_id:${antes.version_id}`] : null;
   const valor = (campo: string, value: unknown): string => {
     if (value === null || value === undefined || value === '') return 'Não informado';
+    if (campo === 'agreementId' && numeroAcordo) return numeroAcordo;
     if ((CAMPOS_REFERENCIAS as readonly string[]).includes(campo)) return typeof value === 'string' ? nomes[`${campo}:${value}`] || 'Cadastro não disponível' : 'Cadastro não disponível';
     if (campo === 'price' && typeof value === 'number') return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
     if (['courtesy', 'active', 'dryRun'].includes(campo)) return value === true || value === 1 ? 'Sim' : 'Não';
@@ -41,11 +45,10 @@ export function detalhesHistorico(texto: unknown, nomes: Record<string, string> 
     if (campo === 'status' && typeof value === 'string') return ({ active: 'Vigente', suspended: 'Suspenso', closed: 'Concluído', cancelled: 'Cancelado' } as Record<string, string>)[value] || value;
     return typeof value === 'string' || typeof value === 'number' ? String(value) : 'Informação registrada';
   };
-  const antes = normalizar(parsed.antes), depois = normalizar(parsed.depois);
   if ('antes' in parsed && 'depois' in parsed) {
     const contexto = { ...antes, ...depois };
     const identificacao = CAMPOS_REFERENCIAS.filter(c => contexto[c] != null).map(c => `${labels[c]}: ${valor(c, contexto[c])}`);
-    if (parsed.depois === null) return ['Condição excluída.', ...Object.entries(antes).filter(([c]) => labels[c]).map(([c, v]) => `${labels[c]}: ${valor(c, v)}`)].join('\n');
+    if (parsed.depois === null) return ['Condição excluída.', ...(!antes.agreementId && acordoLegado ? [`Acordo: ${acordoLegado}`] : []), ...Object.entries(antes).filter(([c]) => labels[c]).map(([c, v]) => `${labels[c]}: ${valor(c, v)}`)].join('\n');
     const mudancas = Object.entries(depois).filter(([c, v]) => labels[c] && JSON.stringify(v) !== JSON.stringify(antes[c])).map(([c, v]) => `${labels[c]}: ${valor(c, antes[c])} → ${valor(c, v)}`);
     return [...identificacao, ...mudancas.length ? mudancas : ['Nenhum campo de negócio alterado.']].join('\n');
   }
