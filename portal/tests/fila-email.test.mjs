@@ -32,21 +32,22 @@ void test('confirmacao marca como enviada e limpa a trava', () => comBanco((db) 
 
 void test('falha agenda nova tentativa e a quinta falha encerra', () => comBanco((db) => {
   let item = reservar(db)[0];
-  falhar(db, item, new Error('SMTP indisponível'));
+  falhar(db, item, Object.assign(new Error('SMTP indisponível'), {code:'ECONNECTION',command:'CONN'}));
   let registro = db.prepare('SELECT * FROM email_notifications WHERE id=?').get('um');
   assert.equal(registro.status, 'pending');
   assert.match(registro.last_error, /SMTP indisponível/);
   db.prepare("UPDATE email_notifications SET attempts=4,next_attempt_at='2000-01-01T00:00:00.000Z'").run();
   item = reservar(db)[0];
-  falhar(db, item, new Error('continua fora'));
+  falhar(db, item, Object.assign(new Error('continua fora'), {code:'ECONNECTION',command:'CONN'}));
   registro = db.prepare('SELECT * FROM email_notifications WHERE id=?').get('um');
   assert.equal(registro.status, 'failed');
   assert.equal(registro.attempts, 5);
 }));
 
-void test('trava abandonada volta para a fila', () => comBanco((db) => {
+void test('trava abandonada exige revisao sem reenvio', () => comBanco((db) => {
   db.prepare("UPDATE email_notifications SET status='processing',locked_at='2000-01-01T00:00:00.000Z'").run();
-  assert.equal(reservar(db).length, 1);
+  assert.equal(reservar(db).length, 0);
+  assert.equal(db.prepare('SELECT status FROM email_notifications').get().status,'failed');
 }));
 
 void test('chave de deduplicacao impede duas copias', () => comBanco((db) => {
@@ -74,6 +75,9 @@ void test('queda na quinta tentativa deixa falha explicita em vez de pendencia e
 void test('resultado atrasado de uma reserva nao altera a reserva de outro processo',()=>comBanco(db=>{
   const antiga=reservar(db)[0];
   db.prepare("UPDATE email_notifications SET locked_at='2000-01-01T00:00:00.000Z'").run();
+  assert.equal(reservar(db).length,0);
+  // Uma nova reserva so nasce por decisao manual apos conferir o destinatario.
+  db.exec("UPDATE email_notifications SET status='pending',next_attempt_at='2000-01-01T00:00:00.000Z'");
   const atual=reservar(db)[0];
   concluir(db,antiga);falhar(db,antiga,new Error('resultado antigo'));
   const row=db.prepare('SELECT * FROM email_notifications').get();

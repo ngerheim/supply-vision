@@ -164,17 +164,21 @@ resultado.
 
 As alterações e suas notificações entram **juntas** numa fila persistente no
 próprio banco. Por isso uma indisponibilidade do SMTP não desfaz a alteração do
-chamado. São até cinco tentativas, com espera de 1, 5, 15, 60 e 240 minutos.
+chamado. Falhas comprovadamente anteriores à aceitação SMTP permitem até cinco
+tentativas. Reservas interrompidas e resultados incertos ficam como falha para
+revisão manual; uma reserva vencida nunca autoriza reenvio automático.
 
 Administradores acompanham a fila na aba **Usuários** e podem reenviar
-**apenas** as notificações que esgotaram as tentativas.
+as notificações com falha definitiva ou resultado incerto, depois de conferir a entrega.
 
 ## Relatório diário
 
 Administradores escolhem, por usuário, quem recebe e em qual horário. O
 relatório traz os totais por situação e os eventos do período desde o envio anterior, no fuso
-`America/Sao_Paulo`. Cada destinatário recebe no máximo uma cópia por dia,
-mesmo que o serviço reinicie.
+`America/Sao_Paulo`. Há uma entrega registrada por usuário/dia. Reiniciar não
+reenvia automaticamente entregas interrompidas: o resultado pode ser incerto e
+exige conferência antes de uma nova tentativa manual. SMTP não oferece garantia
+de entrega exatamente uma vez.
 
 As preferências ficam em `daily_report_enabled` e `daily_report_time` na tabela
 `users`; a tabela `daily_report_deliveries` registra a entrega por usuário e
