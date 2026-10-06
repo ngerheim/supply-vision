@@ -16,12 +16,46 @@ const indiceBanco = process.argv.indexOf('--database');
 const bancoInformado = indiceBanco >= 0 && process.argv[indiceBanco + 1] ? path.resolve(process.argv[indiceBanco + 1]) : null;
 const maxTentativas = 5;
 
+// Falha ao gravar o log nunca pode desfazer um envio ja feito: se o erro
+// subisse, o item seria marcado como falho e reenviado.
 function registrar(texto) {
   const linha = `${new Date().toISOString()}  ${texto}`;
   console.log(linha);
-  fs.appendFileSync(arquivoLog, `${linha}\n`, 'utf8');
-  const linhas = fs.readFileSync(arquivoLog, 'utf8').split(/\r?\n/);
-  if (linhas.length > 501) fs.writeFileSync(arquivoLog, `${linhas.slice(-500).join('\n')}\n`, 'utf8');
+  try {
+    fs.appendFileSync(arquivoLog, `${linha}\n`, 'utf8');
+    const linhas = fs.readFileSync(arquivoLog, 'utf8').split(/\r?\n/);
+    if (linhas.length > 501) fs.writeFileSync(arquivoLog, `${linhas.slice(-500).join('\n')}\n`, 'utf8');
+  } catch (erro) {
+    console.error(`Nao foi possivel gravar o log: ${erro instanceof Error ? erro.message : 'erro desconhecido'}.`);
+  }
+}
+
+export const MENSAGEM_NAO_CONFIRMADO = 'Enviado, mas não confirmado no banco. Confira com o destinatário antes de reenviar.';
+
+// Depois que o SMTP aceitou a mensagem, nenhuma falha pode leva-la de volta
+// para 'pending': isso reenviaria o e-mail. A confirmacao e tentada algumas
+// vezes; se o banco continuar recusando, o item vira 'failed' com mensagem
+// explicita (o reenvio na tela e manual). Se nem isso gravar, o item fica em
+// 'processing' e a recuperacao de trava (10 min) o reenviara: com o banco
+// indisponivel nao ha onde registrar o envio, e o log e o unico rastro.
+export async function confirmarEnvio(item, { concluir: confirmar, naoConfirmado, esperas = [200, 1000, 3000] }) {
+  for (let tentativa = 0; ; tentativa++) {
+    try { confirmar(); return true; }
+    catch (erro) {
+      if (tentativa >= esperas.length) {
+        try { naoConfirmado(); registrar(`${item.id} enviado, mas sem confirmacao no banco (${erro instanceof Error ? erro.message : 'erro desconhecido'}); marcado para revisao.`); }
+        catch (erroFinal) { registrar(`${item.id} enviado, mas o banco nao aceitou nem a confirmacao nem a marcacao (${erroFinal instanceof Error ? erroFinal.message : 'erro desconhecido'}); pode haver reenvio apos a trava vencer.`); }
+        return false;
+      }
+      await new Promise((resolve) => setTimeout(resolve, esperas[tentativa]));
+    }
+  }
+}
+
+function marcarNaoConfirmado(db, tabela, item) {
+  const agora = new Date().toISOString();
+  db.prepare(`UPDATE ${tabela} SET status='failed',locked_at=NULL,last_error=?,updated_at=? WHERE id=? AND status='processing' AND attempts=? AND locked_at=?`)
+    .run(MENSAGEM_NAO_CONFIRMADO, agora, item.id, item.attempts, item.locked_at);
 }
 
 const abrirBanco = () => abrirBancoLocal('email_notifications', bancoInformado);
@@ -64,16 +98,56 @@ export function falhar(db, item, erro) {
     .run(definitivo ? 'failed' : 'pending', proximaTentativa(Number(item.attempts), agora), mensagem, agora.toISOString(), item.id, item.attempts, item.locked_at);
 }
 
+export const MENSAGEM_RESTAURACAO = 'Banco restaurado: confirme o reenvio.';
+
+// Depois de restaurar um backup, o que estava pendente ou em envio na copia
+// pode ja ter saido antes da restauracao. Em vez de reenviar sozinho, fica
+// como falha explicita para o administrador decidir o reenvio.
+export function marcarFilasAposRestauracao(db) {
+  const agora = new Date().toISOString();
+  const tabelas = new Set(db.prepare("SELECT name FROM sqlite_schema WHERE type='table'").all().map((linha) => linha.name));
+  let total = 0;
+  for (const tabela of ['email_notifications', 'daily_report_deliveries']) {
+    if (!tabelas.has(tabela)) continue;
+    total += Number(db.prepare(`UPDATE ${tabela} SET status='failed',locked_at=NULL,last_error=?,updated_at=? WHERE status IN ('pending','processing')`).run(MENSAGEM_RESTAURACAO, agora).changes);
+  }
+  return total;
+}
+
 function horarioSaoPaulo(data=new Date()){
   const partes=Object.fromEntries(new Intl.DateTimeFormat('en-CA',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(data).filter((p)=>p.type!=='literal').map((p)=>[p.type,p.value]));
   return {data:`${partes.year}-${partes.month}-${partes.day}`,horario:`${partes.hour}:${partes.minute}`};
 }
 
+const inicioDoDia=(data)=>`${data}T03:00:00.000Z`;
+const fimLegado=(data,agora)=>new Date(Math.min(agora.getTime(),Date.parse(inicioDoDia(data))+24*60*60_000)).toISOString();
+
+// O portal cria as colunas na inicializacao, mas este processo pode rodar
+// antes dele numa base antiga.
+function garantirPeriodoRelatorio(db){
+  const colunas=new Set(db.prepare('PRAGMA table_info(daily_report_deliveries)').all().map((c)=>c.name));
+  for(const coluna of ['period_start','period_end'])if(!colunas.has(coluna)){
+    try{db.exec(`ALTER TABLE daily_report_deliveries ADD COLUMN ${coluna} TEXT`)}
+    catch(erro){if(!String(erro?.message||'').toLowerCase().includes('duplicate column'))throw erro}
+  }
+}
+
+// Cada relatorio cobre do fim do anterior (enviado ou nao) ate a preparacao
+// deste. Antes cobria so o dia D ate o horario do envio, e o que acontecia
+// depois disso nunca era relatado.
 export function prepararRelatoriosDiarios(db,agora=new Date()){
+  garantirPeriodoRelatorio(db);
   const local=horarioSaoPaulo(agora),agoraIso=agora.toISOString();
-  const usuarios=db.prepare("SELECT id FROM users WHERE active=1 AND daily_report_enabled=1 AND daily_report_time<=?").all(local.horario);
-  const inserir=db.prepare("INSERT OR IGNORE INTO daily_report_deliveries (id,user_id,report_date,status,attempts,next_attempt_at,created_at,updated_at) VALUES (?,?,?,'pending',0,?,?,?)");
-  for(const usuario of usuarios) inserir.run(`rpt_${crypto.randomUUID().replaceAll('-','')}`,usuario.id,local.data,agoraIso,agoraIso,agoraIso);
+  const usuarios=db.prepare("SELECT id FROM users u WHERE active=1 AND daily_report_enabled=1 AND daily_report_time<=? AND NOT EXISTS (SELECT 1 FROM daily_report_deliveries d WHERE d.user_id=u.id AND d.report_date=?)").all(local.horario,local.data);
+  const ultimo=db.prepare("SELECT report_date,period_end,sent_at,created_at FROM daily_report_deliveries WHERE user_id=? AND report_date<? ORDER BY report_date DESC LIMIT 1");
+  const inserir=db.prepare("INSERT OR IGNORE INTO daily_report_deliveries (id,user_id,report_date,status,attempts,next_attempt_at,created_at,updated_at,period_start,period_end) VALUES (?,?,?,'pending',0,?,?,?,?,?)");
+  for(const usuario of usuarios){
+    const anterior=ultimo.get(usuario.id,local.data);
+    // Linha antiga sem periodo: cobria o dia ate o envio (ou a preparacao).
+    let inicio=anterior?(anterior.period_end||fimLegado(anterior.report_date,new Date(anterior.sent_at||anterior.created_at))):inicioDoDia(local.data);
+    if(inicio>agoraIso)inicio=agoraIso;
+    inserir.run(`rpt_${crypto.randomUUID().replaceAll('-','')}`,usuario.id,local.data,agoraIso,agoraIso,agoraIso,inicio,agoraIso);
+  }
   return local.data;
 }
 
@@ -91,28 +165,34 @@ function reservarRelatoriosDiarios(db,agora=new Date()){
   }catch(erro){db.exec('ROLLBACK');throw erro}
 }
 
-export function dadosRelatorioDiario(db,dataRelatorio,agora=new Date()){
-  const inicio=new Date(`${dataRelatorio}T03:00:00.000Z`).toISOString();
-  const fim=new Date(Math.min(agora.getTime(),Date.parse(inicio)+24*60*60_000)).toISOString();
+export function dadosRelatorioDiario(db,dataRelatorio,agora=new Date(),periodo=null){
+  // Periodo gravado na entrega (tentativas repetidas usam o mesmo); linhas
+  // antigas sem periodo usam o dia ate agora.
+  const inicio=periodo?.inicio||inicioDoDia(dataRelatorio);
+  const fim=periodo?.fim||fimLegado(dataRelatorio,agora);
   const totais=db.prepare(`SELECT SUM(status='aberto') aberto,SUM(status='aguardando_fornecedor') aguardando,SUM(status='fechado') fechado,SUM(status='cancelado') cancelado FROM tickets`).get();
   const chamados=db.prepare("SELECT id,code codigo,supplier_name fornecedor,status situacao FROM tickets WHERE (created_at>=? AND created_at<?) OR EXISTS (SELECT 1 FROM ticket_events e WHERE e.ticket_id=tickets.id AND e.created_at>=? AND e.created_at<?) ORDER BY updated_at DESC").all(inicio,fim,inicio,fim);
   const eventos=db.prepare("SELECT e.kind,e.from_status,e.to_status,e.message,e.created_at,u.name autor FROM ticket_events e LEFT JOIN users u ON u.id=e.user_id WHERE e.ticket_id=? AND e.created_at>=? AND e.created_at<? ORDER BY e.created_at");
   const nomesSituacao={aberto:'Aberto',aguardando_fornecedor:'Aguardando fornecedor',fechado:'Fechado',cancelado:'Cancelado'};
-  return {totais:{aberto:Number(totais.aberto||0),aguardando:Number(totais.aguardando||0),fechado:Number(totais.fechado||0),cancelado:Number(totais.cancelado||0)},chamados:chamados.map((chamado)=>({...chamado,atualizacoes:eventos.all(chamado.id,inicio,fim).map((evento)=>({horario:new Intl.DateTimeFormat('pt-BR',{timeZone:'America/Sao_Paulo',hour:'2-digit',minute:'2-digit'}).format(new Date(evento.created_at)),autor:evento.autor||'Sistema',descricao:evento.kind==='status'?`Situação alterada para ${nomesSituacao[evento.to_status]||evento.to_status}${evento.message ? `: ${evento.message}` : ''}`:evento.message||'Chamado atualizado'}))}))};
+  return {periodo:{inicio,fim},totais:{aberto:Number(totais.aberto||0),aguardando:Number(totais.aguardando||0),fechado:Number(totais.fechado||0),cancelado:Number(totais.cancelado||0)},chamados:chamados.map((chamado)=>({...chamado,atualizacoes:eventos.all(chamado.id,inicio,fim).map((evento)=>({horario:new Intl.DateTimeFormat('pt-BR',{timeZone:'America/Sao_Paulo',hour:'2-digit',minute:'2-digit'}).format(new Date(evento.created_at)),autor:evento.autor||'Sistema',descricao:evento.kind==='status'?`Situação alterada para ${nomesSituacao[evento.to_status]||evento.to_status}${evento.message ? `: ${evento.message}` : ''}`:evento.message||'Chamado atualizado'}))}))};
 }
 
 function concluirRelatorio(db,item){const agora=new Date().toISOString();db.prepare("UPDATE daily_report_deliveries SET status='sent',sent_at=?,locked_at=NULL,last_error=NULL,updated_at=? WHERE id=? AND status='processing' AND attempts=? AND locked_at=?").run(agora,agora,item.id,item.attempts,item.locked_at)}
 function falharRelatorio(db,item,erro){const agora=new Date(),definitivo=Number(item.attempts)>=maxTentativas,mensagem=(erro instanceof Error?erro.message:'Falha SMTP').replace(/[\r\n]+/g,' ').slice(0,500);db.prepare("UPDATE daily_report_deliveries SET status=?,next_attempt_at=?,locked_at=NULL,last_error=?,updated_at=? WHERE id=? AND status='processing' AND attempts=? AND locked_at=?").run(definitivo?'failed':'pending',proximaTentativa(Number(item.attempts),agora),mensagem,agora.toISOString(),item.id,item.attempts,item.locked_at)}
 
-async function processarRelatoriosDiarios(db,config,transportador){
+export async function processarRelatoriosDiarios(db,config,transportador,{concluir:confirmar=concluirRelatorio,esperas}={}){
   prepararRelatoriosDiarios(db);
   for(let indice=0;indice<5;indice++){
     const [item]=reservarRelatoriosDiarios(db);if(!item)break;
     try{
-      const dados=dadosRelatorioDiario(db,item.report_date),email=montarEmailRelatorioDiario(item.report_date,dados.totais,dados.chamados,config.PORTAL_URL);
+      const periodo=item.period_start&&item.period_end?{inicio:item.period_start,fim:item.period_end}:null;
+      const dados=dadosRelatorioDiario(db,item.report_date,new Date(),periodo),email=montarEmailRelatorioDiario(item.report_date,dados.totais,dados.chamados,config.PORTAL_URL,dados.periodo);
       await transportador.sendMail({from:{name:config.EMAIL_FROM_NAME,address:config.SMTP_USER},to:{name:item.recipient_name,address:item.recipient_email},subject:email.assunto,text:email.texto,html:email.html});
-      concluirRelatorio(db,item);registrar(`${item.id} relatorio diario enviado para ${item.recipient_email}.`);
-    }catch(erro){falharRelatorio(db,item,erro);registrar(`${item.id} relatorio diario falhou na tentativa ${item.attempts}: ${erro instanceof Error?erro.message:'erro desconhecido'}.`)}
+    }catch(erro){
+      try{falharRelatorio(db,item,erro)}catch(erroBanco){registrar(`${item.id} falha nao registrada: ${erroBanco instanceof Error?erroBanco.message:'erro desconhecido'}.`)}
+      registrar(`${item.id} relatorio diario falhou na tentativa ${item.attempts}: ${erro instanceof Error?erro.message:'erro desconhecido'}.`);continue;
+    }
+    if(await confirmarEnvio(item,{concluir:()=>confirmar(db,item),naoConfirmado:()=>marcarNaoConfirmado(db,'daily_report_deliveries',item),esperas}))registrar(`${item.id} relatorio diario enviado para ${item.recipient_email}.`);
   }
 }
 
@@ -120,6 +200,12 @@ async function ciclo(config, transportador) {
   const db = abrirBanco();
   if (!db) { registrar('Fila ainda nao disponivel; aguardando o portal inicializar a base.'); return; }
   try {
+    await processarNotificacoes(db, config, transportador);
+    await processarRelatoriosDiarios(db,config,transportador);
+  } finally { db.close(); }
+}
+
+export async function processarNotificacoes(db, config, transportador, { concluir: confirmar = concluir, esperas } = {}) {
     for (let indice=0;indice<10;indice++) {
       const [item]=reservar(db,1);if(!item)break;
       try {
@@ -132,15 +218,16 @@ async function ciclo(config, transportador) {
           text: email.texto,
           html: email.html,
         });
-        concluir(db, item);
-        registrar(`${item.id} enviado para ${item.recipient_email}.`);
       } catch (erro) {
-        falhar(db, item, erro);
+        try { falhar(db, item, erro); }
+        catch (erroBanco) { registrar(`${item.id} falha nao registrada: ${erroBanco instanceof Error ? erroBanco.message : 'erro desconhecido'}.`); }
         registrar(`${item.id} falhou na tentativa ${item.attempts}: ${erro instanceof Error ? erro.message : 'erro desconhecido'}.`);
+        continue;
       }
+      // Fora do try do envio: falha daqui nao pode chamar falhar() e reenviar.
+      if (await confirmarEnvio(item, { concluir: () => confirmar(db, item), naoConfirmado: () => marcarNaoConfirmado(db, 'email_notifications', item), esperas }))
+        registrar(`${item.id} enviado para ${item.recipient_email}.`);
     }
-    await processarRelatoriosDiarios(db,config,transportador);
-  } finally { db.close(); }
 }
 
 async function principal() {
