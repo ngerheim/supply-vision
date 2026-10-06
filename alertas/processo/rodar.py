@@ -51,6 +51,7 @@ STATUS_AMBIGUO         = "ACORDO AMBÍGUO"
 STATUS_PRECO_INVALIDO  = "ACORDO SEM PREÇO VÁLIDO"
 STATUS_DATA_INVALIDA   = "DATA DE ABERTURA INVÁLIDA"
 STATUS_QUANTIDADE_INVALIDA = "QUANTIDADE INVÁLIDA"
+STATUS_PRECO_COMPRA_INVALIDO = "PREÇO DE COMPRA INVÁLIDO"
 STATUS_DIMENSAO_PENDENTE = "UF NÃO INFORMADA"
 
 
@@ -145,7 +146,7 @@ def carregar_base(path):
     df = _filtra(df, _excluir("Fornecedor", FORNECEDORES_EXCLUIR),      "Fornecedor excluído")
     df = _filtra(df, df["_fornec_norm"] == "",                          "Sem CNPJ")
     df = _filtra(df, df["_desc_norm"].isin({_norm(i) for i in ITENS_EXCLUIR}), "Item excluído")
-    df = _filtra(df, df["Valor Unitario"].isna() | (df["Valor Unitario"] == 0), "Sem valor")
+    df = _filtra(df, (df["Valor Unitario"] == 0), "Sem valor")
     return df
 
 def _preparar_acordos(df):
@@ -292,6 +293,7 @@ MOTIVO_ITEM           = "Item"
 MOTIVO_AMBIGUO         = "Acordo ambíguo — preços divergentes"
 MOTIVO_PRECO_INVALIDO  = "Acordo com preço inválido"
 MOTIVO_DATA_INVALIDA   = "Data de abertura inválida"
+MOTIVO_PRECO_COMPRA_INVALIDO = "Preço da compra ausente, ilegível ou não finito"
 MOTIVO_QUANTIDADE_INVALIDA = "Quantidade ausente, ilegível ou não finita"
 
 ORDEM_MOTIVOS = [MOTIVO_FORNECEDOR, MOTIVO_CIDADE, MOTIVO_MODELO,
@@ -418,12 +420,14 @@ def _processar_periodo_compativel(df_base, df_acordo):
     e_ambigua   &= ~e_data_invalida
     e_sem_preco &= ~e_data_invalida
 
-    po  = m["Valor Unitario"]
+    po = pd.to_numeric(m["Valor Unitario"], errors="coerce")
+    e_preco_compra_invalido = ~np.isfinite(po)
+    po = po.where(~e_preco_compra_invalido)
     qtd = pd.to_numeric(m["OS Quantidade"], errors="coerce")
     e_quantidade_invalida = ~np.isfinite(qtd)
     qtd = qtd.where(~e_quantidade_invalida)
 
-    quarentena = e_ambigua | e_sem_preco | e_data_invalida | e_quantidade_invalida
+    quarentena = e_ambigua | e_sem_preco | e_data_invalida | e_quantidade_invalida | e_preco_compra_invalido
     pa = m["PRECO"].where(~quarentena)
 
     com_ac = pa.notna() & ~quarentena
@@ -431,6 +435,7 @@ def _processar_periodo_compativel(df_base, df_acordo):
     motivo = _motivo_sem_acordo(m, df_acordo, sem_ac)
     motivo[e_ambigua]   = MOTIVO_AMBIGUO
     motivo[e_sem_preco] = MOTIVO_PRECO_INVALIDO
+    motivo[e_preco_compra_invalido] = MOTIVO_PRECO_COMPRA_INVALIDO
     motivo[e_quantidade_invalida] = MOTIVO_QUANTIDADE_INVALIDA
     motivo[e_data_invalida] = MOTIVO_DATA_INVALIDA
 
@@ -444,6 +449,7 @@ def _processar_periodo_compativel(df_base, df_acordo):
     status[com_ac & (dif_unit  < 0)] = "ABAIXO DO ACORDO"
     status[e_ambigua]                = STATUS_AMBIGUO
     status[e_sem_preco]              = STATUS_PRECO_INVALIDO
+    status[e_preco_compra_invalido] = STATUS_PRECO_COMPRA_INVALIDO
     status[e_quantidade_invalida]     = STATUS_QUANTIDADE_INVALIDA
     status[e_data_invalida]          = STATUS_DATA_INVALIDA
     dif_unit[status == "CONFORME"]   = 0.0
@@ -584,7 +590,7 @@ def processar(df_base, df_acordo):
     return pd.concat(partes).sort_index() if partes else _processar_periodo(df_base, df_acordo)
 
 
-STATUS_QUARENTENA = {STATUS_AMBIGUO, STATUS_PRECO_INVALIDO, STATUS_DATA_INVALIDA, STATUS_DIMENSAO_PENDENTE, STATUS_QUANTIDADE_INVALIDA}
+STATUS_QUARENTENA = {STATUS_AMBIGUO, STATUS_PRECO_INVALIDO, STATUS_DATA_INVALIDA, STATUS_DIMENSAO_PENDENTE, STATUS_QUANTIDADE_INVALIDA, STATUS_PRECO_COMPRA_INVALIDO}
 
 
 def resumir_status(df):
@@ -592,7 +598,7 @@ def resumir_status(df):
     total_bruto = len(df)
     contagens = {st: int((df["Status"] == st).sum()) for st in (
         "CONFORME", "ACIMA DO ACORDO", "ABAIXO DO ACORDO", "SEM ACORDO",
-        STATUS_AMBIGUO, STATUS_PRECO_INVALIDO, STATUS_DATA_INVALIDA, STATUS_DIMENSAO_PENDENTE, STATUS_QUANTIDADE_INVALIDA,
+        STATUS_AMBIGUO, STATUS_PRECO_INVALIDO, STATUS_DATA_INVALIDA, STATUS_DIMENSAO_PENDENTE, STATUS_QUANTIDADE_INVALIDA, STATUS_PRECO_COMPRA_INVALIDO,
     )}
     total_quarentena = sum(contagens[st] for st in STATUS_QUARENTENA)
     total_elegivel = total_bruto - total_quarentena
