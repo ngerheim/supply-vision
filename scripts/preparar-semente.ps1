@@ -10,9 +10,10 @@ param([string]$Destino = $env:USERPROFILE)
 
 $ErrorActionPreference = 'Stop'
 $Raiz = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
-$Privado = Join-Path $Raiz 'privado'
+. (Join-Path $PSScriptRoot 'operacao-logica.ps1')
+$Privado = Obter-PastaPrivada $Raiz
 $stamp = Get-Date -Format 'yyyyMMdd_HHmm'
-$temp = Join-Path $env:TEMP "semente-$stamp"
+$temp = Join-Path $env:TEMP ('semente-' + [guid]::NewGuid().ToString('N'))
 $zip = Join-Path $Destino "supply-vision-semente-$stamp.zip"
 
 function Etapa([string]$t) { Write-Host "`n== $t ==" -ForegroundColor Cyan }
@@ -20,18 +21,7 @@ function Etapa([string]$t) { Write-Host "`n== $t ==" -ForegroundColor Cyan }
 Etapa 'Conferindo a origem'
 if (!(Test-Path $Privado)) { throw "Area privada nao encontrada: $Privado" }
 
-# O banco vivo pode estar a meio de uma escrita. Se a operacao estiver no ar,
-# usa o backup mais recente, que nasce de VACUUM INTO + integrity_check.
-$portalNoAr = [bool](Get-NetTCPConnection -LocalPort 3000 -State Listen -ErrorAction SilentlyContinue)
-$backup = Join-Path $Privado 'portal\backups\portal-atual.sqlite'
-if ($portalNoAr) {
-  if (!(Test-Path $backup)) { throw 'O Portal esta no ar e nao ha backup para empacotar. Rode o backup ou pare a operacao.' }
-  $idade = (Get-Date) - (Get-Item $backup).LastWriteTime
-  Write-Host "   Portal no ar: usando o backup de $([int]$idade.TotalMinutes) min atras" -ForegroundColor Yellow
-  if ($idade.TotalHours -gt 12) { Write-Host '   ATENCAO: o backup tem mais de 12h. Considere rodar um novo antes.' -ForegroundColor Yellow }
-} else {
-  Write-Host '   operacao parada: o banco vivo sera copiado direto' -ForegroundColor Green
-}
+# Sempre cria snapshot SQLite: porta fechada nao significa WAL vazio.
 
 # A copia em %TEMP% tem credenciais e o banco inteiro: o finally a remove
 # mesmo quando algo falha no meio. Um zip que ficou pela metade tambem sai,
@@ -39,7 +29,6 @@ if ($portalNoAr) {
 $concluida = $false
 try {
   Etapa 'Montando a semente'
-  Remove-Item $temp -Recurse -Force -ErrorAction SilentlyContinue
   foreach ($d in @('comum', 'portal\configuracao', 'alertas\config', 'alertas\parametros', 'banco')) {
     New-Item -ItemType Directory -Force (Join-Path $temp $d) | Out-Null
   }
@@ -56,14 +45,14 @@ try {
   # faria o miniflare ignorar o banco e criar um vazio ao lado.
   $nomeD1 = @(Get-ChildItem $d1 -Filter '*.sqlite' -File | Where-Object { $_.Name -ne 'metadata.sqlite' })
   if ($nomeD1.Count -ne 1) { throw "Esperado exatamente 1 banco em $d1, encontrados $($nomeD1.Count)." }
-  $origemBanco = if ($portalNoAr) { $backup } else { $nomeD1[0].FullName }
-  Copy-Item $origemBanco (Join-Path $temp 'banco\portal.sqlite') -Force
+  & node (Join-Path $Raiz 'portal\scripts\snapshot-banco.mjs') $nomeD1[0].FullName (Join-Path $temp 'banco\portal.sqlite')
+  if ($LASTEXITCODE -ne 0) { throw 'Falha ao gerar snapshot consistente. Semente cancelada.' }
   $sha = (Get-FileHash (Join-Path $temp 'banco\portal.sqlite') -Algorithm SHA256).Hash
 
   @{
     gerado = (Get-Date).ToString('o')
     origem = [Environment]::MachineName
-    banco = @{ arquivo = $nomeD1[0].Name; sha256 = $sha; deBackup = $portalNoAr }
+    banco = @{ arquivo = $nomeD1[0].Name; sha256 = $sha; deBackup = $false; snapshotConsistente = $true }
     versao = (git -C $Raiz rev-parse HEAD).Trim()
     revisar = @(
       'privado\portal\configuracao\portal.env -> PORTAL_URL (IP desta maquina)',
@@ -78,7 +67,6 @@ try {
   Compress-Archive -Path (Join-Path $temp '*') -DestinationPath $zip -CompressionLevel Optimal
   $concluida = $true
 } finally {
-  Remove-Item $temp -Recurse -Force -ErrorAction SilentlyContinue
   if (-not $concluida) { Remove-Item $zip -Force -ErrorAction SilentlyContinue }
 }
 
