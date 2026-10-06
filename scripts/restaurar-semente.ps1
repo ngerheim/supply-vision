@@ -7,7 +7,8 @@ param([Parameter(Mandatory)][string]$Zip, [switch]$Simular)
 
 $ErrorActionPreference = 'Stop'
 $Raiz = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
-$Privado = Join-Path $Raiz 'privado'
+. (Join-Path $PSScriptRoot 'operacao-logica.ps1')
+$Privado = Obter-PastaPrivada $Raiz
 $temp = Join-Path $env:TEMP ('semente-restauro-' + [guid]::NewGuid().ToString('N').Substring(0, 8))
 
 function Etapa([string]$t) { Write-Host "`n== $t ==" -ForegroundColor Cyan }
@@ -57,7 +58,9 @@ try {
 
   # O nome do arquivo do D1 e derivado do binding pelo miniflare; manter o nome
   # de origem evita que ele crie um banco novo e vazio ao lado.
-  Copy-Item (Join-Path $temp 'banco\portal.sqlite') (Join-Path $d1 $meta.banco.arquivo) -Force
+  if ([IO.Path]::GetFileName($meta.banco.arquivo) -ne $meta.banco.arquivo -or $meta.banco.arquivo -notmatch '\.sqlite$') { throw 'Nome do banco da semente invalido.' }
+  & node --experimental-strip-types (Join-Path $Raiz 'portal\scripts\restaurar-banco-semente.mjs') (Join-Path $temp 'banco\portal.sqlite') (Join-Path $d1 $meta.banco.arquivo)
+  if ($LASTEXITCODE -ne 0) { throw 'Banco da semente reprovado; destino nao foi ativado.' }
   Ok "banco restaurado como $($meta.banco.arquivo)"
 } finally {
   Remove-Item $temp -Recurse -Force -ErrorAction SilentlyContinue

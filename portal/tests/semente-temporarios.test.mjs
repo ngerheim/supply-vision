@@ -14,15 +14,23 @@ void test('semente apaga credenciais temporarias no sucesso e na falha', { skip:
       const pasta=path.join(privado,nome);fs.mkdirSync(pasta,{recursive:true});
       fs.writeFileSync(path.join(pasta,nome==='comum'?'smtp.env':nome==='portal/configuracao'?'portal.env':'ficticio.txt'),'ficticio');
     }
+    fs.writeFileSync(path.join(privado,'comum/operacao.env'),'ALERTAS_HORARIOS=08:00');
     const d1=path.join(privado,'portal/banco/estado/state/v3/d1/miniflare-D1DatabaseObject');fs.mkdirSync(d1,{recursive:true});
     const banco=path.join(d1,'fixture.sqlite'),db=new DatabaseSync(banco);
     for(const [,ddl] of fs.readFileSync(path.join(root,'portal/lib/database.ts'),'utf8').matchAll(/`(CREATE TABLE IF NOT EXISTS [^`]+)`/g))db.exec(ddl);
+    db.exec("INSERT INTO users VALUES('u','Ficticio','ficticio@example.com','salt','hash','admin',1,'x'); INSERT INTO tickets(id,code,supplier_name,status,created_at,updated_at) VALUES('t','SUP-1','Ficticio','aberto','x','x'); INSERT INTO email_notifications(id,ticket_id,event_id,type,recipient_name,recipient_email,payload_json,status,next_attempt_at,dedupe_key,created_at,updated_at) VALUES('e','t','v','atribuicao','Ficticio','ficticio@example.com','{}','pending','x','d','x','x')");
     db.close();
     // Nao herdar o caminho de modulos do PowerShell 7 em Windows PowerShell 5.
     const env=Object.fromEntries(Object.entries(process.env).filter(([k])=>k.toLowerCase()!=='psmodulepath'));
     const executar=()=>execFileSync('powershell.exe',['-NoProfile','-ExecutionPolicy','Bypass','-File',path.join(root,'scripts/preparar-semente.ps1'),'-Destino',dir],{cwd:root,env:{...env,TEMP:dir,SUPPLY_VISION_PRIVADO:privado},stdio:'pipe'});
     executar();
     assert.equal(fs.readdirSync(dir).some(n=>n.startsWith('semente-')),false);
+    const zip=path.join(dir,fs.readdirSync(dir).find(n=>n.endsWith('.zip'))), destino=path.join(dir,'restaurado');
+    execFileSync('powershell.exe',['-NoProfile','-ExecutionPolicy','Bypass','-File',path.join(root,'scripts/restaurar-semente.ps1'),'-Zip',zip],{cwd:root,env:{...env,TEMP:dir,SUPPLY_VISION_PRIVADO:destino},stdio:'pipe'});
+    const restaurado=new DatabaseSync(path.join(destino,'portal/banco/estado/state/v3/d1/miniflare-D1DatabaseObject/fixture.sqlite'));
+    try { assert.equal(restaurado.prepare("SELECT status FROM email_notifications WHERE id='e'").get().status,'failed'); }
+    finally { restaurado.close(); }
+    assert.equal(fs.readdirSync(dir).some(n=>n.startsWith('semente-restauro-')),false);
     for(const n of fs.readdirSync(dir).filter(n=>n.endsWith('.zip')))fs.rmSync(path.join(dir,n));
     fs.rmSync(banco);
     assert.throws(executar);
