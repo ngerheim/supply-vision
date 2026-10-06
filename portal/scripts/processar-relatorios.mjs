@@ -12,6 +12,7 @@ import { validarPedidoRelatorio } from '../lib/relatorios.ts';
 import { VALIDADE_HISTORICO_MS, arquivoHistoricoExpirado } from '../lib/retencao-relatorios.ts';
 
 const produto = path.resolve(import.meta.dirname, '../..');
+let filhoAtivo = null;
 const pastaAlertas = path.join(produto, 'alertas');
 export function identificadorExecucao(jobId, data = new Date()) {
   const dois = (numero) => String(numero).padStart(2, '0');
@@ -246,6 +247,22 @@ export function limparHistoricosExpirados(db, raiz = privado, agora = Date.now()
   }
   return removidos;
 }
+export function encerrarArvore(filho, executar = execFile) {
+  if (!filho?.pid || filho.exitCode !== null) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    executar('taskkill.exe', ['/PID', String(filho.pid), '/T', '/F'], { windowsHide: true }, erro => {
+      if (erro && filho.exitCode === null) reject(erro); else resolve();
+    });
+  });
+}
+function lockDisponivel() {
+  return new Promise((resolve, reject) => {
+    execFile(path.join(pastaAlertas, '.venv', 'Scripts', 'python.exe'),
+      ['processo/pipeline.py', '--verificar-lock'],
+      { cwd: pastaAlertas, windowsHide: true, timeout: 15000, env: { ...process.env, SUPPLY_VISION_PRIVADO: privado } },
+      erro => { if (!erro) resolve(true); else if (erro.code === 2) resolve(false); else reject(erro); });
+  });
+}
 function executarPython(db, job, segredo) {
   return new Promise((resolve, reject) => {
     let log = '';
@@ -264,6 +281,7 @@ function executarPython(db, job, segredo) {
       },
       stdio: ['ignore', 'pipe', 'pipe'],
     });
+    filhoAtivo = filho;
     const registrar = (chunk) => {
       log = (log + chunk).slice(-128_000);
     };
@@ -301,11 +319,13 @@ function executarPython(db, job, segredo) {
       2 * 60 * 60_000,
     );
     filho.once('error', (erro) => {
+      if (filhoAtivo === filho) filhoAtivo = null;
       clearInterval(atualizacao);
       clearTimeout(limite);
       reject(erro);
     });
     filho.once('close', (code) => {
+      if (filhoAtivo === filho) filhoAtivo = null;
       clearInterval(atualizacao);
       clearTimeout(limite);
       resolve({ code: code ?? 1, log: redigido() });
@@ -408,6 +428,9 @@ async function principal() {
     ocupado = true;
     try {
       if (!inicializado) {
+        // Um Python sobrevivente ainda pode estar enviando: nao declarar falha
+        // nem permitir novos pedidos enquanto mantiver o lock operacional.
+        if (!await lockDisponivel()) return;
         revisarPedidosInterrompidos(db);
         inicializado = true;
       }
@@ -469,11 +492,15 @@ async function principal() {
       console.error('Fila de relatórios:', erro.message),
     );
   }, 3000);
-  const encerrar = () => {
+  let encerrando = false;
+  const encerrar = async () => {
+    if (encerrando) return;
+    encerrando = true;
     clearInterval(pulso);
     clearInterval(agenda);
     servidor.close();
-    process.exit(0);
+    try { await encerrarArvore(filhoAtivo); process.exit(0); }
+    catch { console.error('Nao foi possivel encerrar a arvore Python; confira os processos antes de reiniciar.'); process.exit(1); }
   };
   process.on('SIGTERM', encerrar);
   process.on('SIGINT', encerrar);

@@ -169,6 +169,12 @@ def ler_slot_argv(argv):
 
 
 def main():
+    if "--verificar-lock" in sys.argv:
+        try:
+            adquirir_lock()
+        except RuntimeError:
+            sys.exit(2)
+        sys.exit(0)
     os.environ['SUPPLY_VISION_RUN_ID'] = RUN_ID
     if "--sem-envio" in sys.argv:
         os.environ["SUPPLY_VISION_SEM_ENVIO"] = "1"
