@@ -53,8 +53,8 @@ export function validarPedidoRelatorio(
     );
   const action = body.action as AcaoRelatorio;
   let from: string | null = null,
-    to: string | null = null,
-    recipient: string | null = null;
+    to: string | null = null;
+  const recipient = null;
   if (action === 'recorte') {
     if (
       typeof body.from !== 'string' ||

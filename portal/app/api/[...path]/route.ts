@@ -1318,8 +1318,8 @@ async function auditList(params?: URLSearchParams, exportAll=false){
   const nomes: Record<string, string> = {};
   await Promise.all(fontes.map(async ([campo, tabela, coluna]) => {
     if (!referencias[campo]?.length) return;
-    const rows = await all(`SELECT id,${coluna} AS nome FROM ${tabela} WHERE id IN (SELECT value FROM json_each(?))`, [JSON.stringify(referencias[campo])]);
-    for (const row of rows) nomes[`${campo}:${row.id}`] = String(row.nome);
+    const rows = await all<{ id: string; nome: string }>(`SELECT id,${coluna} AS nome FROM ${tabela} WHERE id IN (SELECT value FROM json_each(?))`, [JSON.stringify(referencias[campo])]);
+    for (const row of rows) nomes[`${campo}:${row.id}`] = row.nome;
   }));
   return { logs: logs.map(r => ({ ...r, detailsText: detalhesHistorico(r.details, nomes) })), total, page, pageSize, pageCount };
 }

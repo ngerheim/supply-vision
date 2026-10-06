@@ -15,7 +15,9 @@ export function arquivoHistoricoExpirado(job: Execucao, arquivo: Arquivo, agora 
 }
 export function informarValidadeArquivos(job: Execucao & { artifactsJson?: unknown; artifacts_json?: unknown }, agora = Date.now()): string {
   let arquivos: unknown;
-  try { arquivos = JSON.parse(String(job.artifactsJson ?? job.artifacts_json ?? '[]')); } catch { return '[]'; }
+  const bruto = job.artifactsJson ?? job.artifacts_json;
+  if (typeof bruto !== 'string') return '[]';
+  try { arquivos = JSON.parse(bruto); } catch { return '[]'; }
   if (!Array.isArray(arquivos)) return '[]';
   return JSON.stringify(arquivos.filter(a => a && typeof a === 'object').map(a => ({ ...a, expiresAt: prazoArquivoHistorico(job, a), expired: arquivoHistoricoExpirado(job, a, agora) })));
 }

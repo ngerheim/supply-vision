@@ -33,7 +33,7 @@ export function detalhesHistorico(texto: unknown, nomes: Record<string, string> 
   if (!parsed) return texto.trim().startsWith('{') || texto.trim().startsWith('[') ? 'Detalhes técnicos não disponíveis para exibição.' : texto;
   const valor = (campo: string, value: unknown): string => {
     if (value === null || value === undefined || value === '') return 'Não informado';
-    if ((CAMPOS_REFERENCIAS as readonly string[]).includes(campo)) return nomes[`${campo}:${String(value)}`] || 'Cadastro não disponível';
+    if ((CAMPOS_REFERENCIAS as readonly string[]).includes(campo)) return typeof value === 'string' ? nomes[`${campo}:${value}`] || 'Cadastro não disponível' : 'Cadastro não disponível';
     if (campo === 'price' && typeof value === 'number') return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
     if (['courtesy', 'active', 'dryRun'].includes(campo)) return value === true || value === 1 ? 'Sim' : 'Não';
     if (campo === 'action' && typeof value === 'string') return (NOMES_ACAO as Record<string, string>)[value] || value;
