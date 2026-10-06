@@ -13,6 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def carregar_pipeline(monkeypatch, tmp_path):
     fake = types.ModuleType("sv_paths")
+    fake.OPERACAO = tmp_path
     fake.LOG_DIR = tmp_path
     fake.PIPELINE_TIMEOUT_S = 1
     fake.SCRIPT_BAIXAR = tmp_path / "baixar.py"
@@ -21,6 +22,7 @@ def carregar_pipeline(monkeypatch, tmp_path):
     monkeypatch.setitem(sys.modules, "sv_paths", fake)
     spec = importlib.util.spec_from_file_location("pipeline_test", ROOT / "processo" / "pipeline.py")
     mod = importlib.util.module_from_spec(spec); spec.loader.exec_module(mod)
+    monkeypatch.setattr(mod.estado_entrega, "sv_paths", fake)
     return mod
 
 
@@ -145,3 +147,27 @@ def test_slot_e_lido_da_linha_de_comando(monkeypatch, tmp_path):
     assert mod.ler_slot_argv(["--slot", "08:00"]) == "08:00"
     assert mod.ler_slot_argv(["--sem-envio", "--slot=14:00"]) == "14:00"
     assert mod.ler_slot_argv([]) == ""
+
+
+@pytest.mark.parametrize("estado,codigo", [("enviado", 0), ("incerto", 3), ("lock", 2)])
+def test_saida_antecipada_tem_log_e_motivo(monkeypatch, tmp_path, caplog, estado, codigo):
+    import logging
+    mod = carregar_pipeline(monkeypatch, tmp_path)
+    monkeypatch.delenv("SUPPLY_VISION_SEM_ENVIO", raising=False)
+    monkeypatch.setattr(sys, "argv", ["pipeline.py"])
+    eventos = []
+    monkeypatch.setattr(mod, "configurar_log", lambda: eventos.append("log") or "teste.log")
+    def lock():
+        eventos.append("lock")
+        if estado == "lock":
+            raise RuntimeError("execucao em andamento")
+    monkeypatch.setattr(mod, "adquirir_lock", lock)
+    monkeypatch.setattr(mod.estado_entrega, "consultar_entrega", lambda: {"estado": estado})
+    monkeypatch.setattr(mod, "rodar_script", lambda *a: pytest.fail("nao deve executar"))
+    with caplog.at_level(logging.INFO), pytest.raises(SystemExit) as saida:
+        mod.main()
+    assert saida.value.code == codigo
+    assert eventos == ["log", "lock"]
+    assert ("CONCLUÍDO COM SUCESSO" in caplog.text) == (estado == "enviado")
+    assert "Run ID:" in caplog.text
+    assert "ERRO" in caplog.text or "ENTREGA JÁ CONFIRMADA" in caplog.text
