@@ -11,6 +11,7 @@ for (const falha of [null, 'email_notifications', 'daily_report_deliveries']) {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sv-restauracao-'));
     const origem = path.join(dir, 'origem.sqlite'), temporario = path.join(dir, 'novo.sqlite');
     const db = new DatabaseSync(origem);
+    db.exec('CREATE TABLE operacao_validacao(id INTEGER PRIMARY KEY,ativa INTEGER); INSERT INTO operacao_validacao VALUES(1,1)');
     for (const tabela of ['email_notifications', 'daily_report_deliveries']) {
       db.exec(`CREATE TABLE ${tabela}(id TEXT,status TEXT,locked_at TEXT,last_error TEXT,updated_at TEXT);
         INSERT INTO ${tabela} VALUES ('a','pending',NULL,NULL,'x')`);
@@ -26,6 +27,7 @@ for (const falha of [null, 'email_notifications', 'daily_report_deliveries']) {
         assert.equal(prepararRestauracao(origem, temporario, () => ({})).marcados, 2);
         const copia = new DatabaseSync(temporario, { readOnly: true });
         try {
+          assert.equal(copia.prepare('SELECT ativa FROM operacao_validacao').get().ativa, 0);
           for (const tabela of ['email_notifications', 'daily_report_deliveries']) assert.equal(copia.prepare(`SELECT status FROM ${tabela}`).get().status, 'failed');
         } finally { copia.close(); }
       }

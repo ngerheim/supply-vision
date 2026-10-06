@@ -1,3 +1,4 @@
+import { VALIDACAO_ATIVA_SQL } from '@/lib/operacao-validacao';
 import { REENVIAR_NOTIFICACAO_SQL, AUDITAR_REENVIO_SQL } from '@/lib/reenvio-sql';
 import { CRIAR_SESSAO_AUTENTICADA_SQL, MIGRAR_SENHA_AUTENTICADA_SQL } from '@/lib/login-sql';
 import { consultarRelatorios, solicitarRelatorio, cancelarRelatorio } from '@/lib/relatorios-api';
@@ -95,9 +96,9 @@ const fail = (message: string, status = 400) => ok({ error: message }, { status 
 // Respostas antecipadas a escritas precisam finalizar o corpo HTTP. No runtime
 // local, deixar um corpo pequeno pendente pode derrubar a conexão reutilizada.
 // Mantém o limite mesmo em pedidos não autorizados.
-async function denyWrite(request: Request, message: string) {
+async function denyWrite(request: Request, message: string, status = 403) {
   if (request.body) await corpoBinarioLimitado(request, CORPO_MAX_JSON);
-  return fail(message, 403);
+  return fail(message, status);
 }
 const partsOf = (request: Request) => new URL(request.url).pathname.replace(/^\/api\/?/, '').split('/').filter(Boolean);
 const canWrite = (user: User) => user.role === 'admin' || user.role === 'editor';
@@ -292,6 +293,7 @@ async function POSTInterno(request: NextRequest) {
   if (parts[0] === 'logout') return logout(request);
   const user = await requireUser(request);
   if (!user) return fail('Sessão expirada.', 401);
+  if (await first(VALIDACAO_ATIVA_SQL)) return denyWrite(request, 'Atualização em validação. Aguarde para salvar ou executar.', 503);
   if (!canWrite(user)) return denyWrite(request, 'Seu perfil permite somente consulta.');
 
   if (parts[0] === 'agreements' && parts.length === 1) return createAgreement(request, user);
@@ -318,6 +320,7 @@ async function PUTInterno(request: NextRequest) {
   if (originFailure) return originFailure;
   const user = await requireUser(request);
   if (!user) return fail('Sessão expirada.', 401);
+  if (await first(VALIDACAO_ATIVA_SQL)) return denyWrite(request, 'Atualização em validação. Aguarde para salvar ou executar.', 503);
   if (!canWrite(user)) return denyWrite(request, 'Seu perfil permite somente consulta.');
   const parts = partsOf(request);
   if (parts[0] === 'agreements' && parts[1] && parts.length === 2) return comTravaDoAcordo(request, parts[1], () => updateAgreement(request, user, parts[1]));
@@ -340,6 +343,7 @@ async function DELETEInterno(request: NextRequest) {
   if (originFailure) return originFailure;
   const user = await requireUser(request);
   if (!user) return fail('Sessão expirada.', 401);
+  if (await first(VALIDACAO_ATIVA_SQL)) return denyWrite(request, 'Atualização em validação. Aguarde para salvar ou executar.', 503);
   if (!canWrite(user)) return fail('Seu perfil permite somente consulta.', 403);
   const parts = partsOf(request);
   if (parts[0] === 'items' && parts[1]) {

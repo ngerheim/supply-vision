@@ -151,6 +151,17 @@ try {
   sqlitePath = locateSqlite(state); assert.ok(sqlitePath);
   reader = new DatabaseSync(sqlitePath, { readOnly: true });
 
+  await check('Validacao de atualizacao permite consulta e bloqueia gravacoes HTTP', async()=>{
+    const db=new DatabaseSync(sqlitePath),antes=businessSnapshot();
+    try{
+      db.exec('INSERT INTO operacao_validacao(id,ativa) VALUES(1,1) ON CONFLICT(id) DO UPDATE SET ativa=1');
+      assert.equal((await request('/api/bootstrap')).status,200);
+      for(const method of ['POST','PUT','DELETE'])assert.equal((await request('/api/catalogs/items/inexistente',{method,body:method==='DELETE'?undefined:{name:'NAO GRAVAR'}})).status,503);
+      assert.deepEqual(businessSnapshot(),antes);
+    }finally{db.exec('UPDATE operacao_validacao SET ativa=0');db.close();}
+    assert.equal((await request('/api/bootstrap')).status,200);
+  });
+
   await check('Edicao antiga de usuario nao restaura permissao revogada', async () => {
     const criado = await good('/api/users', { method: 'POST', body: { name: 'Administrador concorrente', email: 'concorrente@teste.local', password: senha, role: 'admin' } }, 201);
     const antigo = (await good('/api/users')).users.find(u => u.id === criado.id);

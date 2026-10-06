@@ -146,6 +146,8 @@ function Reverter([string]$motivo) {
       Write-Host '!! ============================================================' -ForegroundColor Red
       throw 'Banco nao restaurado; troca de codigo cancelada. Operacao permanece parada.'
     }
+    & node --experimental-strip-types (Join-Path $Portal 'scripts/operacao-validacao.mjs') --liberar
+    if ($LASTEXITCODE -ne 0) { throw 'Nao foi possivel liberar o banco restaurado. Operacao permanece parada.' }
     Write-Host '!! banco restaurado para o estado de antes da atualizacao' -ForegroundColor Red
   }
   # Restaura com o script da versao nova, que valida banco e filas.
@@ -372,6 +374,8 @@ Ok 'suites de operacao aprovadas'
 
 Etapa 'Religando a operacao'
 $NovaVersaoIniciada = $true
+& node --experimental-strip-types (Join-Path $Portal 'scripts/operacao-validacao.mjs') --ativar
+if ($LASTEXITCODE -ne 0) { Reverter 'Nao foi possivel bloquear gravacoes e envios durante a validacao.' }
 Gravar-EstadoOperacao $ContextoArquivo @{anterior=$anterior;remoto=$remoto;fase='iniciada'}
 & (Join-Path $Raiz 'INICIAR.bat') | Out-Null
 if ($LASTEXITCODE -ne 0) { Reverter 'Falha ao solicitar o inicio da nova versao.' }
@@ -391,6 +395,8 @@ if (-not $noAr) { Reverter 'O Portal nao respondeu depois da atualizacao.' }
 Etapa 'Conferindo interface e consumidores da operacao'
 & node (Join-Path $Portal 'scripts/saude-operacao.mjs') $url
 if ($LASTEXITCODE -ne 0) { Reverter 'Interface ou consumidores obrigatorios nao ficaram saudaveis.' }
+& node --experimental-strip-types (Join-Path $Portal 'scripts/operacao-validacao.mjs') --liberar
+if ($LASTEXITCODE -ne 0) { Reverter 'Falha ao liberar a operacao validada.' }
 Ok "Portal e consumidores no ar em $url"
 Write-Host "`n=== Atualizado: $($anterior.Substring(0,7)) -> $($remoto.Substring(0,7)) ===" -ForegroundColor Cyan
 Gravar-EstadoOperacao $ContextoArquivo @{anterior=$anterior;remoto=$remoto;fase='concluido'}

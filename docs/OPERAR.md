@@ -139,7 +139,9 @@ a atualização se não conseguir consultar o repositório remoto. Faz backup an
 de trocar a versão, instala dependências só quando mudaram e roda build e testes.
 Falhas nessas etapas acionam a tentativa de retorno ao código e às dependências
 anteriores; se o retorno também falhar, a operação permanece parada e o erro
-é informado. O Portal fica fora do ar durante a atualização e as validações;
+é informado. O Portal fica fora do ar durante a construção. Na validação final, permite
+somente consulta: gravações, envios, execuções e limpeza ficam pausados até
+a aprovação das verificações de saúde;
 reserve uma janela de manutenção, sem assumir duração fixa.
 
 Depois de trocar a versão, o script se relança a partir do código que acabou de
