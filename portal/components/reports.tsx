@@ -11,6 +11,7 @@ import {
   type AcaoRelatorio,
 } from '@/lib/relatorios';
 import { dataDeNegocio } from '@/lib/data-negocio';
+import { dataBrasileiraParaIso, exibirDataBrasileira, mascararDataBrasileira } from '@/lib/data-brasileira';
 import { Button } from './ui/button';
 import { Card, CardContent } from './ui/card';
 import { Input } from './ui/input';
@@ -48,8 +49,8 @@ const horario = (valor: string) =>
 
 export function Reports({ email }: { email: string }) {
   const [action, setAction] = useState<AcaoDisponivel>('relatorio');
-  const [from, setFrom] = useState(dataDeNegocio()),
-    [to, setTo] = useState(dataDeNegocio()),
+  const [from, setFrom] = useState(() => exibirDataBrasileira(dataDeNegocio())),
+    [to, setTo] = useState(() => exibirDataBrasileira(dataDeNegocio())),
     [recipient, setRecipient] = useState(email);
   const [busy, setBusy] = useState(false),
     [error, setError] = useState(''),
@@ -112,14 +113,14 @@ export function Reports({ email }: { email: string }) {
     try {
       const pedido = validarPedidoRelatorio({
         action,
-        from,
-        to,
+        from: action === 'recorte' ? dataBrasileiraParaIso(from) : undefined,
+        to: action === 'recorte' ? dataBrasileiraParaIso(to) : undefined,
         recipient,
         requestKey: (key.current ??= gerarChaveRelatorio()),
       });
       const mensagem =
         action === 'recorte'
-            ? `Gerar o recorte de ${from.split('-').reverse().join('/')} a ${to.split('-').reverse().join('/')} e enviar para ${recipient.trim()}?`
+            ? `Gerar o recorte de ${from} a ${to} e enviar para ${recipient.trim()}?`
             : action === 'relatorio'
               ? 'Executar agora e enviar aos destinatários configurados quando houver divergências ou pendências?'
               : null;
@@ -135,7 +136,7 @@ export function Reports({ email }: { email: string }) {
       setLogError('');
       setSelected(result.id);
       setNotice(
-        'Solicitação registrada. Você pode sair desta aba; a execução continua no servidor.',
+        'Solicitação registrada. Você pode sair desta aba, pois a execução continua no servidor.',
       );
       await load();
     } catch (e) {
@@ -234,12 +235,14 @@ export function Reports({ email }: { email: string }) {
                   Data inicial
                   <Input
                     id="report-from"
-                    type="date"
+                    type="text"
+                    inputMode="numeric"
+                    placeholder="DD/MM/AAAA"
+                    maxLength={10}
                     value={from}
-                    max={dataDeNegocio()}
                     disabled={busy}
                     onChange={(e) => {
-                      setFrom(e.target.value);
+                      setFrom(mascararDataBrasileira(e.target.value));
                       changed();
                     }}
                   />
@@ -248,13 +251,14 @@ export function Reports({ email }: { email: string }) {
                   Data final
                   <Input
                     id="report-to"
-                    type="date"
+                    type="text"
+                    inputMode="numeric"
+                    placeholder="DD/MM/AAAA"
+                    maxLength={10}
                     value={to}
-                    min={from}
-                    max={dataDeNegocio()}
                     disabled={busy}
                     onChange={(e) => {
-                      setTo(e.target.value);
+                      setTo(mascararDataBrasileira(e.target.value));
                       changed();
                     }}
                   />
@@ -363,8 +367,8 @@ export function Reports({ email }: { email: string }) {
                   onClick={() => {
                     if (job.action !== 'relatorio' && job.action !== 'recorte') return;
                     setAction(job.action);
-                    setFrom(job.from || dataDeNegocio());
-                    setTo(job.to || dataDeNegocio());
+                    setFrom(exibirDataBrasileira(job.from || dataDeNegocio()));
+                    setTo(exibirDataBrasileira(job.to || dataDeNegocio()));
                     setRecipient(job.recipient || email);
                     key.current = null;
                     setNotice(
