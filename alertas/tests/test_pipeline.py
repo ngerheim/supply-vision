@@ -171,3 +171,17 @@ def test_saida_antecipada_tem_log_e_motivo(monkeypatch, tmp_path, caplog, estado
     assert ("CONCLUÍDO COM SUCESSO" in caplog.text) == (estado == "enviado")
     assert "Run ID:" in caplog.text
     assert "ERRO" in caplog.text or "ENTREGA JÁ CONFIRMADA" in caplog.text
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Lock nativo do Windows")
+def test_probe_detecta_lock_sobrevivente_sem_executar_pipeline():
+    codigo = "import pipeline,sys; pipeline.adquirir_lock(); print('pronto',flush=True); sys.stdin.read()"
+    filho = subprocess.Popen([sys.executable, "-c", codigo], cwd=ROOT / "processo", stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    try:
+        assert filho.stdout.readline().strip() == "pronto"
+        probe = subprocess.run([sys.executable, str(ROOT / "processo/pipeline.py"), "--verificar-lock"], capture_output=True, timeout=15)
+        assert probe.returncode == 2
+    finally:
+        filho.terminate(); filho.communicate(timeout=15)
+    probe = subprocess.run([sys.executable, str(ROOT / "processo/pipeline.py"), "--verificar-lock"], capture_output=True, timeout=15)
+    assert probe.returncode == 0

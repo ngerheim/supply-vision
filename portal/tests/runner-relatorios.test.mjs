@@ -6,6 +6,7 @@ import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { SCHEMA_RELATORIOS } from '../lib/relatorios.ts';
 import {
+  encerrarArvore,
   identificadorExecucao,
   comandoRelatorio,
   reservarRelatorio,
@@ -273,4 +274,12 @@ void test('permissão revogada antes de iniciar impede executar o pedido antigo'
   } finally {
     ctx.close();
   }
+});
+
+void test('parada do runner encerra arvore inteira e aguarda confirmacao', async () => {
+  let chamada, confirmar;
+  const parada = encerrarArvore({ pid: 123, exitCode: null }, (...args) => { chamada = args; confirmar = args[3]; });
+  assert.deepEqual(chamada.slice(0, 3), ['taskkill.exe', ['/PID', '123', '/T', '/F'], { windowsHide: true }]);
+  confirmar(null); await parada;
+  await assert.rejects(encerrarArvore({ pid: 123, exitCode: null }, (...args) => args[3](new Error('falha'))), /falha/);
 });
