@@ -2,6 +2,7 @@ import { SCHEMA_RELATORIOS } from './relatorios.ts';
 import { passwordHash, tokenHash, PBKDF2_ITERACOES_ATUAL, PBKDF2_ITERACOES_LEGADO } from './criptografia.ts';
 export { passwordHash, tokenHash, PBKDF2_ITERACOES_ATUAL, PBKDF2_ITERACOES_LEGADO } from './criptografia.ts';
 import { parseCookies } from './cookies.ts';
+import { registraAtividade } from './atualizacao-periodica.ts';
 import { LIMPAR_TRAVAS_VENCIDAS_SQL, TRAVA_VALIDADE_MS } from './travas-sql.ts';
 import { MIGRAR_FORNECEDORES_CHAMADOS_SQL } from './chamados.ts';
 import { TRIGGERS_REVISAO } from './revisoes-sql.ts';
@@ -80,6 +81,10 @@ const columnMigrations: Array<[string, string, string]> = [
   ['agreement_items', 'revision', 'INTEGER NOT NULL DEFAULT 0'],
   ['tickets', 'request_key', 'TEXT'],
   ['tickets', 'request_hash', 'TEXT'],
+  // Janela coberta por cada relatorio diario: o inicio e o fim do relatorio
+  // anterior, para nao haver lacuna nem sobreposicao entre envios.
+  ['daily_report_deliveries', 'period_start', 'TEXT'],
+  ['daily_report_deliveries', 'period_end', 'TEXT'],
 ];
 
 async function applyColumnMigrations() {
@@ -223,9 +228,9 @@ export async function currentUser(request: Request) {
     return null;
   }
 
-  // Registra a atividade no maximo uma vez por minuto, para nao gravar no
-  // banco a cada requisicao da tela.
-  if (!visto || Date.now() - visto > 60000) {
+  // Registra a atividade no maximo uma vez por minuto, e nunca nas
+  // atualizacoes automaticas da tela (cabecalho x-portal-poll: 1).
+  if (registraAtividade(request, visto, Date.now())) {
     await rawDb().prepare('UPDATE sessions SET last_seen_at=? WHERE token=?').bind(agora, guardado).run();
   }
   return { id: sessao.id, name: sessao.name, email: sessao.email, role: sessao.role };

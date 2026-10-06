@@ -20,7 +20,8 @@ import path from 'node:path';
 import readline from 'node:readline';
 import { DatabaseSync } from 'node:sqlite';
 
-import { portalPrivado } from './configuracao.mjs';
+import { lerConfigBruta, portalPrivado } from './configuracao.mjs';
+import { marcarFilasAposRestauracao } from './processar-emails.mjs';
 import { listarHistorico, nomeDoDia } from './retencao-backup.mjs';
 
 const pastaBanco = path.join(portalPrivado, 'banco', 'estado', 'state', 'v3', 'd1', 'miniflare-D1DatabaseObject');
@@ -93,6 +94,23 @@ function operacaoNoAr() {
   } catch { return false; }
 }
 
+// O processador de e-mail e o servico de relatorios tambem mantem o banco
+// aberto; com qualquer um deles no ar, a restauracao nao pode seguir.
+function emailNoAr() {
+  const registro = path.join(import.meta.dirname, '..', '.portal-email.pid');
+  if (!fs.existsSync(registro)) return false;
+  try {
+    const { ProcessId: numero } = JSON.parse(fs.readFileSync(registro, 'utf8').replace(/^\uFEFF/, ''));
+    if (!numero) return false;
+    process.kill(Number(numero), 0);
+    return true;
+  } catch { return false; }
+}
+
+function portaRelatorios() {
+  try { return Number(lerConfigBruta().RELATORIOS_PORTA || 3001); } catch { return 3001; }
+}
+
 async function confirmar(pergunta) {
   if (semPergunta) return true;
   const io = readline.createInterface({ input: process.stdin, output: process.stdout });
@@ -102,6 +120,8 @@ async function confirmar(pergunta) {
 
 if (!fs.existsSync(origem)) throw new Error(`Backup nao encontrado: ${origem}`);
 if (operacaoNoAr() || await portalRespondendo()) throw new Error('A operacao esta no ar (supervisor ativo ou Portal respondendo na porta 3000). Pare a operacao antes de restaurar.');
+if (emailNoAr()) throw new Error('O processador de e-mail esta no ar (.portal-email.pid ativo). Pare-o antes de restaurar.');
+if (await portalRespondendo(portaRelatorios())) throw new Error(`O servico de relatorios esta respondendo na porta ${portaRelatorios()}. Pare-o antes de restaurar.`);
 
 const alvo = localizarBanco();
 const totaisBackup = resumir(origem);
@@ -141,6 +161,15 @@ if (JSON.stringify(totaisRestaurado) !== JSON.stringify(totaisBackup)) {
 for (const sufixo of ['-wal', '-shm']) fs.rmSync(alvo + sufixo, { force: true });
 fs.renameSync(restaurando, alvo);
 console.log('\nRestauracao concluida.');
+try {
+  const restaurado = new DatabaseSync(alvo);
+  try {
+    const marcados = marcarFilasAposRestauracao(restaurado);
+    if (marcados) console.log(`${marcados} e-mail(s) pendente(s) marcado(s) como falha: confirme o reenvio na tela de notificacoes.`);
+  } finally { restaurado.close(); }
+} catch (erro) {
+  console.warn(`AVISO: nao foi possivel marcar os e-mails pendentes do backup (${erro instanceof Error ? erro.message : String(erro)}). Confira a fila antes de iniciar o processador de e-mail.`);
+}
 
 // Cada restauracao guarda o estado anterior como pre-restauracao-*.sqlite,
 // uma copia integral do banco. Fora da retencao de 7 dias do backup, elas se

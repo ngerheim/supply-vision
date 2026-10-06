@@ -180,6 +180,11 @@ Os arquivos são apagados, não movidos. Arquivo sem timestamp reconhecível no
 nome nunca é tocado. Varre `logs/`, `relatorios/diarios/` e
 `relatorios/historicos/`, recursivamente.
 
+Exceção: em `relatorios/historicos/` a idade vem da data de modificação do
+arquivo (mtime), não do nome; o arquivo expira 24 horas depois dela. Além
+desta limpeza, o serviço de relatórios do portal apaga os históricos
+expirados sozinho, a cada ~60 segundos enquanto está no ar.
+
 Para o lixo estrutural (caches, temporários do wrangler), use
 `scripts\faxina.ps1` — com `-Executar` para aplicar, e com a operação parada.
 
