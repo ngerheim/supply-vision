@@ -92,3 +92,11 @@ def test_formatos_mistos_respeitam_mes_e_corte(rodar):
     resultado = rodar.processar(compra, vigente)
     assert resultado["Status"].tolist() == ["CONFORME"] * 4 + [rodar.STATUS_DATA_INVALIDA]
     assert resultado["Data"].astype(str).tolist()[:4] == ["2026-09-05"] * 2 + ["2026-10-05"] * 2
+
+
+def test_uf_ausente_na_base_falha_com_nome_da_coluna(rodar):
+    ac = acordo([10]); ac["UF"] = "SP"
+    with pytest.raises(ValueError, match="Base do Qlik sem coluna de UF"):
+        rodar.processar(base(preco=10), ac)
+    compra = base(preco=10); compra["UF"] = "SP"
+    assert rodar.processar(compra, ac).loc[0, "Status"] == "CONFORME"
