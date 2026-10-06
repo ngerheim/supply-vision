@@ -5,7 +5,7 @@ $raizReal=(Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $pasta=Join-Path ([IO.Path]::GetTempPath()) ('sv-recuperacao-'+[guid]::NewGuid().ToString('N'))
 $privadoAnterior=$env:SUPPLY_VISION_PRIVADO
 try {
-  foreach($caso in @('legado','legado-repetido','prevoo','configuracao','credencial','npm','build','teste','partida','health','filho','restauracao','saude-completa','consumidor')) {
+  foreach($caso in @('legado','legado-repetido','prevoo','configuracao','credencial','npm','build','teste','partida','health','filho','restauracao','saude-completa','consumidor','python')) {
     $raiz=Join-Path $pasta $caso
     foreach($dir in @('scripts','portal/scripts','alertas','compartilhado','privado/operacao','privado/portal/backups','privado/portal/configuracao','privado/comum')) { New-Item -ItemType Directory -Force (Join-Path $raiz $dir)|Out-Null }
     Copy-Item (Join-Path $raizReal 'scripts/operacao-logica.ps1') (Join-Path $raiz 'scripts')
@@ -37,7 +37,7 @@ function git {
     'branch' { 'main' }
     'rev-parse' { if($Caso -eq 'filho' -and !$global:novo -and $args[-1] -eq 'HEAD'){'1'*40}else{'2'*40} }
     'log' { 'Sintetico' }
-    'reset' { $global:resetou=$true; Add-Content (Join-Path $Raiz 'reset.log') 'reset' }
+    'reset' { $global:resetou=$true; Add-Content (Join-Path $Raiz 'reset.log') "reset $($args[2])" }
     'merge' { $global:novo=$true }
   }
 }
@@ -53,7 +53,9 @@ function npm {
   $global:LASTEXITCODE=0
   if(!$global:resetou -and (($Caso -eq 'npm' -and $args[0] -eq 'ci') -or ($Caso -in @('build','legado','legado-repetido') -and $args[1] -eq 'build') -or ($Caso -eq 'teste' -and $args[0] -eq 'test'))) {$global:LASTEXITCODE=1}
 }
-function pythonmock { $global:LASTEXITCODE=0; if($args[0] -eq '--version'){'Python 3.12.0'} }
+# Caso python: a versao e lida, mas o codigo de saida vem -1, como o Windows
+# PowerShell registra para um processo nativo interrompido.
+function pythonmock { $global:LASTEXITCODE=0; if($args[0] -eq '--version'){'Python 3.12.0'; if($Caso -eq 'python'){$global:LASTEXITCODE=-1}} }
 function npm.cmd { npm @args }
 function powershell.exe {
   $global:LASTEXITCODE=0
@@ -74,6 +76,8 @@ exit $LASTEXITCODE
     if($rc -eq 0) { throw "Falha $caso foi declarada sucesso: $saida" }
     $resets=@(Get-Content (Join-Path $raiz 'reset.log') -ErrorAction SilentlyContinue)
     if($resets.Count -ne $(if($caso -eq 'restauracao'){0}else{1})) { throw "Caso $caso nao reverteu exatamente uma vez: $saida" }
+    # A reversao precisa voltar ao commit anterior, nunca ao proprio commit novo.
+    if($resets.Count -and $resets[0] -ne "reset $('1'*40)") { throw "Caso $caso reverteu para o commit errado ($($resets[0])): $saida" }
     $restaurou=Test-Path (Join-Path $raiz 'restore.log')
     if($restaurou -ne ($caso -in @('partida','health','filho','restauracao','saude-completa','consumidor'))) { throw "Restauracao incorreta em ${caso}: $saida" }
     $fase=(Ler-EstadoOperacao (Join-Path $env:SUPPLY_VISION_PRIVADO 'operacao/atualizacao.json')).fase
