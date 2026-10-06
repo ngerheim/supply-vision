@@ -42,9 +42,10 @@ void test('perfis herdam exatamente os três conjuntos solicitados', () => {
   assert.equal(NOMES_PERFIL.editor, 'Suprimentos');
   assert.equal(new Set(GRUPOS_NAVEGACAO.flatMap((g) => [...g.abas])).size, 12);
 });
-void test('recorte aceita datas inclusivas e um destinatário isolado', () => {
+void test('recorte aceita datas inclusivas e nunca mantém destinatário', () => {
   assert.deepEqual(validarPedidoRelatorio(base, '2026-02-01'), {
     ...base,
+    recipient: null,
     dryRun: false,
   });
   assert.equal(
@@ -52,7 +53,7 @@ void test('recorte aceita datas inclusivas e um destinatário isolado', () => {
       { ...base, to: base.from, recipient: '  outro@example.com  ' },
       '2026-02-01',
     ).recipient,
-    'outro@example.com',
+    null,
   );
 });
 void test('recorte recusa datas inválidas, invertidas, futuras ou ausentes', () => {
@@ -68,7 +69,7 @@ void test('recorte recusa datas inválidas, invertidas, futuras ou ausentes', ()
       validarPedidoRelatorio({ ...base, ...patch }, '2026-02-01'),
     );
 });
-void test('recorte rejeita múltiplos destinatários e injeção de cabeçalhos', () => {
+void test('destinatários antigos são ignorados, inclusive texto malformado', () => {
   for (const recipient of [
     '',
     'a@example.com;b@example.com',
@@ -77,7 +78,7 @@ void test('recorte rejeita múltiplos destinatários e injeção de cabeçalhos'
     'a@example.com\r\nBcc:b@example.com',
     'a'.repeat(250) + '@x.com',
   ])
-    assert.throws(() => validarPedidoRelatorio({ ...base, recipient }));
+    assert.equal(validarPedidoRelatorio({ ...base, recipient }).recipient, null);
 });
 void test('operação é uma lista fechada e identidade é obrigatória', () => {
   for (const patch of [

@@ -61,8 +61,6 @@ void test('runner monta argumentos sem shell e cobre todas as funções do bat',
     '01/01/2026',
     '--fim',
     '31/01/2026',
-    '--destinatario',
-    job.recipient,
   ]);
   assert.deepEqual(comandoRelatorio({ ...job, action: 'paralelo' }), [
     'processo/pipeline.py',

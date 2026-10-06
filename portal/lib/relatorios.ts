@@ -69,13 +69,6 @@ export function validarPedidoRelatorio(
       );
     from = body.from;
     to = body.to;
-    if (
-      typeof body.recipient !== 'string' ||
-      body.recipient.length > 254 ||
-      !/^[^\s<>@,;]+@[^\s<>@,;]+\.[^\s<>@,;]+$/.test(body.recipient.trim())
-    )
-      throw new EntradaInvalida('Informe um único e-mail destinatário válido.');
-    recipient = body.recipient.trim();
   }
   if (body.dryRun !== undefined && typeof body.dryRun !== 'boolean')
     throw new EntradaInvalida('Opção de simulação inválida.');
