@@ -2,9 +2,10 @@
 
 Monta uma árvore real (logs e relatórios diários/históricos), cria arquivos com
 timestamps controlados no NOME e verifica o que sobrevive a cada política.
-Nada aqui depende de mtime: a idade vem do nome, como em produção.
+Históricos usam a data de geração (mtime); diários e logs usam o nome.
 """
 import importlib
+import os
 import sys
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -102,6 +103,8 @@ def test_recorte_por_periodo_antigo_e_apagado(arvore):
     """O contrario tambem precisa valer: gerado ha 3 dias, sai."""
     recorte = criar(arvore["historicos"] / "legado",
                     f"sem_acordo_periodo_20250101-20251231_{ts(timedelta(days=3))}_742513.xlsx")
+    gerado = (AGORA - timedelta(days=3)).timestamp()
+    os.utime(recorte, (gerado, gerado))
     limpeza.limpar(dry_run=False)
     assert not recorte.exists()
 
