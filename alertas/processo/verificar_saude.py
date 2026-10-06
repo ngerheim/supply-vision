@@ -25,13 +25,12 @@ mesmo padrão do timestamp usado nos nomes de arquivo de log).
 import sys
 import re
 import pathlib
-import smtplib
-import ssl
 from email.message import EmailMessage
 from datetime import datetime, date
 
 
 import sv_paths
+from smtp_conexao import conectar
 
 LOG_DIR      = str(sv_paths.LOG_DIR)
 LOG_VERIF    = str(pathlib.Path(LOG_DIR) / f"verificacao_{datetime.now().strftime('%Y%m%d_%H%M')}.log")
@@ -71,11 +70,7 @@ def _enviar_email(assunto, corpo):
         msg["Subject"] = assunto
         msg.set_content(corpo)
 
-        with smtplib.SMTP(SMTP_SERVIDOR, SMTP_PORTA, timeout=60) as servidor:
-            servidor.ehlo()
-            servidor.starttls(context=ssl.create_default_context())
-            servidor.ehlo()
-            servidor.login(SMTP_USUARIO, senha)
+        with conectar(SMTP_SERVIDOR, SMTP_PORTA, SMTP_USUARIO, senha, getattr(sv_paths, "SMTP_SEGURO", False)) as servidor:
             servidor.send_message(msg, to_addrs=[DESTINATARIO_ALERTA])
         return True
     except Exception as e:
