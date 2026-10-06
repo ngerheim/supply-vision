@@ -44,6 +44,10 @@ export function comandoRelatorio(job) {
   ];
 }
 export function reservarRelatorio(db) {
+  // Leitura antes da transação de escrita: o ciclo roda a cada 3 s e a fila
+  // quase sempre está vazia. Abrir BEGIN IMMEDIATE à toa disputava o arquivo
+  // com o portal (miniflare/D1), que não espera o lock e responde 500.
+  if (!db.prepare("SELECT 1 FROM report_jobs WHERE status='queued' LIMIT 1").get()) return null;
   db.exec('BEGIN IMMEDIATE');
   try {
     if (db.prepare("SELECT 1 FROM report_jobs WHERE status='running'").get()) {
@@ -391,7 +395,8 @@ async function principal() {
     : null;
   let inicializado = false,
     ocupado = false,
-    ultimaLimpeza = 0;
+    ultimaLimpeza = 0,
+    ultimoPulso = 0;
   const ciclo = async () => {
     if (ocupado) return;
     const db = abrir();
@@ -435,9 +440,14 @@ async function principal() {
     const db = abrir();
     if (!db) return;
     try {
-      db.prepare(
-        'INSERT INTO report_runner(id,heartbeat_at) VALUES(1,?) ON CONFLICT(id) DO UPDATE SET heartbeat_at=excluded.heartbeat_at',
-      ).run(new Date().toISOString());
+      // O portal considera o serviço disponível com sinal de até 30 s. Gravar
+      // a cada 15 s basta e reduz as escritas externas no banco do portal.
+      if (Date.now() - ultimoPulso >= 15_000) {
+        db.prepare(
+          'INSERT INTO report_runner(id,heartbeat_at) VALUES(1,?) ON CONFLICT(id) DO UPDATE SET heartbeat_at=excluded.heartbeat_at',
+        ).run(new Date().toISOString());
+        ultimoPulso = Date.now();
+      }
       if (Date.now() - ultimaLimpeza >= 60_000) {
         const removidos = limparHistoricosExpirados(db);
         ultimaLimpeza = Date.now();

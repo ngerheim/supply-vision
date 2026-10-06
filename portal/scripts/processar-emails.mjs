@@ -68,10 +68,18 @@ function marcarNaoConfirmado(db, tabela, item) {
 
 const abrirBanco = () => abrirBancoLocal('email_notifications', bancoInformado);
 
+function temTrabalho(db, tabela, agoraIso, travaVencida) {
+  return !!db.prepare(`SELECT 1 FROM ${tabela} WHERE (status='processing' AND (locked_at<? OR locked_at IS NULL)) OR (status='pending' AND (attempts>=? OR next_attempt_at<=?)) LIMIT 1`)
+    .get(travaVencida, maxTentativas, agoraIso);
+}
+
 export function reservar(db, limite = 10) {
   const agora = new Date();
   const agoraIso = agora.toISOString();
   const travaVencida = new Date(agora.getTime() - 10 * 60_000).toISOString();
+  // So abre a transacao de escrita se houver algo a fazer: o processador roda
+  // a cada 30 s e escrever sem necessidade disputa o banco com o portal.
+  if (!temTrabalho(db, 'email_notifications', agoraIso, travaVencida)) return [];
   db.exec('BEGIN IMMEDIATE');
   try {
     db.prepare("UPDATE email_notifications SET status='failed',locked_at=NULL,last_error=?,updated_at=? WHERE status='processing' AND (locked_at<? OR locked_at IS NULL)")
@@ -161,6 +169,7 @@ export function prepararRelatoriosDiarios(db,agora=new Date()){
 
 export function reservarRelatoriosDiarios(db,agora=new Date()){
   const agoraIso=agora.toISOString(),travaVencida=new Date(agora.getTime()-10*60_000).toISOString();
+  if(!temTrabalho(db,'daily_report_deliveries',agoraIso,travaVencida))return [];
   db.exec('BEGIN IMMEDIATE');
   try{
     db.prepare("UPDATE daily_report_deliveries SET status='failed',locked_at=NULL,last_error=?,updated_at=? WHERE status='processing' AND (locked_at<? OR locked_at IS NULL)").run(MENSAGEM_INTERROMPIDO,agoraIso,travaVencida);
