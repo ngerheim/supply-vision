@@ -362,6 +362,8 @@ def _processar_periodo(df_base, df_acordo):
     # Regra da operacao: medida nao participa da comparacao nem da referencia.
     if "UF" not in df_acordo.columns or df_base.empty:
         return _processar_periodo_compativel(df_base, df_acordo)
+    if not {"Fornecedor por Estado", "UF"}.intersection(df_base.columns):
+        raise ValueError("Base do Qlik sem coluna de UF (Fornecedor por Estado ou UF), obrigatória para comparar acordos por estado.")
     base = df_base.copy()
     valores = base.get("Fornecedor por Estado", base.get("UF", pd.Series("", index=base.index)))
     base["_comparacao_uf"] = valores.apply(_uf)
