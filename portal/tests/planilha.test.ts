@@ -129,3 +129,31 @@ void test('recusa arquivo maior que 2 MB antes de analisar conteudo', async () =
   const result=await lerPlanilha(new File([new Uint8Array(2*1024*1024+1)],'grande.xlsx'));
   assert.equal(result.ok,false);
 });
+
+void test('dimensao XLSX adulterada nao oculta linhas reais', async () => {
+  const w = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(w, XLSX.utils.json_to_sheet(Array.from({ length: 1000 }, () => LINHA_BOA)), 'Dados');
+  const c = XLSX.CFB.read(XLSX.write(w, { type: 'buffer', bookType: 'xlsx' }), { type: 'buffer' });
+  const i = c.FullPaths.findIndex((p: string) => p.endsWith('/xl/worksheets/sheet1.xml'));
+  const entrada = c.FileIndex[i];
+  entrada.content = Buffer.from(Buffer.from(entrada.content).toString().replace(/<dimension ref="[^"]+"/, '<dimension ref="A1:J2"'));
+  entrada.size = entrada.content.length;
+  const bytes = XLSX.CFB.write(c, { type: 'buffer', fileType: 'zip' });
+  assert.equal((await lerPlanilha(new File([bytes], 'dimensao.xlsx'))).ok, false);
+});
+void test('limite de linhas tambem se aplica ao XLS binario', async () => {
+  const w = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(w, XLSX.utils.json_to_sheet(Array.from({ length: 1000 }, () => LINHA_BOA)), 'Dados');
+  const bytes = XLSX.write(w, { type: 'array', bookType: 'xls' });
+  assert.equal((await lerPlanilha(new File([bytes], 'excessivo.xls'))).ok, false);
+});
+
+for (const ref of ['A1:J1001', 'A1:CW2', 'A1:CW1001']) {
+  void test(`recusa area declarada excessiva mesmo com poucas celulas: ${ref}`, async () => {
+    const w = XLSX.utils.book_new(), aba = XLSX.utils.json_to_sheet([LINHA_BOA]);
+    aba['!ref'] = ref;
+    XLSX.utils.book_append_sheet(w, aba, 'Dados');
+    const bytes = XLSX.write(w, { type: 'array', bookType: 'xlsx' });
+    assert.equal((await lerPlanilha(new File([bytes], 'area.xlsx'))).ok, false);
+  });
+}
