@@ -91,6 +91,13 @@ export async function lerPlanilha(arquivo: File): Promise<ResultadoLeitura> {
   const ref = aba['!ref'];
   if (!ref) return { ok: false, erro: 'A primeira aba da planilha está vazia.' };
   const faixa = XLSX.utils.decode_range(ref);
+  for (const endereco of Object.keys(aba)) {
+    if (endereco.startsWith('!')) continue;
+    const celula = XLSX.utils.decode_cell(endereco);
+    faixa.s.r = Math.min(faixa.s.r, celula.r); faixa.e.r = Math.max(faixa.e.r, celula.r);
+    faixa.s.c = Math.min(faixa.s.c, celula.c); faixa.e.c = Math.max(faixa.e.c, celula.c);
+  }
+  aba['!ref'] = XLSX.utils.encode_range(faixa);
   const linhas = faixa.e.r - faixa.s.r + 1;
   const colunas = faixa.e.c - faixa.s.c + 1;
 
@@ -129,6 +136,8 @@ export async function lerPlanilha(arquivo: File): Promise<ResultadoLeitura> {
   } catch (erro) {
     return { ok: false, erro: `Não foi possível interpretar os dados: ${erro instanceof Error ? erro.message : 'formato inesperado'}.` };
   }
+
+  if (brutas.length >= PLANILHA_LIMITES.linhas) return { ok: false, erro: 'A planilha excede o limite de linhas.' };
 
   // Descarta chaves herdadas do prototipo: xlsx 0.18.5 tem CVE de prototype
   // pollution, e uma coluna chamada __proto__ ou constructor nao deve virar
