@@ -1,3 +1,4 @@
+import { CRIAR_SESSAO_AUTENTICADA_SQL, MIGRAR_SENHA_AUTENTICADA_SQL } from '@/lib/login-sql';
 import { consultarRelatorios, solicitarRelatorio, cancelarRelatorio } from '@/lib/relatorios-api';
 import { erroExportacaoAuditoria, BUSCA_LITERAL_AUDITORIA_SQL } from '@/lib/auditoria-limites';
 import { detalhesHistorico, referenciasHistorico, rotuloAcaoHistorico, rotuloEntidadeHistorico } from '@/lib/historico-legivel';
@@ -567,7 +568,7 @@ async function authenticate(request: Request, texto: string, liberarHash: () => 
   ]);
   const fails = Math.max(Number(porEmail?.n || 0), Math.floor(Number(global?.n || 0) / 1.5));
 
-  const record = await first<{ id: string; name: string; email: string; role: string; password_salt: string; password_hash: string; password_iterations: number }>('SELECT * FROM users WHERE lower(email)=? AND active=1', [email]);
+  const record = await first<{ id: string; name: string; email: string; role: string; password_salt: string; password_hash: string; password_iterations: number; revision: number }>('SELECT * FROM users WHERE lower(email)=? AND active=1', [email]);
 
   // Custo do hash. Para conta inexistente ou inativa usa o custo ATUAL, nao o
   // legado: com o legado, e-mail que nao existe respondia sempre rapido e
@@ -590,12 +591,6 @@ async function authenticate(request: Request, texto: string, liberarHash: () => 
     await new Promise((r) => setTimeout(r, Math.min(LOGIN_DELAY_MAX_MS, 400 * (fails - LOGIN_SOFT_LIMIT + 1))));
   }
 
-  // A tentativa ja foi gravada como falha antes da contagem; se a senha estava
-  // certa, apenas marca o sucesso.
-  if (okLogin) {
-    await rawDb().prepare('UPDATE login_attempts SET success=1 WHERE id=?').bind(idTentativa).run();
-  }
-
   if (!okLogin) {
     // Audita so na virada do limite, nao a cada tentativa: antes, um ataque
     // longo enchia a auditoria de linhas repetidas e escondia o resto.
@@ -608,24 +603,21 @@ async function authenticate(request: Request, texto: string, liberarHash: () => 
   const token = crypto.randomUUID().replaceAll('-', '') + crypto.randomUUID().replaceAll('-', '');
   const guardado = await tokenHash(token);
   const expires = new Date(Date.now() + 12 * 60 * 60 * 1000).toISOString();
-  await rawDb().batch([
-    rawDb().prepare('INSERT INTO sessions (token,user_id,expires_at,last_seen_at) VALUES (?,?,?,?)').bind(guardado, record!.id, expires, agora),
-    // Acerto limpa o historico de erros daquele e-mail nesta origem.
-    rawDb().prepare('DELETE FROM login_attempts WHERE ip=? AND email IS ? AND success=0').bind(ip, email || null),
-    // Higiene: sessoes vencidas e tentativas antigas.
+  const migrar = iteracoesDoHash < PBKDF2_ITERACOES_ATUAL;
+  const salNovo = migrar ? crypto.randomUUID() : record!.password_salt;
+  const hashNovo = migrar ? await passwordHash(senhaCrua, salNovo, PBKDF2_ITERACOES_ATUAL) : record!.password_hash;
+  const lote = [
+    rawDb().prepare(CRIAR_SESSAO_AUTENTICADA_SQL).bind(guardado, expires, agora, record!.id, record!.revision, record!.password_salt, record!.password_hash),
+    rawDb().prepare(MIGRAR_SENHA_AUTENTICADA_SQL).bind(salNovo, hashNovo, PBKDF2_ITERACOES_ATUAL, record!.id, record!.revision, record!.password_salt, record!.password_hash, guardado),
+    rawDb().prepare('UPDATE login_attempts SET success=1 WHERE id=? AND EXISTS (SELECT 1 FROM sessions WHERE token=?)').bind(idTentativa, guardado),
+    rawDb().prepare('DELETE FROM login_attempts WHERE ip=? AND email IS ? AND success=0 AND EXISTS (SELECT 1 FROM sessions WHERE token=?)').bind(ip, email || null, guardado),
     rawDb().prepare('DELETE FROM sessions WHERE expires_at<?').bind(now()),
     rawDb().prepare('DELETE FROM login_attempts WHERE created_at<?').bind(new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()),
-  ]);
+  ];
+  if (!migrar) lote.splice(1, 1);
+  const resultados = await rawDb().batch(lote);
+  if (!resultados[0].meta.changes) return fail('As credenciais mudaram. Entre novamente.', 401);
 
-  // Migracao silenciosa do custo: quem entrou com uma senha de custo antigo tem
-  // o hash regravado agora, com a senha em maos e ja validada. Cada usuario se
-  // atualiza sozinho no proprio ritmo, sem ninguem perder acesso.
-  if (iteracoesDoHash < PBKDF2_ITERACOES_ATUAL && typeof body.password === 'string') {
-    const salNovo = crypto.randomUUID();
-    const hashNovo = await passwordHash(body.password, salNovo, PBKDF2_ITERACOES_ATUAL);
-    await rawDb().prepare('UPDATE users SET password_salt=?,password_hash=?,password_iterations=? WHERE id=?')
-      .bind(salNovo, hashNovo, PBKDF2_ITERACOES_ATUAL, record!.id).run();
-  }
   await audit(record!.id, 'LOGIN', 'session', null, `Acesso realizado de ${ip}`);
   const response = ok({ user: { id: record!.id, name: record!.name, email: record!.email, role: record!.role } });
   response.cookies.set('acordos_session', token, {
