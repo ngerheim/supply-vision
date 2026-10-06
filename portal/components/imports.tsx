@@ -157,7 +157,7 @@ export function Imports({
         {
           method: existing ? 'PUT' : 'POST',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ source: issue.valor, targetId, active: true }),
+          body: JSON.stringify({ expectedRevision: existing?.revision, source: issue.valor, targetId, active: true }),
         },
       );
       setResult(await request(true));

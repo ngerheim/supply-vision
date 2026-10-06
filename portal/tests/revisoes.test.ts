@@ -1,12 +1,13 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { DatabaseSync } from 'node:sqlite';
-import { TRIGGERS_REVISAO, revisaoConfere } from '../lib/revisoes-sql.ts';
+import { TRIGGERS_REVISAO, TABELAS_CADASTRO, revisaoConfere } from '../lib/revisoes-sql.ts';
 
 void test('revisões avançam em edição, publicação e UPSERT mesmo sem alterar o timestamp', () => {
   const db = new DatabaseSync(':memory:');
   try {
     db.exec('PRAGMA recursive_triggers=ON; CREATE TABLE agreements(id TEXT PRIMARY KEY,revision INTEGER NOT NULL DEFAULT 0,notes TEXT); CREATE TABLE agreement_items(id TEXT PRIMARY KEY,revision INTEGER NOT NULL DEFAULT 0,price REAL); CREATE TABLE users(id TEXT PRIMARY KEY,revision INTEGER NOT NULL DEFAULT 0,name TEXT)');
+    for (const tabela of TABELAS_CADASTRO) db.exec(`CREATE TABLE ${tabela}(id TEXT PRIMARY KEY,revision INTEGER NOT NULL DEFAULT 0,name TEXT)`);
     for (const sql of TRIGGERS_REVISAO) db.exec(sql);
     db.exec("INSERT INTO agreements(id,notes) VALUES('a','original'); INSERT INTO agreement_items(id,price) VALUES('i',10)");
     const stale = 0;
@@ -23,4 +24,19 @@ void test('revisões avançam em edição, publicação e UPSERT mesmo sem alter
     db.exec("UPDATE users SET revision=revision+1 WHERE id='u'");
     assert.equal(db.prepare("SELECT revision FROM users WHERE id='u'").get()!.revision,2);
   } finally { db.close(); }
+});
+
+void test('cadastros recusam escrita obsoleta mesmo com timestamps iguais', () => {
+  const db=new DatabaseSync(':memory:');
+  try {
+    for(const tabela of TABELAS_CADASTRO){
+      db.exec(`CREATE TABLE ${tabela}(id TEXT PRIMARY KEY,revision INTEGER NOT NULL DEFAULT 0,name TEXT)`);
+      db.exec(TRIGGERS_REVISAO.find(sql=>sql.includes(`AFTER UPDATE ON ${tabela}\n`))!);
+      db.exec(`INSERT INTO ${tabela}(id,name) VALUES('a','original')`);
+      assert.equal(db.prepare(`UPDATE ${tabela} SET name=? WHERE id=? AND revision=?`).run('primeiro','a',0).changes,1);
+      assert.equal(db.prepare(`UPDATE ${tabela} SET name=? WHERE id=? AND revision=?`).run('obsoleto','a',0).changes,0);
+      assert.equal(db.prepare(`DELETE FROM ${tabela} WHERE id=? AND revision=?`).run('a',0).changes,0);
+      assert.equal(db.prepare(`SELECT name FROM ${tabela}`).get()!.name,'primeiro');
+    }
+  }finally{db.close();}
 });

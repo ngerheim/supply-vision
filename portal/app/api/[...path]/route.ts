@@ -86,7 +86,7 @@ type AgreementItemInput = {
 type CatalogInput = Record<string, unknown>;
 type UserInput = { expectedRevision?: unknown; name?: unknown; email?: unknown; password?: unknown; role?: unknown; active?: unknown; dailyReportEnabled?: unknown; dailyReportTime?: unknown };
 type TicketInput = Record<string, unknown>;
-type MappingInput = { source?: unknown; targetId?: unknown; active?: unknown; notes?: unknown };
+type MappingInput = { expectedRevision?: unknown; source?: unknown; targetId?: unknown; active?: unknown; notes?: unknown };
 
 const ok = (data: unknown, init?: ResponseInit) => {
   const headers = new Headers(init?.headers);
@@ -353,9 +353,9 @@ async function DELETEInterno(request: NextRequest) {
     return comTravaDoAcordo(request, await acordoDaCondicao(parts[1]), () => deleteItem(user, parts[1], revisaoDaQuery(request)));
   }
   if (parts[0] === 'agreements' && parts[1] && parts.length === 2) return comTravaDoAcordo(request, parts[1], () => deleteAgreement(user, parts[1], revisaoDaQuery(request)));
-  if (parts[0] === 'catalogs' && parts[1] && parts[2]) return deleteCatalog(user, parts[1], parts[2]);
+  if (parts[0] === 'catalogs' && parts[1] && parts[2]) return deleteCatalog(user, parts[1], parts[2], revisaoDaQuery(request));
   if (parts[0] === 'reports' && parts[1]) {if(user.role!=='admin')return fail('Somente administradores podem cancelar relatórios.',403);return cancelarRelatorio(parts[1],user.id);}
-  if (parts[0] === 'mappings' && parts[1] && parts[2]) return deleteMapping(user, parts[1], parts[2]);
+  if (parts[0] === 'mappings' && parts[1] && parts[2]) return deleteMapping(user, parts[1], parts[2], revisaoDaQuery(request));
   return fail('Rota não encontrada.', 404);
 }
 
@@ -455,11 +455,12 @@ const catalogDependencies: Record<string, { table: string; queries: Array<[strin
   locations: { table: 'locations', queries: [['condição(ões)', 'SELECT COUNT(*) n FROM agreement_items WHERE location_id=?'], ['acordo(s)', 'SELECT COUNT(*) n FROM agreement_locations WHERE location_id=?']] },
 };
 
-async function deleteCatalog(user: User, type: string, recordId: string) {
+async function deleteCatalog(user: User, type: string, recordId: string, expectedRevision: number | null) {
   const cfg = catalogDependencies[type];
   if (!cfg) return fail('Cadastro inválido.');
-  const existing = await first<{ id: string; active: number }>(`SELECT * FROM ${cfg.table} WHERE id=?`, [recordId]);
+  const existing = await first<{ id: string; active: number; revision: number }>(`SELECT * FROM ${cfg.table} WHERE id=?`, [recordId]);
   if (!existing) return fail('Cadastro não encontrado.', 404);
+  if(!revisaoConfere(expectedRevision,existing.revision))return fail('Registro alterado. Atualize a lista antes de excluir.',409);
 
   const blockers: string[] = [];
   for (const [label, sql] of cfg.queries) {
@@ -478,10 +479,11 @@ async function deleteCatalog(user: User, type: string, recordId: string) {
 
   // A consulta acima melhora a mensagem; as FKs continuam sendo a garantia
   // final se outra requisicao criar uma referencia antes deste DELETE.
-  await rawDb().batch([
-    rawDb().prepare(`DELETE FROM ${cfg.table} WHERE id=?`).bind(recordId),
-    auditoriaNoLote(user.id, 'DELETE', type, recordId, `${label?.nome || recordId} excluído do cadastro`),
+  const [excluido]=await rawDb().batch([
+    rawDb().prepare(`DELETE FROM ${cfg.table} WHERE id=? AND revision=?`).bind(recordId,existing.revision),
+    rawDb().prepare(AUDITAR_REENVIO_SQL).bind(id('aud'),user.id,'DELETE',type,recordId,`${label?.nome || recordId} excluído do cadastro`,now()),
   ]);
+  if(!excluido.meta.changes)return fail('Registro alterado. Atualize a lista antes de excluir.',409);
   return ok({ success: true });
 }
 
@@ -670,15 +672,15 @@ async function bootstrap(user: User) {
       all('SELECT id,trade_name AS tradeName FROM suppliers ORDER BY trade_name'),
       all('SELECT id,name FROM catalog_items ORDER BY name'),
       all('SELECT id,name FROM vehicle_models ORDER BY name'),
-      all('SELECT id,city,state FROM locations ORDER BY state,city'),
+      all('SELECT id,revision,city,state FROM locations ORDER BY state,city'),
     ]);
     return ok({ user, agreements: [], totalAcordos: 0, catalogs: { suppliers, items, models, locations, units: [] }, imports: [], manutencao: relatorioManutencao() });
   }
   const [agreements, suppliers, items, models, units, locations, imports] = await Promise.all([
-    agreementList(), all('SELECT id,legal_name AS legalName,trade_name AS tradeName,cnpj,city,state,active FROM suppliers ORDER BY trade_name'),
-    all('SELECT id,name,active FROM catalog_items ORDER BY name'), all('SELECT id,name,active FROM vehicle_models ORDER BY name'),
-    all('SELECT id,code,name,active FROM units ORDER BY code'),
-    all('SELECT id,city,state FROM locations ORDER BY state,city'), canWrite(user) ? importList() : Promise.resolve([]),
+    agreementList(), all('SELECT id,revision,legal_name AS legalName,trade_name AS tradeName,cnpj,city,state,active FROM suppliers ORDER BY trade_name'),
+    all('SELECT id,revision,name,active FROM catalog_items ORDER BY name'), all('SELECT id,revision,name,active FROM vehicle_models ORDER BY name'),
+    all('SELECT id,revision,code,name,active FROM units ORDER BY code'),
+    all('SELECT id,revision,city,state FROM locations ORDER BY state,city'), canWrite(user) ? importList() : Promise.resolve([]),
   ]);
   return ok({ user, agreements, totalAcordos: agreements.length, catalogs: { suppliers, items, models, units, locations }, imports, manutencao: relatorioManutencao() });
 }
@@ -934,7 +936,7 @@ const mappingConfig: Record<string, { table: string; targetTable: string; label:
 };
 
 async function mappingList() {
-  const select = (table: string, target: string, label = 't.name') => all(`SELECT m.id,m.source_text AS source,m.source_key AS sourceKey,m.target_id AS targetId,${label} AS target,m.active,m.notes,m.updated_at AS updatedAt
+  const select = (table: string, target: string, label = 't.name') => all(`SELECT m.id,m.revision,m.source_text AS source,m.source_key AS sourceKey,m.target_id AS targetId,${label} AS target,m.active,m.notes,m.updated_at AS updatedAt
     FROM ${table} m JOIN ${target} t ON t.id=m.target_id ORDER BY m.source_key`);
   const [items, models, units] = await Promise.all([
     select('import_item_mappings', 'catalog_items'),
@@ -989,29 +991,33 @@ async function updateMapping(request: Request, user: User, type: string, recordI
   if (!canWrite(user)) return denyWrite(request, 'Seu perfil não permite gerenciar o De/Para.');
   const value = await validateMappingInput(request, type);
   if ('error' in value) return fail(value.error || 'De/Para inválido.');
-  const existing=await first(`SELECT 1 ok FROM ${value.cfg.table} WHERE id=?`,[recordId]);
+  const existing=await first(`SELECT revision FROM ${value.cfg.table} WHERE id=?`,[recordId]);
   if(!existing) return fail('Correspondência não encontrada.',404);
+  if(!revisaoConfere(value.body.expectedRevision,Number(existing.revision)))return fail('Correspondência alterada. Atualize a lista antes de salvar.',409);
   try {
-    await rawDb().batch([
-      rawDb().prepare(`UPDATE ${value.cfg.table} SET source_text=?,source_key=?,target_id=?,active=?,notes=?,updated_at=? WHERE id=?`)
-        .bind(value.source,value.sourceKey,value.targetId,value.active,value.notes,now(),recordId),
-      auditoriaNoLote(user.id,'UPDATE','import_mapping',recordId,`De/Para de ${value.cfg.label} atualizado: ${value.sourceKey}`),
+    const [alterado]=await rawDb().batch([
+      rawDb().prepare(`UPDATE ${value.cfg.table} SET source_text=?,source_key=?,target_id=?,active=?,notes=?,updated_at=? WHERE id=? AND revision=?`)
+        .bind(value.source,value.sourceKey,value.targetId,value.active,value.notes,now(),recordId,existing.revision),
+      rawDb().prepare(AUDITAR_REENVIO_SQL).bind(id('aud'),user.id,'UPDATE','import_mapping',recordId,`De/Para de ${value.cfg.label} atualizado: ${value.sourceKey}`,now()),
     ]);
+    if(!alterado.meta.changes)return fail('Correspondência alterada. Atualize a lista antes de salvar.',409);
     return ok({success:true});
   } catch (error: unknown) {
     return fail(errorMessage(error).includes('UNIQUE')?'Já existe um De/Para para essa nomenclatura de origem.':'Não foi possível atualizar o De/Para.');
   }
 }
 
-async function deleteMapping(user: User, type: string, recordId: string) {
+async function deleteMapping(user: User, type: string, recordId: string, expectedRevision: number | null) {
   if (!canWrite(user)) return fail('Seu perfil não permite gerenciar o De/Para.', 403);
   const cfg=mappingConfig[type]; if(!cfg) return fail('Tipo de De/Para inválido.');
-  const existing=await first<{sourceKey:string}>(`SELECT source_key AS sourceKey FROM ${cfg.table} WHERE id=?`,[recordId]);
+  const existing=await first<{sourceKey:string;revision:number}>(`SELECT revision,source_key AS sourceKey FROM ${cfg.table} WHERE id=?`,[recordId]);
   if(!existing) return fail('Correspondência não encontrada.',404);
-  await rawDb().batch([
-    rawDb().prepare(`DELETE FROM ${cfg.table} WHERE id=?`).bind(recordId),
-    auditoriaNoLote(user.id,'DELETE','import_mapping',recordId,`De/Para de ${cfg.label} excluído: ${existing.sourceKey}`),
+  if(!revisaoConfere(expectedRevision,existing.revision))return fail('Registro alterado. Atualize a lista antes de excluir.',409);
+  const [excluido]=await rawDb().batch([
+    rawDb().prepare(`DELETE FROM ${cfg.table} WHERE id=? AND revision=?`).bind(recordId,existing.revision),
+    rawDb().prepare(AUDITAR_REENVIO_SQL).bind(id('aud'),user.id,'DELETE','import_mapping',recordId,`De/Para de ${cfg.label} excluído: ${existing.sourceKey}`,now()),
   ]);
+  if(!excluido.meta.changes)return fail('Registro alterado. Atualize a lista antes de excluir.',409);
   return ok({success:true});
 }
 
@@ -1063,29 +1069,32 @@ async function updateCatalog(request: Request, user: User, type: string, recordI
   if (!cfg) return fail('Cadastro inválido.');
   const body = await jsonBody<CatalogInput>(request);
   exigeCamposDeCatalogo(body);
-  const existing = await first<{ id: string; active: number }>(`SELECT * FROM ${cfg.table} WHERE id=?`, [recordId]);
+  const existing = await first<{ id: string; active: number; revision: number }>(`SELECT * FROM ${cfg.table} WHERE id=?`, [recordId]);
   if (!existing) return fail('Cadastro não encontrado.', 404);
+  if(!revisaoConfere(body.expectedRevision,existing.revision))return fail('Cadastro alterado. Atualize a lista antes de salvar.',409);
   const active = situacaoAtiva(body.active, existing.active);
   let escrita: D1PreparedStatement;
   try {
     if (type === 'suppliers') {
       if (!textValue(body.tradeName) || !isValidCnpj(body.cnpj)) return fail('Informe o nome e um CNPJ válido.');
-      escrita = rawDb().prepare('UPDATE suppliers SET legal_name=?,trade_name=?,cnpj=?,city=?,state=?,active=?,updated_at=? WHERE id=?').bind(textValue(body.legalName) || textValue(body.tradeName), textValue(body.tradeName), normalizeCnpj(body.cnpj), nullableText(body.city), nullableText(body.state)?.toUpperCase().slice(0,2) ?? null, active, now(), recordId);
+      escrita = rawDb().prepare('UPDATE suppliers SET legal_name=?,trade_name=?,cnpj=?,city=?,state=?,active=?,updated_at=? WHERE id=? AND revision=?').bind(textValue(body.legalName) || textValue(body.tradeName), textValue(body.tradeName), normalizeCnpj(body.cnpj), nullableText(body.city), nullableText(body.state)?.toUpperCase().slice(0,2) ?? null, active, now(), recordId,existing.revision);
     } else if (type === 'items') {
       if (!textValue(body.name)) return fail('Informe o nome da peça ou serviço.');
-      escrita = rawDb().prepare('UPDATE catalog_items SET name=?,active=? WHERE id=?').bind(normalizeText(body.name), active, recordId);
+      escrita = rawDb().prepare('UPDATE catalog_items SET name=?,active=? WHERE id=? AND revision=?').bind(normalizeText(body.name), active, recordId,existing.revision);
     } else if (type === 'models') {
       if (!textValue(body.name)) return fail('Informe o modelo.');
-      escrita = rawDb().prepare('UPDATE vehicle_models SET name=?,active=? WHERE id=?').bind(normalizeText(body.name), active, recordId);
+      escrita = rawDb().prepare('UPDATE vehicle_models SET name=?,active=? WHERE id=? AND revision=?').bind(normalizeText(body.name), active, recordId,existing.revision);
     } else if (type === 'units') {
       if (!textValue(body.code)) return fail('Informe a unidade de medida.');
-      escrita = rawDb().prepare('UPDATE units SET code=?,name=?,active=? WHERE id=?').bind(normalizeText(body.code), normalizeText(body.code), active, recordId);
+      escrita = rawDb().prepare('UPDATE units SET code=?,name=?,active=? WHERE id=? AND revision=?').bind(normalizeText(body.code), normalizeText(body.code), active, recordId,existing.revision);
     } else {
       const state = normalizeText(body.state);
       if (!normalizeImportText(body.city) || !isValidState(state)) return fail('Informe a cidade e selecione uma UF brasileira válida.');
-      escrita = rawDb().prepare('UPDATE locations SET city=?,state=? WHERE id=?').bind(normalizeImportText(body.city), state, recordId);
+      escrita = rawDb().prepare('UPDATE locations SET city=?,state=? WHERE id=? AND revision=?').bind(normalizeImportText(body.city), state, recordId,existing.revision);
     }
-    await rawDb().batch([escrita, auditoriaNoLote(user.id, 'UPDATE', type, recordId, 'Cadastro atualizado')]); return ok({ success: true });
+    const [alterado]=await rawDb().batch([escrita, rawDb().prepare(AUDITAR_REENVIO_SQL).bind(id('aud'),user.id,'UPDATE',type,recordId,'Cadastro atualizado',now())]);
+    if(!alterado.meta.changes)return fail('Cadastro alterado. Atualize a lista antes de salvar.',409);
+    return ok({ success: true });
   } catch (error: unknown) {
     return fail(errorMessage(error).includes('UNIQUE') ? 'Já existe um cadastro com esses dados.' : 'Não foi possível atualizar o cadastro.');
   }

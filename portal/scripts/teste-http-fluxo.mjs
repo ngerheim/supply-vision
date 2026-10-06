@@ -49,7 +49,7 @@ console.log('\n  TESTES HTTP EM FLUXO\n  --------------------');
   let removeu = false;
   if (r.status === 201) {
     const criado = JSON.parse(r.corpo);
-    const exclusao = await pedir({ metodo: 'DELETE', caminho: `/api/catalogs/models/${criado.id}`, cabecalhos: { cookie } });
+    const exclusao = await pedir({ metodo: 'DELETE', caminho: `/api/catalogs/models/${criado.id}?expectedRevision=0`, cabecalhos: { cookie } });
     removeu = exclusao.status === 200;
   }
   verifica('Corpo dentro do limite e limpeza continuam funcionando',

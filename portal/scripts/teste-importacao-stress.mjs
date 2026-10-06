@@ -35,6 +35,12 @@ async function request(url, { method = 'GET', body, session = cookie, headers = 
     const detail = await request(url, { session });
     if (detail.status === 200) body = { ...body, expectedRevision: detail.data.agreement.revision };
   }
+  const cadastro=url.match(/^\/api\/(catalogs|mappings)\/(suppliers|locations|items|models|units)\/([^/?]+)$/);
+  if(cadastro && ['PUT','DELETE'].includes(method) && reader && body?.expectedRevision===undefined){
+    const tabelas=cadastro[1]==='mappings'?{items:'import_item_mappings',models:'import_model_mappings',units:'import_unit_mappings'}:{suppliers:'suppliers',locations:'locations',items:'catalog_items',models:'vehicle_models',units:'units'};
+    const tabela=tabelas[cadastro[2]],registro=tabela?reader.prepare(`SELECT revision FROM ${tabela} WHERE id=?`).get(cadastro[3]):null;
+    if(registro){if(method==='PUT')body={...body,expectedRevision:registro.revision};else url+=`?expectedRevision=${registro.revision}`;}
+  }
   const response = await fetch(base + url, {
     method, headers: { connection: 'close', ...(session ? { cookie: session } : {}), ...(body && !(body instanceof FormData) ? { 'content-type': 'application/json' } : {}), ...headers },
     ...(body === undefined ? {} : { body: body instanceof FormData ? body : JSON.stringify(body) }),
@@ -223,6 +229,19 @@ try {
   const item = await catalog('items', { name: 'OLEO DE MOTOR TESTE' });
   const model = await catalog('models', { name: 'HILUX 2.8 TESTE' });
   const itemMap = await mapping('items', 'Óleo teste', item.id);
+  await check('Cadastro e De/Para rejeitam edicao e exclusao com revisao obsoleta', async()=>{
+    const antigo=(await good('/api/bootstrap')).catalogs.suppliers.find(r=>r.id===supplier.id);
+    await good(`/api/catalogs/suppliers/${supplier.id}`,{method:'PUT',body:{...antigo,expectedRevision:antigo.revision,tradeName:'CORRIGIDO'}});
+    assert.equal((await request(`/api/catalogs/suppliers/${supplier.id}`,{method:'PUT',body:{...antigo,expectedRevision:antigo.revision}})).status,409);
+    assert.equal(query('SELECT trade_name FROM suppliers WHERE id=?',supplier.id)[0].trade_name,'CORRIGIDO');
+    await good(`/api/catalogs/suppliers/${supplier.id}`,{method:'PUT',body:{...antigo}});
+    const mapa=(await good('/api/mappings')).items.find(r=>r.id===itemMap.id);
+    await good(`/api/mappings/items/${itemMap.id}`,{method:'PUT',body:{...mapa,expectedRevision:mapa.revision,notes:'CORRIGIDO'}});
+    assert.equal((await request(`/api/mappings/items/${itemMap.id}`,{method:'PUT',body:{...mapa,expectedRevision:mapa.revision}})).status,409);
+    assert.equal((await request(`/api/mappings/items/${itemMap.id}?expectedRevision=${mapa.revision}`,{method:'DELETE'})).status,409);
+    assert.equal(query('SELECT notes FROM import_item_mappings WHERE id=?',itemMap.id)[0].notes,'CORRIGIDO');
+  });
+
   await mapping('models', 'Hilux teste', model.id);
   const unit = query("SELECT * FROM units WHERE code='LITRO'")[0];
   agreementId=(await good('/api/agreements',{method:'POST',body:{number:'STRESS-IMPORTACAO',supplierId:supplier.id,status:'active',startDate:'2026-01-01',locationIds:[location.id]}},201)).id;

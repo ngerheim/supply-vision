@@ -76,7 +76,8 @@ for(const filtro of ['state='+ 'X'.repeat(1000),Array.from({length:81},(_,i)=>'i
 }
 const cadastro=await pedir('catalogs/items','POST',{name:'ITEM INATIVO '+Date.now()});assert.equal(cadastro.status,201);
 for(const body of [{name:'ITEM INATIVO A',active:false},{name:'ITEM INATIVO B',active:0},{name:'ITEM INATIVO C'}]){
- assert.equal((await pedir('catalogs/items/'+cadastro.data.id,'PUT',body)).status,200);
+ const antigo=(await pedir('bootstrap')).data.catalogs.items.find(item=>item.id===cadastro.data.id);
+ assert.equal((await pedir('catalogs/items/'+cadastro.data.id,'PUT',{...body,expectedRevision:antigo.revision})).status,200);
  const bootstrap=await pedir('bootstrap');assert.equal(bootstrap.data.catalogs.items.find(item=>item.id===cadastro.data.id).active,0);
 }
 console.log('[OK] GET traduz filtros invalidos e edicoes preservam cadastros inativos.');
