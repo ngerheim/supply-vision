@@ -6,6 +6,7 @@ import {
   normalizeImportText,
   normalizeText,
 } from './domain.ts';
+import { EntradaInvalida } from './limites-entrada.ts';
 
 export type MappingType = 'items' | 'models' | 'locations' | 'units';
 export type ImportIssue = {
@@ -231,7 +232,7 @@ export function deduplicateImportRows(rows: ImportRow[]) {
     ]);
     const previous = unique.get(key);
     if (previous && previous.unitId !== row.unitId)
-      throw new Error(
+      throw new EntradaInvalida(
         `Medidas diferentes para o mesmo item nas linhas ${previous.rowNumber} e ${row.rowNumber}: ${row.rawItem}, ${row.model}, ${row.city}/${row.state} — "${previous.rawUnit}" e "${row.rawUnit}". Confira a medida na planilha.`,
       );
     if (!previous) {

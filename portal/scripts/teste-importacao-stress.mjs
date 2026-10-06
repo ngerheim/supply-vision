@@ -547,10 +547,10 @@ try {
     const atuais = detalhe.locations.map((local) => local.id);
     const extra = await catalog('locations', { city: 'CONCORRENCIA TESTE', state: 'GO' });
     const condicao = { catalogItemId: modelo.catalogItemId, modelIds: [modelo.modelId], unitId: modelo.unitId, locationId: extra.id, price: 1 };
-    const naCidadeExtra = () => query('SELECT ai.id FROM agreement_items ai JOIN agreements ag ON ag.current_version_id=ai.version_id WHERE ag.id=? AND ai.location_id=?', agreementId, extra.id);
+    const naCidadeExtra = () => query('SELECT ai.id,ai.revision FROM agreement_items ai JOIN agreements ag ON ag.current_version_id=ai.version_id WHERE ag.id=? AND ai.location_id=?', agreementId, extra.id);
     const status = { retirar: new Set(), incluir: new Set() };
     for (let rodada = 0; rodada < 15; rodada++) {
-      for (const item of naCidadeExtra()) await good(`/api/items/${item.id}`, { method: 'DELETE' });
+      for (const item of naCidadeExtra()) await good(`/api/items/${item.id}?expectedRevision=${item.revision}`, { method: 'DELETE' });
       await good(`/api/agreements/${agreementId}`, { method: 'PUT', body: corpo([...atuais, extra.id]) });
       // Uma requisicao retira a cidade enquanto a outra inclui preco nela.
       const [retirar, incluir] = await Promise.all([
@@ -564,7 +564,7 @@ try {
         WHERE ag.id=? AND ai.location_id NOT IN (SELECT location_id FROM agreement_locations WHERE agreement_id=ag.id)`, agreementId)[0].n;
       assert.equal(fora, 0, `rodada ${rodada}: condição ficou fora da abrangência`);
     }
-    for (const item of naCidadeExtra()) await good(`/api/items/${item.id}`, { method: 'DELETE' });
+    for (const item of naCidadeExtra()) await good(`/api/items/${item.id}?expectedRevision=${item.revision}`, { method: 'DELETE' });
     await good(`/api/agreements/${agreementId}`, { method: 'PUT', body: corpo([...atuais, extra.id]) });
     // A disputa acima depende do acaso; esta parte nao. Com o acordo travado
     // por outra operacao, editar e incluir condicao recebem 409 e nada muda.

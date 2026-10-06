@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Download, FileText, LoaderCircle, RefreshCw } from 'lucide-react';
 import { api, errorText } from '@/lib/api';
-import { iniciarAtualizacaoPeriodica } from '@/lib/atualizacao-periodica';
+import { CABECALHO_ATUALIZACAO_AUTOMATICA, iniciarAtualizacaoPeriodica } from '@/lib/atualizacao-periodica';
 import {
   NOMES_ACAO,
   validarPedidoRelatorio,
@@ -64,8 +64,8 @@ export function Reports() {
   const key = useRef<string | null>(null),
     sending = useRef(false),
     mounted = useRef(false);
-  const load = useCallback(async (signal?: AbortSignal) => {
-    const data = await api('/api/reports', { signal });
+  const load = useCallback(async (signal?: AbortSignal, automatica = false) => {
+    const data = await api('/api/reports', automatica ? { signal, headers: CABECALHO_ATUALIZACAO_AUTOMATICA } : { signal });
     if (!mounted.current) return;
     setJobs(data.jobs);
     setOnline(data.runnerOnline);
@@ -74,7 +74,7 @@ export function Reports() {
   }, []);
   useEffect(() => {
     mounted.current = true;
-    const parar = iniciarAtualizacaoPeriodica(load, (e) => {
+    const parar = iniciarAtualizacaoPeriodica((signal) => load(signal, true), (e) => {
       setLoadError(errorText(e));
       setOnline(false);
     }, () => document.visibilityState !== 'hidden');
@@ -88,14 +88,14 @@ export function Reports() {
     if (!selected) return;
     let active = true;
     const controller = new AbortController();
-    const update = async (signal: AbortSignal) => {
-      const data = await api(`/api/reports/${selected}`, { signal });
+    const update = async (signal: AbortSignal, automatica = true) => {
+      const data = await api(`/api/reports/${selected}`, automatica ? { signal, headers: CABECALHO_ATUALIZACAO_AUTOMATICA } : { signal });
       if (active) { setLog(data.job.log); setLogError(''); }
     };
     const falhou = (e: unknown) => { if (active) setLogError(errorText(e)); };
     const parar = selectedStatus === 'queued' || selectedStatus === 'running'
       ? iniciarAtualizacaoPeriodica(update, falhou, () => document.visibilityState !== 'hidden')
-      : (() => { void update(controller.signal).catch(falhou); return () => controller.abort(); })();
+      : (() => { void update(controller.signal, false).catch(falhou); return () => controller.abort(); })();
     return () => {
       active = false;
       parar();
