@@ -23,11 +23,11 @@ Remove-Item $PararFile -Force -ErrorAction SilentlyContinue
 @{pid=$PID;inicio=(Get-Date).ToUniversalTime().ToString('o');raiz=$Raiz}|ConvertTo-Json -Compress|Set-Content $PidFile -Encoding UTF8
 $config=Ler-ConfigOperacao $ConfigOperacao
 $ManutencaoFile=Join-Path $Operacao 'manutencao.sinal'
-$estado=@{};if(Test-Path $EstadoFile){try{$o=Get-Content $EstadoFile -Raw|ConvertFrom-Json;$o.psobject.Properties|ForEach-Object{$estado[$_.Name]=$_.Value}}catch{}}
+$estado=Ler-EstadoOperacao $EstadoFile
 function Salvar-Estado{
  $limite=(Get-Date).Date.AddDays(-14)
  foreach($k in @($estado.Keys)){if($k-match '-(\d{4}-\d{2}-\d{2})-' -and [datetime]$Matches[1]-lt$limite){$estado.Remove($k)}}
- $estado|ConvertTo-Json|Set-Content $EstadoFile -Encoding UTF8
+ Gravar-EstadoOperacao $EstadoFile $estado
 }
 $processos=@{}
 function Iniciar-Processo([string]$nome,[string]$exe,[string[]]$argumentos,[string]$pasta){

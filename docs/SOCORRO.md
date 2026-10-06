@@ -131,3 +131,12 @@ Ao final, registre horário, sintoma, ação tomada e arquivos preservados.
 4. Se a tarefa falhou por execução concorrente, aguarde a rotina automática terminar.
 5. Depois de reinício ou falha SMTP, confira a entrega antes de pedir novamente; não há reenvio automático.
 6. Recortes são exclusivamente para download. Após 24 horas, a aba indica **Arquivo expirado**; gere outro recorte se precisar do arquivo. O serviço exclui arquivos vencidos em verificações de até um minuto quando a operação está ativa.
+
+## Estado da agenda interrompido
+
+O supervisor grava `privado/operacao/estado.json` por substituição atômica e
+mantém `estado.json.anterior`. Se o JSON estiver inválido, bloqueia a partida:
+não apague o arquivo para "resolver", pois isso pode repetir alertas.
+Com a operação parada, compare a cópia anterior com os logs de envio e os slots
+concluídos. Reconstitua e valide o JSON antes de reiniciar; a cópia anterior pode
+não conter a última entrega e não deve ser restaurada automaticamente.
