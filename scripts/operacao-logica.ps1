@@ -117,7 +117,10 @@ function Ler-EstadoOperacao([string]$Caminho) {
 }
 
 function Validar-PythonAlertas([string]$Executavel) {
-  $saida = & $Executavel --version 2>&1 | Select-Object -First 1
+  # Le a saida inteira. Select-Object -First 1 interromperia o python.exe ao
+  # receber a primeira linha, e o Windows PowerShell 5.1 registra entao
+  # $LASTEXITCODE = -1 mesmo com a versao lida corretamente.
+  $saida = (& $Executavel --version 2>&1 | Out-String).Trim()
   if ($LASTEXITCODE -ne 0 -or $saida -notmatch 'Python (\d+\.\d+\.\d+)') { throw 'Nao foi possivel verificar o Python dos Alertas.' }
   if ([version]$Matches[1] -lt [version]'3.12.0') {
     throw 'Alertas exigem Python 3.12 ou superior. Instale-o e recrie alertas/.venv com a operacao parada antes de atualizar; preserve privado/.'

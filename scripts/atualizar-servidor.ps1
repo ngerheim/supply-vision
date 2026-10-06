@@ -203,11 +203,13 @@ if ($sujo) {
 }
 $branch = git branch --show-current
 if ($LASTEXITCODE -ne 0 -or $branch -ne 'main') { throw 'O servidor deve estar na branch main antes de atualizar.' }
-$anterior = git rev-parse --verify HEAD
+$atual = git rev-parse --verify HEAD
 if ($LASTEXITCODE -ne 0) { throw 'Nao foi possivel identificar a versao atual.' }
-$anterior = $anterior.Trim()
-Validar-PythonAlertas $Python
-Ok "versao atual: $($anterior.Substring(0,7))  $(git log -1 --pretty=format:'%s')"
+$atual = $atual.Trim()
+# Na reexecucao (-JaAtualizado) o HEAD ja e a versao nova; $anterior continua
+# sendo a de -VersaoAnterior, para que uma falha aqui reverta para ela.
+if (-not $JaAtualizado) { $anterior = $atual }
+Ok "versao atual: $($atual.Substring(0,7))  $(git log -1 --pretty=format:'%s')"
 
 if ($JaAtualizado) {
   if ($VersaoAnterior -notmatch '^[0-9a-f]{40}$') { throw 'Reexecucao sem a versao anterior. Rode .\scripts\atualizar-servidor.ps1 sem parametros internos.' }
@@ -234,6 +236,11 @@ if ($Reaplicar -and $remoto -eq $anterior) {
 }
 
 }
+
+# So depois de $anterior apontar para a versao realmente anterior: na
+# reexecucao (-JaAtualizado) ele vem de -VersaoAnterior. Uma falha antes disso
+# fazia a recuperacao "reverter" para a propria versao nova.
+Validar-PythonAlertas $Python
 
 $mudou = git diff --name-only "$anterior..$remoto"
 $mexeuNode = $mudou | Where-Object { $_ -eq 'portal/package-lock.json' -or $_ -eq 'portal/package.json' }
