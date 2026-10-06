@@ -88,10 +88,18 @@ function Obter-SlotDevido([string]$Tipo, [string]$Lista, [hashtable]$Estado, [da
     if ($Agora -ge $alvo -and !$Estado.ContainsKey($chave)) { $devidos += @{ chave=$chave; hora=$texto; alvo=$alvo } }
   }
   if (!$devidos) { return $null }
-  # So o slot mais recente roda; os anteriores ficam como recuperados. O
-  # supervisor passa o horario do slot (--slot) ao pipeline, que calcula as
-  # datas a partir dele. Limitacao conhecida: se o slot da manha (dia
-  # anterior) for perdido junto com um slot posterior, ele nao e reexecutado.
+  # A manha (<10h) cobre datas que os slots do dia corrente nao consultam.
+  # Recupera essa cobertura primeiro; a proxima chamada pega o ultimo slot
+  # do dia. Horarios personalizados da manha compartilham a mesma cobertura.
+  if ($Tipo -eq 'alertas') {
+    $manha = $devidos | Where-Object { $_.alvo.Hour -lt 10 } | Sort-Object { $_.alvo } | Select-Object -Last 1
+    if ($manha) {
+      foreach ($item in $devidos) {
+        if ($item.alvo.Hour -lt 10 -and $item.chave -ne $manha.chave) { $Estado[$item.chave] = 'recuperado-pelo-slot-da-manha' }
+      }
+      return $manha
+    }
+  }
   $ultimo = $devidos | Sort-Object { $_.alvo } | Select-Object -Last 1
   foreach ($item in $devidos) { if ($item.chave -ne $ultimo.chave) { $Estado[$item.chave] = 'recuperado-pelo-slot-mais-recente' } }
   return $ultimo
