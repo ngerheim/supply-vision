@@ -1,4 +1,4 @@
-# Atualiza a instalacao do servidor a partir do repositorio.
+﻿# Atualiza a instalacao do servidor a partir do repositorio.
 #
 # Fluxo previsto:
 #   1. no notebook de desenvolvimento: commit e push
@@ -96,6 +96,104 @@ function Reparar-ConfiguracaoPrivada {
   }
 }
 
+$ContextoArquivo = Join-Path (Obter-PastaPrivada $Raiz) 'operacao/atualizacao.json'
+$Recuperando = $false
+$OperacaoParada = $false
+$CodigoTrocado = $false
+$NovaVersaoIniciada = $false
+$OperacaoEstavaAtiva = $false
+$mexeuNode = $true
+$mexeuPython = $true
+$anterior = $VersaoAnterior
+
+function Parar-Operacao {
+& (Join-Path $Raiz 'PARAR.bat') | Out-Null
+if ($LASTEXITCODE -ne 0) { throw 'Falha ao solicitar a parada da operacao.' }
+for ($i = 0; $i -lt 60; $i++) {
+  if (-not (Get-NetTCPConnection -LocalPort 3000 -State Listen -ErrorAction SilentlyContinue)) { break }
+  Start-Sleep 1
+}
+if (Get-NetTCPConnection -LocalPort 3000 -State Listen -ErrorAction SilentlyContinue) { throw 'A porta 3000 continua ocupada; operacao nao encerrou.' }
+}
+function Reverter([string]$motivo) {
+  if ($script:Recuperando) { throw 'A recuperacao ja foi tentada. Operacao permanece parada.' }
+  $script:Recuperando = $true
+  Parar-Operacao
+  Gravar-EstadoOperacao $ContextoArquivo @{anterior=$anterior;remoto=$remoto;fase='recuperando'}
+  Write-Host "`n!! $motivo" -ForegroundColor Red
+  Write-Host '!! revertendo para a versao anterior' -ForegroundColor Red
+  if ($NovaVersaoIniciada) {
+    # A versao nova ja rodou contra o banco real: o banco volta junto com o
+    # codigo, a partir da copia feita antes da troca. A operacao esta parada
+    # (Parar-Operacao acima), como restaurar-backup.mjs exige; ele guarda o
+    # estado atual como copia datada antes de sobrescrever.
+    Write-Host "!! a versao nova chegou a rodar com o banco real; restaurando o banco de $BackupAntesAtualizacao" -ForegroundColor Red
+    $restaurou = $false
+    try {
+      if (-not (Test-Path -LiteralPath $BackupAntesAtualizacao)) { throw "copia de antes da atualizacao nao encontrada: $BackupAntesAtualizacao" }
+      Copy-Item -LiteralPath $BackupAntesAtualizacao -Destination $BackupAntesAtualizacaoOrigem -Force
+      & node (Join-Path $Portal 'scripts\restaurar-backup.mjs') --sim
+      if ($LASTEXITCODE -ne 0) { throw "restaurar-backup.mjs terminou com codigo $LASTEXITCODE" }
+      $restaurou = $true
+    } catch {
+      Write-Host "!! FALHOU A RESTAURACAO DO BANCO: $($_.Exception.Message)" -ForegroundColor Red
+    }
+    if (-not $restaurou) {
+      Write-Host '!! ============================================================' -ForegroundColor Red
+      Write-Host '!! O BANCO NAO FOI RESTAURADO. A operacao permanece PARADA.' -ForegroundColor Red
+      Write-Host "!! Copia de antes da atualizacao: $BackupAntesAtualizacao" -ForegroundColor Red
+      Write-Host '!! Siga docs\SOCORRO.md (restauracao do banco) antes de religar.' -ForegroundColor Red
+      Write-Host '!! ============================================================' -ForegroundColor Red
+      throw 'Banco nao restaurado; troca de codigo cancelada. Operacao permanece parada.'
+    }
+    Write-Host '!! banco restaurado para o estado de antes da atualizacao' -ForegroundColor Red
+  }
+  # Restaura com o script da versao nova, que valida banco e filas.
+  # So depois volta o codigo: a versao anterior pode nao ter essas protecoes.
+  git reset --hard $anterior --quiet
+  if ($LASTEXITCODE -ne 0) { throw 'Nao foi possivel restaurar o codigo anterior. Operacao permanece parada.' }
+  if ($mexeuNode) {
+    Push-Location $Portal
+    try { & npm ci --no-audit --no-fund | Out-Null; if ($LASTEXITCODE -ne 0) { throw 'Falha ao restaurar dependencias Node.' } } finally { Pop-Location }
+  }
+  if ($mexeuPython) {
+    & $Python -m pip install -r (Join-Path $Alertas 'config\requirements.txt') -r (Join-Path $Alertas 'config\requirements-dev.txt') --quiet
+    if ($LASTEXITCODE -ne 0) { throw 'Falha ao restaurar dependencias Python.' }
+  }
+  Push-Location $Portal
+  try { & npm run build | Out-Null; if ($LASTEXITCODE -ne 0) { throw 'Falha ao reconstruir a versao anterior. Operacao permanece parada.' } } finally { Pop-Location }
+  & (Join-Path $Raiz 'INICIAR.bat') | Out-Null
+  if ($LASTEXITCODE -ne 0) { throw 'Codigo restaurado, mas falhou a solicitacao de inicio da operacao.' }
+  Write-Host "!! codigo revertido para $($anterior.Substring(0,7)). Inicio solicitado; confira a saude da operacao." -ForegroundColor Red
+  Gravar-EstadoOperacao $ContextoArquivo @{anterior=$anterior;remoto=$remoto;fase='revertido'}
+  exit 1
+}
+
+try {
+  # O pai conserva o contexto fora do checkout; o filho pode falhar ate no
+  # pre-voo. Sem contexto verificavel, parametros internos nao autorizam reset.
+  if ($JaAtualizado) {
+    $contextoAnterior = Ler-EstadoOperacao $ContextoArquivo
+    $repeticaoLegada = $contextoAnterior.fase -eq 'revertido' -and $contextoAnterior.anterior -eq $VersaoAnterior
+    if (!(Test-Path -LiteralPath $ContextoArquivo) -or $repeticaoLegada) {
+      # Primeira chegada desta correcao: o pai da versao anterior ainda nao
+      # gravava contexto. Tambem aceita repetir uma tentativa ja revertida.
+      # Verifica o commit e o snapshot que o pai entregou.
+      if ($VersaoAnterior -notmatch '^[0-9a-f]{40}$' -or !(Test-Path -LiteralPath $BackupAntesAtualizacao)) { throw 'Reexecucao legada sem commit/snapshot verificavel.' }
+      & git rev-parse --verify $VersaoAnterior | Out-Null
+      if ($LASTEXITCODE -ne 0) { throw 'Commit anterior nao encontrado.' }
+      & git merge-base --is-ancestor $VersaoAnterior HEAD
+      if ($LASTEXITCODE -ne 0) { throw 'Commit anterior nao pertence a esta atualizacao.' }
+      $remoto = (git rev-parse --verify HEAD).Trim()
+      New-Item -ItemType Directory -Force (Split-Path $ContextoArquivo -Parent) | Out-Null
+      Gravar-EstadoOperacao $ContextoArquivo @{anterior=$VersaoAnterior;remoto=$remoto;fase='codigo'}
+    }
+    $contexto = Ler-EstadoOperacao $ContextoArquivo
+    if ($VersaoAnterior -notmatch '^[0-9a-f]{40}$' -or $contexto.anterior -ne $VersaoAnterior -or $contexto.fase -ne 'codigo') { throw 'Contexto de reexecucao invalido.' }
+    $remoto = $contexto.remoto
+    $CodigoTrocado = $true
+    $OperacaoParada = $true
+  }
 Etapa 'Conferindo o repositorio'
 $sujo = git status --porcelain
 if ($LASTEXITCODE -ne 0) { throw 'Nao foi possivel conferir o repositorio.' }
@@ -153,18 +251,11 @@ if ($Simular) {
   exit 0
 }
 
-function Parar-Operacao {
-& (Join-Path $Raiz 'PARAR.bat') | Out-Null
-if ($LASTEXITCODE -ne 0) { throw 'Falha ao solicitar a parada da operacao.' }
-for ($i = 0; $i -lt 60; $i++) {
-  if (-not (Get-NetTCPConnection -LocalPort 3000 -State Listen -ErrorAction SilentlyContinue)) { break }
-  Start-Sleep 1
-}
-if (Get-NetTCPConnection -LocalPort 3000 -State Listen -ErrorAction SilentlyContinue) { throw 'A porta 3000 continua ocupada; operacao nao encerrou.' }
-}
 if (-not $JaAtualizado) {
+  $OperacaoEstavaAtiva = !!(Obter-ProcessoRegistrado (Join-Path (Obter-PastaPrivada $Raiz) 'operacao/supervisor.pid.json')) -or !!(Get-NetTCPConnection -LocalPort 3000 -State Listen -ErrorAction SilentlyContinue)
   Etapa 'Parando a operacao'
   Parar-Operacao
+  $OperacaoParada = $true
   Ok 'operacao parada'
 
   Etapa 'Backup do banco antes de trocar a versao'
@@ -181,60 +272,14 @@ if (-not $JaAtualizado) {
 # Vira $true quando a versao nova e iniciada contra o banco real. A partir
 # dai ela pode ter migrado ou gravado dados, e reverter so o codigo deixaria
 # a versao anterior com um banco que ela talvez nao entenda.
-$NovaVersaoIniciada = $false
-
-function Reverter([string]$motivo) {
-  Write-Host "`n!! $motivo" -ForegroundColor Red
-  Write-Host '!! revertendo para a versao anterior' -ForegroundColor Red
-  Parar-Operacao
-  git reset --hard $anterior --quiet
-  if ($LASTEXITCODE -ne 0) { throw 'Nao foi possivel restaurar o codigo anterior. Operacao permanece parada.' }
-  if ($NovaVersaoIniciada) {
-    # A versao nova ja rodou contra o banco real: o banco volta junto com o
-    # codigo, a partir da copia feita antes da troca. A operacao esta parada
-    # (Parar-Operacao acima), como restaurar-backup.mjs exige; ele guarda o
-    # estado atual como copia datada antes de sobrescrever.
-    Write-Host "!! a versao nova chegou a rodar com o banco real; restaurando o banco de $BackupAntesAtualizacao" -ForegroundColor Red
-    $restaurou = $false
-    try {
-      if (-not (Test-Path -LiteralPath $BackupAntesAtualizacao)) { throw "copia de antes da atualizacao nao encontrada: $BackupAntesAtualizacao" }
-      Copy-Item -LiteralPath $BackupAntesAtualizacao -Destination $BackupAntesAtualizacaoOrigem -Force
-      & node (Join-Path $Portal 'scripts\restaurar-backup.mjs') --sim
-      if ($LASTEXITCODE -ne 0) { throw "restaurar-backup.mjs terminou com codigo $LASTEXITCODE" }
-      $restaurou = $true
-    } catch {
-      Write-Host "!! FALHOU A RESTAURACAO DO BANCO: $($_.Exception.Message)" -ForegroundColor Red
-    }
-    if (-not $restaurou) {
-      Write-Host '!! ============================================================' -ForegroundColor Red
-      Write-Host '!! O BANCO NAO FOI RESTAURADO. A operacao permanece PARADA.' -ForegroundColor Red
-      Write-Host "!! Copia de antes da atualizacao: $BackupAntesAtualizacao" -ForegroundColor Red
-      Write-Host '!! Siga docs\SOCORRO.md (restauracao do banco) antes de religar.' -ForegroundColor Red
-      Write-Host '!! ============================================================' -ForegroundColor Red
-      throw 'Codigo revertido, mas o banco nao foi restaurado. Operacao permanece parada.'
-    }
-    Write-Host '!! banco restaurado para o estado de antes da atualizacao' -ForegroundColor Red
-  }
-  if ($mexeuNode) {
-    Push-Location $Portal
-    try { & npm ci --no-audit --no-fund | Out-Null; if ($LASTEXITCODE -ne 0) { throw 'Falha ao restaurar dependencias Node.' } } finally { Pop-Location }
-  }
-  if ($mexeuPython) {
-    & $Python -m pip install -r (Join-Path $Alertas 'config\requirements.txt') -r (Join-Path $Alertas 'config\requirements-dev.txt') --quiet
-    if ($LASTEXITCODE -ne 0) { throw 'Falha ao restaurar dependencias Python.' }
-  }
-  Push-Location $Portal
-  try { & npm run build | Out-Null; if ($LASTEXITCODE -ne 0) { throw 'Falha ao reconstruir a versao anterior. Operacao permanece parada.' } } finally { Pop-Location }
-  & (Join-Path $Raiz 'INICIAR.bat') | Out-Null
-  if ($LASTEXITCODE -ne 0) { throw 'Codigo restaurado, mas falhou a solicitacao de inicio da operacao.' }
-  Write-Host "!! codigo revertido para $($anterior.Substring(0,7)). Inicio solicitado; confira a saude da operacao." -ForegroundColor Red
-  exit 1
-}
 
 if (-not $JaAtualizado) {
   Etapa 'Aplicando a nova versao'
+  New-Item -ItemType Directory -Force (Split-Path $ContextoArquivo -Parent) | Out-Null
+  Gravar-EstadoOperacao $ContextoArquivo @{anterior=$anterior;remoto=$remoto;fase='codigo'}
+  $CodigoTrocado = $true
   git merge --ff-only $remoto --quiet
-  if ($LASTEXITCODE -ne 0) { throw 'Falha ao aplicar a nova versao. Operacao permanece parada; confira o repositorio antes de reiniciar.' }
+  if ($LASTEXITCODE -ne 0) { throw 'Falha ao aplicar a nova versao.' }
   Ok "agora em $($remoto.Substring(0,7))"
 
   # Daqui para a frente quem manda e o codigo novo. O PowerShell ja carregou
@@ -245,7 +290,17 @@ if (-not $JaAtualizado) {
   Etapa 'Seguindo com o script da nova versao'
   $argumentosReexecucao = Argumentos-ReexecucaoAtualizador (Join-Path $PSScriptRoot 'atualizar-servidor.ps1') $anterior ([bool]$Reaplicar)
   & powershell.exe @argumentosReexecucao
-  exit $LASTEXITCODE
+  $rcFilho = $LASTEXITCODE
+  if ($rcFilho -ne 0) {
+    $contexto = Ler-EstadoOperacao $ContextoArquivo
+    if ($contexto.fase -in @('revertido','recuperando')) {
+      if ($contexto.fase -eq 'recuperando') { Aviso 'A recuperacao do filho nao concluiu. Operacao permanece parada; confira docs/SOCORRO.md.' }
+      exit $rcFilho
+    }
+    $NovaVersaoIniciada = $contexto.fase -eq 'iniciada'
+    throw "O processo da nova versao falhou (codigo $rcFilho)."
+  }
+  exit 0
 }
 
 Etapa 'Conferindo a configuracao privada'
@@ -309,6 +364,7 @@ Ok 'suites de operacao aprovadas'
 
 Etapa 'Religando a operacao'
 $NovaVersaoIniciada = $true
+Gravar-EstadoOperacao $ContextoArquivo @{anterior=$anterior;remoto=$remoto;fase='iniciada'}
 & (Join-Path $Raiz 'INICIAR.bat') | Out-Null
 if ($LASTEXITCODE -ne 0) { Reverter 'Falha ao solicitar o inicio da nova versao.' }
 $url = 'http://127.0.0.1:3000'
@@ -326,6 +382,26 @@ if (-not $noAr) { Reverter 'O Portal nao respondeu depois da atualizacao.' }
 
 Ok "Portal no ar em $url"
 Write-Host "`n=== Atualizado: $($anterior.Substring(0,7)) -> $($remoto.Substring(0,7)) ===" -ForegroundColor Cyan
+Gravar-EstadoOperacao $ContextoArquivo @{anterior=$anterior;remoto=$remoto;fase='concluido'}
 git log -1 --pretty=format:'    %s'
 Write-Host ''
 exit 0
+} catch {
+  $falha = $_
+  if ($CodigoTrocado -and !$Recuperando) {
+    # Se o filho caiu depois de iniciar mas antes de tratar a falha, o pai
+    # restaura tambem o banco. Contexto desconhecido exige a mesma cautela.
+    if (!$JaAtualizado) {
+      try { $NovaVersaoIniciada = (Ler-EstadoOperacao $ContextoArquivo).fase -ne 'codigo' }
+      catch { $NovaVersaoIniciada = $true }
+    }
+    try { Reverter $falha.Exception.Message }
+    catch { Write-Host "RECUPERACAO FALHOU: $($_.Exception.Message). Nao religue antes de conferir docs/SOCORRO.md." -ForegroundColor Red }
+  } elseif ($OperacaoParada -and $OperacaoEstavaAtiva -and !$Recuperando) {
+    # Falha anterior ao merge: codigo/banco ainda sao os originais.
+    & (Join-Path $Raiz 'INICIAR.bat') | Out-Null
+    if ($LASTEXITCODE -ne 0) { Write-Host 'Falhou a retomada da operacao original.' -ForegroundColor Red }
+  }
+  Write-Error $falha.Exception.Message -ErrorAction Continue
+  exit 1
+}
