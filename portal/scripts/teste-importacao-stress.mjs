@@ -162,6 +162,22 @@ try {
     assert.equal((await request('/api/bootstrap')).status,200);
   });
 
+  await check('Entrega diaria aparece na tela e reenvio exige POST autorizado', async()=>{
+    const db=new DatabaseSync(sqlitePath),usuario=query("SELECT id FROM users WHERE role='admin' LIMIT 1")[0].id;
+    try{
+      db.prepare("INSERT INTO daily_report_deliveries(id,user_id,report_date,status,attempts,next_attempt_at,created_at,updated_at,period_start,period_end) VALUES('diario-http',?,'2026-10-06','failed',5,'x','2026-10-06','antes','2026-10-05T20:45:00Z','2026-10-06T20:45:00Z')").run(usuario);
+      const lista=await good('/api/email-notifications?type=relatorio_diario&status=failed');
+      assert.ok(lista.notifications.some(n=>n.id==='diario-http'&&n.deliveryKind==='diario'));
+      assert.equal((await request('/api/daily-report-deliveries/diario-http/retry')).status,404);
+      assert.equal(query("SELECT status FROM daily_report_deliveries WHERE id='diario-http'")[0].status,'failed');
+      assert.equal((await request('/api/daily-report-deliveries/diario-http/retry',{method:'POST',session:''})).status,401);
+      await good('/api/daily-report-deliveries/diario-http/retry',{method:'POST'});
+      assert.equal((await request('/api/daily-report-deliveries/diario-http/retry',{method:'POST'})).status,409);
+      const entrega=query("SELECT status,period_start FROM daily_report_deliveries WHERE id='diario-http'")[0];
+      assert.equal(entrega.status,'pending');assert.equal(entrega.period_start,'2026-10-05T20:45:00Z');
+    }finally{db.exec("DELETE FROM daily_report_deliveries WHERE id='diario-http'");db.close();}
+  });
+
   await check('Edicao antiga de usuario nao restaura permissao revogada', async () => {
     const criado = await good('/api/users', { method: 'POST', body: { name: 'Administrador concorrente', email: 'concorrente@teste.local', password: senha, role: 'admin' } }, 201);
     const antigo = (await good('/api/users')).users.find(u => u.id === criado.id);

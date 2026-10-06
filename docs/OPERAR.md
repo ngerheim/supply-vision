@@ -270,3 +270,13 @@ com o verificador de saúde completa. Depois exige estado recente do supervisor
 e ciclos recentes dos consumidores de e-mail e relatórios, aguardando até um
 minuto para a primeira passagem. Falha aciona a recuperação da atualização.
 Esses sinais provam a partida local; não provam entrega SMTP nem acesso ao Qlik.
+
+### Recuperar entregas de relatório diário
+
+A tela de notificações inclui o tipo **Relatório diário**, com destinatário,
+intervalo coberto, tentativas e erro. O administrador pode filtrar falhas e
+solicitar reenvio após conferir com o destinatário se a mensagem já chegou.
+O reenvio mantém o intervalo original; não altera a janela do próximo relatório.
+O conteúdo é calculado novamente a partir do histórico e do estado atual dos chamados.
+Após restauração de backup ou semente, confira também essas entregas: elas podem
+ter sido marcadas como falha para impedir duplicação automática.

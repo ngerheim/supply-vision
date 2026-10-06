@@ -1,5 +1,6 @@
+import { ENTREGAS_EMAIL_SQL } from '@/lib/entregas-email-sql';
 import { VALIDACAO_ATIVA_SQL } from '@/lib/operacao-validacao';
-import { REENVIAR_NOTIFICACAO_SQL, AUDITAR_REENVIO_SQL } from '@/lib/reenvio-sql';
+import { REENVIAR_NOTIFICACAO_SQL, REENVIAR_RELATORIO_DIARIO_SQL, AUDITAR_REENVIO_SQL } from '@/lib/reenvio-sql';
 import { CRIAR_SESSAO_AUTENTICADA_SQL, MIGRAR_SENHA_AUTENTICADA_SQL } from '@/lib/login-sql';
 import { consultarRelatorios, solicitarRelatorio, cancelarRelatorio } from '@/lib/relatorios-api';
 import { erroExportacaoAuditoria, BUSCA_LITERAL_AUDITORIA_SQL } from '@/lib/auditoria-limites';
@@ -302,6 +303,7 @@ async function POSTInterno(request: NextRequest) {
   if (parts[0] === 'users') return createUser(request, user);
   if (parts[0] === 'tickets' && parts[1] && parts[2] === 'events') return comTravaDoChamado(request, parts[1], () => addTicketEvent(request, user, parts[1]));
   if (parts[0] === 'tickets' && parts.length === 1) return createTicket(request, user);
+  if (parts[0] === 'daily-report-deliveries' && parts[1] && parts[2] === 'retry') return retryEmailNotification(user, parts[1], 'diario');
   if (parts[0] === 'email-notifications' && parts[1] && parts[2] === 'retry') return retryEmailNotification(user, parts[1]);
   if (parts[0] === 'imports' && parts[1] === 'agreement' && parts[2]) return importWorkbook(request, user, parts[2]);
   if (parts[0] === 'reports') {if(user.role!=='admin')return denyWrite(request,'Somente administradores podem executar relatórios.');return solicitarRelatorio(await jsonBody(request),user.id);}
@@ -1387,7 +1389,7 @@ async function exportAudit(params: URLSearchParams){
 
 async function emailNotificationList(params:URLSearchParams){
   const {where,values,page:requestedPage,pageSize}=filtrosNotificacoes(params);
-  const join='FROM email_notifications e JOIN tickets t ON t.id=e.ticket_id';
+  const join=`FROM ${ENTREGAS_EMAIL_SQL}`;
   const stats=await first<{total:number;pending:number;processing:number;sent:number;failed:number}>(`SELECT COUNT(*) total,
     SUM(CASE WHEN e.status='pending' THEN 1 ELSE 0 END) pending,
     SUM(CASE WHEN e.status='processing' THEN 1 ELSE 0 END) processing,
@@ -1396,21 +1398,22 @@ async function emailNotificationList(params:URLSearchParams){
   const total=Number(stats?.total||0),pageCount=Math.max(1,Math.ceil(total/pageSize)),page=Math.min(requestedPage,pageCount);
   const notifications=await all(`SELECT e.id,e.type,e.recipient_name AS recipientName,e.recipient_email AS recipientEmail,e.status,e.attempts,
     e.next_attempt_at AS nextAttemptAt,e.sent_at AS sentAt,e.last_error AS lastError,e.created_at AS createdAt,
-    t.code AS ticketCode,t.supplier_name AS supplierName ${join} ${where} ORDER BY e.created_at DESC,e.id DESC LIMIT ? OFFSET ?`,[...values,pageSize,(page-1)*pageSize]);
+    e.ticket_code AS ticketCode,e.supplier_name AS supplierName,e.delivery_kind AS deliveryKind,e.period_start AS periodStart,e.period_end AS periodEnd ${join} ${where} ORDER BY e.created_at DESC,e.id DESC LIMIT ? OFFSET ?`,[...values,pageSize,(page-1)*pageSize]);
   return {stats,notifications,total,page,pageCount,pageSize};
 }
 
-async function retryEmailNotification(user:User,notificationId:string){
+async function retryEmailNotification(user:User,notificationId:string,kind:'notificacao'|'diario'='notificacao'){
+  const tabela=kind==='diario'?'daily_report_deliveries':'email_notifications';
   if(user.role!=='admin') return fail('Somente administradores podem reenviar notificações.',403);
-  const notification=await first<{id:string;status:string;updated_at:string;attempts:number}>('SELECT id,status,updated_at,attempts FROM email_notifications WHERE id=?',[notificationId]);
+  const notification=await first<{id:string;status:string;updated_at:string;attempts:number}>(`SELECT id,status,updated_at,attempts FROM ${tabela} WHERE id=?`,[notificationId]);
   if(!notification) return fail('Notificação não encontrada.',404);
   if(notification.status==='sent') return fail('Esta notificação já foi enviada.',409);
   if(notification.status==='processing') return fail('Esta notificação está sendo enviada. Atualize a lista antes de tentar novamente.',409);
   if(notification.status!=='failed') return fail('Somente notificações com falha podem ser reenviadas manualmente.',409);
   const timestamp=now();
   const resultados=await rawDb().batch([
-    rawDb().prepare(REENVIAR_NOTIFICACAO_SQL).bind(timestamp,timestamp,notificationId,notification.updated_at,notification.attempts),
-    rawDb().prepare(AUDITAR_REENVIO_SQL).bind(id('aud'),user.id,'RETRY','email_notification',notificationId,'Reenvio de notificação solicitado',timestamp),
+    rawDb().prepare(kind==='diario'?REENVIAR_RELATORIO_DIARIO_SQL:REENVIAR_NOTIFICACAO_SQL).bind(timestamp,timestamp,notificationId,notification.updated_at,notification.attempts),
+    rawDb().prepare(AUDITAR_REENVIO_SQL).bind(id('aud'),user.id,'RETRY',kind==='diario'?'daily_report_delivery':'email_notification',notificationId,'Reenvio de notificação solicitado',timestamp),
   ]);
   if(!resultados[0].meta.changes) return fail('A entrega mudou. Atualize a lista antes de tentar novamente.',409);
   return ok({success:true});
