@@ -286,3 +286,8 @@ A validação operacional confere Python 3.12 ou superior, os quatro filtros
 e os cabeçalhos e correspondências dos CSVs de parâmetros. Ela não acessa
 Qlik ou SMTP e não atualiza o arquivo de contagens. Arquivos inválidos
 impedem a partida, com indicação do parâmetro que precisa ser reparado.
+
+A limpeza atua apenas sobre planilhas, CSV, previews `.eml`, logs e saídas
+`saida_rodar_*.txt` com timestamp. Registros de slots agendados com entrega
+confirmada ficam por 30 dias; entregas incertas/parciais e registros manuais
+são preservados para conferência.

@@ -35,6 +35,7 @@ def arvore(tmp_path, monkeypatch):
     for p in (logs, diarios / "com_acordo", diarios / "sem_acordo",
               historicos / "legado"):
         p.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr(sv_paths, "OPERACAO", tmp_path)
     monkeypatch.setattr(sv_paths, "LOG_DIR", logs)
     monkeypatch.setattr(sv_paths, "RELATORIOS_DIARIOS", diarios)
     monkeypatch.setattr(sv_paths, "RELATORIOS_HISTORICOS", historicos)
@@ -127,3 +128,21 @@ def test_execucao_real_apaga_os_mesmos_alvos_do_dry_run(arvore):
     assert alvo.exists()
     limpeza.limpar(dry_run=False)
     assert not alvo.exists()
+
+
+def test_extensao_desconhecida_e_estado_incerto_sao_preservados(arvore):
+    import json
+    antigo = ts(timedelta(days=40))
+    arquivo = criar(arvore["diarios"], f"config_{antigo}.env")
+    estados = sv_paths.OPERACAO / "estado-envios"; estados.mkdir()
+    atualizado = (datetime.now() - timedelta(days=40)).isoformat()
+    for estado, nome in [("enviado", "2026-01-01_0800.json"), ("incerto", "2026-01-01_1100.json"), ("parcial", "2026-01-01_1400.json"), ("enviado", "manual.json")]:
+        (estados / nome).write_text(json.dumps({"estado": estado, "atualizado": atualizado}))
+    limpeza.limpar(dry_run=True)
+    assert (estados / "2026-01-01_0800.json").exists()
+    limpeza.limpar(dry_run=False)
+    assert arquivo.exists()
+    assert not (estados / "2026-01-01_0800.json").exists()
+    assert (estados / "2026-01-01_1100.json").exists()
+    assert (estados / "2026-01-01_1400.json").exists()
+    assert (estados / "manual.json").exists()
