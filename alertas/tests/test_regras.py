@@ -38,6 +38,24 @@ def com_vigencia(df, inicio="18/09/2026", fim=None, status="active"):
     return df
 
 
+def test_preco_compra_nao_finito_em_excel_vai_para_quarentena(rodar, tmp_path):
+    compras = base(qtd=6, preco=10)
+    compras['Fornecedor CNPJ'] = '1'
+    compras['Valor Unitario'] = ['inf', '-inf', '1e309', 'ilegivel', '', '10']
+    arquivo = tmp_path / 'precos.xlsx'
+    compras.to_excel(arquivo, index=False)
+    carregada = rodar.carregar_base(arquivo)
+    assert len(carregada) == 6
+    acordos = acordo([10])
+    acordos['_fornec_norm'] = carregada['_fornec_norm'].iloc[0]
+    resultado = rodar.processar(carregada, acordos)
+    assert resultado['Status'].tolist() == [rodar.STATUS_PRECO_COMPRA_INVALIDO] * 5 + ['CONFORME']
+    assert resultado.loc[0, 'Motivo Sem Acordo'] == rodar.MOTIVO_PRECO_COMPRA_INVALIDO
+    assert rodar.resumir_status(resultado)['total_quarentena'] == 5
+    for coluna in resultado.select_dtypes(include='number'):
+        assert not np.isinf(resultado[coluna]).any(), coluna
+
+
 def test_antes_do_corte_vale_a_tabela_atual_so_com_ativos(rodar):
     compras = base(preco=10)
     compras["Data Abertura"] = "17/09/2026"
