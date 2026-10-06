@@ -28,7 +28,7 @@ Importações, Cadastros e De/Para. Administrador vê todos os grupos.
 | Operação | Resultado |
 |---|---|
 | Gerar e enviar relatório | Pipeline diário, com os destinatários configurados; só envia quando há divergências ou pendências |
-| Recorte histórico | Datas inicial/final inclusivas e um e-mail informado; envio somente para esse endereço |
+| Recorte histórico | Datas inclusivas em DD/MM/AAAA; arquivo para download por 24 horas, sem e-mail |
 
 A fila aceita até cinco pedidos aguardando, além de uma execução ativa. Fechar
 o navegador não cancela a tarefa. A atualização automática consulta a cada cinco
@@ -45,10 +45,22 @@ já pode ter aceitado o e-mail. Pedidos na fila antes de reiniciar o serviço
 parâmetros** para conferir e fazer uma nova solicitação; nenhum backup é alterado. Só há download de arquivos da própria execução;
 a limpeza pode torná-los indisponíveis após a retenção.
 
-O recorte não usa destinatários ou Cco do relatório diário. Sem dados elegíveis,
+O recorte nunca envia e-mail. Sem dados elegíveis,
 nenhum arquivo/e-mail é produzido. A comparação usa os acordos disponíveis no
 Portal na execução e a regra de vigência configurada; não reconstrói uma tabela
 antiga de preços. Períodos longos podem levar vários minutos.
+
+Itens e modelos extraídos do Qlik são padronizados conforme o De/Para dos
+Alertas para reduzir ruídos. Os campos do recorte sempre exibem DD/MM/AAAA,
+independentemente do idioma do navegador.
+
+Cada histórico fica disponível por **24 horas a partir da gravação do arquivo**.
+A aba mostra a data e hora de expiração (Brasília) junto ao download. Após o
+prazo, mostra **Arquivo expirado** e bloqueia o download, inclusive por link direto.
+O serviço verifica arquivos vencidos a cada minuto e os exclui, mantendo o
+registro da execução. Essa retenção continua no modo manutenção; se a operação
+estiver parada, a exclusão retoma quando o serviço for iniciado. Pedidos antigos
+sem validade por arquivo usam a conclusão da execução como referência.
 
 O supervisor inicia `portal/scripts/processar-relatorios.mjs`. Ele acessa o
 SQLite local e executa o Python instalado em `alertas/.venv`. A ponte de arquivos
@@ -59,7 +71,8 @@ altera a porta interna (1024–65535); reinicie a operação depois de mudar.
 O serviço é local e não acompanha automaticamente uma futura migração para nuvem.
 
 A limpeza não move para archive: planilhas, CSV e prévias são apagados após 24
-horas, logs após cinco dias, pela data de geração no nome. Arquivos sem timestamp
+horas, logs após cinco dias. Históricos usam a data de gravação; os demais arquivos
+usam o timestamp no nome. Arquivos sem timestamp
 reconhecido permanecem intocados. Os registros da aba guardam até 64 mil caracteres
 por tarefa, e a lista apresenta as últimas 100 execuções.
 
@@ -72,6 +85,12 @@ login; a expiração por inatividade é de duas horas, com duração máxima de 
 
 As listas tabulares usam a mesma altura (60% da janela, com mínimo de 16 rem),
 rolagem interna e cabeçalho fixo. Filtros e paginação continuam fora da área rolável.
+
+O Histórico e sua exportação Excel exibem campos alterados com nomes e valores
+legíveis, por exemplo **Preço: R$ 2.028,00 → R$ 2.000,00**. Os registros JSON
+originais continuam preservados no banco e no backup. Para registros antigos,
+os nomes vêm dos cadastros disponíveis hoje; cadastros excluídos são indicados
+como **Cadastro não disponível**, sem mostrar identificadores internos.
 
 **Validar configuração** confere arquivos/chaves obrigatórios, parâmetros da
 agenda, programas, build e escrita nas pastas privadas. Não testa autenticação
@@ -202,7 +221,7 @@ quem mantém o relatório. Ele não é o nome visível da página; é um código
 
 ## Execução paralela
 
-Use `alertas\executar.bat paralelo` para suporte. Essa opção não aparece no Portal. Os
+Para suporte, a partir de `alertas/`, use `.venv\Scripts\python.exe processo\pipeline.py --sem-envio`. Os
 relatórios saem normalmente, a mensagem fica em
 `privado/alertas/relatorios/diarios/previews-email` e nenhuma conexão SMTP é
 aberta. Útil para conferir o conteúdo antes de um envio real.

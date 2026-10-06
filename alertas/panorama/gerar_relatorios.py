@@ -9,7 +9,7 @@ sincronizados com o pipeline diário.
 Consequência do acoplamento: se as assinaturas dessas funções mudarem no
 rodar.py, este script quebra — ajustar aqui.
 
-Retorna o caminho do arquivo atual; executar.py faz o envio opcional.
+Retorna o caminho do arquivo atual, para download pelo Portal.
 Saída em privado/alertas/relatorios/historicos, nomeada com o período e execução.
 """
 
@@ -53,7 +53,7 @@ def _verificar_base():
     rotulado com um período e preenchido com dados de outro."""
     if not pathlib.Path(BASE_PATH).exists():
         print('ERRO: dados\\base_periodo.xlsx não existe.')
-        print('      Rode `executar.bat recorte` primeiro.')
+        print('      Solicite um recorte em Portal → Relatórios primeiro.')
         sys.exit(1)
     try:
         meta  = pathlib.Path(META_PATH).read_text(encoding='utf-8')
@@ -62,12 +62,12 @@ def _verificar_base():
         if (_parse(i), _parse(f)) != (_parse(DATA_INICIO), _parse(DATA_FIM)):
             print(f'ERRO: a base baixada é do período {i} a {f},')
             print(f'      mas o pedido é {DATA_INICIO} a {DATA_FIM}.')
-            print('      Rode `executar.bat recorte` para baixar o período novo.')
+            print('      Solicite um novo recorte em Portal → Relatórios.')
             sys.exit(1)
     except (FileNotFoundError, StopIteration, ValueError, IndexError):
         print('ERRO: não foi possível validar o período da base baixada')
         print('      (dados\\base_periodo.info.txt ausente ou ilegível).')
-        print('      Rode `executar.bat recorte` para baixar de novo com validação.')
+        print('      Solicite um novo recorte em Portal → Relatórios para validar.')
         sys.exit(1)
 
 

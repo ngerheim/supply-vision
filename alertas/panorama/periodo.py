@@ -1,7 +1,7 @@
 """
 Resolve e valida o período do recorte.
 
-O período vem dos argumentos --inicio e --fim, passados pelo executar.bat.
+O período vem dos argumentos --inicio e --fim, passados pelo Portal.
 
 Um período mal formado que chegasse ao Qlik viraria seleção vazia, e o
 relatório sairia sem linhas nenhuma sem explicar por quê.

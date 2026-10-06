@@ -20,8 +20,8 @@ migrado para um servidor dedicado.
 Abra **`Supply Vision.bat`** para iniciar, parar e atualizar a operação, validar
 configuração e conferir backups. Acesse o Portal pelo endereço da instalação.
 Administradores executam os relatórios e recortes históricos na aba **Relatórios**,
-com destinatário informado, acompanhamento e download. `alertas/executar.bat`
-continua disponível para suporte. Veja [o guia de operação](docs/OPERAR.md).
+com acompanhamento e download. Recortes não enviam e-mail e seus arquivos
+expiram após 24 horas. Veja [o guia de operação](docs/OPERAR.md).
 
 ## Os três verbos
 
