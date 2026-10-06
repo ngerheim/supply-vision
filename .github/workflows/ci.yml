@@ -5,6 +5,11 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  # Semanal mesmo sem commits: npm audit e pip-audit acusam vulnerabilidades
+  # novas em dependencias que ja estao em uso.
+  schedule:
+    - cron: '17 10 * * 1'   # segunda, 07:17 em Brasilia
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -14,6 +19,31 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  powershell:
+    name: PowerShell
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # Windows PowerShell 5.1, o mesmo do servidor. Um erro de sintaxe no
+      # atualizador ou no supervisor so apareceria no servidor.
+      - name: Analise sintatica dos scripts
+        shell: powershell
+        run: |
+          $falhas = 0
+          Get-ChildItem -Recurse -Filter *.ps1 -File | Where-Object { $_.FullName -notmatch '\\node_modules\\' } | ForEach-Object {
+            $erros = $null
+            [void][System.Management.Automation.Language.Parser]::ParseFile($_.FullName, [ref]$null, [ref]$erros)
+            foreach ($e in $erros) { Write-Host "::error file=$($_.FullName),line=$($e.Extent.StartLineNumber)::$($e.Message)"; $falhas++ }
+          }
+          if ($falhas) { exit 1 }
+      - name: PSScriptAnalyzer (erros)
+        shell: powershell
+        run: |
+          Install-Module PSScriptAnalyzer -RequiredVersion 1.25.0 -Scope CurrentUser -Force
+          $achados = @(Invoke-ScriptAnalyzer -Path . -Recurse -Severity Error)
+          $achados | Format-Table -AutoSize RuleName, ScriptName, Line, Message | Out-String -Width 300 | Write-Host
+          if ($achados.Count) { exit 1 }
+
   portal:
     name: Portal
     runs-on: ubuntu-latest
@@ -112,6 +142,8 @@ jobs:
         run: |
           pip install -r alertas/config/requirements-ci.txt
           pip-audit -r alertas/config/requirements.txt
+      - name: Lint Python (ruff)
+        run: ruff check alertas
       - name: Preparar configuração fictícia
         shell: pwsh
         run: |
