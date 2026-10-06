@@ -1,5 +1,6 @@
 import { consultarRelatorios, solicitarRelatorio, cancelarRelatorio } from '@/lib/relatorios-api';
 import { erroExportacaoAuditoria, BUSCA_LITERAL_AUDITORIA_SQL } from '@/lib/auditoria-limites';
+import { detalhesHistorico, referenciasHistorico, rotuloAcaoHistorico, rotuloEntidadeHistorico } from '@/lib/historico-legivel';
 import { paginaSolicitada } from '@/lib/paginacao';
 import { filtrosNotificacoes } from '@/lib/filtros-notificacoes';
 import { condicoesBusca } from '@/lib/filtros-busca';
@@ -1287,6 +1288,7 @@ async function importDetail(importId:string){
   return ok({...detail,summary});
 }
 async function auditList(params?: URLSearchParams, exportAll=false){
+  type AuditLog = { id: string; action: string; entity: string; entityId: string | null; details: string | null; createdAt: string; user: string | null; userEmail: string | null; userId: string | null };
   const values:unknown[]=[], conditions:string[]=[];
   const userId=params?.get('user'); if(userId){conditions.push('l.user_id=?');values.push(userId)}
   const action=params?.get('action'); if(action){conditions.push('l.action=?');values.push(action)}
@@ -1306,13 +1308,25 @@ async function auditList(params?: URLSearchParams, exportAll=false){
   const page=Math.min(requestedPage,pageCount);
   const offset=(page-1)*pageSize;
 
-  const logs=await all(`SELECT l.id,l.action,l.entity,l.entity_id AS entityId,l.details,l.created_at AS createdAt,u.name AS user,u.email AS userEmail,l.user_id AS userId FROM audit_logs l LEFT JOIN users u ON u.id=l.user_id ${where} ORDER BY l.created_at DESC,l.id DESC ${exportAll?'':`LIMIT ${pageSize} OFFSET ${offset}`}`, values);
-  return { logs, total, page, pageSize, pageCount };
+  const logs=await all<AuditLog>(`SELECT l.id,l.action,l.entity,l.entity_id AS entityId,l.details,l.created_at AS createdAt,u.name AS user,u.email AS userEmail,l.user_id AS userId FROM audit_logs l LEFT JOIN users u ON u.id=l.user_id ${where} ORDER BY l.created_at DESC,l.id DESC ${exportAll?'':`LIMIT ${pageSize} OFFSET ${offset}`}`, values);
+  const referencias = referenciasHistorico(logs.map(r => r.details));
+  const fontes = [
+    ['catalog_item_id', 'catalog_items', 'name'], ['vehicle_model_id', 'vehicle_models', 'name'],
+    ['location_id', 'locations', "city||' / '||state"], ['unit_id', 'units', 'code'],
+    ['supplier_id', 'suppliers', 'trade_name'], ['agreementId', 'agreements', 'number'],
+  ] as const;
+  const nomes: Record<string, string> = {};
+  await Promise.all(fontes.map(async ([campo, tabela, coluna]) => {
+    if (!referencias[campo]?.length) return;
+    const rows = await all(`SELECT id,${coluna} AS nome FROM ${tabela} WHERE id IN (SELECT value FROM json_each(?))`, [JSON.stringify(referencias[campo])]);
+    for (const row of rows) nomes[`${campo}:${row.id}`] = String(row.nome);
+  }));
+  return { logs: logs.map(r => ({ ...r, detailsText: detalhesHistorico(r.details, nomes) })), total, page, pageSize, pageCount };
 }
 
 async function exportAudit(params: URLSearchParams){
   const {logs}=await auditList(params,true);
-  const sheet=XLSX.utils.aoa_to_sheet([['Quando','Usuario','Email','Acao','Registro','ID do registro','Detalhes'],...logs.map(r=>[r.createdAt,r.user||'Sistema',r.userEmail||'',r.action,r.entity,r.entityId||'',r.details])]);
+  const sheet=XLSX.utils.aoa_to_sheet([['Quando','Usuario','Email','Acao','Registro','ID do registro','Detalhes'],...logs.map(r=>[r.createdAt,r.user||'Sistema',r.userEmail||'',rotuloAcaoHistorico(r.action),rotuloEntidadeHistorico(r.entity),r.entityId||'',r.detailsText])]);
   sheet['!cols']=[24,28,36,16,24,40,80].map(wch=>({wch}));
   sheet['!autofilter']={ref:`A1:G${logs.length+1}`};
   const workbook=XLSX.utils.book_new();XLSX.utils.book_append_sheet(workbook,sheet,'Historico');
