@@ -6,7 +6,6 @@ import json
 import logging
 import os
 import secrets
-import msvcrt
 from datetime import datetime
 
 
@@ -61,7 +60,7 @@ def rodar_script(caminho, nome, args=None):
             cmd, capture_output=True, text=True, encoding="utf-8", errors="replace",
             env={**os.environ, "PYTHONUTF8": "1", "PYTHONDONTWRITEBYTECODE": "1",
                  "SUPPLY_VISION_RUN_ID": RUN_ID},
-            creationflags=0x08000000, timeout=PIPELINE_TIMEOUT_S
+            creationflags=0x08000000 if os.name == "nt" else 0, timeout=PIPELINE_TIMEOUT_S
         )
     except subprocess.TimeoutExpired as e:
         logging.error(f"ERRO em '{nome}': excedeu o timeout de {PIPELINE_TIMEOUT_S}s")
@@ -132,6 +131,8 @@ def extrair_qualidade(output):
 
 def adquirir_lock():
     """Mantém um lock exclusivo do Windows até o processo terminar."""
+    import msvcrt
+
     global _lock_handle
     sv_paths.LOG_DIR.mkdir(parents=True, exist_ok=True)
     _lock_handle = open(LOCK_PATH, "a+b")

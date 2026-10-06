@@ -20,31 +20,43 @@ def pytest_configure(config):
     erro de setup em todos os testes. Agora cada execucao tem a sua, e se a
     area nao estiver utilizavel o pytest volta ao comportamento padrao.
     """
-    if config.option.basetemp is not None:
-        return
     import os
     import shutil
-    import time
+    import tempfile
 
-    raiz = RAIZ / "privado" / "testes-temp"
-    try:
-        raiz.mkdir(parents=True, exist_ok=True)
-        pasta = raiz / f"pytest-alertas-{os.getpid()}-{int(time.time())}"
-        pasta.mkdir()
-    except OSError:
-        return  # sem acesso: o pytest usa o TEMP do perfil
+    # A suite usa apenas exemplos; nunca le configuracao empresarial do host.
+    raiz = ROOT / "work" / "testes-temp"
+    raiz.mkdir(parents=True, exist_ok=True)
+    pasta = Path(tempfile.mkdtemp(prefix="sv-pytest-", dir=raiz))
+    config._sv_pasta = pasta
+    config._sv_ambiente = {k: os.environ.get(k) for k in
+                          ("SUPPLY_VISION_PRIVADO", "SUPPLY_VISION_PARAMETROS_DIR")}
+    os.environ["SUPPLY_VISION_PRIVADO"] = str(pasta / "privado")
+    os.environ.pop("SUPPLY_VISION_PARAMETROS_DIR", None)
+    privado = pasta / "privado"
+    for origem, destino in [
+        (RAIZ / "compartilhado/smtp.env.example", privado / "comum/smtp.env"),
+        *[(ROOT / "config" / f"{nome}.exemplo.txt", privado / "alertas/config" / f"{nome}.txt")
+          for nome in ("cfg_ambiente", "cfg_qlik", "destinatarios")],
+        *[(origem, privado / "alertas/parametros" / origem.parent.name /
+           origem.name.replace(".exemplo", "")) for origem in (ROOT / "parametros").rglob("*.exemplo.*")],
+    ]:
+        destino.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(origem, destino)
+    if config.option.basetemp is None:
+        config.option.basetemp = str(pasta / "casos")
 
-    # Restos de execucoes anteriores, sem deixar que uma pasta travada
-    # atrapalhe a execucao atual.
-    limite = time.time() - 24 * 3600
-    for antiga in raiz.glob("pytest-alertas*"):
-        try:
-            if antiga != pasta and antiga.stat().st_mtime < limite:
-                shutil.rmtree(antiga, ignore_errors=True)
-        except OSError:
-            pass
 
-    config.option.basetemp = str(pasta)
+def pytest_unconfigure(config):
+    import os
+    import shutil
+    for chave, valor in getattr(config, "_sv_ambiente", {}).items():
+        if valor is None:
+            os.environ.pop(chave, None)
+        else:
+            os.environ[chave] = valor
+    if hasattr(config, "_sv_pasta"):
+        shutil.rmtree(config._sv_pasta, ignore_errors=True)
 
 
 @pytest.fixture

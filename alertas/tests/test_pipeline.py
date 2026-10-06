@@ -7,9 +7,6 @@ from pathlib import Path
 
 import pytest
 
-# pipeline.py importa msvcrt (lock do Windows): fora do Windows, pular.
-pytestmark = pytest.mark.skipif(sys.platform != "win32", reason="pipeline.py depende de msvcrt (Windows)")
-
 
 ROOT = Path(__file__).resolve().parents[1]
 
