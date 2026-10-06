@@ -206,6 +206,7 @@ if ($LASTEXITCODE -ne 0 -or $branch -ne 'main') { throw 'O servidor deve estar n
 $anterior = git rev-parse --verify HEAD
 if ($LASTEXITCODE -ne 0) { throw 'Nao foi possivel identificar a versao atual.' }
 $anterior = $anterior.Trim()
+Validar-PythonAlertas $Python
 Ok "versao atual: $($anterior.Substring(0,7))  $(git log -1 --pretty=format:'%s')"
 
 if ($JaAtualizado) {

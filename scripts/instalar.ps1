@@ -1,4 +1,4 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param([switch]$SomenteVerificar,[switch]$SemTestes,[switch]$SemBuild)
 $ErrorActionPreference='Stop'
 $Raiz=(Resolve-Path (Join-Path $PSScriptRoot '..')).Path
@@ -55,8 +55,10 @@ function Rodar([string]$exe,[string[]]$Argumentos,[string]$pasta){
 Etapa 'Verificando a estrutura'
 foreach($c in @($Portal,$Alertas,(Join-Path $Portal 'package-lock.json'),(Join-Path $Alertas 'config\requirements.txt'))){if(!(Test-Path -LiteralPath $c)){throw "Item obrigatorio ausente: $c"}}
 $Node=Comando 'node.exe' 'OpenJS.NodeJS.LTS' 'Node.js'; $Python=Comando 'python.exe' 'Python.Python.3.12' 'Python'
-Versao $Node ([version]'22.13.0') 'Node.js'; Versao $Python ([version]'3.11.0') 'Python'
+Versao $Node ([version]'22.13.0') 'Node.js'; Versao $Python ([version]'3.12.0') 'Python'
 $Npm=Join-Path (Split-Path $Node) 'npm.cmd'; if(!(Test-Path $Npm)){$Npm=Comando 'npm.cmd' 'OpenJS.NodeJS.LTS' 'npm'}
+$PyExistente=Join-Path $Alertas '.venv\Scripts\python.exe'
+if(Test-Path -LiteralPath $PyExistente){Validar-PythonAlertas $PyExistente}
 if($SomenteVerificar){Write-Host 'Estrutura e requisitos verificados. Nenhum arquivo foi alterado.' -ForegroundColor Green; exit 0}
 Etapa 'Preparando a area privada sem sobrescrever dados'
 @('comum','portal\backups','portal\banco\estado','portal\configuracao','portal\logs','alertas\config','alertas\dados','alertas\logs','alertas\parametros\de_para','alertas\parametros\filtros','alertas\relatorios\diarios','alertas\relatorios\historicos')|ForEach-Object{New-Item -ItemType Directory -Force (Join-Path $Privado $_)|Out-Null}

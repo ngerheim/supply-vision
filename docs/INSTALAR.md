@@ -83,3 +83,14 @@ confira **Portal → Relatórios → Pronto para executar** com um administrador
 
 Reinicie a máquina e confirme que o Portal sobe sozinho, sem clique e sem
 janela de console sobrando. Só depois considere a instalação concluída.
+
+## Versao minima do Python e ambientes antigos
+
+Os Alertas exigem **Python 3.12 ou superior**, inclusive em `alertas/.venv`.
+Python 3.11 não instala as dependências atuais. O instalador recusa esse ambiente
+antes de preparar arquivos privados, e o atualizador confere o venv antes de parar.
+
+Para uma instalação antiga: instale Python 3.12+, pare a operação, renomeie
+`alertas/.venv` para uma cópia de segurança e execute `INSTALAR.bat` usando o novo
+Python no PATH. Confira a validação e os testes antes de retomar. Não mova ou
+apague `privado/`: banco, configurações e histórico ficam nessa pasta.
