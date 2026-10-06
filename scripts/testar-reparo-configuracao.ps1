@@ -13,7 +13,9 @@ function Ok([string]$t) {}
 function Aviso([string]$t) { $avisos.Add($t) }
 
 $Raiz = Join-Path ([IO.Path]::GetTempPath()) ('sv-reparo-' + [guid]::NewGuid().ToString('N'))
+$privadoAnterior = $env:SUPPLY_VISION_PRIVADO
 try {
+  $env:SUPPLY_VISION_PRIVADO = Join-Path $Raiz 'privado'
   foreach ($d in @('portal', 'compartilhado', 'privado\portal\configuracao', 'privado\comum')) {
     New-Item -ItemType Directory -Force (Join-Path $Raiz $d) | Out-Null
   }
@@ -56,6 +58,8 @@ try {
   if (-not $erro) { throw 'Configuracao privada ausente deveria interromper a atualizacao.' }
   Write-Host '[OK] configuracao privada ausente e denunciada'
 } finally {
+  $env:SUPPLY_VISION_PRIVADO = $privadoAnterior
+  if (![IO.Path]::GetFullPath($Raiz).StartsWith([IO.Path]::GetFullPath([IO.Path]::GetTempPath()), [StringComparison]::OrdinalIgnoreCase)) { throw 'Raiz de teste fora da pasta temporaria.' }
   Remove-Item -LiteralPath $Raiz -Recurse -Force -ErrorAction SilentlyContinue
 }
 

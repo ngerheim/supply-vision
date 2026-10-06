@@ -1,7 +1,7 @@
 $ErrorActionPreference='Stop'
 $raizReal=(Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $temp=Join-Path $env:TEMP ('supply-vision-supervisor-'+[guid]::NewGuid().ToString('N'))
-$processos=@();$pathAnterior=$env:Path
+$processos=@();$pathAnterior=$env:Path;$privadoAnterior=$env:SUPPLY_VISION_PRIVADO
 function Remover-DiretorioTemporario([string]$Caminho){
  $alvoSeguro=[IO.Path]::GetFullPath($Caminho);$baseSegura=[IO.Path]::GetFullPath([IO.Path]::GetTempPath()).TrimEnd('\')+'\'
  if(!$alvoSeguro.StartsWith($baseSegura,[StringComparison]::OrdinalIgnoreCase)-or!(Split-Path $alvoSeguro -Leaf).StartsWith('supply-vision-supervisor-')){throw 'Diretorio de teste fora da raiz temporaria.'}
@@ -33,6 +33,7 @@ try{
  [IO.File]::WriteAllText("$temp\privado\alertas\config\cfg_ambiente.txt","QLIK_TENANT=x`r`nQLIK_APP_ID=x`r`nQLIK_OBJ_ID=x`r`nDESTINATARIO_ALERTA=x")
  [IO.File]::WriteAllText("$temp\privado\comum\operacao.env","ALERTAS_HORARIOS=00:00`r`nBACKUP_HORARIOS=00:00`r`nLIMPEZA_HORARIO=00:00`r`nESPACO_MINIMO_GB=1")
  $data=Get-Date -Format yyyy-MM-dd;@{"alertas-$data-00:00"='ok';"backup-$data-00:00"='ok';"limpeza-$data-00:00"='ok'}|ConvertTo-Json|Set-Content "$temp\privado\operacao\estado.json"
+ $env:SUPPLY_VISION_PRIVADO=Join-Path $temp 'privado'
  $env:Path="$temp\bin;$pathAnterior";$args=@('-NoProfile','-ExecutionPolicy','Bypass','-File',"$temp\scripts\supervisor.ps1")
  $a=Start-Process powershell.exe -ArgumentList $args -PassThru -WindowStyle Hidden;$b=Start-Process powershell.exe -ArgumentList $args -PassThru -WindowStyle Hidden;$processos=@($a,$b)
  Start-Sleep 4;$vivos=@($processos|Where-Object{!$_.HasExited});if($vivos.Count-ne1){throw "Lock falhou: $($vivos.Count) instancias ativas."}
@@ -44,4 +45,4 @@ try{
  $status=Get-Content $statusPath -Raw|ConvertFrom-Json;if(!$status.portal-or!$status.emails-or!$status.relatorios){throw 'Supervisor nao iniciou os processos simulados.'}
  New-Item -ItemType File -Force "$temp\privado\operacao\parar.sinal"|Out-Null;$vivos[0].WaitForExit(25000)|Out-Null;if(!$vivos[0].HasExited){throw 'Supervisor nao encerrou.'}
  Write-Host 'Supervisor isolado: concorrencia, estado e encerramento aprovados.' -ForegroundColor Green
-}finally{$env:Path=$pathAnterior;foreach($p in $processos){if($p-and!$p.HasExited){& taskkill.exe /PID $p.Id /T /F 2>$null|Out-Null}};if(Test-Path $temp){Remover-DiretorioTemporario $temp}}
+}finally{$env:Path=$pathAnterior;$env:SUPPLY_VISION_PRIVADO=$privadoAnterior;foreach($p in $processos){if($p-and!$p.HasExited){& taskkill.exe /PID $p.Id /T /F 2>$null|Out-Null}};if(Test-Path $temp){Remover-DiretorioTemporario $temp}}

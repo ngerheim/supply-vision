@@ -440,7 +440,7 @@ try {
       fixture.exec(`CREATE TRIGGER teste_falha_auditoria BEFORE INSERT ON audit_logs WHEN NEW.action='IMPORT'
         BEGIN SELECT RAISE(ABORT, 'falha sintetica na auditoria'); END`);
       for (const route of [replace]) {
-        const result = await rejected(file([row({ PRECO: 999 })], { name: 'falha-auditoria' }), route);
+        const result = await rejected(file([row({ PRECO: 999 })], { name: 'falha-auditoria' }), route, 500);
         assert.equal(query('SELECT status FROM imports WHERE id=?', result.data.importId)[0].status, 'error');
       }
     } finally {
