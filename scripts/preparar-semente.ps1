@@ -68,6 +68,10 @@ try {
   $concluida = $true
 } finally {
   if (-not $concluida) { Remove-Item $zip -Force -ErrorAction SilentlyContinue }
+  $tempSeguro = [IO.Path]::GetFullPath($temp)
+  $raizTemporaria = [IO.Path]::GetFullPath($env:TEMP).TrimEnd('\') + '\'
+  if (-not $tempSeguro.StartsWith($raizTemporaria, [StringComparison]::OrdinalIgnoreCase)) { throw 'Pasta de semente fora da raiz temporaria.' }
+  if (Test-Path -LiteralPath $tempSeguro) { Remove-Item -LiteralPath $tempSeguro -Recurse -Force -ErrorAction Stop }
 }
 
 $tam = (Get-Item $zip).Length / 1KB
