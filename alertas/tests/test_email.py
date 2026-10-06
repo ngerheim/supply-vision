@@ -85,17 +85,6 @@ def test_corpo_nao_traz_mais_a_analise(monkeypatch, tmp_path):
     assert len(corpo.strip().splitlines()) == 1
 
 
-def test_avisos_sao_de_uma_linha(monkeypatch, tmp_path):
-    mod = carregar_email(monkeypatch, tmp_path)
-    assunto, corpo = mod.montar_aviso("SEM_DADOS_QLIK", ["01/08/2026"])
-    assert "Sem dados no Qlik" in assunto
-    assert corpo.strip() == "Não havia dados no Qlik para 01/08/2026."
-
-    assunto, corpo = mod.montar_aviso("SEM_DADOS_FILTRO", ["01/08/2026"])
-    assert "Nada dentro dos filtros" in assunto
-    assert corpo.strip() == "Não havia nada dentro dos filtros para 01/08/2026."
-
-
 def test_modo_sem_envio_salva_preview_sem_abrir_smtp(monkeypatch, tmp_path):
     mod = carregar_email(monkeypatch, tmp_path)
     monkeypatch.setenv("SUPPLY_VISION_SEM_ENVIO", "1")
@@ -152,3 +141,31 @@ def test_corpo_preserva_resumo_antigo_sem_alerta(monkeypatch, tmp_path):
         corpo = mod.montar_corpo("parcial", ["01/08/2026"], resumo(**alteracoes))
         assert "Nenhum registro" in corpo
         assert "ATENÇÃO" not in corpo
+
+
+def test_assunto_e_corpo_de_segunda_incluem_domingo(monkeypatch, tmp_path):
+    mod = carregar_email(monkeypatch, tmp_path)
+    datas = ["02/10/2026", "03/10/2026", "04/10/2026"]
+    assunto = mod.montar_assunto("segunda_manha", datas)
+    assert "02/10/2026, 03/10/2026 e 04/10/2026" in assunto
+    corpo = mod.montar_corpo("segunda_manha", datas, resumo())
+    assert "domingo (04/10/2026)" in corpo
+
+
+def test_destinatario_recusado_e_falha(monkeypatch, tmp_path):
+    mod = carregar_email(monkeypatch, tmp_path)
+    monkeypatch.delenv("SUPPLY_VISION_SEM_ENVIO", raising=False)
+
+    class SMTP:
+        def __init__(self, *args, **kwargs): pass
+        def __enter__(self): return self
+        def __exit__(self, *args): pass
+        def ehlo(self): pass
+        def starttls(self, *, context): pass
+        def login(self, *args): pass
+        def send_message(self, *args, **kwargs):
+            return {"ruim@example.com": (550, b"mailbox unavailable")}
+
+    monkeypatch.setattr(mod.smtplib, "SMTP", SMTP)
+    with pytest.raises(mod.DestinatariosRecusados, match="ruim@example.com"):
+        mod.enviar_email("a", "b", [], ["teste@example.com", "ruim@example.com"], copia_oculta=[])

@@ -88,6 +88,10 @@ function Obter-SlotDevido([string]$Tipo, [string]$Lista, [hashtable]$Estado, [da
     if ($Agora -ge $alvo -and !$Estado.ContainsKey($chave)) { $devidos += @{ chave=$chave; hora=$texto; alvo=$alvo } }
   }
   if (!$devidos) { return $null }
+  # So o slot mais recente roda; os anteriores ficam como recuperados. O
+  # supervisor passa o horario do slot (--slot) ao pipeline, que calcula as
+  # datas a partir dele. Limitacao conhecida: se o slot da manha (dia
+  # anterior) for perdido junto com um slot posterior, ele nao e reexecutado.
   $ultimo = $devidos | Sort-Object { $_.alvo } | Select-Object -Last 1
   foreach ($item in $devidos) { if ($item.chave -ne $ultimo.chave) { $Estado[$item.chave] = 'recuperado-pelo-slot-mais-recente' } }
   return $ultimo

@@ -38,11 +38,13 @@ def com_vigencia(df, inicio="18/09/2026", fim=None, status="active"):
     return df
 
 
-def test_antes_do_corte_todos_os_acordos_sao_considerados_ativos(rodar):
+def test_antes_do_corte_vale_a_tabela_atual_so_com_ativos(rodar):
     compras = base(preco=10)
     compras["Data Abertura"] = "17/09/2026"
-    futuro_suspenso = com_vigencia(acordo([10]), inicio="01/12/2026", status="suspended")
-    assert rodar.processar(compras, futuro_suspenso).loc[0, "Status"] == "CONFORME"
+    futuro_ativo = com_vigencia(acordo([10]), inicio="01/12/2026", status="active")
+    assert rodar.processar(compras, futuro_ativo).loc[0, "Status"] == "CONFORME"
+    suspenso = com_vigencia(acordo([10]), inicio="01/12/2026", status="suspended")
+    assert rodar.processar(compras, suspenso).loc[0, "Status"] == "SEM ACORDO"
 
 
 def test_a_partir_do_corte_respeita_status_e_inicio_da_vigencia(rodar):
@@ -321,3 +323,32 @@ def test_fim_ilegivel_nao_vira_acordo_eterno(rodar):
     for fim in (None, "", "  "):
         ac = com_vigencia(acordo([10]), inicio="2026-09-18", fim=fim)
         assert rodar.processar(compras, ac).loc[0, "Status"] == "CONFORME"
+
+
+def test_vigencia_brasileira_aceita_hora(rodar):
+    valores = pd.Series(["18/09/2026", "18/09/2026 10:30", "18/09/2026 10:30:15", "2026-09-18", "lixo"])
+    datas = rodar._data_vigencia(valores)
+    assert datas[:4].tolist() == [pd.Timestamp(2026, 9, 18)] * 4
+    assert pd.isna(datas[4])
+
+
+def test_listas_de_exclusao_comparam_texto_normalizado(rodar, monkeypatch, tmp_path):
+    compras = pd.DataFrame({
+        "Grupo Despesa": ["Pneus", "PEÇAS"], "Modelo": ["Gol", " onix  "],
+        "Codigo OS": ["1", "2"], "Data Abertura": ["01/10/2026"] * 2,
+        "Descrição": ["ITEM"] * 2, "OS Quantidade": ["1"] * 2,
+        "Valor Unitario": ["10"] * 2, "Fornecedor": ["Oficina São José", "Outra"],
+        "Forncedor por Cidade": ["X"] * 2, "Fornecedor CNPJ": ["1", "2"],
+        "Criado Por": ["T"] * 2,
+    })
+    caminho = tmp_path / "base.xlsx"
+    compras.to_excel(caminho, index=False)
+
+    monkeypatch.setattr(rodar, "GRUPOS_EXCLUIR", {"pneus"})
+    assert rodar.carregar_base(caminho)["Codigo OS"].tolist() == ["2"]
+    monkeypatch.setattr(rodar, "GRUPOS_EXCLUIR", set())
+    monkeypatch.setattr(rodar, "MODELOS_EXCLUIR", {"ONIX"})
+    assert rodar.carregar_base(caminho)["Codigo OS"].tolist() == ["1"]
+    monkeypatch.setattr(rodar, "MODELOS_EXCLUIR", set())
+    monkeypatch.setattr(rodar, "FORNECEDORES_EXCLUIR", {"OFICINA SAO  JOSE"})
+    assert rodar.carregar_base(caminho)["Codigo OS"].tolist() == ["2"]

@@ -101,7 +101,7 @@ def carregar_contexto():
 
 def montar_assunto(contexto, datas):
     if contexto == "segunda_manha":
-        return f"Conformidade de Preços — Sexta + Sábado | {datas[0]} e {datas[1]}"
+        return f"Conformidade de Preços — Fim de Semana | {', '.join(datas[:-1])} e {datas[-1]}"
     elif contexto == "manha":
         return f"Conformidade de Preços — Dia Anterior | {datas[0]}"
     elif contexto == "parcial":
@@ -147,7 +147,7 @@ def extrair_resumo(output):
     return resumo, resumo_dados
 
 
-def montar_corpo(contexto, datas, output, com_acordo=None):
+def montar_corpo(contexto, datas, output):
     """Corpo enxuto: quantas linhas estao fora do acordo, e nada mais.
 
     A analise detalhada e feita no recorte historico, que compila os problemas
@@ -157,7 +157,8 @@ def montar_corpo(contexto, datas, output, com_acordo=None):
     agora = datetime.now().strftime("%d/%m/%Y às %H:%M")
 
     if contexto == "segunda_manha":
-        periodo = f"sexta-feira ({datas[0]}) e sábado ({datas[1]})"
+        periodo = f"sexta-feira ({datas[0]}), sábado ({datas[1]}) e domingo ({datas[2]})" \
+            if len(datas) >= 3 else f"sexta-feira ({datas[0]}) e sábado ({datas[1]})"
     elif contexto == "manha":
         periodo = f"o dia anterior ({datas[0]})"
     elif contexto == "parcial":
@@ -216,6 +217,10 @@ def anexo_da_execucao(caminho, rotulo):
     return p
 
 
+class DestinatariosRecusados(RuntimeError):
+    """O SMTP aceitou a mensagem, mas recusou parte dos destinatários."""
+
+
 def enviar_email(assunto, corpo, anexos, destinatarios, html=None, copia_oculta=None):
     senha = SMTP_SENHA
 
@@ -266,24 +271,18 @@ def enviar_email(assunto, corpo, anexos, destinatarios, html=None, copia_oculta=
         servidor.starttls(context=ssl.create_default_context())
         servidor.ehlo()
         servidor.login(SMTP_USUARIO, senha)
-        servidor.send_message(msg, to_addrs=entrega)
+        recusados = servidor.send_message(msg, to_addrs=entrega)
+
+    # send_message só levanta exceção se TODOS forem recusados; recusa parcial
+    # volta no dicionário e passaria como sucesso sem ninguém perceber.
+    if recusados:
+        lista = ", ".join(f"{d} ({c} {m.decode('utf-8', 'replace') if isinstance(m, bytes) else m})"
+                          for d, (c, m) in recusados.items())
+        raise DestinatariosRecusados(f"servidor SMTP recusou destinatário(s): {lista}")
 
     print(f"E-mail enviado para: {', '.join(destinatarios)}")
     if copia_oculta:
         print(f"  (Cco: {', '.join(copia_oculta)})")
-
-
-def montar_aviso(situacao, datas):
-    """Avisos sem anexo: uma frase, sem analise."""
-    periodo = " e ".join(datas)
-
-    if situacao == "SEM_DADOS_QLIK":
-        assunto = f"Conformidade de Preços — Sem dados no Qlik | {periodo}"
-        corpo = f"Não havia dados no Qlik para {periodo}.\n"
-    else:
-        assunto = f"Conformidade de Preços — Nada dentro dos filtros | {periodo}"
-        corpo = f"Não havia nada dentro dos filtros para {periodo}.\n"
-    return assunto, corpo
 
 
 if __name__ == "__main__":
@@ -292,12 +291,8 @@ if __name__ == "__main__":
     destinatarios_para, _ = obter_destinatarios()
     contexto, datas, output = carregar_contexto()
 
-    situacao = sys.argv[4] if len(sys.argv) > 4 else ""
-
-    if situacao in ("SEM_DADOS_QLIK", "SEM_DADOS_FILTRO"):
-        print(f"Nenhum e-mail enviado: {situacao}.")
-        sys.exit(0)
-
+    # sys.argv[4] é reservado (vazio): o pipeline conclui sem envio antes de
+    # chamar este script quando não há dados, então não há aviso a montar.
     try:
         com_acordo = anexo_da_execucao(sys.argv[5] if len(sys.argv) > 5 else "", "com_acordo")
         # Qualidade dos acordos: o pipeline so informa o caminho quando ha
@@ -308,11 +303,15 @@ if __name__ == "__main__":
         sys.exit(1)
 
     assunto = montar_assunto(contexto, datas)
-    corpo   = montar_corpo(contexto, datas, output, com_acordo)
+    corpo   = montar_corpo(contexto, datas, output)
 
     print(f"Assunto: {assunto}")
     avisos = []
     if qualidade:
         avisos.append("A base de acordos tem pendências a corrigir; veja o CSV anexo.")
     html = email_visual.montar_html("Conformidade de Preços", [corpo.strip()] + avisos)
-    enviar_email(assunto, corpo, [com_acordo, qualidade], destinatarios_para, html=html)
+    try:
+        enviar_email(assunto, corpo, [com_acordo, qualidade], destinatarios_para, html=html)
+    except DestinatariosRecusados as e:
+        print(f"ERRO: {e}")
+        sys.exit(1)

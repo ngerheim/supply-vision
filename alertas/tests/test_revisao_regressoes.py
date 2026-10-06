@@ -79,7 +79,7 @@ def test_data_invalida_remove_todos_os_valores_comparativos(rodar):
 def test_data_iso_e_excel_nao_invertem_mes_dia(rodar, data):
     compra = base(preco=10)
     compra["Data Abertura"] = data
-    futuro = com_vigencia(acordo([10]), inicio="2026-12-01", status="suspended")
+    futuro = com_vigencia(acordo([10]), inicio="2026-12-01", status="active")
     resultado = rodar.processar(compra, futuro)
     assert str(resultado.loc[0, "Data"]) == "2026-09-05"
     assert resultado.loc[0, "Status"] == "CONFORME"  # regra anterior ao corte

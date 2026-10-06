@@ -7,6 +7,9 @@ from pathlib import Path
 
 import pytest
 
+# pipeline.py importa msvcrt (lock do Windows): fora do Windows, pular.
+pytestmark = pytest.mark.skipif(sys.platform != "win32", reason="pipeline.py depende de msvcrt (Windows)")
+
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -138,3 +141,10 @@ def test_pendencias_em_massa_nao_sao_silenciadas_sem_divergencias(monkeypatch, t
     monkeypatch.setattr(mod, "rodar_script", lambda caminho, nome, args=None: chamadas.append(nome) or next(respostas))
     mod.main()
     assert chamadas[-1] == "Envio de e-mail"
+
+
+def test_slot_e_lido_da_linha_de_comando(monkeypatch, tmp_path):
+    mod = carregar_pipeline(monkeypatch, tmp_path)
+    assert mod.ler_slot_argv(["--slot", "08:00"]) == "08:00"
+    assert mod.ler_slot_argv(["--sem-envio", "--slot=14:00"]) == "14:00"
+    assert mod.ler_slot_argv([]) == ""

@@ -5,6 +5,8 @@ dados/base.xlsx.
 O horário decide o que buscar — ver datas_alvo(). O pipeline.py lê do stdout
 as linhas CONTEXTO_EMAIL, DATAS_EMAIL e RESULTADO para saber o que enviar.
 """
+import os
+import re
 import sys
 from datetime import datetime, timedelta
 
@@ -23,21 +25,51 @@ TENANT  = sv_paths.QLIK_TENANT
 CAMPO   = 'OS.OSABERTURADATA'
 
 
-def datas_alvo():
+def ler_slot(argv=None, env=None):
+    """Horário agendado (HH:MM) passado pelo supervisor, se houver.
+
+    Aceita --slot HH:MM na linha de comando ou SV_ALERTA_SLOT no ambiente.
+    Sem slot válido devolve None e vale o relógio (comportamento antigo).
+    """
+    argv = sys.argv[1:] if argv is None else argv
+    env = os.environ if env is None else env
+    valor = ''
+    for i, arg in enumerate(argv):
+        if arg == '--slot' and i + 1 < len(argv):
+            valor = argv[i + 1]
+        elif arg.startswith('--slot='):
+            valor = arg.split('=', 1)[1]
+    valor = (valor or env.get('SV_ALERTA_SLOT', '')).strip()
+    m = re.fullmatch(r'(\d{1,2}):?(\d{2})', valor)
+    if not m or int(m.group(1)) > 23 or int(m.group(2)) > 59:
+        if valor:
+            print(f'AVISO: slot agendado inválido ignorado: {valor!r}')
+        return None
+    return int(m.group(1)), int(m.group(2))
+
+
+def datas_alvo(slot=None):
     """Quais dias buscar e qual o contexto do e-mail, conforme o horário.
 
-      manhã (< 10h)  dia anterior — na segunda, sexta + sábado
+      manhã (< 10h)  dia anterior — na segunda, sexta + sábado + domingo
       11h/14h        hoje, parcial (sexta 14h encerra o dia)
       17h            hoje, compilado
+
+    Com slot (hora, minuto), o horário considerado é o do disparo agendado
+    na data de hoje: uma nova tentativa às 10:05 do slot de 08:00 continua
+    buscando o dia anterior, em vez de virar parcial do dia.
     """
     agora = datetime.now()
+    if slot is not None:
+        agora = agora.replace(hour=slot[0], minute=slot[1], second=0, microsecond=0)
     hoje  = agora.date()
     hora  = agora.hour
     dow   = agora.weekday()
 
     if hora < 10:
         if dow == 0:
-            datas = [hoje - timedelta(days=3), hoje - timedelta(days=2)]
+            datas = [hoje - timedelta(days=3), hoje - timedelta(days=2),
+                     hoje - timedelta(days=1)]
             contexto = 'segunda_manha'
         else:
             datas = [hoje - timedelta(days=1)]
@@ -50,7 +82,10 @@ def datas_alvo():
 
 
 def baixar():
-    datas, contexto = datas_alvo()
+    slot = ler_slot()
+    if slot is not None:
+        print(f'Slot agendado: {slot[0]:02d}:{slot[1]:02d}')
+    datas, contexto = datas_alvo(slot)
     datas_str = [d.strftime('%d/%m/%Y') for d in datas]
     print(f'Contexto: {contexto}')
     print(f'Datas alvo: {", ".join(datas_str)}')
