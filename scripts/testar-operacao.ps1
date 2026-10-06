@@ -98,3 +98,15 @@ try {
   Igual (Join-Path $PSScriptRoot 'privado') (Obter-PastaPrivada $PSScriptRoot) 'pasta privada padrao'
 } finally { $env:SUPPLY_VISION_PRIVADO=$privadoAnterior }
 Write-Host '[OK] Agenda de backup e pasta privada alternativa.'
+
+$raizBackup=Join-Path ([IO.Path]::GetTempPath()) ('sv-aviso-backup-'+[guid]::NewGuid().ToString('N'))
+try {
+  $cfgBackup=Join-Path $raizBackup 'portal\configuracao';New-Item -ItemType Directory -Path $cfgBackup -Force|Out-Null
+  $arquivoBackup=Join-Path $cfgBackup 'portal.env'
+  Set-Content -LiteralPath $arquivoBackup -Value 'BACKUP_NETWORK_DIR='
+  Igual $true ((Obter-AvisoBackup $raizBackup) -like '*anexado*') 'aviso de anexo sem rede'
+  Set-Content -LiteralPath $arquivoBackup -Value "BACKUP_NETWORK_DIR=$raizBackup"
+  Igual '' (Obter-AvisoBackup $raizBackup) 'rede disponivel sem anexo'
+  Add-Content -LiteralPath $arquivoBackup -Value 'BACKUP_ANEXAR_BANCO=true'
+  Igual $true ((Obter-AvisoBackup $raizBackup) -like '*habilitado*') 'anexo explicito'
+} finally { Remove-Item -LiteralPath $raizBackup -Recurse -Force }
