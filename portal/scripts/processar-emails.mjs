@@ -30,21 +30,29 @@ function registrar(texto) {
   }
 }
 
+export const MENSAGEM_INTERROMPIDO = 'Envio interrompido: resultado incerto. Confira com o destinatario antes de reenviar.';
+
+// So repete automaticamente quando o SMTP comprovadamente nao aceitou DATA.
+export function falhaAntesEntrega(erro) {
+  if (!erro || typeof erro !== 'object') return false;
+  if (Number(erro.responseCode) >= 400 && Number(erro.responseCode) <= 599) return true;
+  return ['CONN','AUTH','MAIL FROM','RCPT TO'].includes(erro.command) && ['ECONNECTION','EDNS','EAUTH','EENVELOPE','ETIMEDOUT','ESOCKET'].includes(erro.code);
+}
+
 export const MENSAGEM_NAO_CONFIRMADO = 'Enviado, mas não confirmado no banco. Confira com o destinatário antes de reenviar.';
 
 // Depois que o SMTP aceitou a mensagem, nenhuma falha pode leva-la de volta
 // para 'pending': isso reenviaria o e-mail. A confirmacao e tentada algumas
 // vezes; se o banco continuar recusando, o item vira 'failed' com mensagem
 // explicita (o reenvio na tela e manual). Se nem isso gravar, o item fica em
-// 'processing' e a recuperacao de trava (10 min) o reenviara: com o banco
-// indisponivel nao ha onde registrar o envio, e o log e o unico rastro.
+// 'processing'. Ao expirar, exige revisao: nao e seguro presumir que nao enviou.
 export async function confirmarEnvio(item, { concluir: confirmar, naoConfirmado, esperas = [200, 1000, 3000] }) {
   for (let tentativa = 0; ; tentativa++) {
     try { confirmar(); return true; }
     catch (erro) {
       if (tentativa >= esperas.length) {
         try { naoConfirmado(); registrar(`${item.id} enviado, mas sem confirmacao no banco (${erro instanceof Error ? erro.message : 'erro desconhecido'}); marcado para revisao.`); }
-        catch (erroFinal) { registrar(`${item.id} enviado, mas o banco nao aceitou nem a confirmacao nem a marcacao (${erroFinal instanceof Error ? erroFinal.message : 'erro desconhecido'}); pode haver reenvio apos a trava vencer.`); }
+        catch (erroFinal) { registrar(`${item.id} enviado, mas o banco nao aceitou nem a confirmacao nem a marcacao (${erroFinal instanceof Error ? erroFinal.message : 'erro desconhecido'}); a reserva expirada exigira revisao antes de reenviar.`); }
         return false;
       }
       await new Promise((resolve) => setTimeout(resolve, esperas[tentativa]));
@@ -66,8 +74,8 @@ export function reservar(db, limite = 10) {
   const travaVencida = new Date(agora.getTime() - 10 * 60_000).toISOString();
   db.exec('BEGIN IMMEDIATE');
   try {
-    db.prepare("UPDATE email_notifications SET status='pending',locked_at=NULL,updated_at=? WHERE status='processing' AND (locked_at<? OR locked_at IS NULL)")
-      .run(agoraIso, travaVencida);
+    db.prepare("UPDATE email_notifications SET status='failed',locked_at=NULL,last_error=?,updated_at=? WHERE status='processing' AND (locked_at<? OR locked_at IS NULL)")
+      .run(MENSAGEM_INTERROMPIDO, agoraIso, travaVencida);
     db.prepare("UPDATE email_notifications SET status='failed',locked_at=NULL,last_error=COALESCE(last_error,'Envio interrompido no limite de tentativas.'),updated_at=? WHERE status='pending' AND attempts>=?").run(agoraIso,maxTentativas);
     const candidatas = db.prepare("SELECT id FROM email_notifications WHERE status='pending' AND attempts<? AND next_attempt_at<=? ORDER BY created_at LIMIT ?")
       .all(maxTentativas, agoraIso, limite);
@@ -92,8 +100,8 @@ export function concluir(db, item) {
 
 export function falhar(db, item, erro) {
   const agora = new Date();
-  const definitivo = Number(item.attempts) >= maxTentativas;
-  const mensagem = (erro instanceof Error ? erro.message : 'Falha SMTP').replace(/[\r\n]+/g, ' ').slice(0, 500);
+  const definitivo = Number(item.attempts) >= maxTentativas || !falhaAntesEntrega(erro);
+  const mensagem = (!falhaAntesEntrega(erro) ? MENSAGEM_INTERROMPIDO + ' ' : '') + (erro instanceof Error ? erro.message : 'Falha SMTP').replace(/[\r\n]+/g, ' ').slice(0, 500);
   db.prepare("UPDATE email_notifications SET status=?,next_attempt_at=?,locked_at=NULL,last_error=?,updated_at=? WHERE id=? AND status='processing' AND attempts=? AND locked_at=?")
     .run(definitivo ? 'failed' : 'pending', proximaTentativa(Number(item.attempts), agora), mensagem, agora.toISOString(), item.id, item.attempts, item.locked_at);
 }
@@ -151,11 +159,11 @@ export function prepararRelatoriosDiarios(db,agora=new Date()){
   return local.data;
 }
 
-function reservarRelatoriosDiarios(db,agora=new Date()){
+export function reservarRelatoriosDiarios(db,agora=new Date()){
   const agoraIso=agora.toISOString(),travaVencida=new Date(agora.getTime()-10*60_000).toISOString();
   db.exec('BEGIN IMMEDIATE');
   try{
-    db.prepare("UPDATE daily_report_deliveries SET status='pending',locked_at=NULL,updated_at=? WHERE status='processing' AND (locked_at<? OR locked_at IS NULL)").run(agoraIso,travaVencida);
+    db.prepare("UPDATE daily_report_deliveries SET status='failed',locked_at=NULL,last_error=?,updated_at=? WHERE status='processing' AND (locked_at<? OR locked_at IS NULL)").run(MENSAGEM_INTERROMPIDO,agoraIso,travaVencida);
     db.prepare("UPDATE daily_report_deliveries SET status='failed',locked_at=NULL,last_error=COALESCE(last_error,'Envio interrompido no limite de tentativas.'),updated_at=? WHERE status='pending' AND attempts>=?").run(agoraIso,maxTentativas);
     const itens=db.prepare("SELECT d.*,u.name recipient_name,u.email recipient_email FROM daily_report_deliveries d JOIN users u ON u.id=d.user_id WHERE d.status='pending' AND d.attempts<? AND d.next_attempt_at<=? AND u.active=1 AND u.daily_report_enabled=1 ORDER BY d.created_at LIMIT 1").all(maxTentativas,agoraIso);
     const reservar=db.prepare("UPDATE daily_report_deliveries SET status='processing',attempts=attempts+1,locked_at=?,updated_at=? WHERE id=? AND status='pending'");
@@ -178,7 +186,7 @@ export function dadosRelatorioDiario(db,dataRelatorio,agora=new Date(),periodo=n
 }
 
 function concluirRelatorio(db,item){const agora=new Date().toISOString();db.prepare("UPDATE daily_report_deliveries SET status='sent',sent_at=?,locked_at=NULL,last_error=NULL,updated_at=? WHERE id=? AND status='processing' AND attempts=? AND locked_at=?").run(agora,agora,item.id,item.attempts,item.locked_at)}
-function falharRelatorio(db,item,erro){const agora=new Date(),definitivo=Number(item.attempts)>=maxTentativas,mensagem=(erro instanceof Error?erro.message:'Falha SMTP').replace(/[\r\n]+/g,' ').slice(0,500);db.prepare("UPDATE daily_report_deliveries SET status=?,next_attempt_at=?,locked_at=NULL,last_error=?,updated_at=? WHERE id=? AND status='processing' AND attempts=? AND locked_at=?").run(definitivo?'failed':'pending',proximaTentativa(Number(item.attempts),agora),mensagem,agora.toISOString(),item.id,item.attempts,item.locked_at)}
+function falharRelatorio(db,item,erro){const agora=new Date(),definitivo=Number(item.attempts)>=maxTentativas||!falhaAntesEntrega(erro),mensagem=((!falhaAntesEntrega(erro)?MENSAGEM_INTERROMPIDO+' ':'')+(erro instanceof Error?erro.message:'Falha SMTP')).replace(/[\r\n]+/g,' ').slice(0,500);db.prepare("UPDATE daily_report_deliveries SET status=?,next_attempt_at=?,locked_at=NULL,last_error=?,updated_at=? WHERE id=? AND status='processing' AND attempts=? AND locked_at=?").run(definitivo?'failed':'pending',proximaTentativa(Number(item.attempts),agora),mensagem,agora.toISOString(),item.id,item.attempts,item.locked_at)}
 
 export async function processarRelatoriosDiarios(db,config,transportador,{concluir:confirmar=concluirRelatorio,esperas}={}){
   prepararRelatoriosDiarios(db);
