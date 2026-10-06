@@ -53,7 +53,7 @@ jobs:
   portal-integracao:
     name: Portal - instalacao nova e autenticacao real
     runs-on: windows-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
@@ -61,17 +61,44 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: portal/package-lock.json
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - name: Preparar Python e configuracao ficticia operacional
+        shell: pwsh
+        run: |
+          python -m venv alertas/.venv
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          & ./alertas/.venv/Scripts/python.exe -m pip install -r alertas/config/requirements.txt -r alertas/config/requirements-dev.txt
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          $pastaTeste = Join-Path $env:RUNNER_TEMP ('sv-private-' + [guid]::NewGuid().ToString('N'))
+          ./scripts/preparar-configuracao-teste.ps1 -Destino $pastaTeste
+          "SUPPLY_VISION_PRIVADO=$pastaTeste" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
       - run: npm ci
         working-directory: portal
       - name: Validar portal compilado com banco descartavel
         shell: powershell
         run: ./portal/scripts/teste-instalacao-nova.ps1
 
+      - name: Validar operacao e persistencia dos alertas
+        shell: powershell
+        run: |
+          foreach ($teste in @('validar-operacao', 'testar-persistencia-alertas')) {
+            & powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./scripts/$teste.ps1
+            if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          }
+      - name: Validar importacoes e falhas HTTP no portal compilado
+        working-directory: portal
+        run: npm run test:imports
+
   alertas:
     name: Alertas
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"
@@ -106,12 +133,7 @@ jobs:
       - name: Validar protecoes da atualizacao e agenda
         shell: powershell
         run: |
-          & ./scripts/testar-atualizacao-segura.ps1
-          & ./scripts/testar-reparo-configuracao.ps1
-          & ./scripts/testar-credencial-portal.ps1
-          & ./scripts/testar-operacao.ps1
-          # Autocontido: monta uma raiz falsa em %TEMP% com python/npm de mentira.
-          # testar-persistencia-alertas.ps1 (exige alertas/.venv real) e
-          # validar-operacao.ps1 (exige privado/ completo e portal compilado)
-          # continuam so no atualizador, que roda na maquina instalada.
-          & ./scripts/testar-supervisor-isolado.ps1
+          foreach ($teste in @('testar-atualizacao-segura', 'testar-reparo-configuracao', 'testar-credencial-portal', 'testar-operacao', 'testar-supervisor-isolado', 'testar-estado-operacao', 'testar-python-minimo', 'testar-recuperacao-atualizacao')) {
+            & powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./scripts/$teste.ps1
+            if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          }

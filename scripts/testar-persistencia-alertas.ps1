@@ -6,6 +6,7 @@ $raizReal = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $temp = Join-Path $env:TEMP ('supply-vision-persistencia-' + [guid]::NewGuid().ToString('N'))
 $proc = $null
 $pathAnterior = $env:Path
+$privadoAnterior = $env:SUPPLY_VISION_PRIVADO
 function Encerrar-ArvoreTeste($Processo) {
   if (!$Processo -or $Processo.HasExited) { return }
   # taskkill /T pode exigir elevacao em algumas instalacoes do Windows. Para o
@@ -59,6 +60,7 @@ try {
   $chaveAlertas = "alertas-$data-00:00"
   @{ "backup-$data-23:59" = 'ok'; "limpeza-$data-23:59" = 'ok' } | ConvertTo-Json | Set-Content "$temp\privado\operacao\estado.json"
 
+  $env:SUPPLY_VISION_PRIVADO = Join-Path $temp 'privado'
   $env:Path = "$temp\bin;$pathAnterior"
   $proc = Start-Process powershell.exe -PassThru -WindowStyle Hidden -ArgumentList @(
     '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "$temp\scripts\supervisor.ps1")
@@ -92,6 +94,7 @@ try {
   Write-Host 'Persistencia dos alertas: marcador gravado antes da verificacao de saude.' -ForegroundColor Green
 } finally {
   $env:Path = $pathAnterior
+  $env:SUPPLY_VISION_PRIVADO = $privadoAnterior
   if ($proc -and !$proc.HasExited) { Encerrar-ArvoreTeste $proc }
   if (Test-Path "$temp\alertas\.venv") { & cmd.exe /c rmdir "$temp\alertas\.venv" 2>$null | Out-Null }
   if (Test-Path $temp) { Remove-Item $temp -Recurse -Force -ErrorAction SilentlyContinue }
