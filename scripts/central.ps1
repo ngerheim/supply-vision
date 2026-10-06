@@ -8,7 +8,7 @@ $Inicio=Join-Path $Raiz 'INICIAR.bat';$Parar=Join-Path $Raiz 'PARAR.bat';$Atuali
 # correto enquanto alguem lembra de edita-lo, e ele ficava desatualizado.
 $versao=try{(& git -C $Raiz log -1 --date=format:'%d/%m/%Y' --pretty=format:'%h  %ad' 2>$null)}catch{''}
 if(!$versao){$versao='versao indisponivel'}
-$form=New-Object Windows.Forms.Form;$form.Text='Supply Vision';$form.Size=New-Object Drawing.Size(580,590);$form.StartPosition='CenterScreen';$form.BackColor=[Drawing.Color]::FromArgb(15,35,58);$form.ForeColor='White';$form.Font=New-Object Drawing.Font('Segoe UI',10);$form.FormBorderStyle='FixedDialog';$form.MaximizeBox=$false
+$form=New-Object Windows.Forms.Form;$form.Text='Supply Vision';$form.Size=New-Object Drawing.Size(580,635);$form.StartPosition='CenterScreen';$form.BackColor=[Drawing.Color]::FromArgb(15,35,58);$form.ForeColor='White';$form.Font=New-Object Drawing.Font('Segoe UI',10);$form.FormBorderStyle='FixedDialog';$form.MaximizeBox=$false
 $t=New-Object Windows.Forms.Label;$t.Text='Supply Vision';$t.Font=New-Object Drawing.Font('Segoe UI Semibold',23);$t.Location='30,20';$t.AutoSize=$true;$form.Controls.Add($t)
 $v=New-Object Windows.Forms.Label;$v.Text=$versao;$v.ForeColor=[Drawing.Color]::FromArgb(160,188,214);$v.Location='32,64';$v.AutoSize=$true;$form.Controls.Add($v)
 $painel=New-Object Windows.Forms.Panel;$painel.Location='30,100';$painel.Size='505,115';$painel.BackColor=[Drawing.Color]::FromArgb(22,49,78);$form.Controls.Add($painel)
@@ -19,6 +19,7 @@ $atualizar=Botao 'Atualizar sistema' 30 343;$atualizar.Size='505,42';$atualizar.
 $voltar=Botao 'Restaurar backup' 30 397;$voltar.Size='505,42';$voltar.BackColor=[Drawing.Color]::FromArgb(150,62,52)
 $auto=New-Object Windows.Forms.CheckBox;$auto.Text='Iniciar automaticamente com o Windows';$auto.Location='32,460';$auto.Size='330,27';$auto.Checked=Test-Path $Startup;$form.Controls.Add($auto)
 $man=New-Object Windows.Forms.CheckBox;$man.Text='Modo manutenção (pausar rotinas automáticas)';$man.Location='32,494';$man.Size='390,27';$man.Checked=Test-Path $Manutencao;$form.Controls.Add($man)
+$avisoBackup=New-Object Windows.Forms.Label;$avisoBackup.Location='32,531';$avisoBackup.Size='505,50';$avisoBackup.Font=New-Object Drawing.Font('Segoe UI',9);$avisoBackup.ForeColor=[Drawing.Color]::FromArgb(255,180,90);$form.Controls.Add($avisoBackup)
 $dicas=New-Object Windows.Forms.ToolTip
 $dicas.SetToolTip($validar,'Confere arquivos, parâmetros, programas e permissões de escrita. Não testa login no Qlik ou SMTP.')
 $dicas.SetToolTip($man,'Pausa novos alertas, backups e limpezas automáticos. Portal, e-mails e pedidos manuais continuam disponíveis; tarefas em andamento terminam.')
@@ -42,6 +43,7 @@ function Parar-Operacao([int]$Limite=60){
  return $encerrou
 }
 function Atualizar{
+ $avisoBackup.Text=Obter-AvisoBackup (Obter-PastaPrivada $Raiz)
  $ativo=Operacao-Ativa
  if($ativo){$detalhe='Inicializando módulos...';if(Test-Path $StatusFile){try{$st=Get-Content $StatusFile -Raw|ConvertFrom-Json;$po=if($st.portal){'online'}else{'reiniciando'};$em=if($st.emails){'online'}else{'reiniciando'};$detalhe="Portal: $po  |  E-mails: $em`nAlertas: $($st.alertas)  |  Backup: $($st.backup)`nLimpeza: $($st.limpeza)  |  Disco: $($st.espacoLivreGb) GB livres"}catch{}};$status.Text="● OPERAÇÃO ATIVA`n$detalhe";$status.ForeColor=[Drawing.Color]::FromArgb(87,211,140)}else{$status.Text="● OPERAÇÃO PARADA`nUse 'Iniciar operação' quando quiser colocar o conjunto no ar.";$status.ForeColor=[Drawing.Color]::FromArgb(255,180,90)}
 }

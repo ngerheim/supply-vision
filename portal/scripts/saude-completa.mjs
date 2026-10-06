@@ -1,3 +1,4 @@
+import { lerConfigBruta } from './configuracao.mjs';
 import { pathToFileURL } from 'node:url';
 
 export async function verificarSaude(base = 'http://127.0.0.1:3000') {
@@ -30,7 +31,10 @@ export async function verificarSaude(base = 'http://127.0.0.1:3000') {
     if (new URL(url).pathname.endsWith('.css') ? !tipo.includes('text/css') : !/(javascript|ecmascript)/i.test(tipo)) throw new Error(`Tipo invalido: ${url}`);
     if (!(await r.arrayBuffer()).byteLength) throw new Error(`Arquivo vazio: ${url}`);
   }));
-  return `${urls.length} arquivos CSS/JavaScript e API saudaveis`;
+  const config = lerConfigBruta();
+  const aviso = !config.BACKUP_NETWORK_DIR?.trim() || config.BACKUP_ANEXAR_BANCO === 'true'
+    ? '; AVISO: o backup envia o banco completo por e-mail' : '';
+  return `${urls.length} arquivos CSS/JavaScript e API saudaveis${aviso}`;
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

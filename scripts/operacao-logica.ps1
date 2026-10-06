@@ -155,3 +155,14 @@ function Atualizar-AgendaAlertasLegada([string]$Caminho) {
   if ($mudou) { $linhas | Set-Content -LiteralPath $Caminho -Encoding UTF8 }
   return $mudou
 }
+
+function Obter-AvisoBackup([string]$Privado) {
+  $arquivo = Join-Path $Privado 'portal\configuracao\portal.env'
+  try {
+    $config = Ler-ConfigOperacao $arquivo
+    if (!$config['BACKUP_NETWORK_DIR']) { return 'Backup por e-mail: banco completo anexado (sem pasta de rede).' }
+    if (!(Test-Path -LiteralPath $config['BACKUP_NETWORK_DIR'] -PathType Container)) { return 'Pasta de backup de rede indisponivel. Confira o ultimo backup.' }
+    if ($config['BACKUP_ANEXAR_BANCO'] -eq 'true') { return 'Backup por e-mail: anexo do banco completo habilitado.' }
+    return ''
+  } catch { return 'Nao foi possivel conferir a configuracao de backup.' }
+}
