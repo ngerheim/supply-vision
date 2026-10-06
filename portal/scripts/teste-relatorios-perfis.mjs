@@ -178,6 +178,7 @@ try {
   for (const r of tentativas)
     assert.equal(r.status, 202, JSON.stringify(r.data));
   const jobId = tentativas[0].data.id;
+  assert.equal((await pedir(`reports/${jobId}/ainda-nao-gerado.xlsx`)).status, 404, 'Pedido na fila sem arquivos retorna 404');
   assert(tentativas.every((r) => r.data.id === jobId));
   assert.equal(
     db
