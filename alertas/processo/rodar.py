@@ -754,13 +754,6 @@ DROP_COM_ACORDO = {
     "Dif. p/ Menor Acordo",
 }
 
-def gerar_com_acordo(df, path):
-    wb = xlsxwriter.Workbook(path)
-    _gerar_aba(wb, df, drop=DROP_COM_ACORDO, nome_tabela="ComAcordo")
-    wb.close()
-    print(f"  Salvo: {path}")
-
-
 def _gerar_tabela_simples(df, path, drop, nome_tabela, nome_aba):
     """Gera tabela listrada, sem quebra de texto e com dimensões ajustadas."""
     excluir = set(drop) | SEMPRE_OCULTAR
@@ -820,24 +813,6 @@ def gerar_alerta_acordo(df, path):
     wb.close()
     print(f"  Salvo: {path}")
 
-
-
-DROP_SEM_ACORDO = {
-    "Status",
-    "Preco Acordo",
-    "Preco Total Acordo",
-    "Diferenca Unit.",
-    "Diferenca Total",
-}
-
-def gerar_sem_acordo(df, path):
-    df = df.copy()
-    if "Dif. p/ Menor Acordo" in df.columns:
-        df = df.sort_values("Dif. p/ Menor Acordo", ascending=False, na_position="last")
-    wb = xlsxwriter.Workbook(path)
-    _gerar_aba(wb, df, drop=DROP_SEM_ACORDO, nome_tabela="SemAcordo")
-    wb.close()
-    print(f"  Salvo: {path}")
 
 
 def preparar_recorte_historico(df):
