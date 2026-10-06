@@ -43,6 +43,17 @@ try{
  for($i=0;$i -lt 60;$i++){if(Test-Path $statusPath){$apareceu=$true;break};Start-Sleep -Milliseconds 500}
  if(!$apareceu){throw 'Supervisor nao gravou status.json dentro do prazo.'}
  $status=Get-Content $statusPath -Raw|ConvertFrom-Json;if(!$status.portal-or!$status.emails-or!$status.relatorios){throw 'Supervisor nao iniciou os processos simulados.'}
+ # status.json preso por outro processo (central, antivirus) durante mais de
+ # uma volta: o supervisor registra aviso e segue; antes, encerrava tudo.
+ $antes=$status.atualizado
+ $trava=[IO.File]::Open($statusPath,[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::None)
+ try{Start-Sleep 20}finally{$trava.Dispose()}
+ if($vivos[0].HasExited){throw 'Supervisor encerrou com status.json em uso.'}
+ $logSupervisor=Get-Content "$temp\privado\operacao\supervisor.log" -Raw
+ if($logSupervisor -match 'ERRO FATAL|Encerrando a operacao'){throw "Supervisor tratou arquivo em uso como fatal: $logSupervisor"}
+ $atualizou=$false
+ for($i=0;$i -lt 40;$i++){try{if((Get-Content $statusPath -Raw|ConvertFrom-Json).atualizado-ne$antes){$atualizou=$true;break}}catch{};Start-Sleep -Milliseconds 500}
+ if(!$atualizou){throw 'Supervisor nao voltou a atualizar status.json apos a liberacao.'}
  New-Item -ItemType File -Force "$temp\privado\operacao\parar.sinal"|Out-Null;$vivos[0].WaitForExit(25000)|Out-Null;if(!$vivos[0].HasExited){throw 'Supervisor nao encerrou.'}
- Write-Host 'Supervisor isolado: concorrencia, estado e encerramento aprovados.' -ForegroundColor Green
+ Write-Host 'Supervisor isolado: concorrencia, estado, arquivo em uso e encerramento aprovados.' -ForegroundColor Green
 }finally{$env:Path=$pathAnterior;$env:SUPPLY_VISION_PRIVADO=$privadoAnterior;foreach($p in $processos){if($p-and!$p.HasExited){& taskkill.exe /PID $p.Id /T /F 2>$null|Out-Null}};if(Test-Path $temp){Remover-DiretorioTemporario $temp}}
