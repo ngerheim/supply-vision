@@ -1,3 +1,4 @@
+import { redigirLog } from './redigir-log.mjs';
 import { validacaoAtiva } from './operacao-validacao.mjs';
 // Ponte local: o Worker só enfileira pedidos; este processo executa Python.
 import fs from 'node:fs';
@@ -285,12 +286,7 @@ function executarPython(db, job, segredo) {
     const registrar = (chunk) => {
       log = (log + chunk).slice(-128_000);
     };
-    const redigido = () => {
-      let texto = log;
-      for (const valor of segredo)
-        if (valor) texto = texto.replaceAll(valor, '[credencial removida]');
-      return texto.slice(-64_000);
-    };
+    const redigido = () => redigirLog(log, segredo).slice(-64_000);
     filho.stdout.setEncoding('utf8');
     filho.stderr.setEncoding('utf8');
     filho.stdout.on('data', registrar);
@@ -415,8 +411,8 @@ async function principal() {
         .readFileSync(arquivoQlik, 'utf8')
         .split(/\r?\n/)
         .map((l) => l.trim())
-        .find((l) => l && !l.startsWith('#'))
-    : null;
+        .filter((l) => l && !l.startsWith('#'))
+    : [];
   let inicializado = false,
     ocupado = false,
     ultimaLimpeza = 0,
@@ -441,7 +437,7 @@ async function principal() {
         const resultado = await executarPython(db, job, [
           config.PORTAL_API_TOKEN,
           config.SMTP_PASSWORD,
-          chaveQlik,
+          ...chaveQlik,
         ]);
         concluirRelatorio(
           db,
