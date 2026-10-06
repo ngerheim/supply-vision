@@ -105,6 +105,28 @@ function Obter-SlotDevido([string]$Tipo, [string]$Lista, [hashtable]$Estado, [da
   return $ultimo
 }
 
+function Ler-EstadoOperacao([string]$Caminho) {
+  $estado = @{}
+  if (!(Test-Path -LiteralPath $Caminho)) { return $estado }
+  try {
+    $objeto = Get-Content -LiteralPath $Caminho -Raw | ConvertFrom-Json -ErrorAction Stop
+    if ($null -eq $objeto -or $objeto -isnot [System.Management.Automation.PSCustomObject]) { throw 'Esperado objeto JSON.' }
+    foreach ($propriedade in $objeto.psobject.Properties) { $estado[$propriedade.Name] = $propriedade.Value }
+    return $estado
+  } catch { throw "Estado operacional invalido em $Caminho. Operacao bloqueada para evitar reenvios; confira estado.json e estado.json.anterior antes de recuperar. $($_.Exception.Message)" }
+}
+
+function Gravar-EstadoOperacao([string]$Caminho, [hashtable]$Estado) {
+  $temporario = $Caminho + '.' + [guid]::NewGuid().ToString('N') + '.tmp'
+  $bytes = (New-Object Text.UTF8Encoding($false)).GetBytes(($Estado | ConvertTo-Json -Depth 10))
+  try {
+    $arquivo = [IO.File]::Open($temporario, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write, [IO.FileShare]::None)
+    try { $arquivo.Write($bytes, 0, $bytes.Length); $arquivo.Flush($true) } finally { $arquivo.Dispose() }
+    if (Test-Path -LiteralPath $Caminho) { [IO.File]::Replace($temporario, $Caminho, ($Caminho + '.anterior')) }
+    else { [IO.File]::Move($temporario, $Caminho) }
+  } finally { if (Test-Path -LiteralPath $temporario) { Remove-Item -LiteralPath $temporario -Force } }
+}
+
 function Atualizar-AgendaAlertasLegada([string]$Caminho) {
   # privado/ nao viaja pelo Git. Migra somente os valores padrao conhecidos,
   # sem sobrescrever uma agenda que o operador tenha personalizado.
