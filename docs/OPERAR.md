@@ -38,11 +38,13 @@ pedidos ainda na fila ou aguardando revisão podem ser cancelados. Repetir a mes
 falha de comunicação não cria outro trabalho. Uma rotina automática concorrente
 pode ocupar o lock: nesse caso o pedido falha antes de executar; tente depois.
 
-**Falhas ou reinício do serviço não provocam reenvio automático.** Confira os
+**Execuções interrompidas não provocam reenvio automático.** Confira os
 registros e a entrega antes de fazer uma nova solicitação, sobretudo se o SMTP
-já pode ter aceitado o e-mail. Pedidos na fila antes de reiniciar o serviço
-(inclusive os vindos de backup) ficam em **Revisão necessária**. Use **Usar estes
-parâmetros** para conferir e fazer uma nova solicitação; nenhum backup é alterado. Só há download de arquivos da própria execução;
+já pode ter aceitado o e-mail. Pedidos que ainda não iniciaram continuam na fila
+após reinício normal. Na restauração de backup ou semente, os pedidos pendentes
+ficam em **Revisão necessária**, pois podem ter sido executados depois da cópia.
+Use **Usar estes parâmetros** para conferir e fazer uma nova solicitação;
+nenhum backup é alterado. Só há download de arquivos da própria execução;
 a limpeza pode torná-los indisponíveis após a retenção.
 
 O recorte nunca envia e-mail. Sem dados elegíveis,

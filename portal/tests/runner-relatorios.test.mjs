@@ -239,10 +239,12 @@ void test('arquivos de outra execução e caminhos fora dos relatórios não sã
   }
 });
 
-void test('reinício preserva pedidos para revisão e não repete trabalhos do backup', () => {
+void test('reinicio preserva fila nova e restauracao neutraliza pedidos antigos', () => {
   const ctx = preparar();
   try {
-    assert.equal(revisarPedidosInterrompidos(ctx.db), 1);
+    assert.equal(revisarPedidosInterrompidos(ctx.db), 0);
+    assert.equal(ctx.db.prepare('SELECT status FROM report_jobs').get().status, 'queued');
+    assert.equal(revisarPedidosInterrompidos(ctx.db, true), 1);
     assert.equal(
       ctx.db.prepare('SELECT status FROM report_jobs').get().status,
       'review',
