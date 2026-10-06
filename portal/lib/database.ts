@@ -73,6 +73,7 @@ const columnMigrations: Array<[string, string, string]> = [
   ['users', 'password_iterations', `INTEGER NOT NULL DEFAULT ${PBKDF2_ITERACOES_LEGADO}`],
   // Ultima atividade da sessao, para expirar por inatividade alem do prazo fixo.
   ['sessions', 'last_seen_at', 'TEXT'],
+  ['users', 'revision', 'INTEGER NOT NULL DEFAULT 0'],
   ['users', 'daily_report_enabled', 'INTEGER NOT NULL DEFAULT 0'],
   ['users', 'daily_report_time', "TEXT NOT NULL DEFAULT '17:45'"],
   ['tickets', 'revision', 'INTEGER NOT NULL DEFAULT 0'],

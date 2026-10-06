@@ -8,6 +8,9 @@ const pedir = async (path, method='GET', body) => {
   if(method==='PUT' && /^tickets\/[^/]+$/.test(path) && body && body.expectedRevision===undefined){
     const detail=await pedir(path);body={...body,expectedRevision:detail.data.ticket.revision};
   }
+  if(method==='PUT' && /^users\/[^/]+$/.test(path) && body && body.expectedRevision===undefined){
+    const detail=await pedir('users');body={...body,expectedRevision:detail.data.users.find(user=>user.id===path.split('/')[1]).revision};
+  }
   const response = await fetch(`http://127.0.0.1:${porta}/api/${path}`, { method, headers, ...(body === undefined ? {} : {body:JSON.stringify(body)}), signal:AbortSignal.timeout(30000) });
   return { status:response.status, data:await response.json() };
 };

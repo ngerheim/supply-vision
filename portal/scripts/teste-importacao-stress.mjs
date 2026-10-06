@@ -151,6 +151,17 @@ try {
   sqlitePath = locateSqlite(state); assert.ok(sqlitePath);
   reader = new DatabaseSync(sqlitePath, { readOnly: true });
 
+  await check('Edicao antiga de usuario nao restaura permissao revogada', async () => {
+    const criado = await good('/api/users', { method: 'POST', body: { name: 'Administrador concorrente', email: 'concorrente@teste.local', password: senha, role: 'admin' } }, 201);
+    const antigo = (await good('/api/users')).users.find(u => u.id === criado.id);
+    assert.ok(Number.isSafeInteger(antigo.revision));
+    await good(`/api/users/${criado.id}`, { method: 'PUT', body: { role: 'viewer', expectedRevision: antigo.revision } });
+    assert.equal((await request(`/api/users/${criado.id}`, { method: 'PUT', body: { ...antigo, dailyReportTime: '18:00', expectedRevision: antigo.revision } })).status, 409);
+    const atual = (await good('/api/users')).users.find(u => u.id === criado.id);
+    assert.equal(atual.role, 'viewer');assert.equal(atual.dailyReportTime, antigo.dailyReportTime);
+    assert.ok(atual.revision > antigo.revision);
+  });
+
   await check('De/Para inicia vazio', async () => assert.deepEqual(await good('/api/mappings'), { items: [], models: [], units: [] }));
   // Nomes homonimos ficticios para conferir a separacao por UF.
   const location = await catalog('locations', { city: 'GOIANIA', state: 'GO' });

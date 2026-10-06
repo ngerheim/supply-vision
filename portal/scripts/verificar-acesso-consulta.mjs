@@ -61,13 +61,13 @@ export async function verificarAcessoConsulta({ request, good, check, senha, agr
     metrics.push({ scenario: 'consulta-concorrente', concurrency, sessions: sessions.length - 1, requests: timings.length, elapsedMs: Math.round(performance.now() - start), p50Ms: Math.round(timings[Math.ceil(timings.length * .5) - 1]), p95Ms: Math.round(timings[Math.ceil(timings.length * .95) - 1]), maxMs: Math.round(timings.at(-1)) });
   });
   await check('Consulta: trocar senha invalida todas as sessões anteriores', async () => {
-    await good(`/api/users/${user.id}`, { method: 'PUT', body: { password: senha + '-nova' } });
+    await good(`/api/users/${user.id}`, { method: 'PUT', body: { password: senha + '-nova', expectedRevision: (await good('/api/users')).users.find(u => u.id === user.id).revision } });
     for (const s of sessions) assert.equal((await request('/api/search', { session: s })).status, 401);
   });
   await check('Consulta: desativar conta bloqueia sessão já aberta', async () => {
     const fresh = await request('/api/login', { method: 'POST', body: { email, password: senha + '-nova' }, session: '' });
     assert.equal(fresh.status, 200);
-    await good(`/api/users/${user.id}`, { method: 'PUT', body: { active: false } });
+    await good(`/api/users/${user.id}`, { method: 'PUT', body: { active: false, expectedRevision: (await good('/api/users')).users.find(u => u.id === user.id).revision } });
     assert.equal((await request('/api/search', { session: fresh.cookie })).status, 401);
   });
 }

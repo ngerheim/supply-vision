@@ -3,65 +3,57 @@ import { DatabaseSync } from 'node:sqlite';
 import test from 'node:test';
 import { ATUALIZAR_USUARIO_SQL, ATUALIZAR_USUARIO_COM_SENHA_SQL, ENCERRAR_SESSOES_REDEFINIDAS_SQL, ENCERRAR_SESSOES_ALTERADAS_SQL } from '../lib/usuarios-sql.ts';
 
+function banco() {
+  const db = new DatabaseSync(':memory:');
+  db.exec(`CREATE TABLE users(id TEXT PRIMARY KEY,name TEXT,role TEXT,active INTEGER,daily_report_enabled INTEGER,daily_report_time TEXT,password_salt TEXT,password_hash TEXT,password_iterations INTEGER,revision INTEGER NOT NULL DEFAULT 0);
+    CREATE TABLE sessions(token TEXT,user_id TEXT);
+    INSERT INTO users(id,name,role,active,daily_report_enabled,daily_report_time,password_salt,password_hash) VALUES ('a','A','admin',1,0,'17:45','sa','ha'),('b','B','admin',1,0,'17:45','sb','hb');
+    INSERT INTO sessions VALUES ('ta','a'),('tb','b');`);
+  return db;
+}
+
 for (const [role, active] of [['admin', 0], ['viewer', 1]] as const) {
-  void test(`escritas baseadas no mesmo snapshot preservam um administrador (${role}/${active})`, () => {
-    const db = new DatabaseSync(':memory:');
+  void test(`escritas concorrentes preservam ultimo administrador (${role}/${active})`, () => {
+    const db = banco();
     try {
-      db.exec(`CREATE TABLE users (id TEXT PRIMARY KEY, name TEXT, role TEXT, active INTEGER, daily_report_enabled INTEGER, daily_report_time TEXT);
-        INSERT INTO users (id,role,active) VALUES ('a','admin',1),('b','admin',1)`);
-      // Ambas as requisições já leram os dois administradores ativos.
-      const snapshot = db.prepare("SELECT id FROM users WHERE role='admin' AND active=1").all();
-      assert.equal(snapshot.length, 2);
       const update = db.prepare(ATUALIZAR_USUARIO_SQL);
-      assert.equal(update.run('B', role, active, 0, '17:45', 'b', role, active).changes, 1);
-      assert.equal(update.run('A', role, active, 0, '17:45', 'a', role, active).changes, 0);
-      assert.equal(db.prepare("SELECT COUNT(*) n FROM users WHERE role='admin' AND active=1").get()?.n, 1);
-      assert.equal(update.run('Novo nome', 'admin', 1, 1, '18:00', 'a', 'admin', 1).changes, 1);
-      assert.equal(update.run('B', 'viewer', 0, 0, '17:45', 'b', 'viewer', 0).changes, 1);
+      assert.equal(update.run('B',role,active,0,'17:45','b',0,role,active).changes,1);
+      assert.equal(update.run('A',role,active,0,'17:45','a',0,role,active).changes,0);
+      assert.equal(db.prepare("SELECT COUNT(*) n FROM users WHERE role='admin' AND active=1").get()?.n,1);
+      assert.equal(db.prepare(ENCERRAR_SESSOES_ALTERADAS_SQL).run('a','a',role,active).changes,0);
     } finally { db.close(); }
   });
 }
 
-void test('redefinição muda cadastro e senha juntos; guarda recusada preserva sessões', () => {
- const db=new DatabaseSync(':memory:');
- try {
-  db.exec(`CREATE TABLE users(id TEXT PRIMARY KEY,name TEXT,role TEXT,active INTEGER,daily_report_enabled INTEGER,daily_report_time TEXT,password_salt TEXT,password_hash TEXT,password_iterations INTEGER);
-    CREATE TABLE sessions(user_id TEXT);
-    INSERT INTO users VALUES('a','original','admin',1,0,'17:45','salt-antigo','hash-antigo',1);
-    INSERT INTO sessions VALUES('a')`);
-  const update=db.prepare(ATUALIZAR_USUARIO_COM_SENHA_SQL),close=db.prepare(ENCERRAR_SESSOES_REDEFINIDAS_SQL);
-  db.exec('BEGIN');
-  assert.equal(update.run('novo','viewer',0,0,'17:45','salt-novo','hash-novo',600000,'a','viewer',0).changes,0);
-  close.run('a','a','salt-novo');db.exec('COMMIT');
-  assert.equal(db.prepare('SELECT COUNT(*) n FROM sessions').get()?.n,1);
-  assert.equal(db.prepare('SELECT password_hash FROM users').get()?.password_hash,'hash-antigo');
-  db.exec("CREATE TRIGGER impedir_encerramento BEFORE DELETE ON sessions BEGIN SELECT RAISE(ABORT, 'falha sintetica'); END; BEGIN");
-  update.run('novo','admin',1,1,'18:00','salt-novo','hash-novo',600000,'a','admin',1);
-  assert.throws(()=>close.run('a','a','salt-novo'));db.exec('ROLLBACK');
-  const unchanged=db.prepare('SELECT name,password_hash FROM users').get();
-  assert.equal(unchanged?.name,'original');assert.equal(unchanged?.password_hash,'hash-antigo');
-  db.exec('DROP TRIGGER impedir_encerramento; BEGIN');
-  update.run('novo','admin',1,1,'18:00','salt-novo','hash-novo',600000,'a','admin',1);close.run('a','a','salt-novo');db.exec('COMMIT');
-  assert.equal(db.prepare('SELECT name FROM users').get()?.name,'novo');
-  assert.equal(db.prepare('SELECT password_hash FROM users').get()?.password_hash,'hash-novo');
-  assert.equal(db.prepare('SELECT COUNT(*) n FROM sessions').get()?.n,0);
- }finally{db.close();}
+void test('formulario antigo nao restaura privilegios nem encerra sessoes por coincidencia de valores', () => {
+  const db = banco();
+  try {
+    const update=db.prepare(ATUALIZAR_USUARIO_SQL), encerrar=db.prepare(ENCERRAR_SESSOES_ALTERADAS_SQL);
+    update.run('B','viewer',1,0,'17:45','b',0,'viewer',1);
+    assert.equal(encerrar.run('b','b','viewer',1).changes,1);
+    db.exec("INSERT INTO sessions VALUES('nova','b')");
+    assert.equal(update.run('Antigo','admin',1,1,'18:00','b',0,'admin',1).changes,0);
+    assert.equal(encerrar.run('b','b','viewer',1).changes,0);
+    const row=db.prepare("SELECT role,name,revision FROM users WHERE id='b'").get();
+    assert.equal(row?.role,'viewer');assert.equal(row?.name,'B');assert.equal(row?.revision,1);
+    assert.equal(db.prepare("SELECT COUNT(*) n FROM sessions WHERE user_id='b'").get()?.n,1);
+  } finally { db.close(); }
 });
 
-void test('desativar ou trocar perfil encerra sessões só quando a alteração foi gravada', () => {
-  const db = new DatabaseSync(':memory:');
+void test('senha e cadastro revertem juntos se encerramento falha; revisao antiga nao redefine senha', () => {
+  const db=banco();
   try {
-    db.exec(`CREATE TABLE users (id TEXT PRIMARY KEY, name TEXT, role TEXT, active INTEGER, daily_report_enabled INTEGER, daily_report_time TEXT);
-      CREATE TABLE sessions (token TEXT, user_id TEXT);
-      INSERT INTO users (id,role,active) VALUES ('a','admin',1),('e','editor',1);
-      INSERT INTO sessions VALUES ('t1','a'),('t2','e')`);
-    const update = db.prepare(ATUALIZAR_USUARIO_SQL), encerrar = db.prepare(ENCERRAR_SESSOES_ALTERADAS_SQL);
-    // Último administrador: a guarda recusa e as sessões continuam.
-    assert.equal(update.run('A', 'admin', 0, 0, '17:45', 'a', 'admin', 0).changes, 0);
-    assert.equal(encerrar.run('a', 'a', 'admin', 0).changes, 0);
-    // Rebaixamento gravado: sessões do usuário saem, as dos outros ficam.
-    assert.equal(update.run('E', 'viewer', 1, 0, '17:45', 'e', 'viewer', 1).changes, 1);
-    assert.equal(encerrar.run('e', 'e', 'viewer', 1).changes, 1);
-    assert.deepEqual(db.prepare('SELECT token FROM sessions').all().map(r => r.token), ['t1']);
+    const update=db.prepare(ATUALIZAR_USUARIO_COM_SENHA_SQL), close=db.prepare(ENCERRAR_SESSOES_REDEFINIDAS_SQL);
+    db.exec("CREATE TRIGGER impedir BEFORE DELETE ON sessions BEGIN SELECT RAISE(ABORT,'falha sintetica'); END; BEGIN");
+    update.run('Novo','admin',1,0,'18:00','sn','hn',600000,'a',0,'admin',1);
+    assert.throws(()=>close.run('a','a','sn'),/falha sintetica/);db.exec('ROLLBACK');
+    assert.equal(db.prepare("SELECT password_hash FROM users WHERE id='a'").get()?.password_hash,'ha');
+    db.exec('DROP TRIGGER impedir; BEGIN');
+    update.run('Novo','admin',1,0,'18:00','sn','hn',600000,'a',0,'admin',1);
+    close.run('a','a','sn');db.exec('COMMIT');
+    assert.equal(db.prepare("SELECT COUNT(*) n FROM sessions WHERE user_id='a'").get()?.n,0);
+    db.exec("INSERT INTO sessions VALUES ('nova','a')");
+    assert.equal(update.run('Antigo','admin',1,0,'18:00','sn','hn',600000,'a',0,'admin',1).changes,0);
+    assert.equal(close.run('a','a','sn').changes,0);
   } finally { db.close(); }
 });

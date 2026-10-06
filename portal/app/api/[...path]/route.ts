@@ -78,7 +78,7 @@ type AgreementItemInput = {
 };
 
 type CatalogInput = Record<string, unknown>;
-type UserInput = { name?: unknown; email?: unknown; password?: unknown; role?: unknown; active?: unknown; dailyReportEnabled?: unknown; dailyReportTime?: unknown };
+type UserInput = { expectedRevision?: unknown; name?: unknown; email?: unknown; password?: unknown; role?: unknown; active?: unknown; dailyReportEnabled?: unknown; dailyReportTime?: unknown };
 type TicketInput = Record<string, unknown>;
 type MappingInput = { source?: unknown; targetId?: unknown; active?: unknown; notes?: unknown };
 
@@ -243,7 +243,7 @@ async function GETInterno(request: NextRequest) {
     return ok(await emailNotificationList(request.nextUrl.searchParams));
   }
   if (parts[0] === 'users') return ok({ users: user.role === 'admin'
-    ? await all('SELECT id,name,email,role,active,daily_report_enabled AS dailyReportEnabled,daily_report_time AS dailyReportTime,created_at AS createdAt FROM users ORDER BY name')
+    ? await all('SELECT id,name,email,role,active,revision,daily_report_enabled AS dailyReportEnabled,daily_report_time AS dailyReportTime,created_at AS createdAt FROM users ORDER BY name')
     : await all('SELECT id,name FROM users WHERE active=1 ORDER BY name') });
   if (parts[0] === 'tickets' && parts[1]) return ticketDetail(parts[1]);
   if (parts[0] === 'tickets') return ok({ tickets: await ticketList(), stats: await ticketStats() });
@@ -1584,7 +1584,7 @@ async function addTicketEvent(request:Request,user:User,ticketId:string){
 async function updateUser(request:Request,actor:User,userId:string){
   if(actor.role!=='admin') return fail('Somente administradores podem alterar usuários.',403);
   const body=await jsonBody<UserInput>(request);
-  const target=await first<{id:string;name:string;email:string;role:Role;active:number;dailyReportEnabled:number;dailyReportTime:string}>('SELECT id,name,email,role,active,daily_report_enabled AS dailyReportEnabled,daily_report_time AS dailyReportTime FROM users WHERE id=?',[userId]);
+  const target=await first<{id:string;name:string;email:string;role:Role;active:number;revision:number;dailyReportEnabled:number;dailyReportTime:string}>('SELECT id,name,email,role,active,revision,daily_report_enabled AS dailyReportEnabled,daily_report_time AS dailyReportTime FROM users WHERE id=?',[userId]);
   if(!target) return fail('Usuário não encontrado.',404);
   const role=body.role === undefined ? target.role : body.role;
   if(!isOneOf(role,ROLES)) return fail('Perfil de usuário inválido.');
@@ -1597,6 +1597,7 @@ async function updateUser(request:Request,actor:User,userId:string){
   if(!/^([01]\d|2[0-3]):[0-5]\d$/.test(dailyReportTime)) return fail('Informe um horário válido para o relatório diário.');
   const name=textValue(body.name) || target.name;
   if(target.id===actor.id&&(active===0||role!=='admin')) return fail('Você não pode desativar nem rebaixar a própria conta.');
+  if(!revisaoConfere(body.expectedRevision,target.revision)) return fail('Este usuario foi alterado. Feche a edicao e atualize a lista antes de tentar novamente.',409);
   const changes:string[]=[];
   if(name!==target.name) changes.push(`nome: ${target.name} → ${name}`);
   if(role!==target.role) changes.push(`perfil: ${target.role} → ${role}`);
@@ -1608,14 +1609,14 @@ async function updateUser(request:Request,actor:User,userId:string){
   const salt=password !== null ? crypto.randomUUID() : null;
   const hash=password !== null ? await passwordHash(password,salt!,PBKDF2_ITERACOES_ATUAL) : null;
   const statements=[rawDb().prepare(password !== null ? ATUALIZAR_USUARIO_COM_SENHA_SQL : ATUALIZAR_USUARIO_SQL)
-    .bind(...baseValues,...(password !== null ? [salt,hash,PBKDF2_ITERACOES_ATUAL] : []),userId,role,active)];
+    .bind(...baseValues,...(password !== null ? [salt,hash,PBKDF2_ITERACOES_ATUAL] : []),userId,target.revision,role,active)];
   if(password !== null) statements.push(rawDb().prepare(ENCERRAR_SESSOES_REDEFINIDAS_SQL).bind(userId,userId,salt));
   // Desativar ou trocar o perfil derruba as sessoes abertas: o acesso antigo
   // nao pode continuar valendo ate o fim do prazo da sessao.
   const encerrarSessoes=(target.active===1&&active===0)||role!==target.role;
-  if(encerrarSessoes) statements.push(rawDb().prepare(ENCERRAR_SESSOES_ALTERADAS_SQL).bind(userId,userId,role,active));
+  if(password === null && encerrarSessoes) statements.push(rawDb().prepare(ENCERRAR_SESSOES_ALTERADAS_SQL).bind(userId,userId,role,active));
   const [atualizado]=await rawDb().batch(statements);
-  if (!atualizado.meta.changes) return fail('Este é o último administrador ativo. Promova outro antes de alterar este.',409);
+  if (!atualizado.meta.changes) return fail('O usuario foi alterado por outra operacao ou e o ultimo administrador ativo. Atualize a lista; promova outro administrador antes de rebaixar o ultimo.',409);
   if(password !== null) changes.push('senha redefinida (sessões encerradas)');
   else if(encerrarSessoes) changes.push('sessões encerradas');
   await audit(actor.id,'UPDATE','user',userId,`${target.email}: ${changes.join('; ')||'sem alterações'}`);

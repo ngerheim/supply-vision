@@ -1,4 +1,4 @@
-# Teste de instalacao nova: banco vazio, criacao do administrador e login real.
+﻿# Teste de instalacao nova: banco vazio, criacao do administrador e login real.
 #
 # Complementa os testes das funcoes criptograficas com as rotas e o banco
 # reais, incluindo os valores gravados durante a criacao do administrador.
@@ -163,7 +163,7 @@ Verifica 'Sessao autenticada acessa o bootstrap' {
 }
 
 $admin=((Invoke-WebRequest "$baseUrl/api/users" -WebSession $script:sessao -UseBasicParsing -TimeoutSec 60).Content|ConvertFrom-Json).users|Where-Object {$_.email -eq 'admin@portal.local'}|Select-Object -First 1
-Invoke-WebRequest "$baseUrl/api/users/$($admin.id)" -Method PUT -WebSession $script:sessao -ContentType 'application/json' -UseBasicParsing -TimeoutSec 60 -Body '{"dailyReportEnabled":true,"dailyReportTime":"16:20"}' | Out-Null
+Invoke-WebRequest "$baseUrl/api/users/$($admin.id)" -Method PUT -WebSession $script:sessao -ContentType 'application/json' -UseBasicParsing -TimeoutSec 60 -Body (@{dailyReportEnabled=$true;dailyReportTime='16:20';expectedRevision=$admin.revision}|ConvertTo-Json -Compress) | Out-Null
 Verifica 'Administrador configura destinatario e horario do relatorio diario' {
   $lista=(Invoke-WebRequest "$baseUrl/api/users" -WebSession $script:sessao -UseBasicParsing -TimeoutSec 60).Content|ConvertFrom-Json
   $config=$lista.users|Where-Object {$_.id -eq $admin.id}|Select-Object -First 1
