@@ -21,6 +21,10 @@
 # Defesa contra dados reais fora da area privada
 *.xlsx
 *.xls
+*.csv
+!*.exemplo.csv
+/docs/AVALIACAO-*.md
+/docs/REVISAO-*.md
 *.sqlite
 *.sqlite-*
 *.db
