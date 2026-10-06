@@ -1,3 +1,4 @@
+import { exportarTabelas } from '@/lib/exportacao-snapshot';
 import { ENTREGAS_EMAIL_SQL } from '@/lib/entregas-email-sql';
 import { VALIDACAO_ATIVA_SQL } from '@/lib/operacao-validacao';
 import { REENVIAR_NOTIFICACAO_SQL, REENVIAR_RELATORIO_DIARIO_SQL, AUDITAR_REENVIO_SQL } from '@/lib/reenvio-sql';
@@ -1631,31 +1632,7 @@ async function updateUser(request:Request,actor:User,userId:string){
 }
 
 async function exportDatabase(){
-  const tables={
-    users:await all('SELECT id,name,email,role,active,daily_report_enabled,daily_report_time,created_at FROM users ORDER BY created_at'),
-    suppliers:await all('SELECT * FROM suppliers ORDER BY legal_name'),
-    locations:await all('SELECT * FROM locations ORDER BY state,city'),
-    catalogItems:await all('SELECT * FROM catalog_items ORDER BY name'),
-    vehicleModels:await all('SELECT * FROM vehicle_models ORDER BY name'),
-    importItemMappings:await all('SELECT * FROM import_item_mappings ORDER BY source_key'),
-    importUnitMappings:await all('SELECT * FROM import_unit_mappings ORDER BY source_key'),
-    importModelMappings:await all('SELECT * FROM import_model_mappings ORDER BY source_key'),
-    units:await all('SELECT * FROM units ORDER BY code'),
-    agreements:await all('SELECT * FROM agreements ORDER BY created_at'),
-    agreementLocations:await all('SELECT * FROM agreement_locations'),
-    imports:await all('SELECT * FROM imports ORDER BY created_at'),
-    agreementVersions:await all('SELECT * FROM agreement_versions ORDER BY agreement_id,version_number'),
-    agreementItems:await all('SELECT * FROM agreement_items ORDER BY version_id,created_at'),
-    tickets:await all('SELECT * FROM tickets ORDER BY created_at'),
-    ticketEvents:await all('SELECT * FROM ticket_events ORDER BY created_at'),
-    emailNotifications:await all('SELECT * FROM email_notifications ORDER BY created_at'),
-    auditLogs:await all('SELECT * FROM audit_logs ORDER BY created_at'),
-  };
-  // Tabelas criadas por migracoes posteriores entram so se existirem.
-  const extras:Record<string,string>={reportJobs:'report_jobs',dailyReportDeliveries:'daily_report_deliveries'};
-  for(const [nome,tabela] of Object.entries(extras)){
-    if(await first("SELECT 1 ok FROM sqlite_master WHERE type='table' AND name=?",[tabela])) (tables as Record<string,unknown[]>)[nome]=await all(`SELECT * FROM ${tabela}`);
-  }
+  const tables=await exportarTabelas(rawDb());
   const data={
     format:'portal-suprimentos-data-export',
     formatVersion:1,
