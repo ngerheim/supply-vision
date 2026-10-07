@@ -8,7 +8,7 @@ import { erroExportacaoAuditoria, BUSCA_LITERAL_AUDITORIA_SQL } from '@/lib/audi
 import { detalhesHistorico, referenciasHistorico, rotuloAcaoHistorico, rotuloEntidadeHistorico } from '@/lib/historico-legivel';
 import { paginaSolicitada } from '@/lib/paginacao';
 import { filtrosNotificacoes } from '@/lib/filtros-notificacoes';
-import { condicoesBusca } from '@/lib/filtros-busca';
+import { consultaBusca, consultasOpcoesBusca } from '@/lib/consulta-busca';
 import { fornecedorChamado } from '@/lib/chamados';
 import { AUDITAR_USUARIO_SQL, ATUALIZAR_USUARIO_SQL, ATUALIZAR_USUARIO_COM_SENHA_SQL, ENCERRAR_SESSOES_REDEFINIDAS_SQL, ENCERRAR_SESSOES_ALTERADAS_SQL } from '@/lib/usuarios-sql';
 import { montarPowerBiUrl } from '@/lib/powerbi';
@@ -223,7 +223,7 @@ async function GETInterno(request: NextRequest) {
   if (!user) return fail('Sessão expirada.', 401);
 
   if (parts[0] === 'bootstrap') return bootstrap(user);
-  if (parts[0] === 'search') return search(request.nextUrl.searchParams);
+  if (parts[0] === 'search') return parts[1] === 'options' ? searchOptions(request.nextUrl.searchParams) : search(request.nextUrl.searchParams);
   if (parts[0] === 'agreements' && parts[1]) return agreementDetail(parts[1], user, request.nextUrl.searchParams);
 
   // Daqui para baixo, somente quem tem perfil de escrita (admin/editor).
@@ -1123,27 +1123,20 @@ async function createUser(request: Request, actor: User) {
 }
 
 async function search(params: URLSearchParams) {
-  // ?1 e a data de negocio; os filtros abaixo usam ? e o SQLite os numera a
-  // partir de 2, na ordem em que aparecem.
-  const values: unknown[] = [dataDeNegocio()], conditions = [
-    `a.status='active'`,
-    `date(a.start_date)<=date(?1)`,
-    `(a.end_date IS NULL OR date(a.end_date)>=date(?1))`,
-  ];
-  const filtros = condicoesBusca(params);
-  conditions.push(...filtros.conditions);
-  values.push(...filtros.values);
-  const total = Number((await first<{ n: number }>(`SELECT COUNT(*) n
-    FROM agreement_items ai JOIN agreements a ON a.current_version_id=ai.version_id JOIN suppliers s ON s.id=a.supplier_id
-    JOIN catalog_items ci ON ci.id=ai.catalog_item_id JOIN vehicle_models vm ON vm.id=ai.vehicle_model_id JOIN units un ON un.id=ai.unit_id JOIN locations l ON l.id=ai.location_id
-    WHERE ${conditions.join(' AND ')}`, values))?.n || 0);
+  const { sql, values } = consultaBusca(params, dataDeNegocio());
+  const total = Number((await first<{ n: number }>(`SELECT COUNT(*) n ${sql}`, values))?.n || 0);
   const limit = 1000;
   const rows = await all(`SELECT ai.id,ci.name AS item,vm.name AS model,ai.price,ai.courtesy,un.code AS unit,ai.brands_text AS brands,
     l.city,l.state,s.trade_name AS supplier,s.cnpj,a.id AS agreementId,a.number,a.end_date AS endDate
-    FROM agreement_items ai JOIN agreements a ON a.current_version_id=ai.version_id JOIN suppliers s ON s.id=a.supplier_id
-    JOIN catalog_items ci ON ci.id=ai.catalog_item_id JOIN vehicle_models vm ON vm.id=ai.vehicle_model_id JOIN units un ON un.id=ai.unit_id JOIN locations l ON l.id=ai.location_id
-    WHERE ${conditions.join(' AND ')} ORDER BY ci.name,vm.name,l.city,ai.price LIMIT ${limit}`, values);
+    ${sql} ORDER BY ci.name,vm.name,l.city,ai.price LIMIT ${limit}`, values);
   return ok({ rows, total, truncated: total > rows.length, limit });
+}
+
+async function searchOptions(params: URLSearchParams) {
+  const consultas = consultasOpcoesBusca(params, dataDeNegocio());
+  const options = Object.fromEntries(await Promise.all(consultas.map(async ({ campo, sql, values }) =>
+    [campo, await all<{ id: string; name: string }>(sql, values)] as const)));
+  return ok({ options });
 }
 
 async function importWorkbook(request: Request, user: User, agreementId: string) {

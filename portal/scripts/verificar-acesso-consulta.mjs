@@ -20,6 +20,9 @@ export async function verificarAcessoConsulta({ request, good, check, senha, agr
       assert.equal((await request(path, { session })).status, 403, path);
     }
     const initial = (await request('/api/bootstrap', { session })).data;
+    const opcoes = await request('/api/search/options', { session });
+    assert.equal(opcoes.status, 200);
+    assert.ok(opcoes.data.options.supplier.every(s => Object.keys(s).sort().join(',') === 'id,name'));
     assert.deepEqual(initial.imports, []);
     assert.deepEqual(initial.catalogs.units, []);
     assert.ok(initial.catalogs.suppliers.every(s => !('legalName' in s) && !('cnpj' in s)));
