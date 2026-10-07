@@ -1,5 +1,6 @@
 import importlib.util
 from pathlib import Path
+import pytest
 
 
 def carregar(tmp_path, monkeypatch):
@@ -21,3 +22,14 @@ def test_csv_preserva_quebras_comentarios_e_aspas(tmp_path, monkeypatch):
     assert mod.carregar_de_para('itens.csv', 'de', 'para', registrar=False) == {
         'SERVICO # INTERNO': 'TROCA\nDE "OLEO"',
     }
+
+
+def test_falha_ao_gravar_contagem_interrompe_carga(tmp_path, monkeypatch):
+    mod = carregar(tmp_path, monkeypatch)
+    (tmp_path / 'itens.csv').write_text('de;para\na;b\n', encoding='utf-8')
+    # Um diretório no destino temporário reproduz falha real de escrita.
+    (tmp_path / '.contagens.json.tmp').mkdir()
+    with pytest.raises(mod.ParametroInvalido, match='registrar contagens'):
+        mod.carregar_de_para('itens.csv', 'de', 'para')
+    assert not mod.CONTAGENS.exists()
+    assert mod.carregar_de_para('itens.csv', 'de', 'para', registrar=False) == {'A': 'b'}
