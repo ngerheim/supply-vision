@@ -151,8 +151,15 @@ def _checar_queda(nome, quantidade, registrar=True):
             tmp.write_text(json.dumps(hist, indent=2, ensure_ascii=False),
                            encoding='utf-8')
             tmp.replace(CONTAGENS)
-        except OSError:
-            tmp.unlink(missing_ok=True)
+        except OSError as erro:
+            try:
+                tmp.unlink(missing_ok=True)
+            except OSError:
+                pass
+            raise ParametroInvalido(
+                f'Não foi possível registrar contagens em {CONTAGENS}: {erro}. '
+                'Verifique as permissões e o espaço em disco antes de executar.'
+            ) from erro
     return quantidade
 
 
