@@ -104,7 +104,10 @@ try {
   }
   Ok "banco restaurado como $($meta.banco.arquivo)"
 } finally {
-  Remove-Item $temp -Recurse -Force -ErrorAction SilentlyContinue
+  $tempSeguro = [IO.Path]::GetFullPath($temp)
+  $raizTemporaria = [IO.Path]::GetFullPath($env:TEMP).TrimEnd('\') + '\'
+  if (!$tempSeguro.StartsWith($raizTemporaria, [StringComparison]::OrdinalIgnoreCase)) { throw 'Pasta de semente fora da raiz temporaria.' }
+  if (Test-Path -LiteralPath $tempSeguro) { Remove-Item -LiteralPath $tempSeguro -Recurse -Force -ErrorAction SilentlyContinue }
 }
 
 Etapa 'Valores que PRECISAM ser revistos nesta maquina'
