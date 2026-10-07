@@ -1,3 +1,4 @@
+import { travarRestauracao } from './trava-restauracao.mjs';
 import { redigirLog } from './redigir-log.mjs';
 import { validacaoAtiva } from './operacao-validacao.mjs';
 // Ponte local: o Worker só enfileira pedidos; este processo executa Python.
@@ -387,6 +388,9 @@ export function criarServidorArquivos({ token, abrirBanco, raiz = privado }) {
   });
 }
 async function principal() {
+  const liberarRestauracao = travarRestauracao();
+  // Mantem a trava durante toda a vida do runner, incluindo downloads e filas.
+  process.once('exit', liberarRestauracao);
   const config = lerConfigBruta();
   if (!config.PORTAL_API_TOKEN)
     throw new Error(
@@ -495,7 +499,7 @@ async function principal() {
     clearInterval(pulso);
     clearInterval(agenda);
     servidor.close();
-    try { await encerrarArvore(filhoAtivo); process.exit(0); }
+    try { await encerrarArvore(filhoAtivo); liberarRestauracao(); process.removeListener('exit', liberarRestauracao); process.exit(0); }
     catch { console.error('Nao foi possivel encerrar a arvore Python; confira os processos antes de reiniciar.'); process.exit(1); }
   };
   process.on('SIGTERM', encerrar);

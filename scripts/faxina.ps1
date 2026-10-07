@@ -3,7 +3,8 @@ param([switch]$Executar)
 
 $ErrorActionPreference = 'Stop'
 $Raiz = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
-$Privado = Join-Path $Raiz 'privado'
+. (Join-Path $PSScriptRoot 'operacao-logica.ps1')
+$Privado = Obter-PastaPrivada $Raiz
 $modo = if ($Executar) { 'REAL' } else { 'TESTE (nada sera apagado)' }
 $total = 0
 $itens = 0
@@ -14,7 +15,7 @@ Write-Host "=== Faxina Supply Vision - modo: $modo ===" -ForegroundColor Cyan
 function Remover([string]$caminho, [string]$motivo) {
   if (-not (Test-Path -LiteralPath $caminho)) { return }
   $caminho = (Resolve-Path -LiteralPath $caminho).Path
-  if (-not $caminho.StartsWith($Raiz + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) {
+  if (-not $caminho.StartsWith($Raiz + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase) -and -not $caminho.StartsWith([IO.Path]::GetFullPath($Privado).TrimEnd('\') + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) {
     throw "Alvo de limpeza fora do projeto: $caminho"
   }
   if ((Get-Item -LiteralPath $caminho -Force).Attributes -band [IO.FileAttributes]::ReparsePoint) {

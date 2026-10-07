@@ -258,7 +258,11 @@ def main():
     if not ok:
         logging.error("Pipeline interrompido em: Envio de e-mail")
         try:
-            if estado_entrega.consultar_entrega():
+            entrega = estado_entrega.consultar_entrega()
+            if entrega and entrega.get("estado") == "enviado":
+                logging.warning("Entrega confirmada; falha posterior ao envio nao exige reenvio ou revisao da entrega.")
+                return
+            if entrega:
                 sys.exit(3)
         except estado_entrega.EntregaEmRevisao:
             sys.exit(3)
