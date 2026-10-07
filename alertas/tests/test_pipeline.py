@@ -48,6 +48,18 @@ def test_timeout_vira_falha_controlada(monkeypatch, tmp_path):
     assert output == "parcial"
 
 
+def test_timeout_decodifica_bytes_e_registra_stderr(monkeypatch, tmp_path, caplog):
+    mod = carregar_pipeline(monkeypatch, tmp_path)
+    def expira(*args, **kwargs):
+        raise subprocess.TimeoutExpired(args[0], timeout=1,
+                                        output='saída parcial'.encode(), stderr=b'falha detalhada')
+    monkeypatch.setattr(subprocess, 'run', expira)
+    ok, output = mod.rodar_script('preso.py', 'preso')
+    assert not ok
+    assert output == 'saída parcial'
+    assert 'falha detalhada' in caplog.text
+
+
 def test_qualidade_so_e_anexada_quando_ha_pendencias(monkeypatch, tmp_path):
     """O rodar.py so emite RELATORIO_QUALIDADE_ACORDOS quando ha algo a
     corrigir. Sem o marcador, o pipeline nao deve inventar um anexo."""

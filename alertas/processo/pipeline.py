@@ -64,10 +64,13 @@ def rodar_script(caminho, nome, args=None):
         )
     except subprocess.TimeoutExpired as e:
         logging.error(f"ERRO em '{nome}': excedeu o timeout de {PIPELINE_TIMEOUT_S}s")
-        if e.stdout:
-            for linha in str(e.stdout).strip().splitlines():
-                logging.info(f"  {linha}")
-        return False, e.stdout or ""
+        stdout = e.stdout.decode('utf-8', errors='replace') if isinstance(e.stdout, bytes) else (e.stdout or '')
+        stderr = e.stderr.decode('utf-8', errors='replace') if isinstance(e.stderr, bytes) else (e.stderr or '')
+        for linha in stdout.strip().splitlines():
+            logging.info(f"  {linha}")
+        for linha in stderr.strip().splitlines():
+            logging.error(f"  {linha}")
+        return False, stdout
 
     if resultado.stdout:
         for linha in resultado.stdout.strip().splitlines():
