@@ -15,7 +15,7 @@ export type ContextoNotificacaoChamado = {
 
 export async function pessoaNotificacao(userId: string | null) {
   if (!userId) return null;
-  const pessoa = await rawDb().prepare('SELECT id,name,email FROM users WHERE id=? AND active=1 AND role IN ('admin','editor')').bind(userId)
+  const pessoa = await rawDb().prepare("SELECT id,name,email FROM users WHERE id=? AND active=1 AND role IN ('admin','editor')").bind(userId)
     .first<{ id: string; name: string; email: string }>();
   return pessoa ? { id: pessoa.id, nome: pessoa.name, email: pessoa.email } : null;
 }

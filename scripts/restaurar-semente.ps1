@@ -73,7 +73,7 @@ try {
       }
       $copiadas += $d
       New-Item -ItemType Directory -Force $destino | Out-Null
-      Get-ChildItem -LiteralPath $origem -Force | Copy-Item -Destination $destino -Recurse -Force
+      if (Test-Path -LiteralPath $origem) { Get-ChildItem -LiteralPath $origem -Force | Copy-Item -Destination $destino -Recurse -Force }
     }
     New-Item -ItemType Directory -Force $d1 | Out-Null
     Move-Item -LiteralPath $bancoValidado -Destination $bancoDestino

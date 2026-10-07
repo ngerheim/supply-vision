@@ -43,6 +43,7 @@ try{
  [IO.File]::WriteAllText("$temp\privado\portal\configuracao\portal.env","PORTAL_URL=x`r`nPORTAL_API_TOKEN=x`r`nBACKUP_EMAIL_TO=x")
  [IO.File]::WriteAllText("$temp\privado\alertas\config\cfg_ambiente.txt","QLIK_TENANT=x`r`nQLIK_APP_ID=x`r`nQLIK_OBJ_ID=x`r`nDESTINATARIO_ALERTA=x")
  [IO.File]::WriteAllText("$temp\privado\comum\operacao.env","ALERTAS_HORARIOS=00:00`r`nBACKUP_HORARIOS=00:00`r`nLIMPEZA_HORARIO=00:00`r`nESPACO_MINIMO_GB=1")
+ [IO.File]::WriteAllText("$temp\privado\portal\configuracao\worker.env",'segredo-ficticio')
  $data=Get-Date -Format yyyy-MM-dd;@{"alertas-$data-00:00"='ok';"backup-$data-00:00"='ok';"limpeza-$data-00:00"='ok'}|ConvertTo-Json|Set-Content "$temp\privado\operacao\estado.json"
  $env:SUPPLY_VISION_PRIVADO=Join-Path $temp 'privado'
  $env:Path="$temp\bin;$pathAnterior";$args=@('-NoProfile','-ExecutionPolicy','Bypass','-File',"$temp\scripts\supervisor.ps1")
@@ -66,5 +67,6 @@ try{
  for($i=0;$i -lt 40;$i++){try{if((Get-Content $statusPath -Raw|ConvertFrom-Json).atualizado-ne$antes){$atualizou=$true;break}}catch{};Start-Sleep -Milliseconds 500}
  if(!$atualizou){throw 'Supervisor nao voltou a atualizar status.json apos a liberacao.'}
  New-Item -ItemType File -Force "$temp\privado\operacao\parar.sinal"|Out-Null;$vivos[0].WaitForExit(25000)|Out-Null;if(!$vivos[0].HasExited){throw 'Supervisor nao encerrou.'}
+ if(Test-Path -LiteralPath "$temp\privado\portal\configuracao\worker.env"){throw 'Supervisor deixou worker.env depois de encerrar.'}
  Write-Host 'Supervisor isolado: concorrencia, estado, arquivo em uso e encerramento aprovados.' -ForegroundColor Green
 }finally{$env:Path=$pathAnterior;$env:SUPPLY_VISION_PRIVADO=$privadoAnterior;foreach($p in $processos){if($p-and!$p.HasExited){& taskkill.exe /PID $p.Id /T /F 2>$null|Out-Null}};if(Test-Path $temp){Remover-DiretorioTemporario $temp}}

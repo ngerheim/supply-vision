@@ -736,6 +736,32 @@ try {
     assert.equal(exported.tables.importUnitMappings.length, query('SELECT COUNT(*) n FROM import_unit_mappings')[0].n);
     assert.equal(exported.tables.importLocationMappings, undefined);
   });
+  await check('Login paralelo por alvo preserva acesso de outro usuario', async () => {
+    const alvo='alvo-inexistente@example.invalid';
+    for(let i=0;i<5;i++)assert.equal((await request('/api/login',{method:'POST',body:{email:alvo,password:'senha-incorreta'}})).status,401);
+    const inicio=performance.now();
+    const lote=await Promise.all(Array.from({length:20},()=>request('/api/login',{method:'POST',body:{email:alvo,password:'senha-incorreta'}})));
+    assert.equal(lote.filter(r=>r.status===401).length,1);
+    assert.equal(lote.filter(r=>r.status===429).length,19);
+    assert.ok(performance.now()-inicio>=750,'Atraso progressivo foi contornado');
+    const [legitimo, falha]=await Promise.all([
+      request('/api/login',{method:'POST',body:{email:'admin@portal.local',password:senha}}),
+      request('/api/login',{method:'POST',body:{email:alvo,password:'senha-incorreta'}}),
+    ]);
+    assert.equal(legitimo.status,200); assert.equal(falha.status,401);
+  });
+  await check('Importacao com acordo ocupado retorna conflito e nao publica', async () => {
+    const db=new DatabaseSync(sqlitePath);
+    try{db.prepare('INSERT INTO travas(chave,dono,adquirida_em) VALUES(?,?,?)').run(`acordo:${agreementId}`,'teste-conflito',new Date().toISOString());}
+    finally{db.close()}
+    const antes=businessSnapshot();
+    try{
+      const r=await upload(file([row()],{name:'conflito-acordo'}),replace);
+      assert.equal(r.status,409,JSON.stringify(r.data));
+      assert.deepEqual(businessSnapshot(),antes);
+      assert.equal(query('SELECT status FROM imports WHERE id=?',r.data.importId)[0].status,'conflict');
+    }finally{const db=new DatabaseSync(sqlitePath);try{db.prepare('DELETE FROM travas WHERE chave=?').run(`acordo:${agreementId}`);}finally{db.close()}}
+  });
   await check('Reinicialização conserva acordos e correspondências', async () => {
     const before = businessSnapshot(), mappings = await good('/api/mappings');
     reader.close(); reader = null; await stopServer(); await startServer(); reader = new DatabaseSync(sqlitePath, { readOnly: true });

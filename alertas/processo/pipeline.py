@@ -256,7 +256,6 @@ def main():
         args=[contexto, ",".join(datas), f"@{arquivo_saida}", "", caminho_com, caminho_qualidade]
     )
     if not ok:
-        logging.error("Pipeline interrompido em: Envio de e-mail")
         try:
             entrega = estado_entrega.consultar_entrega()
             if entrega and entrega.get("estado") == "enviado":
@@ -266,6 +265,7 @@ def main():
                 sys.exit(3)
         except estado_entrega.EntregaEmRevisao:
             sys.exit(3)
+        logging.error("Pipeline interrompido em: Envio de e-mail")
         sys.exit(1)
 
     logging.info("="*50)

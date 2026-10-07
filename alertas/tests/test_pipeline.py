@@ -197,3 +197,25 @@ def test_probe_detecta_lock_sobrevivente_sem_executar_pipeline():
         filho.terminate(); filho.communicate(timeout=15)
     probe = subprocess.run([sys.executable, str(ROOT / "processo/pipeline.py"), "--verificar-lock"], stdin=subprocess.DEVNULL, capture_output=True, timeout=15)
     assert probe.returncode == 0
+
+
+@pytest.mark.parametrize("estado,codigo", [("enviado", 0), ("incerto", 3), ("parcial", 3), (None, 1)])
+def test_falha_apos_envio_respeita_estado_persistido(monkeypatch, tmp_path, estado, codigo):
+    mod = carregar_pipeline(monkeypatch, tmp_path)
+    monkeypatch.delenv("SUPPLY_VISION_SEM_ENVIO", raising=False)
+    monkeypatch.setattr(sys, "argv", ["pipeline.py"])
+    monkeypatch.setattr(mod, "adquirir_lock", lambda: None)
+    monkeypatch.setattr(mod, "configurar_log", lambda: "teste.log")
+    estados = iter([None, {"estado": estado} if estado else None])
+    monkeypatch.setattr(mod.estado_entrega, "consultar_entrega", lambda: next(estados))
+    respostas = iter([(True, "CONTEXTO_EMAIL=parcial\nDATAS_EMAIL=15/09/2026"),
+                      (True, "RESUMO_JSON=" + json.dumps({"total_elegivel": 1,
+                       "contagens": {"ACIMA DO ACORDO": 1, "ABAIXO DO ACORDO": 0}})),
+                      (False, "falha ao encerrar SMTP")])
+    monkeypatch.setattr(mod, "rodar_script", lambda *a, **kw: next(respostas))
+    if codigo == 0:
+        mod.main()
+    else:
+        with pytest.raises(SystemExit) as saida:
+            mod.main()
+        assert saida.value.code == codigo

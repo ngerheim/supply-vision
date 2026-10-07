@@ -726,7 +726,7 @@ async function agreementDetail(agreementId: string, user: User, params: URLSearc
       FROM agreements a JOIN agreement_items ai ON ai.version_id=a.current_version_id JOIN catalog_items ci ON ci.id=ai.catalog_item_id
       JOIN vehicle_models vm ON vm.id=ai.vehicle_model_id JOIN units un ON un.id=ai.unit_id JOIN locations l ON l.id=ai.location_id
       WHERE a.id=? ORDER BY ${sortColumn} ${sortDirection},ai.id ASC LIMIT ? OFFSET ?`, [agreementId, limit, offset]),
-    all(`SELECT version_number AS versionNumber,status,published_at AS publishedAt,created_at AS createdAt FROM agreement_versions WHERE agreement_id=? ORDER BY version_number DESC`, [agreementId]),
+    all(`SELECT version_number AS versionNumber,status,published_at AS publishedAt,created_at AS createdAt FROM agreement_versions WHERE agreement_id=? AND status='published' ORDER BY version_number DESC`, [agreementId]),
   ]);
   if (!canWrite(user)) {
     const { id, number, status, start_date, end_date, effectiveStatus, supplier, cnpj } = agreement;
