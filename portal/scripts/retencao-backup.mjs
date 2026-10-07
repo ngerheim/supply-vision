@@ -4,7 +4,8 @@
 // acordo apagado por engano as 10h sumia tambem do backup das 11h, e nao havia
 // ponto anterior ao erro para onde voltar. Agora a copia de cada dia fica em
 // historico/portal-AAAA-MM-DD.sqlite -- a ultima daquele dia, porque cada
-// backup regrava o arquivo do dia -- e os dias alem da janela sao apagados.
+// backup regrava o arquivo do dia. Preserva no mínimo sete cópias diárias,
+// mesmo depois de uma pausa, além de todas as cópias dentro da janela.
 //
 // So toca arquivos com esse padrao de nome, na pasta historico/; qualquer
 // outro arquivo ali fica como esta.
@@ -41,11 +42,12 @@ export function guardarNoHistorico(pastaBase, origem, agora = new Date(), dias =
 }
 
 export function podarHistorico(pastaBase, agora = new Date(), dias = DIAS_RETENCAO) {
+  if (!Number.isInteger(dias) || dias < 1) throw new Error('Retenção deve ser um número inteiro positivo.');
   const limite = new Date(agora.getFullYear(), agora.getMonth(), agora.getDate() - (dias - 1));
   const corte = nomeDoDia(limite);
   const apagados = [];
-  for (const { arquivo, dia } of listarHistorico(pastaBase)) {
-    if (dia < corte) {
+  for (const [indice, { arquivo, dia }] of listarHistorico(pastaBase).entries()) {
+    if (dia < corte && indice >= dias) {
       fs.rmSync(arquivo, { force: true });
       apagados.push(path.basename(arquivo));
     }
