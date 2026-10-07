@@ -19,11 +19,15 @@ backups e limpezas. Rotinas já iniciadas terminam. Use durante
 diagnóstico e execução manual. Pedidos manuais do Portal continuam disponíveis;
 a pausa não encerra rotinas em andamento e não substitui Parar operação para restaurar o banco.
 
+## Perfis e acesso
+
+O grupo Consulta reúne Buscar e Manutenção (Power BI); Suprimentos acrescenta
+Chamados, Acordos, Fornecedores, Importações, Cadastros e De/Para.
+Administrador vê todos os grupos.
+
 ## Relatórios no Portal
 
-Entre como **Administrador** e abra **Relatórios**. O grupo Consulta reúne Buscar
-e Manutenção (Power BI); Suprimentos acrescenta Chamados, Acordos, Fornecedores,
-Importações, Cadastros e De/Para. Administrador vê todos os grupos.
+Entre como **Administrador** e abra **Relatórios**.
 
 | Operação | Resultado |
 |---|---|
@@ -99,6 +103,19 @@ agenda, programas, build e escrita nas pastas privadas. Não testa autenticaçã
 Qlik/SMTP nem garante acesso à rede. A central apresenta falha se o verificador
 retornar erro, sem anunciar aprovação indevida.
 
+## Reinício automático do Portal
+
+Depois de o Portal ter respondido à verificação de saúde, duas falhas seguidas
+provocam o aviso **O Portal parou de responder**. O supervisor reinicia o Portal
+após oito falhas consecutivas, desde que tenham passado pelo menos três minutos
+da partida e três minutos do último reinício. Uma resposta saudável zera a
+contagem. A verificação ocorre nos ciclos do supervisor; esses limites não
+representam um prazo exato de recuperação.
+
+Essa recuperação reinicia o Portal, sem reiniciar automaticamente uma execução
+dos Alertas ou um envio SMTP em andamento. Se a falha persistir, consulte
+[SOCORRO.md](SOCORRO.md) e preserve os logs.
+
 ## Agenda
 
 Os horários ficam em `privado/comum/operacao.env`; o modelo é
@@ -111,7 +128,8 @@ o dia não executa.**
 Os Alertas executam de segunda a quinta às 08:00, 11:00, 14:00 e 17:00;
 na sexta, às 08:00, 11:00 e 14:00. Quando não há dados, nenhuma linha
 comparável ou nenhuma divergência de preço, o pipeline conclui normalmente
-sem enviar e-mail.
+sem enviar e-mail, exceto quando as pendências ultrapassam o limite descrito
+em **Quarentena dos Alertas**.
 
 Se o notebook estiver desligado num horário, ao voltar o supervisor executa
 primeiro o slot pendente da manhã (<10h), que cobre o dia anterior ou o fim
@@ -122,6 +140,53 @@ Não há recuperação automática de dias anteriores.
 
 > `LIMPEZA_HORARIO` precisa cair dentro da janela em que a máquina fica ligada.
 > Fora dela, a limpeza só roda tarde, ao subir, competindo com os Alertas.
+
+`BACKUP_HORARIOS` define os horários de backup no mesmo arquivo, com os mesmos
+sufixos por dia e a mesma regra de valor vazio. O exemplo público usa `18:00`;
+para duas cópias diárias, por exemplo, configure `BACKUP_HORARIOS=12:30,17:30`.
+Confira o arquivo privado: os horários da instalação podem ser diferentes.
+Depois de alterar a agenda, pare e inicie a operação pela central.
+
+## Configuração dos Alertas e do remetente
+
+Edite somente os arquivos em `privado/`; os exemplos versionados não são a
+configuração da instalação. Em `privado/alertas/config/cfg_ambiente.txt`:
+
+| Chave | Uso |
+|---|---|
+| `QLIK_TENANT` | Domínio do tenant Qlik, como `tenant.example.com` |
+| `QLIK_APP_ID` | Identificador da aplicação a consultar |
+| `QLIK_OBJ_ID` | Identificador do objeto usado na extração |
+| `DESTINATARIO_ALERTA` | Destinatário dos avisos de saúde e de expiração da chave; os destinatários dos relatórios ficam em `destinatarios.txt`, na mesma pasta |
+| `PIPELINE_TIMEOUT_S` | Limite em segundos para cada subprocesso do pipeline, não para a execução inteira; padrão de 1800 segundos |
+| `CORTE_VIGENCIA_ACORDOS` | Data `AAAA-MM-DD` a partir da qual a comparação exige vigência e situação do acordo; padrão `2026-09-18` |
+| `CHAVE_QLIK_EXPIRA` | Data real de expiração da chave, em `AAAA-MM-DD`, usada nos lembretes |
+
+Ao renovar a chave, atualize tanto o segredo em `cfg_qlik.txt` quanto
+`CHAVE_QLIK_EXPIRA`. A data configurada não renova nem verifica a validade real
+da chave. Os lembretes são verificados na rotina das 08:00, aos 30, 15, 7, 3 e
+1 dias restantes e quando a data já venceu. Sem essa rotina, não conte com o aviso.
+
+Em `privado/comum/smtp.env`, `EMAIL_FROM_NAME` define o nome visível do
+remetente; o endereço continua sendo `SMTP_USER`. Após alterar configurações,
+reinicie a operação e use **Validar configuração**. Isso não comprova
+conectividade ou autenticação Qlik/SMTP. Não publique esses arquivos privados.
+
+## Quarentena dos Alertas
+
+Linhas com quantidade ausente, inválida, zero ou negativa, preço inválido,
+data inválida, acordo ambíguo ou dimensão pendente ficam fora da comparação.
+Elas não são divergências de preço e não entram no total elegível usado nos
+indicadores. **Sem acordo** é uma classificação distinta e permanece elegível.
+
+O resumo no log registra as contagens de quarentena. Quando sua proporção
+ultrapassa **50% das linhas brutas**, o pipeline pode enviar aviso de pendências
+mesmo sem divergências de preço, e o e-mail destaca essa proporção. Abaixo desse
+limite, não há garantia de aviso por e-mail. As planilhas em
+`privado/alertas/relatorios/diarios/pendencias_comparacao/` permitem examinar
+as linhas e os motivos; preserve-as antes da retenção de 24 horas.
+Corrija a origem dos dados, o De/Para ou o cadastro do acordo conforme o motivo,
+e confira uma nova execução antes de considerar a comparação completa.
 
 ## Publicar uma melhoria
 

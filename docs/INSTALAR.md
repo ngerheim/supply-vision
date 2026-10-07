@@ -42,7 +42,6 @@ slots e entregas antes de iniciar. Ajuste-os antes de continuar:
 |---|---|---|
 | `privado\portal\configuracao\portal.env` | `PORTAL_URL` | é o IP desta máquina |
 | `privado\portal\configuracao\portal.env` | `BACKUP_NETWORK_DIR` | acesso à rede |
-| `privado\alertas\config\cfg_ambiente.txt` | `ACORDO_PATH` | acesso à rede |
 | `privado\comum\operacao.env` | `LIMPEZA_HORARIO` | tem que cair na janela em que a máquina fica ligada |
 
 Os alertas acessam o Portal por loopback quando `PORTAL_URL` usa HTTP, na mesma
@@ -76,7 +75,7 @@ Em ordem de importância:
   BIOS religar após queda de energia. A bateria do notebook funciona como
   nobreak.
 - **Credencial persistente** para o compartilhamento de rede (`cmdkey`), senão
-  o backup em rede e a planilha de acordos falham depois de reiniciar.
+  o backup em rede falha depois de reiniciar.
 - **Windows Update** com horário ativo cobrindo o expediente.
 - **Antivírus** com exclusão só de `privado\portal\banco\`, onde o SQLite faz
   muita escrita pequena. Não exclua a pasta inteira do projeto: ela guarda os
@@ -96,7 +95,13 @@ confira **Portal → Relatórios → Pronto para executar** com um administrador
 Reinicie a máquina e confirme que o Portal sobe sozinho, sem clique e sem
 janela de console sobrando. Só depois considere a instalação concluída.
 
-## Versao minima do Python e ambientes antigos
+## Versões mínimas e ambientes antigos
+
+O Portal exige **Node.js 22.13.0 ou superior**, com npm. Sem `winget`, instale
+Node.js e Python manualmente antes de executar o instalador, e abra um novo
+terminal para atualizar o PATH. Confira `node --version`, `npm --version` e
+`python --version`. Uma versão já instalada abaixo do mínimo é recusada;
+o instalador não a atualiza automaticamente.
 
 Os Alertas exigem **Python 3.12 ou superior**, inclusive em `alertas/.venv`.
 Python 3.11 não instala as dependências atuais. O instalador recusa esse ambiente
