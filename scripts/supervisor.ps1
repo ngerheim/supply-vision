@@ -58,6 +58,8 @@ function Encerrar($p){if($p-and!$p.HasExited){& taskkill.exe /PID $p.Id /T /F 2>
 function Pode-Tentar([string]$tipo){$k="tentativa-$tipo";if(!$estado[$k]){return $true};return (Get-Date)-ge([datetime]$estado[$k]).AddMinutes(10)}
 $Npm=(Get-Command npm.cmd).Source;$Node=(Get-Command node.exe).Source;$Python=Join-Path $Alertas '.venv\Scripts\python.exe'
 $alerta=$null;$alertaChave='';$alertaHora='';$alertaRunId='';$backup=$null;$backupChave='';$limpeza=$null;$limpezaChave=''
+$verificacaoSaude=$null;$inicioSaude=$null
+$inicioPortal=Get-Date;$ultimoReinicio=Get-Date
 $portalPronto=$false;$falhasSaude=0;$PortalUrl='http://127.0.0.1:3000'
 # O trace store local do miniflare cresce sem limite (5,5 MB para 14,5 MB em
 # tres dias de operacao) e NAO e controlado por "observability" no
@@ -78,10 +80,20 @@ try{
   # Uma falha isolada do health (ex.: banco momentaneamente ocupado) nao e
   # queda: so duas seguidas (~15 s) declaram o portal fora do ar.
   if($saudavel){$falhasSaude=0}else{$falhasSaude++}
+  # Reinicia apenas o portal apos falhas persistentes e janela de inicializacao.
+  # Nao interrompe Qlik/SMTP com resultado incerto para recuperar a interface.
+  if(!$saudavel-and$falhasSaude-ge8-and((Get-Date)-$inicioPortal).TotalMinutes-ge3-and((Get-Date)-$ultimoReinicio).TotalMinutes-ge3){
+   Log 'Portal sem resposta persistente; reiniciando sua arvore.'
+   Encerrar $processos['portal'];$ultimoReinicio=Get-Date;$inicioPortal=Get-Date;$falhasSaude=0
+  }
+  if($verificacaoSaude){
+   if($verificacaoSaude.HasExited){$verificacaoSaude=$null}
+   elseif(((Get-Date)-$inicioSaude).TotalMinutes-ge3){Encerrar $verificacaoSaude;$verificacaoSaude=$null;Log 'Verificacao de saude excedeu 3 minutos e foi encerrada.'}
+  }
   if($saudavel-and!$portalPronto){$portalPronto=$true;Log 'Portal pronto (health ok).';[void](Notificar 'Supply Vision' "Portal no ar em $PortalUrl")}
   elseif(!$saudavel-and$portalPronto-and$falhasSaude-eq1){Log 'Health sem resposta valida uma vez; aguardando a proxima verificacao.'}
   elseif(!$saudavel-and$portalPronto-and$falhasSaude-ge2){$portalPronto=$false;Log 'Portal deixou de responder.';[void](Notificar 'Supply Vision' 'O Portal parou de responder.')}
-  if($alerta-and$alerta.HasExited){if($alerta.ExitCode-eq0){$estado[$alertaChave]=(Get-Date).ToString('o');$estado.Remove('tentativa-alertas');Log "Alertas concluidos: $alertaChave."}elseif($alerta.ExitCode-eq3){$estado[$alertaChave]='revisao-entrega';$estado.Remove('tentativa-alertas');Log "ALERTA: $alertaChave exige revisao da entrega. Confira privado/alertas/estado-envios; nao sera reenviado automaticamente."}else{Log "Alertas falharam (codigo $($alerta.ExitCode))."};$alerta=$null;Salvar-Estado;try{Start-Process $Python -ArgumentList 'processo\verificar_saude.py',$alertaHora.Replace(':',''),$alertaRunId -WorkingDirectory $Alertas -WindowStyle Hidden -Wait}catch{Log "Verificacao de saude nao executada: $($_.Exception.Message)"}}
+  if($alerta-and$alerta.HasExited){if($alerta.ExitCode-eq0){$estado[$alertaChave]=(Get-Date).ToString('o');$estado.Remove('tentativa-alertas');Log "Alertas concluidos: $alertaChave."}elseif($alerta.ExitCode-eq3){$estado[$alertaChave]='revisao-entrega';$estado.Remove('tentativa-alertas');Log "ALERTA: $alertaChave exige revisao da entrega. Confira privado/alertas/estado-envios; nao sera reenviado automaticamente."}else{Log "Alertas falharam (codigo $($alerta.ExitCode))."};$alerta=$null;Salvar-Estado;try{if(!$verificacaoSaude){$inicioSaude=Get-Date;$verificacaoSaude=Start-Process $Python -ArgumentList 'processo\verificar_saude.py',$alertaHora.Replace(':',''),$alertaRunId -WorkingDirectory $Alertas -WindowStyle Hidden -PassThru}}catch{Log "Verificacao de saude nao executada: $($_.Exception.Message)"}}
   $manutencao=(Test-Path $ManutencaoFile)-or(Test-Path (Join-Path $Operacao 'validacao-atualizacao.sinal'))
   if(!$manutencao-and!$alerta){$agoraAlerta=Get-Date;$d=Obter-SlotDevido 'alertas' (Obter-HorariosDoDia $config 'ALERTAS_HORARIOS' $agoraAlerta) $estado $agoraAlerta;if($d-and(Pode-Tentar 'alertas')){$estado['tentativa-alertas']=(Get-Date).ToString('o');$alertaChave=$d.chave;$alertaHora=$d.hora;$alertaRunId=(Get-Date).ToString('yyyyMMdd_HHmmss')+'_'+[guid]::NewGuid().ToString('N').Substring(0,6);$env:SUPPLY_VISION_RUN_ID=$alertaRunId;try{$alerta=Start-Process $Python -ArgumentList 'processo\pipeline.py','--slot',$d.hora -WorkingDirectory $Alertas -WindowStyle Hidden -PassThru}finally{Remove-Item Env:SUPPLY_VISION_RUN_ID -ErrorAction SilentlyContinue};Log "Alertas iniciados para $($d.hora) (execucao $alertaRunId, PID $($alerta.Id)).";Salvar-Estado}}
   if($backup-and$backup.HasExited){if($backup.ExitCode-eq0){$estado[$backupChave]=(Get-Date).ToString('o');Log "Backup concluido: $backupChave."}else{Log "Backup falhou (codigo $($backup.ExitCode))."};$backup=$null;Salvar-Estado}
@@ -96,4 +108,4 @@ try{
   # deixar quem pediu esperando ate 15s sem sinal de vida.
   for($i=0;$i-lt15-and!(Test-Path $PararFile);$i++){Start-Sleep 1}
  }
-}catch{Log "ERRO FATAL: $($_.Exception.Message)";Log "Origem: $($_.ScriptStackTrace -replace '\s*\r?\n\s*',' | ')"}finally{@{atualizado=(Get-Date).ToString('o');portal=$false;emails=$false;relatorios=$false;alertas='parado';backup='parado';limpeza='parada';manutencao=$false;disco='desconhecido'}|ConvertTo-Json -Compress|ForEach-Object{[void](Gravar-Tolerante $StatusFile $_)};Log 'Encerrando a operacao.';if($portalPronto){[void](Notificar 'Supply Vision' 'Operacao encerrada. O Portal saiu do ar.')};foreach($p in $processos.Values){Encerrar $p};Encerrar $alerta;Encerrar $backup;Encerrar $limpeza;Remove-Item $PidFile,$PararFile -Force -ErrorAction SilentlyContinue;if($LockHandle){$LockHandle.Dispose()}}
+}catch{Log "ERRO FATAL: $($_.Exception.Message)";Log "Origem: $($_.ScriptStackTrace -replace '\s*\r?\n\s*',' | ')"}finally{@{atualizado=(Get-Date).ToString('o');portal=$false;emails=$false;relatorios=$false;alertas='parado';backup='parado';limpeza='parada';manutencao=$false;disco='desconhecido'}|ConvertTo-Json -Compress|ForEach-Object{[void](Gravar-Tolerante $StatusFile $_)};Log 'Encerrando a operacao.';if($portalPronto){[void](Notificar 'Supply Vision' 'Operacao encerrada. O Portal saiu do ar.')};foreach($p in $processos.Values){Encerrar $p};Encerrar $alerta;Encerrar $backup;Encerrar $limpeza;Encerrar $verificacaoSaude;if(!$processos['portal']-or$processos['portal'].HasExited){Remove-Item -LiteralPath (Join-Path $Privado 'portal\configuracao\worker.env') -Force -ErrorAction SilentlyContinue};Remove-Item $PidFile,$PararFile -Force -ErrorAction SilentlyContinue;if($LockHandle){$LockHandle.Dispose()}}

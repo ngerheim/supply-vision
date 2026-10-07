@@ -13,9 +13,10 @@ export function travarRestauracao(exclusiva = false, pasta = portalPrivado) {
     db.exec('PRAGMA busy_timeout=1000; CREATE TABLE IF NOT EXISTS trava(id INTEGER PRIMARY KEY)');
     db.exec(exclusiva ? 'BEGIN EXCLUSIVE' : 'BEGIN');
     db.prepare('SELECT id FROM trava').all();
-    return () => db.close();
+    let liberada = false;
+    return () => { if (!liberada) { liberada = true; db.close(); } };
   } catch (erro) {
     db.close();
-    throw new Error('Restauração e processadores de e-mail não podem executar ao mesmo tempo.', { cause: erro });
+    throw new Error('Restauração e processadores de e-mail/relatórios não podem executar ao mesmo tempo.', { cause: erro });
   }
 }
