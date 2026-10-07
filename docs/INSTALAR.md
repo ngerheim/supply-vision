@@ -39,6 +39,12 @@ e lista os valores que mudam de máquina. Ajuste-os antes de continuar:
 | `privado\alertas\config\cfg_ambiente.txt` | `ACORDO_PATH` | acesso à rede |
 | `privado\comum\operacao.env` | `LIMPEZA_HORARIO` | tem que cair na janela em que a máquina fica ligada |
 
+Os alertas acessam o Portal por loopback quando `PORTAL_URL` usa HTTP, na mesma
+porta, para não transmitir o token interno pela rede. `PORTAL_URL` continua
+sendo o endereço dos links nos e-mails. Se o Portal estiver em outro servidor,
+configure `PORTAL_INTERNAL_URL` com HTTPS e sem redirecionamentos. Isso não
+habilita HTTPS para os navegadores; essa proteção depende da infraestrutura.
+
 Depois:
 
 ```
