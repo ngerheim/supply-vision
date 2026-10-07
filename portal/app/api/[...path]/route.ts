@@ -1,3 +1,4 @@
+import { ATUALIZAR_UNIDADE_SQL, ATUALIZAR_LOCALIDADE_SQL } from '@/lib/catalogos-sql';
 import { exportarTabelas } from '@/lib/exportacao-snapshot';
 import { ENTREGAS_EMAIL_SQL } from '@/lib/entregas-email-sql';
 import { VALIDACAO_ATIVA_SQL } from '@/lib/operacao-validacao';
@@ -518,6 +519,8 @@ function equalHex(left: string, right: string) {
 // Quem acerta a senha entra, independente de quantas falhas houve antes.
 // O custo recai apenas sobre quem erra, na forma de atraso progressivo, o que
 // reduz a vazao de falhas; reservas curtas podem exigir nova tentativa.
+class ConflitoImportacao extends EntradaInvalida {}
+
 const LOGIN_WINDOW_MIN = 15;
 const LOGIN_SOFT_LIMIT = 5;    // a partir daqui, atraso progressivo
 const LOGIN_DELAY_MAX_MS = 4000;
@@ -1090,14 +1093,14 @@ async function updateCatalog(request: Request, user: User, type: string, recordI
       escrita = rawDb().prepare('UPDATE vehicle_models SET name=?,active=? WHERE id=? AND revision=?').bind(normalizeText(body.name), active, recordId,existing.revision);
     } else if (type === 'units') {
       if (!textValue(body.code)) return fail('Informe a unidade de medida.');
-      escrita = rawDb().prepare('UPDATE units SET code=?,name=?,active=? WHERE id=? AND revision=?').bind(normalizeText(body.code), normalizeText(body.code), active, recordId,existing.revision);
+      escrita = rawDb().prepare(ATUALIZAR_UNIDADE_SQL).bind(normalizeText(body.code), normalizeText(body.code), active, recordId,existing.revision,normalizeText(body.code));
     } else {
       const state = normalizeText(body.state);
       if (!normalizeImportText(body.city) || !isValidState(state)) return fail('Informe a cidade e selecione uma UF brasileira válida.');
-      escrita = rawDb().prepare('UPDATE locations SET city=?,state=? WHERE id=? AND revision=?').bind(normalizeImportText(body.city), state, recordId,existing.revision);
+      escrita = rawDb().prepare(ATUALIZAR_LOCALIDADE_SQL).bind(normalizeImportText(body.city), state, recordId,existing.revision,normalizeImportText(body.city),state);
     }
     const [alterado]=await rawDb().batch([escrita, rawDb().prepare(AUDITAR_REENVIO_SQL).bind(id('aud'),user.id,'UPDATE',type,recordId,'Cadastro atualizado',now())]);
-    if(!alterado.meta.changes)return fail('Cadastro alterado. Atualize a lista antes de salvar.',409);
+    if(!alterado.meta.changes)return fail('Cadastro alterado ou código/localidade em uso. Preserve sua identidade e crie outro cadastro para uma unidade ou localidade diferente.',409);
     return ok({ success: true });
   } catch (error: unknown) {
     if (errorMessage(error).includes('UNIQUE')) return fail('Já existe um cadastro com esses dados.'); throw error;
@@ -1233,7 +1236,7 @@ async function importWorkbookComTrava(request: Request, user: User, agreementId:
     };
     // A publicacao troca a abrangencia do acordo: pega a mesma trava da edicao.
     const donoAcordo = await travarAcordo(agreementId);
-    if (!donoAcordo) throw new EntradaInvalida('outro usuário está alterando este acordo neste momento. Tente de novo em instantes');
+    if (!donoAcordo) throw new ConflitoImportacao('outro usuário está alterando este acordo neste momento. Tente de novo em instantes');
     let summary: Record<string, unknown>;
     try { await renovarTrava(TRAVA_IMPORTACAO, donoTrava); summary = await processAgreementImport(prepared.rows, user, importId, agreementId, publish); }
     finally { await soltarAcordo(agreementId, donoAcordo); }
@@ -1241,13 +1244,13 @@ async function importWorkbookComTrava(request: Request, user: User, agreementId:
   } catch (error: unknown) {
     // So erros de validacao conhecidos chegam ao usuario. O resto (banco,
     // bug) vira mensagem generica e fica no log do servidor.
-    const reservaPerdida = error instanceof TravaPerdida;
+    const reservaPerdida = error instanceof TravaPerdida || error instanceof ConflitoImportacao;
     const conhecido = error instanceof EntradaInvalida || reservaPerdida;
     if (!conhecido) console.error('[portal] falha inesperada na importacao:', error);
     const message = conhecido ? errorMessage(error, 'arquivo inválido') : 'erro interno ao processar a planilha. Tente de novo; se persistir, avise o administrador.';
     if (preview) return ok({ preview: true, valid: false, error: conhecido ? message : `Não foi possível conferir: ${message}` }, reservaPerdida ? { status: 409 } : conhecido ? undefined : { status: 500 });
     await cleanupFailedImport(importId);
-    await rawDb().prepare('UPDATE imports SET status=?,summary_json=?,completed_at=? WHERE id=?').bind('error', JSON.stringify({ error: message }), now(), importId).run();
+    await rawDb().prepare('UPDATE imports SET status=?,summary_json=?,completed_at=? WHERE id=?').bind(error instanceof ConflitoImportacao ? 'conflict' : 'error', JSON.stringify({ error: message }), now(), importId).run();
     return ok({ error: `Não foi possível importar: ${message}`, importId }, { status: reservaPerdida ? 409 : conhecido ? 400 : 500 });
   }
 }
