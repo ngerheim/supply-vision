@@ -34,6 +34,7 @@ import sv_paths
 DATA_INICIO, DATA_FIM, ORIGEM_PERIODO = resolver_ou_sair()
 
 import contrato_base
+from base_atomica import salvar_base
 import qlik
 
 CHAVE_PATH = str(sv_paths.CFG_QLIK)
@@ -101,13 +102,10 @@ def baixar():
               f'({100 * n_dup / len(rows):.3f}% do recorte)')
 
     pathlib.Path(SAIDA).parent.mkdir(parents=True, exist_ok=True)
-    df.to_excel(SAIDA, index=False)
-
-    pathlib.Path(META).write_text(
+    salvar_base(df, SAIDA, META,
         f'PERIODO={DATA_INICIO};{DATA_FIM}\n'
         f'LINHAS={len(df)}\n'
-        f'BAIXADO_EM={datetime.now().strftime("%d/%m/%Y %H:%M")}\n',
-        encoding='utf-8')
+        f'BAIXADO_EM={datetime.now().strftime("%d/%m/%Y %H:%M")}\n')
 
     print(f'base_periodo.xlsx salva: {SAIDA}')
     return len(df)

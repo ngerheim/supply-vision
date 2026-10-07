@@ -13,6 +13,7 @@ from datetime import datetime, timedelta
 import pandas as pd
 
 import contrato_base
+from base_atomica import salvar_base
 import qlik
 import sv_paths
 
@@ -121,7 +122,7 @@ def baixar():
         print(f'Linhas duplicadas removidas: {n_dup}')
 
     sv_paths.BASE_PATH.parent.mkdir(parents=True, exist_ok=True)
-    df.to_excel(SAIDA, index=False)
+    salvar_base(df, SAIDA)
     print(f'base.xlsx salva: {SAIDA}')
 
     sinaliza()

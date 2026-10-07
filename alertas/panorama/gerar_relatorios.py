@@ -32,6 +32,7 @@ from periodo import resolver_ou_sair
 PROCESSO = PANORAMA.parent / 'processo'
 sys.path.insert(0, str(PROCESSO))
 import sv_paths
+from base_atomica import validar_vinculo
 
 DATA_INICIO, DATA_FIM, ORIGEM_PERIODO = resolver_ou_sair()
 
@@ -57,6 +58,7 @@ def _verificar_base():
         sys.exit(1)
     try:
         meta  = pathlib.Path(META_PATH).read_text(encoding='utf-8')
+        validar_vinculo(BASE_PATH, meta)
         linha = next(l for l in meta.splitlines() if l.startswith('PERIODO='))
         i, f  = linha.split('=', 1)[1].split(';')
         if (_parse(i), _parse(f)) != (_parse(DATA_INICIO), _parse(DATA_FIM)):
@@ -64,7 +66,7 @@ def _verificar_base():
             print(f'      mas o pedido é {DATA_INICIO} a {DATA_FIM}.')
             print('      Solicite um novo recorte em Portal → Relatórios.')
             sys.exit(1)
-    except (FileNotFoundError, StopIteration, ValueError, IndexError):
+    except (OSError, StopIteration, ValueError, IndexError):
         print('ERRO: não foi possível validar o período da base baixada')
         print('      (dados\\base_periodo.info.txt ausente ou ilegível).')
         print('      Solicite um novo recorte em Portal → Relatórios para validar.')
