@@ -85,7 +85,7 @@ class ParametroInvalido(RuntimeError):
     """Parâmetro ausente, vazio ou com queda suspeita de tamanho."""
 
 
-def _linhas_uteis(caminho):
+def _linhas_uteis(caminho, csv_multilinha=False):
     if not caminho.is_file():
         raise ParametroInvalido(
             f'Parâmetro ausente: {caminho}\n'
@@ -96,8 +96,18 @@ def _linhas_uteis(caminho):
         bruto = caminho.read_text(encoding=ENC)
     except (OSError, UnicodeDecodeError) as e:
         raise ParametroInvalido(f'Parâmetro ilegível: {caminho}: {e}') from e
-    return [ln for ln in bruto.splitlines()
-            if ln.strip() and not ln.lstrip().startswith('#')]
+    if not csv_multilinha:
+        return [ln for ln in bruto.splitlines()
+                if ln.strip() and not ln.lstrip().startswith('#')]
+    # Quebras e linhas de comentário dentro de campos entre aspas são dados.
+    linhas, entre_aspas = [], False
+    for linha in bruto.splitlines(keepends=True):
+        if not entre_aspas and (not linha.strip() or linha.lstrip().startswith('#')):
+            continue
+        linhas.append(linha)
+        if linha.count('"') % 2:
+            entre_aspas = not entre_aspas
+    return linhas
 
 
 def _checar_queda(nome, quantidade, registrar=True):
@@ -167,7 +177,7 @@ def carregar_de_para(nome, col_de, col_para, normalizar_chave=True, registrar=Tr
     Destino vazio vira None, que o rodar.py usa para marcar 'Item não
     comparável' — revisado, sem equivalente no acordo.
     """
-    linhas = _linhas_uteis(DE_PARA / nome)
+    linhas = _linhas_uteis(DE_PARA / nome, csv_multilinha=True)
     leitor = csv.DictReader(linhas, delimiter=';')
 
     faltando = {col_de, col_para} - set(leitor.fieldnames or [])
