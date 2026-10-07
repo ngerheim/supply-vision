@@ -630,7 +630,9 @@ function ImportHistory({ rows }: JsonData) {
                         ? 'Concluída'
                         : r.status === 'error'
                           ? 'Com erro'
-                          : 'Processando'}
+                          : r.status === 'conflict'
+                            ? 'Não publicada: acordo ocupado'
+                            : 'Processando'}
                     </Badge>
                   </TableCell>
                   <TableCell>{date(r.createdAt)}</TableCell>
