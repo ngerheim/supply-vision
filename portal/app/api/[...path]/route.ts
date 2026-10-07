@@ -749,7 +749,7 @@ async function createAgreement(request: Request, user: User) {
       auditoriaNoLote(user.id, 'CREATE', 'agreement', agreementId, `Acordo ${body.number} criado`),
     ]);
     return ok({ id: agreementId }, { status: 201 });
-  } catch (error: unknown) { return fail(errorMessage(error).includes('UNIQUE') ? 'Já existe um acordo com esse número.' : 'Não foi possível criar o acordo.'); }
+  } catch (error: unknown) { if (errorMessage(error).includes('UNIQUE')) return fail('Já existe um acordo com esse número.'); throw error; }
 }
 
 // Verificar e gravar a abrangencia e as condicoes de um acordo precisa ser uma
@@ -848,7 +848,7 @@ async function updateAgreement(request: Request, user: User, agreementId: string
     ]);
     return ok({ success: true });
   } catch (error: unknown) {
-    return fail(errorMessage(error).includes('UNIQUE') ? 'Já existe um acordo com esse número.' : 'Não foi possível atualizar o acordo.');
+    if (errorMessage(error).includes('UNIQUE')) return fail('Já existe um acordo com esse número.'); throw error;
   }
 }
 
@@ -916,7 +916,7 @@ async function updateItem(request: Request, user: User, itemId: string) {
       .bind(locationId, catalogItemId, modelId, unitId, price, price === 0 ? 1 : 0, nullableText(body.brands), nullableText(body.notes), now(), itemId),
       rawDb().prepare('INSERT INTO audit_logs (id,user_id,action,entity,entity_id,details,created_at) VALUES (?,?,?,?,?,?,?)').bind(id('aud'),user.id,'UPDATE','agreement_item',itemId,JSON.stringify({antes:existing,depois:{location_id:locationId,catalog_item_id:catalogItemId,vehicle_model_id:modelId,unit_id:unitId,price,brands_text:nullableText(body.brands),notes:nullableText(body.notes)}}),now())]);
   }catch(error:unknown){
-    return fail(errorMessage(error).includes('UNIQUE')?'Já existe uma condição igual na versão vigente.':'Não foi possível atualizar a condição.');
+    if (errorMessage(error).includes('UNIQUE')) return fail('Já existe uma condição igual na versão vigente.'); throw error;
   }
   return ok({ success: true });
 }
@@ -983,7 +983,7 @@ async function createMapping(request: Request, user: User, type: string) {
     ]);
     return ok({id:recordId},{status:201});
   } catch (error: unknown) {
-    return fail(errorMessage(error).includes('UNIQUE')?'Já existe um De/Para para essa nomenclatura de origem.':'Não foi possível salvar o De/Para.');
+    if (errorMessage(error).includes('UNIQUE')) return fail('Já existe um De/Para para essa nomenclatura de origem.'); throw error;
   }
 }
 
@@ -1003,7 +1003,7 @@ async function updateMapping(request: Request, user: User, type: string, recordI
     if(!alterado.meta.changes)return fail('Correspondência alterada. Atualize a lista antes de salvar.',409);
     return ok({success:true});
   } catch (error: unknown) {
-    return fail(errorMessage(error).includes('UNIQUE')?'Já existe um De/Para para essa nomenclatura de origem.':'Não foi possível atualizar o De/Para.');
+    if (errorMessage(error).includes('UNIQUE')) return fail('Já existe um De/Para para essa nomenclatura de origem.'); throw error;
   }
 }
 
@@ -1096,7 +1096,7 @@ async function updateCatalog(request: Request, user: User, type: string, recordI
     if(!alterado.meta.changes)return fail('Cadastro alterado. Atualize a lista antes de salvar.',409);
     return ok({ success: true });
   } catch (error: unknown) {
-    return fail(errorMessage(error).includes('UNIQUE') ? 'Já existe um cadastro com esses dados.' : 'Não foi possível atualizar o cadastro.');
+    if (errorMessage(error).includes('UNIQUE')) return fail('Já existe um cadastro com esses dados.'); throw error;
   }
 }
 
