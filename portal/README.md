@@ -296,6 +296,15 @@ padrão. Depois de criar as contas reais, desative a conta semente
 `TRUSTED_PROXY=true` segue o mesmo caminho, e só deve ser ligado quando existir
 um proxy reverso confiável à frente do Portal.
 
+Sem esse proxy, o Portal não usa cabeçalhos de IP fornecidos pelo cliente:
+as tentativas são agrupadas no identificador `local`. A proteção contra
+erros de senha é, portanto, coletiva, além da contagem por conta. Muitos
+erros em outras contas podem aumentar o atraso de uma nova tentativa com
+senha incorreta; logins com senha correta não recebem esse atraso.
+Essa contagem coletiva também protege contra tentativas da mesma senha em
+muitas contas. Alterar seus limites exige medir a frequência real de erros
+e preservar essa proteção; não habilite `TRUSTED_PROXY` sem o proxy confiável.
+
 ## Backup e recuperação
 
 A rotina de backup (cópia local e na rede, histórico de 7 dias, comprovante por
