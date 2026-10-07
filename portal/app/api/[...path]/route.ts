@@ -1603,7 +1603,8 @@ async function updateUser(request:Request,actor:User,userId:string){
   const password=typeof body.password === 'string' && body.password !== '' ? body.password : null;
   if(password !== null && !validatePassword(password)) return fail('A nova senha deve ter entre 10 e 200 caracteres.');
   const active=situacaoAtiva(body.active,target.active);
-  const dailyReportEnabled=body.dailyReportEnabled === undefined ? target.dailyReportEnabled : body.dailyReportEnabled === true ? 1 : 0;
+  const dailyReportEnabled=active===1 && role!=='viewer'
+    ? (body.dailyReportEnabled === undefined ? target.dailyReportEnabled : body.dailyReportEnabled === true ? 1 : 0) : 0;
   const dailyReportTime=body.dailyReportTime === undefined ? target.dailyReportTime : textValue(body.dailyReportTime);
   if(!/^([01]\d|2[0-3]):[0-5]\d$/.test(dailyReportTime)) return fail('Informe um horário válido para o relatório diário.');
   const name=textValue(body.name) || target.name;
@@ -1629,6 +1630,10 @@ async function updateUser(request:Request,actor:User,userId:string){
   // Desativar ou trocar o perfil derruba as sessoes abertas: o acesso antigo
   // nao pode continuar valendo ate o fim do prazo da sessao.
   if(password === null && encerrarSessoes) statements.push(rawDb().prepare(ENCERRAR_SESSOES_ALTERADAS_SQL).bind(userId,userId,role,active));
+  statements.push(rawDb().prepare(`UPDATE daily_report_deliveries SET status='failed',locked_at=NULL,last_error='Permissão de relatório revogada.',updated_at=?
+    WHERE user_id=? AND status IN ('pending','processing') AND EXISTS
+    (SELECT 1 FROM users WHERE id=? AND revision=? AND (active<>1 OR role='viewer' OR daily_report_enabled<>1))`)
+    .bind(now(),userId,userId,target.revision+1));
   const [atualizado]=await rawDb().batch(statements);
   if (!atualizado.meta.changes) return fail('O usuario foi alterado por outra operacao ou e o ultimo administrador ativo. Atualize a lista; promova outro administrador antes de rebaixar o ultimo.',409);
   return ok({ success:true });

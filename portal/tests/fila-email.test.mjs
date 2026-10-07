@@ -55,8 +55,8 @@ void test('chave de deduplicacao impede duas copias', () => comBanco((db) => {
 }));
 
 void test('relatório diário respeita horário e não duplica o envio do dia',()=>comBanco((db)=>{
-  db.exec(`CREATE TABLE users (id TEXT PRIMARY KEY,active INTEGER,daily_report_enabled INTEGER,daily_report_time TEXT);
-    INSERT INTO users VALUES ('u1',1,1,'17:45');
+  db.exec(`CREATE TABLE users (id TEXT PRIMARY KEY,active INTEGER,daily_report_enabled INTEGER,daily_report_time TEXT,role TEXT);
+    INSERT INTO users VALUES ('u1',1,1,'17:45','editor');
     CREATE TABLE daily_report_deliveries (id TEXT PRIMARY KEY,user_id TEXT,report_date TEXT,status TEXT,attempts INTEGER,next_attempt_at TEXT,locked_at TEXT,sent_at TEXT,last_error TEXT,created_at TEXT,updated_at TEXT,UNIQUE(user_id,report_date));`);
   prepararRelatoriosDiarios(db,new Date('2026-09-09T20:44:00.000Z'));
   assert.equal(db.prepare('SELECT COUNT(*) total FROM daily_report_deliveries').get().total,0);
