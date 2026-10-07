@@ -38,7 +38,7 @@ try {
   & node --experimental-strip-types (Join-Path $Raiz 'portal\scripts\restaurar-banco-semente.mjs') (Join-Path $temp 'banco\portal.sqlite') $bancoValidado
   if ($LASTEXITCODE -ne 0) { throw 'Banco da semente reprovado; configuracao preservada.' }
   if (!$meta.estadoPersistente) { Write-Warning 'Semente antiga sem estado persistente: confira os envios e slots antes de iniciar a operacao.' }
-  if (Test-Path -LiteralPath (Join-Path $Privado 'operacao\supervisor.pid.json')) { throw 'Pare a operacao antes de restaurar a semente.' }
+  if (!(Testar-SupervisorEncerrado $Privado)) { throw 'Pare a operacao antes de restaurar a semente.' }
 
   Etapa 'Conferindo o destino'
   $d1 = Join-Path $Privado 'portal\banco\estado\state\v3\d1\miniflare-D1DatabaseObject'

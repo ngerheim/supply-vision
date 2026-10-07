@@ -9,7 +9,8 @@
 //
 // As variaveis vem do portal.env, junto das outras configuracoes de operacao,
 // e sao entregues por um arquivo proprio (--env-file), gravado na area privada
-// a cada subida e apagado quando o Portal para. Antes iam por --var, e a linha
+// a cada subida. A saida normal o apaga; na parada forcada, o supervisor faz
+// a limpeza depois de encerrar a arvore. Antes iam por --var, e a linha
 // de comando de qualquer processo fica visivel para todo usuario da maquina
 // (Gerenciador de Tarefas, Get-CimInstance Win32_Process): a senha inicial e
 // o token interno apareciam ali em texto puro.
