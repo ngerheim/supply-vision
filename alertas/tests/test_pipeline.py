@@ -191,9 +191,9 @@ def test_probe_detecta_lock_sobrevivente_sem_executar_pipeline():
     filho = subprocess.Popen([sys.executable, "-c", codigo], cwd=ROOT / "processo", stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     try:
         assert filho.stdout.readline().strip() == "pronto"
-        probe = subprocess.run([sys.executable, str(ROOT / "processo/pipeline.py"), "--verificar-lock"], capture_output=True, timeout=15)
+        probe = subprocess.run([sys.executable, str(ROOT / "processo/pipeline.py"), "--verificar-lock"], stdin=subprocess.DEVNULL, capture_output=True, timeout=15)
         assert probe.returncode == 2
     finally:
         filho.terminate(); filho.communicate(timeout=15)
-    probe = subprocess.run([sys.executable, str(ROOT / "processo/pipeline.py"), "--verificar-lock"], capture_output=True, timeout=15)
+    probe = subprocess.run([sys.executable, str(ROOT / "processo/pipeline.py"), "--verificar-lock"], stdin=subprocess.DEVNULL, capture_output=True, timeout=15)
     assert probe.returncode == 0
