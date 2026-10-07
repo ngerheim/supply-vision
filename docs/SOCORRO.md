@@ -13,6 +13,19 @@ Abra `Supply Vision.bat` e use **Validar configuração**. Consulte os arquivos 
 5. Se reinicia continuamente, ative o modo manutenção, pare a operação e
    preserve os logs.
 
+O supervisor avisa após duas falhas seguidas de saúde de um Portal que já
+respondeu. Reinicia após oito falhas consecutivas, respeitando três minutos
+desde a partida e desde o último reinício. Não espere recuperação imediata;
+consulte o log para saber se houve reinício ou se a falha continua.
+
+## Login informa "Muitos acessos simultâneos" (429)
+
+Aguarde alguns segundos e tente uma vez, evitando cliques repetidos ou várias
+abas entrando com o mesmo e-mail. Há limite por e-mail e por instância do
+Portal; essa resposta não significa bloqueio da conta por senha incorreta.
+Se persistir, consulte os logs do Portal e confira a quantidade de acessos
+simultâneos antes de reiniciar a operação. Não altere senhas para liberar a fila.
+
 ## O supervisor caiu
 
 Procure `ERRO FATAL` no `supervisor.log` — ele registra a mensagem e a pilha
@@ -28,8 +41,17 @@ valor antigo significa supervisor morto, não operação saudável.
 1. Confira `estado.json` e `supervisor.log`.
 2. Veja o último `pipeline_*.log` em `privado/alertas/logs`.
 3. Confirme se o dia tem agenda configurada.
-4. Valide configuração, chave Qlik, planilha de acordos e conectividade.
+4. Valide configuração, chave Qlik, acesso dos Alertas ao Portal e conectividade.
 5. Na pasta `alertas/`, use `.venv\Scripts\python.exe processo\pipeline.py --sem-envio` para gerar uma prévia diária sem enviar e-mail durante o suporte.
+
+## Os Alertas têm menos linhas comparadas que a extração
+
+Confira as contagens de quarentena no log e os arquivos de pendências gerados.
+Quantidade inválida ou não positiva, preço/data inválidos, acordo ambíguo e
+dimensão pendente excluem linhas da comparação, sem classificá-las como
+divergência de preço. O e-mail só destaca pendências acima de 50% das linhas
+brutas; sua ausência não comprova que todas as linhas foram comparadas.
+Veja [Quarentena dos Alertas](OPERAR.md#quarentena-dos-alertas).
 
 ## Os e-mails pararam
 
