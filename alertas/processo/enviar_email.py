@@ -3,7 +3,6 @@ import os
 import pathlib
 import sys
 import re
-import json
 from email.message import EmailMessage
 from datetime import datetime
 
@@ -18,6 +17,7 @@ import sv_paths
 from smtp_conexao import conectar
 import email_visual
 import estado_entrega
+from resumo_saida import ler_resumo
 
 SMTP_SERVIDOR  = sv_paths.SMTP_SERVIDOR
 SMTP_PORTA     = sv_paths.SMTP_PORTA
@@ -114,10 +114,7 @@ def montar_assunto(contexto, datas):
 def extrair_resumo(output):
     """Extrai o marcador estruturado; não depende de frases humanas."""
     filtros  = re.findall(r"Filtro (.+?): ([\d,]+) linhas removidas", output)
-    marcador = re.search(r"^RESUMO_JSON=(.+)$", output, re.MULTILINE)
-    if not marcador:
-        raise ValueError("RESUMO_JSON ausente no output de rodar.py")
-    resumo_dados = json.loads(marcador.group(1))
+    resumo_dados = ler_resumo(output)
 
     linhas_filtros = ""
     for motivo, qtd in filtros:
