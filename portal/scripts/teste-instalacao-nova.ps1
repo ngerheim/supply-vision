@@ -398,6 +398,10 @@ Verifica 'Exclusoes respeitam a trava de uma operacao concorrente' {
   if($codigoTeste -ne 0){Start-Sleep -Seconds 2; Get-Content $logServidor | Select-String -Pattern 'erro nao tratado' -Context 0,15 | Out-Host}
   $codigoTeste -eq 0
 }
+Verifica 'Falhas de banco retornam 500 sem expor detalhes nem gravar parcialmente' {
+  & node (Join-Path $PSScriptRoot 'teste-erros-banco.mjs') $temp $arquivoBanco | Out-Host
+  $LASTEXITCODE -eq 0
+}
 Verifica 'Relatorios e perfis respeitam fila, idempotencia e acesso' {
   & node (Join-Path $PSScriptRoot 'teste-relatorios-perfis.mjs') $temp $arquivoBanco | Out-Host
   $codigoTeste=$LASTEXITCODE
