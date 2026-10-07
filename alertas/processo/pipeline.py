@@ -164,6 +164,8 @@ def concluir_sem_envio(situacao):
 def ler_slot_argv(argv):
     """Devolve o valor de --slot HH:MM (ou --slot=HH:MM), se informado."""
     for i, arg in enumerate(argv):
+        if arg == '--slot' and i + 1 == len(argv):
+            raise ValueError('Informe o horário após --slot.')
         if arg == "--slot" and i + 1 < len(argv):
             return argv[i + 1]
         if arg.startswith("--slot="):
@@ -184,9 +186,10 @@ def main():
     # Horário agendado do disparo: o baixar_base.py calcula datas e contexto
     # a partir dele, não do relógio. Vai pelo ambiente, que os scripts filhos
     # herdam em rodar_script().
-    slot = ler_slot_argv(sys.argv[1:])
+    slot = estado_entrega.normalizar_slot(ler_slot_argv(sys.argv[1:]) or os.environ.get('SV_ALERTA_SLOT', ''))
     if slot:
         os.environ["SV_ALERTA_SLOT"] = slot
+        os.environ.setdefault('SV_ALERTA_DATA', datetime.now().strftime('%Y-%m-%d'))
     log_path = configurar_log()
     logging.info(f"Run ID: {RUN_ID}")
     logging.info(f"Pipeline iniciado — {datetime.now().strftime('%d/%m/%Y %H:%M')}")

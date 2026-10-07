@@ -61,6 +61,8 @@ def datas_alvo(slot=None):
     """
     agora = datetime.now()
     if slot is not None:
+        if os.environ.get('SV_ALERTA_DATA'):
+            agora = datetime.strptime(os.environ['SV_ALERTA_DATA'], '%Y-%m-%d')
         agora = agora.replace(hour=slot[0], minute=slot[1], second=0, microsecond=0)
     hoje  = agora.date()
     hora  = agora.hour

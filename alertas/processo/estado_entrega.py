@@ -8,6 +8,16 @@ from pathlib import Path
 import sv_paths
 
 _MANUAL_ID = 'manual_' + secrets.token_hex(12)
+_DATA_EXECUCAO = datetime.now().strftime('%Y-%m-%d')
+
+
+def normalizar_slot(slot):
+    if not slot:
+        return ''
+    m = re.fullmatch(r'(\d{1,2}):?(\d{2})', slot.strip())
+    if not m or int(m[1]) > 23 or int(m[2]) > 59:
+        raise ValueError('Slot agendado inválido; informe HH:MM.')
+    return f'{int(m[1]):02d}:{int(m[2]):02d}'
 
 
 class EntregaEmRevisao(RuntimeError):
@@ -15,9 +25,11 @@ class EntregaEmRevisao(RuntimeError):
 
 
 def caminho_entrega():
-    slot = os.environ.get('SV_ALERTA_SLOT', '')
-    if re.fullmatch(r'\d{2}:\d{2}', slot):
-        chave = f'{datetime.now():%Y-%m-%d}_{slot.replace(":", "")}'
+    slot = normalizar_slot(os.environ.get('SV_ALERTA_SLOT', ''))
+    if slot:
+        data = os.environ.get('SV_ALERTA_DATA', _DATA_EXECUCAO)
+        datetime.strptime(data, '%Y-%m-%d')
+        chave = f'{data}_{slot.replace(":", "")}'
     else:
         chave = re.sub(r'[^0-9A-Za-z_-]', '_', os.environ.get('SUPPLY_VISION_RUN_ID', _MANUAL_ID))
     return Path(sv_paths.OPERACAO) / 'estado-envios' / f'{chave}.json'
