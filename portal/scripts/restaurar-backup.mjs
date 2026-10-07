@@ -24,8 +24,8 @@ import { lerConfigBruta, portalPrivado } from './configuracao.mjs';
 import { validarBanco as resumir } from './validar-banco.mjs';
 import { prepararRestauracao } from './restauracao-segura.mjs';
 import { listarHistorico, nomeDoDia } from './retencao-backup.mjs';
+import { localizarBanco as localizarBancoLocal } from './banco-local.mjs';
 
-const pastaBanco = path.join(portalPrivado, 'banco', 'estado', 'state', 'v3', 'd1', 'miniflare-D1DatabaseObject');
 const pastaBackup = path.join(portalPrivado, 'backups');
 const anterior = process.argv.includes('--anterior');
 const semPergunta = process.argv.includes('--sim');
@@ -50,10 +50,9 @@ const origem = escolherOrigem();
 
 
 function localizarBanco() {
-  if (!fs.existsSync(pastaBanco)) throw new Error(`Pasta do banco nao encontrada: ${pastaBanco}`);
-  const nome = fs.readdirSync(pastaBanco).find((item) => item.endsWith('.sqlite') && item !== 'metadata.sqlite');
-  if (!nome) throw new Error('Banco atual nao encontrado.');
-  return path.join(pastaBanco, nome);
+  const banco = localizarBancoLocal();
+  if (!banco) throw new Error('Banco atual nao encontrado.');
+  return banco;
 }
 
 // O PID do supervisor nao basta: o Portal pode ter sido iniciado a mao ou o
