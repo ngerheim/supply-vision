@@ -6,9 +6,15 @@ export async function verificarAcessoConsulta({ request, good, check, senha, agr
   const user = await good('/api/users', { method: 'POST', body: { name: 'Consulta carga', email, password: senha, role: 'viewer' } }, 201);
   const login = () => request('/api/login', { method: 'POST', body: { email, password: senha }, session: '' });
   let sessions = [];
-  await check('Consulta: dez logins simultâneos criam sessões independentes', async () => {
+  await check('Consulta: logins simultâneos respeitam limite e retomam sem bloquear conta', async () => {
     const results = await Promise.all(Array.from({ length: 10 }, login));
-    for (const r of results) { assert.equal(r.status, 200); assert.ok(r.cookie); }
+    assert.ok(results.some(r=>r.status===429),'Tentativas simultaneas nao foram limitadas');
+    assert.ok(results.some(r=>r.status===200),'Nenhuma tentativa valida foi aceita');
+    for(let i=0;i<results.length;i++) {
+      assert.ok([200,429].includes(results[i].status));
+      if(results[i].status===429)results[i]=await login();
+      assert.equal(results[i].status,200);assert.ok(results[i].cookie);
+    }
     sessions = results.map(r => r.cookie);
     assert.equal(new Set(sessions).size, 10);
     for (const session of sessions) assert.equal((await request('/api/bootstrap', { session })).status, 200);

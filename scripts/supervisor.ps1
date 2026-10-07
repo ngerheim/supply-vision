@@ -54,7 +54,18 @@ function Iniciar-Processo([string]$nome,[string]$exe,[string[]]$argumentos,[stri
  if($processos[$nome]-and!$processos[$nome].HasExited){return};$saida=Join-Path $Operacao "$nome-saida.log";$erro=Join-Path $Operacao "$nome-erro.log"
  $processos[$nome]=Start-Process $exe -ArgumentList $argumentos -WorkingDirectory $pasta -WindowStyle Hidden -PassThru -RedirectStandardOutput $saida -RedirectStandardError $erro;Log "$nome iniciado (PID $($processos[$nome].Id))."
 }
-function Encerrar($p){if($p-and!$p.HasExited){& taskkill.exe /PID $p.Id /T /F 2>$null|Out-Null}}
+function Encerrar($p){
+ if(!$p){return}
+ try{
+  $p.Refresh()
+  if(!$p.HasExited){
+   # O processo pode sair entre a consulta e taskkill. Essa corrida nao pode
+   # abortar o finally e deixar as demais arvores, inclusive saude, vivas.
+   try{& taskkill.exe /PID $p.Id /T /F 2>$null|Out-Null}catch{}
+   if(!$p.WaitForExit(5000)){Log "AVISO: processo $($p.Id) nao encerrou; confira antes de reiniciar."}
+  }
+ }catch{Log "AVISO ao encerrar processo: $($_.Exception.Message)"}
+}
 function Pode-Tentar([string]$tipo){$k="tentativa-$tipo";if(!$estado[$k]){return $true};return (Get-Date)-ge([datetime]$estado[$k]).AddMinutes(10)}
 $Npm=(Get-Command npm.cmd).Source;$Node=(Get-Command node.exe).Source;$Python=Join-Path $Alertas '.venv\Scripts\python.exe'
 $alerta=$null;$alertaChave='';$alertaHora='';$alertaRunId='';$backup=$null;$backupChave='';$limpeza=$null;$limpezaChave=''
