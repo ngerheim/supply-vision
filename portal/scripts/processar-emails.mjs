@@ -241,7 +241,7 @@ export async function processarNotificacoes(db, config, transportador, { conclui
         const destinatario = db.prepare("SELECT id FROM users WHERE lower(email)=lower(?) AND active=1 AND role IN ('admin','editor') AND (? IS NULL OR id=?)")
           .get(item.recipient_email, item.recipient_user_id ?? null, item.recipient_user_id ?? null);
         if (!destinatario) {
-          db.prepare("UPDATE email_notifications SET status='failed',locked_at=NULL,last_error='Permiss„o de chamado revogada ou destinat·rio alterado.',updated_at=? WHERE id=? AND status='processing' AND attempts=? AND locked_at=?")
+          db.prepare("UPDATE email_notifications SET status='failed',locked_at=NULL,last_error='Permiss√£o de chamado revogada ou destinat√°rio alterado.',updated_at=? WHERE id=? AND status='processing' AND attempts=? AND locked_at=?")
             .run(new Date().toISOString(), item.id, item.attempts, item.locked_at);
           continue;
         }

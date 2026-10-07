@@ -41,7 +41,8 @@ export class KeyedConcurrencyGate {
     try {
       const release = await this.gate.acquire();
       if (!release) { this.keys.delete(key); return null; }
-      return () => { release(); this.keys.delete(key); };
+      let released = false;
+      return () => { if (released) return; released = true; release(); this.keys.delete(key); };
     } catch (error) { this.keys.delete(key); throw error; }
   }
 }

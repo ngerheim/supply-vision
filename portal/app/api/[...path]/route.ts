@@ -532,10 +532,10 @@ async function login(request: Request) {
   const texto = await corpoLimitado(request, CORPO_MAX_LOGIN);
   if (texto === null) return fail('E-mail ou senha inválidos.', 401);
   let body: unknown;
-  try { body = JSON.parse(texto || '{}'); } catch { return fail('E-mail ou senha inv�lidos.', 401); }
-  if (!isRecord(body)) return fail('E-mail ou senha inv�lidos.', 401);
+  try { body = JSON.parse(texto || '{}'); } catch { return fail('E-mail ou senha inválidos.', 401); }
+  if (!isRecord(body)) return fail('E-mail ou senha inválidos.', 401);
   const alvo = textValue(body.email).toLowerCase();
-  if (alvo.length > 254) return fail('E-mail ou senha inv�lidos.', 401);
+  if (alvo.length > 254) return fail('E-mail ou senha inválidos.', 401);
   const release = await loginGate.acquire(alvo);
   if (!release) {
     return ok({ error: 'Muitos acessos simultâneos. Tente novamente em alguns segundos.' }, { status: 429, headers: { 'Retry-After': '5' } });
