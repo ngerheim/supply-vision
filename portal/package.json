@@ -6,7 +6,8 @@
     "node": ">=22.13.0"
   },
   "scripts": {
-    "dev": "vinext dev --host 0.0.0.0",
+    "dev": "vinext dev --host 127.0.0.1",
+    "dev:lan": "vinext dev --host 0.0.0.0",
     "build": "node scripts/verificar-porta-build.mjs && vinext build",
     "start": "node scripts/iniciar-portal.mjs",
     "start:local": "node scripts/iniciar-portal.mjs local",

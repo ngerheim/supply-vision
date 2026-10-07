@@ -267,6 +267,12 @@ documentação, commit ou exportação.
 
 ## Banco e segurança
 
+Para desenvolvimento, `npm run dev` escuta somente em `127.0.0.1`.
+Se for necessário testar de outro computador, use explicitamente
+`npm run dev:lan`, que expõe o servidor de desenvolvimento na rede.
+A operação instalada continua usando `npm run start:lan`; o servidor de
+desenvolvimento não substitui esse procedimento.
+
 SQLite via D1 local. Senhas com PBKDF2, salt individual e 600.000 iterações.
 Sessões guardadas como hash, com expiração em 12 horas e também por
 inatividade (as atualizações automáticas da tela, marcadas com o cabeçalho
