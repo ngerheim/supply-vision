@@ -237,6 +237,14 @@ export async function processarNotificacoes(db, config, transportador, { conclui
       if(validacaoAtiva(db))break;
       const [item]=reservar(db,1);if(!item)break;
       try {
+        // Revalida imediatamente antes do SMTP; uma fila antiga nao concede acesso.
+        const destinatario = db.prepare("SELECT id FROM users WHERE lower(email)=lower(?) AND active=1 AND role IN ('admin','editor') AND (? IS NULL OR id=?)")
+          .get(item.recipient_email, item.recipient_user_id ?? null, item.recipient_user_id ?? null);
+        if (!destinatario) {
+          db.prepare("UPDATE email_notifications SET status='failed',locked_at=NULL,last_error='Permissão de chamado revogada ou destinatário alterado.',updated_at=? WHERE id=? AND status='processing' AND attempts=? AND locked_at=?")
+            .run(new Date().toISOString(), item.id, item.attempts, item.locked_at);
+          continue;
+        }
         const dados = JSON.parse(item.payload_json);
         const email = montarEmailChamado(item.type, dados, config.PORTAL_URL);
         await transportador.sendMail({
