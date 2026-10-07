@@ -10,6 +10,17 @@ import { DIAS_RETENCAO, guardarNoHistorico } from './retencao-backup.mjs';
 import { localizarBanco as localizarBancoLocal } from './banco-local.mjs';
 import { montarCasca, escapar, paleta } from '../lib/email-visual.ts';
 
+// Leitura em blocos limita a memoria independentemente do tamanho do banco.
+export function hashArquivo(arquivo) {
+  const hash = createHash('sha256'), bloco = Buffer.allocUnsafe(1024 * 1024);
+  const fd = fs.openSync(arquivo, 'r');
+  try {
+    let lidos;
+    while ((lidos = fs.readSync(fd, bloco, 0, bloco.length, null)) > 0) hash.update(bloco.subarray(0, lidos));
+    return hash.digest('hex');
+  } finally { fs.closeSync(fd); }
+}
+
 const pastaBackup = path.join(portalPrivado, 'backups');
 const arquivoFinal = path.join(pastaBackup, 'portal-atual.sqlite');
 const arquivoTemporario = path.join(pastaBackup, 'portal-atual.tmp.sqlite');
@@ -53,8 +64,8 @@ function replicarNaRede(config) {
   const anterior = path.join(pastaRede, 'portal-atual.anterior.sqlite');
   fs.rmSync(temporario, { force: true });
   fs.copyFileSync(arquivoFinal, temporario);
-  const hashLocal = createHash('sha256').update(fs.readFileSync(arquivoFinal)).digest('hex');
-  const hashRede = createHash('sha256').update(fs.readFileSync(temporario)).digest('hex');
+  const hashLocal = hashArquivo(arquivoFinal);
+  const hashRede = hashArquivo(temporario);
   if (hashLocal !== hashRede) { fs.rmSync(temporario, { force: true }); throw new Error('A copia do backup na rede nao confere com a copia local.'); }
   fs.rmSync(anterior, { force: true });
   if (fs.existsSync(final)) fs.renameSync(final, anterior);
@@ -69,9 +80,9 @@ function replicarNaRede(config) {
 }
 async function enviar(config, copiaNaRede) {
   if (!config.BACKUP_EMAIL_TO) throw new Error('BACKUP_EMAIL_TO nao configurado.');
-  const conteudo = fs.readFileSync(arquivoFinal);
-  const hash = createHash('sha256').update(conteudo).digest('hex');
-  const tamanhoMb = (conteudo.length / 1024 / 1024).toFixed(2);
+  const tamanho = fs.statSync(arquivoFinal).size;
+  const hash = hashArquivo(arquivoFinal);
+  const tamanhoMb = (tamanho / 1024 / 1024).toFixed(2);
 
   // O anexo levava o banco INTEIRO para fora da empresa a cada horario de
   // backup: hashes de senha, sessoes, tentativas de acesso e toda a base
@@ -86,7 +97,7 @@ async function enviar(config, copiaNaRede) {
   if (anexar && !pedidoExplicito) {
     console.warn('AVISO: sem BACKUP_NETWORK_DIR configurado, o banco segue anexado ao e-mail por falta de outra copia.');
   }
-  if (anexar && conteudo.length > 20 * 1024 * 1024) {
+  if (anexar && tamanho > 20 * 1024 * 1024) {
     console.warn(`AVISO: o banco tem ${tamanhoMb} MB e pode ser recusado pelo servidor de e-mail. Configure BACKUP_NETWORK_DIR.`);
   }
 
