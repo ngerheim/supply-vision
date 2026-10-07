@@ -2,7 +2,6 @@ import subprocess
 import pathlib
 import sys
 import re
-import json
 import logging
 import os
 import secrets
@@ -11,6 +10,7 @@ from datetime import datetime
 
 import sv_paths
 import estado_entrega
+from resumo_saida import ler_resumo
 
 LOG_DIR = str(sv_paths.LOG_DIR)
 PIPELINE_TIMEOUT_S = sv_paths.PIPELINE_TIMEOUT_S
@@ -110,10 +110,7 @@ def extrair_resultado(output):
 
 def extrair_resumo(output):
     """Lê o resumo estruturado emitido por rodar.py."""
-    m = re.search(r"^RESUMO_JSON=(.+)$", output, re.MULTILINE)
-    if not m:
-        raise ValueError("RESUMO_JSON ausente no output de rodar.py")
-    return json.loads(m.group(1))
+    return ler_resumo(output)
 
 
 def extrair_relatorio(output):
