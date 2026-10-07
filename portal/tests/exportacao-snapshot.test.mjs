@@ -17,7 +17,7 @@ void test('exportacao mantem referencias quando exclusao ocorre durante leituras
     reader.exec(`ALTER TABLE users ADD COLUMN daily_report_enabled INTEGER DEFAULT 0; ALTER TABLE users ADD COLUMN daily_report_time TEXT;
       INSERT INTO suppliers(id,legal_name,trade_name,cnpj,created_at,updated_at) VALUES('s','Ficticio','Ficticio','0','x','x');
       INSERT INTO agreements(id,number,supplier_id,start_date,current_version_id,created_at,updated_at) VALUES('a','1','s','2026-10-01','v','x','x');
-      INSERT INTO agreement_versions(id,agreement_id,version_number,created_at) VALUES('v','a',1,'x')`);
+      INSERT INTO agreement_versions(id,agreement_id,version_number,created_at) VALUES('v','a',1,'x'); INSERT INTO agreement_versions(id,agreement_id,version_number,status,created_at) VALUES('preparacao','a',2,'processing','x')`);
     let lotes=0;
     const db={prepare:sql=>sql,batch:async queries=>{
       lotes++;reader.exec('BEGIN');
