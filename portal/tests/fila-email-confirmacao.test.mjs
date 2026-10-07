@@ -7,7 +7,7 @@ const config={PORTAL_URL:'http://portal',EMAIL_FROM_NAME:'Portal',SMTP_USER:'por
 const payload=JSON.stringify({ticketId:'t1',codigo:'SUP-1',fornecedor:'Oficina',prioridade:'media',situacao:'aberto',solicitante:'Ana',responsavel:'Bia',autor:'Ana',resumo:'Teste',alteracoes:[],mensagem:null});
 function banco(){
   const db=new DatabaseSync(':memory:');
-  db.exec(`CREATE TABLE email_notifications (id TEXT PRIMARY KEY,type TEXT,recipient_name TEXT,recipient_email TEXT,payload_json TEXT,status TEXT,attempts INTEGER,next_attempt_at TEXT,locked_at TEXT,sent_at TEXT,last_error TEXT,created_at TEXT,updated_at TEXT)`);
+  db.exec(`CREATE TABLE users(id TEXT,email TEXT,active INTEGER,role TEXT); INSERT INTO users VALUES('bia','bia@exemplo.com',1,'editor'); CREATE TABLE email_notifications (id TEXT PRIMARY KEY,type TEXT,recipient_name TEXT,recipient_email TEXT,payload_json TEXT,status TEXT,attempts INTEGER,next_attempt_at TEXT,locked_at TEXT,sent_at TEXT,last_error TEXT,created_at TEXT,updated_at TEXT)`);
   db.prepare("INSERT INTO email_notifications VALUES ('um','atribuicao','Bia','bia@exemplo.com',?,'pending',0,'2000-01-01T00:00:00.000Z',NULL,NULL,NULL,'2026-01-01','2026-01-01')").run(payload);
   return db;
 }
@@ -32,3 +32,18 @@ void test('confirmacao que nunca grava vira falha explicita e nao volta para a f
     assert.equal(reservar(db).length,0);
   }finally{db.close()}
 });
+
+for (const caso of ['desativado', 'viewer', 'email alterado', 'identidade alterada']) {
+  void test(`notificacao pendente nao envia para destinatario ${caso}`, async () => {
+    const db=banco(), t=transporte();
+    try {
+      if(caso==='desativado')db.exec('UPDATE users SET active=0');
+      if(caso==='viewer')db.exec("UPDATE users SET role='viewer'");
+      if(caso==='email alterado')db.exec("UPDATE users SET email='outro@exemplo.com'");
+      if(caso==='identidade alterada')db.exec("ALTER TABLE email_notifications ADD COLUMN recipient_user_id TEXT; UPDATE email_notifications SET recipient_user_id='antigo'");
+      await processarNotificacoes(db,config,t);
+      assert.equal(t.enviados,0);
+      assert.equal(db.prepare('SELECT status FROM email_notifications').get().status,'failed');
+    }finally{db.close()}
+  });
+}
