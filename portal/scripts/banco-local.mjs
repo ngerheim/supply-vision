@@ -3,10 +3,10 @@ import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { portalPrivado } from './configuracao.mjs';
 
-export function localizarBanco(informado = null) {
+export function localizarBanco(informado = null, pastaPrivada = portalPrivado) {
   if (informado) return path.resolve(informado);
   const diretorio = path.join(
-    portalPrivado,
+    pastaPrivada,
     'banco',
     'estado',
     'state',

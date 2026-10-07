@@ -7,18 +7,18 @@ import { DatabaseSync } from 'node:sqlite';
 
 import { criarTransportador, lerConfig, portalPrivado } from './configuracao.mjs';
 import { DIAS_RETENCAO, guardarNoHistorico } from './retencao-backup.mjs';
+import { localizarBanco as localizarBancoLocal } from './banco-local.mjs';
 import { montarCasca, escapar, paleta } from '../lib/email-visual.ts';
 
-const pastaBanco = path.join(portalPrivado, 'banco', 'estado', 'state', 'v3', 'd1', 'miniflare-D1DatabaseObject');
 const pastaBackup = path.join(portalPrivado, 'backups');
 const arquivoFinal = path.join(pastaBackup, 'portal-atual.sqlite');
 const arquivoTemporario = path.join(pastaBackup, 'portal-atual.tmp.sqlite');
 const arquivoAnterior = path.join(pastaBackup, 'portal-atual.anterior.sqlite');
 
 function localizarBanco() {
-  const nome = fs.readdirSync(pastaBanco).find((item) => item.endsWith('.sqlite') && item !== 'metadata.sqlite');
-  if (!nome) throw new Error('Banco atual nao encontrado.');
-  return path.join(pastaBanco, nome);
+  const banco = localizarBancoLocal();
+  if (!banco) throw new Error('Banco atual nao encontrado.');
+  return banco;
 }
 
 export function criarCopiaIntegra(origem) {
