@@ -40,6 +40,16 @@ assert.equal(evento.fromStatus,'aberto');
 assert.equal(evento.toStatus,'aguardando_fornecedor');
 console.log('[OK] Fornecedor obrigatorio, cadastro sem titulo, mensagem de situacao e dados legados preservados.');
 
+headers['idempotency-key']=crypto.randomUUID();
+const novoAndamento={message:'Andamento com resposta perdida'};
+assert.equal((await pedir(`tickets/${ticketId}/events`,'POST',novoAndamento)).status,201);
+assert.equal((await pedir(`tickets/${ticketId}/events`,'POST',novoAndamento)).status,201);
+assert.equal((await pedir(`tickets/${ticketId}/events`,'POST',{message:'Outro andamento'})).status,409);
+const aposRepeticao=await pedir(`tickets/${ticketId}`);
+assert.equal(aposRepeticao.data.events.filter(e=>e.message===novoAndamento.message).length,1);
+delete headers['idempotency-key'];
+console.log('[OK] Repetir andamento com mesma chave não duplica evento; conteúdo diferente recebe 409.');
+
 for(let i=0;i<12;i++)assert.equal((await pedir(`tickets/${ticketId}/events`,'POST',{message:`OFICINA TESTE exportacao ${i}`})).status,201);
 const codigo=detalhe.data.ticket.code;
 const historico=await pedir(`audit?q=${encodeURIComponent(codigo)}&pageSize=10`);

@@ -87,6 +87,7 @@ const columnMigrations: Array<[string, string, string]> = [
   ['agreement_items', 'revision', 'INTEGER NOT NULL DEFAULT 0'],
   ['tickets', 'request_key', 'TEXT'],
   ['tickets', 'request_hash', 'TEXT'],
+  ['ticket_events', 'request_key', 'TEXT'],
   // Janela coberta por cada relatorio diario: o inicio e o fim do relatorio
   // anterior, para nao haver lacuna nem sobreposicao entre envios.
   ['daily_report_deliveries', 'period_start', 'TEXT'],
@@ -147,6 +148,7 @@ async function initialize() {
   await db.batch([
     ...TRIGGERS_REVISAO.map((sql) => db.prepare(sql)),
     db.prepare('CREATE UNIQUE INDEX IF NOT EXISTS idx_tickets_request_key ON tickets(requested_by,request_key)'),
+    db.prepare('CREATE UNIQUE INDEX IF NOT EXISTS idx_ticket_events_request_key ON ticket_events(ticket_id,user_id,request_key)'),
   ]);
   await db.prepare(MIGRAR_FORNECEDORES_CHAMADOS_SQL).run();
   // Outra instancia pode estar trabalhando neste mesmo banco. A inicializacao

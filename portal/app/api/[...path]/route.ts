@@ -1577,14 +1577,22 @@ async function addTicketEvent(request:Request,user:User,ticketId:string){
   const body=await jsonBody<{message?:unknown}>(request);
   if(!textValue(body.message)) return fail('Escreva o andamento.');
   exigeTexto(body.message,LIMITES_CAMPO.mensagem,'andamento');
+  const mensagem=textValue(body.message);
+  const requestKey=chaveIdempotencia(request);
+  if(requestKey){
+    const anterior=await first<{message:string}>('SELECT message FROM ticket_events WHERE ticket_id=? AND user_id=? AND request_key=?',[ticketId,user.id,requestKey]);
+    if(anterior){
+      if(anterior.message!==mensagem)return fail('Esta tentativa já foi usada com outro andamento. Atualize o chamado antes de tentar novamente.',409);
+      return ok({success:true},{status:201});
+    }
+  }
   const timestamp=now();
   const ticket=await contextoNotificacaoChamado(ticketId);
   if(!ticket) return fail('Chamado não encontrado.',404);
   const eventId=id('tev');
-  const mensagem=textValue(body.message);
   const notificacoes=prepararNotificacoesChamado({eventId,anterior:ticket,atual:ticket,mudanca:{andamentoAdicionado:true},autor:user,alteracoes:['Novo andamento'],mensagem,timestamp});
   await rawDb().batch([
-    rawDb().prepare(`INSERT INTO ticket_events (id,ticket_id,user_id,kind,message,created_at) VALUES (?,?,?,'note',?,?)`).bind(eventId,ticketId,user.id,mensagem,timestamp),
+    rawDb().prepare(`INSERT INTO ticket_events (id,ticket_id,user_id,kind,message,created_at,request_key) VALUES (?,?,?,'note',?,?,?)`).bind(eventId,ticketId,user.id,mensagem,timestamp,requestKey),
     rawDb().prepare('UPDATE tickets SET updated_at=?,revision=revision+1 WHERE id=?').bind(timestamp,ticketId),
     rawDb().prepare('INSERT INTO audit_logs (id,user_id,action,entity,entity_id,details,created_at) VALUES (?,?,?,?,?,?,?)').bind(id('aud'),user.id,'COMMENT','ticket',ticketId,`Andamento no chamado ${ticket.codigo}`,timestamp),
     ...notificacoes,
