@@ -21,7 +21,7 @@ function Etapa([string]$t) { Write-Host "`n== $t ==" -ForegroundColor Cyan }
 Etapa 'Conferindo a origem'
 if (!(Test-Path $Privado)) { throw "Area privada nao encontrada: $Privado" }
 
-if (Test-Path -LiteralPath (Join-Path $Privado 'operacao\supervisor.pid.json')) { throw 'Pare a operacao antes de preparar a semente, para preservar estado e banco da mesma execucao.' }
+if (!(Testar-SupervisorEncerrado $Privado)) { throw 'Pare a operacao antes de preparar a semente, para preservar estado e banco da mesma execucao.' }
 
 # Sempre cria snapshot SQLite: porta fechada nao significa WAL vazio.
 
@@ -45,7 +45,7 @@ try {
     New-Item -ItemType Directory -Force (Join-Path $temp $d) | Out-Null
   }
   $estadoOrigem = Join-Path $Privado 'operacao\estado.json'
-  if (Test-Path -LiteralPath $estadoOrigem) { Copy-Item -LiteralPath $estadoOrigem -Destination (Join-Path $temp 'operacao\estado.json') }
+  if (Test-Path -LiteralPath $estadoOrigem) { [void](Ler-EstadoOperacao $estadoOrigem); Copy-Item -LiteralPath $estadoOrigem -Destination (Join-Path $temp 'operacao\estado.json') }
   $entregasOrigem = Join-Path $Privado 'alertas\estado-envios'
   if (Test-Path -LiteralPath $entregasOrigem) {
     Get-ChildItem -LiteralPath $entregasOrigem -Filter '*.json' -File | Copy-Item -Destination (Join-Path $temp 'alertas\estado-envios')
