@@ -165,7 +165,7 @@ jobs:
       - name: Validar protecoes da atualizacao e agenda
         shell: powershell
         run: |
-          foreach ($teste in @('testar-atualizacao-segura', 'testar-reparo-configuracao', 'testar-credencial-portal', 'testar-operacao', 'testar-supervisor-isolado', 'testar-estado-operacao', 'testar-python-minimo', 'testar-recuperacao-atualizacao')) {
+          foreach ($teste in @('testar-atualizacao-segura', 'testar-reparo-configuracao', 'testar-credencial-portal', 'testar-operacao', 'testar-supervisor-isolado', 'testar-estado-operacao', 'testar-python-minimo', 'testar-parada-supervisor', 'testar-recuperacao-atualizacao')) {
             & powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./scripts/$teste.ps1
             if ($LASTEXITCODE) { exit $LASTEXITCODE }
           }

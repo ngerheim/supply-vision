@@ -166,3 +166,15 @@ function Obter-AvisoBackup([string]$Privado) {
     return ''
   } catch { return 'Nao foi possivel conferir a configuracao de backup.' }
 }
+
+function Testar-SupervisorEncerrado([string]$Privado) {
+  $pasta = Join-Path $Privado 'operacao'
+  if (Obter-ProcessoRegistrado (Join-Path $pasta 'supervisor.pid.json')) { return $false }
+  $arquivo = Join-Path $pasta 'supervisor.lock'
+  if (!(Test-Path -LiteralPath $arquivo)) { return $true }
+  try {
+    $trava = [IO.File]::Open($arquivo, [IO.FileMode]::Open, [IO.FileAccess]::ReadWrite, [IO.FileShare]::None)
+    $trava.Dispose()
+    return $true
+  } catch { return $false }
+}

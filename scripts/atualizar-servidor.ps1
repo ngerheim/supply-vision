@@ -109,11 +109,18 @@ $anterior = $VersaoAnterior
 function Parar-Operacao {
 & (Join-Path $Raiz 'PARAR.bat') | Out-Null
 if ($LASTEXITCODE -ne 0) { throw 'Falha ao solicitar a parada da operacao.' }
+$privadoParada = Obter-PastaPrivada $Raiz
+$arquivoConfigParada = Join-Path $privadoParada 'portal/configuracao/portal.env'
+$configParada = @{}
+if (Test-Path -LiteralPath $arquivoConfigParada) { $configParada = Ler-ConfigOperacao $arquivoConfigParada }
+$portaRelatoriosParada = 3001
+if ($configParada['RELATORIOS_PORTA']) { $portaRelatoriosParada = [int]$configParada['RELATORIOS_PORTA'] }
 for ($i = 0; $i -lt 60; $i++) {
-  if (-not (Get-NetTCPConnection -LocalPort 3000 -State Listen -ErrorAction SilentlyContinue)) { break }
+  if ((Testar-SupervisorEncerrado $privadoParada) -and
+      !(Get-NetTCPConnection -LocalPort 3000,$portaRelatoriosParada -State Listen -ErrorAction SilentlyContinue)) { return }
   Start-Sleep 1
 }
-if (Get-NetTCPConnection -LocalPort 3000 -State Listen -ErrorAction SilentlyContinue) { throw 'A porta 3000 continua ocupada; operacao nao encerrou.' }
+throw 'Supervisor ou portas da operacao continuam ativos; atualizacao bloqueada antes de alterar codigo e banco.'
 }
 function Reverter([string]$motivo) {
   if ($script:Recuperando) { throw 'A recuperacao ja foi tentada. Operacao permanece parada.' }
