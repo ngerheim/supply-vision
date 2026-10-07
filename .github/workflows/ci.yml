@@ -124,6 +124,9 @@ jobs:
       - name: Validar importacoes e falhas HTTP no portal compilado
         working-directory: portal
         run: npm run test:imports
+      - name: Ensaiar restauracao de backup ficticio
+        working-directory: portal
+        run: npm run test:restore -- --fixture
 
   alertas:
     name: Alertas
