@@ -28,3 +28,20 @@ export class ConcurrencyGate {
     };
   }
 }
+
+// Evita que um unico alvo ocupe toda a fila. Nao e bloqueio de conta:
+// a reserva existe apenas durante uma tentativa e sempre e liberada.
+export class KeyedConcurrencyGate {
+  private keys = new Set<string>();
+  private gate: ConcurrencyGate;
+  constructor(limit: number, waiting: number) { this.gate = new ConcurrencyGate(limit, waiting); }
+  async acquire(key: string): Promise<(() => void) | null> {
+    if (this.keys.has(key)) return null;
+    this.keys.add(key);
+    try {
+      const release = await this.gate.acquire();
+      if (!release) { this.keys.delete(key); return null; }
+      return () => { release(); this.keys.delete(key); };
+    } catch (error) { this.keys.delete(key); throw error; }
+  }
+}

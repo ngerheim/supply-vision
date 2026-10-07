@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { ConcurrencyGate } from '../lib/concurrency.ts';
+import { ConcurrencyGate, KeyedConcurrencyGate } from '../lib/concurrency.ts';
 
 void test('limita execução e fila; devolve capacidade sem liberação dupla', async () => {
   const gate = new ConcurrencyGate(2, 1);
@@ -28,4 +28,16 @@ void test('limita execução e fila; devolve capacidade sem liberação dupla', 
 void test('recusa configuração inválida', () => {
   assert.throws(() => new ConcurrencyGate(0, 1));
   assert.throws(() => new ConcurrencyGate(1, -1));
+});
+
+void test('um alvo nao ocupa a fila e reservas nao persistem apos a tentativa', async () => {
+  const gate = new KeyedConcurrencyGate(4,16);
+  const primeiro = await gate.acquire('alvo');
+  assert.ok(primeiro);
+  const repetidas = await Promise.all(Array.from({length:20},()=>gate.acquire('alvo')));
+  assert.ok(repetidas.every(r=>r===null));
+  const legitimo = await gate.acquire('outro');
+  assert.ok(legitimo);
+  legitimo();primeiro();
+  const nova = await gate.acquire('alvo'); assert.ok(nova);nova();
 });
