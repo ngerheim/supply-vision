@@ -59,7 +59,8 @@ try {
   Etapa 'Restaurando'
   $pastas = @('comum', 'portal\configuracao', 'alertas\config', 'alertas\parametros')
   if ($meta.estadoPersistente) { $pastas += @('operacao', 'alertas\estado-envios') }
-  $recuperacao = Join-Path $temp 'configuracao-anterior'
+  $recuperacao = Join-Path $Privado ('.recuperacao-semente-' + [guid]::NewGuid().ToString('N'))
+  $preservarRecuperacao = $false
   $copiadas = @()
   $bancoDestino = Join-Path $d1 $meta.banco.arquivo
   try {
@@ -79,6 +80,7 @@ try {
     Move-Item -LiteralPath $bancoValidado -Destination $bancoDestino
   } catch {
     $erroOriginal = $_
+    try {
     foreach ($d in $copiadas) {
       $destino = [IO.Path]::GetFullPath((Join-Path $Privado $d))
       $raizSegura = [IO.Path]::GetFullPath($Privado).TrimEnd('\') + '\'
@@ -87,7 +89,18 @@ try {
       $anterior = Join-Path $recuperacao $d
       if (Test-Path -LiteralPath $anterior) { Copy-Item -LiteralPath $anterior -Destination $destino -Recurse -Force }
     }
+    } catch {
+      $preservarRecuperacao = $true
+      throw "Restauracao falhou e o rollback nao concluiu. Copia anterior preservada em $recuperacao. Erro inicial: $($erroOriginal.Exception.Message); rollback: $($_.Exception.Message)"
+    }
     throw $erroOriginal
+  } finally {
+    if (!$preservarRecuperacao -and (Test-Path -LiteralPath $recuperacao)) {
+      $recuperacaoSegura = [IO.Path]::GetFullPath($recuperacao)
+      $raizSegura = [IO.Path]::GetFullPath($Privado).TrimEnd('\') + '\'
+      if (!$recuperacaoSegura.StartsWith($raizSegura, [StringComparison]::OrdinalIgnoreCase)) { throw 'Recuperacao fora da area privada.' }
+      Remove-Item -LiteralPath $recuperacaoSegura -Recurse -Force -ErrorAction SilentlyContinue
+    }
   }
   Ok "banco restaurado como $($meta.banco.arquivo)"
 } finally {
