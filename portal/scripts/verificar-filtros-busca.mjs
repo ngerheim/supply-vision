@@ -50,13 +50,16 @@ export async function verificarFiltrosBusca({ request, good, check, query }) {
     assert.ok(!r.supplier.some(s => s.id === fornecedores[2].id));
     assert.deepEqual(ids(r.state), ['MG','SP']);
   });
-  await check('Filtros: cidade cruza fornecedor, peça e modelo, distinguindo cidades homônimas por UF', async () => {
+  await check('Filtros: cidade cruza fornecedor, peça e modelo; nomes sem UF preservam IDs distintos', async () => {
     const r = await options({ location: [cidades[0].id], model: [modelos[0].id] });
     assert.deepEqual(ids(r.supplier), [fornecedores[0].id]);
     assert.deepEqual(ids(r.item), [itens[0].id]);
     assert.deepEqual(ids(r.state), ['SP']);
-    assert.ok(r.location.some(c => c.name === 'CIDADE FILTROS / SP'));
-    assert.ok(r.location.some(c => c.name === 'CIDADE FILTROS / MG'));
+    assert.deepEqual(ids(r.location), ids(cidades));
+    assert.ok(r.location.every(c => c.name === 'CIDADE FILTROS'));
+    const porEstado = await options({ state: ['SP'], supplier: [fornecedores[0].id] });
+    assert.deepEqual(ids(porEstado.location), [cidades[0].id]);
+    assert.equal(porEstado.location[0].name, 'CIDADE FILTROS');
     const combinado = await options({ supplier: [fornecedores[0].id], location: [cidades[1].id] });
     assert.deepEqual(ids(combinado.item), [itens[0].id]);
     assert.deepEqual(ids(combinado.model), [modelos[1].id]);

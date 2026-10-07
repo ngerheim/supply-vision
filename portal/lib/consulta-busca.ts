@@ -18,7 +18,7 @@ export function consultaBusca(params: URLSearchParams, hoje: string, ignorarCamp
 
 export function consultasOpcoesBusca(params: URLSearchParams, hoje: string) {
   const colunas = {
-    state: ['l.state', 'l.state'], location: ['l.id', "l.city||' / '||l.state"],
+    state: ['l.state', 'l.state'], location: ['l.id', 'l.city'],
     item: ['ci.id', 'ci.name'], model: ['vm.id', 'vm.name'], supplier: ['s.id', 's.trade_name'],
   } as const;
   return CAMPOS_BUSCA.map(campo => {
