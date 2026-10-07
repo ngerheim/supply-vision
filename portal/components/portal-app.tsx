@@ -159,7 +159,7 @@ function SearchPage({catalogs,openAgreement,filters,setFilters}:JsonData){
   const labels={state:'Estado',location:'Cidade',model:'Modelo',item:'Peça ou serviço',supplier:'Fornecedor'};
   const selectedOptions:Options={
     state:Array.from(new Set<string>((catalogs.locations||[]).map((x:AnyRow)=>String(x.state)))).map(uf=>({id:uf,name:uf})),
-    location:(catalogs.locations||[]).map((x:AnyRow)=>({id:x.id,name:`${x.city} / ${x.state}`})),
+    location:(catalogs.locations||[]).map((x:AnyRow)=>({id:x.id,name:x.city})),
     model:catalogs.models||[],item:catalogs.items||[],
     supplier:(catalogs.suppliers||[]).map((x:AnyRow)=>({id:x.id,name:x.tradeName})),
   };
