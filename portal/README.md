@@ -56,8 +56,8 @@ novo nome sem migração de perfil. As permissões são verificadas também na A
   Selecione várias opções em cada filtro; as opções do mesmo campo são alternativas,
   e os campos são combinados. É possível marcar até 80 opções no total. A pesquisa
   de nomes dentro de cada filtro mantém as seleções anteriores. A lista permanece
-  aberta ao marcar ou desmarcar opções, inclusive após digitar uma busca. Use
-  **Concluir seleção**, clique fora ou pressione **Esc** para fechar. As seleções permanecem
+  aberta ao marcar ou desmarcar opções, inclusive após digitar uma busca. Clique
+  fora ou pressione **Esc** para fechar; as escolhas são aplicadas ao marcar. As seleções permanecem
   visíveis e podem ser removidas mesmo quando uma combinação não tem condições.
   As opções consideram toda a base de condições vigentes. Acima de 1.000
   resultados o portal avisa e sugere refinar.

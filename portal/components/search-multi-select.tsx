@@ -38,7 +38,6 @@ export function SearchMultiSelect({ label, value, onChange, options, selectedOpt
  <Combobox.List>{(o:SearchOption)=><Combobox.Item key={o.id} value={o} disabled={loading} className="flex cursor-pointer items-center gap-2 rounded p-2 text-sm data-[highlighted]:bg-muted data-[disabled]:opacity-50">
  <span className="flex size-4 shrink-0 items-center justify-center rounded border"><Combobox.ItemIndicator><Check className="size-3"/></Combobox.ItemIndicator></span><span className="break-words">{o.name}</span>
  </Combobox.Item>}</Combobox.List>
- <div className="sticky bottom-0 mt-1 border-t bg-popover p-1"><button type="button" className="w-full rounded px-3 py-2 text-sm font-medium text-primary hover:bg-muted" onClick={()=>setOpen(false)}>Concluir seleção</button></div>
  </Combobox.Popup>
  </Combobox.Positioner></Combobox.Portal>
  </Combobox.Root>
