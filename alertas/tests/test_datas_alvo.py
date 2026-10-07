@@ -10,6 +10,13 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def test_slot_usa_data_original_mesmo_depois_da_meia_noite(monkeypatch):
+    mod = carregar_baixar_base(monkeypatch)
+    monkeypatch.setenv('SV_ALERTA_DATA', '2026-10-05')
+    datas, _ = mod.datas_alvo((17, 0))
+    assert datas == [date(2026, 10, 5)]
+
+
 def carregar_baixar_base(monkeypatch):
     monkeypatch.setitem(sys.modules, "contrato_base", types.ModuleType("contrato_base"))
     monkeypatch.setitem(sys.modules, "qlik", types.ModuleType("qlik"))
