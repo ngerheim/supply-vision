@@ -20,7 +20,7 @@ import { chaveIdempotencia } from '@/lib/idempotencia';
 import { NextRequest, NextResponse } from 'next/server';
 import * as XLSX from 'xlsx';
 import { lerPlanilha } from '@/lib/planilha';
-import { ConcurrencyGate } from '@/lib/concurrency';
+import { KeyedConcurrencyGate } from '@/lib/concurrency';
 import { chaveLocalidade, colunasAusentes, parseImportRow, resolveImportRows, summarizeImportErrors, deduplicateImportRows, validarFornecedorImportacao, uniqueIndex, type ImportTarget } from '@/lib/importacao';
 import { contextoNotificacaoChamado, pessoaNotificacao, prepararNotificacoesChamado, type ContextoNotificacaoChamado } from '@/lib/fila-email-chamados';
 import { TravaPerdida } from '@/lib/travas-sql';
@@ -517,7 +517,7 @@ function equalHex(left: string, right: string) {
 // Por isso a ordem e invertida: a credencial e SEMPRE conferida primeiro.
 // Quem acerta a senha entra, independente de quantas falhas houve antes.
 // O custo recai apenas sobre quem erra, na forma de atraso progressivo, o que
-// torna a forca bruta inviavel sem jamais trancar um usuario legitimo.
+// reduz a vazao de falhas; reservas curtas podem exigir nova tentativa.
 const LOGIN_WINDOW_MIN = 15;
 const LOGIN_SOFT_LIMIT = 5;    // a partir daqui, atraso progressivo
 const LOGIN_DELAY_MAX_MS = 4000;
@@ -527,19 +527,24 @@ const LOGIN_DELAY_MAX_MS = 4000;
 const SALT_INEXISTENTE = 'conta-inexistente-salt-fixo-nao-usar-em-usuario-real';
 
 // Limites conservadores por processo, a calibrar na homologaÃ§Ã£o do servidor.
-const loginGate = new ConcurrencyGate(4, 16);
+const loginGate = new KeyedConcurrencyGate(4, 16);
 async function login(request: Request) {
   const texto = await corpoLimitado(request, CORPO_MAX_LOGIN);
   if (texto === null) return fail('E-mail ou senha invÃ¡lidos.', 401);
-  const release = await loginGate.acquire();
+  let body: unknown;
+  try { body = JSON.parse(texto || '{}'); } catch { return fail('E-mail ou senha inválidos.', 401); }
+  if (!isRecord(body)) return fail('E-mail ou senha inválidos.', 401);
+  const alvo = textValue(body.email).toLowerCase();
+  if (alvo.length > 254) return fail('E-mail ou senha inválidos.', 401);
+  const release = await loginGate.acquire(alvo);
   if (!release) {
-    return ok({ error: 'Muitos acessos simultÃ¢neos. Tente novamente em alguns segundos.' }, { status: 503, headers: { 'Retry-After': '5' } });
+    return ok({ error: 'Muitos acessos simultÃ¢neos. Tente novamente em alguns segundos.' }, { status: 429, headers: { 'Retry-After': '5' } });
   }
-  try { return await authenticate(request, texto, release); }
+  try { return await authenticate(request, texto); }
   finally { release(); }
 }
 
-async function authenticate(request: Request, texto: string, liberarHash: () => void) {
+async function authenticate(request: Request, texto: string) {
   const ip = clientIp(request);
   const agora = now();
   const since = new Date(Date.now() - LOGIN_WINDOW_MIN * 60 * 1000).toISOString();
@@ -595,8 +600,7 @@ async function authenticate(request: Request, texto: string, liberarHash: () => 
   const candidate = await passwordHash(typeof body.password === 'string' ? body.password : '', record?.password_salt || SALT_INEXISTENTE, iteracoesDoHash);
   const okLogin = !!record && equalHex(candidate, record.password_hash);
 
-  liberarHash();
-  // O atraso pune apenas o erro; quem acerta nunca espera.
+  // Mantem a reserva durante o atraso: paralelismo nao contorna a vazao.
   if (!okLogin && fails >= LOGIN_SOFT_LIMIT) {
     await new Promise((r) => setTimeout(r, Math.min(LOGIN_DELAY_MAX_MS, 400 * (fails - LOGIN_SOFT_LIMIT + 1))));
   }
