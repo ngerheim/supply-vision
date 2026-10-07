@@ -178,8 +178,7 @@ def carregar_de_para(nome, col_de, col_para, normalizar_chave=True, registrar=Tr
     viram a mesma chave apontando para destinos diferentes — aborta a carga:
     a última venceria em silêncio.
 
-    modelos.csv passa normalizar_chave=False: ali a comparação é contra o
-    valor cru da coluna Modelo, não contra a forma canônica.
+    Modelos e itens sao consultados pelo consumidor com a chave normalizada.
 
     Destino vazio vira None, que o rodar.py usa para marcar 'Item não
     comparável' — revisado, sem equivalente no acordo.

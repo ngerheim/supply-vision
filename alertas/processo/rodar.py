@@ -298,7 +298,7 @@ MOTIVO_AMBIGUO         = "Acordo ambíguo — preços divergentes"
 MOTIVO_PRECO_INVALIDO  = "Acordo com preço inválido"
 MOTIVO_DATA_INVALIDA   = "Data de abertura inválida"
 MOTIVO_PRECO_COMPRA_INVALIDO = "Preço da compra ausente, ilegível ou não finito"
-MOTIVO_QUANTIDADE_INVALIDA = "Quantidade ausente, ilegível ou não finita"
+MOTIVO_QUANTIDADE_INVALIDA = "Quantidade ausente, ilegível, não finita ou não positiva"
 
 ORDEM_MOTIVOS = [MOTIVO_FORNECEDOR, MOTIVO_CIDADE, MOTIVO_MODELO,
                  MOTIVO_ITEM, MOTIVO_ITEM_MAPEAR, MOTIVO_NAO_COMPARAVEL,
@@ -390,7 +390,7 @@ def _processar_periodo(df_base, df_acordo):
 
 def _processar_periodo_compativel(df_base, df_acordo):
     df = df_base.copy()
-    df["_modelo_ac"]  = df["Modelo"].map(MODELOS).fillna(df["Modelo"]).apply(_norm)
+    df["_modelo_ac"]  = df["Modelo"].apply(_norm).map(MODELOS).fillna(df["Modelo"]).apply(_norm)
     sin_map  = {k: v for k, v in SINONIMOS.items() if v is not None}
     sin_none = {k for k, v in SINONIMOS.items() if v is None}
     df["_peca_busca"] = df["_desc_norm"].map(sin_map).fillna(df["_desc_norm"]).apply(_norm)
@@ -423,6 +423,8 @@ def _processar_periodo_compativel(df_base, df_acordo):
     # para a compra. Ela vai para a quarentena, contada no resumo, em vez de
     # ser comparada como se fosse anterior ao corte.
     e_data_invalida = _data_vigencia(m["Data Abertura"]).isna()
+    if e_ambigua.any():
+        print(f"AVISO: {int(e_ambigua.sum())} compra(s) com acordo ambíguo; antes do corte a comparação usa todos os preços ativos, sem reconstruir vigência histórica.")
     e_ambigua   &= ~e_data_invalida
     e_sem_preco &= ~e_data_invalida
 
@@ -430,7 +432,7 @@ def _processar_periodo_compativel(df_base, df_acordo):
     e_preco_compra_invalido = ~np.isfinite(po) | (po < 0)
     po = po.where(~e_preco_compra_invalido)
     qtd = pd.to_numeric(m["OS Quantidade"], errors="coerce")
-    e_quantidade_invalida = ~np.isfinite(qtd)
+    e_quantidade_invalida = (~np.isfinite(qtd) | (qtd <= 0))
     qtd = qtd.where(~e_quantidade_invalida)
 
     quarentena = e_ambigua | e_sem_preco | e_data_invalida | e_quantidade_invalida | e_preco_compra_invalido
@@ -490,7 +492,7 @@ def _processar_periodo_compativel(df_base, df_acordo):
     dif_referencia = (preco_total - preco_ref * qtd).round(2)
     dif_referencia[preco_ref.isna()] = np.nan
 
-    modelos_exibicao = m["Modelo"].map(MODELOS).fillna(m["Modelo"])
+    modelos_exibicao = m["Modelo"].apply(_norm).map(MODELOS).fillna(m["Modelo"])
     itens_exibicao = m["_desc_norm"].map(SINONIMOS)
     itens_exibicao = itens_exibicao.where(itens_exibicao.notna(), m["Descrição"])
 
@@ -545,6 +547,10 @@ def _preparar_vigencia(df_acordo):
     """Converte inicio, fim e situacao uma vez so; processar() usa o resultado
     para cada data de compra, em vez de reconverter as colunas a cada data."""
     inicio = _data_vigencia(df_acordo["INICIO_VIGENCIA"])
+    inicio_preenchido = df_acordo["INICIO_VIGENCIA"].astype("string").str.strip().fillna("") != ""
+    inicio_invalido = inicio_preenchido & inicio.isna()
+    if inicio_invalido.any():
+        print(f"AVISO: {int(inicio_invalido.sum())} condição(ões) com início de vigência ilegível; corrigir a data no Portal.")
     fim = _data_vigencia(df_acordo["FIM_VIGENCIA"])
     status = df_acordo["STATUS_ACORDO"].fillna("").astype(str).str.strip().str.lower()
     preenchido = df_acordo["FIM_VIGENCIA"].astype("string").str.strip().fillna("") != ""
@@ -915,6 +921,11 @@ def gerar_qualidade_acordos(df_acordo, path):
             "Maior preço": precos.max() if len(precos) else np.nan,
             "Ocorrências": len(grupo),
         })
+    # CSV nao tem tipo de celula: impede executar texto externo como formula.
+    for linha in linhas:
+        for coluna, valor in linha.items():
+            if isinstance(valor, str) and valor.lstrip().startswith(("=", "+", "-", "@")):
+                linha[coluna] = "'" + valor
     pd.DataFrame(linhas, columns=colunas).to_csv(
         path, sep=";", index=False, encoding="utf-8-sig"
     )

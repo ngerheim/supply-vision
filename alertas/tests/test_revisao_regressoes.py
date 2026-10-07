@@ -55,8 +55,8 @@ def test_quantidade_nao_finita_vai_para_quarentena(rodar, quantidade, tmp_path):
     assert rodar.gerar_pendencias_comparacao(resultado, tmp_path / "pendencias.xlsx")
 
 
-@pytest.mark.parametrize("quantidade", [0, -2, 1.5])
-def test_quantidade_finita_preserva_regra_atual_inclusive_devolucoes(rodar, quantidade):
+@pytest.mark.parametrize("quantidade", [1, 1.5])
+def test_quantidade_positiva_preserva_comparacao(rodar, quantidade):
     compra = base(preco=100)
     compra["OS Quantidade"] = quantidade
     resultado = rodar.processar(compra, acordo([10]))
@@ -113,3 +113,36 @@ def test_vigencia_iso_com_fuso_preserva_data_civil(rodar):
     compra["Data Abertura"] = ["2026-09-30T23:30:00-03:00", "2026-10-01T00:30:00+03:00", "2026-10-01T00:00:00Z"]
     ac = com_vigencia(acordo([10]), inicio="2026-10-01T00:00:00-03:00", status=" ACTIVE ")
     assert rodar.processar(compra, ac)["Status"].tolist() == ["SEM ACORDO", "CONFORME", "CONFORME"]
+
+
+@pytest.mark.parametrize("quantidade", [0, -2])
+def test_quantidade_nao_positiva_vai_para_quarentena(rodar, quantidade):
+    compra = base(preco=15)
+    compra["OS Quantidade"] = quantidade
+    resultado = rodar.processar(compra, acordo([10]))
+    assert resultado.loc[0, "Status"] == rodar.STATUS_QUANTIDADE_INVALIDA
+    assert rodar.resumir_status(resultado)["total_quarentena"] == 1
+
+
+def test_alias_modelo_normalizado_antes_do_de_para(rodar):
+    rodar.MODELOS = {"APELIDO": "M"}
+    compra = base(preco=10)
+    compra["Modelo"] = " apelido "
+    assert rodar.processar(compra, acordo([10])).loc[0, "Status"] == "CONFORME"
+
+
+def test_csv_qualidade_nao_executa_formula(rodar, tmp_path):
+    ac = acordo([10, 20])
+    ac["_peca_norm"] = "=1+1"
+    arquivo = tmp_path / "qualidade.csv"
+    rodar.gerar_qualidade_acordos(ac, arquivo)
+    texto = arquivo.read_text(encoding="utf-8-sig")
+    assert "'=1+1" in texto
+    assert ";=1+1;" not in texto
+
+
+def test_sucessao_anterior_ao_corte_mantem_regra_e_avisa(rodar, capsys):
+    ac = pd.concat([com_vigencia(acordo([10]), fim="2026-09-30"),
+                    com_vigencia(acordo([12]), inicio="2026-10-01")], ignore_index=True)
+    assert rodar.processar(base(preco=10), ac).loc[0,"Status"] == rodar.STATUS_AMBIGUO
+    assert "antes do corte" in capsys.readouterr().out
