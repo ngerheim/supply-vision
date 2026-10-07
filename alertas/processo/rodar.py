@@ -24,6 +24,7 @@ for _s in (sys.stdout, sys.stderr):
 
 import sv_paths
 import contrato_base
+import portal_conexao
 
 sys.path.insert(0, str(sv_paths.PARAMETROS_SRC))
 
@@ -174,14 +175,15 @@ def carregar_acordos_portal(url=PORTAL_URL, token=PORTAL_API_TOKEN):
     """Obtém a tabela vigente diretamente do banco mantido pelo Portal."""
     if not url or not token:
         raise RuntimeError("PORTAL_URL e PORTAL_API_TOKEN precisam estar configurados para carregar os acordos")
-    endpoint = f"{url.rstrip('/')}/api/internal/agreements"
+    url = portal_conexao.endereco_interno(url, str(getattr(sv_paths, 'PORTAL_INTERNAL_URL', '')))
+    endpoint = f"{url}/api/internal/agreements"
     ultimo_erro = None
     for tentativa in range(1, ACORDO_TENTATIVAS + 1):
         try:
             requisicao = urllib.request.Request(
                 endpoint, headers={"Authorization": f"Bearer {token}", "Accept": "application/json"}
             )
-            with urllib.request.urlopen(requisicao, timeout=60) as resposta:
+            with portal_conexao.abrir(requisicao, timeout=60) as resposta:
                 payload = json.loads(resposta.read().decode("utf-8"))
             df = pd.DataFrame(payload.get("agreements", []))
             if df.empty:
@@ -193,6 +195,8 @@ def carregar_acordos_portal(url=PORTAL_URL, token=PORTAL_API_TOKEN):
             return _preparar_acordos(df)
         except (OSError, ValueError, KeyError, RuntimeError, urllib.error.URLError) as erro:
             ultimo_erro = erro
+            if isinstance(erro, urllib.error.HTTPError) and not portal_conexao.repetir_http(erro.code):
+                break
             if tentativa < ACORDO_TENTATIVAS:
                 print(f"AVISO: banco de acordos do Portal indisponível — tentativa "
                       f"{tentativa}/{ACORDO_TENTATIVAS}; aguardando {ACORDO_INTERVALO_S}s...")
