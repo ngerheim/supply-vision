@@ -25,6 +25,7 @@ import { validarBanco as resumir } from './validar-banco.mjs';
 import { prepararRestauracao } from './restauracao-segura.mjs';
 import { listarHistorico, nomeDoDia } from './retencao-backup.mjs';
 import { localizarBanco as localizarBancoLocal } from './banco-local.mjs';
+import { travarRestauracao } from './trava-restauracao.mjs';
 
 const pastaBackup = path.join(portalPrivado, 'backups');
 const anterior = process.argv.includes('--anterior');
@@ -81,19 +82,6 @@ function operacaoNoAr() {
   } catch { return false; }
 }
 
-// O processador de e-mail e o servico de relatorios tambem mantem o banco
-// aberto; com qualquer um deles no ar, a restauracao nao pode seguir.
-function emailNoAr() {
-  const registro = path.join(import.meta.dirname, '..', '.portal-email.pid');
-  if (!fs.existsSync(registro)) return false;
-  try {
-    const { ProcessId: numero } = JSON.parse(fs.readFileSync(registro, 'utf8').replace(/^\uFEFF/, ''));
-    if (!numero) return false;
-    process.kill(Number(numero), 0);
-    return true;
-  } catch { return false; }
-}
-
 function portaRelatorios() {
   try { return Number(lerConfigBruta().RELATORIOS_PORTA || 3001); } catch { return 3001; }
 }
@@ -107,9 +95,10 @@ async function confirmar(pergunta) {
 
 if (!fs.existsSync(origem)) throw new Error(`Backup nao encontrado: ${origem}`);
 if (operacaoNoAr() || await portalRespondendo()) throw new Error('A operacao esta no ar (supervisor ativo ou Portal respondendo na porta 3000). Pare a operacao antes de restaurar.');
-if (emailNoAr()) throw new Error('O processador de e-mail esta no ar (.portal-email.pid ativo). Pare-o antes de restaurar.');
 if (await portalRespondendo(portaRelatorios())) throw new Error(`O servico de relatorios esta respondendo na porta ${portaRelatorios()}. Pare-o antes de restaurar.`);
 
+const liberarRestauracao = travarRestauracao(true);
+try {
 const alvo = localizarBanco();
 const totaisBackup = resumir(origem);
 const dataBackup = fs.statSync(origem).mtime.toLocaleString('pt-BR');
@@ -147,6 +136,7 @@ for (const sufixo of ['-wal', '-shm']) fs.rmSync(alvo + sufixo, { force: true })
 fs.renameSync(restaurando, alvo);
 console.log('\nRestauracao concluida.');
 if (marcados) console.log(`${marcados} e-mail(s) marcado(s) como falha: confirme o reenvio na tela de notificacoes.`);
+} finally { liberarRestauracao(); }
 
 // Cada restauracao guarda o estado anterior como pre-restauracao-*.sqlite,
 // uma copia integral do banco. Fora da retencao de 7 dias do backup, elas se
