@@ -22,7 +22,7 @@ function comBanco(sql, fn) {
 }
 
 const EMAILS = `CREATE TABLE email_notifications (id TEXT PRIMARY KEY, status TEXT, attempts INTEGER, next_attempt_at TEXT, locked_at TEXT, sent_at TEXT, last_error TEXT, created_at TEXT, updated_at TEXT, dedupe_key TEXT UNIQUE);`;
-const DIARIOS = `CREATE TABLE users (id TEXT PRIMARY KEY, name TEXT, email TEXT, active INTEGER, daily_report_enabled INTEGER);
+const DIARIOS = `CREATE TABLE users (id TEXT PRIMARY KEY, name TEXT, email TEXT, active INTEGER, daily_report_enabled INTEGER, role TEXT);
   CREATE TABLE daily_report_deliveries (id TEXT PRIMARY KEY, user_id TEXT, report_date TEXT, status TEXT, attempts INTEGER, next_attempt_at TEXT, locked_at TEXT, sent_at TEXT, last_error TEXT, created_at TEXT, updated_at TEXT);`;
 
 void test('fila de e-mails vazia ou ja enviada nao abre escrita', () => comBanco(EMAILS + `
@@ -41,7 +41,7 @@ void test('e-mail pendente ou trava vencida ainda abrem a escrita', () => comBan
 }));
 
 void test('relatorio diario sem entrega devida nao abre escrita', () => comBanco(DIARIOS + `
-  INSERT INTO users VALUES ('u','Ana','ana@exemplo.com',1,1);
+  INSERT INTO users VALUES ('u','Ana','ana@exemplo.com',1,1,'editor');
   INSERT INTO daily_report_deliveries VALUES ('r','u','2026-10-05','sent',1,'2000-01-01T00:00:00.000Z',NULL,'2026-10-05T20:00:00.000Z',NULL,'2026-10-05T20:00:00.000Z','2026-10-05T20:00:00.000Z');`, (db, escritas) => {
   assert.deepEqual(reservarRelatoriosDiarios(db), []);
   assert.deepEqual(escritas, []);

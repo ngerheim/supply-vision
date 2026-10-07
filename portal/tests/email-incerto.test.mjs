@@ -6,10 +6,10 @@ import { reservarRelatoriosDiarios, reservar, falhar, falhaAntesEntrega } from '
 void test('ambas as filas exigem revisao para reservas expiradas inclusive sem horario', () => {
   const db=new DatabaseSync(':memory:');
   try {
-    db.exec(`CREATE TABLE users(id TEXT,name TEXT,email TEXT,active INTEGER,daily_report_enabled INTEGER);
+    db.exec(`CREATE TABLE users(id TEXT,name TEXT,email TEXT,active INTEGER,daily_report_enabled INTEGER,role TEXT);
       CREATE TABLE email_notifications(id TEXT,status TEXT,attempts INTEGER,next_attempt_at TEXT,locked_at TEXT,last_error TEXT,updated_at TEXT,created_at TEXT);
       CREATE TABLE daily_report_deliveries(id TEXT,user_id TEXT,status TEXT,attempts INTEGER,next_attempt_at TEXT,locked_at TEXT,last_error TEXT,updated_at TEXT,created_at TEXT);
-      INSERT INTO users VALUES('u','Nome','a@b',1,1);`);
+      INSERT INTO users VALUES('u','Nome','a@b',1,1,'editor');`);
     for (const tabela of ['email_notifications','daily_report_deliveries']) {
       for(const [id,locked] of [['expirada','2000-01-01'],['sem-hora',null]]) {
         db.prepare(`INSERT INTO ${tabela}(id,status,attempts,next_attempt_at,locked_at) VALUES(?,'processing',1,'2000-01-01',?)`).run(id,locked);

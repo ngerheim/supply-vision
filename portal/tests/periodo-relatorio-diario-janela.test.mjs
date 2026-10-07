@@ -1,18 +1,31 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { DatabaseSync } from 'node:sqlite';
-import { dadosRelatorioDiario, prepararRelatoriosDiarios } from '../scripts/processar-emails.mjs';
+import { dadosRelatorioDiario, prepararRelatoriosDiarios, reservarRelatoriosDiarios } from '../scripts/processar-emails.mjs';
 
 function banco(){
   const db=new DatabaseSync(':memory:');
-  db.exec(`CREATE TABLE users(id TEXT PRIMARY KEY,name TEXT,active INTEGER,daily_report_enabled INTEGER,daily_report_time TEXT);
-  INSERT INTO users VALUES ('u1','Ana',1,1,'17:45');
+  db.exec(`CREATE TABLE users(id TEXT PRIMARY KEY,name TEXT,active INTEGER,daily_report_enabled INTEGER,daily_report_time TEXT,role TEXT,email TEXT);
+  INSERT INTO users VALUES ('u1','Ana',1,1,'17:45','editor','a@exemplo.com');
   CREATE TABLE daily_report_deliveries (id TEXT PRIMARY KEY,user_id TEXT,report_date TEXT,status TEXT,attempts INTEGER,next_attempt_at TEXT,locked_at TEXT,sent_at TEXT,last_error TEXT,created_at TEXT,updated_at TEXT,UNIQUE(user_id,report_date));
   CREATE TABLE tickets(id TEXT,code TEXT,supplier_name TEXT,status TEXT,created_at TEXT,updated_at TEXT);
   CREATE TABLE ticket_events(ticket_id TEXT,user_id TEXT,kind TEXT,from_status TEXT,to_status TEXT,message TEXT,created_at TEXT);`);
   return db;
 }
 const periodo=(db,data)=>{const r=db.prepare('SELECT period_start inicio,period_end fim FROM daily_report_deliveries WHERE report_date=?').get(data);return {inicio:r.inicio,fim:r.fim}};
+
+void test('rebaixar usuário impede preparar e enviar relatórios pendentes', () => {
+  const db=banco();
+  try {
+    const agora=new Date('2026-10-05T21:00:00.000Z');
+    prepararRelatoriosDiarios(db,agora);
+    db.exec("UPDATE users SET role='viewer'");
+    assert.deepEqual(reservarRelatoriosDiarios(db,agora),[]);
+    assert.equal(db.prepare('SELECT status FROM daily_report_deliveries').get().status,'failed');
+    prepararRelatoriosDiarios(db,new Date('2026-10-06T21:00:00.000Z'));
+    assert.equal(db.prepare('SELECT COUNT(*) n FROM daily_report_deliveries').get().n,1);
+  } finally { db.close(); }
+});
 
 void test('chamado criado as 19h de D aparece no relatorio de D+1',()=>{
   const db=banco();

@@ -155,7 +155,7 @@ function garantirPeriodoRelatorio(db){
 export function prepararRelatoriosDiarios(db,agora=new Date()){
   garantirPeriodoRelatorio(db);
   const local=horarioSaoPaulo(agora),agoraIso=agora.toISOString();
-  const usuarios=db.prepare("SELECT id FROM users u WHERE active=1 AND daily_report_enabled=1 AND daily_report_time<=? AND NOT EXISTS (SELECT 1 FROM daily_report_deliveries d WHERE d.user_id=u.id AND d.report_date=?)").all(local.horario,local.data);
+  const usuarios=db.prepare("SELECT id FROM users u WHERE active=1 AND role IN ('admin','editor') AND daily_report_enabled=1 AND daily_report_time<=? AND NOT EXISTS (SELECT 1 FROM daily_report_deliveries d WHERE d.user_id=u.id AND d.report_date=?)").all(local.horario,local.data);
   const ultimo=db.prepare("SELECT report_date,period_end,sent_at,created_at FROM daily_report_deliveries WHERE user_id=? AND report_date<? ORDER BY report_date DESC LIMIT 1");
   const inserir=db.prepare("INSERT OR IGNORE INTO daily_report_deliveries (id,user_id,report_date,status,attempts,next_attempt_at,created_at,updated_at,period_start,period_end) VALUES (?,?,?,'pending',0,?,?,?,?,?)");
   for(const usuario of usuarios){
@@ -175,7 +175,8 @@ export function reservarRelatoriosDiarios(db,agora=new Date()){
   try{
     db.prepare("UPDATE daily_report_deliveries SET status='failed',locked_at=NULL,last_error=?,updated_at=? WHERE status='processing' AND (locked_at<? OR locked_at IS NULL)").run(MENSAGEM_INTERROMPIDO,agoraIso,travaVencida);
     db.prepare("UPDATE daily_report_deliveries SET status='failed',locked_at=NULL,last_error=COALESCE(last_error,'Envio interrompido no limite de tentativas.'),updated_at=? WHERE status='pending' AND attempts>=?").run(agoraIso,maxTentativas);
-    const itens=db.prepare("SELECT d.*,u.name recipient_name,u.email recipient_email FROM daily_report_deliveries d JOIN users u ON u.id=d.user_id WHERE d.status='pending' AND d.attempts<? AND d.next_attempt_at<=? AND u.active=1 AND u.daily_report_enabled=1 ORDER BY d.created_at LIMIT 1").all(maxTentativas,agoraIso);
+    db.prepare("UPDATE daily_report_deliveries SET status='failed',locked_at=NULL,last_error='Permissão de relatório revogada.',updated_at=? WHERE status IN ('pending','processing') AND NOT EXISTS (SELECT 1 FROM users u WHERE u.id=user_id AND u.active=1 AND u.role IN ('admin','editor') AND u.daily_report_enabled=1)").run(agoraIso);
+    const itens=db.prepare("SELECT d.*,u.name recipient_name,u.email recipient_email FROM daily_report_deliveries d JOIN users u ON u.id=d.user_id WHERE d.status='pending' AND d.attempts<? AND d.next_attempt_at<=? AND u.active=1 AND u.role IN ('admin','editor') AND u.daily_report_enabled=1 ORDER BY d.created_at LIMIT 1").all(maxTentativas,agoraIso);
     const reservar=db.prepare("UPDATE daily_report_deliveries SET status='processing',attempts=attempts+1,locked_at=?,updated_at=? WHERE id=? AND status='pending'");
     const escolhidos=[];
     for(const item of itens)if(reservar.run(agoraIso,agoraIso,item.id).changes===1)escolhidos.push({...item,attempts:Number(item.attempts)+1,locked_at:agoraIso});
@@ -204,6 +205,10 @@ export async function processarRelatoriosDiarios(db,config,transportador,{conclu
   for(let indice=0;indice<5;indice++){
     const [item]=reservarRelatoriosDiarios(db);if(!item)break;
     try{
+      if(!db.prepare("SELECT 1 FROM users WHERE id=? AND active=1 AND role IN ('admin','editor') AND daily_report_enabled=1").get(item.user_id)){
+        db.prepare("UPDATE daily_report_deliveries SET status='failed',locked_at=NULL,last_error='Permissão de relatório revogada.' WHERE id=? AND status='processing' AND locked_at=?").run(item.id,item.locked_at);
+        continue;
+      }
       const periodo=item.period_start&&item.period_end?{inicio:item.period_start,fim:item.period_end}:null;
       const dados=dadosRelatorioDiario(db,item.report_date,new Date(),periodo),email=montarEmailRelatorioDiario(item.report_date,dados.totais,dados.chamados,config.PORTAL_URL,dados.periodo);
       await transportador.sendMail({from:{name:config.EMAIL_FROM_NAME,address:config.SMTP_USER},to:{name:item.recipient_name,address:item.recipient_email},subject:email.assunto,text:email.texto,html:email.html});
