@@ -44,6 +44,10 @@ jobs:
           $achados | Format-Table -AutoSize RuleName, ScriptName, Line, Message | Out-String -Width 300 | Write-Host
           if ($achados.Count) { exit 1 }
 
+      - name: Validar restricao de firewall sem alterar regras reais
+        shell: powershell
+        run: ./portal/scripts/testar-restricao-firewall.ps1
+
   portal:
     name: Portal
     runs-on: ubuntu-latest
