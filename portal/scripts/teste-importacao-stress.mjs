@@ -10,6 +10,7 @@ import { DatabaseSync } from 'node:sqlite';
 import * as XLSX from 'xlsx';
 import { abrirRequisicao, multipart } from './cliente-http.mjs';
 import { verificarAcessoConsulta } from './verificar-acesso-consulta.mjs';
+import { verificarFiltrosBusca } from './verificar-filtros-busca.mjs';
 
 const portal = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 fs.mkdirSync(path.join(portal, 'work'), { recursive: true });
@@ -598,6 +599,7 @@ try {
     const result = await upload(large, replace); assert.equal(result.status, 200, JSON.stringify(result.data)); assert.equal(result.data.summary.items, 999);
     assert.equal(query('SELECT COUNT(*) n FROM agreement_items WHERE version_id=(SELECT current_version_id FROM agreements WHERE id=?)', agreementId)[0].n, 999);
   });
+  await verificarFiltrosBusca({ request, good, check, query });
   await verificarAcessoConsulta({ request, good, check, senha, agreementId, metrics });
   await check('20 concorrentes recebem 409 enquanto uma importação segura a trava', async () => {
     const doc = file([row()], { name: 'concorrencia' }), m = multipart(doc.filename, doc.bytes);

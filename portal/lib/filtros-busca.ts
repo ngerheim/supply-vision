@@ -12,14 +12,16 @@ export function parametrosBusca(filters: FiltrosBusca) {
   return params;
 }
 
-export function condicoesBusca(params: URLSearchParams) {
+export function condicoesBusca(params: URLSearchParams, ignorarCampo?: typeof CAMPOS_BUSCA[number]) {
   const conditions: string[] = [], values: string[] = [];
+  let totalSelecionado = 0;
   const columns = { state: 'l.state', location: 'l.id', item: 'ci.id', model: 'vm.id', supplier: 's.id' };
   for (const key of CAMPOS_BUSCA) {
     const selected = [...new Set(params.getAll(key).filter(Boolean))];
     if (selected.some(value => value.length > LIMITES_CAMPO.busca)) throw new EntradaInvalida('Filtro de busca muito longo.');
-    if (values.length + selected.length > MAX_FILTROS_BUSCA) throw new EntradaInvalida(`Selecione no máximo ${MAX_FILTROS_BUSCA} opções entre os filtros.`);
-    if (!selected.length) continue;
+    totalSelecionado += selected.length;
+    if (totalSelecionado > MAX_FILTROS_BUSCA) throw new EntradaInvalida(`Selecione no máximo ${MAX_FILTROS_BUSCA} opções entre os filtros.`);
+    if (!selected.length || key === ignorarCampo) continue;
     conditions.push(`${columns[key]} IN (${selected.map(() => '?').join(',')})`);
     values.push(...selected.map(value => key === 'state' ? value.trim().toUpperCase() : value));
   }

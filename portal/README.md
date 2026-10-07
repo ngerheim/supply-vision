@@ -49,7 +49,15 @@ novo nome sem migração de perfil. As permissões são verificadas também na A
 ## As abas
 
 - **Buscar** — preços por Estado, cidade, peça/serviço, modelo e fornecedor.
-  Selecione várias opções em cada filtro; as opções do mesmo campo são alternativas, e os campos são combinados. É possível marcar até 80 opções no total. A pesquisa de nomes dentro de cada filtro mantém as seleções anteriores. Ao mudar os Estados, cidades fora deles são desmarcadas. Acima de 1.000
+  Cada lista mostra apenas opções presentes nas condições vigentes e compatíveis
+  com as escolhas nos outros filtros. Por exemplo, um fornecedor restringe cidades,
+  modelos e peças; uma cidade restringe fornecedores, modelos e peças. A própria
+  lista mantém alternativas para acrescentar outras opções ao mesmo filtro.
+  Selecione várias opções em cada filtro; as opções do mesmo campo são alternativas,
+  e os campos são combinados. É possível marcar até 80 opções no total. A pesquisa
+  de nomes dentro de cada filtro mantém as seleções anteriores. As seleções permanecem
+  visíveis e podem ser removidas mesmo quando uma combinação não tem condições.
+  As opções consideram toda a base de condições vigentes. Acima de 1.000
   resultados o portal avisa e sugere refinar.
 - **Chamados** — fornecedores a negociar. Cada um tem código (`SUP-0001`) e
   passa por Aberto → Aguardando fornecedor → Fechado ou Cancelado, com linha

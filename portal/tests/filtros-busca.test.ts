@@ -23,3 +23,12 @@ void test('limita parâmetros totais e tamanho sem truncar silenciosamente', () 
   assert.throws(() => condicoesBusca(parametrosBusca(filters)), /no máximo 80/);
   assert.throws(() => condicoesBusca(new URLSearchParams({ item: 'a'.repeat(201) })), /muito longo/);
 });
+void test('opções ignoram só seu próprio campo e mantêm validação de toda a seleção', () => {
+  const params = parametrosBusca({ ...filtrosVazios(), supplier: ['a','b'], location: ['cidade'], model: ['modelo'] });
+  assert.deepEqual(condicoesBusca(params, 'supplier'), {
+    conditions: ['l.id IN (?)', 'vm.id IN (?)'], values: ['cidade', 'modelo'],
+  });
+  assert.throws(() => condicoesBusca(new URLSearchParams({ item: 'a'.repeat(201) }), 'item'), /muito longo/);
+  const excesso = parametrosBusca({ ...filtrosVazios(), item: Array.from({ length:81 }, (_, i) => String(i)) });
+  assert.throws(() => condicoesBusca(excesso, 'item'), /no máximo 80/);
+});
