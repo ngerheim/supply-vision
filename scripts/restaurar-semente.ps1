@@ -29,6 +29,17 @@ try {
   if ($shaAtual -ne $meta.banco.sha256) { throw 'O banco da semente nao confere com o hash registrado. Refaca a semente.' }
   Ok "banco integro (SHA-256 $($shaAtual.Substring(0,16)))"
 
+  # Toda validacao ocorre antes de tocar a configuracao existente.
+  if ([IO.Path]::GetFileName($meta.banco.arquivo) -ne $meta.banco.arquivo -or $meta.banco.arquivo -notmatch '\.sqlite$') { throw 'Nome do banco da semente invalido.' }
+  foreach ($d in @('comum', 'portal\configuracao', 'alertas\config', 'alertas\parametros')) {
+    if (!(Test-Path -LiteralPath (Join-Path $temp $d) -PathType Container)) { throw "Pasta ausente na semente: $d" }
+  }
+  $bancoValidado = Join-Path $temp 'banco\validado.sqlite'
+  & node --experimental-strip-types (Join-Path $Raiz 'portal\scripts\restaurar-banco-semente.mjs') (Join-Path $temp 'banco\portal.sqlite') $bancoValidado
+  if ($LASTEXITCODE -ne 0) { throw 'Banco da semente reprovado; configuracao preservada.' }
+  if (!$meta.estadoPersistente) { Write-Warning 'Semente antiga sem estado persistente: confira os envios e slots antes de iniciar a operacao.' }
+  if (Test-Path -LiteralPath (Join-Path $Privado 'operacao\supervisor.pid.json')) { throw 'Pare a operacao antes de restaurar a semente.' }
+
   Etapa 'Conferindo o destino'
   $d1 = Join-Path $Privado 'portal\banco\estado\state\v3\d1\miniflare-D1DatabaseObject'
   $jaTem = @(Get-ChildItem $d1 -Filter '*.sqlite' -File -ErrorAction SilentlyContinue | Where-Object { $_.Name -ne 'metadata.sqlite' })
@@ -46,21 +57,38 @@ try {
   }
 
   Etapa 'Restaurando'
-  foreach ($d in @('comum', 'portal\configuracao', 'alertas\config', 'alertas\parametros')) {
-    New-Item -ItemType Directory -Force (Join-Path $Privado $d) | Out-Null
+  $pastas = @('comum', 'portal\configuracao', 'alertas\config', 'alertas\parametros')
+  if ($meta.estadoPersistente) { $pastas += @('operacao', 'alertas\estado-envios') }
+  $recuperacao = Join-Path $temp 'configuracao-anterior'
+  $copiadas = @()
+  $bancoDestino = Join-Path $d1 $meta.banco.arquivo
+  try {
+    foreach ($d in $pastas) {
+      $origem = Join-Path $temp $d
+      $destino = Join-Path $Privado $d
+      $anterior = Join-Path $recuperacao $d
+      if (Test-Path -LiteralPath $destino) {
+        New-Item -ItemType Directory -Force (Split-Path $anterior) | Out-Null
+        Copy-Item -LiteralPath $destino -Destination $anterior -Recurse -Force
+      }
+      $copiadas += $d
+      New-Item -ItemType Directory -Force $destino | Out-Null
+      Get-ChildItem -LiteralPath $origem -Force | Copy-Item -Destination $destino -Recurse -Force
+    }
+    New-Item -ItemType Directory -Force $d1 | Out-Null
+    Move-Item -LiteralPath $bancoValidado -Destination $bancoDestino
+  } catch {
+    $erroOriginal = $_
+    foreach ($d in $copiadas) {
+      $destino = [IO.Path]::GetFullPath((Join-Path $Privado $d))
+      $raizSegura = [IO.Path]::GetFullPath($Privado).TrimEnd('\') + '\'
+      if (!$destino.StartsWith($raizSegura, [StringComparison]::OrdinalIgnoreCase)) { throw 'Destino de rollback fora da area privada.' }
+      if (Test-Path -LiteralPath $destino) { Remove-Item -LiteralPath $destino -Recurse -Force }
+      $anterior = Join-Path $recuperacao $d
+      if (Test-Path -LiteralPath $anterior) { Copy-Item -LiteralPath $anterior -Destination $destino -Recurse -Force }
+    }
+    throw $erroOriginal
   }
-  New-Item -ItemType Directory -Force $d1 | Out-Null
-
-  Copy-Item (Join-Path $temp 'comum\*') (Join-Path $Privado 'comum') -Recurse -Force
-  Copy-Item (Join-Path $temp 'portal\configuracao\*') (Join-Path $Privado 'portal\configuracao') -Recurse -Force
-  Copy-Item (Join-Path $temp 'alertas\config\*') (Join-Path $Privado 'alertas\config') -Recurse -Force
-  Copy-Item (Join-Path $temp 'alertas\parametros\*') (Join-Path $Privado 'alertas\parametros') -Recurse -Force
-
-  # O nome do arquivo do D1 e derivado do binding pelo miniflare; manter o nome
-  # de origem evita que ele crie um banco novo e vazio ao lado.
-  if ([IO.Path]::GetFileName($meta.banco.arquivo) -ne $meta.banco.arquivo -or $meta.banco.arquivo -notmatch '\.sqlite$') { throw 'Nome do banco da semente invalido.' }
-  & node --experimental-strip-types (Join-Path $Raiz 'portal\scripts\restaurar-banco-semente.mjs') (Join-Path $temp 'banco\portal.sqlite') (Join-Path $d1 $meta.banco.arquivo)
-  if ($LASTEXITCODE -ne 0) { throw 'Banco da semente reprovado; destino nao foi ativado.' }
   Ok "banco restaurado como $($meta.banco.arquivo)"
 } finally {
   Remove-Item $temp -Recurse -Force -ErrorAction SilentlyContinue

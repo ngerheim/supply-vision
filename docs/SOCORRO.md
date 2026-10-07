@@ -79,8 +79,18 @@ repassa é o `portal/scripts/iniciar-portal.mjs`, usado pelo `start:lan`.
 ## Recuperar a instalação do zero
 
 Se o notebook morrer, o caminho é o mesmo da primeira instalação:
-`git clone`, restaurar a semente a partir do backup — que chega por e-mail e
-está replicado na rede — e `INSTALAR.bat`. Veja [INSTALAR.md](INSTALAR.md).
+`git clone`, restaurar uma **semente completa** e executar `INSTALAR.bat`.
+O backup automatico do Portal contem somente SQLite: nao substitui a semente,
+que inclui configuracao, parametros e estado persistente dos envios e slots.
+
+Prepare a semente com a operacao parada (`scripts/preparar-semente.ps1`) e
+mantenha uma copia protegida fora do computador. Ela contem credenciais e dados
+empresariais; nao publique nem envie por canal aberto. Atualize-a quando mudar
+configuracao ou parametros. Para recuperar um banco mais recente, restaure-o
+pelo procedimento de backup, com a operacao parada, antes de voltar a operar;
+as filas restauradas exigem conferencia manual. Confira tambem os slots e
+entregas posteriores a data da semente, pois seu estado pode estar defasado.
+Veja [INSTALAR.md](INSTALAR.md).
 
 Vale ensaiar isso **uma vez**, com calma, antes de precisar.
 

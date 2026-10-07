@@ -1,6 +1,6 @@
 # Empacota o minimo indispensavel para levantar o Supply Vision em outra
 # maquina: configuracao, parametros e o banco do Portal. Tudo o mais e
-# regeravel (base do Qlik, logs, relatorios, estado da operacao) ou vem do
+# regeravel (base do Qlik, logs, relatorios) ou vem do
 # repositorio.
 #
 #   .\scripts\preparar-semente.ps1
@@ -21,6 +21,8 @@ function Etapa([string]$t) { Write-Host "`n== $t ==" -ForegroundColor Cyan }
 Etapa 'Conferindo a origem'
 if (!(Test-Path $Privado)) { throw "Area privada nao encontrada: $Privado" }
 
+if (Test-Path -LiteralPath (Join-Path $Privado 'operacao\supervisor.pid.json')) { throw 'Pare a operacao antes de preparar a semente, para preservar estado e banco da mesma execucao.' }
+
 # Sempre cria snapshot SQLite: porta fechada nao significa WAL vazio.
 
 # A copia em %TEMP% tem credenciais e o banco inteiro: o finally a remove
@@ -38,6 +40,17 @@ try {
   Copy-Item (Join-Path $Privado 'alertas\config\*') (Join-Path $temp 'alertas\config') -Recurse -Force
   Copy-Item (Join-Path $Privado 'alertas\parametros\*') (Join-Path $temp 'alertas\parametros') -Recurse -Force
 
+  # Estado persistente impede repetir slots e entregas depois da migracao.
+  foreach ($d in @('operacao', 'alertas\estado-envios')) {
+    New-Item -ItemType Directory -Force (Join-Path $temp $d) | Out-Null
+  }
+  $estadoOrigem = Join-Path $Privado 'operacao\estado.json'
+  if (Test-Path -LiteralPath $estadoOrigem) { Copy-Item -LiteralPath $estadoOrigem -Destination (Join-Path $temp 'operacao\estado.json') }
+  $entregasOrigem = Join-Path $Privado 'alertas\estado-envios'
+  if (Test-Path -LiteralPath $entregasOrigem) {
+    Get-ChildItem -LiteralPath $entregasOrigem -Filter '*.json' -File | Copy-Item -Destination (Join-Path $temp 'alertas\estado-envios')
+  }
+
   # O banco: um unico arquivo .sqlite dentro do diretorio do D1.
   $d1 = Join-Path $Privado 'portal\banco\estado\state\v3\d1\miniflare-D1DatabaseObject'
   # O nome do arquivo do D1 e derivado do binding pelo miniflare e precisa ser
@@ -50,6 +63,7 @@ try {
   $sha = (Get-FileHash (Join-Path $temp 'banco\portal.sqlite') -Algorithm SHA256).Hash
 
   @{
+    estadoPersistente = $true
     gerado = (Get-Date).ToString('o')
     origem = [Environment]::MachineName
     banco = @{ arquivo = $nomeD1[0].Name; sha256 = $sha; deBackup = $false; snapshotConsistente = $true }
