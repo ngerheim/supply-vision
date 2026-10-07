@@ -56,9 +56,11 @@ if ($resposta -notmatch '^[sS]') {
 
 # 3) Desativa (nao apaga) as regras amplas de node e workerd
 $amplas = Get-NetFirewallRule -Direction Inbound -Enabled True |
-  Where-Object { $_.DisplayName -match 'Node\.js|workerd' }
+  Where-Object { $_.Action -eq 'Allow' -and $_.DisplayName -match 'Node\.js|workerd' }
+$desativadas = @()
 foreach ($r in $amplas) {
   Disable-NetFirewallRule -Name $r.Name
+  $desativadas += $r.Name
   Write-Host "  Desativada: $($r.DisplayName) [$($r.Profile)]" -ForegroundColor Green
 }
 
@@ -69,6 +71,9 @@ Get-NetFirewallRule -Direction Inbound -Enabled True -ErrorAction SilentlyContin
   Select-Object DisplayName, Profile, Action | Format-Table -AutoSize
 
 Write-Host '  Teste de novo pelo outro computador. Se algo parar de funcionar:' -ForegroundColor Yellow
-Write-Host "     Get-NetFirewallRule -Direction Inbound | Where-Object { `$_.DisplayName -match 'Node\.js|workerd' } | Enable-NetFirewallRule" -ForegroundColor Gray
+foreach ($regra in $desativadas) {
+  $nomeSeguro = $regra.Replace("'", "''")
+  Write-Host "     Enable-NetFirewallRule -Name '$nomeSeguro'" -ForegroundColor Gray
+}
 Write-Host ''
 Read-Host '  Enter para fechar'
