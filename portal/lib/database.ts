@@ -61,6 +61,7 @@ const schema = [
   // entre as duas operacoes.
   `CREATE TABLE IF NOT EXISTS travas (chave TEXT PRIMARY KEY, dono TEXT, adquirida_em TEXT NOT NULL)`,
   `CREATE INDEX IF NOT EXISTS idx_login_attempts_ip ON login_attempts(ip, created_at DESC)`,
+  `CREATE INDEX IF NOT EXISTS idx_login_attempts_created_at ON login_attempts(created_at)`,
   `CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL)`,
 ];
 
