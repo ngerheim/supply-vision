@@ -15,8 +15,12 @@ usar pen drive em toda atualização futura.
 .\scripts\preparar-semente.ps1 -Destino D:\
 ```
 
-Gera `supply-vision-semente-<data>.zip`. Se a operação estiver no ar, ele usa
-o backup mais recente em vez do banco vivo, e avisa se o backup estiver velho.
+Pare a operacao na central antes de executar. Gera
+`supply-vision-semente-<data>.zip` com um snapshot consistente do banco,
+configuracao, parametros e estado persistente de slots e entregas. O script
+recusa um supervisor ainda ativo; nao usa um backup antigo no lugar do banco.
+Na migracao, mantenha a origem parada ate concluir a ativacao do destino,
+para que as duas maquinas nao executem os mesmos slots.
 
 > A semente contém credenciais SMTP, token do Qlik e o banco com preços e
 > usuários. Prefira pen drive a e-mail, e apague depois de usar.
@@ -29,8 +33,10 @@ cd C:\Projetos\supply-vision
 .\scripts\restaurar-semente.ps1 -Zip D:\supply-vision-semente-<data>.zip
 ```
 
-A restauração confere o SHA-256 do banco, recusa se já houver banco no destino
-e lista os valores que mudam de máquina. Ajuste-os antes de continuar:
+A restauração confere o SHA-256 e a estrutura do banco antes de substituir
+configuracoes, recusa se já houver banco no destino e lista os valores que
+mudam de máquina. Sementes antigas sem estado persistente exigem conferir
+slots e entregas antes de iniciar. Ajuste-os antes de continuar:
 
 | Onde | Chave | Por quê |
 |---|---|---|
