@@ -296,3 +296,26 @@ A limpeza atua apenas sobre planilhas, CSV, previews `.eml`, logs e saídas
 `saida_rodar_*.txt` com timestamp. Registros de slots agendados com entrega
 confirmada ficam por 30 dias; entregas incertas/parciais e registros manuais
 são preservados para conferência.
+
+
+## Limites e preservacao do historico
+
+A exportacao JSON administrativa preserva um snapshot consistente e nao inclui
+versoes de acordos em preparacao. Para evitar materializar uma base crescente
+sem limite, recusa mais de 10 mil registros por tabela ou mais de 8 MiB de logs
+de relatorios. Nao entrega arquivo parcial. O backup SQLite completo continua
+sendo o meio de recuperacao de bases maiores.
+
+Auditoria, historico de chamados e identificadores de deduplicacao nao sao
+apagados automaticamente nesta versao. Uma politica futura de arquivamento
+precisa preservar rastreabilidade e impedir reenvio de entregas antigas.
+
+O login aceita uma tentativa simultanea por e-mail e limita o processamento e
+a fila por instancia. Uma resposta 429 pede nova tentativa apos alguns segundos;
+nao bloqueia a conta por numero de falhas. Esses limites nao substituem controle
+no proxy para ataques distribuidos ou multiplas instancias.
+
+A instalacao LAN documentada usa HTTP: senha e sessao trafegam sem criptografia.
+Restrinja o acesso a rede empresarial confiavel. Para trafegar fora dessa rede,
+homologue HTTPS no proxy, cookies seguros e a origem do Portal antes de liberar
+acesso. Esta correcao nao instala certificados nem altera a rede do servidor.

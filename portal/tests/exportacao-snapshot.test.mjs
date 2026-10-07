@@ -36,3 +36,10 @@ void test('exportacao mantem referencias quando exclusao ocorre durante leituras
     assert.equal(tables.users.some(u=>'password_hash' in u),false);
   } finally { reader.close();writer.close();fs.rmSync(dir,{recursive:true,force:true}); }
 });
+
+void test('exportacao excessiva e recusada sem apagar ou truncar historico',async()=>{
+  const db={prepare:sql=>sql,batch:async queries=>queries.map((sql,i)=>({results:i===0?[{bytes:9*1024*1024}]:[]}))};
+  await assert.rejects(()=>exportarTabelas(db),/limite de logs/);
+  db.batch=async queries=>queries.map((sql,i)=>({results:i===0?[{bytes:0}]:i===1?Array.from({length:10001},()=>({id:'x'})):[]}));
+  await assert.rejects(()=>exportarTabelas(db),/10000 registros/);
+});
