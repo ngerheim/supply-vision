@@ -1,5 +1,6 @@
 import { validacaoAtiva } from './operacao-validacao.mjs';
 import { abrirBancoLocal } from './banco-local.mjs';
+import { travarRestauracao } from './trava-restauracao.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
@@ -259,6 +260,8 @@ export async function processarNotificacoes(db, config, transportador, { conclui
 
 async function principal() {
   const config = lerConfig();
+  const liberarRestauracao = travarRestauracao();
+  try {
   const transportador = criarTransportador(config);
   if (testarConexao) {
     await transportador.verify();
@@ -271,6 +274,7 @@ async function principal() {
     if (observar) await new Promise((resolve) => setTimeout(resolve, 30_000));
   } while (observar);
   transportador.close();
+  } finally { liberarRestauracao(); }
 }
 
 if (process.argv[1] && pathToFileURL(path.resolve(process.argv[1])).href === import.meta.url) {
