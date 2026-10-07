@@ -30,6 +30,8 @@ try{
    $relativo=$exemplo.FullName.Substring($parametros.Length).TrimStart('\').Replace('.exemplo','')
    Copy-Item $exemplo.FullName (Join-Path "$temp\privado\alertas\parametros" $relativo) -Force
  }
+ [IO.File]::WriteAllText("$temp\alertas\processo\pipeline.py",'print("pipeline ficticio concluido")')
+ [IO.File]::WriteAllText("$temp\alertas\processo\verificar_saude.py", "import pathlib,time`npathlib.Path('../privado/operacao/saude-iniciada').write_text('ficticio')`ntime.sleep(600)")
  Remove-Item -LiteralPath "$temp\alertas\.venv\Scripts\python.exe" -Force
  & python.exe -m venv --without-pip "$temp\alertas\.venv"
  if($LASTEXITCODE-ne0){throw 'Nao foi possivel criar Python real para validacao do supervisor.'}
@@ -44,7 +46,7 @@ try{
  [IO.File]::WriteAllText("$temp\privado\alertas\config\cfg_ambiente.txt","QLIK_TENANT=x`r`nQLIK_APP_ID=x`r`nQLIK_OBJ_ID=x`r`nDESTINATARIO_ALERTA=x")
  [IO.File]::WriteAllText("$temp\privado\comum\operacao.env","ALERTAS_HORARIOS=00:00`r`nBACKUP_HORARIOS=00:00`r`nLIMPEZA_HORARIO=00:00`r`nESPACO_MINIMO_GB=1")
  [IO.File]::WriteAllText("$temp\privado\portal\configuracao\worker.env",'segredo-ficticio')
- $data=Get-Date -Format yyyy-MM-dd;@{"alertas-$data-00:00"='ok';"backup-$data-00:00"='ok';"limpeza-$data-00:00"='ok'}|ConvertTo-Json|Set-Content "$temp\privado\operacao\estado.json"
+ $data=Get-Date -Format yyyy-MM-dd;@{"backup-$data-00:00"='ok';"limpeza-$data-00:00"='ok'}|ConvertTo-Json|Set-Content "$temp\privado\operacao\estado.json"
  $env:SUPPLY_VISION_PRIVADO=Join-Path $temp 'privado'
  $env:Path="$temp\bin;$pathAnterior";$args=@('-NoProfile','-ExecutionPolicy','Bypass','-File',"$temp\scripts\supervisor.ps1")
  $a=Start-Process powershell.exe -ArgumentList $args -PassThru -WindowStyle Hidden;$b=Start-Process powershell.exe -ArgumentList $args -PassThru -WindowStyle Hidden;$processos=@($a,$b)
@@ -55,6 +57,9 @@ try{
  for($i=0;$i -lt 60;$i++){if(Test-Path $statusPath){$apareceu=$true;break};Start-Sleep -Milliseconds 500}
  if(!$apareceu){throw 'Supervisor nao gravou status.json dentro do prazo.'}
  $status=Get-Content $statusPath -Raw|ConvertFrom-Json;if(!$status.portal-or!$status.emails-or!$status.relatorios){throw 'Supervisor nao iniciou os processos simulados.'}
+ $saudeIniciada=$false
+ for($i=0;$i-lt60;$i++){if(Test-Path "$temp\privado\operacao\saude-iniciada"){$saudeIniciada=$true;break};Start-Sleep -Milliseconds 500}
+ if(!$saudeIniciada){throw 'Verificacao ficticia de saude nao iniciou.'}
  # status.json preso por outro processo (central, antivirus) durante mais de
  # uma volta: o supervisor registra aviso e segue; antes, encerrava tudo.
  $antes=$status.atualizado

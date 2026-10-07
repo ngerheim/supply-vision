@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 
 void test('semente apaga credenciais temporarias no sucesso e na falha', { skip: process.platform !== 'win32' }, () => {
@@ -48,6 +49,14 @@ void test('semente apaga credenciais temporarias no sucesso e na falha', { skip:
     fs.rmSync(zip);ps("Compress-Archive -Path (Join-Path $env:SV_EXTRAIDO '*') -DestinationPath $env:SV_ZIP");
     const preservado=path.join(dir,'config-existente');fs.mkdirSync(path.join(preservado,'comum'),{recursive:true});
     fs.writeFileSync(path.join(preservado,'comum/smtp.env'),'preservar');
+    assert.throws(()=>execFileSync('powershell.exe',['-NoProfile','-ExecutionPolicy','Bypass','-File',path.join(root,'scripts/restaurar-semente.ps1'),'-Zip',zip],{env:{...env,TEMP:dir,SUPPLY_VISION_PRIVADO:preservado},stdio:'pipe'}));
+    assert.equal(fs.readFileSync(path.join(preservado,'comum/smtp.env'),'utf8'),'preservar');
+    // Hash valido nao basta: um SQLite de outro produto deve ser rejeitado.
+    const origemBanco=path.join(extraido,'banco/portal.sqlite');fs.rmSync(origemBanco);
+    const estranho=new DatabaseSync(origemBanco);estranho.exec('CREATE TABLE outro_produto(id TEXT)');estranho.close();
+    meta.banco.arquivo='fixture.sqlite';meta.banco.sha256=createHash('sha256').update(fs.readFileSync(origemBanco)).digest('hex');
+    fs.writeFileSync(metadata,JSON.stringify(meta));fs.rmSync(zip);
+    ps("Compress-Archive -Path (Join-Path $env:SV_EXTRAIDO '*') -DestinationPath $env:SV_ZIP");
     assert.throws(()=>execFileSync('powershell.exe',['-NoProfile','-ExecutionPolicy','Bypass','-File',path.join(root,'scripts/restaurar-semente.ps1'),'-Zip',zip],{env:{...env,TEMP:dir,SUPPLY_VISION_PRIVADO:preservado},stdio:'pipe'}));
     assert.equal(fs.readFileSync(path.join(preservado,'comum/smtp.env'),'utf8'),'preservar');
     for(const n of fs.readdirSync(dir).filter(n=>n.endsWith('.zip')))fs.rmSync(path.join(dir,n));
