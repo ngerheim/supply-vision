@@ -16,8 +16,7 @@ MODELOS_EXCLUIR      = carregar_lista('excluir_modelos.txt')
 FORNECEDORES_EXCLUIR = carregar_lista('excluir_fornecedores.txt')
 ITENS_EXCLUIR        = carregar_lista('excluir_descricoes.txt')
 
-MODELOS   = carregar_de_para('modelos.csv', 'modelo_qlik', 'modelo_acordo',
-                             normalizar_chave=False)
+MODELOS   = carregar_de_para('modelos.csv', 'modelo_qlik', 'modelo_acordo')
 SINONIMOS = carregar_de_para('itens.csv', 'descricao_qlik', 'item_acordo')
 
 __all__ = [
