@@ -166,6 +166,9 @@ máquina) ou quando `BACKUP_ANEXAR_BANCO=true`. O banco contém hashes de senha
 e toda a base comercial, então configurar a pasta de rede é o caminho
 recomendado. A troca é atômica.
 
+A cópia local e a réplica na rede são feitas antes de validar o SMTP.
+Se a réplica for confirmada, falha no comprovante gera aviso sem invalidar o
+backup; sem réplica, falha no e-mail continua sendo erro de redundância.
 Além da cópia atual, fica um **histórico de 7 dias**: a última cópia de cada
 dia, em `privado/portal/backups/historico/portal-AAAA-MM-DD.sqlite` e na mesma
 subpasta da pasta de rede. Também são preservadas as sete cópias diárias mais

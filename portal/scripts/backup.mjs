@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 
-import { criarTransportador, lerConfig, portalPrivado } from './configuracao.mjs';
+import { criarTransportador, lerConfig, lerConfigBruta, portalPrivado } from './configuracao.mjs';
 import { DIAS_RETENCAO, guardarNoHistorico } from './retencao-backup.mjs';
 import { localizarBanco as localizarBancoLocal } from './banco-local.mjs';
 import { montarCasca, escapar, paleta } from '../lib/email-visual.ts';
@@ -67,10 +67,8 @@ function replicarNaRede(config) {
   guardarNoHistorico(pastaRede, final);
   return final;
 }
-async function enviar() {
-  const config = lerConfig();
+async function enviar(config, copiaNaRede) {
   if (!config.BACKUP_EMAIL_TO) throw new Error('BACKUP_EMAIL_TO nao configurado.');
-  const copiaNaRede = replicarNaRede(config);
   const conteudo = fs.readFileSync(arquivoFinal);
   const hash = createHash('sha256').update(conteudo).digest('hex');
   const tamanhoMb = (conteudo.length / 1024 / 1024).toFixed(2);
@@ -124,6 +122,15 @@ async function enviar() {
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
-  try { await comBackupExclusivo(pastaBackup, async () => { criarCopiaIntegra(localizarBanco()); await enviar(); }); }
+  try { await comBackupExclusivo(pastaBackup, async () => {
+    criarCopiaIntegra(localizarBanco());
+    // A redundância não depende do servidor de correio nem da configuração SMTP.
+    const copiaNaRede = replicarNaRede(lerConfigBruta());
+    try { await enviar(lerConfig(), copiaNaRede); }
+    catch (erro) {
+      if (!copiaNaRede) throw erro;
+      console.warn(`AVISO: backup local e na rede confirmados; comprovante não enviado: ${erro instanceof Error ? erro.message : 'falha de e-mail'}`);
+    }
+  }); }
   catch (erro) { console.error(`ERRO: ${erro instanceof Error ? erro.message : 'falha inesperada'}`); process.exitCode = 1; }
 }
