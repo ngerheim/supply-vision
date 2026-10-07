@@ -168,7 +168,9 @@ recomendado. A troca é atômica.
 
 Além da cópia atual, fica um **histórico de 7 dias**: a última cópia de cada
 dia, em `privado/portal/backups/historico/portal-AAAA-MM-DD.sqlite` e na mesma
-subpasta da pasta de rede. Os dias além da janela são apagados sozinhos. É o
+subpasta da pasta de rede. Também são preservadas as sete cópias diárias mais
+recentes, mesmo após uma pausa de mais de sete dias. Só são apagadas cópias
+fora da janela que excedam esse mínimo. É o
 que permite voltar a um ponto anterior a um erro que já entrou no backup do
 dia (um acordo apagado por engano, por exemplo). Para restaurar, a central
 oferece a cópia mais recente ou a do último dia anterior; um dia específico

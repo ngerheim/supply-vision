@@ -41,8 +41,20 @@ void test('nao toca em arquivos fora do padrao', () => {
   fs.mkdirSync(pasta);
   for (const nome of ['portal-2020-01-01.sqlite', 'pre-restauracao-2020.sqlite', 'anotacoes.txt', 'portal-2020-01-01.sqlite.bak'])
     fs.writeFileSync(path.join(pasta, nome), 'x');
-  assert.deepEqual(podarHistorico(base, dia('2026-09-22')), ['portal-2020-01-01.sqlite']);
-  assert.deepEqual(fs.readdirSync(pasta).sort(), ['anotacoes.txt', 'portal-2020-01-01.sqlite.bak', 'pre-restauracao-2020.sqlite']);
+  assert.deepEqual(podarHistorico(base, dia('2026-09-22')), []);
+  assert.deepEqual(fs.readdirSync(pasta).sort(), ['anotacoes.txt', 'portal-2020-01-01.sqlite', 'portal-2020-01-01.sqlite.bak', 'pre-restauracao-2020.sqlite']);
+});
+
+void test('retomar após pausa preserva os pontos anteriores à retomada', () => {
+  const base = pastaTemporaria(), origem = path.join(base, 'portal-atual.sqlite');
+  fs.writeFileSync(origem, 'antes');
+  for (let n = 1; n <= 7; n++) guardarNoHistorico(base, origem, new Date(2026, 8, n, 9));
+  fs.writeFileSync(origem, 'depois');
+  guardarNoHistorico(base, origem, dia('2026-10-06'));
+  assert.equal(listarHistorico(base).length, 7);
+  assert.equal(fs.readFileSync(listarHistorico(base)[1].arquivo, 'utf8'), 'antes');
+  assert.equal(listarHistorico(base).at(-1).dia, '2026-09-02');
+  assert.throws(() => podarHistorico(base, dia('2026-10-06'), 0), /positivo/);
 });
 
 void test('usa a data local da maquina', () => {
