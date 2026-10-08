@@ -54,3 +54,11 @@ export function criarTransportador(config) {
     tls: { servername: config.SMTP_HOST, minVersion: 'TLSv1.2' },
   });
 }
+
+// Avisos operacionais usam somente o SMTP comum, sem depender do Portal.
+export function lerConfigSmtp() {
+  const config = lerArquivo(path.join(privado, 'comum', 'smtp.env'));
+  const obrigatorias = ['SMTP_HOST', 'SMTP_PORT', 'SMTP_USER', 'SMTP_PASSWORD', 'EMAIL_FROM_NAME'];
+  if (obrigatorias.some(chave => !config[chave])) throw new Error('Configuracao SMTP comum incompleta.');
+  return config;
+}

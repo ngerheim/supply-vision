@@ -68,6 +68,47 @@ Para sair desse modo em um terminal de testes, use `$env:MODO_ENSAIO = '0'`.
 Isso não altera uma operação já iniciada: para ela vale parar e iniciar pela
 central, com o arquivo configurado.
 
+## Avisos por e-mail para o administrador
+
+Os avisos na tela continuam existindo. Para receber também por e-mail, abra
+`privado/comum/operacao.env` e acrescente, com seus endereços:
+
+```ini
+ADMIN_ALERTA_EMAIL=administrador@example.com,outro@example.com
+```
+
+Use vírgula para separar mais de um endereço. Pare e inicie a operação pela
+central após alterar. A chave ausente ou vazia mantém o recurso desligado,
+sem tentativa de envio. Para desligar, remova a linha ou deixe
+`ADMIN_ALERTA_EMAIL=` e reinicie a operação.
+
+Os avisos usam o SMTP já configurado em `privado/comum/smtp.env` e cobrem:
+
+- Portal deixou de responder, após as mesmas duas falhas do aviso na tela;
+- início da recuperação automática do Portal;
+- falha de backup;
+- falha dos Alertas ou entrega que exige revisão;
+- espaço em disco abaixo de `ESPACO_MINIMO_GB`;
+- partida do supervisor, no máximo uma tentativa por inicialização.
+
+Cada tipo de evento permite no máximo uma tentativa de e-mail a cada
+60 minutos. O controle fica em `privado/operacao/avisos-admin.sqlite` e
+sobrevive a reinícios. Falhas e resultados incertos também consomem essa
+janela, para evitar mensagens repetidas. Não apague o controle para forçar
+reenvio. Os avisos acompanham os pontos já existentes do supervisor: por
+exemplo, o alerta de disco continua sendo registrado uma vez por dia.
+
+O envio acontece separado da operação, com prazo máximo de 60 segundos.
+Se falhar ou exceder esse prazo, o supervisor registra no `supervisor.log`
+e continua funcionando. Confira esse log se os avisos não chegarem.
+O e-mail informa a máquina, data/hora de São Paulo, o ocorrido e a seção
+correspondente de `docs/SOCORRO.md`, sem anexar dados, logs ou credenciais.
+
+Com `MODO_ENSAIO=1`, nenhum desses e-mails sai e o log registra
+**ensaio: aviso ao administrador suprimido — <evento>**. A supressão não
+consome a janela de envio. Esses avisos dependem de o supervisor, a máquina
+e o SMTP estarem funcionando; não avisam sobre uma máquina já desligada.
+
 ## Perfis e acesso
 
 O grupo Consulta reúne Buscar e Manutenção (Power BI); Suprimentos acrescenta

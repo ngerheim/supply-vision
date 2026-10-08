@@ -28,7 +28,7 @@ try {
             'privado\alertas\logs', 'privado\alertas\relatorios\diarios',
             'privado\alertas\parametros\de_para', 'privado\operacao', 'bin')
   $dirs | ForEach-Object { New-Item -ItemType Directory -Force (Join-Path $temp $_) | Out-Null }
-  Copy-Item "$raizReal\scripts\supervisor.ps1", "$raizReal\scripts\operacao-logica.ps1", "$raizReal\scripts\validar-operacao.ps1", "$raizReal\scripts\notificacao.ps1" "$temp\scripts"
+  Copy-Item "$raizReal\scripts\supervisor.ps1", "$raizReal\scripts\operacao-logica.ps1", "$raizReal\scripts\validar-operacao.ps1", "$raizReal\scripts\notificacao.ps1", "$raizReal\scripts\avisos-admin.ps1" "$temp\scripts"
 
  New-Item -ItemType Directory -Force "$temp\alertas\processo","$temp\privado\alertas\parametros\filtros"|Out-Null
  Copy-Item "$raizReal\alertas\parametros" "$temp\alertas" -Recurse -Force

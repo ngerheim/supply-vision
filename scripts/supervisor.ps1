@@ -3,6 +3,7 @@ param([switch]$Visivel)
 $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'operacao-logica.ps1')
 . (Join-Path $PSScriptRoot 'notificacao.ps1')
+. (Join-Path $PSScriptRoot 'avisos-admin.ps1')
 $Raiz=(Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $Privado=Obter-PastaPrivada $Raiz;$Portal=Join-Path $Raiz 'portal';$Alertas=Join-Path $Raiz 'alertas'
 $Operacao=Join-Path $Privado 'operacao';New-Item -ItemType Directory -Force $Operacao|Out-Null
@@ -69,6 +70,7 @@ function Encerrar($p){
 }
 function Pode-Tentar([string]$tipo){$k="tentativa-$tipo";if(!$estado[$k]){return $true};return (Get-Date)-ge([datetime]$estado[$k]).AddMinutes(10)}
 $Npm=(Get-Command npm.cmd).Source;$Node=(Get-Command node.exe).Source;$Python=Join-Path $Alertas '.venv\Scripts\python.exe'
+$avisosAdmin=Novo-ControleAvisosAdmin $config $ensaio $Node $Portal
 $alerta=$null;$alertaChave='';$alertaHora='';$alertaRunId='';$backup=$null;$backupChave='';$limpeza=$null;$limpezaChave=''
 $verificacaoSaude=$null;$inicioSaude=$null
 $inicioPortal=Get-Date;$ultimoReinicio=Get-Date
@@ -81,11 +83,13 @@ try{$linhaUrl=@(Get-Content (Join-Path $Privado 'portal\configuracao\portal.env'
 try{
  Log 'Supervisor iniciado.'
  if($ensaio){Log 'Modo ensaio ATIVO'}
+ Avisar-Administrador $avisosAdmin 'supervisor-iniciado'
  while(!(Test-Path $PararFile)){
   # Erro numa volta e registrado e a volta seguinte tenta de novo. Antes, uma
   # falha transitoria qualquer (ex.: status.json em uso) encerrava toda a
   # operacao ate alguem religar.
   try{
+  Atualizar-AvisosAdmin $avisosAdmin
   if($estadoPendente){Salvar-Estado}
   Iniciar-Processo 'portal' $Npm @('run','start:lan') $Portal;Iniciar-Processo 'emails' $Npm @('run','email:watch') $Portal
   Iniciar-Processo 'relatorios' $Node @('--experimental-strip-types','scripts\processar-relatorios.mjs') $Portal
@@ -97,6 +101,7 @@ try{
   # Nao interrompe Qlik/SMTP com resultado incerto para recuperar a interface.
   if(!$saudavel-and$falhasSaude-ge8-and((Get-Date)-$inicioPortal).TotalMinutes-ge3-and((Get-Date)-$ultimoReinicio).TotalMinutes-ge3){
    Log 'Portal sem resposta persistente; reiniciando sua arvore.'
+   Avisar-Administrador $avisosAdmin 'portal-reiniciado'
    Encerrar $processos['portal'];$ultimoReinicio=Get-Date;$inicioPortal=Get-Date;$falhasSaude=0
   }
   if($verificacaoSaude){
@@ -105,20 +110,20 @@ try{
   }
   if($saudavel-and!$portalPronto){$portalPronto=$true;Log 'Portal pronto (health ok).';[void](Notificar 'Supply Vision' "Portal no ar em $PortalUrl")}
   elseif(!$saudavel-and$portalPronto-and$falhasSaude-eq1){Log 'Health sem resposta valida uma vez; aguardando a proxima verificacao.'}
-  elseif(!$saudavel-and$portalPronto-and$falhasSaude-ge2){$portalPronto=$false;Log 'Portal deixou de responder.';[void](Notificar 'Supply Vision' 'O Portal parou de responder.')}
-  if($alerta-and$alerta.HasExited){if($alerta.ExitCode-eq0){$estado[$alertaChave]=(Get-Date).ToString('o');$estado.Remove('tentativa-alertas');Log "Alertas concluidos: $alertaChave."}elseif($alerta.ExitCode-eq3){$estado[$alertaChave]='revisao-entrega';$estado.Remove('tentativa-alertas');Log "ALERTA: $alertaChave exige revisao da entrega. Confira privado/alertas/estado-envios; nao sera reenviado automaticamente."}else{Log "Alertas falharam (codigo $($alerta.ExitCode))."};$alerta=$null;Salvar-Estado;try{if(!$verificacaoSaude){$inicioSaude=Get-Date;$verificacaoSaude=Start-Process $Python -ArgumentList 'processo\verificar_saude.py',$alertaHora.Replace(':',''),$alertaRunId -WorkingDirectory $Alertas -WindowStyle Hidden -PassThru}}catch{Log "Verificacao de saude nao executada: $($_.Exception.Message)"}}
+  elseif(!$saudavel-and$portalPronto-and$falhasSaude-ge2){$portalPronto=$false;Log 'Portal deixou de responder.';[void](Notificar 'Supply Vision' 'O Portal parou de responder.');Avisar-Administrador $avisosAdmin 'portal-parou'}
+  if($alerta-and$alerta.HasExited){if($alerta.ExitCode-eq0){$estado[$alertaChave]=(Get-Date).ToString('o');$estado.Remove('tentativa-alertas');Log "Alertas concluidos: $alertaChave."}elseif($alerta.ExitCode-eq3){$estado[$alertaChave]='revisao-entrega';$estado.Remove('tentativa-alertas');Log "ALERTA: $alertaChave exige revisao da entrega. Confira privado/alertas/estado-envios; nao sera reenviado automaticamente.";Avisar-Administrador $avisosAdmin 'alertas-revisao'}else{Log "Alertas falharam (codigo $($alerta.ExitCode)).";Avisar-Administrador $avisosAdmin 'alertas-falharam'};$alerta=$null;Salvar-Estado;try{if(!$verificacaoSaude){$inicioSaude=Get-Date;$verificacaoSaude=Start-Process $Python -ArgumentList 'processo\verificar_saude.py',$alertaHora.Replace(':',''),$alertaRunId -WorkingDirectory $Alertas -WindowStyle Hidden -PassThru}}catch{Log "Verificacao de saude nao executada: $($_.Exception.Message)"}}
   $manutencao=(Test-Path $ManutencaoFile)-or(Test-Path (Join-Path $Operacao 'validacao-atualizacao.sinal'))
   if(!$manutencao-and!$alerta){$agoraAlerta=Get-Date;$d=Obter-SlotDevido 'alertas' (Obter-HorariosDoDia $config 'ALERTAS_HORARIOS' $agoraAlerta) $estado $agoraAlerta;if($d-and(Pode-Tentar 'alertas')){$estado['tentativa-alertas']=(Get-Date).ToString('o');$alertaChave=$d.chave;$alertaHora=$d.hora;$alertaRunId=(Get-Date).ToString('yyyyMMdd_HHmmss')+'_'+[guid]::NewGuid().ToString('N').Substring(0,6);$env:SUPPLY_VISION_RUN_ID=$alertaRunId;try{$alerta=Start-Process $Python -ArgumentList (Argumentos-Pipeline $d.hora $ensaio) -WorkingDirectory $Alertas -WindowStyle Hidden -PassThru}finally{Remove-Item Env:SUPPLY_VISION_RUN_ID -ErrorAction SilentlyContinue};Log "Alertas iniciados para $($d.hora) (execucao $alertaRunId, PID $($alerta.Id)).";Salvar-Estado}}
-  if($backup-and$backup.HasExited){if($backup.ExitCode-eq0){$estado[$backupChave]=(Get-Date).ToString('o');Log "Backup concluido: $backupChave."}else{Log "Backup falhou (codigo $($backup.ExitCode))."};$backup=$null;Salvar-Estado}
+  if($backup-and$backup.HasExited){if($backup.ExitCode-eq0){$estado[$backupChave]=(Get-Date).ToString('o');Log "Backup concluido: $backupChave."}else{Log "Backup falhou (codigo $($backup.ExitCode)).";Avisar-Administrador $avisosAdmin 'backup-falhou'};$backup=$null;Salvar-Estado}
   if(!$manutencao-and!$backup){$d=Obter-SlotDoDia 'backup' $config 'BACKUP_HORARIOS' $estado (Get-Date);if($d-and(Pode-Tentar 'backup')){$estado['tentativa-backup']=(Get-Date).ToString('o');$backupChave=$d.chave;$backup=Start-Process $Node -ArgumentList 'scripts\backup.mjs' -WorkingDirectory $Portal -WindowStyle Hidden -PassThru;Log "Backup iniciado para $($d.hora) (PID $($backup.Id)).";Salvar-Estado}}
   if($limpeza-and$limpeza.HasExited){if($limpeza.ExitCode-eq0){$estado[$limpezaChave]=(Get-Date).ToString('o');Log 'Limpeza concluida.'}else{Log "Limpeza falhou (codigo $($limpeza.ExitCode))."};$limpeza=$null;Salvar-Estado}
   if(!$manutencao-and!$limpeza){$d=Obter-SlotDevido 'limpeza' $config.LIMPEZA_HORARIO $estado (Get-Date);if($d-and(Pode-Tentar 'limpeza')){$estado['tentativa-limpeza']=(Get-Date).ToString('o');$limpezaChave=$d.chave;$limpeza=Start-Process $Python -ArgumentList 'processo\limpeza.py' -WorkingDirectory $Alertas -WindowStyle Hidden -PassThru;Log "Limpeza iniciada (PID $($limpeza.Id)).";Salvar-Estado}}
   $livreGb=[math]::Round((Get-Item $Raiz).PSDrive.Free/1GB,1);$disco=if($livreGb-lt[double]$config.ESPACO_MINIMO_GB){'baixo'}else{'ok'}
-  $hoje=(Get-Date).ToString('yyyy-MM-dd');if($disco-eq'baixo'-and$estado['aviso-disco']-ne$hoje){Log "ALERTA: apenas $livreGb GB livres no disco.";$estado['aviso-disco']=$hoje;Salvar-Estado}
+  $hoje=(Get-Date).ToString('yyyy-MM-dd');if($disco-eq'baixo'-and$estado['aviso-disco']-ne$hoje){Log "ALERTA: apenas $livreGb GB livres no disco.";Avisar-Administrador $avisosAdmin 'disco-baixo';$estado['aviso-disco']=$hoje;Salvar-Estado}
   @{atualizado=(Get-Date).ToString('o');ensaio=$ensaio;portal=!!($processos['portal']-and!$processos['portal'].HasExited);emails=!!($processos['emails']-and!$processos['emails'].HasExited);relatorios=!!($processos['relatorios']-and!$processos['relatorios'].HasExited);alertas=if($alerta){'executando'}elseif($manutencao){'pausados'}else{'aguardando'};backup=if($backup){'executando'}elseif($manutencao){'pausado'}else{'aguardando'};limpeza=if($limpeza){'executando'}elseif($manutencao){'pausada'}else{'aguardando'};manutencao=$manutencao;espacoLivreGb=$livreGb;disco=$disco}|ConvertTo-Json -Compress|ForEach-Object{if(!(Gravar-Tolerante $StatusFile $_)){Log-Limitado 'status' 'AVISO: status.json em uso por outro processo; a central pode mostrar a situacao com atraso.' 60}}
   }catch{Log-Limitado ("volta:"+$_.Exception.Message) "ERRO na volta do supervisor (a operacao segue): $($_.Exception.Message) | Origem: $($_.ScriptStackTrace -replace '\s*\r?\n\s*',' | ')" 10}
   # Dorme em fatias de 1s para enxergar o pedido de parada logo, em vez de
   # deixar quem pediu esperando ate 15s sem sinal de vida.
-  for($i=0;$i-lt15-and!(Test-Path $PararFile);$i++){Start-Sleep 1}
+  for($i=0;$i-lt15-and!(Test-Path $PararFile);$i++){Start-Sleep 1;Atualizar-AvisosAdmin $avisosAdmin}
  }
-}catch{Log "ERRO FATAL: $($_.Exception.Message)";Log "Origem: $($_.ScriptStackTrace -replace '\s*\r?\n\s*',' | ')"}finally{@{atualizado=(Get-Date).ToString('o');ensaio=$ensaio;portal=$false;emails=$false;relatorios=$false;alertas='parado';backup='parado';limpeza='parada';manutencao=$false;disco='desconhecido'}|ConvertTo-Json -Compress|ForEach-Object{[void](Gravar-Tolerante $StatusFile $_)};Log 'Encerrando a operacao.';if($portalPronto){[void](Notificar 'Supply Vision' 'Operacao encerrada. O Portal saiu do ar.')};foreach($p in $processos.Values){Encerrar $p};Encerrar $alerta;Encerrar $backup;Encerrar $limpeza;Encerrar $verificacaoSaude;if(!$processos['portal']-or$processos['portal'].HasExited){Remove-Item -LiteralPath (Join-Path $Privado 'portal\configuracao\worker.env') -Force -ErrorAction SilentlyContinue};Remove-Item $PidFile,$PararFile -Force -ErrorAction SilentlyContinue;if($LockHandle){$LockHandle.Dispose()}}
+}catch{Log "ERRO FATAL: $($_.Exception.Message)";Log "Origem: $($_.ScriptStackTrace -replace '\s*\r?\n\s*',' | ')"}finally{@{atualizado=(Get-Date).ToString('o');ensaio=$ensaio;portal=$false;emails=$false;relatorios=$false;alertas='parado';backup='parado';limpeza='parada';manutencao=$false;disco='desconhecido'}|ConvertTo-Json -Compress|ForEach-Object{[void](Gravar-Tolerante $StatusFile $_)};Encerrar-AvisosAdmin $avisosAdmin;Log 'Encerrando a operacao.';if($portalPronto){[void](Notificar 'Supply Vision' 'Operacao encerrada. O Portal saiu do ar.')};foreach($p in $processos.Values){Encerrar $p};Encerrar $alerta;Encerrar $backup;Encerrar $limpeza;Encerrar $verificacaoSaude;if(!$processos['portal']-or$processos['portal'].HasExited){Remove-Item -LiteralPath (Join-Path $Privado 'portal\configuracao\worker.env') -Force -ErrorAction SilentlyContinue};Remove-Item $PidFile,$PararFile -Force -ErrorAction SilentlyContinue;if($LockHandle){$LockHandle.Dispose()}}
