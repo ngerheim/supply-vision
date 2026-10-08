@@ -20,6 +20,7 @@ $voltar=Botao 'Restaurar backup' 30 397;$voltar.Size='505,42';$voltar.BackColor=
 $auto=New-Object Windows.Forms.CheckBox;$auto.Text='Iniciar automaticamente com o Windows';$auto.Location='32,460';$auto.Size='330,27';$auto.Checked=Test-Path $Startup;$form.Controls.Add($auto)
 $man=New-Object Windows.Forms.CheckBox;$man.Text='Modo manutenção (pausar rotinas automáticas)';$man.Location='32,494';$man.Size='390,27';$man.Checked=Test-Path $Manutencao;$form.Controls.Add($man)
 $avisoBackup=New-Object Windows.Forms.Label;$avisoBackup.Location='32,531';$avisoBackup.Size='505,50';$avisoBackup.Font=New-Object Drawing.Font('Segoe UI',9);$avisoBackup.ForeColor=[Drawing.Color]::FromArgb(255,180,90);$form.Controls.Add($avisoBackup)
+$fonteAvisoBackup=$avisoBackup.Font;$fonteAvisoEnsaio=New-Object Drawing.Font('Segoe UI Semibold',11)
 $dicas=New-Object Windows.Forms.ToolTip
 $dicas.SetToolTip($validar,'Confere arquivos, parâmetros, programas e permissões de escrita. Não testa login no Qlik ou SMTP.')
 $dicas.SetToolTip($man,'Pausa novos alertas, backups e limpezas automáticos. Portal, e-mails e pedidos manuais continuam disponíveis; tarefas em andamento terminam.')
@@ -47,8 +48,8 @@ function Atualizar{
  try{$ensaio=(Ler-ConfigOperacao (Join-Path (Obter-PastaPrivada $Raiz) 'comum\operacao.env'))['MODO_ENSAIO']-eq'1'}catch{}
  # Enquanto ativo, mostra o modo efetivo mesmo se o arquivo foi editado sem reiniciar.
  if((Operacao-Ativa)-and(Test-Path $StatusFile)){try{$ensaio=!!(Get-Content $StatusFile -Raw|ConvertFrom-Json).ensaio}catch{}}
- if($ensaio){$avisoBackup.Text=Obter-AvisoEnsaio $true;$avisoBackup.Font=New-Object Drawing.Font('Segoe UI Semibold',11)}
- else{$avisoBackup.Text=Obter-AvisoBackup (Obter-PastaPrivada $Raiz);$avisoBackup.Font=New-Object Drawing.Font('Segoe UI',9)}
+ if($ensaio){$avisoBackup.Text=Obter-AvisoEnsaio $true;$avisoBackup.Font=$fonteAvisoEnsaio}
+ else{$avisoBackup.Text=Obter-AvisoBackup (Obter-PastaPrivada $Raiz);$avisoBackup.Font=$fonteAvisoBackup}
  $ativo=Operacao-Ativa
  if($ativo){$detalhe='Inicializando módulos...';if(Test-Path $StatusFile){try{$st=Get-Content $StatusFile -Raw|ConvertFrom-Json;$po=if($st.portal){'online'}else{'reiniciando'};$em=if($st.emails){'online'}else{'reiniciando'};$detalhe="Portal: $po  |  E-mails: $em`nAlertas: $($st.alertas)  |  Backup: $($st.backup)`nLimpeza: $($st.limpeza)  |  Disco: $($st.espacoLivreGb) GB livres"}catch{}};$status.Text="● OPERAÇÃO ATIVA`n$detalhe";$status.ForeColor=[Drawing.Color]::FromArgb(87,211,140)}else{$status.Text="● OPERAÇÃO PARADA`nUse 'Iniciar operação' quando quiser colocar o conjunto no ar.";$status.ForeColor=[Drawing.Color]::FromArgb(255,180,90)}
 }
