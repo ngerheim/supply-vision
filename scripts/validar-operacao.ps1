@@ -1,8 +1,9 @@
 [CmdletBinding()]
-param([string]$Raiz)
+param([string]$Raiz,[switch]$SemLogin)
 $ErrorActionPreference='Stop'
 if(!$Raiz){$Raiz=(Resolve-Path (Join-Path $PSScriptRoot '..')).Path}
 . (Join-Path $PSScriptRoot 'operacao-logica.ps1')
+. (Join-Path $PSScriptRoot 'inicializacao-logica.ps1')
 $privado=Obter-PastaPrivada $Raiz;$erros=[Collections.Generic.List[string]]::new()
 function Falha([string]$m){$erros.Add($m)}
 function Exigir-Arquivo([string]$p){
@@ -22,7 +23,8 @@ $op=Join-Path $privado 'comum\operacao.env';try{$cfg=Ler-ConfigOperacao $op;Vali
 if($cfg){$minimo=0.0;if(![double]::TryParse($cfg['ESPACO_MINIMO_GB'],[Globalization.NumberStyles]::Number,[Globalization.CultureInfo]::InvariantCulture,[ref]$minimo)-or$minimo-lt1){Falha 'ESPACO_MINIMO_GB deve ser um numero maior ou igual a 1.'}}
 Ler-Chaves (Join-Path $privado 'comum\smtp.env') @('SMTP_HOST','SMTP_PORT','SMTP_USER','SMTP_PASSWORD','EMAIL_FROM_NAME')|Out-Null
 $portalEnv=Join-Path $privado 'portal\configuracao\portal.env'
-Ler-Chaves $portalEnv @('PORTAL_URL','PORTAL_API_TOKEN','BACKUP_EMAIL_TO')|Out-Null
+$cfgPortal=Ler-Chaves $portalEnv @('PORTAL_URL','PORTAL_API_TOKEN','BACKUP_EMAIL_TO')
+if($SemLogin-or$env:SUPPLY_VISION_SEM_LOGIN-eq'1'-or(Obter-TarefaSupplyVision $Raiz)){try{Validar-BackupSemLogin 'computador' $cfgPortal['BACKUP_NETWORK_DIR']}catch{Falha $_.Exception.Message}}
 
 # Chave repetida: cada leitor escolhe uma ocorrencia diferente. O build do
 # Portal e o rodar.py dos Alertas liam o mesmo arquivo e adotavam linhas

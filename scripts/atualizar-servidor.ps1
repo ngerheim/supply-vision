@@ -23,6 +23,10 @@ param([switch]$Simular,[switch]$Reaplicar,[switch]$JaAtualizado,[string]$VersaoA
 $ErrorActionPreference = 'Stop'
 $Raiz = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 . (Join-Path $PSScriptRoot 'operacao-logica.ps1')
+$script:TarefaSemLogin=$false
+$logicaInicializacao=Join-Path $PSScriptRoot 'inicializacao-logica.ps1'
+if(Test-Path $logicaInicializacao){. $logicaInicializacao;$script:TarefaSemLogin=!!(Obter-TarefaSupplyVision $Raiz)}
+if($script:TarefaSemLogin-and!$Simular-and!(Testar-Elevacao)){throw 'Atualizar a operacao SYSTEM exige executar como administrador.'}
 Set-Location $Raiz
 $Portal = Join-Path $Raiz 'portal'
 $Alertas = Join-Path $Raiz 'alertas'
@@ -106,7 +110,14 @@ $mexeuNode = $true
 $mexeuPython = $true
 $anterior = $VersaoAnterior
 
+function Iniciar-OperacaoAtualizada {
+ if($script:TarefaSemLogin){Enable-ScheduledTask -TaskName 'Supply Vision' -TaskPath '\'|Out-Null;Start-ScheduledTask -TaskName 'Supply Vision' -TaskPath '\';$global:LASTEXITCODE=0;return}
+ $logica=Join-Path $PSScriptRoot 'inicializacao-logica.ps1'
+ if(Test-Path $logica){. $logica;Iniciar-OperacaoConfigurada $Raiz;return}
+ & (Join-Path $Raiz 'INICIAR.bat') | Out-Null
+}
 function Parar-Operacao {
+if($script:TarefaSemLogin){Disable-ScheduledTask -TaskName 'Supply Vision' -TaskPath '\'|Out-Null}
 & (Join-Path $Raiz 'PARAR.bat') | Out-Null
 if ($LASTEXITCODE -ne 0) { throw 'Falha ao solicitar a parada da operacao.' }
 $privadoParada = Obter-PastaPrivada $Raiz
@@ -171,7 +182,7 @@ function Reverter([string]$motivo) {
   }
   Push-Location $Portal
   try { & npm run build | Out-Null; if ($LASTEXITCODE -ne 0) { throw 'Falha ao reconstruir a versao anterior. Operacao permanece parada.' } } finally { Pop-Location }
-  & (Join-Path $Raiz 'INICIAR.bat') | Out-Null
+  Iniciar-OperacaoAtualizada
   if ($LASTEXITCODE -ne 0) { throw 'Codigo restaurado, mas falhou a solicitacao de inicio da operacao.' }
   Write-Host "!! codigo revertido para $($anterior.Substring(0,7)). Inicio solicitado; confira a saude da operacao." -ForegroundColor Red
   Gravar-EstadoOperacao $ContextoArquivo @{anterior=$anterior;remoto=$remoto;fase='revertido'}
@@ -384,7 +395,7 @@ $NovaVersaoIniciada = $true
 & node --experimental-strip-types (Join-Path $Portal 'scripts/operacao-validacao.mjs') --ativar
 if ($LASTEXITCODE -ne 0) { Reverter 'Nao foi possivel bloquear gravacoes e envios durante a validacao.' }
 Gravar-EstadoOperacao $ContextoArquivo @{anterior=$anterior;remoto=$remoto;fase='iniciada'}
-& (Join-Path $Raiz 'INICIAR.bat') | Out-Null
+Iniciar-OperacaoAtualizada
 if ($LASTEXITCODE -ne 0) { Reverter 'Falha ao solicitar o inicio da nova versao.' }
 $url = 'http://127.0.0.1:3000'
 try {
@@ -423,7 +434,7 @@ exit 0
     catch { Write-Host "RECUPERACAO FALHOU: $($_.Exception.Message). Nao religue antes de conferir docs/SOCORRO.md." -ForegroundColor Red }
   } elseif ($OperacaoParada -and $OperacaoEstavaAtiva -and !$Recuperando) {
     # Falha anterior ao merge: codigo/banco ainda sao os originais.
-    & (Join-Path $Raiz 'INICIAR.bat') | Out-Null
+    Iniciar-OperacaoAtualizada
     if ($LASTEXITCODE -ne 0) { Write-Host 'Falhou a retomada da operacao original.' -ForegroundColor Red }
   }
   Write-Error $falha.Exception.Message -ErrorAction Continue

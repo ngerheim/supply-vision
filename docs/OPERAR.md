@@ -1,7 +1,8 @@
 # Operar
 
-Um supervisor residente acompanha todos os módulos enquanto o notebook estiver
-ligado e o usuário operacional conectado. Não há tarefa agendada do Windows.
+Um supervisor residente acompanha todos os módulos. No modo atual, ele depende
+do usuário conectado. O modo opcional sem login usa uma tarefa agendada do
+Windows e continua funcionando depois de sair da sessão RDP.
 
 Supervisionados: Portal na LAN, fila de e-mails, serviço de relatórios manuais,
 pipeline dos Alertas, backup do banco e limpeza diária.
@@ -18,6 +19,55 @@ O **modo manutenção** mantém Portal e e-mails no ar, mas pausa novos Alertas,
 backups e limpezas. Rotinas já iniciadas terminam. Use durante
 diagnóstico e execução manual. Pedidos manuais do Portal continuam disponíveis;
 a pausa não encerra rotinas em andamento e não substitui Parar operação para restaurar o banco.
+
+## Início automático e operação por RDP
+
+A central oferece **Desligado**, **Ao entrar no Windows (atual)** e
+**Ao ligar o computador, sem login**. O notebook mantém o modo atual até alguém
+escolher outro. Pare a operação antes de mudar; a central pede elevação e
+reabre como administrador quando necessário. Escolha o modo novamente na
+janela elevada. Ativar a tarefa remove o atalho de login do usuário que a
+configurou; ativar login remove a tarefa. A instalação por outros usuários
+pode ter deixado atalhos na pasta Inicializar deles: confira esses atalhos.
+
+No modo **Ao entrar no Windows**, ao encerrar o acesso remoto use
+**Desconectar**, nunca **Sair**: Sair encerra a operação. A central mostra esse
+aviso quando está aberta por RDP nesse modo.
+
+No modo **sem login**, a tarefa **Supply Vision** inicia um minuto após ligar,
+sem limite de duração. Se falhar, tenta novamente a cada minuto, até três
+vezes. Ela roda como **NT AUTHORITY\SYSTEM** por padrão; não precisa de senha.
+A tarefa impede instâncias simultâneas, e a trava de arquivo do supervisor
+protege também contra uma tentativa de início pela sessão do usuário.
+
+**Iniciar operação** dispara a tarefa. **Parar operação** grava o sinal e
+aguarda o supervisor encerrar de verdade. O status é lido dos arquivos da
+operação, inclusive quando o processo está fora da sessão RDP. O usuário que
+ativou a tarefa pode iniciá-la e acessar os arquivos; para outros
+administradores, abra a central elevada se houver erro de permissão. Se um
+processo SYSTEM travar e precisar ser encerrado à força, será necessária
+elevação. Não apague a trava nem tente abrir um segundo supervisor.
+
+**Atualizar sistema** no modo sem login exige a central elevada. O atualizador
+desabilita a tarefa durante a parada e a atualização, espera o encerramento e
+volta a habilitar e iniciar a mesma tarefa ao retomar. As notificações na tela
+continuam no modo atual. Sem sessão interativa, a indisponibilidade é registrada
+no log e a operação segue; os avisos ao administrador por e-mail continuam
+funcionando conforme a configuração e respeitando o modo ensaio.
+
+Para backup em rede, configure um caminho **UNC**, como `\\servidor\pasta`.
+Unidades mapeadas (`Z:\`, por exemplo) são reprovadas somente no modo sem login.
+A TI deve liberar **DOMINIO\NOMEDAMAQUINA$** (neste servidor,
+**LOCFROTAS\PROGRAMASUP$**) no compartilhamento **e** no NTFS. Com conta
+personalizada, a permissão deve ser dada àquela conta.
+
+SYSTEM tem acesso amplo à máquina. Proteja a escrita nos scripts e no código:
+quem os altera pode executar código como SYSTEM. Veja INSTALAR para a opção
+com conta própria e para os parâmetros do instalador.
+
+O teste que confirma este modo é reiniciar o servidor **sem fazer login** e,
+de outra máquina, abrir **http://sup.locfrotas.local:3000** após o atraso e a
+inicialização. Depois confira os registros pela central em RDP.
 
 ## Modo ensaio no servidor novo
 

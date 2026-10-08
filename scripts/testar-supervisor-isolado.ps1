@@ -1,4 +1,4 @@
-﻿param([switch]$Ensaio, [ValidateSet('', 'falha', 'lento')][string]$AvisoAdminTeste='')
+﻿param([switch]$SemLogin, [switch]$Ensaio, [ValidateSet('', 'falha', 'lento')][string]$AvisoAdminTeste='')
 $ErrorActionPreference='Stop'
 $raizReal=(Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $temp=Join-Path $env:TEMP ('supply-vision-supervisor-'+[guid]::NewGuid().ToString('N'))
@@ -20,7 +20,7 @@ function Remover-DiretorioTemporario([string]$Caminho){
 try{
  $dirs=@('scripts','portal\dist\server','portal\scripts','alertas\.venv\Scripts','privado\comum','privado\portal\configuracao','privado\portal\logs','privado\alertas\config','privado\alertas\logs','privado\alertas\relatorios\diarios','privado\alertas\parametros\de_para','privado\operacao','bin')
  $dirs|ForEach-Object{New-Item -ItemType Directory -Force (Join-Path $temp $_)|Out-Null}
- Copy-Item "$raizReal\scripts\supervisor.ps1","$raizReal\scripts\operacao-logica.ps1","$raizReal\scripts\validar-operacao.ps1","$raizReal\scripts\notificacao.ps1","$raizReal\scripts\avisos-admin.ps1" "$temp\scripts"
+ Copy-Item "$raizReal\scripts\supervisor.ps1","$raizReal\scripts\operacao-logica.ps1","$raizReal\scripts\validar-operacao.ps1","$raizReal\scripts\notificacao.ps1","$raizReal\scripts\avisos-admin.ps1","$raizReal\scripts\inicializacao-logica.ps1" "$temp\scripts"
  $conteudos=@{'portal\dist\server\wrangler.json'='{}';'portal\dist\server\index.js'='const PORTAL_API_TOKEN="x";';'alertas\.venv\Scripts\python.exe'='teste';'privado\alertas\config\cfg_qlik.txt'='token';'privado\alertas\config\destinatarios.txt'='destino';'privado\alertas\parametros\de_para\itens.csv'='origem,destino';'privado\alertas\parametros\de_para\modelos.csv'='origem,destino';'acordos.xlsx'='teste'}
  foreach($item in $conteudos.GetEnumerator()){[IO.File]::WriteAllText((Join-Path $temp $item.Key),$item.Value)}
  New-Item -ItemType Directory -Force "$temp\alertas\processo","$temp\privado\alertas\parametros\filtros"|Out-Null
@@ -31,7 +31,7 @@ try{
    $relativo=$exemplo.FullName.Substring($parametros.Length).TrimStart('\').Replace('.exemplo','')
    Copy-Item $exemplo.FullName (Join-Path "$temp\privado\alertas\parametros" $relativo) -Force
  }
- [IO.File]::WriteAllText("$temp\alertas\processo\pipeline.py","import json,os,pathlib,sys`npathlib.Path('../privado/operacao/pipeline-args.json').write_text(json.dumps({'args':sys.argv[1:],'ensaio':os.environ.get('MODO_ENSAIO')}))`nprint('pipeline ficticio concluido')")
+ [IO.File]::WriteAllText("$temp\alertas\processo\pipeline.py","import json,os,pathlib,sys`npathlib.Path('../privado/operacao/pipeline-args.json').write_text(json.dumps({'args':sys.argv[1:],'ensaio':os.environ.get('MODO_ENSAIO'),'path':os.environ.get('PATH'),'cache':os.environ.get('XDG_CONFIG_HOME'),'temp':os.environ.get('TEMP')}))`nprint('pipeline ficticio concluido')")
  [IO.File]::WriteAllText("$temp\alertas\processo\verificar_saude.py", "import pathlib,time`npathlib.Path('../privado/operacao/saude-iniciada').write_text('ficticio')`ntime.sleep(600)")
  Remove-Item -LiteralPath "$temp\alertas\.venv\Scripts\python.exe" -Force
  & python.exe -m venv --without-pip "$temp\alertas\.venv"
@@ -58,6 +58,10 @@ try{
  $env:MODO_ENSAIO=if($Ensaio){'0'}else{'1'}
  $env:SUPPLY_VISION_PRIVADO=Join-Path $temp 'privado'
  $env:Path="$temp\bin;$pathAnterior";$args=@('-NoProfile','-ExecutionPolicy','Bypass','-File',"$temp\scripts\supervisor.ps1")
+ if($SemLogin){
+  Copy-Item (Get-Command node.exe).Source "$temp\bin\node.exe"
+  $args+=@('-SemLogin','-NodeExecutavel',"$temp\bin\node.exe")
+ }
  $a=Start-Process powershell.exe -ArgumentList $args -PassThru -WindowStyle Hidden;$b=Start-Process powershell.exe -ArgumentList $args -PassThru -WindowStyle Hidden;$processos=@($a,$b)
  Start-Sleep 4;$vivos=@($processos|Where-Object{!$_.HasExited});if($vivos.Count-ne1){throw "Lock falhou: $($vivos.Count) instancias ativas."}
  # Espera ativa pelo status.json. Espera fixa era corrida: a verificacao de
@@ -73,6 +77,12 @@ try{
  $esperados=@('--slot','00:00');if($Ensaio){$esperados+='--sem-envio'}
  if(($pipeline.args-join '|')-ne($esperados-join '|')){throw 'Argumentos do pipeline divergiram do modo configurado.'}
  if($pipeline.ensaio-ne$(if($Ensaio){'1'}else{'0'})){throw 'Modo ensaio nao foi propagado ao processo Python.'}
+ if($SemLogin){
+  $cacheEsperado=Join-Path $temp 'privado\operacao\cache'
+  if($pipeline.cache-ne$cacheEsperado-or$pipeline.temp-ne$cacheEsperado){throw 'Sem login dependeu de cache ou TEMP do perfil.'}
+  $pathEsperado="$temp\bin;"+[Environment]::GetEnvironmentVariable('Path','Machine')
+  if($pipeline.path-ne$pathEsperado){throw 'Sem login herdou o PATH do usuario.'}
+ }
  if($status.ensaio-ne[bool]$Ensaio){throw 'status.json nao reflete o modo ensaio.'}
  $logInicio=Get-Content "$temp\privado\operacao\supervisor.log" -Raw
  if(($logInicio.Contains('Modo ensaio ATIVO'))-ne[bool]$Ensaio){throw 'Log de inicio nao reflete o modo ensaio.'}

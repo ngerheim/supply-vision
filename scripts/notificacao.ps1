@@ -1,10 +1,14 @@
-# Notificacoes da area de trabalho para a operacao Supply Vision.
+﻿# Notificacoes da area de trabalho para a operacao Supply Vision.
 # Toda falha aqui e engolida de proposito: aviso na tela nunca pode
 # derrubar o supervisor.
 
 $script:NotificacaoAppId = '{1AC14E77-02E7-4E5D-B744-2EB1AE5198B7}\WindowsPowerShell\v1.0\powershell.exe'
 
-function Notificar([string]$Titulo, [string]$Texto) {
+function Notificar([string]$Titulo, [string]$Texto, [bool]$Interativa=[Environment]::UserInteractive) {
+  if(!$Interativa-or($env:SUPPLY_VISION_SEM_LOGIN-eq'1'-and(Get-Process -Id $PID).SessionId-eq0)){
+    if(Get-Command Log -CommandType Function -ErrorAction SilentlyContinue){Log 'Notificacao na tela indisponivel: sem sessao interativa.'}
+    return $false
+  }
   try {
     [void][Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime]
     [void][Windows.Data.Xml.Dom.XmlDocument, Windows.Data.Xml.Dom, ContentType = WindowsRuntime]
@@ -16,6 +20,7 @@ function Notificar([string]$Titulo, [string]$Texto) {
     [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier($script:NotificacaoAppId).Show($aviso)
     return $true
   } catch {
+    if($env:SUPPLY_VISION_SEM_LOGIN-eq'1'-and(Get-Command Log -CommandType Function -ErrorAction SilentlyContinue)){Log 'Notificacao na tela falhou; a operacao continua.'}
     return $false
   }
 }
