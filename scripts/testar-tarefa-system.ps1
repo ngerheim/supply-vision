@@ -6,7 +6,15 @@ if(!(Testar-Elevacao)){throw 'O teste SYSTEM exige runner elevado.'}
 if(Get-ScheduledTask -TaskName 'Supply Vision' -TaskPath '\' -ErrorAction SilentlyContinue){throw 'Teste recusa alterar tarefa preexistente.'}
 $pasta=Join-Path ([IO.Path]::GetTempPath()) ('sv-tarefa-'+[guid]::NewGuid().ToString('N'))
 $privado=Join-Path $pasta 'dados-ficticios';$startup=Join-Path $pasta 'startup.cmd'
-$criou=$false
+$criou=$false;$privadoAnterior=$env:SUPPLY_VISION_PRIVADO
+# Executa as funcoes reais de parada/retomada sem executar o atualizador inteiro.
+$ast=[System.Management.Automation.Language.Parser]::ParseFile((Join-Path $PSScriptRoot 'atualizar-servidor.ps1'),[ref]$null,[ref]$null)
+foreach($nome in @('Parar-Operacao','Iniciar-OperacaoAtualizada')){
+ $funcao=$ast.Find({param($n) $n-is[System.Management.Automation.Language.FunctionDefinitionAst]-and$n.Name-eq$nome},$true)
+ . ([scriptblock]::Create($funcao.Extent.Text))
+}
+function Get-NetTCPConnection {} # O supervisor ficticio nao abre portas.
+$script:TarefaSemLogin=$true;$Raiz=$pasta;$env:SUPPLY_VISION_PRIVADO=$privado
 try{
  New-Item -ItemType Directory -Force (Join-Path $pasta 'scripts'),(Join-Path $privado 'portal\configuracao'),(Join-Path $privado 'operacao')|Out-Null
  [IO.File]::WriteAllText((Join-Path $privado 'portal\configuracao\portal.env'),'BACKUP_NETWORK_DIR=\\servidor\pasta')
@@ -32,6 +40,7 @@ try{
  [IO.File]::WriteAllText((Join-Path $pasta 'scripts\supervisor.ps1'),$falso)
  Copy-Item (Join-Path $PSScriptRoot 'notificacao.ps1') (Join-Path $pasta 'scripts\notificacao.ps1')
  $node=(Get-Command node.exe).Source
+ [IO.File]::WriteAllText((Join-Path $pasta 'PARAR.bat'),"@echo off`r`ntype nul > `"$(Join-Path $privado 'operacao\parar.sinal')`"`r`nexit /b 0`r`n",[Text.Encoding]::ASCII)
  # Mesma ativacao usada pela central, com diretorios exclusivamente ficticios.
  $criou=$true
  Definir-ModoInicializacao $pasta $privado $startup 'computador' $node
@@ -49,14 +58,13 @@ try{
  Iniciar-OperacaoConfigurada $pasta # IgnoreNew evita outra instancia.
  Start-Sleep -Milliseconds 500
  if(@(Get-Content (Join-Path $privado 'operacao\inicios')).Count-ne1){throw 'Duas instancias foram iniciadas.'}
- New-Item -ItemType File -Force (Join-Path $privado 'operacao\parar.sinal')|Out-Null
- for($i=0;$i-lt100;$i++){if((Testar-SupervisorEncerrado $privado)-and((Get-ScheduledTask -TaskName 'Supply Vision').State-ne'Running')){break};Start-Sleep -Milliseconds 200}
+ Parar-Operacao
+ for($i=0;$i-lt100-and((Get-ScheduledTask -TaskName 'Supply Vision').State-eq'Running');$i++){Start-Sleep -Milliseconds 200}
  if(!(Test-Path (Join-Path $privado 'operacao\parou'))-or!(Testar-SupervisorEncerrado $privado)){throw 'Supervisor nao respondeu ao sinal.'}
- # Simula a janela de atualizacao: desabilitar durante parada e retomar a tarefa.
- Disable-ScheduledTask -TaskName 'Supply Vision' -TaskPath '\'|Out-Null
+ if((Get-ScheduledTask -TaskName 'Supply Vision').State-ne'Disabled'){throw 'Atualizador nao desabilitou a tarefa durante a parada.'}
+ # Retomada real do atualizador no modo sem login.
  Remove-Item $status,(Join-Path $privado 'operacao\parar.sinal'),(Join-Path $privado 'operacao\parou') -Force
- Enable-ScheduledTask -TaskName 'Supply Vision' -TaskPath '\'|Out-Null
- Iniciar-OperacaoConfigurada $pasta
+ Iniciar-OperacaoAtualizada
  for($i=0;$i-lt100-and!(Test-Path $status);$i++){Start-Sleep -Milliseconds 200}
  if(!(Test-Path $status)-or@(Get-Content (Join-Path $privado 'operacao\inicios')).Count-ne2){throw 'Tarefa nao retomou apos a atualizacao.'}
  New-Item -ItemType File -Force (Join-Path $privado 'operacao\parar.sinal')|Out-Null
@@ -68,6 +76,7 @@ try{
  if(Test-Path $startup){throw 'Modo desligado manteve atalho.'}
  Write-Host 'Tarefa SYSTEM real: inicio, status, ACL, instancia unica, parada e exclusao aprovados.'
 }finally{
+ $env:SUPPLY_VISION_PRIVADO=$privadoAnterior
  if($criou){Stop-ScheduledTask -TaskName 'Supply Vision' -ErrorAction SilentlyContinue;Unregister-ScheduledTask -TaskName 'Supply Vision' -Confirm:$false -ErrorAction SilentlyContinue}
  if(Test-Path $pasta){for($i=0;$i-lt20;$i++){try{Remove-Item -LiteralPath $pasta -Recurse -Force -ErrorAction Stop;break}catch{Start-Sleep -Milliseconds 200}}}
 }
