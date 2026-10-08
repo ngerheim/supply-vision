@@ -37,12 +37,13 @@ function Montar-DefinicaoTarefa([string]$Raiz,[string]$Privado,[string]$Node,[st
  foreach($c in @($Raiz,$Privado,$Node,$PowerShell)){if($c-notmatch '^(?:[A-Za-z]:\\|\\\\)'){throw 'A tarefa exige caminhos Windows absolutos.'}}
  $args='-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "'+($Raiz.TrimEnd('\')+'\scripts\supervisor.ps1')+'" -SemLogin -NodeExecutavel "'+$Node+'" -PastaPrivada "'+$Privado+'"'
  $usuario=if($Conta-eq'SYSTEM'){'S-1-5-18'}else{$Conta}
- $logon=if($Conta-eq'SYSTEM'){'ServiceAccount'}else{'Password'}
+ # No XML, SYSTEM omite LogonType; ServiceAccount existe apenas na API COM/CIM.
+ $logon=if($Conta-eq'SYSTEM'){''}else{'<LogonType>Password</LogonType>'}
  $u=[Security.SecurityElement]::Escape($usuario);$a=[Security.SecurityElement]::Escape($args);$exe=[Security.SecurityElement]::Escape($PowerShell);$cwd=[Security.SecurityElement]::Escape($Raiz)
  return @"
 <Task version="1.4" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
  <Triggers><BootTrigger><Enabled>true</Enabled><Delay>PT1M</Delay></BootTrigger></Triggers>
- <Principals><Principal id="Operacao"><UserId>$u</UserId><LogonType>$logon</LogonType><RunLevel>HighestAvailable</RunLevel></Principal></Principals>
+ <Principals><Principal id="Operacao"><UserId>$u</UserId>$logon<RunLevel>HighestAvailable</RunLevel></Principal></Principals>
  <Settings><MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy><DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries><StopIfGoingOnBatteries>false</StopIfGoingOnBatteries><StartWhenAvailable>true</StartWhenAvailable><AllowStartOnDemand>true</AllowStartOnDemand><ExecutionTimeLimit>PT0S</ExecutionTimeLimit><RestartOnFailure><Interval>PT1M</Interval><Count>3</Count></RestartOnFailure></Settings>
  <Actions Context="Operacao"><Exec><Command>$exe</Command><Arguments>$a</Arguments><WorkingDirectory>$cwd</WorkingDirectory></Exec></Actions>
 </Task>
