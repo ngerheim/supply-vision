@@ -180,6 +180,14 @@ jobs:
             Copy-Item $_.FullName (Join-Path 'privado/alertas/parametros/filtros' ($_.Name -replace '\.exemplo\.txt$', '.txt'))
           }
       - run: python -m pytest alertas/tests -q
+      - name: Validar supervisor sem login, avisos e ensaio
+        shell: powershell
+        run: |
+          & powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./scripts/testar-supervisor-isolado.ps1 -SemLogin -AvisoAdminTeste falha
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          & powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./scripts/testar-supervisor-isolado.ps1 -SemLogin -Ensaio -AvisoAdminTeste falha
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+
       - name: Validar protecoes da atualizacao e agenda
         shell: powershell
         run: |
@@ -196,9 +204,4 @@ jobs:
             if ($LASTEXITCODE) { exit $LASTEXITCODE }
           }
           & powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./scripts/testar-supervisor-isolado.ps1 -Ensaio -AvisoAdminTeste falha
-          if ($LASTEXITCODE) { exit $LASTEXITCODE }
-
-          & powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./scripts/testar-supervisor-isolado.ps1 -SemLogin -AvisoAdminTeste falha
-          if ($LASTEXITCODE) { exit $LASTEXITCODE }
-          & powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./scripts/testar-supervisor-isolado.ps1 -SemLogin -Ensaio -AvisoAdminTeste falha
           if ($LASTEXITCODE) { exit $LASTEXITCODE }

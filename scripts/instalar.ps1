@@ -112,7 +112,7 @@ $Inicio=Join-Path $Raiz 'INICIAR.bat'
 if(!$ModoInicializacao-and(Obter-TarefaSupplyVision $Raiz)){Write-Host 'Modo sem login existente preservado.';exit 0}
 if($ModoInicializacao){
  $credencial=$null;if($ContaPersonalizada){$credencial=Get-Credential -Message 'Conta da tarefa Supply Vision';if(!$credencial){throw 'Conta nao informada.'}}
- Definir-ModoInicializacao $Raiz $Privado $Startup $ModoInicializacao $Node $credencial
+ Definir-ModoInicializacao $Raiz $Privado $Startup $ModoInicializacao -Credencial $credencial
  Write-Host "Modo de inicializacao configurado: $ModoInicializacao";exit 0
 }
 $linha="@echo off`r`nstart `"`" `"$Inicio`"`r`n"
