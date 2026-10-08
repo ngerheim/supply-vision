@@ -84,7 +84,7 @@ try{
   if($pipeline.cache-ne$cacheEsperado-or$pipeline.temp-ne$cacheEsperado){throw "Cache/TEMP divergentes: cache=$($pipeline.cache); TEMP=$($pipeline.temp); esperado=$cacheEsperado."}
   if($pipeline.cache_xdg-ne$cacheEsperado-or$pipeline.cache_wrangler-ne(Join-Path $cacheEsperado 'wrangler')-or$pipeline.log_wrangler-ne(Join-Path $cacheEsperado 'wrangler.log')){throw 'Wrangler dependeu de cache do perfil.'}
   $pathEsperado="$temp\bin;"+[Environment]::GetEnvironmentVariable('Path','Machine')
-  if($pipeline.path-ne$pathEsperado){throw 'Sem login herdou o PATH do usuario.'}
+  if($pipeline.path-ne$pathEsperado){throw "PATH divergente: atual=$($pipeline.path); esperado=$pathEsperado."}
  }
  if($status.ensaio-ne[bool]$Ensaio){throw 'status.json nao reflete o modo ensaio.'}
  $logInicio=Get-Content "$temp\privado\operacao\supervisor.log" -Raw
@@ -125,4 +125,4 @@ try{
  $statusFinal=Get-Content $statusPath -Raw|ConvertFrom-Json;if($statusFinal.ensaio-ne[bool]$Ensaio){throw 'Status de encerramento perdeu o modo ensaio.'}
  if(Test-Path -LiteralPath "$temp\privado\portal\configuracao\worker.env"){throw 'Supervisor deixou worker.env depois de encerrar.'}
  Write-Host 'Supervisor isolado: concorrencia, estado, arquivo em uso e encerramento aprovados.' -ForegroundColor Green
-}finally{$env:Path=$pathAnterior;$env:SUPPLY_VISION_PRIVADO=$privadoAnterior;$env:MODO_ENSAIO=$ensaioAnterior;$env:ADMIN_ALERTA_EMAIL=$adminAnterior;foreach($p in $processos){if($p-and!$p.HasExited){& taskkill.exe /PID $p.Id /T /F 2>$null|Out-Null}};if(Test-Path $temp){Remover-DiretorioTemporario $temp}}
+}catch{Write-Host ('FALHA DO CENARIO: '+$_.Exception.Message);throw}finally{$env:Path=$pathAnterior;$env:SUPPLY_VISION_PRIVADO=$privadoAnterior;$env:MODO_ENSAIO=$ensaioAnterior;$env:ADMIN_ALERTA_EMAIL=$adminAnterior;foreach($p in $processos){if($p-and!$p.HasExited){try{& taskkill.exe /PID $p.Id /T /F 2>$null|Out-Null}catch{}}};if(Test-Path $temp){Remover-DiretorioTemporario $temp}}
