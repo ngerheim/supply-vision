@@ -172,10 +172,17 @@ jobs:
       - name: Validar protecoes da atualizacao e agenda
         shell: powershell
         run: |
-          foreach ($teste in @('testar-atualizacao-segura', 'testar-reparo-configuracao', 'testar-credencial-portal', 'testar-operacao', 'testar-modo-ensaio', 'testar-supervisor-isolado', 'testar-estado-operacao', 'testar-python-minimo', 'testar-parada-supervisor', 'testar-recuperacao-atualizacao')) {
+          foreach ($teste in @('testar-atualizacao-segura', 'testar-reparo-configuracao', 'testar-credencial-portal', 'testar-operacao', 'testar-modo-ensaio', 'testar-avisos-admin', 'testar-supervisor-isolado', 'testar-estado-operacao', 'testar-python-minimo', 'testar-parada-supervisor', 'testar-recuperacao-atualizacao')) {
             & powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./scripts/$teste.ps1
             if ($LASTEXITCODE) { exit $LASTEXITCODE }
           }
 
           & powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./scripts/testar-supervisor-isolado.ps1 -Ensaio
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+
+          foreach ($modo in @('falha', 'lento')) {
+            & powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./scripts/testar-supervisor-isolado.ps1 -AvisoAdminTeste $modo
+            if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          }
+          & powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./scripts/testar-supervisor-isolado.ps1 -Ensaio -AvisoAdminTeste falha
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
