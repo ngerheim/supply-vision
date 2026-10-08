@@ -1,4 +1,4 @@
-function Obter-PastaPrivada([string]$Raiz) {
+﻿function Obter-PastaPrivada([string]$Raiz) {
   if ($env:SUPPLY_VISION_PRIVADO) {
     $env:SUPPLY_VISION_PRIVADO = [IO.Path]::GetFullPath($env:SUPPLY_VISION_PRIVADO)
     return $env:SUPPLY_VISION_PRIVADO
@@ -27,6 +27,24 @@ function Ler-ConfigOperacao([string]$Caminho) {
     $config[$chave.Trim()] = $valor.Trim()
   }
   return $config
+}
+
+# A configuracao do supervisor prevalece sobre um ambiente herdado antigo.
+function Aplicar-ModoEnsaio([hashtable]$Config) {
+  $ativo = $Config['MODO_ENSAIO'] -eq '1'
+  $env:MODO_ENSAIO = if ($ativo) { '1' } else { '0' }
+  return $ativo
+}
+
+function Argumentos-Pipeline([string]$Slot, [bool]$Ensaio) {
+  $argumentos = @('processo\pipeline.py', '--slot', $Slot)
+  if ($Ensaio) { $argumentos += '--sem-envio' }
+  return $argumentos
+}
+
+function Obter-AvisoEnsaio([bool]$Ensaio) {
+  if ($Ensaio) { return 'MODO ENSAIO — nenhum e-mail ou backup em rede' }
+  return ''
 }
 
 function Obter-ProcessoRegistrado([string]$CaminhoPid) {

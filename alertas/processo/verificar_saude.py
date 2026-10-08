@@ -23,6 +23,7 @@ mesmo padrão do timestamp usado nos nomes de arquivo de log).
 """
 
 import sys
+import os
 import re
 import pathlib
 from email.message import EmailMessage
@@ -61,6 +62,9 @@ def registrar(msg):
 def _enviar_email(assunto, corpo):
     """Envia e-mail pela mesma infra SMTP do pipeline. Retorna True se saiu.
     Falha nunca sobe sem rastro: fica registrada no _verificacao.log."""
+    if os.environ.get("MODO_ENSAIO") == "1":
+        registrar(f"ensaio: envio suprimido — assunto: {assunto}")
+        return False
     try:
         senha = SMTP_SENHA
 

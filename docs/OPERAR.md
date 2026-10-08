@@ -19,6 +19,55 @@ backups e limpezas. Rotinas já iniciadas terminam. Use durante
 diagnóstico e execução manual. Pedidos manuais do Portal continuam disponíveis;
 a pausa não encerra rotinas em andamento e não substitui Parar operação para restaurar o banco.
 
+## Modo ensaio no servidor novo
+
+O modo ensaio permite testar o sistema no servidor novo enquanto o notebook
+continua em produção. Ele vem **desligado**: se `MODO_ENSAIO` estiver ausente
+ou valer `0`, a operação continua como antes.
+
+Para ligar, antes de iniciar a operação no servidor novo, abra
+`privado/comum/operacao.env` e acrescente uma linha:
+
+```ini
+MODO_ENSAIO=1
+```
+
+Pare e inicie a operação pela central para aplicar a mudança. Confira o aviso
+**MODO ENSAIO — nenhum e-mail ou backup em rede** e, no
+`privado/operacao/supervisor.log`, a mensagem **Modo ensaio ATIVO**.
+O supervisor passa esse modo aos programas que inicia; eles não precisam
+abrir o arquivo de configuração operacional.
+
+Durante o ensaio, os Alertas geram os relatórios sem enviar e-mail, inclusive
+nos horários automáticos e nos pedidos do Portal. As notificações de chamados
+e os relatórios diários por e-mail ficam pendentes, sem tentativas de envio.
+Os avisos de saúde e de expiração da chave também não enviam e-mail. O backup
+local é gerado e conferido, mas nenhuma cópia vai para `BACKUP_NETWORK_DIR` e
+nenhum comprovante vai por e-mail. Isso evita sobrescrever o backup do notebook
+que continua em produção. Os logs registram **ensaio: envio suprimido**.
+O Portal, as consultas ao Qlik, os relatórios e as rotinas locais continuam
+funcionando. Use uma instalação e uma pasta privada próprias para o ensaio.
+
+Para desligar, use `MODO_ENSAIO=0` (ou remova a linha), depois pare e inicie a
+operação. **Ao encerrar o ensaio para instalar em definitivo, pare a operação
+e descarte toda a pasta `privado/` usada no ensaio antes da instalação
+definitiva.** A fila de e-mails pendentes do ensaio não pode ir para a
+produção: desligar o modo com essa fila presente permitiria enviar mensagens
+de teste. Preserve apenas o que precisar do diagnóstico fora dessa pasta;
+não reaproveite o banco, as filas ou a configuração do ensaio na instalação
+definitiva. Não apague a pasta privada do notebook em produção.
+
+Comandos avulsos, iniciados fora do supervisor, precisam receber o modo no
+próprio PowerShell antes de executar qualquer rotina:
+
+```powershell
+$env:MODO_ENSAIO = '1'
+```
+
+Para sair desse modo em um terminal de testes, use `$env:MODO_ENSAIO = '0'`.
+Isso não altera uma operação já iniciada: para ela vale parar e iniciar pela
+central, com o arquivo configurado.
+
 ## Perfis e acesso
 
 O grupo Consulta reúne Buscar e Manutenção (Power BI); Suprimentos acrescenta
