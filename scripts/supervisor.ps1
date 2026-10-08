@@ -84,7 +84,8 @@ $portalPronto=$false;$falhasSaude=0;$PortalUrl='http://127.0.0.1:3000'
 $env:X_LOCAL_OBSERVABILITY='false'
 if($SemLogin){
  $cache=Join-Path $Operacao 'cache';New-Item -ItemType Directory -Force $cache|Out-Null
- $env:XDG_CONFIG_HOME=$cache;$env:npm_config_cache=Join-Path $cache 'npm';$env:WRANGLER_SEND_METRICS='false'
+ $env:XDG_CONFIG_HOME=$cache;$env:XDG_CACHE_HOME=$cache;$env:npm_config_cache=Join-Path $cache 'npm'
+ $env:WRANGLER_CACHE_DIR=Join-Path $cache 'wrangler';$env:WRANGLER_LOG_PATH=Join-Path $cache 'wrangler.log';$env:WRANGLER_SEND_METRICS='false'
  $env:TEMP=$cache;$env:TMP=$cache
 }
 $codigoSupervisor=0

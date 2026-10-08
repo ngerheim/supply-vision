@@ -31,7 +31,7 @@ try{
    $relativo=$exemplo.FullName.Substring($parametros.Length).TrimStart('\').Replace('.exemplo','')
    Copy-Item $exemplo.FullName (Join-Path "$temp\privado\alertas\parametros" $relativo) -Force
  }
- [IO.File]::WriteAllText("$temp\alertas\processo\pipeline.py","import json,os,pathlib,sys`npathlib.Path('../privado/operacao/pipeline-args.json').write_text(json.dumps({'args':sys.argv[1:],'ensaio':os.environ.get('MODO_ENSAIO'),'path':os.environ.get('PATH'),'cache':os.environ.get('XDG_CONFIG_HOME'),'temp':os.environ.get('TEMP')}))`nprint('pipeline ficticio concluido')")
+ [IO.File]::WriteAllText("$temp\alertas\processo\pipeline.py","import json,os,pathlib,sys`npathlib.Path('../privado/operacao/pipeline-args.json').write_text(json.dumps({'args':sys.argv[1:],'ensaio':os.environ.get('MODO_ENSAIO'),'path':os.environ.get('PATH'),'cache':os.environ.get('XDG_CONFIG_HOME'),'cache_xdg':os.environ.get('XDG_CACHE_HOME'),'cache_wrangler':os.environ.get('WRANGLER_CACHE_DIR'),'log_wrangler':os.environ.get('WRANGLER_LOG_PATH'),'temp':os.environ.get('TEMP')}))`nprint('pipeline ficticio concluido')")
  [IO.File]::WriteAllText("$temp\alertas\processo\verificar_saude.py", "import pathlib,time`npathlib.Path('../privado/operacao/saude-iniciada').write_text('ficticio')`ntime.sleep(600)")
  Remove-Item -LiteralPath "$temp\alertas\.venv\Scripts\python.exe" -Force
  & python.exe -m venv --without-pip "$temp\alertas\.venv"
@@ -80,6 +80,7 @@ try{
  if($SemLogin){
   $cacheEsperado=Join-Path $temp 'privado\operacao\cache'
   if($pipeline.cache-ne$cacheEsperado-or$pipeline.temp-ne$cacheEsperado){throw 'Sem login dependeu de cache ou TEMP do perfil.'}
+  if($pipeline.cache_xdg-ne$cacheEsperado-or$pipeline.cache_wrangler-ne(Join-Path $cacheEsperado 'wrangler')-or$pipeline.log_wrangler-ne(Join-Path $cacheEsperado 'wrangler.log')){throw 'Wrangler dependeu de cache do perfil.'}
   $pathEsperado="$temp\bin;"+[Environment]::GetEnvironmentVariable('Path','Machine')
   if($pipeline.path-ne$pathEsperado){throw 'Sem login herdou o PATH do usuario.'}
  }
