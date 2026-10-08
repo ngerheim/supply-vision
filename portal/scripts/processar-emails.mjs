@@ -1,3 +1,4 @@
+import { modoEnsaio } from './modo-ensaio.mjs';
 import { validacaoAtiva } from './operacao-validacao.mjs';
 import { abrirBancoLocal } from './banco-local.mjs';
 import { travarRestauracao } from './trava-restauracao.mjs';
@@ -203,6 +204,7 @@ function falharRelatorio(db,item,erro){const agora=new Date(),definitivo=Number(
 export async function processarRelatoriosDiarios(db,config,transportador,{concluir:confirmar=concluirRelatorio,esperas}={}){
   if(validacaoAtiva(db))return;
   prepararRelatoriosDiarios(db);
+  if(modoEnsaio()){registrar('ensaio: envio suprimido (relatorio diario)');return;}
   for(let indice=0;indice<5;indice++){
     const [item]=reservarRelatoriosDiarios(db);if(!item)break;
     try{
@@ -233,6 +235,7 @@ async function ciclo(config, transportador) {
 }
 
 export async function processarNotificacoes(db, config, transportador, { concluir: confirmar = concluir, esperas } = {}) {
+    if(modoEnsaio()){registrar('ensaio: envio suprimido (notificacoes de chamados)');return;}
     for (let indice=0;indice<10;indice++) {
       if(validacaoAtiva(db))break;
       const [item]=reservar(db,1);if(!item)break;
@@ -267,11 +270,12 @@ export async function processarNotificacoes(db, config, transportador, { conclui
 }
 
 async function principal() {
-  const config = lerConfig();
+  const config = modoEnsaio() ? null : lerConfig();
   const liberarRestauracao = travarRestauracao();
   try {
-  const transportador = criarTransportador(config);
+  const transportador = modoEnsaio() ? null : criarTransportador(config);
   if (testarConexao) {
+    if(modoEnsaio()){registrar('ensaio: envio suprimido (teste SMTP bloqueado)');return;}
     await transportador.verify();
     registrar('Conexao e autenticacao SMTP verificadas; nenhuma mensagem enviada.');
     return;
@@ -281,7 +285,7 @@ async function principal() {
     catch (erro) { registrar(`Ciclo interrompido: ${erro instanceof Error ? erro.message : 'erro desconhecido'}.`); }
     if (observar) await new Promise((resolve) => setTimeout(resolve, 30_000));
   } while (observar);
-  transportador.close();
+  transportador?.close();
   } finally { liberarRestauracao(); }
 }
 

@@ -1,7 +1,8 @@
+﻿param([switch]$Ensaio)
 $ErrorActionPreference='Stop'
 $raizReal=(Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $temp=Join-Path $env:TEMP ('supply-vision-supervisor-'+[guid]::NewGuid().ToString('N'))
-$processos=@();$pathAnterior=$env:Path;$privadoAnterior=$env:SUPPLY_VISION_PRIVADO
+$processos=@();$pathAnterior=$env:Path;$privadoAnterior=$env:SUPPLY_VISION_PRIVADO;$ensaioAnterior=$env:MODO_ENSAIO
 function Remover-DiretorioTemporario([string]$Caminho){
  $alvoSeguro=[IO.Path]::GetFullPath($Caminho);$baseSegura=[IO.Path]::GetFullPath([IO.Path]::GetTempPath()).TrimEnd('\')+'\'
  if(!$alvoSeguro.StartsWith($baseSegura,[StringComparison]::OrdinalIgnoreCase)-or!(Split-Path $alvoSeguro -Leaf).StartsWith('supply-vision-supervisor-')){throw 'Diretorio de teste fora da raiz temporaria.'}
@@ -30,7 +31,7 @@ try{
    $relativo=$exemplo.FullName.Substring($parametros.Length).TrimStart('\').Replace('.exemplo','')
    Copy-Item $exemplo.FullName (Join-Path "$temp\privado\alertas\parametros" $relativo) -Force
  }
- [IO.File]::WriteAllText("$temp\alertas\processo\pipeline.py",'print("pipeline ficticio concluido")')
+ [IO.File]::WriteAllText("$temp\alertas\processo\pipeline.py","import json,os,pathlib,sys`npathlib.Path('../privado/operacao/pipeline-args.json').write_text(json.dumps({'args':sys.argv[1:],'ensaio':os.environ.get('MODO_ENSAIO')}))`nprint('pipeline ficticio concluido')")
  [IO.File]::WriteAllText("$temp\alertas\processo\verificar_saude.py", "import pathlib,time`npathlib.Path('../privado/operacao/saude-iniciada').write_text('ficticio')`ntime.sleep(600)")
  Remove-Item -LiteralPath "$temp\alertas\.venv\Scripts\python.exe" -Force
  & python.exe -m venv --without-pip "$temp\alertas\.venv"
@@ -44,9 +45,11 @@ try{
  [IO.File]::WriteAllText("$temp\privado\comum\smtp.env","SMTP_HOST=x`r`nSMTP_PORT=1`r`nSMTP_USER=x`r`nSMTP_PASSWORD=x`r`nEMAIL_FROM_NAME=x")
  [IO.File]::WriteAllText("$temp\privado\portal\configuracao\portal.env","PORTAL_URL=x`r`nPORTAL_API_TOKEN=x`r`nBACKUP_EMAIL_TO=x")
  [IO.File]::WriteAllText("$temp\privado\alertas\config\cfg_ambiente.txt","QLIK_TENANT=x`r`nQLIK_APP_ID=x`r`nQLIK_OBJ_ID=x`r`nDESTINATARIO_ALERTA=x")
- [IO.File]::WriteAllText("$temp\privado\comum\operacao.env","ALERTAS_HORARIOS=00:00`r`nBACKUP_HORARIOS=00:00`r`nLIMPEZA_HORARIO=00:00`r`nESPACO_MINIMO_GB=1")
+ [IO.File]::WriteAllText("$temp\privado\comum\operacao.env","ALERTAS_HORARIOS=00:00`r`nBACKUP_HORARIOS=00:00`r`nLIMPEZA_HORARIO=00:00`r`nESPACO_MINIMO_GB=1`r`nMODO_ENSAIO=$(if($Ensaio){'1'}else{'0'})")
  [IO.File]::WriteAllText("$temp\privado\portal\configuracao\worker.env",'segredo-ficticio')
  $data=Get-Date -Format yyyy-MM-dd;@{"backup-$data-00:00"='ok';"limpeza-$data-00:00"='ok'}|ConvertTo-Json|Set-Content "$temp\privado\operacao\estado.json"
+ # Simula ambiente antigo: operacao.env deve prevalecer.
+ $env:MODO_ENSAIO=if($Ensaio){'0'}else{'1'}
  $env:SUPPLY_VISION_PRIVADO=Join-Path $temp 'privado'
  $env:Path="$temp\bin;$pathAnterior";$args=@('-NoProfile','-ExecutionPolicy','Bypass','-File',"$temp\scripts\supervisor.ps1")
  $a=Start-Process powershell.exe -ArgumentList $args -PassThru -WindowStyle Hidden;$b=Start-Process powershell.exe -ArgumentList $args -PassThru -WindowStyle Hidden;$processos=@($a,$b)
@@ -60,6 +63,13 @@ try{
  $saudeIniciada=$false
  for($i=0;$i-lt60;$i++){if(Test-Path "$temp\privado\operacao\saude-iniciada"){$saudeIniciada=$true;break};Start-Sleep -Milliseconds 500}
  if(!$saudeIniciada){throw 'Verificacao ficticia de saude nao iniciou.'}
+ $pipeline=Get-Content "$temp\privado\operacao\pipeline-args.json" -Raw|ConvertFrom-Json
+ $esperados=@('--slot','00:00');if($Ensaio){$esperados+='--sem-envio'}
+ if(($pipeline.args-join '|')-ne($esperados-join '|')){throw 'Argumentos do pipeline divergiram do modo configurado.'}
+ if($pipeline.ensaio-ne$(if($Ensaio){'1'}else{'0'})){throw 'Modo ensaio nao foi propagado ao processo Python.'}
+ if($status.ensaio-ne[bool]$Ensaio){throw 'status.json nao reflete o modo ensaio.'}
+ $logInicio=Get-Content "$temp\privado\operacao\supervisor.log" -Raw
+ if(($logInicio.Contains('Modo ensaio ATIVO'))-ne[bool]$Ensaio){throw 'Log de inicio nao reflete o modo ensaio.'}
  # status.json preso por outro processo (central, antivirus) durante mais de
  # uma volta: o supervisor registra aviso e segue; antes, encerrava tudo.
  $antes=$status.atualizado
@@ -72,6 +82,7 @@ try{
  for($i=0;$i -lt 40;$i++){try{if((Get-Content $statusPath -Raw|ConvertFrom-Json).atualizado-ne$antes){$atualizou=$true;break}}catch{};Start-Sleep -Milliseconds 500}
  if(!$atualizou){throw 'Supervisor nao voltou a atualizar status.json apos a liberacao.'}
  New-Item -ItemType File -Force "$temp\privado\operacao\parar.sinal"|Out-Null;$vivos[0].WaitForExit(25000)|Out-Null;if(!$vivos[0].HasExited){throw 'Supervisor nao encerrou.'}
+ $statusFinal=Get-Content $statusPath -Raw|ConvertFrom-Json;if($statusFinal.ensaio-ne[bool]$Ensaio){throw 'Status de encerramento perdeu o modo ensaio.'}
  if(Test-Path -LiteralPath "$temp\privado\portal\configuracao\worker.env"){throw 'Supervisor deixou worker.env depois de encerrar.'}
  Write-Host 'Supervisor isolado: concorrencia, estado, arquivo em uso e encerramento aprovados.' -ForegroundColor Green
-}finally{$env:Path=$pathAnterior;$env:SUPPLY_VISION_PRIVADO=$privadoAnterior;foreach($p in $processos){if($p-and!$p.HasExited){& taskkill.exe /PID $p.Id /T /F 2>$null|Out-Null}};if(Test-Path $temp){Remover-DiretorioTemporario $temp}}
+}finally{$env:Path=$pathAnterior;$env:SUPPLY_VISION_PRIVADO=$privadoAnterior;$env:MODO_ENSAIO=$ensaioAnterior;foreach($p in $processos){if($p-and!$p.HasExited){& taskkill.exe /PID $p.Id /T /F 2>$null|Out-Null}};if(Test-Path $temp){Remover-DiretorioTemporario $temp}}

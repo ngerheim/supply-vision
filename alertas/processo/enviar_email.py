@@ -255,7 +255,7 @@ def enviar_email(assunto, corpo, anexos, destinatarios, html=None, copia_oculta=
         copia_oculta = obter_destinatarios()[1]
     entrega = list(destinatarios) + list(copia_oculta)
 
-    if os.environ.get("SUPPLY_VISION_SEM_ENVIO") == "1":
+    if os.environ.get("SUPPLY_VISION_SEM_ENVIO") == "1" or os.environ.get("MODO_ENSAIO") == "1":
         pasta = pathlib.Path(getattr(sv_paths, "RELATORIOS_DIARIOS", pathlib.Path.cwd())) / "previews-email"
         pasta.mkdir(parents=True, exist_ok=True)
         run_id = re.sub(r"[^0-9A-Za-z_-]", "_", os.environ.get("SUPPLY_VISION_RUN_ID", datetime.now().strftime("%Y%m%d_%H%M%S")))

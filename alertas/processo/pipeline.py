@@ -178,7 +178,7 @@ def main():
             sys.exit(2)
         sys.exit(0)
     os.environ['SUPPLY_VISION_RUN_ID'] = RUN_ID
-    if "--sem-envio" in sys.argv:
+    if "--sem-envio" in sys.argv or os.environ.get("MODO_ENSAIO") == "1":
         os.environ["SUPPLY_VISION_SEM_ENVIO"] = "1"
     # Horário agendado do disparo: o baixar_base.py calcula datas e contexto
     # a partir dele, não do relógio. Vai pelo ambiente, que os scripts filhos

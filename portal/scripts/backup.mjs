@@ -1,3 +1,4 @@
+import { modoEnsaio } from './modo-ensaio.mjs';
 import { pathToFileURL } from 'node:url';
 import { comBackupExclusivo } from './backup-exclusivo.mjs';
 import { createHash } from 'node:crypto';
@@ -135,6 +136,10 @@ async function enviar(config, copiaNaRede) {
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
   try { await comBackupExclusivo(pastaBackup, async () => {
     criarCopiaIntegra(localizarBanco());
+    if (modoEnsaio()) {
+      console.log('ensaio: envio suprimido; backup local validado, backup em rede bloqueado.');
+      return;
+    }
     // A redundância não depende do servidor de correio nem da configuração SMTP.
     const copiaNaRede = replicarNaRede(lerConfigBruta());
     try { await enviar(lerConfig(), copiaNaRede); }

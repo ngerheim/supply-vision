@@ -43,7 +43,12 @@ function Parar-Operacao([int]$Limite=60){
  return $encerrou
 }
 function Atualizar{
- $avisoBackup.Text=Obter-AvisoBackup (Obter-PastaPrivada $Raiz)
+ $ensaio=$false
+ try{$ensaio=(Ler-ConfigOperacao (Join-Path (Obter-PastaPrivada $Raiz) 'comum\operacao.env'))['MODO_ENSAIO']-eq'1'}catch{}
+ # Enquanto ativo, mostra o modo efetivo mesmo se o arquivo foi editado sem reiniciar.
+ if((Operacao-Ativa)-and(Test-Path $StatusFile)){try{$ensaio=!!(Get-Content $StatusFile -Raw|ConvertFrom-Json).ensaio}catch{}}
+ if($ensaio){$avisoBackup.Text=Obter-AvisoEnsaio $true;$avisoBackup.Font=New-Object Drawing.Font('Segoe UI Semibold',11)}
+ else{$avisoBackup.Text=Obter-AvisoBackup (Obter-PastaPrivada $Raiz);$avisoBackup.Font=New-Object Drawing.Font('Segoe UI',9)}
  $ativo=Operacao-Ativa
  if($ativo){$detalhe='Inicializando módulos...';if(Test-Path $StatusFile){try{$st=Get-Content $StatusFile -Raw|ConvertFrom-Json;$po=if($st.portal){'online'}else{'reiniciando'};$em=if($st.emails){'online'}else{'reiniciando'};$detalhe="Portal: $po  |  E-mails: $em`nAlertas: $($st.alertas)  |  Backup: $($st.backup)`nLimpeza: $($st.limpeza)  |  Disco: $($st.espacoLivreGb) GB livres"}catch{}};$status.Text="● OPERAÇÃO ATIVA`n$detalhe";$status.ForeColor=[Drawing.Color]::FromArgb(87,211,140)}else{$status.Text="● OPERAÇÃO PARADA`nUse 'Iniciar operação' quando quiser colocar o conjunto no ar.";$status.ForeColor=[Drawing.Color]::FromArgb(255,180,90)}
 }
