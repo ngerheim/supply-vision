@@ -1,7 +1,7 @@
 ﻿$ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'inicializacao-logica.ps1')
 $xml=[xml](Montar-DefinicaoTarefa 'C:\Supply Vision' 'C:\Supply Vision\privado' 'C:\Program Files\nodejs\node.exe' 'C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe')
-if($xml.Task.Principals.Principal.UserId-ne'S-1-5-18'-or$xml.Task.Principals.Principal.LogonType-ne'ServiceAccount'){throw 'Conta SYSTEM incorreta.'}
+if($xml.Task.Principals.Principal.UserId-ne'S-1-5-18'-or$xml.Task.Principals.Principal.LogonType){throw 'Conta SYSTEM incorreta.'}
 if($xml.Task.Triggers.BootTrigger.Delay-ne'PT1M'){throw 'Atraso incorreto.'}
 if($xml.Task.Settings.ExecutionTimeLimit-ne'PT0S'-or$xml.Task.Settings.MultipleInstancesPolicy-ne'IgnoreNew'){throw 'Limites incorretos.'}
 if($xml.Task.Settings.RestartOnFailure.Interval-ne'PT1M'-or$xml.Task.Settings.RestartOnFailure.Count-ne'3'){throw 'Reinicio incorreto.'}
