@@ -83,7 +83,8 @@ try{
   $cacheEsperado=(& $pythonTeste -c 'import pathlib,sys;print(pathlib.Path(sys.argv[1]).resolve())' (Join-Path $temp 'privado\operacao\cache')|Out-String).Trim()
   if($pipeline.cache-ne$cacheEsperado-or$pipeline.temp-ne$cacheEsperado){throw "Cache/TEMP divergentes: cache=$($pipeline.cache); TEMP=$($pipeline.temp); esperado=$cacheEsperado."}
   if($pipeline.cache_xdg-ne$cacheEsperado-or$pipeline.cache_wrangler-ne(Join-Path $cacheEsperado 'wrangler')-or$pipeline.log_wrangler-ne(Join-Path $cacheEsperado 'wrangler.log')){throw 'Wrangler dependeu de cache do perfil.'}
-  $pathEsperado="$temp\bin;"+[Environment]::GetEnvironmentVariable('Path','Machine')
+  $binEsperado=(& $pythonTeste -c 'import pathlib,sys;print(pathlib.Path(sys.argv[1]).resolve())' (Join-Path $temp 'bin')|Out-String).Trim()
+  $pathEsperado=$binEsperado+';'+[Environment]::GetEnvironmentVariable('Path','Machine')
   if($pipeline.path-ne$pathEsperado){throw "PATH divergente: atual=$($pipeline.path); esperado=$pathEsperado."}
  }
  if($status.ensaio-ne[bool]$Ensaio){throw 'status.json nao reflete o modo ensaio.'}
