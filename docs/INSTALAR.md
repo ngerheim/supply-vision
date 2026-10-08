@@ -63,6 +63,70 @@ relatórios.
 
 Para conferir requisitos sem alterar nada: `INSTALAR.bat -SomenteVerificar`.
 
+## Escolher como iniciar no Windows
+
+No notebook atual, nada muda: o instalador sem parâmetro continua criando o
+atalho que inicia ao entrar no Windows. Uma tarefa sem login já instalada é
+preservada ao reexecutar o instalador sem parâmetro.
+
+Na central, pare a operação e escolha uma das três opções:
+
+- **Desligado:** sem início automático; Iniciar operação continua disponível.
+- **Ao entrar no Windows (atual):** usa a pasta Inicializar do usuário.
+- **Ao ligar o computador, sem login:** cria a tarefa **Supply Vision**, como
+  **NT AUTHORITY\SYSTEM**, com atraso de um minuto após ligar o computador.
+
+Mudar o modo exige **Executar como administrador**. A central oferece reabrir
+com elevação; nela, escolha o modo novamente. As opções são exclusivas: a tarefa
+remove o atalho do usuário que a configurou, e escolher login remove a tarefa.
+Se houve instalação por outros usuários, confira que eles não tenham atalhos
+antigos na própria pasta Inicializar.
+
+Para o instalador (PowerShell elevado), use:
+
+```powershell
+.\scripts\instalar.ps1 -ModoInicializacao computador
+```
+
+Os valores também podem ser `login` e `desligado`. Para trocar somente o modo,
+sem reinstalar as dependências:
+
+```powershell
+.\scripts\configurar-inicializacao.ps1 -Modo computador
+```
+
+Opcionalmente acrescente `-ContaPersonalizada` para a conta definida pelo
+administrador. A senha é pedida por **Get-Credential**, passada ao Agendador do
+Windows e nunca gravada pelo Supply Vision em arquivo ou log. A TI deve liberar
+para essa conta o direito de executar tarefas em lote e o acesso à rede.
+
+No modo sem login, instale Node **22.13 ou superior**, com npm, para a máquina,
+e mantenha Python **3.12 ou superior** e o venv em `alertas\.venv`. Prefira uma
+pasta local como `C:\SupplyVision`, fora de Desktop e pastas de perfil. A tarefa
+usa caminhos absolutos para PowerShell, Node, npm e Python do venv; seus caches
+ficam em `privado\operacao\cache`, sem depender do PATH do usuário. A ativação
+prepara permissões para SYSTEM, Administradores e o usuário administrador que
+configurou o modo, mantendo as permissões existentes.
+
+**Backup em rede com SYSTEM:** use `BACKUP_NETWORK_DIR=\\servidor\pasta`, nunca
+uma unidade mapeada como `Z:\`. A TI precisa liberar a conta de computador
+**DOMINIO\NOMEDAMAQUINA$** tanto no compartilhamento quanto nas permissões NTFS.
+Neste servidor, é **LOCFROTAS\PROGRAMASUP$**. Credenciais `cmdkey` do usuário RDP
+não se aplicam à SYSTEM.
+
+**Contrapartida de segurança:** SYSTEM tem privilégios altos na máquina.
+Quem puder alterar scripts ou código executado pela tarefa poderá executar
+código com esses privilégios. Restrinja a escrita na instalação a pessoas de
+confiança; não conceda acesso geral. Uma conta própria com permissões menores
+é alternativa quando a TI puder administrá-la.
+
+**Teste final no servidor:** reinicie sem fazer login, aguarde o minuto de
+atraso e a inicialização, e confirme de outra máquina que
+**http://sup.locfrotas.local:3000** está no ar. Só depois abra RDP para conferir
+central, logs e backup. No ensaio, mantenha `MODO_ENSAIO=1`: e-mails e cópia em
+rede continuam bloqueados. Consulte OPERAR para descartar os dados do ensaio
+antes da instalação definitiva.
+
 ## Configuração do notebook servidor
 
 Em ordem de importância:

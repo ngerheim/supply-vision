@@ -1,8 +1,11 @@
 ﻿[CmdletBinding()]
-param([switch]$SomenteVerificar,[switch]$SemTestes,[switch]$SemBuild)
+param([switch]$SomenteVerificar,[switch]$SemTestes,[switch]$SemBuild,[ValidateSet('desligado','login','computador')][string]$ModoInicializacao,[switch]$ContaPersonalizada)
 $ErrorActionPreference='Stop'
 $Raiz=(Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 . (Join-Path $PSScriptRoot 'operacao-logica.ps1')
+. (Join-Path $PSScriptRoot 'inicializacao-logica.ps1')
+if($ModoInicializacao-and!(Testar-Elevacao)){throw 'Escolher o modo de inicializacao exige executar como administrador.'}
+if($ContaPersonalizada-and$ModoInicializacao-ne'computador'){throw 'ContaPersonalizada exige ModoInicializacao computador.'}
 $Portal=Join-Path $Raiz 'portal'; $Alertas=Join-Path $Raiz 'alertas'; $Privado=Obter-PastaPrivada $Raiz
 function Etapa([string]$m){Write-Host "`n==> $m" -ForegroundColor Cyan}
 function Localizar-Comando([string]$nome){
@@ -106,6 +109,12 @@ if(Test-Path (Join-Path $Privado 'portal\backups\portal-atual.sqlite')){Rodar $N
 Write-Host "`nSupply Vision instalado e validado." -ForegroundColor Green
 $Startup=Join-Path ([Environment]::GetFolderPath('Startup')) 'Supply Vision.cmd'
 $Inicio=Join-Path $Raiz 'INICIAR.bat'
+if(!$ModoInicializacao-and(Obter-TarefaSupplyVision $Raiz)){Write-Host 'Modo sem login existente preservado.';exit 0}
+if($ModoInicializacao){
+ $credencial=$null;if($ContaPersonalizada){$credencial=Get-Credential -Message 'Conta da tarefa Supply Vision';if(!$credencial){throw 'Conta nao informada.'}}
+ Definir-ModoInicializacao $Raiz $Privado $Startup $ModoInicializacao $Node $credencial
+ Write-Host "Modo de inicializacao configurado: $ModoInicializacao";exit 0
+}
 $linha="@echo off`r`nstart `"`" `"$Inicio`"`r`n"
 [IO.File]::WriteAllText($Startup,$linha,[Text.Encoding]::ASCII)
 Write-Host 'Inicializacao automatica no login do Windows configurada.'

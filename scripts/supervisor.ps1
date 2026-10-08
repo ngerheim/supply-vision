@@ -1,9 +1,12 @@
 [CmdletBinding()]
-param([switch]$Visivel)
+param([switch]$Visivel,[switch]$SemLogin,[string]$NodeExecutavel,[string]$PastaPrivada)
 $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'operacao-logica.ps1')
 . (Join-Path $PSScriptRoot 'notificacao.ps1')
 . (Join-Path $PSScriptRoot 'avisos-admin.ps1')
+. (Join-Path $PSScriptRoot 'inicializacao-logica.ps1')
+if($PastaPrivada){$env:SUPPLY_VISION_PRIVADO=$PastaPrivada}
+if($SemLogin){$env:SUPPLY_VISION_SEM_LOGIN='1';$NodeExecutavel=Localizar-NodeMaquina $NodeExecutavel;$env:Path=(Split-Path $NodeExecutavel)+';'+[Environment]::GetEnvironmentVariable('Path','Machine')}
 $Raiz=(Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $Privado=Obter-PastaPrivada $Raiz;$Portal=Join-Path $Raiz 'portal';$Alertas=Join-Path $Raiz 'alertas'
 $Operacao=Join-Path $Privado 'operacao';New-Item -ItemType Directory -Force $Operacao|Out-Null
@@ -69,7 +72,7 @@ function Encerrar($p){
  }catch{Log "AVISO ao encerrar processo: $($_.Exception.Message)"}
 }
 function Pode-Tentar([string]$tipo){$k="tentativa-$tipo";if(!$estado[$k]){return $true};return (Get-Date)-ge([datetime]$estado[$k]).AddMinutes(10)}
-$Npm=(Get-Command npm.cmd).Source;$Node=(Get-Command node.exe).Source;$Python=Join-Path $Alertas '.venv\Scripts\python.exe'
+$Npm=if($SemLogin){Join-Path (Split-Path $NodeExecutavel) 'npm.cmd'}else{(Get-Command npm.cmd).Source};$Node=if($SemLogin){$NodeExecutavel}else{(Get-Command node.exe).Source};$Python=Join-Path $Alertas '.venv\Scripts\python.exe'
 $avisosAdmin=Novo-ControleAvisosAdmin $config $ensaio $Node $Portal
 $alerta=$null;$alertaChave='';$alertaHora='';$alertaRunId='';$backup=$null;$backupChave='';$limpeza=$null;$limpezaChave=''
 $verificacaoSaude=$null;$inicioSaude=$null
@@ -79,6 +82,12 @@ $portalPronto=$false;$falhasSaude=0;$PortalUrl='http://127.0.0.1:3000'
 # tres dias de operacao) e NAO e controlado por "observability" no
 # wrangler.json. A unica chave e esta variavel, lida direto do ambiente.
 $env:X_LOCAL_OBSERVABILITY='false'
+if($SemLogin){
+ $cache=Join-Path $Operacao 'cache';New-Item -ItemType Directory -Force $cache|Out-Null
+ $env:XDG_CONFIG_HOME=$cache;$env:npm_config_cache=Join-Path $cache 'npm';$env:WRANGLER_SEND_METRICS='false'
+ $env:TEMP=$cache;$env:TMP=$cache
+}
+$codigoSupervisor=0
 try{$linhaUrl=@(Get-Content (Join-Path $Privado 'portal\configuracao\portal.env') -ErrorAction Stop)|Where-Object{$_ -like 'PORTAL_URL=*'}|Select-Object -First 1;if($linhaUrl){$PortalUrl=($linhaUrl -split '=',2)[1].Trim()}}catch{}
 try{
  Log 'Supervisor iniciado.'
@@ -126,4 +135,6 @@ try{
   # deixar quem pediu esperando ate 15s sem sinal de vida.
   for($i=0;$i-lt15-and!(Test-Path $PararFile);$i++){Start-Sleep 1;Atualizar-AvisosAdmin $avisosAdmin}
  }
-}catch{Log "ERRO FATAL: $($_.Exception.Message)";Log "Origem: $($_.ScriptStackTrace -replace '\s*\r?\n\s*',' | ')"}finally{@{atualizado=(Get-Date).ToString('o');ensaio=$ensaio;portal=$false;emails=$false;relatorios=$false;alertas='parado';backup='parado';limpeza='parada';manutencao=$false;disco='desconhecido'}|ConvertTo-Json -Compress|ForEach-Object{[void](Gravar-Tolerante $StatusFile $_)};Encerrar-AvisosAdmin $avisosAdmin;Log 'Encerrando a operacao.';if($portalPronto){[void](Notificar 'Supply Vision' 'Operacao encerrada. O Portal saiu do ar.')};foreach($p in $processos.Values){Encerrar $p};Encerrar $alerta;Encerrar $backup;Encerrar $limpeza;Encerrar $verificacaoSaude;if(!$processos['portal']-or$processos['portal'].HasExited){Remove-Item -LiteralPath (Join-Path $Privado 'portal\configuracao\worker.env') -Force -ErrorAction SilentlyContinue};Remove-Item $PidFile,$PararFile -Force -ErrorAction SilentlyContinue;if($LockHandle){$LockHandle.Dispose()}}
+}catch{$codigoSupervisor=1;Log "ERRO FATAL: $($_.Exception.Message)";Log "Origem: $($_.ScriptStackTrace -replace '\s*\r?\n\s*',' | ')"}finally{@{atualizado=(Get-Date).ToString('o');ensaio=$ensaio;portal=$false;emails=$false;relatorios=$false;alertas='parado';backup='parado';limpeza='parada';manutencao=$false;disco='desconhecido'}|ConvertTo-Json -Compress|ForEach-Object{[void](Gravar-Tolerante $StatusFile $_)};Encerrar-AvisosAdmin $avisosAdmin;Log 'Encerrando a operacao.';if($portalPronto){[void](Notificar 'Supply Vision' 'Operacao encerrada. O Portal saiu do ar.')};foreach($p in $processos.Values){Encerrar $p};Encerrar $alerta;Encerrar $backup;Encerrar $limpeza;Encerrar $verificacaoSaude;if(!$processos['portal']-or$processos['portal'].HasExited){Remove-Item -LiteralPath (Join-Path $Privado 'portal\configuracao\worker.env') -Force -ErrorAction SilentlyContinue};Remove-Item $PidFile,$PararFile -Force -ErrorAction SilentlyContinue;if($LockHandle){$LockHandle.Dispose()}}
+
+if($SemLogin){exit $codigoSupervisor}

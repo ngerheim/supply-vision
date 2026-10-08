@@ -2,13 +2,14 @@
 Add-Type -AssemblyName System.Drawing
 $Raiz=(Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 . (Join-Path $PSScriptRoot 'operacao-logica.ps1')
+. (Join-Path $PSScriptRoot 'inicializacao-logica.ps1')
 $Op=Join-Path (Obter-PastaPrivada $Raiz) 'operacao';$PidFile=Join-Path $Op 'supervisor.pid.json';$StatusFile=Join-Path $Op 'status.json';$Manutencao=Join-Path $Op 'manutencao.sinal'
 $Inicio=Join-Path $Raiz 'INICIAR.bat';$Parar=Join-Path $Raiz 'PARAR.bat';$Atualizador=Join-Path $PSScriptRoot 'atualizar-servidor.ps1';$Startup=Join-Path ([Environment]::GetFolderPath('Startup')) 'Supply Vision.cmd'
 # A versao vem do Git, nao de um arquivo mantido a mao: um VERSAO.md so fica
 # correto enquanto alguem lembra de edita-lo, e ele ficava desatualizado.
 $versao=try{(& git -C $Raiz log -1 --date=format:'%d/%m/%Y' --pretty=format:'%h  %ad' 2>$null)}catch{''}
 if(!$versao){$versao='versao indisponivel'}
-$form=New-Object Windows.Forms.Form;$form.Text='Supply Vision';$form.Size=New-Object Drawing.Size(580,635);$form.StartPosition='CenterScreen';$form.BackColor=[Drawing.Color]::FromArgb(15,35,58);$form.ForeColor='White';$form.Font=New-Object Drawing.Font('Segoe UI',10);$form.FormBorderStyle='FixedDialog';$form.MaximizeBox=$false
+$form=New-Object Windows.Forms.Form;$form.Text='Supply Vision';$form.Size=New-Object Drawing.Size(580,705);$form.StartPosition='CenterScreen';$form.BackColor=[Drawing.Color]::FromArgb(15,35,58);$form.ForeColor='White';$form.Font=New-Object Drawing.Font('Segoe UI',10);$form.FormBorderStyle='FixedDialog';$form.MaximizeBox=$false
 $t=New-Object Windows.Forms.Label;$t.Text='Supply Vision';$t.Font=New-Object Drawing.Font('Segoe UI Semibold',23);$t.Location='30,20';$t.AutoSize=$true;$form.Controls.Add($t)
 $v=New-Object Windows.Forms.Label;$v.Text=$versao;$v.ForeColor=[Drawing.Color]::FromArgb(160,188,214);$v.Location='32,64';$v.AutoSize=$true;$form.Controls.Add($v)
 $painel=New-Object Windows.Forms.Panel;$painel.Location='30,100';$painel.Size='505,115';$painel.BackColor=[Drawing.Color]::FromArgb(22,49,78);$form.Controls.Add($painel)
@@ -17,7 +18,11 @@ function Botao($texto,$x,$y){$b=New-Object Windows.Forms.Button;$b.Text=$texto;$
 $iniciar=Botao 'Iniciar operação' 30 235;$parar=Botao 'Parar operação' 295 235;$validar=Botao 'Validar configuração' 30 289;$restaurar=Botao 'Testar backup' 295 289
 $atualizar=Botao 'Atualizar sistema' 30 343;$atualizar.Size='505,42';$atualizar.BackColor=[Drawing.Color]::FromArgb(31,122,99)
 $voltar=Botao 'Restaurar backup' 30 397;$voltar.Size='505,42';$voltar.BackColor=[Drawing.Color]::FromArgb(150,62,52)
-$auto=New-Object Windows.Forms.CheckBox;$auto.Text='Iniciar automaticamente com o Windows';$auto.Location='32,460';$auto.Size='330,27';$auto.Checked=Test-Path $Startup;$form.Controls.Add($auto)
+$auto=New-Object Windows.Forms.ComboBox;$auto.DropDownStyle='DropDownList';$auto.Location='32,460';$auto.Size='505,27'
+[void]$auto.Items.AddRange(@('Desligado','Ao entrar no Windows (atual)','Ao ligar o computador, sem login'))
+$modos=@('desligado','login','computador');$auto.SelectedIndex=[Array]::IndexOf($modos,(Obter-ModoInicializacao $Raiz $Startup));$form.Controls.Add($auto)
+$avisoSessao=New-Object Windows.Forms.Label;$avisoSessao.Location='32,586';$avisoSessao.Size='505,65';$avisoSessao.ForeColor=[Drawing.Color]::FromArgb(255,180,90);$form.Controls.Add($avisoSessao)
+
 $man=New-Object Windows.Forms.CheckBox;$man.Text='Modo manutenção (pausar rotinas automáticas)';$man.Location='32,494';$man.Size='390,27';$man.Checked=Test-Path $Manutencao;$form.Controls.Add($man)
 $avisoBackup=New-Object Windows.Forms.Label;$avisoBackup.Location='32,531';$avisoBackup.Size='505,50';$avisoBackup.Font=New-Object Drawing.Font('Segoe UI',9);$avisoBackup.ForeColor=[Drawing.Color]::FromArgb(255,180,90);$form.Controls.Add($avisoBackup)
 $fonteAvisoBackup=$avisoBackup.Font;$fonteAvisoEnsaio=New-Object Drawing.Font('Segoe UI Semibold',11)
@@ -26,7 +31,7 @@ $dicas.SetToolTip($validar,'Confere arquivos, parâmetros, programas e permissõ
 $dicas.SetToolTip($man,'Pausa novos alertas, backups e limpezas automáticos. Portal, e-mails e pedidos manuais continuam disponíveis; tarefas em andamento terminam.')
 $script:processoAtualizacao=$null
 function Operacao-Ativa{
- return $null-ne(Obter-ProcessoRegistrado $PidFile)
+ return !(Testar-SupervisorEncerrado (Obter-PastaPrivada $Raiz))
 }
 function Parar-Operacao([int]$Limite=60){
  # O supervisor le o sinal no ritmo do proprio laco. Esperar por um relogio
@@ -44,6 +49,8 @@ function Parar-Operacao([int]$Limite=60){
  return $encerrou
 }
 function Atualizar{
+ $modo=Obter-ModoInicializacao $Raiz $Startup
+ $avisoSessao.Text=Aviso-SessaoRemota $modo ($env:SESSIONNAME-like'RDP-*')
  $ensaio=$false
  try{$ensaio=(Ler-ConfigOperacao (Join-Path (Obter-PastaPrivada $Raiz) 'comum\operacao.env'))['MODO_ENSAIO']-eq'1'}catch{}
  # Enquanto ativo, mostra o modo efetivo mesmo se o arquivo foi editado sem reiniciar.
@@ -53,7 +60,7 @@ function Atualizar{
  $ativo=Operacao-Ativa
  if($ativo){$detalhe='Inicializando módulos...';if(Test-Path $StatusFile){try{$st=Get-Content $StatusFile -Raw|ConvertFrom-Json;$po=if($st.portal){'online'}else{'reiniciando'};$em=if($st.emails){'online'}else{'reiniciando'};$detalhe="Portal: $po  |  E-mails: $em`nAlertas: $($st.alertas)  |  Backup: $($st.backup)`nLimpeza: $($st.limpeza)  |  Disco: $($st.espacoLivreGb) GB livres"}catch{}};$status.Text="● OPERAÇÃO ATIVA`n$detalhe";$status.ForeColor=[Drawing.Color]::FromArgb(87,211,140)}else{$status.Text="● OPERAÇÃO PARADA`nUse 'Iniciar operação' quando quiser colocar o conjunto no ar.";$status.ForeColor=[Drawing.Color]::FromArgb(255,180,90)}
 }
-$iniciar.Add_Click({Start-Process $Inicio -WindowStyle Hidden;Start-Sleep 2;Atualizar});$parar.Add_Click({$form.Cursor='WaitCursor';$parar.Enabled=$false;try{$ok=Parar-Operacao}finally{$parar.Enabled=$true;$form.Cursor='Default'};Atualizar;if(!$ok){[Windows.Forms.MessageBox]::Show('A operacao nao encerrou dentro do tempo esperado. Veja privado\operacao\supervisor.log.','Supply Vision','OK','Warning')|Out-Null}})
+$iniciar.Add_Click({try{Iniciar-OperacaoConfigurada $Raiz;Start-Sleep 2;Atualizar}catch{[Windows.Forms.MessageBox]::Show('Não foi possível iniciar. Para controlar uma tarefa SYSTEM sem permissão, abra a central como administrador.','Iniciar operação','OK','Warning')|Out-Null}});$parar.Add_Click({$form.Cursor='WaitCursor';$parar.Enabled=$false;try{$ok=Parar-Operacao}finally{$parar.Enabled=$true;$form.Cursor='Default'};Atualizar;if(!$ok){[Windows.Forms.MessageBox]::Show('A operação não encerrou no prazo. Veja supervisor.log. Para encerrar processos SYSTEM à força, é necessário executar como administrador; não remova a trava nem inicie outro supervisor.','Supply Vision','OK','Warning')|Out-Null}})
 $validar.Add_Click({try{$saida=& powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'validar-operacao.ps1') 2>&1;if($LASTEXITCODE-ne0){throw ($saida-join "`n")};[Windows.Forms.MessageBox]::Show('Configuração aprovada.','Supply Vision','OK','Information')|Out-Null}catch{[Windows.Forms.MessageBox]::Show($_.Exception.Message,'Configuração reprovada','OK','Error')|Out-Null}})
 $restaurar.Add_Click({try{$saida=& node.exe (Join-Path $Raiz 'portal\scripts\testar-restauracao.mjs') 2>&1;if($LASTEXITCODE){throw ($saida-join "`n")};[Windows.Forms.MessageBox]::Show(($saida-join "`n"),'Backup aprovado','OK','Information')|Out-Null}catch{[Windows.Forms.MessageBox]::Show($_.Exception.Message,'Backup reprovado','OK','Error')|Out-Null}})
 $voltar.Add_Click({
@@ -75,6 +82,7 @@ $atualizar.Add_Click({
  $confirmar=[Windows.Forms.MessageBox]::Show("O sistema fará um backup, pausará a operação e aplicará a versão aprovada mais recente.`n`nDeseja continuar?",'Atualizar Supply Vision','YesNo','Question')
  if($confirmar-ne[Windows.Forms.DialogResult]::Yes){return}
  try{
+  if((Obter-TarefaSupplyVision $Raiz)-and!(Testar-Elevacao)){[Windows.Forms.MessageBox]::Show('Atualizar uma operação SYSTEM exige elevação. A central será reaberta como administrador; clique Atualizar sistema nela.','Elevação necessária','OK','Information')|Out-Null;Reabrir-CentralElevada;return}
   New-Item -ItemType Directory -Force $Op|Out-Null
   $saida=Join-Path $Op 'atualizacao-saida.log';$erro=Join-Path $Op 'atualizacao-erro.log'
   Remove-Item $saida,$erro -Force -ErrorAction SilentlyContinue
@@ -83,7 +91,22 @@ $atualizar.Add_Click({
   $atualizar.Enabled=$false;$atualizar.Text='Atualizando...'
  }catch{[Windows.Forms.MessageBox]::Show($_.Exception.Message,'Não foi possível atualizar','OK','Error')|Out-Null}
 })
-$auto.Add_CheckedChanged({if($auto.Checked){$linha="@echo off`r`nstart `"`" `"$Inicio`"`r`n";[IO.File]::WriteAllText($Startup,$linha,[Text.Encoding]::ASCII)}elseif(Test-Path $Startup){Remove-Item $Startup -Force}})
+function Reabrir-CentralElevada {
+ Start-Process "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -Verb RunAs -ArgumentList ('-NoProfile -ExecutionPolicy Bypass -File "'+(Join-Path $PSScriptRoot 'central.ps1')+'"')
+ $form.Close()
+}
+$auto.Add_SelectionChangeCommitted({
+ $modo=$modos[$auto.SelectedIndex]
+ try{
+  if(!(Testar-Elevacao)){
+   [Windows.Forms.MessageBox]::Show('Mudar o modo exige Executar como administrador. A central será reaberta elevada; escolha o modo novamente.','Elevação necessária','OK','Information')|Out-Null
+   Reabrir-CentralElevada;return
+  }
+  if(Operacao-Ativa){throw 'Pare a operação antes de mudar o modo de inicialização.'}
+  Definir-ModoInicializacao $Raiz (Obter-PastaPrivada $Raiz) $Startup $modo
+ }catch{[Windows.Forms.MessageBox]::Show($_.Exception.Message,'Inicialização não alterada','OK','Warning')|Out-Null}
+ $auto.SelectedIndex=[Array]::IndexOf($modos,(Obter-ModoInicializacao $Raiz $Startup));Atualizar
+})
 $man.Add_CheckedChanged({New-Item -ItemType Directory -Force $Op|Out-Null;if($man.Checked){New-Item -ItemType File -Force $Manutencao|Out-Null}else{Remove-Item $Manutencao -Force -ErrorAction SilentlyContinue};Atualizar})
 $timer=New-Object Windows.Forms.Timer;$timer.Interval=5000;$timer.Add_Tick({
  Atualizar
