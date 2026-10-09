@@ -68,6 +68,9 @@ try{
  foreach($cmd in @('node "C:\Supply Vision\portal\scripts\processar-relatorios.mjs"','node npm-cli.js --prefix "C:\Supply Vision\portal" run email:watch','"C:\Supply Vision\portal\node_modules\workerd\bin\workerd.exe"')){
   Exigir-Correcao (Processo-OrfaoDestaInstalacao @{Name='node.exe';CommandLine=$cmd} $root) 'orfao desta instalacao selecionado'
  }
+ foreach($cmd in @('node "C:\Supply Vision\portal\scripts\processar-emails.mjs" --watch','node "C:\Supply Vision\portal\scripts\iniciar-portal.mjs" lan','node "C:\Supply Vision\portal\node_modules\wrangler\bin\wrangler.js" dev')){
+  Exigir-Correcao (Processo-OrfaoDestaInstalacao @{Name='node.exe';CommandLine=$cmd} $root) 'servico sem pai npm tambem selecionado'
+ }
  foreach($cmd in @('node "C:\Outra\portal\scripts\processar-relatorios.mjs"','node "C:\Supply Vision extra\portal\scripts\processar-relatorios.mjs"','node app.js')){
   Exigir-Correcao (!(Processo-OrfaoDestaInstalacao @{Name='node.exe';CommandLine=$cmd} $root)) 'outro Node preservado'
  }

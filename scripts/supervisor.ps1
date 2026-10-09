@@ -103,7 +103,8 @@ try{
   try{
   Atualizar-AvisosAdmin $avisosAdmin
   if($estadoPendente){Salvar-Estado}
-  Iniciar-Processo 'portal' $Npm @('--prefix',('"'+$Portal+'"'),'run','start:lan') $Portal;Iniciar-Processo 'emails' $Npm @('--prefix',('"'+$Portal+'"'),'run','email:watch') $Portal
+  Iniciar-Processo 'portal' $Node @(('"'+(Join-Path $Portal 'scripts\iniciar-portal.mjs')+'"'),'lan') $Portal
+  Iniciar-Processo 'emails' $Node @('--experimental-strip-types',('"'+(Join-Path $Portal 'scripts\processar-emails.mjs')+'"'),'--watch') $Portal
   Iniciar-Processo 'relatorios' $Node @('--experimental-strip-types',('"'+(Join-Path $Portal 'scripts\processar-relatorios.mjs')+'"')) $Portal
   $saudavel=$false;try{$saudavel=((Invoke-RestMethod "$PortalUrl/api/health" -TimeoutSec 3).status-eq'ok')}catch{$saudavel=$false}
   # Uma falha isolada do health (ex.: banco momentaneamente ocupado) nao e
