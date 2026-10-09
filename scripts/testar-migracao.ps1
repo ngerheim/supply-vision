@@ -9,6 +9,11 @@ foreach($c in @('Z:\dados','\\servidor','C:\dados','\\servidor\pa:sta')){Exigir 
 Exigir ((Sugerir-PortalUrl 'sup.locfrotas.local')-eq'http://sup.locfrotas.local:3000') 'DNS'
 Exigir (Pular-EtapaMigracao 5 @{'5'='concluida'}) 'retomada'
 Exigir (!(Pular-EtapaMigracao 6 @{'5'='concluida'})) 'nao pular pendente'
+Exigir ((Decidir-CloneMigracao $false $false $false $false)-eq'clonar') 'clone novo'
+Exigir ((Decidir-CloneMigracao $true $true $true $false)-eq'usar') 'clone concluido'
+Exigir ((Decidir-CloneMigracao $true $false $true $false)-eq'arquivar') 'preservar clone interrompido'
+Exigir ((Decidir-CloneMigracao $true $false $false $false)-eq'recusar') 'recusar pasta desconhecida'
+Exigir ((Decidir-CloneMigracao $true $false $true $true)-eq'recusar') 'nao arquivar instalacao com dados'
 Exigir (Permitir-DescarteEnsaio @{MODO_ENSAIO='1'}) 'descarte ensaio'
 foreach($cfg in @(@{},@{MODO_ENSAIO='0'})){Exigir (!(Permitir-DescarteEnsaio $cfg)) 'recusa producao'}
 $ast=[System.Management.Automation.Language.Parser]::ParseFile((Join-Path $PSScriptRoot 'homologar.ps1'),[ref]$null,[ref]$null)
