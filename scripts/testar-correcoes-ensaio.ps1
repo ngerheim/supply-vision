@@ -44,7 +44,12 @@ try{
  function New-ScheduledTaskAction {param($Execute,$Argument);return @{Arguments=$Argument}}
  function New-ScheduledTaskSettingsSet {param($ExecutionTimeLimit);return @{}}
  $script:redeOk=$false;$script:conta='';$script:senhaViu=$false;$script:removeu=0
- function Register-ScheduledTask {param($TaskName,$Action,$Settings,$User,$Password,$RunLevel);$script:acao=$Action;$script:conta=$User;$script:senhaViu=!!$Password}
+ # O mock reproduz a assinatura da API Windows; nenhuma senha real e utilizada.
+ function Register-ScheduledTask {
+  [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingUsernameAndPasswordParams','',Justification='Mock da API Register-ScheduledTask com credencial ficticia.')]
+  param($TaskName,$Action,$Settings,$User,$Password,$RunLevel)
+  $script:acao=$Action;$script:conta=$User;$script:senhaViu=!!$Password
+ }
  function Start-ScheduledTask {param($TaskName);$arq=($script:acao.Arguments-split'"')[1];$fonte=Get-Content $arq -Raw;[void]($fonte-match "Set-Content '([^']+)' 'OK'");Set-Content $Matches[1] $(if($script:redeOk){'OK'}else{'FALHA'})}
  function Stop-ScheduledTask {}
  function Unregister-ScheduledTask {$script:removeu++}
