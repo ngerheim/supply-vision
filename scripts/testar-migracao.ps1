@@ -28,6 +28,12 @@ try{
  Set-Content (Join-Path $pasta 'operacao/migrada.sinal') 'ficticio'
  $bloqueou=$false;try{Exigir-InstalacaoNaoMigrada $pasta}catch{$bloqueou=$_.Exception.Message-like'*migrada*'}
  Exigir $bloqueou 'marcador'
+ $privadoAnterior=$env:SUPPLY_VISION_PRIVADO
+ try{
+  $env:SUPPLY_VISION_PRIVADO=$pasta;$bloqueou=$false
+  try{Iniciar-OperacaoConfigurada (Split-Path $PSScriptRoot)}catch{$bloqueou=$_.Exception.Message-like'*migrada*'}
+  Exigir $bloqueou 'central recusa inicio configurado antes de consultar tarefa'
+ }finally{$env:SUPPLY_VISION_PRIVADO=$privadoAnterior}
  $raiz=Split-Path $PSScriptRoot
  Exigir ((Get-Content (Join-Path $raiz 'INICIAR.bat') -Raw)-match'Exigir-InstalacaoNaoMigrada') 'BAT usa guarda'
  Exigir ((Get-Content (Join-Path $PSScriptRoot 'central.ps1') -Raw)-match'Iniciar-OperacaoConfigurada') 'central usa guarda'

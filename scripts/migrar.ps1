@@ -90,20 +90,28 @@ $hash=(Get-FileHash -LiteralPath $Zip -Algorithm SHA256).Hash
 # Progresso fora de privado permite registrar as etapas anteriores a restauracao.
 # Este arquivo nao contem dados da semente, credenciais ou configuracao.
 New-Item -ItemType Directory -Force (Split-Path $Destino)|Out-Null
-$checkpoint=$Destino+'.migracao.json';$estado=@{}
-if(Test-Path $checkpoint){$salvo=Get-Content $checkpoint -Raw|ConvertFrom-Json;if($salvo.semente-ne$hash){throw 'Outra semente foi selecionada. Use Descartar instalacao de ensaio ou uma pasta de destino nova.'};foreach($p in $salvo.etapas.PSObject.Properties){$estado[$p.Name]=$p.Value};if($Modo-and$Modo-ne$salvo.modo){throw 'Modo diferente da retomada. Primeiro use Descartar instalacao de ensaio.'};if(!$Modo){$Modo=$salvo.modo}}
+$checkpoint=$Destino+'.migracao.json';$estado=@{};$pendentes=@()
+if(Test-Path $checkpoint){$salvo=Get-Content $checkpoint -Raw|ConvertFrom-Json;$pendentes=@($salvo.registros|Where-Object {$_});if($salvo.semente-ne$hash){throw 'Outra semente foi selecionada. Use Descartar instalacao de ensaio ou uma pasta de destino nova.'};foreach($p in $salvo.etapas.PSObject.Properties){$estado[$p.Name]=$p.Value};if($salvo.modo-and$Modo-and$Modo-ne$salvo.modo){throw 'Modo diferente da retomada. Primeiro use Descartar instalacao de ensaio.'};if(!$Modo){$Modo=$salvo.modo}}
+function Salvar-ProgressoMigracao {
+ $tmp=$checkpoint+'.tmp';@{semente=$hash;modo=$script:Modo;etapas=$estado;registros=$script:pendentes}|ConvertTo-Json -Depth 4|Set-Content $tmp -Encoding UTF8
+ Move-Item -LiteralPath $tmp -Destination $checkpoint -Force
+}
 function Registrar-Migracao([string]$Mensagem){
  Write-Host $Mensagem
  $op=Join-Path $Destino 'privado\operacao'
- if(Test-Path $op){Add-Content (Join-Path $op 'migracao.log') "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') $Mensagem" -Encoding UTF8}
+ $registro="$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') $Mensagem"
+ if(Test-Path $op){
+  foreach($anterior in $script:pendentes){Add-Content (Join-Path $op 'migracao.log') $anterior -Encoding UTF8}
+  $script:pendentes=@();Add-Content (Join-Path $op 'migracao.log') $registro -Encoding UTF8
+ }else{$script:pendentes+= $registro}
+ Salvar-ProgressoMigracao
 }
 function Etapa-Migracao([int]$Numero,[string]$Texto,[scriptblock]$Acao){
  if(Pular-EtapaMigracao $Numero $estado){Registrar-Migracao "$Numero/10 - ${Texto}: ja concluida";return}
  Registrar-Migracao "$Numero/10 - $Texto"
  & $Acao
  $estado[[string]$Numero]='concluida'
- $tmp=$checkpoint+'.tmp';@{semente=$hash;modo=$script:Modo;etapas=$estado}|ConvertTo-Json -Depth 4|Set-Content $tmp -Encoding UTF8
- Move-Item -LiteralPath $tmp -Destination $checkpoint -Force
+ Salvar-ProgressoMigracao
  if($InterromperApos-eq$Numero){throw "Interrupcao simulada apos etapa $Numero. Execute novamente para continuar."}
 }
 try{
