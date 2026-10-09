@@ -10,11 +10,11 @@ resolver. O assistente reutiliza a instalação, a semente e a tarefa já existe
 - Windows 11 Pro 22621 ou mais recente, acesso RDP e conta de administrador.
 - Internet e winget disponíveis para instalar Git, Node.js LTS e Python 3.12
   para todos os usuários. Reserve pelo menos 10 GB no disco.
-- Nome `sup.locfrotas.local` apontando para o servidor; Portal em
-  `http://sup.locfrotas.local:3000`.
-- Backup em `\\192.168.0.100\Documentos\SUPRIMENTOS\backups_portal`.
+- Nome fictício `portal.empresa.local` apontando para o servidor; Portal em
+  `http://portal.empresa.local:3000`.
+- Exemplo de backup em `\\servidor-arquivos\pasta\backups`.
   A TI deve conceder escrita à conta do computador
-  `LOCFROTAS\PROGRAMASUP$`, tanto no compartilhamento quanto no NTFS.
+  `DOMINIO\SERVIDOR$`, tanto no compartilhamento quanto no NTFS.
   O teste do assistente usa SYSTEM, a mesma conta da operação.
 - A tarefa roda como SYSTEM, uma conta com privilégios elevados. Restrinja quem
   pode editar a instalação; veja [INSTALAR.md](INSTALAR.md).

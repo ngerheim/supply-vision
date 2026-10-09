@@ -74,6 +74,9 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: portal/package-lock.json
+      - name: Impedir dados de infraestrutura interna no repositorio publico
+        working-directory: .
+        run: node scripts/verificar-infra-publica.mjs
       # Arquivo gravado com CRLF no indice aparece como alterado no checkout
       # do Windows e trava o atualizar-servidor.ps1 ("alteracoes locais").
       - name: Conferir fim de linha no repositorio

@@ -4,9 +4,9 @@
 . (Join-Path $PSScriptRoot 'inicializacao-logica.ps1')
 . (Join-Path $PSScriptRoot 'migracao-logica.ps1')
 function Exigir([bool]$Ok,[string]$Nome){if(!$Ok){throw "Falhou: $Nome"}}
-foreach($c in @('\\servidor\pasta','\\192.168.0.100\Documentos\SUPRIMENTOS\backups_portal')){Exigir (Testar-UncMigracao $c) 'UNC valido'}
+foreach($c in @('\\servidor\pasta','\\servidor-arquivos\pasta\backups')){Exigir (Testar-UncMigracao $c) 'UNC valido'}
 foreach($c in @('Z:\dados','\\servidor','C:\dados','\\servidor\pa:sta')){Exigir (!(Testar-UncMigracao $c)) 'UNC invalido'}
-Exigir ((Sugerir-PortalUrl 'sup.locfrotas.local')-eq'http://sup.locfrotas.local:3000') 'DNS'
+Exigir ((Sugerir-PortalUrl 'portal.empresa.local')-eq'http://portal.empresa.local:3000') 'DNS'
 Exigir (Pular-EtapaMigracao 5 @{'5'='concluida'}) 'retomada'
 Exigir (!(Pular-EtapaMigracao 6 @{'5'='concluida'})) 'nao pular pendente'
 Exigir ((Decidir-CloneMigracao $false $false $false $false)-eq'clonar') 'clone novo'
