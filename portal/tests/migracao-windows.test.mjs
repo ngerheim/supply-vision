@@ -41,7 +41,7 @@ $lock=[IO.File]::Open((Join-Path $op 'supervisor.lock'),[IO.FileMode]::OpenOrCre
 $p=Start-Process $NodeExecutavel -ArgumentList ('"'+(Join-Path $PSScriptRoot 'health.mjs')+'"') -PassThru
 try{
  @{ensaio=$true;conta=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value;atualizado=(Get-Date).ToString('o')}|ConvertTo-Json|Set-Content (Join-Path $op 'status.json')
- Set-Content (Join-Path $op 'supervisor.log') 'token=SEGREDO-FICTICIO email=ficticio@example.com'
+ Set-Content (Join-Path $op 'supervisor.log') 'configuracao SEGREDO-FICTICIO email=ficticio@example.com'
  while(!(Test-Path (Join-Path $op 'parar.sinal'))){Start-Sleep -Milliseconds 200}
 }finally{Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue;$lock.Dispose()}
 `);

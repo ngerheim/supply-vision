@@ -12,7 +12,12 @@ if([IO.Path]::GetExtension($caminhoRelatorio)-ne'.txt'-or$caminhoRelatorio.Start
 $linhas=New-Object 'Collections.Generic.List[string]'
 $segredos=@()
 foreach($arquivo in @(Get-ChildItem -LiteralPath $privado -Filter '*.env' -Recurse -File -ErrorAction SilentlyContinue)){
- foreach($l in Get-Content $arquivo.FullName){if($l-match '^\s*([^#=]+)=(.+)$'-and$Matches[1]-match '(?i)TOKEN|PASS|SENHA|SECRET|SMTP|EMAIL|KEY'){$segredos+=$Matches[2].Trim()}}
+ foreach($l in Get-Content $arquivo.FullName){
+  if($l-match '^\s*([^#=]+)=(.+)$'){
+   $chave=$Matches[1];$valor=$Matches[2]
+   if($chave-match '(?i)TOKEN|PASS|SENHA|SECRET|SMTP|EMAIL|KEY'){$segredos+=$valor.Trim()}
+  }
+ }
 }
 function Mascarar-Homologacao([string]$Texto){
  foreach($s in $segredos){if($s){$Texto=$Texto.Replace($s,'[mascarado]')}}
