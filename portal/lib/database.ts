@@ -1,3 +1,4 @@
+import { CRIAR_CONTADOR_CHAMADOS_SQL, MIGRAR_CONTADOR_CHAMADOS_SQL } from './operacao-dados.ts';
 import { SCHEMA_VALIDACAO } from './operacao-validacao.ts';
 import { SCHEMA_RELATORIOS } from './relatorios.ts';
 import { passwordHash, tokenHash, PBKDF2_ITERACOES_ATUAL, PBKDF2_ITERACOES_LEGADO } from './criptografia.ts';
@@ -153,6 +154,9 @@ async function initialize() {
     db.prepare('CREATE UNIQUE INDEX IF NOT EXISTS idx_ticket_events_request_key ON ticket_events(ticket_id,user_id,request_key)'),
   ]);
   await db.prepare(MIGRAR_FORNECEDORES_CHAMADOS_SQL).run();
+  await db.prepare('CREATE INDEX IF NOT EXISTS idx_tickets_updated_at ON tickets(updated_at DESC,id DESC)').run();
+  await db.prepare(CRIAR_CONTADOR_CHAMADOS_SQL).run();
+  if(!await db.prepare('SELECT 1 FROM ticket_counter WHERE id=1').first()){await db.prepare(MIGRAR_CONTADOR_CHAMADOS_SQL).run();}
   // Outra instancia pode estar trabalhando neste mesmo banco. A inicializacao
   // so limpa travas vencidas, com o mesmo prazo usado por adquirirTrava.
   await db.prepare(LIMPAR_TRAVAS_VENCIDAS_SQL)

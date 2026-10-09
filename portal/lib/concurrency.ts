@@ -46,3 +46,27 @@ export class KeyedConcurrencyGate {
     } catch (error) { this.keys.delete(key); throw error; }
   }
 }
+
+// Reserva imediata por IP antes de ocupar uma vaga ativa ou espera global.
+// Inclui os clientes esperando; recusa excesso sem criar outra fila.
+export class IpConcurrencyGate {
+  private slots = new Map<string, number>();
+  private readonly limit: number;
+  constructor(limit: number) {
+    this.limit = limit;
+    if (!Number.isInteger(limit) || limit < 1) throw new Error('Limite por IP inválido');
+  }
+  acquire(ip: string): (() => void) | null {
+    const usados = this.slots.get(ip) || 0;
+    if (usados >= this.limit) return null;
+    this.slots.set(ip, usados + 1);
+    let liberado = false;
+    return () => {
+      if (liberado) return;
+      liberado = true;
+      const restantes = (this.slots.get(ip) || 1) - 1;
+      if (restantes) this.slots.set(ip, restantes);
+      else this.slots.delete(ip);
+    };
+  }
+}

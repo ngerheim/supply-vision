@@ -152,11 +152,37 @@ try {
     }
     db.exec('COMMIT');
   }catch(error){db.exec('ROLLBACK');throw error;}
+  // Mais de 100 registros: o total deve incluir o que nao cabe na lista.
+  const usuario=db.prepare("SELECT id FROM users WHERE role='admin' LIMIT 1").get().id;
+  for(let i=0;i<105;i++){
+    const registro=`${prefixo}_historico_${i}`;
+    db.prepare('INSERT INTO imports(id,filename,mode,status,created_by,created_at) VALUES(?,?,?,?,?,?)').run(registro,'ficticio.xlsx','replace','completed',usuario,stamp);
+    db.prepare('INSERT INTO report_jobs(id,request_key,action,status,created_by,created_at) VALUES(?,?,?,?,?,?)').run(registro,registro,'relatorio','done',usuario,stamp);
+  }
+  const historicoImports=await (await fetch(`${url}/api/imports`,{headers})).json();
+  assert.equal(historicoImports.imports.length,100);
+  assert.equal(historicoImports.total,db.prepare('SELECT COUNT(*) n FROM imports').get().n);
+  const historicoReports=await (await fetch(`${url}/api/reports`,{headers})).json();
+  assert.equal(historicoReports.jobs.length,100);
+  assert.equal(historicoReports.total,db.prepare('SELECT COUNT(*) n FROM report_jobs').get().n);
   const bootstrap=await (await fetch(`${url}/api/bootstrap`,{headers})).json();
-  const tickets=await (await fetch(`${url}/api/tickets`,{headers})).json();
+  assert.equal(bootstrap.imports.length,100);assert.equal(bootstrap.totalImports,historicoImports.total);
+  console.log('[OK] Importacoes e relatorios mostram total completo acima do limite de 100.');
+  // Os proximos cenarios compartilham este banco descartavel e contam a propria fila.
+  for(let i=0;i<105;i++){
+    const registro=`${prefixo}_historico_${i}`;
+    db.prepare('DELETE FROM imports WHERE id=?').run(registro);
+    db.prepare('DELETE FROM report_jobs WHERE id=?').run(registro);
+  }
+
+  const tickets=await (await fetch(`${url}/api/tickets?pageSize=50`,{headers})).json();
+  assert.equal(tickets.pageSize,50);assert.equal(tickets.tickets.length,50);assert.ok(tickets.total>=501);
+  const todas=[...tickets.tickets];
+  for(let page=2;page<=tickets.pageCount;page++){const pagina=await (await fetch(`${url}/api/tickets?page=${page}&pageSize=50`,{headers})).json();assert.ok(pagina.tickets.length<=50);todas.push(...pagina.tickets);}
+  assert.equal(todas.length,tickets.total);assert.equal(new Set(todas.map(r=>r.id)).size,todas.length);
   for(let i=0;i<501;i++){
     assert.ok(bootstrap.agreements.some(row=>row.id===`${prefixo}_lista_${i}`));
-    assert.ok(tickets.tickets.some(row=>row.id===`${prefixo}_lista_${i}`));
+    assert.ok(todas.some(row=>row.id===`${prefixo}_lista_${i}`));
   }
   console.log('[OK] Acordos e chamados antigos permanecem acessiveis alem de 500 registros; auditoria preserva preco anterior.');
   console.log('[OK] Exclusoes respeitam a trava e funcionam depois de sua liberacao.');
