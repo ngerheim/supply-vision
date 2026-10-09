@@ -7,6 +7,8 @@ import { criarTransportador, lerConfigSmtp, privado } from './configuracao.mjs';
 import { modoEnsaio } from './modo-ensaio.mjs';
 
 export const EVENTOS_ADMIN = Object.freeze({
+  'tarefa-falhou': { nome: 'Tarefa principal falhou ao iniciar', ocorrido: 'A vigilância encontrou falha na partida da tarefa principal.', acao: 'Confira a conta e reconfigure a senha da tarefa pela central elevada.', secao: 'A conta da tarefa não consegue entrar', ancora: 'a-conta-da-tarefa-não-consegue-entrar' },
+  'vigilancia-health': { nome: 'Vigilância: Portal indisponível', ocorrido: 'A verificação diária não recebeu uma resposta saudável do Portal.', acao: 'Abra a central e confira a tarefa e supervisor.log.', secao: 'A conta da tarefa não consegue entrar', ancora: 'a-conta-da-tarefa-não-consegue-entrar' },
   'portal-parou': { nome: 'Portal parou de responder', ocorrido: 'O Portal deixou de responder após duas verificações seguidas.', acao: 'Confira a central, teste o acesso local e consulte portal-erro.log e supervisor.log.', secao: 'O Portal não responde na LAN', ancora: 'o-portal-não-responde-na-lan' },
   'portal-reiniciado': { nome: 'Portal reiniciado automaticamente', ocorrido: 'O supervisor iniciou a recuperação automática do Portal após falhas persistentes.', acao: 'Confira se o Portal voltou a responder. Se os reinícios continuarem, pare a operação e preserve os logs.', secao: 'O Portal não responde na LAN', ancora: 'o-portal-não-responde-na-lan' },
   'backup-falhou': { nome: 'Backup falhou', ocorrido: 'A rotina de backup terminou com falha.', acao: 'Confira supervisor.log, o último backup e o acesso à pasta de rede. Não sobrescreva o banco atual.', secao: 'O backup não chegou', ancora: 'o-backup-não-chegou' },

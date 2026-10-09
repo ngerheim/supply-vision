@@ -116,27 +116,15 @@ function Iniciar-OperacaoAtualizada {
  if(Test-Path $logica){. $logica;Iniciar-OperacaoConfigurada $Raiz;return}
  & (Join-Path $Raiz 'INICIAR.bat') | Out-Null
 }
-function Parar-Operacao {
-if($script:TarefaSemLogin){Disable-ScheduledTask -TaskName 'Supply Vision' -TaskPath '\'|Out-Null}
-& (Join-Path $Raiz 'PARAR.bat') | Out-Null
-if ($LASTEXITCODE -ne 0) { throw 'Falha ao solicitar a parada da operacao.' }
-$privadoParada = Obter-PastaPrivada $Raiz
-$arquivoConfigParada = Join-Path $privadoParada 'portal/configuracao/portal.env'
-$configParada = @{}
-if (Test-Path -LiteralPath $arquivoConfigParada) { $configParada = Ler-ConfigOperacao $arquivoConfigParada }
-$portaRelatoriosParada = 3001
-if ($configParada['RELATORIOS_PORTA']) { $portaRelatoriosParada = [int]$configParada['RELATORIOS_PORTA'] }
-for ($i = 0; $i -lt 60; $i++) {
-  if ((Testar-SupervisorEncerrado $privadoParada) -and
-      !(Get-NetTCPConnection -LocalPort 3000,$portaRelatoriosParada -State Listen -ErrorAction SilentlyContinue)) { return }
-  Start-Sleep 1
+function Parar-OperacaoAtualizacao {
+ if($script:TarefaSemLogin){Disable-ScheduledTask -TaskName 'Supply Vision' -TaskPath '\'|Out-Null}
+ if(!(Parar-Operacao $Raiz)){throw 'Supervisor ou portas nao encerraram no prazo; troca de codigo e banco bloqueada.'}
 }
-throw 'Supervisor ou portas da operacao continuam ativos; atualizacao bloqueada antes de alterar codigo e banco.'
-}
+
 function Reverter([string]$motivo) {
   if ($script:Recuperando) { throw 'A recuperacao ja foi tentada. Operacao permanece parada.' }
   $script:Recuperando = $true
-  Parar-Operacao
+  Parar-OperacaoAtualizacao
   Gravar-EstadoOperacao $ContextoArquivo @{anterior=$anterior;remoto=$remoto;fase='recuperando'}
   Write-Host "`n!! $motivo" -ForegroundColor Red
   Write-Host '!! revertendo para a versao anterior' -ForegroundColor Red
@@ -285,7 +273,7 @@ if ($Simular) {
 if (-not $JaAtualizado) {
   $OperacaoEstavaAtiva = !!(Obter-ProcessoRegistrado (Join-Path (Obter-PastaPrivada $Raiz) 'operacao/supervisor.pid.json')) -or !!(Get-NetTCPConnection -LocalPort 3000 -State Listen -ErrorAction SilentlyContinue)
   Etapa 'Parando a operacao'
-  Parar-Operacao
+  Parar-OperacaoAtualizacao
   $OperacaoParada = $true
   Ok 'operacao parada'
 
