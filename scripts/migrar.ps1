@@ -156,7 +156,8 @@ try{
     try{
      $origem=(& git.exe -C $Destino remote get-url origin 2>$null|Out-String).Trim()
      $branch=(& git.exe -C $Destino branch --show-current 2>$null|Out-String).Trim()
-     $limpo=$origem-eq'https://github.com/ngerheim/supply-vision.git'-and$branch-eq'main'-and!( @(& git.exe -C $Destino status --porcelain).Count )
+     $head=(& git.exe -C $Destino rev-parse --verify HEAD 2>$null|Out-String).Trim()
+     $limpo=$head-match'^[a-f0-9]{40}$'-and(Test-Path (Join-Path $Destino 'scripts\instalar.ps1'))-and$origem-eq'https://github.com/ngerheim/supply-vision.git'-and$branch-eq'main'-and!( @(& git.exe -C $Destino status --porcelain).Count )
      if($LASTEXITCODE){$limpo=$false}
     }catch{$limpo=$false}
    }
