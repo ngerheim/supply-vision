@@ -65,7 +65,7 @@ function Atualizar{
 }
 $iniciar.Add_Click({try{Iniciar-OperacaoConfigurada $Raiz;Start-Sleep 2;Atualizar}catch{[Windows.Forms.MessageBox]::Show(($_.Exception.Message+' Para controlar uma conta da tarefa sem permissão, abra a central como administrador.'),'Iniciar operação','OK','Warning')|Out-Null}});$parar.Add_Click({$form.Cursor='WaitCursor';$parar.Enabled=$false;try{$ok=Parar-Operacao $Raiz}finally{$parar.Enabled=$true;$form.Cursor='Default'};Atualizar;if(!$ok){[Windows.Forms.MessageBox]::Show('A operação não encerrou no prazo. Veja supervisor.log. Para encerrar processos da conta da tarefa à força, é necessário executar como administrador; não remova a trava nem inicie outro supervisor.','Supply Vision','OK','Warning')|Out-Null}})
 $validar.Add_Click({try{$saida=& powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'validar-operacao.ps1') 2>&1;if($LASTEXITCODE-ne0){throw ($saida-join "`n")};[Windows.Forms.MessageBox]::Show('Configuração aprovada.','Supply Vision','OK','Information')|Out-Null}catch{[Windows.Forms.MessageBox]::Show($_.Exception.Message,'Configuração reprovada','OK','Error')|Out-Null}})
-$restaurar.Add_Click({try{$saida=& (Localizar-NodeMaquina) (Join-Path $Raiz 'portal\scripts\testar-restauracao.mjs') 2>&1;if($LASTEXITCODE){throw ($saida-join "`n")};[Windows.Forms.MessageBox]::Show(($saida-join "`n"),'Backup aprovado','OK','Information')|Out-Null}catch{[Windows.Forms.MessageBox]::Show($_.Exception.Message,'Backup reprovado','OK','Error')|Out-Null}})
+$restaurar.Add_Click({try{$saida=& (Localizar-NodeMaquina) --experimental-strip-types (Join-Path $Raiz 'portal\scripts\testar-restauracao.mjs') 2>&1;if($LASTEXITCODE){throw ($saida-join "`n")};[Windows.Forms.MessageBox]::Show(($saida-join "`n"),'Backup aprovado','OK','Information')|Out-Null}catch{[Windows.Forms.MessageBox]::Show($_.Exception.Message,'Backup reprovado','OK','Error')|Out-Null}})
 $voltar.Add_Click({
  $aviso="Isto substitui o banco atual por uma copia de backup.`n`nA operacao sera parada, o estado atual sera guardado numa copia datada e os acordos, cadastros e chamados voltarao ao que eram no momento do backup.`n`nDeseja continuar?"
  if([Windows.Forms.MessageBox]::Show($aviso,'Restaurar backup','YesNo','Warning')-ne[Windows.Forms.DialogResult]::Yes){return}
@@ -75,7 +75,7 @@ $voltar.Add_Click({
   if(!(Parar-Operacao $Raiz)){throw 'A operacao nao encerrou. Restauracao cancelada para nao mexer no banco com o portal no ar.'}
   $argumentos=@((Join-Path $Raiz 'portal\scripts\restaurar-backup.mjs'),'--sim')
   if($qual-eq[Windows.Forms.DialogResult]::No){$argumentos+='--anterior'}
-  $saida=& (Localizar-NodeMaquina) @argumentos 2>&1
+  $saida=& (Localizar-NodeMaquina) --experimental-strip-types @argumentos 2>&1
   if($LASTEXITCODE){throw ($saida-join "`n")}
   [Windows.Forms.MessageBox]::Show((($saida-join "`n")+"`n`nInicie a operacao para voltar ao ar."),'Backup restaurado','OK','Information')|Out-Null
  }catch{[Windows.Forms.MessageBox]::Show($_.Exception.Message,'Falha ao restaurar','OK','Error')|Out-Null}

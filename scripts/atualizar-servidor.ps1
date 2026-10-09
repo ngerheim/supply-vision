@@ -142,7 +142,7 @@ function Reverter([string]$motivo) {
     try {
       if (-not (Test-Path -LiteralPath $BackupAntesAtualizacao)) { throw "copia de antes da atualizacao nao encontrada: $BackupAntesAtualizacao" }
       Copy-Item -LiteralPath $BackupAntesAtualizacao -Destination $BackupAntesAtualizacaoOrigem -Force
-      & $Node (Join-Path $Portal 'scripts\restaurar-backup.mjs') --sim
+      & $Node --experimental-strip-types (Join-Path $Portal 'scripts\restaurar-backup.mjs') --sim
       if ($LASTEXITCODE -ne 0) { throw "restaurar-backup.mjs terminou com codigo $LASTEXITCODE" }
       $restaurou = $true
     } catch {
@@ -282,7 +282,7 @@ if (-not $JaAtualizado) {
   Ok 'operacao parada'
 
   Etapa 'Backup do banco antes de trocar a versao'
-  & $Node (Join-Path $Portal 'scripts\backup.mjs') --pre-atualizacao
+  & $Node --experimental-strip-types (Join-Path $Portal 'scripts\backup.mjs') --pre-atualizacao
   if ($LASTEXITCODE -eq 3) { Aviso 'Backup local validado; copia de rede falhou. Atualizacao continua.' }
   elseif ($LASTEXITCODE -ne 0) { throw 'O backup falhou. Atualizacao cancelada — nao se troca versao sem copia do banco.' }
   Ok 'backup concluido'
