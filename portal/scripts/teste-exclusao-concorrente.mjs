@@ -152,7 +152,22 @@ try {
     }
     db.exec('COMMIT');
   }catch(error){db.exec('ROLLBACK');throw error;}
+  // Mais de 100 registros: o total deve incluir o que nao cabe na lista.
+  const usuario=db.prepare("SELECT id FROM users WHERE role='admin' LIMIT 1").get().id;
+  for(let i=0;i<105;i++){
+    const registro=`${prefixo}_historico_${i}`;
+    db.prepare('INSERT INTO imports(id,filename,mode,status,created_by,created_at) VALUES(?,?,?,?,?,?)').run(registro,'ficticio.xlsx','replace','completed',usuario,stamp);
+    db.prepare('INSERT INTO report_jobs(id,request_key,action,status,created_by,created_at) VALUES(?,?,?,?,?,?)').run(registro,registro,'relatorio','done',usuario,stamp);
+  }
+  const historicoImports=await (await fetch(`${url}/api/imports`,{headers})).json();
+  assert.equal(historicoImports.imports.length,100);
+  assert.equal(historicoImports.total,db.prepare('SELECT COUNT(*) n FROM imports').get().n);
+  const historicoReports=await (await fetch(`${url}/api/reports`,{headers})).json();
+  assert.equal(historicoReports.jobs.length,100);
+  assert.equal(historicoReports.total,db.prepare('SELECT COUNT(*) n FROM report_jobs').get().n);
   const bootstrap=await (await fetch(`${url}/api/bootstrap`,{headers})).json();
+  assert.equal(bootstrap.imports.length,100);assert.equal(bootstrap.totalImports,historicoImports.total);
+  console.log('[OK] Importacoes e relatorios mostram total completo acima do limite de 100.');
   const tickets=await (await fetch(`${url}/api/tickets?pageSize=50`,{headers})).json();
   assert.equal(tickets.pageSize,50);assert.equal(tickets.tickets.length,50);assert.ok(tickets.total>=501);
   const todas=[...tickets.tickets];
