@@ -1,5 +1,6 @@
 # Dados operacionais, credenciais e resultados reais
 /privado/
+/privado.ensaio-*/
 
 # Arquivos temporários e dependências locais dos módulos
 **/node_modules/
