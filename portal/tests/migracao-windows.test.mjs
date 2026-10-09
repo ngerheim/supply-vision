@@ -19,7 +19,7 @@ void test('assistente Windows: semente, SYSTEM, health, homologacao e retomada',
   const comando=(cmd)=>executar(['-NoProfile','-Command',cmd+'; exit 0'],{SV_REPO:repo},30_000);
   // Nunca remove uma tarefa que nao pertence a esta fixture.
   comando("if(Get-ScheduledTask -TaskName 'Supply Vision' -ErrorAction SilentlyContinue){throw 'Tarefa preexistente: teste recusado'}");
-  let erroOriginal;
+  const erros=[];
   try {
     for(const pasta of ['scripts','portal/scripts','portal/lib','alertas/processo','alertas/parametros']) {
       fs.cpSync(path.join(root,pasta),path.join(repo,pasta),{recursive:true});
@@ -100,12 +100,11 @@ Preparar-Migracao $Raiz $Privado (Join-Path $Destino 'startup-ficticio.cmd') $De
     assert.ok(!fs.existsSync(path.join(repo,'privado')));
     assert.ok(fs.readdirSync(repo).some(n=>n.startsWith('privado.ensaio-')));
     assert.equal(comando("@(Get-ScheduledTask -TaskName 'Supply Vision' -ErrorAction SilentlyContinue).Count").toString().trim(),'0');
-  } catch(e) {erroOriginal=e;throw e;} finally {
-    const erros=[];
+  } finally {
     try{comando("$t=Get-ScheduledTask -TaskName 'Supply Vision' -ErrorAction SilentlyContinue;if($t-and([string]$t.Actions.Arguments).Contains($env:SV_REPO)){Stop-ScheduledTask -TaskName 'Supply Vision';Unregister-ScheduledTask -TaskName 'Supply Vision' -Confirm:$false}");}catch(e){erros.push(e);}
     // Descarta somente arquivos ficticios; encerra eventual servidor health desta fixture.
     try{comando("Get-CimInstance Win32_Process | Where-Object {$_.Name-eq'node.exe'-and$_.CommandLine-like('*'+$env:SV_REPO+'*health.mjs*')} | ForEach-Object {Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue}");}catch(e){erros.push(e);}
     try{fs.rmSync(dir,{recursive:true,force:true,maxRetries:10,retryDelay:200});}catch(e){erros.push(e);}
-    if(erros.length&&!erroOriginal)throw new AggregateError(erros,'Limpeza da fixture falhou');
   }
+  if(erros.length)throw new AggregateError(erros,'Limpeza da fixture falhou');
 });
