@@ -27,8 +27,8 @@ function Mascarar-Homologacao([string]$Texto){
  if($Texto-match '(?i)://[^/\s]+@|\b(SELECT|INSERT|UPDATE|DELETE)\b|[{}]|\b(chamado|usuario|preco|payload)\s*[:=]'){return '[conteudo omitido]'}
  return $Texto
 }
-function Item-Homologacao([string]$Nome,[scriptblock]$Conferir){
- try{$detalhe=& $Conferir;$linhas.Add('✅ '+(Mascarar-Homologacao $Nome)+': '+(Mascarar-Homologacao ($detalhe-join' ')))}
+function Item-Homologacao([string]$Nome,[scriptblock]$Conferir,[switch]$Classificar){
+ try{$detalhe=& $Conferir;$icone='✅';if($Classificar){$icone=switch($detalhe.nivel){'ok'{'✅'} 'aviso'{'⚠️'} 'erro'{'❌'}};$detalhe=$detalhe.mensagem};$linhas.Add($icone+' '+(Mascarar-Homologacao $Nome)+': '+(Mascarar-Homologacao ($detalhe-join' ')))}
  catch{$linhas.Add('❌ '+(Mascarar-Homologacao $Nome)+': nao aprovado/indisponivel. Consulte docs/SOCORRO.md.')} # Nao publica excecoes que podem conter segredos.
 }
 $linhas.Add('Supply Vision — verificacao somente leitura — '+(Get-Date -Format 'yyyy-MM-dd HH:mm:ss'))
@@ -56,7 +56,12 @@ Item-Homologacao 'Parametros dos alertas' {
  $saida=& $python -B -X utf8 (Join-Path $Raiz 'alertas\processo\validar_parametros.py') 2>&1
  if($LASTEXITCODE){throw 'parametros'};'carregados e validados (sem exibir conteudo)'
 }
-foreach($p in @((Join-Path $privado 'portal\backups'),$cfg['BACKUP_NETWORK_DIR'])){
+Item-Homologacao 'Backups locais' {
+ $op=Ler-ConfigOperacao (Join-Path $privado 'comum\operacao.env')
+ $inicio=(Get-Item -LiteralPath $privado).CreationTime
+ Obter-SituacaoBackupLocal (Join-Path $privado 'portal\backups') $op $inicio (Get-Date)
+} -Classificar
+foreach($p in @($cfg['BACKUP_NETWORK_DIR'])){
  Item-Homologacao "Backups $p" {if(!$p-or!(Test-Path -LiteralPath $p)){throw 'pasta'};$arquivos=@(Get-ChildItem -LiteralPath $p -File|Sort-Object LastWriteTime -Descending);if(!$arquivos){throw 'vazio'};"$($arquivos.Count) arquivos; mais recente $($arquivos[0].LastWriteTime) (nao valida integridade)"}
 }
 Item-Homologacao 'Ultimas entregas' {

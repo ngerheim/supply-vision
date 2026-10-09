@@ -34,6 +34,20 @@ function Avisar-Bitdefender {
 }
 function Testar-UncMigracao([string]$Valor){return $Valor-match '^\\\\[^\\/:*?"<>|]+\\[^\\/:*?"<>|]+(?:\\[^/:*?"<>|]*)?$'}
 function Sugerir-PortalUrl([string]$Nome){return "http://${Nome}:3000"}
+function Normalizar-ModoMigracao([string]$Texto){
+ $normal=$Texto.Trim().ToLowerInvariant().Normalize([Text.NormalizationForm]::FormD) -replace '\p{Mn}',''
+ $normal=$normal -replace '\s+',' '
+ if($normal-eq'ensaio'){return 'ensaio'}
+ if($normal-in@('definitiva','migracao definitiva','definitivo')){return 'definitiva'}
+ return $null
+}
+function Perguntar-ModoMigracao {
+ do{
+  $escolhido=Normalizar-ModoMigracao (Read-Host 'Ensaio ou migracao definitiva? Digite ensaio ou definitiva')
+  if(!$escolhido){Write-Host 'Escolha ensaio ou migracao definitiva. Vamos perguntar novamente.' -ForegroundColor Yellow}
+ }while(!$escolhido)
+ return $escolhido
+}
 function Pular-EtapaMigracao([int]$Numero,[hashtable]$Estado){return $Estado.ContainsKey([string]$Numero)-and$Estado[[string]$Numero]-eq'concluida'}
 function Decidir-CloneMigracao([bool]$Existe,[bool]$Limpo,[bool]$Iniciado,[bool]$TemPrivado){
  if(!$Existe){return 'clonar'}
@@ -138,9 +152,11 @@ $hash=(Get-FileHash -LiteralPath $Zip -Algorithm SHA256).Hash
 # Este arquivo nao contem dados da semente, credenciais ou configuracao.
 New-Item -ItemType Directory -Force (Split-Path $Destino)|Out-Null
 $checkpoint=$Destino+'.migracao.json';$estado=@{};$pendentes=@();$cloneIniciado=$false;$restaurada=$false
-if(Test-Path $checkpoint){$salvo=Get-Content $checkpoint -Raw|ConvertFrom-Json;$cloneIniciado=!!$salvo.cloneIniciado;$restaurada=!!$salvo.restaurada;$script:contaPersonalizada=!!$salvo.contaPersonalizada;$pendentes=@($salvo.registros|Where-Object {$_});if($salvo.semente-ne$hash){throw 'Outra semente foi selecionada. Use Descartar instalacao de ensaio ou uma pasta de destino nova.'};foreach($p in $salvo.etapas.PSObject.Properties){$estado[$p.Name]=$p.Value};if($salvo.modo-and$Modo-and$Modo-ne$salvo.modo){throw 'Modo diferente da retomada. Primeiro use Descartar instalacao de ensaio.'};if(!$Modo){$Modo=$salvo.modo}}
+if(Test-Path $checkpoint){$salvo=Get-Content $checkpoint -Raw|ConvertFrom-Json;$cloneIniciado=!!$salvo.cloneIniciado;$restaurada=!!$salvo.restaurada;$script:contaPersonalizada=!!$salvo.contaPersonalizada;$pendentes=@($salvo.registros|Where-Object {$_});if($salvo.semente-ne$hash){throw 'Outra semente foi selecionada. Use Descartar instalacao de ensaio ou uma pasta de destino nova.'};foreach($p in $salvo.etapas.PSObject.Properties){$estado[$p.Name]=$p.Value};$modoSalvo=Normalizar-ModoMigracao $salvo.modo;if($modoSalvo-and$Modo-and$Modo-ne$modoSalvo){throw 'Modo diferente da retomada. Primeiro use Descartar instalacao de ensaio.'};if(!$Modo-and$modoSalvo){$Modo=$modoSalvo};if(!$Modo){$estado.Remove('4')}}
 function Salvar-ProgressoMigracao {
- $tmp=$checkpoint+'.tmp';@{semente=$hash;modo=$script:Modo;etapas=$estado;registros=$script:pendentes;cloneIniciado=$script:cloneIniciado;restaurada=$script:restaurada;contaPersonalizada=[bool]$script:contaPersonalizada}|ConvertTo-Json -Depth 4|Set-Content $tmp -Encoding UTF8
+ $dados=@{semente=$hash;etapas=$estado;registros=$script:pendentes;cloneIniciado=$script:cloneIniciado;restaurada=$script:restaurada;contaPersonalizada=[bool]$script:contaPersonalizada}
+ if($script:Modo){$dados.modo=$script:Modo}
+ $tmp=$checkpoint+'.tmp';$dados|ConvertTo-Json -Depth 4|Set-Content $tmp -Encoding UTF8
  Move-Item -LiteralPath $tmp -Destination $checkpoint -Force
 }
 function Registrar-Migracao([string]$Mensagem){
@@ -219,7 +235,7 @@ try{
  . (Join-Path $Destino 'scripts\operacao-logica.ps1');. (Join-Path $Destino 'scripts\inicializacao-logica.ps1')
  $privado=Join-Path $Destino 'privado';$env:SUPPLY_VISION_PRIVADO=$privado
  Etapa-Migracao 4 'Escolher ensaio ou migracao definitiva' {
-  if(!$script:Modo){$escolha=Read-Host 'Ensaio ou migracao definitiva? Digite ensaio ou definitiva';if($escolha-notin@('ensaio','definitiva')){throw 'Escolha ensaio ou definitiva e tente novamente.'};$script:Modo=$escolha}
+  if(!$script:Modo){$script:Modo=Perguntar-ModoMigracao}
  }
  Etapa-Migracao 5 'Restaurar a semente' {
   if(!$restaurada){

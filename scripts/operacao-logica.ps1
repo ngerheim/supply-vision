@@ -96,6 +96,21 @@ function Validar-Horarios([hashtable]$Config) {
   }
 }
 
+function Obter-SituacaoBackupLocal([string]$Pasta,[hashtable]$Config,[datetime]$Inicio,[datetime]$Agora){
+ $arquivos=@();if(Test-Path -LiteralPath $Pasta){$arquivos=@(Get-ChildItem -LiteralPath $Pasta -File -ErrorAction Stop|Sort-Object LastWriteTime -Descending)}
+ if($arquivos){return @{nivel='ok';mensagem="$($arquivos.Count) arquivos; mais recente $($arquivos[0].LastWriteTime) (nao valida integridade)"}}
+ # A agenda se repete a cada semana; oito dias cobrem inclusive a virada do dia.
+ for($dias=0;$dias-lt8;$dias++){
+  $dia=$Agora.Date.AddDays(-$dias)
+  if($dia.AddDays(1)-le$Inicio){break}
+  $horarios=[string](Obter-HorariosDoDia $Config 'BACKUP_HORARIOS' $dia)
+  foreach($h in @($horarios.Split(',')|ForEach-Object {$_.Trim()}|Where-Object {$_})){
+   $alvo=[datetime]::ParseExact(($dia.ToString('yyyy-MM-dd')+' '+$h),'yyyy-MM-dd HH:mm',[Globalization.CultureInfo]::InvariantCulture)
+   if($alvo-ge$Inicio-and$alvo-lt$Agora){return @{nivel='erro';mensagem='backup local agendado vencido sem arquivo; consulte docs/SOCORRO.md.'}}
+  }
+ }
+ return @{nivel='aviso';mensagem='nenhum backup local ainda; o primeiro ocorre no próximo horário agendado'}
+}
 function Obter-SlotDevido([string]$Tipo, [string]$Lista, [hashtable]$Estado, [datetime]$Agora) {
   # Lista vazia = dia sem execucao (ex.: sabado e domingo para alertas).
   if (!$Lista -or !$Lista.Trim()) { return $null }

@@ -54,6 +54,8 @@ jobs:
         run: |
           ./scripts/testar-espera-testes.ps1
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          ./scripts/testar-pos-migracao.ps1
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
           ./scripts/testar-correcoes-ensaio.ps1
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           ./scripts/testar-reversao-arquivos.ps1
