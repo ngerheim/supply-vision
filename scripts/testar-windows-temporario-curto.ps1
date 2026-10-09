@@ -39,7 +39,7 @@ public static class CaminhoCurtoTeste {
  $conta=$env:COMPUTERNAME+'\'+$usuario
  & icacls.exe $pasta /grant ($conta+':(OI)(CI)M')|Out-Null
  if($LASTEXITCODE){throw 'Falha ao liberar somente a fixture para o usuario de teste.'}
- & icacls.exe $raiz /grant ($conta+':(OI)(CI)RX') /deny ($conta+':(OI)(CI)(W)')|Out-Null
+ & icacls.exe $raiz /grant ($conta+':(OI)(CI)RX') /deny ($conta+':(OI)(CI)(WD,AD,WEA,WA,DE)')|Out-Null
  if($LASTEXITCODE){throw 'Falha ao tornar o checkout somente leitura para o usuario de teste.'}
  $tarefasAntes=@(Get-ScheduledTask|ForEach-Object {$_.TaskPath+$_.TaskName}|Sort-Object)
  $firewallAntes=@(Get-NetFirewallRule|Select-Object Name,Enabled,Action,Direction,Profile|Sort-Object Name|ConvertTo-Json -Depth 3)
