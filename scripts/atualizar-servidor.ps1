@@ -426,9 +426,10 @@ exit 0
     }
     try { Reverter $falha.Exception.Message }
     catch { Write-Host "RECUPERACAO FALHOU: $($_.Exception.Message). Nao religue antes de conferir docs/SOCORRO.md." -ForegroundColor Red }
-  } elseif ($OperacaoParada -and $OperacaoEstavaAtiva -and !$Recuperando) {
-    # Falha anterior ao merge: codigo/banco ainda sao os originais.
-    Iniciar-OperacaoAtualizada
+  } elseif (!$CodigoTrocado -and !$Recuperando) {
+    # Inclui a parada incompleta: reabilita antes de tentar retomar.
+    try { Recuperar-OperacaoAntesDaTroca $Raiz $script:TarefaSemLogin $OperacaoEstavaAtiva }
+    catch { Write-Host "Falhou a retomada: $($_.Exception.Message). A tarefa deve permanecer habilitada." -ForegroundColor Red }
     if ($LASTEXITCODE -ne 0) { Write-Host 'Falhou a retomada da operacao original.' -ForegroundColor Red }
   }
   Write-Error $falha.Exception.Message -ErrorAction Continue
