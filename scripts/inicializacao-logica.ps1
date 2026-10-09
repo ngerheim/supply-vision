@@ -52,7 +52,10 @@ function Montar-DefinicaoTarefa([string]$Raiz,[string]$Privado,[string]$Node,[st
 }
 function Obter-GruposAutorizadosConta([string]$Conta) {
  Add-Type -AssemblyName System.DirectoryServices.AccountManagement
- $tipo=if($Conta.Contains('\')){[DirectoryServices.AccountManagement.ContextType]::Domain}else{[DirectoryServices.AccountManagement.ContextType]::Machine}
+ if($Conta-match '^S-1-'){$Conta=(New-Object Security.Principal.SecurityIdentifier($Conta)).Translate([Security.Principal.NTAccount]).Value}
+ $prefixo=($Conta-split'\\')[0]
+ $dominio=$Conta.Contains('\')-and$prefixo-notin@('.',$env:COMPUTERNAME)
+ $tipo=if($dominio){[DirectoryServices.AccountManagement.ContextType]::Domain}else{[DirectoryServices.AccountManagement.ContextType]::Machine}
  $contexto=New-Object DirectoryServices.AccountManagement.PrincipalContext($tipo)
  $usuario=$null
  try{
@@ -63,7 +66,7 @@ function Obter-GruposAutorizadosConta([string]$Conta) {
 }
 function Testar-ContaAdministradora([string]$Conta) {
  if($Conta-in@('SYSTEM','S-1-5-18','NT AUTHORITY\SYSTEM')){return $true}
- $sid=(New-Object Security.Principal.NTAccount($Conta)).Translate([Security.Principal.SecurityIdentifier]).Value
+ $sid=if($Conta-match '^S-1-'){$Conta}else{(New-Object Security.Principal.NTAccount($Conta)).Translate([Security.Principal.SecurityIdentifier]).Value}
  $membros=@(Get-LocalGroupMember -SID 'S-1-5-32-544' -ErrorAction Stop|ForEach-Object {$_.SID.Value})
  if($sid-in$membros){return $true}
  return !!(@(Obter-GruposAutorizadosConta $Conta|Where-Object {$_-in$membros}).Count)
