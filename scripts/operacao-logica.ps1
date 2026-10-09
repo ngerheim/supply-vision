@@ -207,8 +207,9 @@ function Processo-OrfaoDestaInstalacao($Processo,[string]$Raiz){
  $cmd=[string]$Processo.CommandLine
  $script=('(?i)(?:^|[\s"'']){0}\\portal\\scripts\\(?:iniciar-portal|processar-emails|processar-relatorios|aviso-admin)\.mjs(?:["'']|\s|$)' -f $p)
  $motor=('(?i)(?:^|[\s"'']){0}\\portal\\node_modules\\[^"'']*workerd(?:\.exe)?(?:["'']|\s|$)' -f $p)
+ $wrangler=('(?i)(?:^|[\s"'']){0}\\portal\\node_modules\\wrangler\\bin\\wrangler\.js(?:["'']|\s|$)' -f $p)
  $npm=('(?i)--prefix\s+["'']?{0}\\portal["'']?\s+run\s+(?:start:lan|email:watch)(?:\s|$)' -f $p)
- return $cmd-match$script-or$cmd-match$motor-or$cmd-match$npm
+ return $cmd-match$script-or$cmd-match$motor-or$cmd-match$wrangler-or$cmd-match$npm
 }
 function Encerrar-OrfaosInstalacao([string]$Raiz){
  foreach($p in @(Get-CimInstance Win32_Process|Where-Object {Processo-OrfaoDestaInstalacao $_ $Raiz})){

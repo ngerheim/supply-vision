@@ -37,6 +37,10 @@ try{
  & python.exe -m venv --without-pip "$temp\alertas\.venv"
  if($LASTEXITCODE-ne0){throw 'Nao foi possivel criar Python real para validacao do supervisor.'}
  [IO.File]::WriteAllText("$temp\portal\scripts\processar-relatorios.mjs", "import fs from 'node:fs';setInterval(()=>{if(fs.existsSync('../privado/operacao/parar.sinal'))process.exit(0)},500);")
+ # Os mesmos pontos de entrada agora usam Node e caminhos absolutos, sem npm intermediario.
+ foreach($entrada in @('iniciar-portal.mjs','processar-emails.mjs')){
+  Copy-Item "$temp\portal\scripts\processar-relatorios.mjs" "$temp\portal\scripts\$entrada"
+ }
  # Processo longo o bastante para o teste observar os modulos ativos, mas que
  # tambem respeita o sinal de parada. Assim uma maquina sem permissao para
  # taskkill /T nao deixa um cmd orfao prendendo a pasta temporaria.
