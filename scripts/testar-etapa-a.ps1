@@ -25,5 +25,14 @@ try{
  if((Obter-EventoVigilancia $true $false)-ne'tarefa-falhou'){throw 'Falha de tarefa tem prioridade'}
  if((Obter-EventoVigilancia $false $false)-ne'vigilancia-health'){throw 'Health deve avisar'}
  if(Obter-EventoVigilancia $false $true){throw 'Saudavel nao deve avisar'}
- Write-Host 'PASSOU: 11 verificacoes de parada, recuperacao, logon e vigilancia.'
+ # Executa o catch real do atualizador no caso que antes escapava da retomada.
+ $ast=[System.Management.Automation.Language.Parser]::ParseFile((Join-Path $PSScriptRoot 'atualizar-servidor.ps1'),[ref]$null,[ref]$null)
+ $catch=$ast.Find({param($n) $n-is[System.Management.Automation.Language.CatchClauseAst]-and$n.Body.Extent.Text.Contains('$falha = $_')},$true)
+ $texto=$catch.Body.Extent.Text.Trim();$texto=$texto.Substring(1,$texto.Length-2).Replace('exit 1','$global:catchExecutado=$true')
+ $CodigoTrocado=$false;$Recuperando=$false;$OperacaoParada=$false;$OperacaoEstavaAtiva=$true;$script:TarefaSemLogin=$true;$Raiz=$pasta
+ $global:habilitada=$false;$global:iniciada=$false
+ function Write-Error {}
+ try{throw 'parada nao terminou no prazo'}catch{. ([scriptblock]::Create($texto))}
+ if(!$global:habilitada-or!$global:iniciada-or!$global:catchExecutado){throw 'Catch real nao recuperou parada incompleta'}
+ Write-Host 'PASSOU: 12 verificacoes de parada, recuperacao, logon e vigilancia.'
 }finally{$env:SUPPLY_VISION_PRIVADO=$antes;Remove-Item -LiteralPath $pasta -Recurse -Force}
