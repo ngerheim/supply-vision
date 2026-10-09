@@ -524,3 +524,7 @@ A instalacao LAN documentada usa HTTP: senha e sessao trafegam sem criptografia.
 Restrinja o acesso a rede empresarial confiavel. Para trafegar fora dessa rede,
 homologue HTTPS no proxy, cookies seguros e a origem do Portal antes de liberar
 acesso. Esta correcao nao instala certificados nem altera a rede do servidor.
+
+Para preparar uma semente pela central e levar a operação ao servidor, siga
+[Assistente de migração](MIGRAR.md). A opção Migração definitiva bloqueia
+novos inícios no notebook; o guia explica como voltar atrás com segurança.
