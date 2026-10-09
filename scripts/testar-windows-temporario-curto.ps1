@@ -35,6 +35,7 @@ public static class CaminhoCurtoTeste {
  $senha=ConvertTo-SecureString ('Aa!'+[guid]::NewGuid().ToString('N')) -AsPlainText -Force
  New-LocalUser -Name $usuario -Password $senha -AccountNeverExpires|Out-Null
  $criouUsuario=$true
+ Add-LocalGroupMember -Group (Get-LocalGroup -SID 'S-1-5-32-545') -Member $usuario
  $conta=$env:COMPUTERNAME+'\'+$usuario
  & icacls.exe $pasta /grant ($conta+':(OI)(CI)M')|Out-Null
  if($LASTEXITCODE){throw 'Falha ao liberar somente a fixture para o usuario de teste.'}
