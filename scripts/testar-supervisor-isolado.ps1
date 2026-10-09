@@ -93,7 +93,11 @@ if($Atraso){Start-Sleep -Seconds $Atraso} # Simula VM lenta, somente no teste.
  $vivos=@($processos|Where-Object{!$_.HasExited})
  if(!$convergiu-or$vivos.Count-ne1){throw ("Lock falhou: $($vivos.Count) instancias ativas apos prazo de 60 s.`n"+(Formatar-DiagnosticoTravaTeste $instancias))}
  $perdedor=@($processos|Where-Object HasExited)[0]
- if($perdedor.ExitCode-ne0){throw ("Instancia concorrente encerrou por erro, nao por trava.`n"+(Formatar-DiagnosticoTravaTeste $instancias))}
+ $perdedor.WaitForExit()
+ $registroPerdedor=@($instancias|Where-Object {$_.pid-eq$perdedor.Id})[0]
+ # Start-Process/Refresh no PS5.1 pode deixar ExitCode nulo. A mensagem
+ # exclusiva da disputa confirma que nao foi apenas uma falha de inicializacao.
+ if(!(Get-Content -LiteralPath $registroPerdedor.saida -Raw).Contains('A operacao ja esta ativa.')){throw ("Instancia concorrente encerrou sem confirmar trava.`n"+(Formatar-DiagnosticoTravaTeste $instancias))}
  # Espera ativa pelo status.json. Espera fixa era corrida: a verificacao de
  # saude contra um host inexistente sozinha ja consome quase 3 segundos.
  $statusPath="$temp\privado\operacao\status.json";$apareceu=$false
