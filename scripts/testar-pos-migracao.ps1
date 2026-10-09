@@ -4,7 +4,7 @@
 $script:total=0
 function Exigir-Pos([bool]$Ok,[string]$Nome){if(!$Ok){throw "Falhou: $Nome"};$script:total++;Write-Host "OK: $Nome"}
 foreach($texto in @('definitiva',' migração definitiva ','MIGRACAO   DEFINITIVA','definitivo')){Exigir-Pos ((Normalizar-ModoMigracao $texto)-eq'definitiva') 'normaliza modo definitivo'}
-foreach($texto in @('', '   ', 'qualquer coisa', 'migracao')){Exigir-Pos (!(Normalizar-ModoMigracao $texto)) 'modo ausente/invalido nao atribuido'}
+foreach($texto in @($null, '', '   ', 'qualquer coisa', 'migracao')){Exigir-Pos (!(Normalizar-ModoMigracao $texto)) 'modo ausente/invalido nao atribuido'}
 Exigir-Pos ((Normalizar-ModoMigracao ' ENSAIO ')-eq'ensaio') 'normaliza ensaio'
 $dir=Join-Path ([IO.Path]::GetTempPath()) ('sv-pos-migracao-'+[guid]::NewGuid().ToString('N'))
 $anterior=$env:SUPPLY_VISION_PRIVADO
