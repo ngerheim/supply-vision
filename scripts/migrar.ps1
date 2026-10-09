@@ -6,6 +6,12 @@ $ErrorActionPreference='Stop'
 function Testar-UncMigracao([string]$Valor){return $Valor-match '^\\\\[^\\/:*?"<>|]+\\[^\\/:*?"<>|]+(?:\\[^/:*?"<>|]*)?$'}
 function Sugerir-PortalUrl([string]$Nome){return "http://${Nome}:3000"}
 function Pular-EtapaMigracao([int]$Numero,[hashtable]$Estado){return $Estado.ContainsKey([string]$Numero)-and$Estado[[string]$Numero]-eq'concluida'}
+function Decidir-CloneMigracao([bool]$Existe,[bool]$Limpo,[bool]$Iniciado,[bool]$TemPrivado){
+ if(!$Existe){return 'clonar'}
+ if($Limpo){return 'usar'}
+ if($Iniciado-and!$TemPrivado){return 'arquivar'}
+ return 'recusar'
+}
 function Permitir-DescarteEnsaio([hashtable]$Config){return $Config['MODO_ENSAIO']-eq'1'}
 function Atualizar-EnvMigracao([string]$Arquivo,[string]$Chave,[string]$Valor){
  if($Valor-match '[\r\n]'){throw 'Valor invalido. Use uma unica linha.'}
@@ -91,10 +97,10 @@ $hash=(Get-FileHash -LiteralPath $Zip -Algorithm SHA256).Hash
 # Progresso fora de privado permite registrar as etapas anteriores a restauracao.
 # Este arquivo nao contem dados da semente, credenciais ou configuracao.
 New-Item -ItemType Directory -Force (Split-Path $Destino)|Out-Null
-$checkpoint=$Destino+'.migracao.json';$estado=@{};$pendentes=@()
-if(Test-Path $checkpoint){$salvo=Get-Content $checkpoint -Raw|ConvertFrom-Json;$pendentes=@($salvo.registros|Where-Object {$_});if($salvo.semente-ne$hash){throw 'Outra semente foi selecionada. Use Descartar instalacao de ensaio ou uma pasta de destino nova.'};foreach($p in $salvo.etapas.PSObject.Properties){$estado[$p.Name]=$p.Value};if($salvo.modo-and$Modo-and$Modo-ne$salvo.modo){throw 'Modo diferente da retomada. Primeiro use Descartar instalacao de ensaio.'};if(!$Modo){$Modo=$salvo.modo}}
+$checkpoint=$Destino+'.migracao.json';$estado=@{};$pendentes=@();$cloneIniciado=$false;$restaurada=$false
+if(Test-Path $checkpoint){$salvo=Get-Content $checkpoint -Raw|ConvertFrom-Json;$cloneIniciado=!!$salvo.cloneIniciado;$restaurada=!!$salvo.restaurada;$pendentes=@($salvo.registros|Where-Object {$_});if($salvo.semente-ne$hash){throw 'Outra semente foi selecionada. Use Descartar instalacao de ensaio ou uma pasta de destino nova.'};foreach($p in $salvo.etapas.PSObject.Properties){$estado[$p.Name]=$p.Value};if($salvo.modo-and$Modo-and$Modo-ne$salvo.modo){throw 'Modo diferente da retomada. Primeiro use Descartar instalacao de ensaio.'};if(!$Modo){$Modo=$salvo.modo}}
 function Salvar-ProgressoMigracao {
- $tmp=$checkpoint+'.tmp';@{semente=$hash;modo=$script:Modo;etapas=$estado;registros=$script:pendentes}|ConvertTo-Json -Depth 4|Set-Content $tmp -Encoding UTF8
+ $tmp=$checkpoint+'.tmp';@{semente=$hash;modo=$script:Modo;etapas=$estado;registros=$script:pendentes;cloneIniciado=$script:cloneIniciado;restaurada=$script:restaurada}|ConvertTo-Json -Depth 4|Set-Content $tmp -Encoding UTF8
  Move-Item -LiteralPath $tmp -Destination $checkpoint -Force
 }
 function Registrar-Migracao([string]$Mensagem){
@@ -145,14 +151,26 @@ try{
  }
  Etapa-Migracao 3 'Obter o sistema aprovado (main)' {
   if(!$RepositorioTeste){
-   if(Test-Path $Destino){
-    $origem=(& git.exe -C $Destino remote get-url origin 2>$null|Out-String).Trim()
-    $branch=(& git.exe -C $Destino branch --show-current 2>$null|Out-String).Trim()
-    if($origem-ne'https://github.com/ngerheim/supply-vision.git'-or$branch-ne'main'-or@(& git.exe -C $Destino status --porcelain).Count){throw 'Pasta existente nao corresponde a clone limpo da main. Preserve-a e escolha outra pasta.'}
-    return
+   $existe=Test-Path $Destino;$limpo=$false
+   if($existe){
+    try{
+     $origem=(& git.exe -C $Destino remote get-url origin 2>$null|Out-String).Trim()
+     $branch=(& git.exe -C $Destino branch --show-current 2>$null|Out-String).Trim()
+     $limpo=$origem-eq'https://github.com/ngerheim/supply-vision.git'-and$branch-eq'main'-and!( @(& git.exe -C $Destino status --porcelain).Count )
+     if($LASTEXITCODE){$limpo=$false}
+    }catch{$limpo=$false}
    }
+   $decisao=Decidir-CloneMigracao $existe $limpo $cloneIniciado (Test-Path (Join-Path $Destino 'privado'))
+   if($decisao-eq'usar'){return}
+   if($decisao-eq'recusar'){throw 'Pasta existente nao corresponde a clone limpo da main. Preserve-a e escolha outra pasta.'}
+   if($decisao-eq'arquivar'){
+    $arquivoClone=$Destino+'.clone-incompleto-'+[guid]::NewGuid().ToString('N')
+    Move-Item -LiteralPath $Destino -Destination $arquivoClone
+    Registrar-Migracao 'Clone interrompido preservado ao lado da instalacao; retomando somente a etapa de clone.'
+   }
+   $script:cloneIniciado=$true;Salvar-ProgressoMigracao
    & git.exe clone --branch main --single-branch https://github.com/ngerheim/supply-vision.git $Destino
-   if($LASTEXITCODE){throw 'Clone falhou. Preserve a pasta parcial e escolha outra pasta para tentar novamente.'}
+   if($LASTEXITCODE){throw 'Clone falhou. Confira a internet e execute novamente: a pasta parcial sera preservada ao lado da instalacao.'}
   }
  }
  . (Join-Path $Destino 'scripts\operacao-logica.ps1');. (Join-Path $Destino 'scripts\inicializacao-logica.ps1')
@@ -161,7 +179,10 @@ try{
   if(!$script:Modo){$escolha=Read-Host 'Ensaio ou migracao definitiva? Digite ensaio ou definitiva';if($escolha-notin@('ensaio','definitiva')){throw 'Escolha ensaio ou definitiva e tente novamente.'};$script:Modo=$escolha}
  }
  Etapa-Migracao 5 'Restaurar a semente' {
-  & (Join-Path $Destino 'scripts\restaurar-semente.ps1') -Zip $Zip
+  if(!$restaurada){
+   & (Join-Path $Destino 'scripts\restaurar-semente.ps1') -Zip $Zip
+   $script:restaurada=$true;Salvar-ProgressoMigracao
+  }
   Registrar-Migracao ('Etapas anteriores concluidas: '+(($estado.Keys|Sort-Object {[int]$_})-join', '))
   Atualizar-EnvMigracao (Join-Path $privado 'comum\operacao.env') 'MODO_ENSAIO' $(if($Modo-eq'ensaio'){'1'}else{'0'})
  }

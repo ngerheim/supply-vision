@@ -44,8 +44,10 @@ resolver. O assistente reutiliza a instalação, a semente e a tarefa já existe
 
 Se parar no meio, abra o mesmo `MIGRAR.bat`, selecione a mesma semente e a mesma
 pasta. O progresso fica ao lado da instalação (`supply-vision.migracao.json`),
-e as etapas concluídas são puladas. Nada é apagado. Se houver uma pasta parcial
-que não seja um clone limpo, preserve-a e escolha outra pasta; peça ajuda à TI.
+e as etapas concluídas são puladas. Nada é apagado. Se o clone iniciado pelo assistente ficar parcial, ele é movido para uma pasta
+`clone-incompleto` ao lado da instalação; somente a etapa incompleta é repetida.
+Pastas desconhecidas ou com dados privados são recusadas: preserve-as e peça
+ajuda à TI para escolher outro destino.
 Os registros ficam em `privado/operacao/migracao.log` assim que a semente é
 restaurada, incluindo a lista das etapas anteriores concluídas. Não edite o
 arquivo de progresso. Uma execução já concluída não refaz a homologação; para
