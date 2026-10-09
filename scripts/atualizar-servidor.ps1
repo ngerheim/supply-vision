@@ -18,7 +18,7 @@
 # so valeria na atualizacao seguinte. -JaAtualizado e -VersaoAnterior sao de
 # uso interno; nao devem ser chamados a mao.
 [CmdletBinding()]
-param([switch]$Simular,[switch]$Reaplicar,[switch]$JaAtualizado,[string]$VersaoAnterior)
+param([switch]$Simular,[switch]$Reaplicar,[switch]$JaAtualizado,[string]$VersaoAnterior,[ValidateRange(1,3600)][int]$PrazoParadaSegundos=60)
 
 $ErrorActionPreference = 'Stop'
 $Raiz = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
@@ -118,15 +118,15 @@ function Iniciar-OperacaoAtualizada {
  if(Test-Path $logica){. $logica;Iniciar-OperacaoConfigurada $Raiz;return}
  & (Join-Path $Raiz 'INICIAR.bat') | Out-Null
 }
-function Parar-OperacaoAtualizacao {
+function Parar-OperacaoAtualizacao([int]$Limite=60) {
  if($script:TarefaSemLogin){Disable-ScheduledTask -TaskName 'Supply Vision' -TaskPath '\'|Out-Null}
- if(!(Parar-Operacao $Raiz)){throw 'Supervisor ou portas nao encerraram no prazo; troca de codigo e banco bloqueada.'}
+ if(!(Parar-Operacao $Raiz $Limite)){throw 'Supervisor ou portas nao encerraram no prazo; troca de codigo e banco bloqueada.'}
 }
 
 function Reverter([string]$motivo) {
   if ($script:Recuperando) { throw 'A recuperacao ja foi tentada. Operacao permanece parada.' }
   $script:Recuperando = $true
-  Parar-OperacaoAtualizacao
+  Parar-OperacaoAtualizacao $PrazoParadaSegundos
   Gravar-EstadoOperacao $ContextoArquivo @{anterior=$anterior;remoto=$remoto;fase='recuperando'}
   Write-Host "`n!! $motivo" -ForegroundColor Red
   Write-Host '!! revertendo para a versao anterior' -ForegroundColor Red
@@ -275,7 +275,7 @@ if ($Simular) {
 if (-not $JaAtualizado) {
   $OperacaoEstavaAtiva = !!(Obter-ProcessoRegistrado (Join-Path (Obter-PastaPrivada $Raiz) 'operacao/supervisor.pid.json')) -or !!(Get-NetTCPConnection -LocalPort 3000 -State Listen -ErrorAction SilentlyContinue)
   Etapa 'Parando a operacao'
-  Parar-OperacaoAtualizacao
+  Parar-OperacaoAtualizacao $PrazoParadaSegundos
   $OperacaoParada = $true
   Ok 'operacao parada'
 

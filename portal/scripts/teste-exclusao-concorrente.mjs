@@ -153,10 +153,14 @@ try {
     db.exec('COMMIT');
   }catch(error){db.exec('ROLLBACK');throw error;}
   const bootstrap=await (await fetch(`${url}/api/bootstrap`,{headers})).json();
-  const tickets=await (await fetch(`${url}/api/tickets`,{headers})).json();
+  const tickets=await (await fetch(`${url}/api/tickets?pageSize=50`,{headers})).json();
+  assert.equal(tickets.pageSize,50);assert.equal(tickets.tickets.length,50);assert.ok(tickets.total>=501);
+  const todas=[...tickets.tickets];
+  for(let page=2;page<=tickets.pageCount;page++){const pagina=await (await fetch(`${url}/api/tickets?page=${page}&pageSize=50`,{headers})).json();assert.ok(pagina.tickets.length<=50);todas.push(...pagina.tickets);}
+  assert.equal(todas.length,tickets.total);assert.equal(new Set(todas.map(r=>r.id)).size,todas.length);
   for(let i=0;i<501;i++){
     assert.ok(bootstrap.agreements.some(row=>row.id===`${prefixo}_lista_${i}`));
-    assert.ok(tickets.tickets.some(row=>row.id===`${prefixo}_lista_${i}`));
+    assert.ok(todas.some(row=>row.id===`${prefixo}_lista_${i}`));
   }
   console.log('[OK] Acordos e chamados antigos permanecem acessiveis alem de 500 registros; auditoria preserva preco anterior.');
   console.log('[OK] Exclusoes respeitam a trava e funcionam depois de sua liberacao.');

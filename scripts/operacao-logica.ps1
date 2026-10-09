@@ -277,16 +277,23 @@ function Parar-Operacao([string]$Raiz,[int]$Limite=60) {
   Start-Sleep -Milliseconds 500
  }while($true)
 }
-function Recuperar-OperacaoAntesDaTroca([string]$Raiz,[bool]$Tarefa,[bool]$EstavaAtiva) {
+function Recuperar-OperacaoAntesDaTroca([string]$Raiz,[bool]$Tarefa,[bool]$EstavaAtiva,[int]$Limite=60) {
  if($Tarefa){Enable-ScheduledTask -TaskName 'Supply Vision' -TaskPath '\'|Out-Null}
  if($EstavaAtiva){
   # Nao remova a trava: a tarefa ignora nova instancia; o sinal cancelado
   # permite ao supervisor ainda ativo continuar, ou a tarefa iniciar outro.
   $sinal=Join-Path (Obter-PastaPrivada $Raiz) 'operacao/parar.sinal'
   Remove-Item -LiteralPath $sinal -Force -ErrorAction SilentlyContinue
-  if($Tarefa){Start-ScheduledTask -TaskName 'Supply Vision' -TaskPath '\'}
+  if($Tarefa){
+   $anterior=Obter-ProcessoRegistrado (Join-Path (Obter-PastaPrivada $Raiz) 'operacao/supervisor.pid.json')
+   Start-ScheduledTask -TaskName 'Supply Vision' -TaskPath '\'
+   # IgnoreNew pode ter recusado a partida enquanto a instancia antiga encerra.
+   # Se o processo antigo sair nesta janela, solicite a tarefa novamente.
+   if($anterior){$prazo=[Diagnostics.Stopwatch]::StartNew();while($prazo.Elapsed.TotalSeconds-lt$Limite){if($anterior.HasExited){Start-ScheduledTask -TaskName 'Supply Vision' -TaskPath '\';break};Start-Sleep -Milliseconds 500}}
+  }
   elseif(Testar-SupervisorEncerrado (Obter-PastaPrivada $Raiz)){Iniciar-OperacaoConfigurada $Raiz}
  }
+ $global:LASTEXITCODE=0
 }
 function Obter-FalhaLogonTarefa([long]$Resultado) {
  $codigo=$Resultado-band4294967295L

@@ -593,3 +593,12 @@ Chamados são paginados no servidor, com busca e situação aplicadas antes da
 paginação. Importações e relatórios mostram o total quando a lista contém
 somente os 100 mais recentes. Os códigos de novos chamados usam um contador
 atômico; reservas não concluídas podem deixar lacunas, sem reutilizar números.
+
+
+Para limitar a duas vagas de login por IP real na LAN, configure
+`LOGIN_IP_POR_SOCKET=1` em portal.env e reinicie a operação. Fica desligado por
+padrão. O Portal continua na porta 3000; um encaminhador local identifica o
+cliente pelo socket e assina a identidade com o token interno. O backend fica
+em loopback numa porta dinâmica; cabeçalhos falsos do navegador são substituídos.
+Sem essa opção nem proxy confiável, o Portal preserva sua fila global existente:
+não aplica a cota de um IP ao balde “local”, que representa toda a LAN.
