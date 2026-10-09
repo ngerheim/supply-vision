@@ -60,13 +60,26 @@ foreach($p in @((Join-Path $privado 'portal\backups'),$cfg['BACKUP_NETWORK_DIR']
 }
 Item-Homologacao 'Ultimas entregas' {
  $entregas=@(Get-ChildItem (Join-Path $privado 'alertas\estado-envios') -Filter '*.json' -File|Sort-Object LastWriteTime -Descending)
- if(!$entregas){throw 'sem entregas'};"$($entregas.Count) registros; ultimo $($entregas[0].LastWriteTime); conteudo e destinatarios omitidos"
+ if(!$entregas){throw 'sem entregas'}
+ $resumo=@()
+ foreach($registro in @($entregas|Select-Object -First 5)){
+  $j=Get-Content $registro.FullName -Raw|ConvertFrom-Json
+  $estado=if($j.estado-in@('enviado','parcial','incerto')){$j.estado}else{'desconhecido'}
+  $resumo+="$($registro.LastWriteTime): $estado"
+ }
+ "$($entregas.Count) registros; ultimos cinco: $($resumo-join'; '); destinatarios omitidos"
 }
 Item-Homologacao 'Disco' {$d=Get-PSDrive -Name ([IO.Path]::GetPathRoot($Raiz).Substring(0,1));$op=Ler-ConfigOperacao (Join-Path $privado 'comum\operacao.env');$gb=[math]::Round($d.Free/1GB,1);if($gb-lt[double]$op['ESPACO_MINIMO_GB']){throw 'disco'};"$gb GB livres"}
 foreach($tipo in @('supervisor','portal','emails','relatorios')){
  Item-Homologacao "Final do log $tipo" {
   $pastas=@((Join-Path $privado 'operacao'),(Join-Path $privado 'portal\logs'))
-  $logs=@($pastas|ForEach-Object{Get-ChildItem -LiteralPath $_ -Filter "*$tipo*.log" -File -ErrorAction SilentlyContinue}|Sort-Object LastWriteTime -Descending)
+  $nomes=switch($tipo){
+   'supervisor'{@('supervisor.log')}
+   'portal'{@('portal-saida.log','portal-erro.log')}
+   'emails'{@('emails-saida.log','emails-erro.log','portal-email.log')}
+   'relatorios'{@('relatorios-saida.log','relatorios-erro.log')}
+  }
+  $logs=@($pastas|ForEach-Object{Get-ChildItem -LiteralPath $_ -File -ErrorAction SilentlyContinue}|Where-Object {$_.Name-in$nomes}|Sort-Object LastWriteTime -Descending)
   if(!$logs){throw 'sem log'}
   $linhas.Add('--- '+$tipo+' ---')
   foreach($l in @(Get-Content -LiteralPath $logs[0].FullName -Tail 10)){$linhas.Add((Mascarar-Homologacao $l))}
