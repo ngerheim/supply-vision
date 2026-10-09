@@ -111,3 +111,5 @@ try{
  }
  Write-Host "PASSOU: $script:passaram verificacoes de correcoes do ensaio."
 }finally{$env:TEMP=$tempAnterior;$env:SUPPLY_VISION_PRIVADO=$privadoAnterior;if(Test-Path $pasta){Remove-Item -LiteralPath $pasta -Recurse -Force}}
+
+$global:LASTEXITCODE=0

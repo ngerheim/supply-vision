@@ -30,3 +30,5 @@ try{
  if((Get-Content (Join-Path $pasta 'privado/ficticio.txt') -Raw).Trim()-ne'preservar privado'){throw 'Privado ficticio alterado'}
  Write-Host 'PASSOU: reversao remove somente introduzidos; preserva existentes, arquivos do usuario, ignorados e privado ficticio.'
 }finally{if(Test-Path $pasta){Remove-Item -LiteralPath $pasta -Recurse -Force}}
+
+$global:LASTEXITCODE=0
