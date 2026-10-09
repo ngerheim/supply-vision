@@ -57,13 +57,14 @@ funcionando conforme a configuração e respeitando o modo ensaio.
 
 Para backup em rede, configure um caminho **UNC**, como `\\servidor\pasta`.
 Unidades mapeadas (`Z:\`, por exemplo) são reprovadas somente no modo sem login.
-A TI deve liberar **DOMINIO\NOMEDAMAQUINA$** (por exemplo,
-**DOMINIO\SERVIDOR$**) no compartilhamento **e** no NTFS. Com conta
-personalizada, a permissão deve ser dada àquela conta.
+A TI deve liberar a **conta da tarefa** no compartilhamento **e** no NTFS.
+Em produção com conta de domínio, libere aquela conta. Se escolher SYSTEM,
+libere a conta do computador **DOMINIO\NOMEDAMAQUINA$**, por exemplo,
+**DOMINIO\SERVIDOR$**.
 
-SYSTEM tem acesso amplo à máquina. Proteja a escrita nos scripts e no código:
-quem os altera pode executar código como SYSTEM. Veja INSTALAR para a opção
-com conta própria e para os parâmetros do instalador.
+A conta da tarefa tem privilégios de administradora local. Proteja a escrita
+nos scripts e no código: quem os altera pode executar código com esses
+privilégios. Veja INSTALAR para escolher a conta e os parâmetros do instalador.
 
 O teste que confirma este modo é reiniciar o servidor **sem fazer login** e,
 de outra máquina, abrir **http://portal.empresa.local:3000** após o atraso e a
