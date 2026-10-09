@@ -168,6 +168,13 @@ try {
   const bootstrap=await (await fetch(`${url}/api/bootstrap`,{headers})).json();
   assert.equal(bootstrap.imports.length,100);assert.equal(bootstrap.totalImports,historicoImports.total);
   console.log('[OK] Importacoes e relatorios mostram total completo acima do limite de 100.');
+  // Os proximos cenarios compartilham este banco descartavel e contam a propria fila.
+  for(let i=0;i<105;i++){
+    const registro=`${prefixo}_historico_${i}`;
+    db.prepare('DELETE FROM imports WHERE id=?').run(registro);
+    db.prepare('DELETE FROM report_jobs WHERE id=?').run(registro);
+  }
+
   const tickets=await (await fetch(`${url}/api/tickets?pageSize=50`,{headers})).json();
   assert.equal(tickets.pageSize,50);assert.equal(tickets.tickets.length,50);assert.ok(tickets.total>=501);
   const todas=[...tickets.tickets];
