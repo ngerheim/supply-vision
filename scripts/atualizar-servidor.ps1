@@ -105,6 +105,7 @@ function Reparar-ConfiguracaoPrivada {
 $ContextoArquivo = Join-Path (Obter-PastaPrivada $Raiz) 'operacao/atualizacao.json'
 $Recuperando = $false
 $OperacaoParada = $false
+$script:ParadaSolicitada = $false
 $CodigoTrocado = $false
 $NovaVersaoIniciada = $false
 $OperacaoEstavaAtiva = $false
@@ -119,6 +120,7 @@ function Iniciar-OperacaoAtualizada {
  & (Join-Path $Raiz 'INICIAR.bat') | Out-Null
 }
 function Parar-OperacaoAtualizacao([int]$Limite=60) {
+ $script:ParadaSolicitada=$true
  if($script:TarefaSemLogin){Disable-ScheduledTask -TaskName 'Supply Vision' -TaskPath '\'|Out-Null}
  if(!(Parar-Operacao $Raiz $Limite)){throw 'Supervisor ou portas nao encerraram no prazo; troca de codigo e banco bloqueada.'}
 }
@@ -273,7 +275,7 @@ if ($Simular) {
 }
 
 if (-not $JaAtualizado) {
-  $OperacaoEstavaAtiva = !!(Obter-ProcessoRegistrado (Join-Path (Obter-PastaPrivada $Raiz) 'operacao/supervisor.pid.json')) -or !!(Get-NetTCPConnection -LocalPort 3000 -State Listen -ErrorAction SilentlyContinue)
+  $OperacaoEstavaAtiva = !(Testar-SupervisorEncerrado (Obter-PastaPrivada $Raiz))
   Etapa 'Parando a operacao'
   Parar-OperacaoAtualizacao $PrazoParadaSegundos
   $OperacaoParada = $true
@@ -426,7 +428,7 @@ exit 0
     }
     try { Reverter $falha.Exception.Message }
     catch { Write-Host "RECUPERACAO FALHOU: $($_.Exception.Message). Nao religue antes de conferir docs/SOCORRO.md." -ForegroundColor Red }
-  } elseif (!$CodigoTrocado -and !$Recuperando) {
+  } elseif (!$CodigoTrocado -and !$Recuperando -and $script:ParadaSolicitada) {
     # Inclui a parada incompleta: reabilita antes de tentar retomar.
     try { Recuperar-OperacaoAntesDaTroca $Raiz $script:TarefaSemLogin $OperacaoEstavaAtiva }
     catch { Write-Host "Falhou a retomada: $($_.Exception.Message). A tarefa deve permanecer habilitada." -ForegroundColor Red }

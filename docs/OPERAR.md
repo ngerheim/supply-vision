@@ -571,6 +571,10 @@ portas na central elevada. O Node das ações e da atualização vem da instala�
 da máquina. Falha somente na cópia de rede do backup pré-atualização não impede
 a troca: a cópia local íntegra é preservada e o aviso exige verificar a rede.
 
+O Windows aplica novos membros do grupo de operadores numa nova sessão.
+Se precisar usar a central sem elevação após configurar o grupo, no modo
+sem login entre novamente no Windows; a tarefa continua fora da sessão RDP.
+
 ## Retenção de registros operacionais
 
 O expurgo fica **desligado por padrão**. Para ligar, em operacao.env configure
@@ -602,3 +606,4 @@ cliente pelo socket e assina a identidade com o token interno. O backend fica
 em loopback numa porta dinâmica; cabeçalhos falsos do navegador são substituídos.
 Sem essa opção nem proxy confiável, o Portal preserva sua fila global existente:
 não aplica a cota de um IP ao balde “local”, que representa toda a LAN.
+
