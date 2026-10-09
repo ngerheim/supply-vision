@@ -104,7 +104,6 @@ function Descartar-InstalacaoEnsaio([string]$Raiz,[string]$Privado){
  }catch{if($t-and(Obter-TarefaSupplyVision $Raiz)){Enable-ScheduledTask -TaskName 'Supply Vision'|Out-Null};throw}
 }
 if($Biblioteca){return}
-Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
 try{
 Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
 # Parametros de teste nao substituem os scripts reais de restauracao, tarefa ou homologacao.
