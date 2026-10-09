@@ -40,6 +40,7 @@ jobs:
   powershell:
     name: PowerShell
     runs-on: windows-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
@@ -91,7 +92,7 @@ jobs:
           node --test portal/tests/orfaos-windows.test.mjs
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
 
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v6
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: '3.12'
       - name: Supervisor isolado com outra instalacao em tarefa ativa
@@ -107,18 +108,27 @@ jobs:
   portal:
     name: Portal
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     defaults:
       run:
         working-directory: portal
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 22
           cache: npm
           cache-dependency-path: portal/package-lock.json
+      - name: Conferir pacote SheetJS contra o oficial
+        working-directory: .
+        run: curl --fail --location --retry 3 --max-time 120 https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz --output "$RUNNER_TEMP/xlsx-oficial.tgz"
       - name: Impedir dados de infraestrutura interna no repositorio publico
         working-directory: .
+        env:
+          SV_BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || '' }}
+          SV_XLSX_OFICIAL: ${{ runner.temp }}/xlsx-oficial.tgz
         run: node scripts/verificar-infra-publica.mjs
       # Arquivo gravado com CRLF no indice aparece como alterado no checkout
       # do Windows e trava o atualizar-servidor.ps1 ("alteracoes locais").
@@ -199,6 +209,7 @@ jobs:
   alertas:
     name: Alertas
     runs-on: windows-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
@@ -248,17 +259,13 @@ jobs:
       - name: Validar protecoes da atualizacao e agenda
         shell: powershell
         run: |
-          foreach ($teste in @('testar-atualizacao-segura', 'testar-reparo-configuracao', 'testar-credencial-portal', 'testar-operacao', 'testar-modo-ensaio', 'testar-avisos-admin', 'testar-supervisor-isolado', 'testar-estado-operacao', 'testar-python-minimo', 'testar-parada-supervisor', 'testar-recuperacao-atualizacao')) {
+          foreach ($teste in @('testar-atualizacao-segura', 'testar-reparo-configuracao', 'testar-credencial-portal', 'testar-operacao', 'testar-modo-ensaio', 'testar-avisos-admin', 'testar-estado-operacao', 'testar-python-minimo', 'testar-parada-supervisor', 'testar-recuperacao-atualizacao')) {
             & powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./scripts/$teste.ps1
             if ($LASTEXITCODE) { exit $LASTEXITCODE }
           }
 
-          & powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./scripts/testar-supervisor-isolado.ps1 -Ensaio
-          if ($LASTEXITCODE) { exit $LASTEXITCODE }
-
-          foreach ($modo in @('falha', 'lento')) {
-            & powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./scripts/testar-supervisor-isolado.ps1 -AvisoAdminTeste $modo
+          # Somente variantes ainda nao cobertas: modo interativo e timeout.
+          foreach ($argumentos in @(@(), @('-AvisoAdminTeste', 'lento'))) {
+            & powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./scripts/testar-supervisor-isolado.ps1 @argumentos
             if ($LASTEXITCODE) { exit $LASTEXITCODE }
           }
-          & powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./scripts/testar-supervisor-isolado.ps1 -Ensaio -AvisoAdminTeste falha
-          if ($LASTEXITCODE) { exit $LASTEXITCODE }
