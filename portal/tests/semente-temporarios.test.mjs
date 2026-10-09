@@ -1,14 +1,14 @@
+import { criarTemporarioTeste } from './apoio/ambiente.mjs';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 
 void test('semente apaga credenciais temporarias no sucesso e na falha', { skip: process.platform !== 'win32' }, () => {
-  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'sv-semente-teste-'));
+  const dir=criarTemporarioTeste('sv-semente-teste-');
   const root=path.resolve(import.meta.dirname,'../..'), privado=path.join(dir,'privado');
   try {
     for(const nome of ['comum','portal/configuracao','alertas/config','alertas/parametros']) {

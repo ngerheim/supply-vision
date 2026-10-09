@@ -1,13 +1,13 @@
+import { criarTemporarioTeste } from './apoio/ambiente.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 
 import { guardarNoHistorico, listarHistorico, nomeDoDia, podarHistorico } from '../scripts/retencao-backup.mjs';
 
 function pastaTemporaria() {
-  return fs.mkdtempSync(path.join(os.tmpdir(), 'retencao-'));
+  return criarTemporarioTeste('retencao-');
 }
 function dia(texto) {
   const [a, m, d] = texto.split('-').map(Number);
