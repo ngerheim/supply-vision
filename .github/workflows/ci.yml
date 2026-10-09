@@ -50,6 +50,8 @@ jobs:
       - name: Validar modos de inicializacao e tarefa SYSTEM real
         shell: powershell
         run: |
+          ./scripts/testar-migracao.ps1
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
           ./scripts/testar-inicializacao.ps1
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           ./scripts/testar-tarefa-system.ps1
@@ -121,6 +123,10 @@ jobs:
           "SUPPLY_VISION_PRIVADO=$pastaTeste" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
       - run: npm ci
         working-directory: portal
+      - name: Assistente de migracao com semente ficticia e SYSTEM
+        working-directory: portal
+        shell: powershell
+        run: node --test --experimental-strip-types tests/migracao-windows.test.mjs
       - name: Validar portal compilado com banco descartavel
         shell: powershell
         run: ./portal/scripts/teste-instalacao-nova.ps1

@@ -1,4 +1,4 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param([switch]$Visivel,[switch]$SemLogin,[string]$NodeExecutavel,[string]$PastaPrivada)
 $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'operacao-logica.ps1')
@@ -9,6 +9,7 @@ if($PastaPrivada){$env:SUPPLY_VISION_PRIVADO=$PastaPrivada}
 if($SemLogin){$env:SUPPLY_VISION_SEM_LOGIN='1';$NodeExecutavel=Localizar-NodeMaquina $NodeExecutavel;$env:Path=(Split-Path $NodeExecutavel)+';'+[Environment]::GetEnvironmentVariable('Path','Machine')}
 $Raiz=(Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $Privado=Obter-PastaPrivada $Raiz;$Portal=Join-Path $Raiz 'portal';$Alertas=Join-Path $Raiz 'alertas'
+Exigir-InstalacaoNaoMigrada $Privado
 $Operacao=Join-Path $Privado 'operacao';New-Item -ItemType Directory -Force $Operacao|Out-Null
 $ConfigOperacao=Join-Path $Privado 'comum\operacao.env'
 [void](Atualizar-AgendaAlertasLegada $ConfigOperacao)

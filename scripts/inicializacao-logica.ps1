@@ -1,4 +1,5 @@
-﻿# Modos explicitos; a tarefa registrada e a fonte de verdade do modo sem login.
+﻿if(!(Get-Command Obter-PastaPrivada -ErrorAction SilentlyContinue)){. (Join-Path $PSScriptRoot 'operacao-logica.ps1')}
+# Modos explicitos; a tarefa registrada e a fonte de verdade do modo sem login.
 function Testar-Elevacao {
  return ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 }
@@ -102,6 +103,7 @@ function Definir-ModoInicializacao([string]$Raiz,[string]$Privado,[string]$Start
 }
 function Iniciar-OperacaoConfigurada([string]$Raiz) {
  $ErrorActionPreference='Stop'
+ Exigir-InstalacaoNaoMigrada (Obter-PastaPrivada $Raiz)
  if(Obter-TarefaSupplyVision $Raiz){Start-ScheduledTask -TaskName 'Supply Vision' -TaskPath '\';$global:LASTEXITCODE=0;return}
  & (Join-Path $Raiz 'INICIAR.bat') | Out-Null
 }

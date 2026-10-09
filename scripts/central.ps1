@@ -3,13 +3,14 @@ Add-Type -AssemblyName System.Drawing
 $Raiz=(Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 . (Join-Path $PSScriptRoot 'operacao-logica.ps1')
 . (Join-Path $PSScriptRoot 'inicializacao-logica.ps1')
+. (Join-Path $PSScriptRoot 'migracao-logica.ps1')
 $Op=Join-Path (Obter-PastaPrivada $Raiz) 'operacao';$PidFile=Join-Path $Op 'supervisor.pid.json';$StatusFile=Join-Path $Op 'status.json';$Manutencao=Join-Path $Op 'manutencao.sinal'
 $Inicio=Join-Path $Raiz 'INICIAR.bat';$Parar=Join-Path $Raiz 'PARAR.bat';$Atualizador=Join-Path $PSScriptRoot 'atualizar-servidor.ps1';$Startup=Join-Path ([Environment]::GetFolderPath('Startup')) 'Supply Vision.cmd'
 # A versao vem do Git, nao de um arquivo mantido a mao: um VERSAO.md so fica
 # correto enquanto alguem lembra de edita-lo, e ele ficava desatualizado.
 $versao=try{(& git -C $Raiz log -1 --date=format:'%d/%m/%Y' --pretty=format:'%h  %ad' 2>$null)}catch{''}
 if(!$versao){$versao='versao indisponivel'}
-$form=New-Object Windows.Forms.Form;$form.Text='Supply Vision';$form.Size=New-Object Drawing.Size(580,705);$form.StartPosition='CenterScreen';$form.BackColor=[Drawing.Color]::FromArgb(15,35,58);$form.ForeColor='White';$form.Font=New-Object Drawing.Font('Segoe UI',10);$form.FormBorderStyle='FixedDialog';$form.MaximizeBox=$false
+$form=New-Object Windows.Forms.Form;$form.Text='Supply Vision';$form.Size=New-Object Drawing.Size(580,775);$form.StartPosition='CenterScreen';$form.BackColor=[Drawing.Color]::FromArgb(15,35,58);$form.ForeColor='White';$form.Font=New-Object Drawing.Font('Segoe UI',10);$form.FormBorderStyle='FixedDialog';$form.MaximizeBox=$false
 $t=New-Object Windows.Forms.Label;$t.Text='Supply Vision';$t.Font=New-Object Drawing.Font('Segoe UI Semibold',23);$t.Location='30,20';$t.AutoSize=$true;$form.Controls.Add($t)
 $v=New-Object Windows.Forms.Label;$v.Text=$versao;$v.ForeColor=[Drawing.Color]::FromArgb(160,188,214);$v.Location='32,64';$v.AutoSize=$true;$form.Controls.Add($v)
 $painel=New-Object Windows.Forms.Panel;$painel.Location='30,100';$painel.Size='505,115';$painel.BackColor=[Drawing.Color]::FromArgb(22,49,78);$form.Controls.Add($painel)
@@ -29,6 +30,20 @@ $fonteAvisoBackup=$avisoBackup.Font;$fonteAvisoEnsaio=New-Object Drawing.Font('S
 $dicas=New-Object Windows.Forms.ToolTip
 $dicas.SetToolTip($validar,'Confere arquivos, parâmetros, programas e permissões de escrita. Não testa login no Qlik ou SMTP.')
 $dicas.SetToolTip($man,'Pausa novos alertas, backups e limpezas automáticos. Portal, e-mails e pedidos manuais continuam disponíveis; tarefas em andamento terminam.')
+$migrar=Botao 'Preparar migração' 30 661;$migrar.Size='505,42'
+$migrar.Add_Click({
+ try{
+  if(!(Testar-Elevacao)){[Windows.Forms.MessageBox]::Show('A central será reaberta como administrador. Clique Preparar migração novamente.','Elevação necessária')|Out-Null;Reabrir-CentralElevada;return}
+  $escolha=[Windows.Forms.MessageBox]::Show("Sim = Semente para ensaio (notebook volta a funcionar).`nNão = Migração definitiva (notebook será bloqueado).`nCancelar = voltar.",'Preparar migração','YesNoCancel','Warning')
+  if($escolha-eq'Cancel'){return}
+  $pasta=New-Object Windows.Forms.FolderBrowserDialog;$pasta.Description='Escolha a pasta do pen drive para levar ao servidor'
+  try{if($pasta.ShowDialog()-ne'OK'){return};$destino=$pasta.SelectedPath}finally{$pasta.Dispose()}
+  $modo=if($escolha-eq'Yes'){'ensaio'}else{'definitiva'}
+  Preparar-Migracao $Raiz (Obter-PastaPrivada $Raiz) $Startup $destino $modo
+  [Windows.Forms.MessageBox]::Show('Leve a pasta ao servidor e abra MIGRAR.bat. Consulte docs/MIGRAR.md.','Semente pronta')|Out-Null
+ }catch{[Windows.Forms.MessageBox]::Show($_.Exception.Message,'Migração não concluída')|Out-Null}
+ Atualizar
+})
 $script:processoAtualizacao=$null
 function Operacao-Ativa{
  return !(Testar-SupervisorEncerrado (Obter-PastaPrivada $Raiz))
@@ -57,10 +72,11 @@ function Atualizar{
  if((Operacao-Ativa)-and(Test-Path $StatusFile)){try{$ensaio=!!(Get-Content $StatusFile -Raw|ConvertFrom-Json).ensaio}catch{}}
  if($ensaio){$avisoBackup.Text=Obter-AvisoEnsaio $true;$avisoBackup.Font=$fonteAvisoEnsaio}
  else{$avisoBackup.Text=Obter-AvisoBackup (Obter-PastaPrivada $Raiz);$avisoBackup.Font=$fonteAvisoBackup}
+ $iniciar.Enabled=!(Test-Path (Join-Path $Op 'migrada.sinal'))
  $ativo=Operacao-Ativa
  if($ativo){$detalhe='Inicializando módulos...';if(Test-Path $StatusFile){try{$st=Get-Content $StatusFile -Raw|ConvertFrom-Json;$po=if($st.portal){'online'}else{'reiniciando'};$em=if($st.emails){'online'}else{'reiniciando'};$detalhe="Portal: $po  |  E-mails: $em`nAlertas: $($st.alertas)  |  Backup: $($st.backup)`nLimpeza: $($st.limpeza)  |  Disco: $($st.espacoLivreGb) GB livres"}catch{}};$status.Text="● OPERAÇÃO ATIVA`n$detalhe";$status.ForeColor=[Drawing.Color]::FromArgb(87,211,140)}else{$status.Text="● OPERAÇÃO PARADA`nUse 'Iniciar operação' quando quiser colocar o conjunto no ar.";$status.ForeColor=[Drawing.Color]::FromArgb(255,180,90)}
 }
-$iniciar.Add_Click({try{Iniciar-OperacaoConfigurada $Raiz;Start-Sleep 2;Atualizar}catch{[Windows.Forms.MessageBox]::Show('Não foi possível iniciar. Para controlar uma tarefa SYSTEM sem permissão, abra a central como administrador.','Iniciar operação','OK','Warning')|Out-Null}});$parar.Add_Click({$form.Cursor='WaitCursor';$parar.Enabled=$false;try{$ok=Parar-Operacao}finally{$parar.Enabled=$true;$form.Cursor='Default'};Atualizar;if(!$ok){[Windows.Forms.MessageBox]::Show('A operação não encerrou no prazo. Veja supervisor.log. Para encerrar processos SYSTEM à força, é necessário executar como administrador; não remova a trava nem inicie outro supervisor.','Supply Vision','OK','Warning')|Out-Null}})
+$iniciar.Add_Click({try{Iniciar-OperacaoConfigurada $Raiz;Start-Sleep 2;Atualizar}catch{[Windows.Forms.MessageBox]::Show(($_.Exception.Message+' Para controlar uma tarefa SYSTEM sem permissão, abra a central como administrador.'),'Iniciar operação','OK','Warning')|Out-Null}});$parar.Add_Click({$form.Cursor='WaitCursor';$parar.Enabled=$false;try{$ok=Parar-Operacao}finally{$parar.Enabled=$true;$form.Cursor='Default'};Atualizar;if(!$ok){[Windows.Forms.MessageBox]::Show('A operação não encerrou no prazo. Veja supervisor.log. Para encerrar processos SYSTEM à força, é necessário executar como administrador; não remova a trava nem inicie outro supervisor.','Supply Vision','OK','Warning')|Out-Null}})
 $validar.Add_Click({try{$saida=& powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'validar-operacao.ps1') 2>&1;if($LASTEXITCODE-ne0){throw ($saida-join "`n")};[Windows.Forms.MessageBox]::Show('Configuração aprovada.','Supply Vision','OK','Information')|Out-Null}catch{[Windows.Forms.MessageBox]::Show($_.Exception.Message,'Configuração reprovada','OK','Error')|Out-Null}})
 $restaurar.Add_Click({try{$saida=& node.exe (Join-Path $Raiz 'portal\scripts\testar-restauracao.mjs') 2>&1;if($LASTEXITCODE){throw ($saida-join "`n")};[Windows.Forms.MessageBox]::Show(($saida-join "`n"),'Backup aprovado','OK','Information')|Out-Null}catch{[Windows.Forms.MessageBox]::Show($_.Exception.Message,'Backup reprovado','OK','Error')|Out-Null}})
 $voltar.Add_Click({

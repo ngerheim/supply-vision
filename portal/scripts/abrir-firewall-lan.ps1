@@ -1,3 +1,4 @@
+﻿param([switch]$SemPausa)
 # Abre a porta 3000 para a rede local. Execute como Administrador.
 $ErrorActionPreference = 'Stop'
 
@@ -25,4 +26,4 @@ Write-Host ""
 Write-Host "Para revogar o acesso depois, execute:" -ForegroundColor Yellow
 Write-Host '   Remove-NetFirewallRule -DisplayName "Portal Suprimentos (LAN 3000)"'
 Write-Host ""
-Read-Host "Pressione Enter para fechar"
+if(!$SemPausa){Read-Host "Pressione Enter para fechar"}

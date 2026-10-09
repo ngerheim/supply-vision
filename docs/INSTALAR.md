@@ -175,3 +175,6 @@ Para uma instalação antiga: instale Python 3.12+, pare a operação, renomeie
 `alertas/.venv` para uma cópia de segurança e execute `INSTALAR.bat` usando o novo
 Python no PATH. Confira a validação e os testes antes de retomar. Não mova ou
 apague `privado/`: banco, configurações e histórico ficam nessa pasta.
+
+Para levar a instalação do notebook para o servidor, siga o
+[assistente de migração, com ensaio e troca definitiva](MIGRAR.md).
