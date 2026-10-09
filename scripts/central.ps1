@@ -63,9 +63,9 @@ function Atualizar{
  if($ativo){$detalhe='Inicializando módulos...';if(Test-Path $StatusFile){try{$st=Get-Content $StatusFile -Raw|ConvertFrom-Json;$po=if($st.portal){'online'}else{'reiniciando'};$em=if($st.emails){'online'}else{'reiniciando'};$detalhe="Portal: $po  |  E-mails: $em`nAlertas: $($st.alertas)  |  Backup: $($st.backup)`nLimpeza: $($st.limpeza)  |  Disco: $($st.espacoLivreGb) GB livres"}catch{}};$status.Text="● OPERAÇÃO ATIVA`n$detalhe";$status.ForeColor=[Drawing.Color]::FromArgb(87,211,140)}else{$status.Text="● OPERAÇÃO PARADA`nUse 'Iniciar operação' quando quiser colocar o conjunto no ar.";$status.ForeColor=[Drawing.Color]::FromArgb(255,180,90)}
  if(!$iniciar.Enabled){$status.Text='Esta instalação foi migrada para outro servidor';$status.ForeColor=[Drawing.Color]::FromArgb(255,180,90)}
 }
-$iniciar.Add_Click({try{Iniciar-OperacaoConfigurada $Raiz;Start-Sleep 2;Atualizar}catch{[Windows.Forms.MessageBox]::Show(($_.Exception.Message+' Para controlar uma tarefa SYSTEM sem permissão, abra a central como administrador.'),'Iniciar operação','OK','Warning')|Out-Null}});$parar.Add_Click({$form.Cursor='WaitCursor';$parar.Enabled=$false;try{$ok=Parar-Operacao $Raiz}finally{$parar.Enabled=$true;$form.Cursor='Default'};Atualizar;if(!$ok){[Windows.Forms.MessageBox]::Show('A operação não encerrou no prazo. Veja supervisor.log. Para encerrar processos SYSTEM à força, é necessário executar como administrador; não remova a trava nem inicie outro supervisor.','Supply Vision','OK','Warning')|Out-Null}})
+$iniciar.Add_Click({try{Iniciar-OperacaoConfigurada $Raiz;Start-Sleep 2;Atualizar}catch{[Windows.Forms.MessageBox]::Show(($_.Exception.Message+' Para controlar uma conta da tarefa sem permissão, abra a central como administrador.'),'Iniciar operação','OK','Warning')|Out-Null}});$parar.Add_Click({$form.Cursor='WaitCursor';$parar.Enabled=$false;try{$ok=Parar-Operacao $Raiz}finally{$parar.Enabled=$true;$form.Cursor='Default'};Atualizar;if(!$ok){[Windows.Forms.MessageBox]::Show('A operação não encerrou no prazo. Veja supervisor.log. Para encerrar processos da conta da tarefa à força, é necessário executar como administrador; não remova a trava nem inicie outro supervisor.','Supply Vision','OK','Warning')|Out-Null}})
 $validar.Add_Click({try{$saida=& powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'validar-operacao.ps1') 2>&1;if($LASTEXITCODE-ne0){throw ($saida-join "`n")};[Windows.Forms.MessageBox]::Show('Configuração aprovada.','Supply Vision','OK','Information')|Out-Null}catch{[Windows.Forms.MessageBox]::Show($_.Exception.Message,'Configuração reprovada','OK','Error')|Out-Null}})
-$restaurar.Add_Click({try{$saida=& node.exe (Join-Path $Raiz 'portal\scripts\testar-restauracao.mjs') 2>&1;if($LASTEXITCODE){throw ($saida-join "`n")};[Windows.Forms.MessageBox]::Show(($saida-join "`n"),'Backup aprovado','OK','Information')|Out-Null}catch{[Windows.Forms.MessageBox]::Show($_.Exception.Message,'Backup reprovado','OK','Error')|Out-Null}})
+$restaurar.Add_Click({try{$saida=& (Localizar-NodeMaquina) (Join-Path $Raiz 'portal\scripts\testar-restauracao.mjs') 2>&1;if($LASTEXITCODE){throw ($saida-join "`n")};[Windows.Forms.MessageBox]::Show(($saida-join "`n"),'Backup aprovado','OK','Information')|Out-Null}catch{[Windows.Forms.MessageBox]::Show($_.Exception.Message,'Backup reprovado','OK','Error')|Out-Null}})
 $voltar.Add_Click({
  $aviso="Isto substitui o banco atual por uma copia de backup.`n`nA operacao sera parada, o estado atual sera guardado numa copia datada e os acordos, cadastros e chamados voltarao ao que eram no momento do backup.`n`nDeseja continuar?"
  if([Windows.Forms.MessageBox]::Show($aviso,'Restaurar backup','YesNo','Warning')-ne[Windows.Forms.DialogResult]::Yes){return}
@@ -75,7 +75,7 @@ $voltar.Add_Click({
   if(!(Parar-Operacao $Raiz)){throw 'A operacao nao encerrou. Restauracao cancelada para nao mexer no banco com o portal no ar.'}
   $argumentos=@((Join-Path $Raiz 'portal\scripts\restaurar-backup.mjs'),'--sim')
   if($qual-eq[Windows.Forms.DialogResult]::No){$argumentos+='--anterior'}
-  $saida=& node.exe @argumentos 2>&1
+  $saida=& (Localizar-NodeMaquina) @argumentos 2>&1
   if($LASTEXITCODE){throw ($saida-join "`n")}
   [Windows.Forms.MessageBox]::Show((($saida-join "`n")+"`n`nInicie a operacao para voltar ao ar."),'Backup restaurado','OK','Information')|Out-Null
  }catch{[Windows.Forms.MessageBox]::Show($_.Exception.Message,'Falha ao restaurar','OK','Error')|Out-Null}
@@ -85,7 +85,7 @@ $atualizar.Add_Click({
  $confirmar=[Windows.Forms.MessageBox]::Show("O sistema fará um backup, pausará a operação e aplicará a versão aprovada mais recente.`n`nDeseja continuar?",'Atualizar Supply Vision','YesNo','Question')
  if($confirmar-ne[Windows.Forms.DialogResult]::Yes){return}
  try{
-  if((Obter-TarefaSupplyVision $Raiz)-and!(Testar-Elevacao)){[Windows.Forms.MessageBox]::Show('Atualizar uma operação SYSTEM exige elevação. A central será reaberta como administrador; clique Atualizar sistema nela.','Elevação necessária','OK','Information')|Out-Null;Reabrir-CentralElevada;return}
+  if((Obter-TarefaSupplyVision $Raiz)-and!(Testar-Elevacao)){[Windows.Forms.MessageBox]::Show('Atualizar uma operação com a conta da tarefa exige elevação. A central será reaberta como administrador; clique Atualizar sistema nela.','Elevação necessária','OK','Information')|Out-Null;Reabrir-CentralElevada;return}
   New-Item -ItemType Directory -Force $Op|Out-Null
   $saida=Join-Path $Op 'atualizacao-saida.log';$erro=Join-Path $Op 'atualizacao-erro.log'
   Remove-Item $saida,$erro -Force -ErrorAction SilentlyContinue

@@ -226,13 +226,22 @@ function Processo-OrfaoDestaInstalacao($Processo,[string]$Raiz){
  $npm=('(?i)--prefix\s+["'']?{0}\\portal["'']?\s+run\s+(?:start:lan|email:watch)(?:\s|$)' -f $p)
  return $cmd-match$script-or$cmd-match$motor-or$cmd-match$wrangler-or$cmd-match$npm
 }
+function Avisar-FalhaOrfaos {
+ if(Get-Command Log -ErrorAction SilentlyContinue){Log 'Nao foi possivel ler ou encerrar processo orfao; confira conta administradora local e permissoes.'}
+ if((Get-Command Avisar-Administrador -ErrorAction SilentlyContinue)-and$avisosAdmin){Avisar-Administrador $avisosAdmin 'orfaos-falharam'}
+}
 function Encerrar-OrfaosInstalacao([string]$Raiz){
- foreach($p in @(Get-CimInstance Win32_Process|Where-Object {Processo-OrfaoDestaInstalacao $_ $Raiz})){
-  $atual=Get-CimInstance Win32_Process -Filter "ProcessId=$($p.ProcessId)" -ErrorAction SilentlyContinue
-  if(!$atual-or$atual.CreationDate-ne$p.CreationDate-or!(Processo-OrfaoDestaInstalacao $atual $Raiz)){continue}
-  if(Get-Command Log -ErrorAction SilentlyContinue){Log "Encerrando processo orfao desta instalacao: PID $($p.ProcessId)."}
-  & taskkill.exe /PID $p.ProcessId /T /F|Out-Null
-  if(Get-Process -Id $p.ProcessId -ErrorAction SilentlyContinue){throw 'Processo orfao da instalacao continua ativo. Abra a central como administrador e pare a operacao antes de iniciar.'}
+ try{$processos=@(Get-CimInstance Win32_Process -ErrorAction Stop)}catch{Avisar-FalhaOrfaos;return}
+ foreach($p in $processos){
+  if($p.Name-in@('node.exe','workerd.exe')-and!$p.CommandLine){Avisar-FalhaOrfaos;continue}
+  if(!(Processo-OrfaoDestaInstalacao $p $Raiz)){continue}
+  try{
+   $atual=Get-CimInstance Win32_Process -Filter "ProcessId=$($p.ProcessId)" -ErrorAction Stop
+   if(!$atual-or$atual.CreationDate-ne$p.CreationDate-or!(Processo-OrfaoDestaInstalacao $atual $Raiz)){continue}
+   if(Get-Command Log -ErrorAction SilentlyContinue){Log "Encerrando processo orfao desta instalacao: PID $($p.ProcessId)."}
+   & taskkill.exe /PID $p.ProcessId /T /F|Out-Null
+   if(Get-Process -Id $p.ProcessId -ErrorAction SilentlyContinue){Avisar-FalhaOrfaos}
+  }catch{Avisar-FalhaOrfaos}
  }
 }
 function Remover-ArquivosIntroduzidos([string]$Raiz,[string[]]$Arquivos){

@@ -51,6 +51,7 @@ Item-Homologacao 'Tarefa e inicializacao' {
  if($modo-eq'computador'){$aviso=Obter-AvisoContaTarefa $Raiz;if($aviso){throw $aviso};"$modo; estado $($t.State); conta $($t.Principal.UserId)"}else{$modo}
 }
 Item-Homologacao 'Conta da tarefa' { $aviso=Obter-AvisoContaTarefa $Raiz;if($aviso){@{nivel='erro';mensagem=$aviso}}else{@{nivel='ok';mensagem='nenhuma falha de logon registrada'}} } -Classificar
+Item-Homologacao 'Permissao da conta da tarefa' {$t=Obter-TarefaSupplyVision $Raiz;if($t-and!(Testar-ContaAdministradora $t.Principal.UserId)){throw 'conta nao administradora local'};'conta administradora local ou modo sem tarefa'}
 Item-Homologacao 'Modo ensaio' {$op=Ler-ConfigOperacao (Join-Path $privado 'comum\operacao.env');if($op['MODO_ENSAIO']-eq'1'){'ATIVO — nenhum email ou backup em rede'}else{'desligado'}}
 Item-Homologacao 'Parametros dos alertas' {
  $python=Join-Path $Raiz 'alertas\.venv\Scripts\python.exe'

@@ -26,7 +26,9 @@ $Raiz = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $script:TarefaSemLogin=$false
 $logicaInicializacao=Join-Path $PSScriptRoot 'inicializacao-logica.ps1'
 if(Test-Path $logicaInicializacao){. $logicaInicializacao;$script:TarefaSemLogin=!!(Obter-TarefaSupplyVision $Raiz)}
-if($script:TarefaSemLogin-and!$Simular-and!(Testar-Elevacao)){throw 'Atualizar a operacao SYSTEM exige executar como administrador.'}
+if($script:TarefaSemLogin-and!$Simular-and!(Testar-Elevacao)){throw 'Atualizar a operacao com a conta da tarefa exige executar como administrador.'}
+$Node = Localizar-NodeMaquina
+$Npm = if([IO.Path]::IsPathRooted($Node)){Join-Path (Split-Path $Node) 'npm.cmd'}else{'npm.cmd'}
 Set-Location $Raiz
 $Portal = Join-Path $Raiz 'portal'
 $Alertas = Join-Path $Raiz 'alertas'
@@ -138,7 +140,7 @@ function Reverter([string]$motivo) {
     try {
       if (-not (Test-Path -LiteralPath $BackupAntesAtualizacao)) { throw "copia de antes da atualizacao nao encontrada: $BackupAntesAtualizacao" }
       Copy-Item -LiteralPath $BackupAntesAtualizacao -Destination $BackupAntesAtualizacaoOrigem -Force
-      & node (Join-Path $Portal 'scripts\restaurar-backup.mjs') --sim
+      & $Node (Join-Path $Portal 'scripts\restaurar-backup.mjs') --sim
       if ($LASTEXITCODE -ne 0) { throw "restaurar-backup.mjs terminou com codigo $LASTEXITCODE" }
       $restaurou = $true
     } catch {
@@ -152,7 +154,7 @@ function Reverter([string]$motivo) {
       Write-Host '!! ============================================================' -ForegroundColor Red
       throw 'Banco nao restaurado; troca de codigo cancelada. Operacao permanece parada.'
     }
-    & node --experimental-strip-types (Join-Path $Portal 'scripts/operacao-validacao.mjs') --liberar
+    & $Node --experimental-strip-types (Join-Path $Portal 'scripts/operacao-validacao.mjs') --liberar
     if ($LASTEXITCODE -ne 0) { throw 'Nao foi possivel liberar o banco restaurado. Operacao permanece parada.' }
     Write-Host '!! banco restaurado para o estado de antes da atualizacao' -ForegroundColor Red
   }
@@ -165,14 +167,14 @@ function Reverter([string]$motivo) {
   Remover-ArquivosIntroduzidos $Raiz $introduzidos
   if ($mexeuNode) {
     Push-Location $Portal
-    try { & npm.cmd ci --no-audit --no-fund | Out-Null; if ($LASTEXITCODE -ne 0) { throw 'Falha ao restaurar dependencias Node.' } } finally { Pop-Location }
+    try { & $Npm ci --no-audit --no-fund | Out-Null; if ($LASTEXITCODE -ne 0) { throw 'Falha ao restaurar dependencias Node.' } } finally { Pop-Location }
   }
   if ($mexeuPython) {
     & $Python -m pip install -r (Join-Path $Alertas 'config\requirements.txt') -r (Join-Path $Alertas 'config\requirements-dev.txt') --quiet
     if ($LASTEXITCODE -ne 0) { throw 'Falha ao restaurar dependencias Python.' }
   }
   Push-Location $Portal
-  try { & npm.cmd run build | Out-Null; if ($LASTEXITCODE -ne 0) { throw 'Falha ao reconstruir a versao anterior. Operacao permanece parada.' } } finally { Pop-Location }
+  try { & $Npm run build | Out-Null; if ($LASTEXITCODE -ne 0) { throw 'Falha ao reconstruir a versao anterior. Operacao permanece parada.' } } finally { Pop-Location }
   Iniciar-OperacaoAtualizada
   if ($LASTEXITCODE -ne 0) { throw 'Codigo restaurado, mas falhou a solicitacao de inicio da operacao.' }
   Write-Host "!! codigo revertido para $($anterior.Substring(0,7)). Inicio solicitado; confira a saude da operacao." -ForegroundColor Red
@@ -278,8 +280,9 @@ if (-not $JaAtualizado) {
   Ok 'operacao parada'
 
   Etapa 'Backup do banco antes de trocar a versao'
-  & node (Join-Path $Portal 'scripts\backup.mjs')
-  if ($LASTEXITCODE -ne 0) { throw 'O backup falhou. Atualizacao cancelada — nao se troca versao sem copia do banco.' }
+  & $Node (Join-Path $Portal 'scripts\backup.mjs') --pre-atualizacao
+  if ($LASTEXITCODE -eq 3) { Aviso 'Backup local validado; copia de rede falhou. Atualizacao continua.' }
+  elseif ($LASTEXITCODE -ne 0) { throw 'O backup falhou. Atualizacao cancelada — nao se troca versao sem copia do banco.' }
   Ok 'backup concluido'
   # portal-atual.sqlite e reescrito por todo backup, inclusive o diario do
   # supervisor quando a versao nova sobe. Uma copia fixa guarda o estado de
@@ -331,7 +334,7 @@ Garantir-CredencialPortal
 
 if ($mexeuNode) {
   Etapa 'Dependencias Node mudaram: npm.cmd ci'
-  Push-Location $Portal; & npm.cmd ci --no-audit --no-fund; $rc = $LASTEXITCODE; Pop-Location
+  Push-Location $Portal; & $Npm ci --no-audit --no-fund; $rc = $LASTEXITCODE; Pop-Location
   if ($rc -ne 0) { Reverter 'npm.cmd ci falhou.' }
   Ok 'dependencias Node atualizadas'
 } else { Aviso 'dependencias Node inalteradas — npm.cmd ci dispensado' }
@@ -347,13 +350,13 @@ if ($mexeuPython) {
 } else { Aviso 'dependencias Python inalteradas — pip install dispensado' }
 
 Etapa 'Build do Portal'
-Push-Location $Portal; & npm.cmd run build; $rc = $LASTEXITCODE; Pop-Location
+Push-Location $Portal; & $Npm run build; $rc = $LASTEXITCODE; Pop-Location
 if ($rc -ne 0) { Reverter 'O build falhou.' }
 Ok 'build concluido'
 
 Etapa 'Suites de teste'
 $suites = @(
-  @{ nome = 'testes do Portal';        exe = 'npm.cmd'; args = @('test');        pasta = $Portal },
+  @{ nome = 'testes do Portal';        exe = $Npm; args = @('test');        pasta = $Portal },
   @{ nome = 'testes dos Alertas';      exe = $Python;   args = @('-m', 'pytest', 'tests', '-q'); pasta = $Alertas }
 )
 foreach ($s in $suites) {
@@ -383,7 +386,7 @@ Ok 'suites de operacao aprovadas'
 
 Etapa 'Religando a operacao'
 $NovaVersaoIniciada = $true
-& node --experimental-strip-types (Join-Path $Portal 'scripts/operacao-validacao.mjs') --ativar
+& $Node --experimental-strip-types (Join-Path $Portal 'scripts/operacao-validacao.mjs') --ativar
 if ($LASTEXITCODE -ne 0) { Reverter 'Nao foi possivel bloquear gravacoes e envios durante a validacao.' }
 Gravar-EstadoOperacao $ContextoArquivo @{anterior=$anterior;remoto=$remoto;fase='iniciada'}
 Iniciar-OperacaoAtualizada
@@ -402,9 +405,9 @@ for ($i = 0; $i -lt 60; $i++) {
 if (-not $noAr) { Reverter 'O Portal nao respondeu depois da atualizacao.' }
 
 Etapa 'Conferindo interface e consumidores da operacao'
-& node (Join-Path $Portal 'scripts/saude-operacao.mjs') $url
+& $Node (Join-Path $Portal 'scripts/saude-operacao.mjs') $url
 if ($LASTEXITCODE -ne 0) { Reverter 'Interface ou consumidores obrigatorios nao ficaram saudaveis.' }
-& node --experimental-strip-types (Join-Path $Portal 'scripts/operacao-validacao.mjs') --liberar
+& $Node --experimental-strip-types (Join-Path $Portal 'scripts/operacao-validacao.mjs') --liberar
 if ($LASTEXITCODE -ne 0) { Reverter 'Falha ao liberar a operacao validada.' }
 Ok "Portal e consumidores no ar em $url"
 Write-Host "`n=== Atualizado: $($anterior.Substring(0,7)) -> $($remoto.Substring(0,7)) ===" -ForegroundColor Cyan

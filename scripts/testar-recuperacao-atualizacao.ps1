@@ -1,4 +1,4 @@
-# Executa o script inteiro em raiz descartavel; Git, processos, banco e rede
+﻿# Executa o script inteiro em raiz descartavel; Git, processos, banco e rede
 # sao simulados. Nenhum checkout/servico real participa deste ensaio de fases.
 $ErrorActionPreference='Stop'
 $raizReal=(Resolve-Path (Join-Path $PSScriptRoot '..')).Path
@@ -41,6 +41,7 @@ function git {
     'merge' { $global:novo=$true }
   }
 }
+function Localizar-NodeMaquina {return 'node'}
 function Get-NetTCPConnection {}
 function Start-Sleep {}
 function Invoke-RestMethod { if($Caso -in @('saude-completa','consumidor')) { @{status='ok'} } else { throw 'health indisponivel' } }

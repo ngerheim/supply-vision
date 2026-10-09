@@ -7,6 +7,7 @@ import { criarTransportador, lerConfigSmtp, privado } from './configuracao.mjs';
 import { modoEnsaio } from './modo-ensaio.mjs';
 
 export const EVENTOS_ADMIN = Object.freeze({
+  'orfaos-falharam': { nome: 'Limpeza de processos órfãos incompleta', ocorrido: 'A partida não conseguiu verificar ou encerrar todos os processos órfãos.', acao: 'Confira se a conta da tarefa é administradora local e pare a operação pela central elevada.', secao: 'A conta da tarefa não consegue entrar', ancora: 'a-conta-da-tarefa-não-consegue-entrar' },
   'tarefa-falhou': { nome: 'Tarefa principal falhou ao iniciar', ocorrido: 'A vigilância encontrou falha na partida da tarefa principal.', acao: 'Confira a conta e reconfigure a senha da tarefa pela central elevada.', secao: 'A conta da tarefa não consegue entrar', ancora: 'a-conta-da-tarefa-não-consegue-entrar' },
   'vigilancia-health': { nome: 'Vigilância: Portal indisponível', ocorrido: 'A verificação diária não recebeu uma resposta saudável do Portal.', acao: 'Abra a central e confira a tarefa e supervisor.log.', secao: 'A conta da tarefa não consegue entrar', ancora: 'a-conta-da-tarefa-não-consegue-entrar' },
   'portal-parou': { nome: 'Portal parou de responder', ocorrido: 'O Portal deixou de responder após duas verificações seguidas.', acao: 'Confira a central, teste o acesso local e consulte portal-erro.log e supervisor.log.', secao: 'O Portal não responde na LAN', ancora: 'o-portal-não-responde-na-lan' },
