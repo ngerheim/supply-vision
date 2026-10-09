@@ -48,8 +48,9 @@ foreach($url in @('http://127.0.0.1:3000',$cfg['PORTAL_URL'])){
 Item-Homologacao 'Tarefa e inicializacao' {
  $startup=Join-Path ([Environment]::GetFolderPath('Startup')) 'Supply Vision.cmd';$modo=Obter-ModoInicializacao $Raiz $startup
  $t=Obter-TarefaSupplyVision $Raiz
- if($modo-eq'computador'){"$modo; estado $($t.State); conta $($t.Principal.UserId)"}else{$modo}
+ if($modo-eq'computador'){$aviso=Obter-AvisoContaTarefa $Raiz;if($aviso){throw $aviso};"$modo; estado $($t.State); conta $($t.Principal.UserId)"}else{$modo}
 }
+Item-Homologacao 'Conta da tarefa' { $aviso=Obter-AvisoContaTarefa $Raiz;if($aviso){@{nivel='erro';mensagem=$aviso}}else{@{nivel='ok';mensagem='nenhuma falha de logon registrada'}} } -Classificar
 Item-Homologacao 'Modo ensaio' {$op=Ler-ConfigOperacao (Join-Path $privado 'comum\operacao.env');if($op['MODO_ENSAIO']-eq'1'){'ATIVO — nenhum email ou backup em rede'}else{'desligado'}}
 Item-Homologacao 'Parametros dos alertas' {
  $python=Join-Path $Raiz 'alertas\.venv\Scripts\python.exe'
