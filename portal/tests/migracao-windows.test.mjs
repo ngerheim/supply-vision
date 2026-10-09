@@ -53,10 +53,31 @@ try{
     const dbpath=path.join(origem,'banco/portal.sqlite'),db=new DatabaseSync(dbpath);
     for(const [,ddl] of fs.readFileSync(path.join(root,'portal/lib/database.ts'),'utf8').matchAll(/`(CREATE TABLE IF NOT EXISTS [^`]+)`/g))db.exec(ddl);
     db.close();
-    const hash=comando(`(Get-FileHash -LiteralPath '${dbpath.replaceAll("'","''")}' -Algorithm SHA256).Hash`).toString().trim();
-    fs.writeFileSync(path.join(origem,'semente.json'),JSON.stringify({gerado:'2026-10-09',origem:'fixture',versao:'1234567890',estadoPersistente:true,banco:{arquivo:'fixture.sqlite',sha256:hash},revisar:[]}));
-    const zip=path.join(dir,'supply-vision-semente-fixture.zip');
-    comando(`Compress-Archive -Path '${origem.replaceAll("'","''")}\\*' -DestinationPath '${zip.replaceAll("'","''")}'`);
+    // Origem real com banco ficticio: apenas a retomada e substituida por um sinal.
+    const d1=path.join(origem,'portal/banco/estado/state/v3/d1/miniflare-D1DatabaseObject');
+    fs.mkdirSync(d1,{recursive:true});fs.copyFileSync(dbpath,path.join(d1,'fixture.sqlite'));
+    for(const pasta of ['alertas/config','alertas/parametros'])fs.writeFileSync(path.join(origem,pasta,'ficticio.txt'),'ficticio');
+    const preparar=path.join(dir,'origem.ps1');
+    fs.writeFileSync(preparar,`param($Raiz,$Privado,$Destino,$Modo)
+$ErrorActionPreference='Stop'
+$env:SUPPLY_VISION_PRIVADO=$Privado
+. (Join-Path $Raiz 'scripts\\operacao-logica.ps1')
+. (Join-Path $Raiz 'scripts\\inicializacao-logica.ps1')
+. (Join-Path $Raiz 'scripts\\migracao-logica.ps1')
+function Iniciar-OperacaoConfigurada {Set-Content (Join-Path $env:SUPPLY_VISION_PRIVADO 'retomou') 'sim'}
+Preparar-Migracao $Raiz $Privado (Join-Path $Destino 'startup-ficticio.cmd') $Destino $Modo
+`);
+    ps(preparar,['-Raiz',root,'-Privado',origem,'-Destino',dir,'-Modo','ensaio']);
+    assert.ok(fs.existsSync(path.join(origem,'retomou')));
+    fs.rmSync(path.join(origem,'retomou'));
+    ps(preparar,['-Raiz',root,'-Privado',origem,'-Destino',dir,'-Modo','definitiva']);
+    assert.ok(!fs.existsSync(path.join(origem,'retomou')));
+    assert.ok(fs.existsSync(path.join(origem,'operacao/migrada.sinal')));
+    const bloqueio=comando(`$env:SUPPLY_VISION_PRIVADO='${origem.replaceAll("'","''")}'; & '${path.join(root,'INICIAR.bat').replaceAll("'","''")}'`).toString();
+    assert.match(bloqueio,/migrada/);
+    assert.ok(fs.existsSync(path.join(dir,'MIGRAR.bat')));
+    assert.ok(fs.existsSync(path.join(dir,'migrar.ps1')));
+    const zip=path.join(dir,fs.readdirSync(dir).find(n=>n.endsWith('.zip')));
     const script=path.join(root,'scripts/migrar.ps1');
     const args=['-Zip',zip,'-RepositorioTeste',repo,'-PularInstalacoes','-Modo','ensaio','-PortalUrl','http://127.0.0.1:3000','-BackupNetworkDir','\\\\inexistente\\fixture','-LimpezaHorario','04:00','-ContinuarSemRede','-RelatorioDestino',report];
     assert.throws(()=>ps(script,[...args,'-InterromperApos','5']), /./);
