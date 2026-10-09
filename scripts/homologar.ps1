@@ -6,6 +6,9 @@ $Raiz=(Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 . (Join-Path $PSScriptRoot 'inicializacao-logica.ps1')
 $privado=Obter-PastaPrivada $Raiz
 if(!$Destino){$Destino=Join-Path ([Environment]::GetFolderPath('Desktop')) ('Supply-Vision-homologacao-'+(Get-Date -Format 'yyyyMMdd-HHmmss')+'.txt')}
+$caminhoRelatorio=[IO.Path]::GetFullPath($Destino)
+$raizPrivada=[IO.Path]::GetFullPath($privado).TrimEnd('\')+'\'
+if([IO.Path]::GetExtension($caminhoRelatorio)-ne'.txt'-or$caminhoRelatorio.StartsWith($raizPrivada,[StringComparison]::OrdinalIgnoreCase)){throw 'Escolha um arquivo .txt fora da pasta privado para o relatorio.'}
 $linhas=New-Object 'Collections.Generic.List[string]'
 $segredos=@()
 foreach($arquivo in @(Get-ChildItem -LiteralPath $privado -Filter '*.env' -Recurse -File -ErrorAction SilentlyContinue)){
@@ -44,7 +47,7 @@ Item-Homologacao 'Tarefa e inicializacao' {
 Item-Homologacao 'Modo ensaio' {$op=Ler-ConfigOperacao (Join-Path $privado 'comum\operacao.env');if($op['MODO_ENSAIO']-eq'1'){'ATIVO — nenhum email ou backup em rede'}else{'desligado'}}
 Item-Homologacao 'Parametros dos alertas' {
  $python=Join-Path $Raiz 'alertas\.venv\Scripts\python.exe'
- $saida=& $python -X utf8 (Join-Path $Raiz 'alertas\processo\validar_parametros.py') 2>&1
+ $saida=& $python -B -X utf8 (Join-Path $Raiz 'alertas\processo\validar_parametros.py') 2>&1
  if($LASTEXITCODE){throw 'parametros'};'carregados e validados (sem exibir conteudo)'
 }
 foreach($p in @((Join-Path $privado 'portal\backups'),$cfg['BACKUP_NETWORK_DIR'])){
