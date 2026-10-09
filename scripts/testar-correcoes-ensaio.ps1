@@ -27,17 +27,20 @@ try{
  function Executar-WorkerdVersao {return @{codigo=0;saida='workerd 2026'}}
  Conferir-Workerd $portal
  # Deteccao de antivirus, sem consultar nem alterar a protecao real.
+ # Captura explicita: Write-Host/InformationRecord varia entre PowerShell 5.1 e 7.
+ function Write-Host {param($Object,$ForegroundColor);$script:mensagemAv+=[string]$Object}
  function Get-CimInstance {param($ClassName,$Namespace,$ErrorAction);[pscustomobject]@{displayName='Bitdefender ficticio'}}
- $av=Avisar-Bitdefender 6>&1|Out-String
- Exigir-Correcao ($av.Contains('controle avancado de ameacas')) 'avisa exclusao Bitdefender'
+ $script:mensagemAv='';Avisar-Bitdefender
+ Exigir-Correcao ($script:mensagemAv.Contains('controle avancado de ameacas')) 'avisa exclusao Bitdefender'
 
  function Get-CimInstance {param($ClassName,$Namespace,$ErrorAction);if($ClassName-eq'Win32_Service'){[pscustomobject]@{PathName='C:\Program Files\Bitdefender\ficticio.exe'}}}
  function Get-Service {}
- $av=Avisar-Bitdefender 6>&1|Out-String
- Exigir-Correcao ($av.Contains('BITDEFENDER detectado')) 'detecta Endpoint pelo caminho do servico'
+ $script:mensagemAv='';Avisar-Bitdefender
+ Exigir-Correcao ($script:mensagemAv.Contains('BITDEFENDER detectado')) 'detecta Endpoint pelo caminho do servico'
  function Get-CimInstance {}
- $av=Avisar-Bitdefender 6>&1|Out-String
- Exigir-Correcao (!$av.Contains('BITDEFENDER detectado')) 'sem antivirus nao mostra aviso indevido'
+ $script:mensagemAv='';Avisar-Bitdefender
+ Exigir-Correcao (!$script:mensagemAv.Contains('BITDEFENDER detectado')) 'sem antivirus nao mostra aviso indevido'
+ Remove-Item Function:\Write-Host
 
  # Tarefa de teste de rede: credencial somente na API; resultado e limpeza simulados.
  function Preparar-PastaTesteRede {}
