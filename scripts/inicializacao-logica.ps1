@@ -71,7 +71,7 @@ function Testar-ContaAdministradora([string]$Conta) {
 function Preparar-GrupoOperadores([string]$Conta='SYSTEM') {
  $nome='Supply Vision Operadores'
  $grupo=Get-LocalGroup -Name $nome -ErrorAction SilentlyContinue
- if(!$grupo){$grupo=New-LocalGroup -Name $nome -Description 'Operadores autorizados da instalacao Supply Vision'}
+ if(!$grupo){$grupo=New-LocalGroup -Name $nome -Description 'Operadores Supply Vision'}
  $membros=@(Get-LocalGroupMember -SID 'S-1-5-32-544' -ErrorAction Stop)
  if($Conta-ne'SYSTEM'){$membros+=@{SID=(New-Object Security.Principal.NTAccount($Conta)).Translate([Security.Principal.SecurityIdentifier])}}
  $existentes=@(Get-LocalGroupMember -Group $nome -ErrorAction Stop|ForEach-Object {$_.SID.Value})
