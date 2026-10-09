@@ -141,11 +141,10 @@ Em ordem de importância:
 - **Credencial persistente** para o compartilhamento de rede (`cmdkey`), senão
   o backup em rede falha depois de reiniciar.
 - **Windows Update** com horário ativo cobrindo o expediente.
-- **Antivírus** com exclusão só de `privado\portal\banco\`, onde o SQLite faz
-  muita escrita pequena. Não exclua a pasta inteira do projeto: ela guarda os
-  `.bat` e `.ps1` que a agenda executa sozinha, e um arquivo adulterado ali
-  rodaria sem ser examinado. Se o build ou o `npm.cmd ci` ficarem lentos demais,
-  `portal\node_modules\` é a segunda candidata, com a mesma ressalva.
+- **Antivírus**: combine as exclusões com a TI. Para o Bitdefender no servidor,
+  siga a seção "Antivirus e motor do Portal" abaixo: a exclusão deve cobrir a
+  pasta da instalação nas duas proteções indicadas. Restrinja a escrita nessa
+  pasta, pois os `.bat` e `.ps1` são executados automaticamente.
 - **Login automático**, se a operação precisar subir sem alguém sentar na
   máquina. Junto com a exclusão do antivírus, são os itens desta lista com
   contrapartida de segurança.
