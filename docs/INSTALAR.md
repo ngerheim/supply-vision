@@ -105,20 +105,23 @@ e mantenha Python **3.12 ou superior** e o venv em `alertas\.venv`. Prefira uma
 pasta local como `C:\SupplyVision`, fora de Desktop e pastas de perfil. A tarefa
 usa caminhos absolutos para PowerShell, Node, npm e Python do venv; seus caches
 ficam em `privado\operacao\cache`, sem depender do PATH do usuário. A ativação
-prepara permissões para SYSTEM, Administradores e o usuário administrador que
-configurou o modo, mantendo as permissões existentes.
+prepara permissões para SYSTEM, Administradores e o grupo local fixo
+**Supply Vision Operadores**. O instalador inclui os administradores e a conta
+da tarefa no grupo, preservando membros e permissões anteriores.
 
-**Backup em rede com SYSTEM:** use `BACKUP_NETWORK_DIR=\\servidor\pasta`, nunca
-uma unidade mapeada como `Z:\`. A TI precisa liberar a conta de computador
-**DOMINIO\NOMEDAMAQUINA$** tanto no compartilhamento quanto nas permissões NTFS.
+**Backup em rede com a conta da tarefa:** use `BACKUP_NETWORK_DIR=\\servidor\pasta`, nunca
+uma unidade mapeada como `Z:\`. Em produção com conta de domínio, a TI deve
+liberar aquela conta no compartilhamento e no NTFS. Se escolher SYSTEM,
+libere a conta do computador **DOMINIO\NOMEDAMAQUINA$**.
 Por exemplo, **DOMINIO\SERVIDOR$**. Credenciais `cmdkey` do usuário RDP
 não se aplicam à SYSTEM.
 
-**Contrapartida de segurança:** SYSTEM tem privilégios altos na máquina.
+**Contrapartida de segurança:** a conta da tarefa tem privilégios de
+administradora local.
 Quem puder alterar scripts ou código executado pela tarefa poderá executar
 código com esses privilégios. Restrinja a escrita na instalação a pessoas de
-confiança; não conceda acesso geral. Uma conta própria com permissões menores
-é alternativa quando a TI puder administrá-la.
+confiança; não conceda acesso geral. Em produção com conta de domínio, ela também precisa ser administradora local
+para gerenciar os processos da instalação. A configuração valida essa condição.
 
 **Teste final no servidor:** reinicie sem fazer login, aguarde o minuto de
 atraso e a inicialização, e confirme de outra máquina que

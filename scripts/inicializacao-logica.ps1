@@ -50,8 +50,39 @@ function Montar-DefinicaoTarefa([string]$Raiz,[string]$Privado,[string]$Node,[st
 </Task>
 "@
 }
+function Obter-GruposAutorizadosConta([string]$Conta) {
+ Add-Type -AssemblyName System.DirectoryServices.AccountManagement
+ if($Conta-match '^S-1-'){$Conta=(New-Object Security.Principal.SecurityIdentifier($Conta)).Translate([Security.Principal.NTAccount]).Value}
+ $prefixo=($Conta-split'\\')[0]
+ $dominio=$Conta.Contains('\')-and$prefixo-notin@('.',$env:COMPUTERNAME)
+ $tipo=if($dominio){[DirectoryServices.AccountManagement.ContextType]::Domain}else{[DirectoryServices.AccountManagement.ContextType]::Machine}
+ $contexto=New-Object DirectoryServices.AccountManagement.PrincipalContext($tipo)
+ $usuario=$null
+ try{
+  $usuario=[DirectoryServices.AccountManagement.UserPrincipal]::FindByIdentity($contexto,$Conta)
+  if(!$usuario){throw 'Conta nao encontrada para validar grupos.'}
+  return @($usuario.GetAuthorizationGroups()|ForEach-Object {$_.Sid.Value})
+ }finally{if($usuario){$usuario.Dispose()};$contexto.Dispose()}
+}
+function Testar-ContaAdministradora([string]$Conta) {
+ if($Conta-in@('SYSTEM','S-1-5-18','NT AUTHORITY\SYSTEM')){return $true}
+ $sid=if($Conta-match '^S-1-'){$Conta}else{(New-Object Security.Principal.NTAccount($Conta)).Translate([Security.Principal.SecurityIdentifier]).Value}
+ $membros=@(Get-LocalGroupMember -SID 'S-1-5-32-544' -ErrorAction Stop|ForEach-Object {$_.SID.Value})
+ if($sid-in$membros){return $true}
+ return !!(@(Obter-GruposAutorizadosConta $Conta|Where-Object {$_-in$membros}).Count)
+}
+function Preparar-GrupoOperadores([string]$Conta='SYSTEM') {
+ $nome='Supply Vision Operadores'
+ $grupo=Get-LocalGroup -Name $nome -ErrorAction SilentlyContinue
+ if(!$grupo){$grupo=New-LocalGroup -Name $nome -Description 'Operadores Supply Vision'}
+ $membros=@(Get-LocalGroupMember -SID 'S-1-5-32-544' -ErrorAction Stop)
+ if($Conta-ne'SYSTEM'){$membros+=@{SID=(New-Object Security.Principal.NTAccount($Conta)).Translate([Security.Principal.SecurityIdentifier])}}
+ $existentes=@(Get-LocalGroupMember -Group $nome -ErrorAction Stop|ForEach-Object {$_.SID.Value})
+ foreach($m in $membros){if($m.SID.Value-notin$existentes){Add-LocalGroupMember -Group $nome -Member $m.SID.Value -ErrorAction Stop;$existentes+=$m.SID.Value}}
+ return $grupo.SID.Value
+}
 function Liberar-AcessoOperacao([string]$Raiz,[string]$Privado,[string]$Conta='SYSTEM') {
- $sid=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+ $sid=Preparar-GrupoOperadores $Conta
  $regras=@('*S-1-5-18:(OI)(CI)F','*S-1-5-32-544:(OI)(CI)F',('*'+$sid+':(OI)(CI)M'))
  if($Conta-ne'SYSTEM'){$regras+=($Conta+':(OI)(CI)M')}
  # Mantem ACLs existentes. Nenhum acesso para Everyone; heranca cobre novos arquivos.
@@ -80,6 +111,7 @@ function Definir-ModoInicializacao([string]$Raiz,[string]$Privado,[string]$Start
   $v=(& $node --version | Out-String).Trim();if($v-notmatch '^v(\d+\.\d+\.\d+)' -or [version]$Matches[1]-lt[version]'22.13.0'){throw 'A tarefa exige Node >= 22.13.'}
   $cfg=Ler-ConfigOperacao (Join-Path $Privado 'portal\configuracao\portal.env');Validar-BackupSemLogin 'computador' $cfg['BACKUP_NETWORK_DIR']
   $conta=if($Credencial){$Credencial.UserName}else{'SYSTEM'}
+  if(!(Testar-ContaAdministradora $conta)){throw 'A conta da tarefa deve ser administradora local. Peca a TI a permissao antes de configurar.'}
   Liberar-AcessoOperacao $Raiz $Privado $conta
   $xml=Montar-DefinicaoTarefa $Raiz $Privado $node "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" $conta
   try{
@@ -90,7 +122,7 @@ function Definir-ModoInicializacao([string]$Raiz,[string]$Privado,[string]$Start
   }else{Register-ScheduledTask -TaskName 'Supply Vision' -TaskPath '\' -Xml $xml -Force|Out-Null}
   $servico=New-Object -ComObject 'Schedule.Service';$servico.Connect()
   $tarefa=$servico.GetFolder('\').GetTask('Supply Vision')
-  $sid=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+  $sid=(Get-LocalGroup -Name 'Supply Vision Operadores' -ErrorAction Stop).SID.Value
   $sddl=$tarefa.GetSecurityDescriptor(4)
   $tarefa.SetSecurityDescriptor(($sddl+'(A;;GRGX;;;'+$sid+')'),0)
   if(Test-Path -LiteralPath $Startup){Remove-Item -LiteralPath $Startup -Force}

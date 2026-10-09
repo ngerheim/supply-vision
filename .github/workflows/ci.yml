@@ -51,6 +51,8 @@ jobs:
         env:
           SV_TESTES_INTEGRACAO_WINDOWS: '1'
         run: |
+          ./scripts/testar-etapa-b.ps1
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
           ./scripts/testar-etapa-a.ps1
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           ./scripts/testar-espera-testes.ps1

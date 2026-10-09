@@ -103,7 +103,7 @@ function Testar-RedeContaMigracao([string]$Caminho,[pscredential]$Credencial){
   Remove-Item -LiteralPath $temp -Recurse -Force
  }
 }
-function Testar-RedeComoSystem([string]$Caminho){return Testar-RedeContaMigracao $Caminho}
+function Testar-RedeDaContaTarefa([string]$Caminho){return Testar-RedeContaMigracao $Caminho}
 function Descartar-InstalacaoEnsaio([string]$Raiz,[string]$Privado){
  $cfg=Ler-ConfigOperacao (Join-Path $Privado 'comum\operacao.env')
  if(!(Permitir-DescarteEnsaio $cfg)){throw 'Descarte recusado: esta instalacao nao tem MODO_ENSAIO=1. Nada foi movido.'}
@@ -255,7 +255,7 @@ try{
   $uri=$null;if(![uri]::TryCreate($url,[UriKind]::Absolute,[ref]$uri)-or$uri.Scheme-notin@('http','https')-or$uri.UserInfo){throw 'Endereco invalido. Use http://portal.empresa.local:3000 sem usuario ou senha.'}
   $rede=Perguntar-Migracao 'Pasta de backup na rede' $cfg['BACKUP_NETWORK_DIR'] $BackupNetworkDir
   if(!(Testar-UncMigracao $rede)){throw 'Use caminho UNC: \\servidor\pasta.'}
-  if(!(Testar-RedeComoSystem $rede)){
+  if(!(Testar-RedeDaContaTarefa $rede)){
    $dominio=(Get-CimInstance Win32_ComputerSystem).Domain
    Write-Host ('Nao foi possivel gravar como SYSTEM. Peca a TI permissao no compartilhamento e no NTFS para '+$dominio+'\'+$env:COMPUTERNAME+'$. No ensaio o backup em rede permanece bloqueado.') -ForegroundColor Yellow
    if(!$ContinuarSemRede){

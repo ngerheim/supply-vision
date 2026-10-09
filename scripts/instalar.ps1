@@ -112,6 +112,7 @@ if(Test-Path (Join-Path $Privado 'portal\backups\portal-atual.sqlite')){Rodar $N
 Write-Host "`nSupply Vision instalado e validado." -ForegroundColor Green
 $Startup=Join-Path ([Environment]::GetFolderPath('Startup')) 'Supply Vision.cmd'
 $Inicio=Join-Path $Raiz 'INICIAR.bat'
+if(Testar-Elevacao){[void](Preparar-GrupoOperadores)}
 if(!$ModoInicializacao-and(Obter-TarefaSupplyVision $Raiz)){Write-Host 'Modo sem login existente preservado.';exit 0}
 if($ModoInicializacao){
  $credencial=$CredencialTarefa;if($ContaPersonalizada-and!$credencial){$credencial=Get-Credential -Message 'Conta da tarefa Supply Vision';if(!$credencial){throw 'Conta nao informada.'}}

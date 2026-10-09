@@ -42,10 +42,10 @@ protege também contra uma tentativa de início pela sessão do usuário.
 
 **Iniciar operação** dispara a tarefa. **Parar operação** grava o sinal e
 aguarda o supervisor encerrar de verdade. O status é lido dos arquivos da
-operação, inclusive quando o processo está fora da sessão RDP. O usuário que
-ativou a tarefa pode iniciá-la e acessar os arquivos; para outros
-administradores, abra a central elevada se houver erro de permissão. Se um
-processo SYSTEM travar e precisar ser encerrado à força, será necessária
+operação, inclusive quando o processo está fora da sessão RDP. O grupo local Supply Vision Operadores reúne a conta da tarefa e os
+administradores; reconfigurar não retira o acesso dos operadores anteriores.
+Abra a central elevada se houver erro de permissão. Se um
+processo da conta da tarefa travar e precisar ser encerrado à força, será necessária
 elevação. Não apague a trava nem tente abrir um segundo supervisor.
 
 **Atualizar sistema** no modo sem login exige a central elevada. O atualizador
@@ -57,13 +57,14 @@ funcionando conforme a configuração e respeitando o modo ensaio.
 
 Para backup em rede, configure um caminho **UNC**, como `\\servidor\pasta`.
 Unidades mapeadas (`Z:\`, por exemplo) são reprovadas somente no modo sem login.
-A TI deve liberar **DOMINIO\NOMEDAMAQUINA$** (por exemplo,
-**DOMINIO\SERVIDOR$**) no compartilhamento **e** no NTFS. Com conta
-personalizada, a permissão deve ser dada àquela conta.
+A TI deve liberar a **conta da tarefa** no compartilhamento **e** no NTFS.
+Em produção com conta de domínio, libere aquela conta. Se escolher SYSTEM,
+libere a conta do computador **DOMINIO\NOMEDAMAQUINA$**, por exemplo,
+**DOMINIO\SERVIDOR$**.
 
-SYSTEM tem acesso amplo à máquina. Proteja a escrita nos scripts e no código:
-quem os altera pode executar código como SYSTEM. Veja INSTALAR para a opção
-com conta própria e para os parâmetros do instalador.
+A conta da tarefa tem privilégios de administradora local. Proteja a escrita
+nos scripts e no código: quem os altera pode executar código com esses
+privilégios. Veja INSTALAR para escolher a conta e os parâmetros do instalador.
 
 O teste que confirma este modo é reiniciar o servidor **sem fazer login** e,
 de outra máquina, abrir **http://portal.empresa.local:3000** após o atraso e a
@@ -548,3 +549,29 @@ pela central e confira os serviços e o backup. Quando a TI liberar SYSTEM pela
 conta de computador no compartilhamento e no NTFS, use o mesmo comando sem
 `-ContaPersonalizada` para voltar a SYSTEM. A senha não é gravada em arquivo
 ou log pelo Supply Vision; o Windows guarda as credenciais da tarefa.
+
+
+## Conta de domínio em produção
+
+A conta da tarefa deve ser **administradora local**; a configuração valida isso
+e a homologação mostra a condição. A TI também deve liberar o logon em lote e
+a escrita da conta no compartilhamento e no NTFS. Se a senha mudar ou expirar,
+a tarefa poderá deixar de iniciar. A central e a homologação explicam o erro;
+consulte a seção “A conta da tarefa não consegue entrar” em SOCORRO.md.
+
+Abra PowerShell como administrador e execute novamente
+`.\scripts\configurar-inicializacao.ps1 -Modo computador -ContaPersonalizada`.
+Informe a senha atual, inicie pela central e confira o Portal e o backup.
+Quando a TI liberar a conta do computador, rode o mesmo comando sem
+`-ContaPersonalizada` para voltar a SYSTEM. O grupo de operadores é preservado.
+
+Pare sempre pela **central**, não pelo Agendador. Se a limpeza de órfãos não
+conseguir ler ou encerrar um processo, a partida segue e registra um aviso no
+log e para o administrador (quando e-mail habilitado); confira permissões e
+portas na central elevada. O Node das ações e da atualização vem da instalação
+da máquina. Falha somente na cópia de rede do backup pré-atualização não impede
+a troca: a cópia local íntegra é preservada e o aviso exige verificar a rede.
+
+O Windows aplica novos membros do grupo de operadores numa nova sessão.
+Se precisar usar a central sem elevação após configurar o grupo, no modo
+sem login entre novamente no Windows; a tarefa continua fora da sessão RDP.
