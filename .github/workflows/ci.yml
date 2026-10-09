@@ -52,6 +52,8 @@ jobs:
         env:
           SV_TESTES_INTEGRACAO_WINDOWS: '1'
         run: |
+          ./scripts/testar-espera-testes.ps1
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
           ./scripts/testar-correcoes-ensaio.ps1
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           ./scripts/testar-reversao-arquivos.ps1
@@ -64,6 +66,15 @@ jobs:
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           node --test portal/tests/orfaos-windows.test.mjs
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v6
+        with:
+          python-version: '3.12'
+      - name: Supervisor isolado com outra instalacao em tarefa ativa
+        shell: powershell
+        env:
+          SV_TESTES_INTEGRACAO_WINDOWS: '1'
+        run: ./scripts/testar-supervisor-com-outra-tarefa.ps1
 
       - name: Validar restricao de firewall sem alterar regras reais
         shell: powershell

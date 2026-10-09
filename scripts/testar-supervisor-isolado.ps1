@@ -1,5 +1,6 @@
-﻿param([switch]$SemLogin, [switch]$Ensaio, [ValidateSet('', 'falha', 'lento')][string]$AvisoAdminTeste='')
+﻿param([switch]$SemLogin, [switch]$Ensaio, [ValidateSet('', 'falha', 'lento')][string]$AvisoAdminTeste='', [int]$AtrasoSegundaInstanciaSegundos=0)
 $ErrorActionPreference='Stop'
+. (Join-Path $PSScriptRoot 'espera-testes.ps1')
 $raizReal=(Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $temp=Join-Path $env:TEMP ('supply-vision-supervisor-'+[guid]::NewGuid().ToString('N'))
 $processos=@();$pathAnterior=$env:Path;$privadoAnterior=$env:SUPPLY_VISION_PRIVADO;$ensaioAnterior=$env:MODO_ENSAIO;$adminAnterior=$env:ADMIN_ALERTA_EMAIL
@@ -61,17 +62,42 @@ try{
  $env:ADMIN_ALERTA_EMAIL='herdado@example.com'
  $env:MODO_ENSAIO=if($Ensaio){'0'}else{'1'}
  $env:SUPPLY_VISION_PRIVADO=Join-Path $temp 'privado'
- $env:Path="$temp\bin;$pathAnterior";$args=@('-NoProfile','-ExecutionPolicy','Bypass','-File',"$temp\scripts\supervisor.ps1")
- if($SemLogin){
-  Copy-Item (Get-Command node.exe).Source "$temp\bin\node.exe"
-  $args+=@('-SemLogin','-NodeExecutavel',"$temp\bin\node.exe")
+ $env:Path="$temp\bin;$pathAnterior"
+ # A entrada rejeita qualquer pasta privada que nao seja a fixture. O parametro
+ # explicito prevalece sobre o ambiente herdado da instalacao em execucao.
+ $entrada=@'
+param([string]$PastaPrivada,[string]$Manifesto,[switch]$SemLogin,[string]$NodeExecutavel,[int]$Atraso=0)
+$ErrorActionPreference='Stop'
+$esperado=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot 'privado'))
+if([IO.Path]::GetFullPath($PastaPrivada)-ne$esperado){throw 'Pasta privada fora da fixture.'}
+$env:SUPPLY_VISION_PRIVADO=$esperado
+. (Join-Path $PSScriptRoot 'scripts\operacao-logica.ps1')
+$privado=Obter-PastaPrivada $PSScriptRoot
+[IO.File]::WriteAllText($Manifesto,(Join-Path $privado 'operacao\supervisor.lock'))
+if($Atraso){Start-Sleep -Seconds $Atraso} # Simula VM lenta, somente no teste.
+& (Join-Path $PSScriptRoot 'scripts\supervisor.ps1') -PastaPrivada $privado -SemLogin:$SemLogin -NodeExecutavel $NodeExecutavel -Visivel
+'@
+ [IO.File]::WriteAllText("$temp\entrada-teste.ps1",$entrada)
+ if($SemLogin){Copy-Item (Get-Command node.exe).Source "$temp\bin\node.exe"}
+ $instancias=@()
+ foreach($nome in @('a','b')){
+  $manifesto="$temp\$nome-trava.txt";$saida="$temp\$nome-saida.log";$erro="$temp\$nome-erro.log"
+  $args=@('-NoProfile','-ExecutionPolicy','Bypass','-File',('"'+"$temp\entrada-teste.ps1"+'"'),'-PastaPrivada',('"'+"$temp\privado"+'"'),'-Manifesto',('"'+$manifesto+'"'))
+  if($SemLogin){$args+=@('-SemLogin','-NodeExecutavel',('"'+"$temp\bin\node.exe"+'"'))}
+  if($nome-eq'b'){$args+=@('-Atraso',$AtrasoSegundaInstanciaSegundos)}
+  $proc=Start-Process powershell.exe -ArgumentList $args -PassThru -WindowStyle Hidden -RedirectStandardOutput $saida -RedirectStandardError $erro
+  $processos+=$proc
+  $instancias+=@{pid=$proc.Id;trava="$temp\privado\operacao\supervisor.lock";manifesto=$manifesto;saida=$saida;erro=$erro;log="$temp\privado\operacao\supervisor.log"}
  }
- $a=Start-Process powershell.exe -ArgumentList $args -PassThru -WindowStyle Hidden;$b=Start-Process powershell.exe -ArgumentList $args -PassThru -WindowStyle Hidden;$processos=@($a,$b)
- Start-Sleep 4;$vivos=@($processos|Where-Object{!$_.HasExited});if($vivos.Count-ne1){throw "Lock falhou: $($vivos.Count) instancias ativas."}
+ $convergiu=Esperar-CondicaoTeste {foreach($p in $processos){$p.Refresh()};@($processos|Where-Object HasExited).Count-eq1} -Segundos 60
+ $vivos=@($processos|Where-Object{!$_.HasExited})
+ if(!$convergiu-or$vivos.Count-ne1){throw ("Lock falhou: $($vivos.Count) instancias ativas apos prazo de 60 s.`n"+(Formatar-DiagnosticoTravaTeste $instancias))}
+ $perdedor=@($processos|Where-Object HasExited)[0]
+ if($perdedor.ExitCode-ne0){throw ("Instancia concorrente encerrou por erro, nao por trava.`n"+(Formatar-DiagnosticoTravaTeste $instancias))}
  # Espera ativa pelo status.json. Espera fixa era corrida: a verificacao de
  # saude contra um host inexistente sozinha ja consome quase 3 segundos.
  $statusPath="$temp\privado\operacao\status.json";$apareceu=$false
- for($i=0;$i -lt 60;$i++){if(Test-Path $statusPath){$apareceu=$true;break};Start-Sleep -Milliseconds 500}
+ $apareceu=Esperar-CondicaoTeste {try{$j=Get-Content $statusPath -Raw|ConvertFrom-Json;[bool]($j.portal-and$j.emails-and$j.relatorios)}catch{$false}} -Segundos 60
  if(!$apareceu){throw 'Supervisor nao gravou status.json dentro do prazo.'}
  $status=Get-Content $statusPath -Raw|ConvertFrom-Json;if(!$status.portal-or!$status.emails-or!$status.relatorios){throw 'Supervisor nao iniciou os processos simulados.'}
  $saudeIniciada=$false
@@ -119,7 +145,9 @@ try{
  # uma volta: o supervisor registra aviso e segue; antes, encerrava tudo.
  $antes=$status.atualizado
  $trava=[IO.File]::Open($statusPath,[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::None)
- try{Start-Sleep 20}finally{$trava.Dispose()}
+ try{
+  if(!(Esperar-CondicaoTeste {try{(Get-Content "$temp\privado\operacao\supervisor.log" -Raw).Contains('status.json em uso por outro processo')}catch{$false}} -Segundos 60)){throw 'Supervisor nao observou status.json em uso dentro do prazo.'}
+ }finally{$trava.Dispose()}
  if($vivos[0].HasExited){throw 'Supervisor encerrou com status.json em uso.'}
  $logSupervisor=Get-Content "$temp\privado\operacao\supervisor.log" -Raw
  if($logSupervisor -match 'ERRO FATAL|Encerrando a operacao'){throw "Supervisor tratou arquivo em uso como fatal: $logSupervisor"}
