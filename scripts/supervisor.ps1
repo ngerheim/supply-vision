@@ -92,6 +92,7 @@ if($SemLogin){
 $codigoSupervisor=0
 try{$linhaUrl=@(Get-Content (Join-Path $Privado 'portal\configuracao\portal.env') -ErrorAction Stop)|Where-Object{$_ -like 'PORTAL_URL=*'}|Select-Object -First 1;if($linhaUrl){$PortalUrl=($linhaUrl -split '=',2)[1].Trim()}}catch{}
 try{
+ Encerrar-OrfaosInstalacao $Raiz
  Log 'Supervisor iniciado.'
  if($ensaio){Log 'Modo ensaio ATIVO'}
  Avisar-Administrador $avisosAdmin 'supervisor-iniciado'
@@ -102,8 +103,8 @@ try{
   try{
   Atualizar-AvisosAdmin $avisosAdmin
   if($estadoPendente){Salvar-Estado}
-  Iniciar-Processo 'portal' $Npm @('run','start:lan') $Portal;Iniciar-Processo 'emails' $Npm @('run','email:watch') $Portal
-  Iniciar-Processo 'relatorios' $Node @('--experimental-strip-types','scripts\processar-relatorios.mjs') $Portal
+  Iniciar-Processo 'portal' $Npm @('--prefix',('"'+$Portal+'"'),'run','start:lan') $Portal;Iniciar-Processo 'emails' $Npm @('--prefix',('"'+$Portal+'"'),'run','email:watch') $Portal
+  Iniciar-Processo 'relatorios' $Node @('--experimental-strip-types',('"'+(Join-Path $Portal 'scripts\processar-relatorios.mjs')+'"')) $Portal
   $saudavel=$false;try{$saudavel=((Invoke-RestMethod "$PortalUrl/api/health" -TimeoutSec 3).status-eq'ok')}catch{$saudavel=$false}
   # Uma falha isolada do health (ex.: banco momentaneamente ocupado) nao e
   # queda: so duas seguidas (~15 s) declaram o portal fora do ar.

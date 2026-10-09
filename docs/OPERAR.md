@@ -528,3 +528,23 @@ acesso. Esta correcao nao instala certificados nem altera a rede do servidor.
 Para preparar uma semente pela central e levar a operação ao servidor, siga
 [Assistente de migração](MIGRAR.md). A opção Migração definitiva bloqueia
 novos inícios no notebook; o guia explica como voltar atrás com segurança.
+
+## Parar a tarefa e atualizar sua senha
+
+**Pare pela central e aguarde o encerramento.** Não use Parar no Agendador:
+o Windows pode encerrar somente o supervisor e deixar processos de e-mail,
+relatórios ou Portal vivos. Na próxima partida, o supervisor encerra os processos
+órfãos identificados pelos caminhos desta instalação; não encerra outros Node.
+
+Se a tarefa usa conta de domínio e a senha mudou, pare pela central e abra
+PowerShell como administrador na pasta da instalação:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\configurar-inicializacao.ps1 -Modo computador -ContaPersonalizada
+```
+
+Informe a senha nova, aguarde as permissões e a confirmação de sucesso. Inicie
+pela central e confira os serviços e o backup. Quando a TI liberar SYSTEM pela
+conta de computador no compartilhamento e no NTFS, use o mesmo comando sem
+`-ContaPersonalizada` para voltar a SYSTEM. A senha não é gravada em arquivo
+ou log pelo Supply Vision; o Windows guarda as credenciais da tarefa.

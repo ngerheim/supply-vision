@@ -124,7 +124,7 @@ desfazer manualmente uma versão que passou nos testes mas se comportou mal:
 ```powershell
 git log --oneline -5
 git reset --hard <commit anterior>
-cd portal; npm run build; cd ..
+cd portal; npm.cmd run build; cd ..
 INICIAR.bat
 ```
 
@@ -172,3 +172,22 @@ não apague o arquivo para "resolver", pois isso pode repetir alertas.
 Com a operação parada, compare a cópia anterior com os logs de envio e os slots
 concluídos. Reconstitua e valide o JSON antes de reiniciar; a cópia anterior pode
 não conter a última entrega e não deve ser restaurada automaticamente.
+
+## Antivirus bloqueou arquivos ou aparece write EOF
+
+No Bitdefender, peça à TI a exclusão da pasta completa da instalação no
+**antimalware em tempo real** e no **controle avançado de ameaças**. Restrinja a
+escrita nessa pasta: a exclusão reduz a proteção do antivírus. O Supply Vision
+não muda essas configurações.
+
+`Permission denied`, `unable to unlink` e arquivos `D` no `git status` podem
+indicar arquivos bloqueados ou apagados. Confira a quarentena e os eventos do
+antivírus. Se um arquivo ficar travado, **reinicie a máquina** depois de ajustar
+a exclusão; tentar novamente sem reiniciar pode continuar falhando. Preserve
+`privado/` e solicite ajuda à TI para recuperar arquivos do código aprovado.
+
+Se o Wrangler mostrar apenas `write EOF`, confira o Microsoft Visual C++
+Redistributable 2015+ x64 e execute novamente o instalador: ele testa o workerd e
+explica se o motor não consegue iniciar. Reinicie após instalar o runtime se
+necessário. No PowerShell use `npm.cmd`, pois `npm.ps1` pode ser bloqueado pela
+política padrão. Para parar a operação, use a central, não o Agendador.

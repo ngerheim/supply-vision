@@ -1,7 +1,7 @@
 import fs from 'node:fs';
-import { revisarPedidosInterrompidos } from './processar-relatorios.mjs';
+import { revisarPedidosInterrompidos } from './pedidos-interrompidos.mjs';
 import { DatabaseSync } from 'node:sqlite';
-import { marcarFilasAposRestauracao } from './processar-emails.mjs';
+import { marcarFilasAposRestauracao } from './filas-restauradas.mjs';
 
 // Toda escrita acontece na copia descartavel, antes de substituir o alvo.
 export function prepararRestauracao(origem, temporario, validar) {

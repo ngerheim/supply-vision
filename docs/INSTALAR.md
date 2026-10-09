@@ -57,7 +57,7 @@ INSTALAR.bat
 ```
 
 Ele instala Node e Python pelo `winget` se faltarem, cria o `.venv`, roda
-`npm ci`, gera o build, executa as suítes e prepara a inicialização
+`npm.cmd ci`, gera o build, executa as suítes e prepara a inicialização
 automática. Reexecutar é seguro: não apaga banco, credenciais, parâmetros nem
 relatórios.
 
@@ -144,7 +144,7 @@ Em ordem de importância:
 - **Antivírus** com exclusão só de `privado\portal\banco\`, onde o SQLite faz
   muita escrita pequena. Não exclua a pasta inteira do projeto: ela guarda os
   `.bat` e `.ps1` que a agenda executa sozinha, e um arquivo adulterado ali
-  rodaria sem ser examinado. Se o build ou o `npm ci` ficarem lentos demais,
+  rodaria sem ser examinado. Se o build ou o `npm.cmd ci` ficarem lentos demais,
   `portal\node_modules\` é a segunda candidata, com a mesma ressalva.
 - **Login automático**, se a operação precisar subir sem alguém sentar na
   máquina. Junto com a exclusão do antivírus, são os itens desta lista com
@@ -163,7 +163,7 @@ janela de console sobrando. Só depois considere a instalação concluída.
 
 O Portal exige **Node.js 22.13.0 ou superior**, com npm. Sem `winget`, instale
 Node.js e Python manualmente antes de executar o instalador, e abra um novo
-terminal para atualizar o PATH. Confira `node --version`, `npm --version` e
+terminal para atualizar o PATH. Confira `node --version`, `npm.cmd --version` e
 `python --version`. Uma versão já instalada abaixo do mínimo é recusada;
 o instalador não a atualiza automaticamente.
 
@@ -178,3 +178,21 @@ apague `privado/`: banco, configurações e histórico ficam nessa pasta.
 
 Para levar a instalação do notebook para o servidor, siga o
 [assistente de migração, com ensaio e troca definitiva](MIGRAR.md).
+
+## Antivirus e motor do Portal
+
+Antes de instalar, peça à TI uma exclusão da pasta completa da instalação no
+Bitdefender: **antimalware em tempo real** e **controle avançado de ameaças**.
+A exclusão reduz a proteção nessa pasta; restrinja quem pode escrever nela e
+use somente a versão aprovada. O instalador não altera o antivírus.
+
+`Permission denied`, `unable to unlink` e arquivos com `D` no `git status`
+podem indicar bloqueio ou exclusão pelo antivírus. Confira a quarentena com a
+TI antes de repetir a instalação. Se um arquivo continuar travado, **reinicie
+a máquina**, mesmo depois de criar a exclusão. Preserve os dados privados.
+
+O Portal também precisa do Microsoft Visual C++ Redistributable 2015+ **x64**.
+O assistente e o instalador verificam e instalam com winget; o instalador testa
+`workerd --version`. A falha desse motor pode aparecer como `write EOF` no
+Wrangler. Confira Visual C++, antivírus e a necessidade de reiniciar antes de
+pedir nova instalação. No PowerShell, use `npm.cmd` nos comandos npm.

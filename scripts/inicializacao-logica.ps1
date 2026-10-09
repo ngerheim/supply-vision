@@ -55,10 +55,15 @@ function Liberar-AcessoOperacao([string]$Raiz,[string]$Privado,[string]$Conta='S
  $regras=@('*S-1-5-18:(OI)(CI)F','*S-1-5-32-544:(OI)(CI)F',('*'+$sid+':(OI)(CI)M'))
  if($Conta-ne'SYSTEM'){$regras+=($Conta+':(OI)(CI)M')}
  # Mantem ACLs existentes. Nenhum acesso para Everyone; heranca cobre novos arquivos.
- foreach($p in @($Raiz,$Privado)|Select-Object -Unique){
+ $pastas=@(@($Raiz,$Privado)|Select-Object -Unique);$indice=0
+ foreach($p in $pastas){
+  Write-Progress -Activity 'Permissoes da tarefa Supply Vision' -Status "Pasta $($indice+1) de $($pastas.Count). Aguarde." -PercentComplete ([int](100*$indice/$pastas.Count))
+  $indice++
+  Write-Host "Preparando permissoes em $p. Pode levar alguns minutos; aguarde."
   & "$env:SystemRoot\System32\icacls.exe" $p /grant @regras /T /Q | Out-Null
-  if($LASTEXITCODE){throw 'Falha ao preparar permissoes da operacao. A tarefa nao foi ativada.'}
+  if($LASTEXITCODE){Write-Progress -Activity 'Permissoes da tarefa Supply Vision' -Completed;throw 'Falha ao preparar permissoes da operacao. A tarefa nao foi ativada.'}
  }
+ Write-Progress -Activity 'Permissoes da tarefa Supply Vision' -Completed
 }
 function Definir-ModoInicializacao([string]$Raiz,[string]$Privado,[string]$Startup,[ValidateSet('desligado','login','computador')][string]$Modo,[string]$NodeExecutavel,[pscredential]$Credencial) {
  $ErrorActionPreference='Stop'

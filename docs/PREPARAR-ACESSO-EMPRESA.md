@@ -41,7 +41,7 @@ sucesso da experiência no patamar de 100. Os números incluem carregamento
 inicial, pesquisa e detalhe e não representam 100 usuários reais. A quantidade
 de localidades da fixture também é maior que a da base inicial da operação.
 
-- Executar `npm run build` e `npm run test:imports` em cópia isolada, em uma
+- Executar `npm.cmd run build` e `npm.cmd run test:imports` em cópia isolada, em uma
   janela apropriada do notebook-servidor. O ensaio cria seu próprio banco e
   serviço em loopback. Nunca apontar uma ferramenta de carga para produção.
 - Conferir os resultados de consulta concorrente em `portal/work/`, especialmente

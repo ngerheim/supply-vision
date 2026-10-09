@@ -10,3 +10,6 @@ $credencial=$null
 if($ContaPersonalizada){$credencial=Get-Credential -Message 'Conta que executara a tarefa Supply Vision';if(!$credencial){throw 'Conta nao informada.'}}
 $startup=Join-Path ([Environment]::GetFolderPath('Startup')) 'Supply Vision.cmd'
 Definir-ModoInicializacao $raiz (Obter-PastaPrivada $raiz) $startup $Modo $NodeExecutavel $credencial
+
+Write-Host "Inicializacao configurada com sucesso: $Modo." -ForegroundColor Green
+if($credencial){Write-Host 'Se a senha da conta mudar, execute novamente este comando com -ContaPersonalizada para atualizar a tarefa.'}

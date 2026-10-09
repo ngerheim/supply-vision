@@ -52,11 +52,17 @@ jobs:
         env:
           SV_TESTES_INTEGRACAO_WINDOWS: '1'
         run: |
+          ./scripts/testar-correcoes-ensaio.ps1
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          ./scripts/testar-reversao-arquivos.ps1
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
           ./scripts/testar-migracao.ps1
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           ./scripts/testar-inicializacao.ps1
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           ./scripts/testar-tarefa-system.ps1
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          node --test portal/tests/orfaos-windows.test.mjs
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
 
       - name: Validar restricao de firewall sem alterar regras reais
@@ -92,6 +98,10 @@ jobs:
           fi
       - run: npm ci
       - run: npm test
+      - name: Avisos SMTP com terminal colorido
+        env:
+          FORCE_COLOR: '1'
+        run: node --test tests/aviso-admin.test.mjs
       - run: npm run typecheck
       - run: npm run lint
       - run: npm run build

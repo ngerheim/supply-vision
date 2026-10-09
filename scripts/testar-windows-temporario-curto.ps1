@@ -31,7 +31,7 @@ public static class CaminhoCurtoTeste {
  $env:TEMP=$curto;$env:TMP=$curto;$env:npm_config_cache=Join-Path $longo 'npm-cache'
  Write-Host "TEMP/TMP da fixture: $curto"
 
- # npm test igual ao atualizador, mas com uma conta que nao e administradora.
+ # npm.cmd test igual ao atualizador, mas com uma conta que nao e administradora.
  $senha=New-Object Security.SecureString
  foreach($caractere in ('Aa!'+[guid]::NewGuid().ToString('N')).ToCharArray()){$senha.AppendChar($caractere)}
  $senha.MakeReadOnly()
@@ -63,19 +63,19 @@ exit /b %SV_RESULTADO_NPM%
  $env:GIT_CONFIG_COUNT='1';$env:GIT_CONFIG_KEY_0='safe.directory';$env:GIT_CONFIG_VALUE_0=$raiz
  $env:SV_TESTES_INTEGRACAO_WINDOWS=$null
  $proc=Start-Process -FilePath $env:ComSpec -Credential ([pscredential]::new($conta,$senha)) -WorkingDirectory (Join-Path $raiz 'portal') -ArgumentList @('/d','/c',('"'+$launcher+'"')) -RedirectStandardOutput (Join-Path $longo 'npm.log') -RedirectStandardError (Join-Path $longo 'npm-erro.log') -PassThru
- if(!$proc.WaitForExit(180000)){& taskkill.exe /PID $proc.Id /T /F|Out-Null;throw 'npm test sem elevacao excedeu 180 segundos.'}
+ if(!$proc.WaitForExit(180000)){& taskkill.exe /PID $proc.Id /T /F|Out-Null;throw 'npm.cmd test sem elevacao excedeu 180 segundos.'}
  $proc.Refresh()
  Get-Content (Join-Path $longo 'npm.log'),(Join-Path $longo 'npm-erro.log')|Write-Host
  $codigoArquivo=Join-Path $longo 'npm-exit.txt'
- if(!(Test-Path $codigoArquivo)){throw 'npm test sem elevacao nao concluiu o launcher.'}
+ if(!(Test-Path $codigoArquivo)){throw 'npm.cmd test sem elevacao nao concluiu o launcher.'}
  $codigo=(Get-Content $codigoArquivo -Raw).Trim()
- if($codigo-ne'0'){throw "npm test sem elevacao falhou: $codigo"}
+ if($codigo-ne'0'){throw "npm.cmd test sem elevacao falhou: $codigo"}
  $tarefasDepois=@(Get-ScheduledTask|ForEach-Object {$_.TaskPath+$_.TaskName}|Sort-Object)
  $firewallDepois=@(Get-NetFirewallRule|Select-Object Name,Enabled,Action,Direction,Profile|Sort-Object Name|ConvertTo-Json -Depth 3)
- if(Compare-Object $tarefasAntes $tarefasDepois){throw 'npm test alterou tarefas agendadas.'}
- if(($firewallAntes-join '')-ne($firewallDepois-join '')){throw 'npm test alterou regras de firewall.'}
- if($gitAntes-ne(& git -C $raiz status --porcelain --untracked-files=all|Out-String)){throw 'npm test escreveu no checkout.'}
- Write-Host 'npm test sem elevacao: nenhuma tarefa, regra de firewall ou escrita no checkout.'
+ if(Compare-Object $tarefasAntes $tarefasDepois){throw 'npm.cmd test alterou tarefas agendadas.'}
+ if(($firewallAntes-join '')-ne($firewallDepois-join '')){throw 'npm.cmd test alterou regras de firewall.'}
+ if($gitAntes-ne(& git -C $raiz status --porcelain --untracked-files=all|Out-String)){throw 'npm.cmd test escreveu no checkout.'}
+ Write-Host 'npm.cmd test sem elevacao: nenhuma tarefa, regra de firewall ou escrita no checkout.'
 
  # A mesma raiz curta agora exercita a copia e a migracao privilegiada.
  $env:SV_TESTES_INTEGRACAO_WINDOWS=$chaveAnterior

@@ -212,9 +212,9 @@ Nunca instale pacotes com o portal em execução.
 
 ## Validação obrigatória antes de ativar
 
-1. `npm run lint`
-2. `npm run typecheck`
-3. `npm test`
+1. `npm.cmd run lint`
+2. `npm.cmd run typecheck`
+3. `npm.cmd test`
 4. build Vinext
 5. `scripts/teste-instalacao-nova.ps1 -UsarBuildExistente`
 6. `scripts/saude-completa.mjs` — API, HTML, CSS e JavaScript
@@ -231,7 +231,7 @@ node scripts/saude-completa.mjs
 ```
 
 Esse modo testa o build existente, não mudanças posteriores no código-fonte.
-`npm run build` direto é bloqueado se a porta 3000 estiver ocupada.
+`npm.cmd run build` direto é bloqueado se a porta 3000 estiver ocupada.
 
 No notebook servidor, a atualização não é feita assim: use
 `scripts\atualizar-servidor.ps1`, que busca a versão publicada, testa e reverte
@@ -267,10 +267,10 @@ documentação, commit ou exportação.
 
 ## Banco e segurança
 
-Para desenvolvimento, `npm run dev` escuta somente em `127.0.0.1`.
+Para desenvolvimento, `npm.cmd run dev` escuta somente em `127.0.0.1`.
 Se for necessário testar de outro computador, use explicitamente
-`npm run dev:lan`, que expõe o servidor de desenvolvimento na rede.
-A operação instalada continua usando `npm run start:lan`; o servidor de
+`npm.cmd run dev:lan`, que expõe o servidor de desenvolvimento na rede.
+A operação instalada continua usando `npm.cmd run start:lan`; o servidor de
 desenvolvimento não substitui esse procedimento.
 
 SQLite via D1 local. Senhas com PBKDF2, salt individual e 600.000 iterações.
@@ -339,7 +339,7 @@ unidades são criadas vazias quando ausentes; localidade não tem De/Para. Não 
 preciso substituir o arquivo SQLite nem preencher correspondências
 antecipadamente.
 
-`npm run test:imports` testa HTTP real em uma instância e banco descartáveis:
+`npm.cmd run test:imports` testa HTTP real em uma instância e banco descartáveis:
 prévia sem publicação, correspondências, rejeições sem alteração de negócio,
 limites de volume, concorrência, exportação, reinicialização e atualização de banco.
 Inclui falhas provocadas na gravação e na auditoria para verificar a reversão integral.
@@ -376,3 +376,5 @@ conexão depende do runtime ou do proxy de implantação; não há um novo proxy
 HTTP incorporado nesta correção.
 A reserva de importação é liberada em qualquer caso e sua posse é renovada e
 conferida depois da leitura, antes de preparar e antes de publicar dados.
+
+No Windows PowerShell use `npm.cmd`, pois a política padrão pode bloquear `npm.ps1`. Em Linux use `npm` nos mesmos comandos.
