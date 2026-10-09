@@ -1,3 +1,4 @@
+import { ipLoginAssinado } from '@/lib/ip-login';
 import { RESERVAR_CODIGO_CHAMADO_SQL, joinContagemHistorico, filtroChamados } from '@/lib/operacao-dados';
 import { ATUALIZAR_UNIDADE_SQL, ATUALIZAR_LOCALIDADE_SQL } from '@/lib/catalogos-sql';
 import { exportarTabelas } from '@/lib/exportacao-snapshot';
@@ -542,7 +543,11 @@ async function login(request: Request) {
   const alvo = textValue(body.email).toLowerCase();
   if (alvo.length > 254) return fail('E-mail ou senha inválidos.', 401);
   const ocupado = () => ok({ error: 'Muitos acessos simultâneos. Tente novamente em alguns segundos.' }, { status: 429, headers: { 'Retry-After': '5' } });
-  const releaseIp = loginIpGate.acquire(clientIp(request));
+  const token=(env as unknown as {PORTAL_API_TOKEN?:string}).PORTAL_API_TOKEN;
+  const ipAssinado=await ipLoginAssinado(request.headers,token);
+  const ip=ipAssinado||clientIp(request);
+  // Sem origem verificavel, nao confundir toda a LAN com um unico cliente.
+  const releaseIp=ip==='local'?()=>{}:loginIpGate.acquire(ip);
   if (!releaseIp) return ocupado();
   try {
     const release = await loginGate.acquire(alvo);

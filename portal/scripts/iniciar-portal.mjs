@@ -22,6 +22,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 import { spawn } from 'node:child_process';
+import { criarProxyIpLogin, reservarPortaLoopback } from './proxy-ip-login.mjs';
 
 import { lerConfigBruta, portalPrivado } from './configuracao.mjs';
 
@@ -74,7 +75,8 @@ function apagarArquivoVars() {
 
 if (process.argv[1] && path.resolve(process.argv[1]).endsWith('iniciar-portal.mjs')) {
   const modo = process.argv[2] || '';
-  const conteudo = montarArquivoVars(lerConfigBruta());
+  const config = lerConfigBruta();
+  const conteudo = montarArquivoVars(config);
   // Sempre regrava: um arquivo que sobrou de uma queda nao pode entregar
   // valores antigos depois que o portal.env mudou.
   apagarArquivoVars();
@@ -83,7 +85,16 @@ if (process.argv[1] && path.resolve(process.argv[1]).endsWith('iniciar-portal.mj
     fs.writeFileSync(ARQUIVO_VARS, conteudo, { encoding: 'utf8', mode: 0o600 });
   }
   const wrangler = path.join(path.resolve(import.meta.dirname, '..'), 'node_modules', 'wrangler', 'bin', 'wrangler.js');
-  const filho = spawn(process.execPath, [wrangler, ...montarArgumentos(modo, conteudo ? ARQUIVO_VARS : null)], {
+  let proxy;
+  let argumentos=montarArgumentos(modo, conteudo ? ARQUIVO_VARS : null);
+  if(config.LOGIN_IP_POR_SOCKET==='1'){
+    const portaBackend=await reservarPortaLoopback();
+    // Porta publica continua 3000; so o backend fica em porta privada dinamica.
+    argumentos=montarArgumentos('',conteudo?ARQUIVO_VARS:null).concat(['--ip','127.0.0.1','--port',String(portaBackend)]);
+    proxy=criarProxyIpLogin({portaBackend,token:config.PORTAL_API_TOKEN});
+    await new Promise((resolve,reject)=>{proxy.once('error',reject);proxy.listen(3000,modo==='local'?'127.0.0.1':'0.0.0.0',resolve);});
+  }
+  const filho = spawn(process.execPath, [wrangler, ...argumentos], {
     cwd: path.resolve(import.meta.dirname, '..'),
     stdio: 'inherit',
   });
@@ -91,6 +102,8 @@ if (process.argv[1] && path.resolve(process.argv[1]).endsWith('iniciar-portal.mj
   // deixar o wrangler orfao quando o encerramento vem pelo console.
   for (const sinal of ['SIGINT', 'SIGTERM']) process.on(sinal, () => filho.kill(sinal));
   filho.on('exit', (codigo, sinal) => {
+    proxy?.close();
+    proxy?.closeAllConnections();
     apagarArquivoVars();
     process.exitCode = sinal ? 1 : (codigo ?? 0);
   });
