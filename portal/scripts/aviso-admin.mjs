@@ -22,16 +22,28 @@ export function destinatariosAdmin(valor = '') {
 
 // Banco separado do Portal: somente tipo de evento e instante da tentativa.
 // A reserva atomica antecede SMTP, inclusive para falha/resultado incerto.
-export function reservarAviso(arquivo, evento, agora = Date.now()) {
+function tentarReservaAviso(arquivo, evento, agora) {
   if (!Object.hasOwn(EVENTOS_ADMIN, evento)) throw new Error('Evento desconhecido.');
   fs.mkdirSync(path.dirname(arquivo), { recursive: true });
   const db = new DatabaseSync(arquivo);
   try {
-    db.exec('PRAGMA busy_timeout=1000; CREATE TABLE IF NOT EXISTS avisos(evento TEXT PRIMARY KEY, tentativa_ms INTEGER NOT NULL)');
+    db.exec('PRAGMA busy_timeout=2000; CREATE TABLE IF NOT EXISTS avisos(evento TEXT PRIMARY KEY, tentativa_ms INTEGER NOT NULL)');
     return db.prepare(`INSERT INTO avisos(evento,tentativa_ms) VALUES(?,?)
       ON CONFLICT(evento) DO UPDATE SET tentativa_ms=excluded.tentativa_ms
       WHERE avisos.tentativa_ms<=?`).run(evento, agora, agora - 60 * 60_000).changes === 1;
   } finally { db.close(); }
+}
+
+export function reservarAviso(arquivo, evento, agora = Date.now()) {
+  const limite = Date.now() + 10_000;
+  for (;;) {
+    try { return tentarReservaAviso(arquivo, evento, agora); }
+    catch (erro) {
+      // Inclui locks no open/schema, anteriores ao PRAGMA busy_timeout.
+      if (![5, 6].includes(Number(erro?.errcode)) || Date.now() >= limite) throw erro;
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 50);
+    }
+  }
 }
 
 export function montarAviso(evento, agora = new Date(), maquina = os.hostname()) {

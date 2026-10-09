@@ -60,7 +60,7 @@ void test('frequencia sobrevive a novos processos e ao relogio que voltou', t =>
   const modulo = new URL('../scripts/aviso-admin.mjs', import.meta.url).href;
   const codigo = `import {enviarAvisoAdmin} from ${JSON.stringify(modulo)};
     console.log(await enviarAvisoAdmin('supervisor-iniciado',{destinatarios:'admin@example.com',ensaio:false,arquivo:process.argv[1],agora:new Date('2026-10-08T14:00:00Z'),lerSmtp:()=>({}),criarTransporte:()=>({async sendMail(){},close(){}})}));`;
-  const executar = () => spawnSync(process.execPath, ['--input-type=module', '-e', codigo, arquivo], { encoding: 'utf8', env: { ...process.env, SUPPLY_VISION_PRIVADO: pasta }, timeout: 10_000 });
+  const executar = () => spawnSync(process.execPath, ['--input-type=module', '-e', codigo, arquivo], { encoding: 'utf8', env: { ...process.env, NO_COLOR: '1', FORCE_COLOR: '0', SUPPLY_VISION_PRIVADO: pasta }, timeout: 10_000 });
   const primeira = executar(), segunda = executar();
   assert.ifError(primeira.error); assert.ifError(segunda.error);
   assert.equal(primeira.status, 0, primeira.stderr); assert.equal(segunda.status, 0, segunda.stderr);
@@ -109,7 +109,7 @@ void test('mensagens usam somente conteudo fixo, maquina e horario e apontam sec
 void test('CLI desliga sem configurar SMTP e falha sem publicar segredo', t => {
   const { pasta } = fixture(t);
   const executar = (destinatarios, evento, modo = '0') => spawnSync(process.execPath, ['scripts/aviso-admin.mjs', evento], {
-    cwd: path.resolve(import.meta.dirname, '..'), env: { ...process.env, SUPPLY_VISION_PRIVADO: pasta, ADMIN_ALERTA_EMAIL: destinatarios, MODO_ENSAIO: modo }, encoding: 'utf8', timeout: 10_000,
+    cwd: path.resolve(import.meta.dirname, '..'), env: { ...process.env, NO_COLOR: '1', FORCE_COLOR: '0', SUPPLY_VISION_PRIVADO: pasta, ADMIN_ALERTA_EMAIL: destinatarios, MODO_ENSAIO: modo }, encoding: 'utf8', timeout: 10_000,
   });
   let resultado = executar('', 'supervisor-iniciado');
   assert.ifError(resultado.error); assert.equal(resultado.status, 0); assert.deepEqual(fs.readdirSync(pasta), []);
@@ -123,7 +123,7 @@ void test('SMTP comum e suficiente e configuracao do Portal nao e lida', t => {
   const { pasta } = fixture(t);
   fs.mkdirSync(path.join(pasta, 'comum')); fs.writeFileSync(path.join(pasta, 'comum', 'smtp.env'), 'SMTP_HOST=smtp.example.com\nSMTP_PORT=587\nSMTP_USER=remetente@example.com\nSMTP_PASSWORD=SEGREDO\nEMAIL_FROM_NAME=Supply Vision\n');
   const modulo = new URL('../scripts/configuracao.mjs', import.meta.url).href;
-  const resultado = spawnSync(process.execPath, ['--input-type=module', '-e', `import {lerConfigSmtp} from ${JSON.stringify(modulo)}; const c=lerConfigSmtp(); console.log(c.SMTP_HOST); console.log(c.PORTAL_URL===undefined);`], { env: { ...process.env, SUPPLY_VISION_PRIVADO: pasta }, encoding: 'utf8', timeout: 10_000 });
+  const resultado = spawnSync(process.execPath, ['--input-type=module', '-e', `import {lerConfigSmtp} from ${JSON.stringify(modulo)}; const c=lerConfigSmtp(); console.log(c.SMTP_HOST); console.log(c.PORTAL_URL===undefined);`], { env: { ...process.env, NO_COLOR: '1', FORCE_COLOR: '0', SUPPLY_VISION_PRIVADO: pasta }, encoding: 'utf8', timeout: 10_000 });
   assert.ifError(resultado.error); assert.equal(resultado.status, 0, resultado.stderr); assert.equal(resultado.stdout.trim(), 'smtp.example.com\ntrue');
 });
 
@@ -135,7 +135,7 @@ void test('processos concorrentes enviam todos os tipos mas reservam cada tipo u
   const codigo = `import {enviarAvisoAdmin} from ${JSON.stringify(modulo)};
     console.log(await enviarAvisoAdmin(process.argv[2],{destinatarios:'admin@example.com',ensaio:false,arquivo:process.argv[1],agora:new Date('2026-10-08T14:00:00Z'),lerSmtp:()=>({}),criarTransporte:()=>({async sendMail(){},close(){}})}));`;
   const executar = (evento, controle = arquivo) => new Promise((resolve, reject) => {
-    const filho = spawn(process.execPath, ['--input-type=module', '-e', codigo, controle, evento], { env: { ...process.env, SUPPLY_VISION_PRIVADO: pasta } });
+    const filho = spawn(process.execPath, ['--input-type=module', '-e', codigo, controle, evento], { env: { ...process.env, NO_COLOR: '1', FORCE_COLOR: '0', SUPPLY_VISION_PRIVADO: pasta } });
     let stdout = '', stderr = '';
     filho.stdout.on('data', dados => { stdout += dados; }); filho.stderr.on('data', dados => { stderr += dados; });
     filho.on('error', reject); filho.on('close', status => { if (status) reject(new Error(stderr)); else resolve(stdout.trim()); });
@@ -148,4 +148,30 @@ void test('processos concorrentes enviam todos os tipos mas reservam cada tipo u
   const resultados = await Promise.all(Array.from({ length: 4 }, () => executar('backup-falhou', outra)));
   assert.equal(resultados.filter(r => r === 'enviado').length, 1);
   assert.equal(resultados.filter(r => r === 'limitado').length, 3);
+});
+
+void test('reserva aguarda lock de escrita acima de um segundo sem perder exclusao', async t => {
+  const { arquivo, pasta } = fixture(t);
+  reservarAviso(arquivo, 'supervisor-iniciado', 0);
+  const { DatabaseSync } = await import('node:sqlite');
+  const db = new DatabaseSync(arquivo);
+  db.exec('BEGIN IMMEDIATE');
+  const modulo = new URL('../scripts/aviso-admin.mjs', import.meta.url).href;
+  const codigo = `import {reservarAviso} from ${JSON.stringify(modulo)}; console.log('pronto'); process.stdout.write(JSON.stringify(reservarAviso(process.argv[1],'backup-falhou')));`;
+  let liberado = false, timer;
+  try {
+    const saida = await new Promise((resolve, reject) => {
+      const filho = spawn(process.execPath, ['--input-type=module', '-e', codigo, arquivo], { env: { ...process.env, SUPPLY_VISION_PRIVADO: pasta, NO_COLOR: '1', FORCE_COLOR: '0' } });
+      let stdout = '', stderr = '';
+      filho.stdout.on('data', dados => {
+        stdout += dados;
+        if (!timer && stdout.includes('pronto')) timer = setTimeout(() => { db.exec('COMMIT'); liberado = true; }, 1400);
+      });
+      filho.stderr.on('data', dados => { stderr += dados; });
+      filho.on('error', reject);
+      filho.on('close', code => code ? reject(new Error(stderr)) : resolve(stdout));
+    });
+    assert.equal(saida.trim(), 'pronto\ntrue');
+    assert.equal(reservarAviso(arquivo, 'backup-falhou'), false);
+  } finally { clearTimeout(timer); if (!liberado) db.exec('ROLLBACK'); db.close(); }
 });

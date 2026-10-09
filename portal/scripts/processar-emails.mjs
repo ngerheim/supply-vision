@@ -117,21 +117,12 @@ export function falhar(db, item, erro) {
     .run(definitivo ? 'failed' : 'pending', proximaTentativa(Number(item.attempts), agora), mensagem, agora.toISOString(), item.id, item.attempts, item.locked_at);
 }
 
-export const MENSAGEM_RESTAURACAO = 'Banco restaurado: confirme o reenvio.';
+export { MENSAGEM_RESTAURACAO } from './filas-restauradas.mjs';
 
 // Depois de restaurar um backup, o que estava pendente ou em envio na copia
 // pode ja ter saido antes da restauracao. Em vez de reenviar sozinho, fica
 // como falha explicita para o administrador decidir o reenvio.
-export function marcarFilasAposRestauracao(db) {
-  const agora = new Date().toISOString();
-  const tabelas = new Set(db.prepare("SELECT name FROM sqlite_schema WHERE type='table'").all().map((linha) => linha.name));
-  let total = 0;
-  for (const tabela of ['email_notifications', 'daily_report_deliveries']) {
-    if (!tabelas.has(tabela)) continue;
-    total += Number(db.prepare(`UPDATE ${tabela} SET status='failed',locked_at=NULL,last_error=?,updated_at=? WHERE status IN ('pending','processing')`).run(MENSAGEM_RESTAURACAO, agora).changes);
-  }
-  return total;
-}
+export { marcarFilasAposRestauracao } from './filas-restauradas.mjs';
 
 function horarioSaoPaulo(data=new Date()){
   const partes=Object.fromEntries(new Intl.DateTimeFormat('en-CA',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(data).filter((p)=>p.type!=='literal').map((p)=>[p.type,p.value]));

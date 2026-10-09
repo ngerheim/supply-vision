@@ -38,7 +38,8 @@ Item-Homologacao 'Commit e alteracoes locais' {
  "$commit; $($mudancas.Count) alteracoes locais (nomes omitidos)"
 }
 foreach($nome in @('status','estado')){
- Item-Homologacao "$nome.json" { $j=Get-Content (Join-Path $privado "operacao\$nome.json") -Raw|ConvertFrom-Json;"JSON legivel; atualizado: $($j.atualizado)" }
+ $arquivoJson=Join-Path $privado "operacao\$nome.json"
+ Item-Homologacao "$nome.json" { $j=Get-Content -LiteralPath $arquivoJson -Raw -Encoding UTF8|ConvertFrom-Json;if($null-eq$j-or$j-is[string]-or$j-is[array]-or$j-is[ValueType]){throw 'Objeto JSON esperado'};'JSON legivel e valido' }
 }
 $cfg=@{};try{$cfg=Ler-ConfigOperacao (Join-Path $privado 'portal\configuracao\portal.env')}catch{}
 foreach($url in @('http://127.0.0.1:3000',$cfg['PORTAL_URL'])){
@@ -63,7 +64,7 @@ Item-Homologacao 'Ultimas entregas' {
  if(!$entregas){throw 'sem entregas'}
  $resumo=@()
  foreach($registro in @($entregas|Select-Object -First 5)){
-  $j=Get-Content $registro.FullName -Raw|ConvertFrom-Json
+  $j=Get-Content $registro.FullName -Raw -Encoding UTF8|ConvertFrom-Json
   $estado=if($j.estado-in@('enviado','parcial','incerto')){$j.estado}else{'desconhecido'}
   $resumo+="$($registro.LastWriteTime): $estado"
  }

@@ -88,7 +88,7 @@ Write-Host '  Compilando...' -ForegroundColor DarkGray
 $preferenciaAnterior = $ErrorActionPreference
 try {
   $ErrorActionPreference = 'Continue'
-  npm run build *> $logBuild
+  npm.cmd run build *> $logBuild
   $codigoBuild = $LASTEXITCODE
 } finally { $ErrorActionPreference = $preferenciaAnterior }
 if ($codigoBuild -ne 0) {

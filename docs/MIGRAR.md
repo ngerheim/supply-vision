@@ -94,3 +94,32 @@ o teste de escrita como SYSTEM é a etapa separada do assistente. Ele mascara
 segredos e e-mails, omite dados das entregas e mostra só as últimas dez linhas
 dos logs operacionais. A presença de um backup não comprova sua integridade;
 use a opção **Testar backup** da central para isso.
+
+## Antivirus antes do ensaio
+
+Se houver Bitdefender, peça à TI exclusão da pasta da instalação no antimalware
+em tempo real e no controle avançado de ameaças. A etapa 1 mostra um lembrete;
+não altera o antivírus. Proteja a escrita nessa pasta, pois a exclusão reduz sua
+proteção. `Permission denied`, `unable to unlink` ou arquivos `D` no `git status`
+são sinais de possível bloqueio/quarentena. Arquivo travado exige **reiniciar a
+máquina** depois de ajustar a exclusão. Consulte SOCORRO antes de retomar.
+
+## Conta de dominio para a tarefa
+
+O assistente tenta gravar um arquivo de teste como SYSTEM na pasta de backup e
+o remove. Se falhar, você pode escolher **CONTA** e informar uma conta de domínio
+na janela de credenciais. Outra tarefa temporária testa essa conta antes da
+configuração definitiva. A senha não vai para arquivos, logs nem checkpoint.
+Ao retomar, pode ser necessário informá-la novamente.
+
+**Se a senha da conta mudar, reconfigure a tarefa.** Pela central, pare a operação
+e aguarde encerrar. Em PowerShell como administrador, na pasta da instalação:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\configurar-inicializacao.ps1 -Modo computador -ContaPersonalizada
+```
+
+Informe a senha nova, aguarde o ajuste das permissões e a mensagem de sucesso.
+Inicie pela central e confira o Portal e o backup. Para voltar a SYSTEM depois
+que a TI liberar a conta de computador no compartilhamento e no NTFS, repita o
+comando **sem `-ContaPersonalizada`**. Consulte OPERAR.

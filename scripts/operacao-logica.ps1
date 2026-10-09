@@ -200,3 +200,35 @@ function Testar-SupervisorEncerrado([string]$Privado) {
 function Exigir-InstalacaoNaoMigrada([string]$Privado) {
  if(Test-Path -LiteralPath (Join-Path $Privado 'operacao\migrada.sinal')){throw 'Esta instalação foi migrada para outro servidor'}
 }
+
+function Processo-OrfaoDestaInstalacao($Processo,[string]$Raiz){
+ if($Processo.Name-notin@('node.exe','workerd.exe')){return $false}
+ $p=[regex]::Escape($Raiz.TrimEnd('\'))
+ $cmd=[string]$Processo.CommandLine
+ $script=('(?i)(?:^|[\s"'']){0}\\portal\\scripts\\(?:iniciar-portal|processar-emails|processar-relatorios|aviso-admin)\.mjs(?:["'']|\s|$)' -f $p)
+ $motor=('(?i)(?:^|[\s"'']){0}\\portal\\node_modules\\[^"'']*workerd(?:\.exe)?(?:["'']|\s|$)' -f $p)
+ $npm=('(?i)--prefix\s+["'']?{0}\\portal["'']?\s+run\s+(?:start:lan|email:watch)(?:\s|$)' -f $p)
+ return $cmd-match$script-or$cmd-match$motor-or$cmd-match$npm
+}
+function Encerrar-OrfaosInstalacao([string]$Raiz){
+ foreach($p in @(Get-CimInstance Win32_Process|Where-Object {Processo-OrfaoDestaInstalacao $_ $Raiz})){
+  $atual=Get-CimInstance Win32_Process -Filter "ProcessId=$($p.ProcessId)" -ErrorAction SilentlyContinue
+  if(!$atual-or$atual.CreationDate-ne$p.CreationDate-or!(Processo-OrfaoDestaInstalacao $atual $Raiz)){continue}
+  if(Get-Command Log -ErrorAction SilentlyContinue){Log "Encerrando processo orfao desta instalacao: PID $($p.ProcessId)."}
+  & taskkill.exe /PID $p.ProcessId /T /F|Out-Null
+  if(Get-Process -Id $p.ProcessId -ErrorAction SilentlyContinue){throw 'Processo orfao da instalacao continua ativo. Abra a central como administrador e pare a operacao antes de iniciar.'}
+ }
+}
+function Remover-ArquivosIntroduzidos([string]$Raiz,[string[]]$Arquivos){
+ foreach($relativo in $Arquivos){
+  if(!$relativo-or$relativo-match '^(?i:privado)(?:[\\/]|$)'){continue}
+  $alvo=[IO.Path]::GetFullPath((Join-Path $Raiz $relativo));$base=[IO.Path]::GetFullPath($Raiz).TrimEnd([IO.Path]::DirectorySeparatorChar)+[IO.Path]::DirectorySeparatorChar
+  if(!$alvo.StartsWith($base,[StringComparison]::OrdinalIgnoreCase)){throw 'Caminho de recuperacao fora da instalacao.'}
+  & git -C $Raiz check-ignore -q -- $relativo
+  if($LASTEXITCODE-eq0){continue};if($LASTEXITCODE-ne1){throw 'Nao foi possivel conferir arquivos ignorados antes da recuperacao.'}
+  $parent=Split-Path $alvo -Parent;$link=$false
+  while($parent-and$parent.StartsWith($base,[StringComparison]::OrdinalIgnoreCase)){if((Get-Item -LiteralPath $parent -ErrorAction SilentlyContinue).Attributes-band[IO.FileAttributes]::ReparsePoint){$link=$true;break};$parent=Split-Path $parent -Parent}
+  if($link){continue}
+  if(Test-Path -LiteralPath $alvo -PathType Leaf){Remove-Item -LiteralPath $alvo -Force}
+ }
+}

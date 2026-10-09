@@ -170,18 +170,21 @@ function Reverter([string]$motivo) {
   }
   # Restaura com o script da versao nova, que valida banco e filas.
   # So depois volta o codigo: a versao anterior pode nao ter essas protecoes.
+  $introduzidos=@(& git -c core.quotepath=false diff --name-only --diff-filter=A "${anterior}..${remoto}" --)
+  if($LASTEXITCODE){throw 'Nao foi possivel identificar os arquivos novos da versao.'}
   git reset --hard $anterior --quiet
   if ($LASTEXITCODE -ne 0) { throw 'Nao foi possivel restaurar o codigo anterior. Operacao permanece parada.' }
+  Remover-ArquivosIntroduzidos $Raiz $introduzidos
   if ($mexeuNode) {
     Push-Location $Portal
-    try { & npm ci --no-audit --no-fund | Out-Null; if ($LASTEXITCODE -ne 0) { throw 'Falha ao restaurar dependencias Node.' } } finally { Pop-Location }
+    try { & npm.cmd ci --no-audit --no-fund | Out-Null; if ($LASTEXITCODE -ne 0) { throw 'Falha ao restaurar dependencias Node.' } } finally { Pop-Location }
   }
   if ($mexeuPython) {
     & $Python -m pip install -r (Join-Path $Alertas 'config\requirements.txt') -r (Join-Path $Alertas 'config\requirements-dev.txt') --quiet
     if ($LASTEXITCODE -ne 0) { throw 'Falha ao restaurar dependencias Python.' }
   }
   Push-Location $Portal
-  try { & npm run build | Out-Null; if ($LASTEXITCODE -ne 0) { throw 'Falha ao reconstruir a versao anterior. Operacao permanece parada.' } } finally { Pop-Location }
+  try { & npm.cmd run build | Out-Null; if ($LASTEXITCODE -ne 0) { throw 'Falha ao reconstruir a versao anterior. Operacao permanece parada.' } } finally { Pop-Location }
   Iniciar-OperacaoAtualizada
   if ($LASTEXITCODE -ne 0) { throw 'Codigo restaurado, mas falhou a solicitacao de inicio da operacao.' }
   Write-Host "!! codigo revertido para $($anterior.Substring(0,7)). Inicio solicitado; confira a saude da operacao." -ForegroundColor Red
@@ -273,7 +276,7 @@ if ($Reaplicar) { $mexeuNode = $true; $mexeuPython = $true }
 if ($Simular) {
   Write-Host "`n   arquivos alterados:" -ForegroundColor DarkGray
   $mudou | ForEach-Object { Write-Host "      $_" -ForegroundColor DarkGray }
-  Aviso ('dependencias Node: ' + $(if ($mexeuNode) { 'PRECISAM de npm ci' } else { 'inalteradas' }))
+  Aviso ('dependencias Node: ' + $(if ($mexeuNode) { 'PRECISAM de npm.cmd ci' } else { 'inalteradas' }))
   Aviso ('dependencias Python: ' + $(if ($mexeuPython) { 'PRECISAM de pip install' } else { 'inalteradas' }))
   Write-Host "`n   Simulacao: nada foi alterado." -ForegroundColor DarkGray
   exit 0
@@ -339,11 +342,11 @@ Reparar-ConfiguracaoPrivada
 Garantir-CredencialPortal
 
 if ($mexeuNode) {
-  Etapa 'Dependencias Node mudaram: npm ci'
-  Push-Location $Portal; & npm ci --no-audit --no-fund; $rc = $LASTEXITCODE; Pop-Location
-  if ($rc -ne 0) { Reverter 'npm ci falhou.' }
+  Etapa 'Dependencias Node mudaram: npm.cmd ci'
+  Push-Location $Portal; & npm.cmd ci --no-audit --no-fund; $rc = $LASTEXITCODE; Pop-Location
+  if ($rc -ne 0) { Reverter 'npm.cmd ci falhou.' }
   Ok 'dependencias Node atualizadas'
-} else { Aviso 'dependencias Node inalteradas — npm ci dispensado' }
+} else { Aviso 'dependencias Node inalteradas — npm.cmd ci dispensado' }
 
 # requirements-dev.txt entra junto, como no instalador e no CI: a suite de
 # testes logo abaixo roda pytest, e uma versao nova dele so chegaria ao
@@ -356,7 +359,7 @@ if ($mexeuPython) {
 } else { Aviso 'dependencias Python inalteradas — pip install dispensado' }
 
 Etapa 'Build do Portal'
-Push-Location $Portal; & npm run build; $rc = $LASTEXITCODE; Pop-Location
+Push-Location $Portal; & npm.cmd run build; $rc = $LASTEXITCODE; Pop-Location
 if ($rc -ne 0) { Reverter 'O build falhou.' }
 Ok 'build concluido'
 

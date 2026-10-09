@@ -1,9 +1,10 @@
 ﻿[CmdletBinding()]
-param([switch]$SomenteVerificar,[switch]$SemTestes,[switch]$SemBuild,[ValidateSet('desligado','login','computador')][string]$ModoInicializacao,[switch]$ContaPersonalizada)
+param([switch]$SomenteVerificar,[switch]$SemTestes,[switch]$SemBuild,[ValidateSet('desligado','login','computador')][string]$ModoInicializacao,[switch]$ContaPersonalizada,[pscredential]$CredencialTarefa)
 $ErrorActionPreference='Stop'
 $Raiz=(Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 . (Join-Path $PSScriptRoot 'operacao-logica.ps1')
 . (Join-Path $PSScriptRoot 'inicializacao-logica.ps1')
+. (Join-Path $PSScriptRoot 'migrar.ps1') -Biblioteca
 if($ModoInicializacao-and!(Testar-Elevacao)){throw 'Escolher o modo de inicializacao exige executar como administrador.'}
 if($ContaPersonalizada-and$ModoInicializacao-ne'computador'){throw 'ContaPersonalizada exige ModoInicializacao computador.'}
 $Portal=Join-Path $Raiz 'portal'; $Alertas=Join-Path $Raiz 'alertas'; $Privado=Obter-PastaPrivada $Raiz
@@ -55,6 +56,7 @@ function Copiar([string]$origem,[string]$destino){
 function Rodar([string]$exe,[string[]]$Argumentos,[string]$pasta){
   Push-Location $pasta; try{& $exe @Argumentos; if($LASTEXITCODE){throw "Falha: $exe $($Argumentos-join ' ')"}}finally{Pop-Location}
 }
+Garantir-VisualCpp -SomenteVerificar:$SomenteVerificar
 Etapa 'Verificando a estrutura'
 foreach($c in @($Portal,$Alertas,(Join-Path $Portal 'package-lock.json'),(Join-Path $Alertas 'config\requirements.txt'))){if(!(Test-Path -LiteralPath $c)){throw "Item obrigatorio ausente: $c"}}
 $Node=Comando 'node.exe' 'OpenJS.NodeJS.LTS' 'Node.js'; $Python=Comando 'python.exe' 'Python.Python.3.12' 'Python'
@@ -88,6 +90,7 @@ foreach($n in @('excluir_descricoes','excluir_fornecedores','excluir_grupos_desp
 $amb="@echo off`r`nREM Gerado pelo INSTALAR.bat. Caminho portatil.`r`nset `"PYTHON=%~dp0..\..\..\alertas\.venv\Scripts\python.exe`"`r`n"
 [IO.File]::WriteAllText("$Privado\alertas\config\ambiente.bat",$amb,[Text.Encoding]::ASCII)
 Etapa 'Instalando dependencias do Portal'; Rodar $Npm @('ci','--include=dev','--audit=false') $Portal
+Conferir-Workerd $Portal
 Etapa 'Instalando dependencias dos Alertas'
 $PyVenv="$Alertas\.venv\Scripts\python.exe"; if(!(Test-Path $PyVenv)){Rodar $Python @('-m','venv',"$Alertas\.venv") $Raiz}
 Rodar $PyVenv @('-m','pip','install','--upgrade','pip') $Raiz
@@ -111,7 +114,7 @@ $Startup=Join-Path ([Environment]::GetFolderPath('Startup')) 'Supply Vision.cmd'
 $Inicio=Join-Path $Raiz 'INICIAR.bat'
 if(!$ModoInicializacao-and(Obter-TarefaSupplyVision $Raiz)){Write-Host 'Modo sem login existente preservado.';exit 0}
 if($ModoInicializacao){
- $credencial=$null;if($ContaPersonalizada){$credencial=Get-Credential -Message 'Conta da tarefa Supply Vision';if(!$credencial){throw 'Conta nao informada.'}}
+ $credencial=$CredencialTarefa;if($ContaPersonalizada-and!$credencial){$credencial=Get-Credential -Message 'Conta da tarefa Supply Vision';if(!$credencial){throw 'Conta nao informada.'}}
  Definir-ModoInicializacao $Raiz $Privado $Startup $ModoInicializacao -Credencial $credencial
  Write-Host "Modo de inicializacao configurado: $ModoInicializacao";exit 0
 }
