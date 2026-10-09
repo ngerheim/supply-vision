@@ -7,8 +7,8 @@ function Novo-ControleAvisosAdmin([hashtable]$Config, [bool]$Ensaio, [string]$No
 
 function Nome-EventoAdmin([string]$Evento) {
   $nomes = @{
-    'tarefa-falhou'{'Tarefa principal falhou ao iniciar'}
- 'vigilancia-health'{'Vigilância: Portal indisponível'}
+    'tarefa-falhou'='Tarefa principal falhou ao iniciar'
+ 'vigilancia-health'='Vigilância: Portal indisponível'
  'portal-parou'='Portal parou de responder'
     'portal-reiniciado'='Portal reiniciado automaticamente'
     'backup-falhou'='Backup falhou'
