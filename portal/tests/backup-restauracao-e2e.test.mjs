@@ -1,14 +1,14 @@
+import { criarTemporarioTeste } from './apoio/ambiente.mjs';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { DatabaseSync } from 'node:sqlite';
 import { SCHEMA_RELATORIOS } from '../lib/relatorios.ts';
 
 void test('backup real e restauracao CLI recuperam estado e preservam copia anterior', () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sv-backup-e2e-'));
+  const dir = criarTemporarioTeste('sv-backup-e2e-');
   const banco = path.join(dir, 'portal/banco/estado/state/v3/d1/miniflare-D1DatabaseObject/teste.sqlite');
   fs.mkdirSync(path.dirname(banco), { recursive: true });
   const db = new DatabaseSync(banco);

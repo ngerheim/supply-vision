@@ -1,7 +1,7 @@
+import { criarTemporarioTeste } from './apoio/ambiente.mjs';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { DatabaseSync } from 'node:sqlite';
@@ -35,7 +35,7 @@ void test('somente MODO_ENSAIO=1 ativa o ensaio; as duas filas ficam intactas se
 });
 
 for(const existente of [true,false])void test(`backup em ensaio valida copia local e nao toca rede ${existente?'existente':'ausente'}, sem SMTP`,(t)=>{
-  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'sv-ensaio-'));
+  const dir=criarTemporarioTeste('sv-ensaio-');
   t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
   const arquivo=path.join(dir,'portal/banco/estado/state/v3/d1/miniflare-D1DatabaseObject/a.sqlite');
   fs.mkdirSync(path.dirname(arquivo),{recursive:true});
@@ -57,7 +57,7 @@ for(const existente of [true,false])void test(`backup em ensaio valida copia loc
 });
 
 void test('processador CLI em ensaio nao exige SMTP nem tenta verificar conexao',(t)=>{
-  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'sv-email-ensaio-'));
+  const dir=criarTemporarioTeste('sv-email-ensaio-');
   t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
   for(const args of [[],['--test-connection']]){
     const resultado=spawnSync(process.execPath,['--experimental-strip-types','scripts/processar-emails.mjs',...args],{

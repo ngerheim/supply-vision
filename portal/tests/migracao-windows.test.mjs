@@ -1,14 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { DatabaseSync } from 'node:sqlite';
+import { criarTemporarioTeste, motivoPularIntegracaoWindows } from './apoio/ambiente.mjs';
 
-void test('assistente Windows: semente, SYSTEM, health, homologacao e retomada', { skip: process.platform !== 'win32', timeout: 240_000 }, () => {
+void test('assistente Windows: semente, SYSTEM, health, homologacao e retomada', { skip: motivoPularIntegracaoWindows(), timeout: 240_000 }, () => {
   const root=path.resolve(import.meta.dirname,'../..');
-  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'sv-migrar-ci-'));
+  const dir=criarTemporarioTeste('sv-migrar-ci-');
   const repo=path.join(dir,'repo'), origem=path.join(dir,'origem'), report=path.join(dir,'relatorio.txt');
   const env=Object.fromEntries(Object.entries(process.env).filter(([k])=>k.toLowerCase()!=='psmodulepath'));
   const executar=(args,extra={},timeout=200_000)=>{

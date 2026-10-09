@@ -1,13 +1,13 @@
+import { criarTemporarioTeste } from './apoio/ambiente.mjs';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { DatabaseSync } from 'node:sqlite';
 
 for (const rede of [true, false]) void test(`backup sem SMTP ${rede ? 'replica na rede' : 'não declara redundância'}`, (t) => {
-  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'backup-sem-smtp-'));
+  const dir=criarTemporarioTeste('backup-sem-smtp-');
   t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
   const arquivo=path.join(dir,'portal/banco/estado/state/v3/d1/miniflare-D1DatabaseObject/a.sqlite');
   fs.mkdirSync(path.dirname(arquivo),{recursive:true});

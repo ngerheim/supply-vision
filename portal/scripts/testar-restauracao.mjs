@@ -7,7 +7,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { SCHEMA_RELATORIOS } from '../lib/relatorios.ts';
 import { portalPrivado } from './configuracao.mjs';
 
-const pasta = fs.mkdtempSync(path.join(os.tmpdir(), 'supply-vision-restauracao-'));
+const pasta = fs.mkdtempSync(path.join(fs.realpathSync.native(os.tmpdir()), 'supply-vision-restauracao-'));
 const copia = path.join(pasta, 'restaurado.sqlite');
 const ficticio = process.argv.includes('--fixture');
 const origem = ficticio ? path.join(pasta, 'origem.sqlite') : path.join(portalPrivado, 'backups', 'portal-atual.sqlite');

@@ -1,5 +1,6 @@
 ﻿# Integracao real Windows/SYSTEM, apenas em pasta e tarefa ficticias.
 $ErrorActionPreference='Stop'
+if($env:SV_TESTES_INTEGRACAO_WINDOWS-ne'1'){Write-Host 'SKIPPED: tarefa SYSTEM exige SV_TESTES_INTEGRACAO_WINDOWS=1 no CI.';return}
 . (Join-Path $PSScriptRoot 'operacao-logica.ps1')
 . (Join-Path $PSScriptRoot 'inicializacao-logica.ps1')
 if(!(Testar-Elevacao)){throw 'O teste SYSTEM exige runner elevado.'}

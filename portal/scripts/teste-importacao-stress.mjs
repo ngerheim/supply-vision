@@ -14,7 +14,7 @@ import { verificarFiltrosBusca } from './verificar-filtros-busca.mjs';
 
 const portal = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 fs.mkdirSync(path.join(portal, 'work'), { recursive: true });
-const output = fs.mkdtempSync(path.join(portal, 'work', 'import-stress-'));
+const output = fs.mkdtempSync(path.join(fs.realpathSync.native(path.join(portal, 'work')), 'import-stress-'));
 const state = path.join(output, 'state');
 const runtime = path.join(output, 'runtime');
 fs.cpSync(path.join(portal, 'dist'), runtime, { recursive: true });

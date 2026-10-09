@@ -1,7 +1,7 @@
+import { criarTemporarioTeste } from './apoio/ambiente.mjs';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { SCHEMA_RELATORIOS } from '../lib/relatorios.ts';
@@ -9,7 +9,7 @@ import { prepararRestauracao } from '../scripts/restauracao-segura.mjs';
 
 for (const falha of [null, 'email_notifications', 'daily_report_deliveries']) {
   void test(`restauracao prepara ambas as filas sem tocar origem/alvo: ${falha || 'sucesso'}`, () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sv-restauracao-'));
+    const dir = criarTemporarioTeste('sv-restauracao-');
     const origem = path.join(dir, 'origem.sqlite'), temporario = path.join(dir, 'novo.sqlite');
     const db = new DatabaseSync(origem);
     db.exec('CREATE TABLE operacao_validacao(id INTEGER PRIMARY KEY,ativa INTEGER); INSERT INTO operacao_validacao VALUES(1,1)');
