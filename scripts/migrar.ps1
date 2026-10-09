@@ -35,6 +35,7 @@ function Avisar-Bitdefender {
 function Testar-UncMigracao([string]$Valor){return $Valor-match '^\\\\[^\\/:*?"<>|]+\\[^\\/:*?"<>|]+(?:\\[^/:*?"<>|]*)?$'}
 function Sugerir-PortalUrl([string]$Nome){return "http://${Nome}:3000"}
 function Normalizar-ModoMigracao([string]$Texto){
+ if([string]::IsNullOrWhiteSpace($Texto)){return $null}
  $normal=$Texto.Trim().ToLowerInvariant().Normalize([Text.NormalizationForm]::FormD) -replace '\p{Mn}',''
  $normal=$normal -replace '\s+',' '
  if($normal-eq'ensaio'){return 'ensaio'}
