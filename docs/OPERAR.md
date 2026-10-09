@@ -570,3 +570,7 @@ log e para o administrador (quando e-mail habilitado); confira permissões e
 portas na central elevada. O Node das ações e da atualização vem da instalação
 da máquina. Falha somente na cópia de rede do backup pré-atualização não impede
 a troca: a cópia local íntegra é preservada e o aviso exige verificar a rede.
+
+O Windows aplica novos membros do grupo de operadores numa nova sessão.
+Se precisar usar a central sem elevação após configurar o grupo, no modo
+sem login entre novamente no Windows; a tarefa continua fora da sessão RDP.
