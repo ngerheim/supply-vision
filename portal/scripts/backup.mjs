@@ -149,7 +149,7 @@ export async function executarBackup({ preAtualizacao = false, ensaio = modoEnsa
   try { await email(copiaNaRede); }
   catch (erro) {
     if (!copiaNaRede) throw erro;
-    registrar('AVISO: backup local e na rede confirmados; comprovante nao enviado.');
+    registrar('AVISO: backup local e na rede confirmados; comprovante não enviado.');
   }
   return 0;
 }
