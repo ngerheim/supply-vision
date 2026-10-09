@@ -58,3 +58,6 @@ nao hospeda a aplicacao. Nao ha adaptacao para GitHub Pages.
 O workflow manual ainda nao publica o portal. E-mails, backups e demais
 etapas de migracao precisam ser concluidos antes de substituir a operacao
 local. Veja [docs/HOSPEDAGEM.md](docs/HOSPEDAGEM.md).
+
+Para levar a instalação do notebook para o servidor, siga o
+[assistente de migração, com ensaio e troca definitiva](docs/MIGRAR.md).

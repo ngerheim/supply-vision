@@ -196,3 +196,7 @@ function Testar-SupervisorEncerrado([string]$Privado) {
     return $true
   } catch { return $false }
 }
+
+function Exigir-InstalacaoNaoMigrada([string]$Privado) {
+ if(Test-Path -LiteralPath (Join-Path $Privado 'operacao\migrada.sinal')){throw 'Esta instalação foi migrada para outro servidor'}
+}
