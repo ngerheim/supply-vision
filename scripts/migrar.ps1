@@ -193,7 +193,7 @@ try{
   $dns=[Net.Dns]::GetHostEntry([Environment]::MachineName).HostName
   Write-Host "Endereco anterior: $($cfg['PORTAL_URL'])"
   $url=Perguntar-Migracao 'Endereco do Portal' (Sugerir-PortalUrl $dns) $PortalUrl
-  $uri=$null;if(![uri]::TryCreate($url,[UriKind]::Absolute,[ref]$uri)-or$uri.Scheme-notin@('http','https')-or$uri.UserInfo){throw 'Endereco invalido. Use http://sup.locfrotas.local:3000 sem usuario ou senha.'}
+  $uri=$null;if(![uri]::TryCreate($url,[UriKind]::Absolute,[ref]$uri)-or$uri.Scheme-notin@('http','https')-or$uri.UserInfo){throw 'Endereco invalido. Use http://portal.empresa.local:3000 sem usuario ou senha.'}
   $rede=Perguntar-Migracao 'Pasta de backup na rede' $cfg['BACKUP_NETWORK_DIR'] $BackupNetworkDir
   if(!(Testar-UncMigracao $rede)){throw 'Use caminho UNC: \\servidor\pasta.'}
   if(!(Testar-RedeComoSystem $rede)){

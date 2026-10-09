@@ -111,7 +111,7 @@ configurou o modo, mantendo as permissões existentes.
 **Backup em rede com SYSTEM:** use `BACKUP_NETWORK_DIR=\\servidor\pasta`, nunca
 uma unidade mapeada como `Z:\`. A TI precisa liberar a conta de computador
 **DOMINIO\NOMEDAMAQUINA$** tanto no compartilhamento quanto nas permissões NTFS.
-Neste servidor, é **LOCFROTAS\PROGRAMASUP$**. Credenciais `cmdkey` do usuário RDP
+Por exemplo, **DOMINIO\SERVIDOR$**. Credenciais `cmdkey` do usuário RDP
 não se aplicam à SYSTEM.
 
 **Contrapartida de segurança:** SYSTEM tem privilégios altos na máquina.
@@ -122,7 +122,7 @@ confiança; não conceda acesso geral. Uma conta própria com permissões menore
 
 **Teste final no servidor:** reinicie sem fazer login, aguarde o minuto de
 atraso e a inicialização, e confirme de outra máquina que
-**http://sup.locfrotas.local:3000** está no ar. Só depois abra RDP para conferir
+**http://portal.empresa.local:3000** está no ar. Só depois abra RDP para conferir
 central, logs e backup. No ensaio, mantenha `MODO_ENSAIO=1`: e-mails e cópia em
 rede continuam bloqueados. Consulte OPERAR para descartar os dados do ensaio
 antes da instalação definitiva.
