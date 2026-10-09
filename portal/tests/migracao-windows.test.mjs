@@ -90,6 +90,8 @@ Preparar-Migracao $Raiz $Privado (Join-Path $Destino 'startup-ficticio.cmd') $De
     const banco=path.join(repo,'privado/portal/banco/estado/state/v3/d1/miniflare-D1DatabaseObject/fixture.sqlite');
     assert.ok(fs.existsSync(banco));
     const antes=fs.statSync(banco).mtimeMs;
+    assert.throws(()=>ps(script,args.map(a=>a==='ensaio'?'definitiva':a)), /Modo diferente/);
+    assert.equal(fs.statSync(banco).mtimeMs,antes);
     ps(script,args);
     assert.equal(fs.statSync(banco).mtimeMs,antes,'retomada nao restaura banco outra vez');
     assert.equal(JSON.parse(fs.readFileSync(path.join(repo,'privado/operacao/status.json'),'utf8').replace(/^\uFEFF/,'' )).conta,'S-1-5-18');
