@@ -15,7 +15,7 @@ function Decidir-CloneMigracao([bool]$Existe,[bool]$Limpo,[bool]$Iniciado,[bool]
 function Permitir-DescarteEnsaio([hashtable]$Config){return $Config['MODO_ENSAIO']-eq'1'}
 function Atualizar-EnvMigracao([string]$Arquivo,[string]$Chave,[string]$Valor){
  if($Valor-match '[\r\n]'){throw 'Valor invalido. Use uma unica linha.'}
- $linhas=@(Get-Content -LiteralPath $Arquivo -ErrorAction Stop)
+ $linhas=@(Get-Content -LiteralPath $Arquivo -Encoding UTF8 -ErrorAction Stop)
  $nova=@();$achou=$false
  foreach($l in $linhas){if($l-match ('^\s*'+[regex]::Escape($Chave)+'\s*=')){if(!$achou){$nova+="$Chave=$Valor";$achou=$true}}else{$nova+=$l}}
  if(!$achou){$nova+="$Chave=$Valor"}
