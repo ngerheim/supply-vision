@@ -215,3 +215,6 @@ limite persistente de um aviso por tipo a cada 60 minutos. Para desligar:
 Quando a parada para atualização excede o prazo, a versão ainda não foi trocada:
 a tarefa é reabilitada e a retomada solicitada se a operação estava ativa.
 A central só considera a parada concluída quando o supervisor e as portas estão livres.
+
+Para ajustar o prazo de parada da atualização, use
+`atualizar-servidor.ps1 -PrazoParadaSegundos 120` (padrão: 60 segundos).
