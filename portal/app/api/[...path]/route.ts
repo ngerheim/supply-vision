@@ -1,3 +1,4 @@
+import { RESERVAR_CODIGO_CHAMADO_SQL, joinContagemHistorico, filtroChamados } from '@/lib/operacao-dados';
 import { ATUALIZAR_UNIDADE_SQL, ATUALIZAR_LOCALIDADE_SQL } from '@/lib/catalogos-sql';
 import { exportarTabelas } from '@/lib/exportacao-snapshot';
 import { ENTREGAS_EMAIL_SQL } from '@/lib/entregas-email-sql';
@@ -21,7 +22,7 @@ import { chaveIdempotencia } from '@/lib/idempotencia';
 import { NextRequest, NextResponse } from 'next/server';
 import * as XLSX from 'xlsx';
 import { lerPlanilha } from '@/lib/planilha';
-import { KeyedConcurrencyGate } from '@/lib/concurrency';
+import { IpConcurrencyGate, KeyedConcurrencyGate } from '@/lib/concurrency';
 import { chaveLocalidade, colunasAusentes, parseImportRow, resolveImportRows, summarizeImportErrors, deduplicateImportRows, validarFornecedorImportacao, uniqueIndex, type ImportTarget } from '@/lib/importacao';
 import { contextoNotificacaoChamado, pessoaNotificacao, prepararNotificacoesChamado, type ContextoNotificacaoChamado } from '@/lib/fila-email-chamados';
 import { TravaPerdida } from '@/lib/travas-sql';
@@ -236,7 +237,7 @@ async function GETInterno(request: NextRequest) {
     return consultarRelatorios(parts[1], parts[2]);
   }
   if (parts[0] === 'imports' && parts[1]) return importDetail(parts[1]);
-  if (parts[0] === 'imports') return ok({ imports: await importList() });
+  if (parts[0] === 'imports') return ok({ imports: await importList(), total: await totalImportacoes() });
   if (parts[0] === 'mappings') {
     return mappingList();
   }
@@ -253,7 +254,7 @@ async function GETInterno(request: NextRequest) {
     ? await all('SELECT id,name,email,role,active,revision,daily_report_enabled AS dailyReportEnabled,daily_report_time AS dailyReportTime,created_at AS createdAt FROM users ORDER BY name')
     : await all('SELECT id,name FROM users WHERE active=1 ORDER BY name') });
   if (parts[0] === 'tickets' && parts[1]) return ticketDetail(parts[1]);
-  if (parts[0] === 'tickets') return ok({ tickets: await ticketList(), stats: await ticketStats() });
+  if (parts[0] === 'tickets') return ok({ ...await ticketList(request.nextUrl.searchParams), stats: await ticketStats() });
   if (parts[0] === 'export' && parts[1] === 'agreements') {
     const resposta = await exportAgreements();
     await audit(user.id, 'EXPORT', 'agreement', null, 'Planilha de acordos gerada para download');
@@ -531,6 +532,7 @@ const SALT_INEXISTENTE = 'conta-inexistente-salt-fixo-nao-usar-em-usuario-real';
 
 // Limites conservadores por processo, a calibrar na homologação do servidor.
 const loginGate = new KeyedConcurrencyGate(4, 16);
+const loginIpGate = new IpConcurrencyGate(2);
 async function login(request: Request) {
   const texto = await corpoLimitado(request, CORPO_MAX_LOGIN);
   if (texto === null) return fail('E-mail ou senha inválidos.', 401);
@@ -539,12 +541,16 @@ async function login(request: Request) {
   if (!isRecord(body)) return fail('E-mail ou senha inválidos.', 401);
   const alvo = textValue(body.email).toLowerCase();
   if (alvo.length > 254) return fail('E-mail ou senha inválidos.', 401);
-  const release = await loginGate.acquire(alvo);
-  if (!release) {
-    return ok({ error: 'Muitos acessos simultâneos. Tente novamente em alguns segundos.' }, { status: 429, headers: { 'Retry-After': '5' } });
-  }
-  try { return await authenticate(request, texto); }
-  finally { release(); }
+  const ocupado = () => ok({ error: 'Muitos acessos simultâneos. Tente novamente em alguns segundos.' }, { status: 429, headers: { 'Retry-After': '5' } });
+  const releaseIp = loginIpGate.acquire(clientIp(request));
+  if (!releaseIp) return ocupado();
+  try {
+    const release = await loginGate.acquire(alvo);
+    if (!release) return ocupado();
+    try { return await authenticate(request, texto); }
+    finally { release(); }
+  } finally { releaseIp(); }
+
 }
 
 async function authenticate(request: Request, texto: string) {
@@ -689,7 +695,7 @@ async function bootstrap(user: User) {
     all('SELECT id,revision,code,name,active FROM units ORDER BY code'),
     all('SELECT id,revision,city,state FROM locations ORDER BY state,city'), canWrite(user) ? importList() : Promise.resolve([]),
   ]);
-  return ok({ user, agreements, totalAcordos: agreements.length, catalogs: { suppliers, items, models, units, locations }, imports, manutencao: relatorioManutencao() });
+  return ok({ user, agreements, totalAcordos: agreements.length, catalogs: { suppliers, items, models, units, locations }, imports, totalImports: canWrite(user) ? await totalImportacoes() : 0, manutencao: relatorioManutencao() });
 }
 
 async function agreementList() {
@@ -1336,6 +1342,7 @@ async function recuperarImportacoesInterrompidas(){
   }
 }
 
+async function totalImportacoes(){return Number((await first<{n:number}>('SELECT COUNT(*) n FROM imports'))?.n||0)}
 async function importList(){ return all(`SELECT i.id,i.filename,i.mode,i.status,i.total_rows AS totalRows,i.valid_rows AS validRows,i.error_rows AS errorRows,i.created_at AS createdAt,i.completed_at AS completedAt,a.number AS agreement,u.name AS user FROM imports i LEFT JOIN agreements a ON a.id=i.agreement_id LEFT JOIN users u ON u.id=i.created_by ORDER BY i.created_at DESC LIMIT 100`); }
 async function importDetail(importId:string){
   const row=await first<{id:string;filename:string;mode:string;status:string;totalRows:number;validRows:number;errorRows:number;createdAt:string;completedAt:string|null;agreement:string|null;user:string|null;summaryJson:string|null}>(`SELECT i.id,i.filename,i.mode,i.status,i.total_rows AS totalRows,i.valid_rows AS validRows,i.error_rows AS errorRows,
@@ -1363,7 +1370,7 @@ async function auditList(params?: URLSearchParams, exportAll=false){
   // Paginacao real: o total vem do banco, entao a tela sabe quantas paginas
   // existem sem precisar carregar tudo.
   const {page:requestedPage,pageSize}=paginaSolicitada(params||new URLSearchParams());
-  const total=Number((await first<{n:number}>(`SELECT COUNT(*) n FROM audit_logs l LEFT JOIN users u ON u.id=l.user_id ${where}`, values))?.n||0);
+  const total=Number((await first<{n:number}>(`SELECT COUNT(*) n FROM audit_logs l ${joinContagemHistorico(q)} ${where}`, values))?.n||0);
   if(exportAll){const erro=erroExportacaoAuditoria(total);if(erro)throw new EntradaInvalida(erro);}
   const pageCount=Math.max(Math.ceil(total/pageSize),1);
   const page=Math.min(requestedPage,pageCount);
@@ -1430,12 +1437,17 @@ async function retryEmailNotification(user:User,notificationId:string,kind:'noti
   return ok({success:true});
 }
 
-async function ticketList(){
-  return all(`SELECT t.id,t.code,t.supplier_name AS supplierName,t.cnpj,t.city,t.state,t.contact,t.scope,t.priority,t.status,
+async function ticketList(params: URLSearchParams){
+  const {where,values}=filtroChamados(params);
+  const {page:requestedPage,pageSize}=paginaSolicitada(params);
+  const total=Number((await first<{n:number}>(`SELECT COUNT(*) n FROM tickets t ${where}`,values))?.n||0);
+  const pageCount=Math.max(1,Math.ceil(total/pageSize)),page=Math.min(requestedPage,pageCount);
+  const tickets=await all(`SELECT t.id,t.code,t.supplier_name AS supplierName,t.cnpj,t.city,t.state,t.contact,t.scope,t.priority,t.status,
     t.created_at AS createdAt,t.updated_at AS updatedAt,t.closed_at AS closedAt,t.agreement_id AS agreementId,
     r.name AS requestedBy,a.name AS assignedTo,ag.number AS agreementNumber
     FROM tickets t LEFT JOIN users r ON r.id=t.requested_by LEFT JOIN users a ON a.id=t.assigned_to
-    LEFT JOIN agreements ag ON ag.id=t.agreement_id ORDER BY t.updated_at DESC`);
+    LEFT JOIN agreements ag ON ag.id=t.agreement_id ${where} ORDER BY t.updated_at DESC,t.id DESC LIMIT ? OFFSET ?`,[...values,pageSize,(page-1)*pageSize]);
+  return {tickets,total,page,pageCount,pageSize};
 }
 
 async function ticketStats(){
@@ -1490,8 +1502,9 @@ async function createTicket(request:Request,user:User){
   // calcular o mesmo numero antes de qualquer uma gravar; por isso ha novas
   // tentativas ate encontrar um codigo livre, em vez de perder o chamado.
   for(let tentativa=0;tentativa<12;tentativa++){
-    const maior=await first<{c:string}>(`SELECT code c FROM tickets ORDER BY CAST(substr(code,instr(code,'-')+1) AS INTEGER) DESC LIMIT 1`);
-    const proximo=(maior?.c?Number(maior.c.split('-').at(-1)):0)+1+tentativa;
+    const reserva=await rawDb().prepare(RESERVAR_CODIGO_CHAMADO_SQL).first<{value:number}>();
+    if(!reserva)throw new Error('Contador de chamados indisponível.');
+    const proximo=reserva.value;
     const code=`SUP-${String(proximo).padStart(4,'0')}`;
     const ticketId=id('tck'), eventId=id('tev'), timestamp=now();
     try{

@@ -570,3 +570,26 @@ log e para o administrador (quando e-mail habilitado); confira permissões e
 portas na central elevada. O Node das ações e da atualização vem da instalação
 da máquina. Falha somente na cópia de rede do backup pré-atualização não impede
 a troca: a cópia local íntegra é preservada e o aviso exige verificar a rede.
+
+## Retenção de registros operacionais
+
+O expurgo fica **desligado por padrão**. Para ligar, em operacao.env configure
+`EXPURGO_HABILITADO=1` e reinicie a operação. Ele roda no horário da limpeza,
+com trava compartilhada com o backup. Antes de cada execução faz e valida uma
+cópia local; a primeira fica preservada como `pre-expurgo.sqlite`. Se o backup
+falhar, o expurgo não ocorre. Não envia e-mail nem copia esse backup para rede.
+
+`EXPURGO_EMAILS_DIAS=180` remove notificações e relatórios diários enviados ou
+com falha finalizada; pendentes e envios em andamento ficam. Depois da remoção,
+as falhas antigas não estarão disponíveis para reenvio manual.
+`EXPURGO_RELATORIOS_DIAS=90` remove execuções concluídas, com falha ou canceladas.
+`EXPURGO_IMPORTACOES_DIAS=180` limpa somente o resumo detalhado das importações
+finalizadas; preserva o registro, contagens e vínculo com as versões.
+Só registros **mais antigos** que o prazo são afetados; o dia do limite fica.
+Cada prazo pode ser ajustado; `0` preserva aquele tipo. `EXPURGO_HABILITADO=0`
+desliga tudo. **audit_logs e ticket_events são preservados sem expurgo**.
+
+Chamados são paginados no servidor, com busca e situação aplicadas antes da
+paginação. Importações e relatórios mostram o total quando a lista contém
+somente os 100 mais recentes. Os códigos de novos chamados usam um contador
+atômico; reservas não concluídas podem deixar lacunas, sem reutilizar números.

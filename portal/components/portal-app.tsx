@@ -261,22 +261,21 @@ function Tickets({busy,users,agreements,run,initialDetail}:JsonData){
   const [page,setPage]=useState(1);
   const [agora]=useState(()=>Date.now());
   const [loadError,setLoadError]=useState('');
-  const load=useCallback(async()=>{setLoadError('');try{setData(await api('/api/tickets'))}catch(error){setLoadError(errorText(error))}},[]);
+  const consulta=useRef(0);
+  const load=useCallback(async()=>{setLoadError('');try{const pedido=++consulta.current;const resposta=await api(`/api/tickets?page=${page}&pageSize=50&group=${group}&q=${encodeURIComponent(q)}`);if(pedido===consulta.current)setData(resposta)}catch(error){setLoadError(errorText(error))}},[page,group,q]);
   useEffect(()=>{let active=true;queueMicrotask(()=>{if(active)void load()});return()=>{active=false}},[load]);
   if(loadError)return <FalhaDeCarregamento erro={loadError} tentar={()=>void load()}/>;
   if(!data) return <Loading label="Carregando chamados…"/>;
   if(detail) return <TicketDetail busy={busy} id={detail} users={users} agreements={agreements} onBack={()=>{setDetail(null);void load()}} run={run}/>;
   const s=data.stats||{};
   const prioridade:AnyRow={alta:1,media:2,baixa:3};
-  const groupStatuses:AnyRow={ativos:['aberto','aguardando_fornecedor'],fechados:['fechado'],cancelados:['cancelado']};
-  const filtradas=(data.tickets||[]).filter((r:AnyRow)=>groupStatuses[group].includes(r.status)&&(!q||correspondeBusca(`${r.code} ${r.supplierName} ${r.city} ${r.state}`,q)));
-  const rows=ordenar(filtradas,(r:AnyRow)=>[r.code,r.supplierName,prioridade[r.priority]||9,(ticketStatusMap[r.status]||[r.status])[0],(r.closedAt?Date.parse(r.closedAt):agora)-Date.parse(r.createdAt),r.requestedBy||'']);
-  const pageCount=Math.max(1,Math.ceil(rows.length/50)),currentPage=Math.min(page,pageCount);
+  const rows=ordenar(data.tickets||[],(r:AnyRow)=>[r.code,r.supplierName,prioridade[r.priority]||9,(ticketStatusMap[r.status]||[r.status])[0],(r.closedAt?Date.parse(r.closedAt):agora)-Date.parse(r.createdAt),r.requestedBy||'']);
+  const pageCount=data.pageCount,currentPage=data.page;
   const cards=[['Abertos',s.aberto],['Aguardando',s.aguardando],['Fechados',s.fechado]];
   return <div className="space-y-6">
     <section className="grid gap-3 sm:grid-cols-3">{cards.map(([label,value]:JsonData,i:number)=><Card key={label} className="overflow-hidden shadow-sm animate-in fade-in slide-in-from-bottom-2 fill-mode-both" style={{animationDelay:`${i*60}ms`}}><CardContent><p className="text-sm font-medium text-muted-foreground">{label}</p><p className="mt-2 text-4xl font-semibold tabular-nums tracking-[-.045em]">{Number(value||0)}</p></CardContent></Card>)}</section>
     <div className="flex flex-wrap gap-2 rounded-xl border bg-muted/35 p-1.5" role="tablist" aria-label="Situação dos chamados">{([['ativos','Ativos',Number(s.aberto||0)+Number(s.aguardando||0)],['fechados','Finalizados',s.fechado],['cancelados','Cancelados',s.cancelado]] as const).map(([key,label,count])=><Button key={key} role="tab" aria-selected={group===key} variant={group===key?'default':'ghost'} onClick={()=>{setGroup(key);setPage(1)}}>{label}<Badge className={group===key?'bg-white/20 text-white':'bg-background text-foreground'}>{Number(count||0)}</Badge></Button>)}</div>
-    {Number(s.total||0)>(data.tickets||[]).length&&<Alert><AlertTriangle/><AlertTitle>Lista incompleta</AlertTitle><AlertDescription>Mostrando os {(data.tickets||[]).length} chamados atualizados mais recentemente, de {Number(s.total).toLocaleString('pt-BR')}.</AlertDescription></Alert>}
+    <output>{data.total} chamados; página {currentPage} de {pageCount}.</output>
     <div className="flex flex-wrap gap-3">
       <div className="relative min-w-0 basis-64 flex-1"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"/><Input className="pl-9" placeholder="Código, fornecedor ou cidade" aria-label="Pesquisar chamados" value={q} onChange={e=>{setQ(e.target.value);setPage(1)}}/></div>
       <Button onClick={()=>setOpen({priority:'media'})}><Plus/> Novo chamado</Button>
@@ -284,7 +283,7 @@ function Tickets({busy,users,agreements,run,initialDetail}:JsonData){
     {rows.length?<Card className="min-w-0"><CardContent className="min-w-0 px-0 pb-0"><Table className="w-full min-w-[900px] table-fixed">
       <colgroup>{[9,31,11,20,14,15].map((largura,indice)=><col key={indice} style={{width:`${largura}%`}}/>)}</colgroup>
       <TableHeader><CabecalhoOrdenavel acoes={false} titulos={['Código','Fornecedor','Prioridade','Situação','Em aberto','Solicitante']} ordem={ordem} onAlternar={alternar}/></TableHeader>
-      <TableBody>{rows.slice((currentPage-1)*50,currentPage*50).map((r:AnyRow)=><TableRow key={r.id}>
+      <TableBody>{rows.map((r:AnyRow)=><TableRow key={r.id}>
         <TableCell><button className="block w-full truncate text-left font-mono text-xs font-semibold text-primary hover:underline" title={r.code} onClick={()=>setDetail(r.id)}>{r.code}</button></TableCell>
 
         <TableCell><span className="block truncate font-medium" title={r.supplierName}>{r.supplierName||'Não informado'}</span></TableCell>
