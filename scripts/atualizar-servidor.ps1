@@ -18,7 +18,7 @@
 # so valeria na atualizacao seguinte. -JaAtualizado e -VersaoAnterior sao de
 # uso interno; nao devem ser chamados a mao.
 [CmdletBinding()]
-param([switch]$Simular,[switch]$Reaplicar,[switch]$JaAtualizado,[string]$VersaoAnterior)
+param([switch]$Simular,[switch]$Reaplicar,[switch]$JaAtualizado,[string]$VersaoAnterior,[ValidateRange(1,3600)][int]$PrazoParadaSegundos=60)
 
 $ErrorActionPreference = 'Stop'
 $Raiz = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
@@ -103,6 +103,7 @@ function Reparar-ConfiguracaoPrivada {
 $ContextoArquivo = Join-Path (Obter-PastaPrivada $Raiz) 'operacao/atualizacao.json'
 $Recuperando = $false
 $OperacaoParada = $false
+$script:ParadaSolicitada = $false
 $CodigoTrocado = $false
 $NovaVersaoIniciada = $false
 $OperacaoEstavaAtiva = $false
@@ -116,27 +117,16 @@ function Iniciar-OperacaoAtualizada {
  if(Test-Path $logica){. $logica;Iniciar-OperacaoConfigurada $Raiz;return}
  & (Join-Path $Raiz 'INICIAR.bat') | Out-Null
 }
-function Parar-Operacao {
-if($script:TarefaSemLogin){Disable-ScheduledTask -TaskName 'Supply Vision' -TaskPath '\'|Out-Null}
-& (Join-Path $Raiz 'PARAR.bat') | Out-Null
-if ($LASTEXITCODE -ne 0) { throw 'Falha ao solicitar a parada da operacao.' }
-$privadoParada = Obter-PastaPrivada $Raiz
-$arquivoConfigParada = Join-Path $privadoParada 'portal/configuracao/portal.env'
-$configParada = @{}
-if (Test-Path -LiteralPath $arquivoConfigParada) { $configParada = Ler-ConfigOperacao $arquivoConfigParada }
-$portaRelatoriosParada = 3001
-if ($configParada['RELATORIOS_PORTA']) { $portaRelatoriosParada = [int]$configParada['RELATORIOS_PORTA'] }
-for ($i = 0; $i -lt 60; $i++) {
-  if ((Testar-SupervisorEncerrado $privadoParada) -and
-      !(Get-NetTCPConnection -LocalPort 3000,$portaRelatoriosParada -State Listen -ErrorAction SilentlyContinue)) { return }
-  Start-Sleep 1
+function Parar-OperacaoAtualizacao([int]$Limite=60) {
+ $script:ParadaSolicitada=$true
+ if($script:TarefaSemLogin){Disable-ScheduledTask -TaskName 'Supply Vision' -TaskPath '\'|Out-Null}
+ if(!(Parar-Operacao $Raiz $Limite)){throw 'Supervisor ou portas nao encerraram no prazo; troca de codigo e banco bloqueada.'}
 }
-throw 'Supervisor ou portas da operacao continuam ativos; atualizacao bloqueada antes de alterar codigo e banco.'
-}
+
 function Reverter([string]$motivo) {
   if ($script:Recuperando) { throw 'A recuperacao ja foi tentada. Operacao permanece parada.' }
   $script:Recuperando = $true
-  Parar-Operacao
+  Parar-OperacaoAtualizacao $PrazoParadaSegundos
   Gravar-EstadoOperacao $ContextoArquivo @{anterior=$anterior;remoto=$remoto;fase='recuperando'}
   Write-Host "`n!! $motivo" -ForegroundColor Red
   Write-Host '!! revertendo para a versao anterior' -ForegroundColor Red
@@ -283,9 +273,9 @@ if ($Simular) {
 }
 
 if (-not $JaAtualizado) {
-  $OperacaoEstavaAtiva = !!(Obter-ProcessoRegistrado (Join-Path (Obter-PastaPrivada $Raiz) 'operacao/supervisor.pid.json')) -or !!(Get-NetTCPConnection -LocalPort 3000 -State Listen -ErrorAction SilentlyContinue)
+  $OperacaoEstavaAtiva = !(Testar-SupervisorEncerrado (Obter-PastaPrivada $Raiz))
   Etapa 'Parando a operacao'
-  Parar-Operacao
+  Parar-OperacaoAtualizacao $PrazoParadaSegundos
   $OperacaoParada = $true
   Ok 'operacao parada'
 
@@ -435,9 +425,10 @@ exit 0
     }
     try { Reverter $falha.Exception.Message }
     catch { Write-Host "RECUPERACAO FALHOU: $($_.Exception.Message). Nao religue antes de conferir docs/SOCORRO.md." -ForegroundColor Red }
-  } elseif ($OperacaoParada -and $OperacaoEstavaAtiva -and !$Recuperando) {
-    # Falha anterior ao merge: codigo/banco ainda sao os originais.
-    Iniciar-OperacaoAtualizada
+  } elseif (!$CodigoTrocado -and !$Recuperando -and $script:ParadaSolicitada) {
+    # Inclui a parada incompleta: reabilita antes de tentar retomar.
+    try { Recuperar-OperacaoAntesDaTroca $Raiz $script:TarefaSemLogin $OperacaoEstavaAtiva }
+    catch { Write-Host "Falhou a retomada: $($_.Exception.Message). A tarefa deve permanecer habilitada." -ForegroundColor Red }
     if ($LASTEXITCODE -ne 0) { Write-Host 'Falhou a retomada da operacao original.' -ForegroundColor Red }
   }
   Write-Error $falha.Exception.Message -ErrorAction Continue

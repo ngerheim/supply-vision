@@ -191,3 +191,30 @@ Redistributable 2015+ x64 e execute novamente o instalador: ele testa o workerd 
 explica se o motor não consegue iniciar. Reinicie após instalar o runtime se
 necessário. No PowerShell use `npm.cmd`, pois `npm.ps1` pode ser bloqueado pela
 política padrão. Para parar a operação, use a central, não o Agendador.
+
+## A conta da tarefa não consegue entrar
+
+A central e a homologação mostram erros de usuário/senha, senha expirada ou falta
+do direito de executar tarefas em lote. Abra PowerShell como administrador e rode:
+
+```powershell
+.\scripts\configurar-inicializacao.ps1 -Modo computador -ContaPersonalizada
+```
+
+Informe novamente a conta e a senha. Nunca grave a senha em arquivos. Se faltar
+permissão de logon em lote, peça à TI a liberação nas políticas locais e do domínio.
+
+Para receber uma verificação diária independente do supervisor, configure
+`ADMIN_ALERTA_EMAIL` e execute, como administrador,
+`.\scripts\configurar-vigilancia.ps1`. A tarefa opcional **Supply Vision Vigilancia**
+roda às 09:00 como SYSTEM, sem senha; verifica a tarefa principal e o health local.
+Não altera a conta da operação. Usa o SMTP comum, respeita o modo ensaio e o
+limite persistente de um aviso por tipo a cada 60 minutos. Para desligar:
+`.\scripts\configurar-vigilancia.ps1 -Desligar`. Sem essa escolha nada muda.
+
+Quando a parada para atualização excede o prazo, a versão ainda não foi trocada:
+a tarefa é reabilitada e a retomada solicitada se a operação estava ativa.
+A central só considera a parada concluída quando o supervisor e as portas estão livres.
+
+Para ajustar o prazo de parada da atualização, use
+`atualizar-servidor.ps1 -PrazoParadaSegundos 120` (padrão: 60 segundos).

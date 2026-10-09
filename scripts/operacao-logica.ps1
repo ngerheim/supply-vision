@@ -248,3 +248,58 @@ function Remover-ArquivosIntroduzidos([string]$Raiz,[string[]]$Arquivos){
   if(Test-Path -LiteralPath $alvo -PathType Leaf){Remove-Item -LiteralPath $alvo -Force}
  }
 }
+
+# A mesma barreira protege a central e o atualizador: PID/trava E portas.
+function Parar-Operacao([string]$Raiz,[int]$Limite=60) {
+ $privado=Obter-PastaPrivada $Raiz
+ $op=Join-Path $privado 'operacao'
+ $porta=3001
+ $arquivo=Join-Path $privado 'portal/configuracao/portal.env'
+ if(Test-Path -LiteralPath $arquivo){$cfg=Ler-ConfigOperacao $arquivo;if($cfg['RELATORIOS_PORTA']){$porta=[int]$cfg['RELATORIOS_PORTA']}}
+ if(!(Testar-SupervisorEncerrado $privado)){
+  [IO.File]::WriteAllText((Join-Path $op 'parar.sinal'),'parar')
+ }
+ $prazo=[Diagnostics.Stopwatch]::StartNew()
+ do {
+  $encerrado=Testar-SupervisorEncerrado $privado
+  $portas=@(Get-NetTCPConnection -LocalPort 3000,$porta -State Listen -ErrorAction SilentlyContinue)
+  if($encerrado-and!$portas){return $true}
+  if($prazo.Elapsed.TotalSeconds-ge$Limite){return $false}
+  Start-Sleep -Milliseconds 500
+ }while($true)
+}
+function Recuperar-OperacaoAntesDaTroca([string]$Raiz,[bool]$Tarefa,[bool]$EstavaAtiva,[int]$Limite=60) {
+ if($Tarefa){Enable-ScheduledTask -TaskName 'Supply Vision' -TaskPath '\'|Out-Null}
+ if($EstavaAtiva){
+  # Nao remova a trava: a tarefa ignora nova instancia; o sinal cancelado
+  # permite ao supervisor ainda ativo continuar, ou a tarefa iniciar outro.
+  $sinal=Join-Path (Obter-PastaPrivada $Raiz) 'operacao/parar.sinal'
+  Remove-Item -LiteralPath $sinal -Force -ErrorAction SilentlyContinue
+  if($Tarefa){
+   $anterior=Obter-ProcessoRegistrado (Join-Path (Obter-PastaPrivada $Raiz) 'operacao/supervisor.pid.json')
+   Start-ScheduledTask -TaskName 'Supply Vision' -TaskPath '\'
+   # IgnoreNew pode ter recusado a partida enquanto a instancia antiga encerra.
+   # Se o processo antigo sair nesta janela, solicite a tarefa novamente.
+   if($anterior){$prazo=[Diagnostics.Stopwatch]::StartNew();while($prazo.Elapsed.TotalSeconds-lt$Limite){if($anterior.HasExited){Start-ScheduledTask -TaskName 'Supply Vision' -TaskPath '\';break};Start-Sleep -Milliseconds 500}}
+  }
+  elseif(Testar-SupervisorEncerrado (Obter-PastaPrivada $Raiz)){Iniciar-OperacaoConfigurada $Raiz;if($LASTEXITCODE-ne0){throw 'Falha na partida original.'}}
+ }
+ $global:LASTEXITCODE=0
+}
+function Obter-FalhaLogonTarefa([long]$Resultado) {
+ $codigo=$Resultado-band4294967295L
+ $motivo=switch($codigo){2147943726{'usuario ou senha invalidos'} 2147943785{'conta sem direito de executar tarefas em lote'} 2147943730{'senha da conta expirada'}}
+ if($motivo){return "A conta da tarefa nao conseguiu entrar: $motivo. Execute como administrador: .\scripts\configurar-inicializacao.ps1 -Modo computador -ContaPersonalizada"}
+ return ''
+}
+function Obter-AvisoContaTarefa([string]$Raiz) {
+ $t=Obter-TarefaSupplyVision $Raiz
+ if(!$t){return ''}
+ $info=Get-ScheduledTaskInfo -TaskName 'Supply Vision' -TaskPath '\' -ErrorAction Stop
+ return Obter-FalhaLogonTarefa ([long]$info.LastTaskResult)
+}
+function Obter-EventoVigilancia([bool]$FalhaTarefa,[bool]$Saudavel) {
+ if($FalhaTarefa){return 'tarefa-falhou'}
+ if(!$Saudavel){return 'vigilancia-health'}
+ return ''
+}

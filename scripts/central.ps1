@@ -48,24 +48,10 @@ $script:processoAtualizacao=$null
 function Operacao-Ativa{
  return !(Testar-SupervisorEncerrado (Obter-PastaPrivada $Raiz))
 }
-function Parar-Operacao([int]$Limite=60){
- # O supervisor le o sinal no ritmo do proprio laco. Esperar por um relogio
- # fixo dava a operacao como parada antes da hora: a tela voltava a dizer
- # 'ativa' e a restauracao recusava o banco por achar o portal no ar.
- if(!(Operacao-Ativa)){return $true}
- Add-Content (Join-Path $Op 'supervisor.log') "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')  CENTRAL: encerramento solicitado." -Encoding UTF8
- Start-Process $Parar -WindowStyle Hidden
- for($i=0;$i-lt$Limite-and(Operacao-Ativa);$i++){Start-Sleep 1}
- $encerrou=!(Operacao-Ativa)
- if(!$encerrou){
-  $registro=try{Get-Content $PidFile -Raw}catch{'registro de PID indisponivel'}
-  Add-Content (Join-Path $Op 'supervisor.log') "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')  CENTRAL: tempo de parada esgotado. Registro: $registro" -Encoding UTF8
- }
- return $encerrou
-}
 function Atualizar{
  $modo=Obter-ModoInicializacao $Raiz $Startup
  $avisoSessao.Text=Aviso-SessaoRemota $modo ($env:SESSIONNAME-like'RDP-*')
+ try{$avisoConta=Obter-AvisoContaTarefa $Raiz;if($avisoConta){$avisoSessao.Text=$avisoConta}}catch{}
  $ensaio=$false
  try{$ensaio=(Ler-ConfigOperacao (Join-Path (Obter-PastaPrivada $Raiz) 'comum\operacao.env'))['MODO_ENSAIO']-eq'1'}catch{}
  # Enquanto ativo, mostra o modo efetivo mesmo se o arquivo foi editado sem reiniciar.
@@ -77,7 +63,7 @@ function Atualizar{
  if($ativo){$detalhe='Inicializando módulos...';if(Test-Path $StatusFile){try{$st=Get-Content $StatusFile -Raw|ConvertFrom-Json;$po=if($st.portal){'online'}else{'reiniciando'};$em=if($st.emails){'online'}else{'reiniciando'};$detalhe="Portal: $po  |  E-mails: $em`nAlertas: $($st.alertas)  |  Backup: $($st.backup)`nLimpeza: $($st.limpeza)  |  Disco: $($st.espacoLivreGb) GB livres"}catch{}};$status.Text="● OPERAÇÃO ATIVA`n$detalhe";$status.ForeColor=[Drawing.Color]::FromArgb(87,211,140)}else{$status.Text="● OPERAÇÃO PARADA`nUse 'Iniciar operação' quando quiser colocar o conjunto no ar.";$status.ForeColor=[Drawing.Color]::FromArgb(255,180,90)}
  if(!$iniciar.Enabled){$status.Text='Esta instalação foi migrada para outro servidor';$status.ForeColor=[Drawing.Color]::FromArgb(255,180,90)}
 }
-$iniciar.Add_Click({try{Iniciar-OperacaoConfigurada $Raiz;Start-Sleep 2;Atualizar}catch{[Windows.Forms.MessageBox]::Show(($_.Exception.Message+' Para controlar uma tarefa SYSTEM sem permissão, abra a central como administrador.'),'Iniciar operação','OK','Warning')|Out-Null}});$parar.Add_Click({$form.Cursor='WaitCursor';$parar.Enabled=$false;try{$ok=Parar-Operacao}finally{$parar.Enabled=$true;$form.Cursor='Default'};Atualizar;if(!$ok){[Windows.Forms.MessageBox]::Show('A operação não encerrou no prazo. Veja supervisor.log. Para encerrar processos SYSTEM à força, é necessário executar como administrador; não remova a trava nem inicie outro supervisor.','Supply Vision','OK','Warning')|Out-Null}})
+$iniciar.Add_Click({try{Iniciar-OperacaoConfigurada $Raiz;Start-Sleep 2;Atualizar}catch{[Windows.Forms.MessageBox]::Show(($_.Exception.Message+' Para controlar uma tarefa SYSTEM sem permissão, abra a central como administrador.'),'Iniciar operação','OK','Warning')|Out-Null}});$parar.Add_Click({$form.Cursor='WaitCursor';$parar.Enabled=$false;try{$ok=Parar-Operacao $Raiz}finally{$parar.Enabled=$true;$form.Cursor='Default'};Atualizar;if(!$ok){[Windows.Forms.MessageBox]::Show('A operação não encerrou no prazo. Veja supervisor.log. Para encerrar processos SYSTEM à força, é necessário executar como administrador; não remova a trava nem inicie outro supervisor.','Supply Vision','OK','Warning')|Out-Null}})
 $validar.Add_Click({try{$saida=& powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'validar-operacao.ps1') 2>&1;if($LASTEXITCODE-ne0){throw ($saida-join "`n")};[Windows.Forms.MessageBox]::Show('Configuração aprovada.','Supply Vision','OK','Information')|Out-Null}catch{[Windows.Forms.MessageBox]::Show($_.Exception.Message,'Configuração reprovada','OK','Error')|Out-Null}})
 $restaurar.Add_Click({try{$saida=& node.exe (Join-Path $Raiz 'portal\scripts\testar-restauracao.mjs') 2>&1;if($LASTEXITCODE){throw ($saida-join "`n")};[Windows.Forms.MessageBox]::Show(($saida-join "`n"),'Backup aprovado','OK','Information')|Out-Null}catch{[Windows.Forms.MessageBox]::Show($_.Exception.Message,'Backup reprovado','OK','Error')|Out-Null}})
 $voltar.Add_Click({
@@ -86,7 +72,7 @@ $voltar.Add_Click({
  $qual=[Windows.Forms.MessageBox]::Show("Usar a copia mais recente?`n`nSim = mais recente (portal-atual)`nNao = ultimo backup de um dia anterior (historico de 7 dias)",'Qual backup','YesNoCancel','Question')
  if($qual-eq[Windows.Forms.DialogResult]::Cancel){return}
  try{
-  if(!(Parar-Operacao)){throw 'A operacao nao encerrou. Restauracao cancelada para nao mexer no banco com o portal no ar.'}
+  if(!(Parar-Operacao $Raiz)){throw 'A operacao nao encerrou. Restauracao cancelada para nao mexer no banco com o portal no ar.'}
   $argumentos=@((Join-Path $Raiz 'portal\scripts\restaurar-backup.mjs'),'--sim')
   if($qual-eq[Windows.Forms.DialogResult]::No){$argumentos+='--anterior'}
   $saida=& node.exe @argumentos 2>&1

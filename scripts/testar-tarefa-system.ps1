@@ -10,7 +10,7 @@ $privado=Join-Path $pasta 'dados-ficticios';$startup=Join-Path $pasta 'startup.c
 $criou=$false;$privadoAnterior=$env:SUPPLY_VISION_PRIVADO
 # Executa as funcoes reais de parada/retomada sem executar o atualizador inteiro.
 $ast=[System.Management.Automation.Language.Parser]::ParseFile((Join-Path $PSScriptRoot 'atualizar-servidor.ps1'),[ref]$null,[ref]$null)
-foreach($nome in @('Parar-Operacao','Iniciar-OperacaoAtualizada')){
+foreach($nome in @('Parar-OperacaoAtualizacao','Iniciar-OperacaoAtualizada')){
  $funcao=$ast.Find({param($n) $n-is[System.Management.Automation.Language.FunctionDefinitionAst]-and$n.Name-eq$nome},$true)
  . ([scriptblock]::Create($funcao.Extent.Text))
 }
@@ -59,7 +59,7 @@ try{
  Iniciar-OperacaoConfigurada $pasta # IgnoreNew evita outra instancia.
  Start-Sleep -Milliseconds 500
  if(@(Get-Content (Join-Path $privado 'operacao\inicios')).Count-ne1){throw 'Duas instancias foram iniciadas.'}
- Parar-Operacao
+ Parar-OperacaoAtualizacao
  for($i=0;$i-lt100-and((Get-ScheduledTask -TaskName 'Supply Vision').State-eq'Running');$i++){Start-Sleep -Milliseconds 200}
  if(!(Test-Path (Join-Path $privado 'operacao\parou'))-or!(Testar-SupervisorEncerrado $privado)){throw 'Supervisor nao respondeu ao sinal.'}
  if((Get-ScheduledTask -TaskName 'Supply Vision').State-ne'Disabled'){throw 'Atualizador nao desabilitou a tarefa durante a parada.'}
