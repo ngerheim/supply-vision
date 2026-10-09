@@ -57,13 +57,14 @@ funcionando conforme a configuração e respeitando o modo ensaio.
 
 Para backup em rede, configure um caminho **UNC**, como `\\servidor\pasta`.
 Unidades mapeadas (`Z:\`, por exemplo) são reprovadas somente no modo sem login.
-A TI deve liberar **DOMINIO\NOMEDAMAQUINA$** (por exemplo,
-**DOMINIO\SERVIDOR$**) no compartilhamento **e** no NTFS. Com conta
-personalizada, a permissão deve ser dada àquela conta.
+A TI deve liberar a **conta da tarefa** no compartilhamento **e** no NTFS.
+Em produção com conta de domínio, libere aquela conta. Se escolher SYSTEM,
+libere a conta do computador **DOMINIO\NOMEDAMAQUINA$**, por exemplo,
+**DOMINIO\SERVIDOR$**.
 
-SYSTEM tem acesso amplo à máquina. Proteja a escrita nos scripts e no código:
-quem os altera pode executar código como SYSTEM. Veja INSTALAR para a opção
-com conta própria e para os parâmetros do instalador.
+A conta da tarefa tem privilégios de administradora local. Proteja a escrita
+nos scripts e no código: quem os altera pode executar código com esses
+privilégios. Veja INSTALAR para escolher a conta e os parâmetros do instalador.
 
 O teste que confirma este modo é reiniciar o servidor **sem fazer login** e,
 de outra máquina, abrir **http://portal.empresa.local:3000** após o atraso e a
@@ -571,6 +572,10 @@ portas na central elevada. O Node das ações e da atualização vem da instala�
 da máquina. Falha somente na cópia de rede do backup pré-atualização não impede
 a troca: a cópia local íntegra é preservada e o aviso exige verificar a rede.
 
+O Windows aplica novos membros do grupo de operadores numa nova sessão.
+Se precisar usar a central sem elevação após configurar o grupo, no modo
+sem login entre novamente no Windows; a tarefa continua fora da sessão RDP.
+
 ## Retenção de registros operacionais
 
 O expurgo fica **desligado por padrão**. Para ligar, em operacao.env configure
@@ -602,3 +607,4 @@ cliente pelo socket e assina a identidade com o token interno. O backend fica
 em loopback numa porta dinâmica; cabeçalhos falsos do navegador são substituídos.
 Sem essa opção nem proxy confiável, o Portal preserva sua fila global existente:
 não aplica a cota de um IP ao balde “local”, que representa toda a LAN.
+
