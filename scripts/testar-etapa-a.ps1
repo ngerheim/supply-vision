@@ -29,10 +29,13 @@ try{
  $ast=[System.Management.Automation.Language.Parser]::ParseFile((Join-Path $PSScriptRoot 'atualizar-servidor.ps1'),[ref]$null,[ref]$null)
  $catch=$ast.Find({param($n) $n-is[System.Management.Automation.Language.CatchClauseAst]-and$n.Body.Extent.Text.Contains('$falha = $_')},$true)
  $texto=$catch.Body.Extent.Text.Trim();$texto=$texto.Substring(1,$texto.Length-2).Replace('exit 1','$global:catchExecutado=$true')
- $CodigoTrocado=$false;$Recuperando=$false;$OperacaoParada=$false;$OperacaoEstavaAtiva=$true;$script:TarefaSemLogin=$true;$Raiz=$pasta
+ $CodigoTrocado=$false;$Recuperando=$false;$OperacaoParada=$false;$OperacaoEstavaAtiva=$true;$script:TarefaSemLogin=$true;$script:ParadaSolicitada=$true;$Raiz=$pasta
  $global:habilitada=$false;$global:iniciada=$false
  function Write-Error {}
  try{throw 'parada nao terminou no prazo'}catch{. ([scriptblock]::Create($texto))}
  if(!$global:habilitada-or!$global:iniciada-or!$global:catchExecutado){throw 'Catch real nao recuperou parada incompleta'}
- Write-Host 'PASSOU: 12 verificacoes de parada, recuperacao, logon e vigilancia.'
+ $script:ParadaSolicitada=$false;$global:habilitada=$false;$global:iniciada=$false
+ try{throw 'prevoo recusado'}catch{. ([scriptblock]::Create($texto))}
+ if($global:habilitada-or$global:iniciada){throw 'Falha antes de solicitar parada nao deve alterar tarefa'}
+ Write-Host 'PASSOU: 13 verificacoes de parada, recuperacao, logon e vigilancia.'
 }finally{$env:SUPPLY_VISION_PRIVADO=$antes;Remove-Item -LiteralPath $pasta -Recurse -Force}

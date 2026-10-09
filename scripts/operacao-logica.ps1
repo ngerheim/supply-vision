@@ -282,7 +282,7 @@ function Recuperar-OperacaoAntesDaTroca([string]$Raiz,[bool]$Tarefa,[bool]$Estav
    # Se o processo antigo sair nesta janela, solicite a tarefa novamente.
    if($anterior){$prazo=[Diagnostics.Stopwatch]::StartNew();while($prazo.Elapsed.TotalSeconds-lt$Limite){if($anterior.HasExited){Start-ScheduledTask -TaskName 'Supply Vision' -TaskPath '\';break};Start-Sleep -Milliseconds 500}}
   }
-  elseif(Testar-SupervisorEncerrado (Obter-PastaPrivada $Raiz)){Iniciar-OperacaoConfigurada $Raiz}
+  elseif(Testar-SupervisorEncerrado (Obter-PastaPrivada $Raiz)){Iniciar-OperacaoConfigurada $Raiz;if($LASTEXITCODE-ne0){throw 'Falha na partida original.'}}
  }
  $global:LASTEXITCODE=0
 }
