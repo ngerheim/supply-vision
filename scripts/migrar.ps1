@@ -175,7 +175,8 @@ try{
   $rede=Perguntar-Migracao 'Pasta de backup na rede' $cfg['BACKUP_NETWORK_DIR'] $BackupNetworkDir
   if(!(Testar-UncMigracao $rede)){throw 'Use caminho UNC: \\servidor\pasta.'}
   if(!(Testar-RedeComoSystem $rede)){
-   Write-Host ('Nao foi possivel gravar como SYSTEM. Peca a TI permissao no compartilhamento e no NTFS para '+$env:USERDOMAIN+'\'+$env:COMPUTERNAME+'$. No ensaio o backup em rede permanece bloqueado.') -ForegroundColor Yellow
+   $dominio=(Get-CimInstance Win32_ComputerSystem).Domain
+   Write-Host ('Nao foi possivel gravar como SYSTEM. Peca a TI permissao no compartilhamento e no NTFS para '+$dominio+'\'+$env:COMPUTERNAME+'$. No ensaio o backup em rede permanece bloqueado.') -ForegroundColor Yellow
    if(!$ContinuarSemRede-and(Read-Host 'Continuar mesmo assim? Digite SIM')-ne'SIM'){throw 'Permissao de rede pendente. Peca ajuda a TI e execute novamente.'}
   }
   $horario=Perguntar-Migracao 'Horario da limpeza (HH:mm)' $op['LIMPEZA_HORARIO'] $LimpezaHorario
@@ -187,7 +188,7 @@ try{
  Etapa-Migracao 9 'Iniciar e aguardar o Portal' {
   Start-ScheduledTask -TaskName 'Supply Vision'
   $limite=(Get-Date).AddMinutes(3);$ok=$false
-  do{try{$h=Invoke-RestMethod 'http://127.0.0.1:3000/api/health' -TimeoutSec 5;$ok=$h.status-eq'ok'}catch{};if(!$ok){Start-Sleep 2}}while(!$ok-and(Get-Date)-lt$limite)
+  do{try{$h=Invoke-RestMethod 'http://127.0.0.1:3000/api/health' -TimeoutSec 5;$ok=$h.status-eq'ok'-and(Get-ScheduledTask -TaskName 'Supply Vision').State-eq'Running'-and(Test-Path (Join-Path $privado 'operacao\status.json'))}catch{};if(!$ok){Start-Sleep 2}}while(!$ok-and(Get-Date)-lt$limite)
   if(!$ok){throw 'Portal nao respondeu em 3 minutos. Veja privado/operacao/supervisor.log; solicite ajuda e execute novamente.'}
  }
  Etapa-Migracao 10 'Gerar o relatorio de verificacao final' {& (Join-Path $Destino 'scripts\homologar.ps1') -Destino $RelatorioDestino}
