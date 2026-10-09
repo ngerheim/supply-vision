@@ -26,10 +26,10 @@ Exigir ((Mascarar-Homologacao 'SELECT * FROM users')-eq'[conteudo omitido]') 'om
 $pasta=Join-Path ([IO.Path]::GetTempPath()) ('sv-migracao-pura-'+[guid]::NewGuid().ToString('N'))
 try{
  New-Item -ItemType Directory -Force (Join-Path $pasta 'operacao'),(Join-Path $pasta 'comum')|Out-Null
- $envfile=Join-Path $pasta 'comum/operacao.env';Set-Content $envfile "# preservar`nMODO_ENSAIO=0`nSEGREDO=ficticio"
+ $envfile=Join-Path $pasta 'comum/operacao.env';[IO.File]::WriteAllText($envfile,"# preservar`nMODO_ENSAIO=0`nSEGREDO=fictício-ação",(New-Object Text.UTF8Encoding($false)))
  Atualizar-EnvMigracao $envfile 'MODO_ENSAIO' '1'
  Exigir ((Ler-ConfigOperacao $envfile)['MODO_ENSAIO']-eq'1') 'env'
- Exigir ((Get-Content $envfile -Raw)-match'SEGREDO=ficticio') 'preservar configuracao'
+ Exigir ([IO.File]::ReadAllText($envfile).Contains('SEGREDO=fictício-ação')) 'preservar configuracao'
  Set-Content (Join-Path $pasta 'operacao/migrada.sinal') 'ficticio'
  $bloqueou=$false;try{Exigir-InstalacaoNaoMigrada $pasta}catch{$bloqueou=$_.Exception.Message-like'*migrada*'}
  Exigir $bloqueou 'marcador'

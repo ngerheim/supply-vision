@@ -12,7 +12,7 @@ if([IO.Path]::GetExtension($caminhoRelatorio)-ne'.txt'-or$caminhoRelatorio.Start
 $linhas=New-Object 'Collections.Generic.List[string]'
 $segredos=@()
 foreach($arquivo in @(Get-ChildItem -LiteralPath $privado -Filter '*.env' -Recurse -File -ErrorAction SilentlyContinue)){
- foreach($l in Get-Content $arquivo.FullName){
+ foreach($l in Get-Content $arquivo.FullName -Encoding UTF8){
   if($l-match '^\s*([^#=]+)=(.+)$'){
    $chave=$Matches[1];$valor=$Matches[2]
    if($chave-match '(?i)TOKEN|PASS|SENHA|SECRET|SMTP|EMAIL|KEY'){$segredos+=$valor.Trim()}
@@ -82,7 +82,7 @@ foreach($tipo in @('supervisor','portal','emails','relatorios')){
   $logs=@($pastas|ForEach-Object{Get-ChildItem -LiteralPath $_ -File -ErrorAction SilentlyContinue}|Where-Object {$_.Name-in$nomes}|Sort-Object LastWriteTime -Descending)
   if(!$logs){throw 'sem log'}
   $linhas.Add('--- '+$tipo+' ---')
-  foreach($l in @(Get-Content -LiteralPath $logs[0].FullName -Tail 10)){$linhas.Add((Mascarar-Homologacao $l))}
+  foreach($l in @(Get-Content -LiteralPath $logs[0].FullName -Encoding UTF8 -Tail 10)){$linhas.Add((Mascarar-Homologacao $l))}
   'ultimas 10 linhas (dados sensiveis mascarados)'
  }
 }
