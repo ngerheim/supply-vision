@@ -9,6 +9,13 @@ $um=Preparar-GrupoOperadores
 $dois=Preparar-GrupoOperadores
 if($um-ne$dois-or$global:criados-ne1-or$global:adicionados.Count-ne1){throw 'Grupo deve ser fixo e aditivo'}
 if(!(Testar-ContaAdministradora 'SYSTEM')){throw 'SYSTEM deve ser aceito'}
+# SIDs ficticios exercitam a associacao direta e por grupo de dominio, sem AD.
+if(!(Testar-ContaAdministradora 'S-1-5-21-100-100-100-1001')){throw 'Administrador direto deve ser aceito'}
+function Obter-GruposAutorizadosConta {return @('S-1-5-21-100-100-100-1001')}
+if(!(Testar-ContaAdministradora 'S-1-5-21-100-100-100-2001')){throw 'Administrador por grupo deve ser aceito'}
+function Obter-GruposAutorizadosConta {return @('S-1-5-21-100-100-100-3001')}
+if(Testar-ContaAdministradora 'S-1-5-21-100-100-100-2001'){throw 'Conta sem administracao local deve ser recusada'}
+
 $global:logs=@();$global:avisos=@();$avisosAdmin=@{Habilitado=$true}
 function Log {param($Texto);$global:logs+=$Texto}
 function Avisar-Administrador {param($Controle,$Evento);$global:avisos+=$Evento}
