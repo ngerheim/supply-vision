@@ -47,8 +47,9 @@ function Start-Sleep {}
 function Invoke-RestMethod { if($Caso -in @('saude-completa','consumidor')) { @{status='ok'} } else { throw 'health indisponivel' } }
 function node {
   $global:LASTEXITCODE=0
-  if($args[0] -like '*saude-operacao*' -and $Caso -in @('saude-completa','consumidor')){$global:LASTEXITCODE=1}
-  if($args[0] -like '*restaurar-backup*') { Add-Content (Join-Path $Raiz 'restore.log') 'restore'; if($Caso -eq 'restauracao'){$global:LASTEXITCODE=1} }
+  $arquivo=@($args|Where-Object {$_-like '*.mjs'})|Select-Object -First 1
+  if($arquivo -like '*saude-operacao*' -and $Caso -in @('saude-completa','consumidor')){$global:LASTEXITCODE=1}
+  if($arquivo -like '*restaurar-backup*') { Add-Content (Join-Path $Raiz 'restore.log') 'restore'; if($Caso -eq 'restauracao'){$global:LASTEXITCODE=1} }
 }
 function npm {
   $global:LASTEXITCODE=0
