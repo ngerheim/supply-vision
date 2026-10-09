@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import http from 'node:http';
 import test from 'node:test';
 import { once } from 'node:events';
-import { assinarIpLogin, ipLoginAssinado } from '../lib/ip-login.ts';
+import { assinarIpLogin, ipLoginAssinado } from '../lib/ip-login.mjs';
 import { criarProxyIpLogin } from '../scripts/proxy-ip-login.mjs';
 const token='ficticio-token-de-teste';
 void test('IP assinado diferencia clientes; prova falsificada ou chave errada nao ocupa outra cota', async () => {

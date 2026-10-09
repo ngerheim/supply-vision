@@ -1,5 +1,5 @@
 import http from 'node:http';
-import { assinarIpLogin } from '../lib/ip-login.ts';
+import { assinarIpLogin } from '../lib/ip-login.mjs';
 // Backend sempre em loopback. Identidade vem do socket; cliente nao pode
 // escolher os cabecalhos assinados, que nao sao devolvidos na resposta.
 export function criarProxyIpLogin({ portaBackend, token }) {

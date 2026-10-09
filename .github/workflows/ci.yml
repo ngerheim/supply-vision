@@ -18,6 +18,25 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  node-minimo:
+    name: Node 22.13 - partida e operacao
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: portal
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '22.13.0'
+          cache: npm
+          cache-dependency-path: portal/package-lock.json
+      - run: npm ci
+      # A partida padrao nao pode precisar de suporte TypeScript implicito.
+      - run: node --test tests/iniciar-portal.test.mjs tests/ip-login.test.mjs
+      - run: node --experimental-strip-types --test tests/operacao-dados.test.mjs tests/backup-atualizacao.test.mjs
+
   powershell:
     name: PowerShell
     runs-on: windows-latest

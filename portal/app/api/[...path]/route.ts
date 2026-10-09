@@ -1,4 +1,4 @@
-import { ipLoginAssinado } from '@/lib/ip-login';
+import { ipLoginAssinado } from '@/lib/ip-login.mjs';
 import { RESERVAR_CODIGO_CHAMADO_SQL, joinContagemHistorico, filtroChamados } from '@/lib/operacao-dados';
 import { ATUALIZAR_UNIDADE_SQL, ATUALIZAR_LOCALIDADE_SQL } from '@/lib/catalogos-sql';
 import { exportarTabelas } from '@/lib/exportacao-snapshot';
