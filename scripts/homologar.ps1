@@ -19,7 +19,7 @@ function Mascarar-Homologacao([string]$Texto){
  $Texto=[regex]::Replace($Texto,'[\w.+-]+@[\w.-]+\.[a-zA-Z]{2,}','[email mascarado]')
  $Texto=[regex]::Replace($Texto,'(?i)(authorization|bearer|token|password|senha|secret|api[_-]?key)\s*[:= ]\s*\S+','$1=[mascarado]')
  # Nao reproduz URLs com credenciais nem linhas com consultas ou registros de banco.
- if($Texto-match '(?i)://[^/\s]+@|\b(SELECT|INSERT|UPDATE|DELETE)\b|\b(chamado|usuario|preco|payload)\s*[:=]'){return '[conteudo omitido]'}
+ if($Texto-match '(?i)://[^/\s]+@|\b(SELECT|INSERT|UPDATE|DELETE)\b|[{}]|\b(chamado|usuario|preco|payload)\s*[:=]'){return '[conteudo omitido]'}
  return $Texto
 }
 function Item-Homologacao([string]$Nome,[scriptblock]$Conferir){

@@ -62,6 +62,7 @@ function Descartar-InstalacaoEnsaio([string]$Raiz,[string]$Privado){
 if($Biblioteca){return}
 # Parametros de teste nao substituem os scripts reais de restauracao, tarefa ou homologacao.
 if($PularInstalacoes-and!$RepositorioTeste){throw 'PularInstalacoes exige RepositorioTeste.'}
+if(!$RepositorioTeste-and!$PSBoundParameters.ContainsKey('Destino')){$Destino=Perguntar-Migracao 'Pasta para instalar o sistema' $Destino ''}
 if($RepositorioTeste){$Destino=[IO.Path]::GetFullPath($RepositorioTeste)}
 $Destino=[IO.Path]::GetFullPath($Destino)
 $admin=([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
