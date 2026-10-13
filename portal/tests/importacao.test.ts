@@ -129,3 +129,13 @@ void test('sugestoes aproximadas nao alteram nem resolvem as linhas', () => {
   assert.ok(resolved({ MODELO: 'Hlux' }).error);
   assert.deepEqual(suggestMatches('ZZZZ', options), []);
 });
+
+void test('De/Para real normaliza acentos/espacos e recusa origem desconhecida', () => {
+  const references = { ...refs, items: new Map([['OLEO DE MOTOR', {id:'oleo',name:'OLEO MOTOR 5W30'}]]) };
+  for (const [entrada, esperado] of [['Óleo  de motor', 'oleo'], ['ITEM SEM DE PARA', '']]) {
+    const row = parseImportRow({...source, PECA_SERVICO:entrada}, 2);
+    resolveImportRows([row], references);
+    assert.equal(row.itemId, esperado);
+    assert.equal(Boolean(row.error), !esperado);
+  }
+});
