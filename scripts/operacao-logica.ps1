@@ -19,11 +19,12 @@ function Argumentos-ReexecucaoAtualizador([string]$Script, [string]$Anterior, [b
 function Ler-ConfigOperacao([string]$Caminho) {
   $config = @{}
   if (!(Test-Path -LiteralPath $Caminho)) { throw "Configuracao operacional ausente: $Caminho" }
-  foreach ($linha in Get-Content -LiteralPath $Caminho) {
+  foreach ($linha in Get-Content -LiteralPath $Caminho -Encoding UTF8) {
     $texto = $linha.Trim()
     if (!$texto -or $texto.StartsWith('#')) { continue }
     if (!$texto.Contains('=')) { throw "Linha invalida em operacao.env: $texto" }
     $chave, $valor = $texto.Split('=', 2)
+    if (!$chave.Trim()) { throw 'Chave vazia na configuracao.' }
     $config[$chave.Trim()] = $valor.Trim()
   }
   return $config
