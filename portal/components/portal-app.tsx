@@ -14,6 +14,7 @@ import { AgreementDialog, ItemDialog } from '@/components/agreement-dialogs';
 import { SearchMultiSelect, type SearchOption } from '@/components/search-multi-select';
 import { CAMPOS_BUSCA, filtrosVazios, parametrosBusca } from '@/lib/filtros-busca';
 import { salvarEAtualizar } from '@/lib/salvar-e-atualizar';
+import { criarConsultaDebounced } from '@/lib/atualizacao-periodica';
 import { SearchSelect } from '@/components/search-select';
 import { BRAZILIAN_STATES } from '@/lib/domain';
 import { correspondeBusca } from '@/lib/busca';
@@ -262,9 +263,16 @@ function Tickets({busy,users,agreements,run,initialDetail}:JsonData){
   const querySort=ordem?`&sort=${COLUNAS_ORDENACAO_CHAMADOS[ordem.coluna]}&direction=${ordem.direcao===1?'asc':'desc'}`:'';
   const [page,setPage]=useState(1);
   const [loadError,setLoadError]=useState('');
-  const consulta=useRef(0);
-  const load=useCallback(async()=>{setLoadError('');try{const pedido=++consulta.current;const resposta=await api(`/api/tickets?page=${page}&pageSize=50&group=${group}&q=${encodeURIComponent(q)}${querySort}`);if(pedido===consulta.current)setData(resposta)}catch(error){setLoadError(errorText(error))}},[page,group,q,querySort]);
-  useEffect(()=>{let active=true;queueMicrotask(()=>{if(active)void load()});return()=>{active=false}},[load]);
+  const [consulta]=useState(()=>criarConsultaDebounced<AnyRow>(setData,erro=>setLoadError(errorText(erro))));
+  const ultimaBusca=useRef(q);
+  const load=useCallback((atraso=0)=>{setLoadError('');consulta.executar(signal=>api(`/api/tickets?page=${page}&pageSize=50&group=${group}&q=${encodeURIComponent(q)}${querySort}`,{signal}),atraso)},[page,group,q,querySort,consulta]);
+  useEffect(()=>{
+    let active=true;
+    const atraso=q!==ultimaBusca.current?300:0;
+    ultimaBusca.current=q;
+    queueMicrotask(()=>{if(active)load(atraso)});
+    return()=>{active=false;consulta.cancelar()};
+  },[load,q,consulta]);
   if(loadError)return <FalhaDeCarregamento erro={loadError} tentar={()=>void load()}/>;
   if(!data) return <Loading label="Carregando chamados…"/>;
   if(detail) return <TicketDetail busy={busy} id={detail} users={users} agreements={agreements} onBack={()=>{setDetail(null);void load()}} run={run}/>;

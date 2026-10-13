@@ -34,3 +34,36 @@ export function iniciarAtualizacaoPeriodica(
     if (timer !== undefined) clearTimeout(timer);
   };
 }
+
+// Consultas substituiveis: cancelar tambem invalida respostas de transportes
+// que nao interrompem a promessa ao receber AbortSignal.
+export function criarConsultaDebounced<T>(receber: (resultado: T) => void, falhar: (erro: unknown) => void) {
+  let sequencia = 0;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let controller: AbortController | undefined;
+  const cancelar = () => {
+    sequencia++;
+    if (timer !== undefined) clearTimeout(timer);
+    timer = undefined;
+    controller?.abort();
+  };
+  return {
+    cancelar,
+    executar(consultar: (signal: AbortSignal) => Promise<T>, atraso = 300) {
+      cancelar();
+      const pedido = sequencia, atual = new AbortController();
+      controller = atual;
+      timer = setTimeout(() => {
+        timer = undefined;
+        void (async () => {
+          try {
+            const resultado = await consultar(atual.signal);
+            if (!atual.signal.aborted && pedido === sequencia) receber(resultado);
+          } catch (erro) {
+            if (!atual.signal.aborted && pedido === sequencia) falhar(erro);
+          }
+        })();
+      }, atraso);
+    },
+  };
+}
