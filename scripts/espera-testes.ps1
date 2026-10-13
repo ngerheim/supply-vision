@@ -33,6 +33,13 @@ function Preparar-InstalacaoSupervisorTeste([string]$Raiz,[string]$Destino){
  foreach($nome in @('supervisor','operacao-logica','validar-operacao','notificacao','avisos-admin','inicializacao-logica')){
   Copy-Item (Join-Path $Raiz "scripts/$nome.ps1") (Join-Path $alvo 'scripts')
  }
+ # Injecao somente na copia temporaria: nunca consulta o Portal real em 3000.
+ $supervisorTeste=Join-Path $alvo 'scripts/supervisor.ps1'
+ $codigoTeste=[IO.File]::ReadAllText($supervisorTeste)
+ $chamadaHealth='Consultar-HealthLocal $clienteHealth'
+ if(!$codigoTeste.Contains($chamadaHealth)){throw 'Ponto de isolamento do health nao encontrado.'}
+ $codigoTeste=$codigoTeste.Replace($chamadaHealth,($chamadaHealth+' "http://127.0.0.1:59999/api/health"'))
+ [IO.File]::WriteAllText($supervisorTeste,$codigoTeste,(New-Object Text.UTF8Encoding($true)))
  Copy-Item (Join-Path $Raiz 'alertas/parametros') (Join-Path $alvo 'alertas') -Recurse -Force
  Copy-Item (Join-Path $Raiz 'alertas/processo/validar_parametros.py') (Join-Path $alvo 'alertas/processo')
  $parametros=Join-Path $Raiz 'alertas/parametros'

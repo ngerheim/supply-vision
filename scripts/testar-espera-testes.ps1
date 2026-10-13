@@ -35,6 +35,10 @@ try{
  foreach($arq in @('scripts/supervisor.ps1','privado/alertas/parametros/de_para/itens.csv','alertas/processo/validar_parametros.py')){
   if(!(Test-Path (Join-Path $fixture $arq))){throw "Fixture incompleta: $arq"}
  }
+ $supervisorFixture=[IO.File]::ReadAllText((Join-Path $fixture 'scripts/supervisor.ps1'))
+ if(!$supervisorFixture.Contains('Consultar-HealthLocal $clienteHealth "http://127.0.0.1:59999/api/health"')){throw 'Fixture perdeu isolamento do health.'}
+ $supervisorReal=[IO.File]::ReadAllText((Join-Path $PSScriptRoot 'supervisor.ps1'))
+ if($supervisorReal.Contains('59999')){throw 'Injecao de teste alterou supervisor real.'}
  $recusou=$false;try{Preparar-InstalacaoSupervisorTeste $PSScriptRoot $fixture}catch{$recusou=$true}
  if(!$recusou){throw 'Fixture sobrescreveu destino existente.'}
  Write-Host 'Fixture compartilhada: estrutura, exemplos e destino novo aprovados.'

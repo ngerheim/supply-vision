@@ -41,7 +41,7 @@ try{
  }finally{$env:SUPPLY_VISION_PRIVADO=$privadoAnterior}
  $raiz=Split-Path $PSScriptRoot
  Exigir ((Get-Content (Join-Path $raiz 'INICIAR.bat') -Raw)-match'Exigir-InstalacaoNaoMigrada') 'BAT usa guarda'
- Exigir ((Get-Content (Join-Path $PSScriptRoot 'central.ps1') -Raw)-match'Iniciar-OperacaoConfigurada') 'central usa guarda'
+ Exigir ((Get-Content (Join-Path $PSScriptRoot 'central-logica.ps1') -Raw)-match'Iniciar-OperacaoConfigurada') 'central usa guarda'
  Exigir ((Get-Content (Join-Path $PSScriptRoot 'inicializacao-logica.ps1') -Raw)-match'Exigir-InstalacaoNaoMigrada') 'inicio configurado usa guarda'
  # Origem com componentes simulados: orquestrador real, sem tocar tarefa ou dados reais.
  $raizFalsa=Join-Path $pasta 'origem';New-Item -ItemType Directory -Force (Join-Path $raizFalsa 'scripts')|Out-Null
