@@ -154,6 +154,14 @@ async function startServer() {
 }
 try {
   await startServer();
+  // Email reservado somente na base nova desta fixture; hash/iteracoes reais.
+  sqlitePath=locateSqlite(state);assert.ok(sqlitePath&&sqlitePath.startsWith(state+path.sep));
+  const fixtureAdmin=new DatabaseSync(sqlitePath);
+  try{
+    fixtureAdmin.exec('PRAGMA busy_timeout=5000');
+    assert.equal(fixtureAdmin.prepare('SELECT COUNT(*) n FROM users').get().n,1);
+    fixtureAdmin.prepare("UPDATE users SET email=? WHERE role='admin'").run('admin@portal.test');
+  }finally{fixtureAdmin.close();}
   const login = await request('/api/login', { method: 'POST', body: { email: 'admin@portal.test', password: senha } });
   assert.equal(login.status, 200); cookie = login.cookie;
   sqlitePath = locateSqlite(state); assert.ok(sqlitePath);
