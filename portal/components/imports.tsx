@@ -373,7 +373,8 @@ export function Imports({
           )}
         </CardContent>
       </Card>
-      <ImportHistory rows={data.imports} />
+      {Number(data.totalImports)>data.imports.length&&<output>Mostrando as 100 importações mais recentes de {data.totalImports}.</output>}
+      <ImportHistory rows={data.imports} total={data.totalImports} />
     </div>
   );
 }

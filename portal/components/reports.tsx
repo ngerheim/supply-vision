@@ -54,6 +54,7 @@ export function Reports() {
   const [busy, setBusy] = useState(false),
     [error, setError] = useState(''),
     [notice, setNotice] = useState('');
+  const [total,setTotal]=useState(0);
   const [jobs, setJobs] = useState<Job[]>([]),
     [online, setOnline] = useState(false),
     [loaded, setLoaded] = useState(false);
@@ -68,6 +69,7 @@ export function Reports() {
     const data = await api('/api/reports', automatica ? { signal, headers: CABECALHO_ATUALIZACAO_AUTOMATICA } : { signal });
     if (!mounted.current) return;
     setJobs(data.jobs);
+    setTotal(data.total);
     setOnline(data.runnerOnline);
     setLoaded(true);
     setLoadError('');
@@ -185,6 +187,7 @@ export function Reports() {
             : 'Verificando serviço…'}
         </Badge>
       </div>
+      {total>jobs.length&&<output>Mostrando os 100 relatórios mais recentes de {total}.</output>}
       {!online && loaded && !loadError && (
         <output className="block rounded-lg border p-3 text-sm">
           Inicie a operação na central Supply Vision para habilitar as execuções

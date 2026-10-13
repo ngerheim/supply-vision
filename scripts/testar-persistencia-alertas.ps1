@@ -1,7 +1,11 @@
-# Confirma que um slot concluido permanece registrado durante verificacoes
+﻿# Confirma que um slot concluido permanece registrado durante verificacoes
 # posteriores. O teste interrompe o supervisor nessa janela e exige que o
 # estado ja contenha o horario concluido.
+param([string]$AgoraSimulado='2026-10-13T14:00:01Z',[ValidatePattern('^\d{2}:\d{2}$')][string]$Slot='14:00')
 $ErrorActionPreference = 'Stop'
+$agoraFixo=[datetimeoffset]::Parse($AgoraSimulado,[Globalization.CultureInfo]::InvariantCulture).UtcDateTime
+$alvo=[datetime]::ParseExact(($agoraFixo.ToString('yyyy-MM-dd')+' '+$Slot),'yyyy-MM-dd HH:mm',[Globalization.CultureInfo]::InvariantCulture)
+if($agoraFixo-lt$alvo){throw 'O slot de teste deve estar devido no relogio simulado.'}
 $raizReal = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $temp = Join-Path $env:TEMP ('supply-vision-persistencia-' + [guid]::NewGuid().ToString('N'))
 $proc = $null
@@ -30,6 +34,25 @@ try {
   $dirs | ForEach-Object { New-Item -ItemType Directory -Force (Join-Path $temp $_) | Out-Null }
   Copy-Item "$raizReal\scripts\supervisor.ps1", "$raizReal\scripts\operacao-logica.ps1", "$raizReal\scripts\validar-operacao.ps1", "$raizReal\scripts\notificacao.ps1", "$raizReal\scripts\avisos-admin.ps1","$raizReal\scripts\inicializacao-logica.ps1" "$temp\scripts"
 
+
+  # Injecao SOMENTE na copia descartavel: nenhum relogio de producao e alterado.
+  $arquivoSupervisor=Join-Path $temp 'scripts/supervisor.ps1'
+  $fonte=[IO.File]::ReadAllText($arquivoSupervisor)
+  $ponto='$config=Ler-ConfigOperacao $ConfigOperacao'
+  if(!$fonte.Contains($ponto)-or!$fonte.Contains('function Salvar-Estado{')){throw 'Ponto de injecao do teste nao encontrado.'}
+  $relogio=@"
+function Get-Date {
+ param([string]`$Format)
+ `$agora=[datetimeoffset]::Parse('$AgoraSimulado',[Globalization.CultureInfo]::InvariantCulture).UtcDateTime
+ if(`$Format){return `$agora.ToString(`$Format,[Globalization.CultureInfo]::InvariantCulture)}
+ return `$agora
+}
+"@
+  $fonte=$fonte.Replace($ponto,($ponto+"`n"+$relogio))
+  # Amplia a janela entre log e disco: o criterio antigo falharia sempre aqui.
+  $fonte=$fonte.Replace('function Salvar-Estado{',"function Salvar-Estado{`n Start-Sleep -Milliseconds 1200")
+  [IO.File]::WriteAllText($arquivoSupervisor,$fonte,(New-Object Text.UTF8Encoding($true)))
+
  New-Item -ItemType Directory -Force "$temp\alertas\processo","$temp\privado\alertas\parametros\filtros"|Out-Null
  Copy-Item "$raizReal\alertas\parametros" "$temp\alertas" -Recurse -Force
  Copy-Item "$raizReal\alertas\processo\validar_parametros.py" "$temp\alertas\processo"
@@ -46,7 +69,21 @@ try {
   # pipeline falso: termina imediatamente com sucesso.
   [IO.File]::WriteAllText("$temp\alertas\processo\pipeline.py", "import sys`nsys.exit(0)`n")
   # verificar_saude falso: segura a execucao, abrindo a janela do incidente.
-  [IO.File]::WriteAllText("$temp\alertas\processo\verificar_saude.py", "import time`ntime.sleep(30)`n")
+  $data=$agoraFixo.ToString('yyyy-MM-dd')
+  $chaveAlertas="alertas-$data-$Slot"
+  $marcadorSaude=Join-Path $temp 'privado/operacao/saude-iniciada.json'
+  $saudeTeste=@"
+import json, pathlib, time
+pasta = pathlib.Path(__file__).resolve().parents[2] / 'privado' / 'operacao'
+estado = json.loads((pasta / 'estado.json').read_text(encoding='utf-8-sig'))
+marcador = pasta / 'saude-iniciada.json'
+temporario = pasta / 'saude-iniciada.tmp'
+temporario.write_text(json.dumps({'chave': '$chaveAlertas', 'persistido': bool(estado.get('$chaveAlertas'))}), encoding='utf-8')
+temporario.replace(marcador)
+time.sleep(30)
+"@
+  [IO.File]::WriteAllText("$temp\alertas\processo\verificar_saude.py", $saudeTeste)
+
 
   $conteudos = @{
     'portal\dist\server\wrangler.json'                 = '{}'
@@ -59,11 +96,9 @@ try {
   [IO.File]::WriteAllText("$temp\privado\comum\smtp.env", "SMTP_HOST=x`r`nSMTP_PORT=1`r`nSMTP_USER=x`r`nSMTP_PASSWORD=x`r`nEMAIL_FROM_NAME=x")
   [IO.File]::WriteAllText("$temp\privado\portal\configuracao\portal.env", "PORTAL_URL=http://127.0.0.1:59999`r`nPORTAL_API_TOKEN=x`r`nBACKUP_EMAIL_TO=x")
   [IO.File]::WriteAllText("$temp\privado\alertas\config\cfg_ambiente.txt", "QLIK_TENANT=x`r`nQLIK_APP_ID=x`r`nQLIK_OBJ_ID=x`r`nDESTINATARIO_ALERTA=x")
-  [IO.File]::WriteAllText("$temp\privado\comum\operacao.env", "ALERTAS_HORARIOS=00:00`r`nBACKUP_HORARIOS=23:59`r`nLIMPEZA_HORARIO=23:59`r`nESPACO_MINIMO_GB=1")
+  [IO.File]::WriteAllText("$temp\privado\comum\operacao.env", "ALERTAS_HORARIOS=$Slot`r`nBACKUP_HORARIOS=23:59`r`nLIMPEZA_HORARIO=23:59`r`nESPACO_MINIMO_GB=1")
 
   # Estado inicial: backup e limpeza ja feitos; o slot de ALERTAS fica pendente.
-  $data = Get-Date -Format yyyy-MM-dd
-  $chaveAlertas = "alertas-$data-00:00"
   @{ "backup-$data-23:59" = 'ok'; "limpeza-$data-23:59" = 'ok' } | ConvertTo-Json | Set-Content "$temp\privado\operacao\estado.json"
 
   $env:SUPPLY_VISION_PRIVADO = Join-Path $temp 'privado'
@@ -71,17 +106,20 @@ try {
   $proc = Start-Process powershell.exe -PassThru -WindowStyle Hidden -ArgumentList @(
     '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "$temp\scripts\supervisor.ps1")
 
-  # Espera o supervisor registrar a conclusao dos alertas.
-  $logPath = "$temp\privado\operacao\supervisor.log"
-  $concluiu = $false
-  for ($i = 0; $i -lt 90; $i++) {
-    Start-Sleep -Milliseconds 500
-    if ((Test-Path $logPath) -and (Select-String -LiteralPath $logPath -Pattern 'Alertas concluidos' -Quiet)) { $concluiu = $true; break }
+  # O log de conclusao antecede o flush. Sincroniza com a entrada REAL da
+  # saude, que registra o estado visto antes de qualquer trabalho demorado.
+  $prazo=[Diagnostics.Stopwatch]::StartNew()
+  while(!(Test-Path -LiteralPath $marcadorSaude)-and$prazo.Elapsed.TotalSeconds-lt60){
+    if($proc.HasExited){throw 'Supervisor encerrou antes da verificacao simulada.'}
+    Start-Sleep -Milliseconds 100
   }
-  if (-not $concluiu) { throw 'O supervisor nao chegou a concluir os alertas simulados.' }
-
-  # Neste ponto verificar_saude.py esta rodando (sleep 30). Mata a arvore a
-  # forca, sem dar chance ao finally - exatamente como um desligamento.
+  if(!(Test-Path -LiteralPath $marcadorSaude)){
+    Get-Content "$temp\privado\operacao\supervisor.log" -ErrorAction SilentlyContinue|Write-Host
+    throw 'Supervisor nao iniciou a verificacao de saude no prazo.'
+  }
+  $observado=Get-Content -LiteralPath $marcadorSaude -Raw|ConvertFrom-Json
+  if($observado.chave-ne$chaveAlertas-or!$observado.persistido){throw "REGRESSAO: saude iniciou sem persistencia de '$chaveAlertas'."}
+  # Agora a saude esta no sleep 30. Interrompe sem finally, como o incidente.
   Encerrar-ArvoreTeste $proc
 
   # O marcador precisa ja estar em disco.
@@ -94,10 +132,10 @@ try {
   . "$raizReal\scripts\operacao-logica.ps1"
   $mapa = @{}
   $estado.psobject.Properties | ForEach-Object { $mapa[$_.Name] = $_.Value }
-  $devido = Obter-SlotDevido 'alertas' '00:00' $mapa (Get-Date)
+  $devido = Obter-SlotDevido 'alertas' $Slot $mapa $agoraFixo
   if ($devido) { throw "REGRESSAO: o slot '$($devido.chave)' ainda consta pendente apos a conclusao." }
 
-  Write-Host 'Persistencia dos alertas: marcador gravado antes da verificacao de saude.' -ForegroundColor Green
+  Write-Host "Persistencia dos alertas: $AgoraSimulado / $Slot; marcador observado pela saude e preservado apos interrupcao." -ForegroundColor Green
 } finally {
   $env:Path = $pathAnterior
   $env:SUPPLY_VISION_PRIVADO = $privadoAnterior

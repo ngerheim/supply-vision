@@ -7,7 +7,7 @@ const resposta = (body: unknown, status = 200) =>
   Response.json(body, { status, headers: { 'cache-control': 'no-store' } });
 export async function consultarRelatorios(jobId?: string, arquivo?: string) {
   if (!jobId) {
-    const [jobs, runner] = await Promise.all([
+    const [jobs, runner, contagem] = await Promise.all([
       rawDb()
         .prepare(
           `SELECT j.id,j.action,j.from_date AS "from",j.to_date AS "to",j.recipient,j.dry_run AS dryRun,j.status,j.created_at AS createdAt,j.started_at AS startedAt,j.completed_at AS completedAt,j.artifacts_json AS artifactsJson,u.name AS requestedBy FROM report_jobs j JOIN users u ON u.id=j.created_by ORDER BY j.created_at DESC,j.id DESC LIMIT 100`,
@@ -18,8 +18,10 @@ export async function consultarRelatorios(jobId?: string, arquivo?: string) {
           'SELECT heartbeat_at AS heartbeatAt FROM report_runner WHERE id=1',
         )
         .first<{ heartbeatAt: string }>(),
+      rawDb().prepare('SELECT COUNT(*) total FROM report_jobs').first<{ total: number }>(),
     ]);
     return resposta({
+      total: Number(contagem?.total || 0),
       jobs: jobs.results.map(job => ({ ...job, artifactsJson: informarValidadeArquivos(job) })),
       runnerOnline:
         !!runner && Date.now() - Date.parse(runner.heartbeatAt) < 30_000,

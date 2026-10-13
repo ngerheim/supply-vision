@@ -148,15 +148,69 @@ try {
     for(let i=0;i<501;i++){
       const registro=`${prefixo}_lista_${i}`;
       db.prepare('INSERT INTO agreements(id,number,supplier_id,start_date,created_at,updated_at) VALUES(?,?,?,?,?,?)').run(registro,registro,prefixo,'2000-01-01',stamp,'2000-01-01T00:00:00.000Z');
-      db.prepare("INSERT INTO tickets(id,code,supplier_name,priority,status,created_at,updated_at) VALUES(?,?,?,'media','aberto',?,?)").run(registro,`SUP-${900000+i}`,prefixo,stamp,'2000-01-01T00:00:00.000Z');
+      db.prepare("INSERT INTO tickets(id,code,supplier_name,priority,status,created_at,updated_at,search_text,supplier_sort) VALUES(?,?,?,'media','aberto',?,?,?,?)").run(registro,`SUP-${900000+i}`,prefixo,stamp,'2000-01-01T00:00:00.000Z',`sup-${900000+i} ${prefixo}`,prefixo);
     }
     db.exec('COMMIT');
   }catch(error){db.exec('ROLLBACK');throw error;}
+  const abrirChamadoBusca=async fornecedor=>{
+    const resposta=await fetch(`${url}/api/tickets`,{method:'POST',headers:{...headers,'content-type':'application/json'},body:JSON.stringify({supplierName:fornecedor,city:'São   Paulo',state:'SP'})});
+    assert.equal(resposta.status,201,await resposta.clone().text());return (await resposta.json()).id;
+  };
+  const agua=await abrirChamadoBusca(`ÁGUA 2 ${prefixo}`),zulu=await abrirChamadoBusca(`Zulu ${prefixo}`);
+  db.prepare('UPDATE tickets SET updated_at=? WHERE id=?').run('1999-01-01T00:00:00.000Z',agua);
+  const consultarChamados=async params=>{
+    const resposta=await fetch(`${url}/api/tickets?${new URLSearchParams(params)}`,{headers});
+    assert.equal(resposta.status,200,await resposta.clone().text());return resposta.json();
+  };
+  for(const q of ['sao paulo','ÁGUA','  SAO  PAULO  ']){
+    const encontrado=await consultarChamados({q});
+    let registros=encontrado.tickets;
+    for(let page=2;page<=encontrado.pageCount;page++)registros=registros.concat((await consultarChamados({q,page:String(page)})).tickets);
+    assert.ok(registros.some(row=>row.id===agua),q);
+  }
+  const semOrdem=await consultarChamados({q:prefixo,pageSize:'50'});
+  assert.ok(!semOrdem.tickets.some(row=>row.id===agua));
+  assert.equal((await consultarChamados({q:prefixo,sort:'supplier',direction:'asc'})).tickets[0].id,agua);
+  assert.equal((await consultarChamados({q:prefixo,sort:'supplier',direction:'desc'})).tickets[0].id,zulu);
+  assert.deepEqual((await consultarChamados({q:prefixo,sort:'supplier; DROP TABLE tickets'})).tickets.map(row=>row.id),semOrdem.tickets.map(row=>row.id));
+  const detalheAgua=await (await fetch(`${url}/api/tickets/${agua}`,{headers})).json();
+  const editarBusca=await fetch(`${url}/api/tickets/${agua}`,{method:'PUT',headers:{...headers,'content-type':'application/json'},body:JSON.stringify({supplierName:`ÓLEO e AÇÃO ${prefixo}`,city:'Ribeirão Preto',expectedRevision:detalheAgua.ticket.revision})});
+  assert.equal(editarBusca.status,200,await editarBusca.text());
+  assert.ok(!(await consultarChamados({q:'ÁGUA'})).tickets.some(row=>row.id===agua));
+  assert.ok((await consultarChamados({q:'OLEO E ACAO'})).tickets.some(row=>row.id===agua));
+  assert.ok((await consultarChamados({q:'RIBEIRAO PRETO'})).tickets.some(row=>row.id===agua));
+  console.log('[OK] Busca normalizada acompanha criacao/edicao; fornecedor ordena antes das paginas.');
+  // Mais de 100 registros: o total deve incluir o que nao cabe na lista.
+  const usuario=db.prepare("SELECT id FROM users WHERE role='admin' LIMIT 1").get().id;
+  for(let i=0;i<105;i++){
+    const registro=`${prefixo}_historico_${i}`;
+    db.prepare('INSERT INTO imports(id,filename,mode,status,created_by,created_at) VALUES(?,?,?,?,?,?)').run(registro,'ficticio.xlsx','replace','completed',usuario,stamp);
+    db.prepare('INSERT INTO report_jobs(id,request_key,action,status,created_by,created_at) VALUES(?,?,?,?,?,?)').run(registro,registro,'relatorio','done',usuario,stamp);
+  }
+  const historicoImports=await (await fetch(`${url}/api/imports`,{headers})).json();
+  assert.equal(historicoImports.imports.length,100);
+  assert.equal(historicoImports.total,db.prepare('SELECT COUNT(*) n FROM imports').get().n);
+  const historicoReports=await (await fetch(`${url}/api/reports`,{headers})).json();
+  assert.equal(historicoReports.jobs.length,100);
+  assert.equal(historicoReports.total,db.prepare('SELECT COUNT(*) n FROM report_jobs').get().n);
   const bootstrap=await (await fetch(`${url}/api/bootstrap`,{headers})).json();
-  const tickets=await (await fetch(`${url}/api/tickets`,{headers})).json();
+  assert.equal(bootstrap.imports.length,100);assert.equal(bootstrap.totalImports,historicoImports.total);
+  console.log('[OK] Importacoes e relatorios mostram total completo acima do limite de 100.');
+  // Os proximos cenarios compartilham este banco descartavel e contam a propria fila.
+  for(let i=0;i<105;i++){
+    const registro=`${prefixo}_historico_${i}`;
+    db.prepare('DELETE FROM imports WHERE id=?').run(registro);
+    db.prepare('DELETE FROM report_jobs WHERE id=?').run(registro);
+  }
+
+  const tickets=await (await fetch(`${url}/api/tickets?pageSize=50`,{headers})).json();
+  assert.equal(tickets.pageSize,50);assert.equal(tickets.tickets.length,50);assert.ok(tickets.total>=501);
+  const todas=[...tickets.tickets];
+  for(let page=2;page<=tickets.pageCount;page++){const pagina=await (await fetch(`${url}/api/tickets?page=${page}&pageSize=50`,{headers})).json();assert.ok(pagina.tickets.length<=50);todas.push(...pagina.tickets);}
+  assert.equal(todas.length,tickets.total);assert.equal(new Set(todas.map(r=>r.id)).size,todas.length);
   for(let i=0;i<501;i++){
     assert.ok(bootstrap.agreements.some(row=>row.id===`${prefixo}_lista_${i}`));
-    assert.ok(tickets.tickets.some(row=>row.id===`${prefixo}_lista_${i}`));
+    assert.ok(todas.some(row=>row.id===`${prefixo}_lista_${i}`));
   }
   console.log('[OK] Acordos e chamados antigos permanecem acessiveis alem de 500 registros; auditoria preserva preco anterior.');
   console.log('[OK] Exclusoes respeitam a trava e funcionam depois de sua liberacao.');
