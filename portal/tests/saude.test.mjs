@@ -7,7 +7,8 @@ for (const caso of ['normal', 'js-ausente', 'html-no-css', 'api-alheia']) {
   void test(`saude completa: ${caso}`, async () => {
     const servidor = createServer((req, res) => {
       if (req.url === '/api/health') {
-        res.setHeader('Content-Type', 'application/json');
+        res.setHeader('Content-Type', 'application/json; charset=utf-8');
+        res.setHeader('X-Content-Type-Options', 'nosniff');
         res.end(JSON.stringify({ app: caso === 'api-alheia' ? 'outro' : 'portal-suprimentos', status: 'ok' }));
       } else if (req.url === '/') {
         res.setHeader('Content-Type', 'text/html');

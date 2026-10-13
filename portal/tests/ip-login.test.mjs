@@ -19,6 +19,8 @@ void test('proxy usa socket, sobrescreve cabecalhos falsos e preserva metodo e c
   const backend=http.createServer(async(req,res)=>{
     ip=await ipLoginAssinado(new Headers(req.headers),token);
     let corpo='';for await(const trecho of req)corpo+=trecho;
+    res.setHeader('Content-Type','application/json; charset=utf-8');
+    res.setHeader('X-Content-Type-Options','nosniff');
     res.setHeader('x-sv-client-proof','nao-expor');res.end(JSON.stringify({corpo,metodo:req.method,caminho:req.url}));
   });
   backend.listen(0,'127.0.0.1');await once(backend,'listening');
@@ -27,6 +29,8 @@ void test('proxy usa socket, sobrescreve cabecalhos falsos e preserva metodo e c
   t.after(()=>{proxy.closeAllConnections();backend.closeAllConnections();proxy.close();backend.close();});
   const r=await fetch(`http://127.0.0.1:${proxy.address().port}/api/login`,{method:'POST',body:'{"email":"teste@example.com"}',headers:{'x-sv-client-ip':'127.0.0.2','x-sv-client-proof':'0'.repeat(64)}});
   assert.equal(r.status,200);assert.equal(r.headers.get('x-sv-client-proof'),null);
+  assert.equal(r.headers.get('content-type'),'application/json; charset=utf-8');
+  assert.equal(r.headers.get('x-content-type-options'),'nosniff');
   assert.deepEqual(await r.json(),{corpo:'{"email":"teste@example.com"}',metodo:'POST',caminho:'/api/login'});assert.equal(ip,'127.0.0.1');
 });
 void test('backend indisponivel devolve 503 e deixa proxy funcionando', async t => {

@@ -38,7 +38,7 @@ $r=Split-Path $PSScriptRoot
 Definir-ModoInicializacao $r (Join-Path $r 'privado') (Join-Path $r 'startup.cmd') $ModoInicializacao '${process.execPath.replaceAll("'","''")}'
 `);
     fs.writeFileSync(path.join(repo,'portal/scripts/abrir-firewall-lan.ps1'),"param([switch]$SemPausa)\n# firewall simulado\n");
-    fs.writeFileSync(path.join(repo,'scripts/health.mjs'),"import http from 'node:http'; http.createServer((q,r)=>{r.setHeader('content-type','application/json');r.end(JSON.stringify({status:'ok'}));}).listen(3000,'127.0.0.1');");
+    fs.writeFileSync(path.join(repo,'scripts/health.mjs'),"import http from 'node:http'; http.createServer((q,r)=>{r.setHeader('Content-Type','application/json; charset=utf-8');r.setHeader('X-Content-Type-Options','nosniff');r.end(JSON.stringify({status:'ok'}));}).listen(3000,'127.0.0.1');");
     fs.writeFileSync(path.join(repo,'scripts/supervisor.ps1'),`param([switch]$SemLogin,[string]$NodeExecutavel,[string]$PastaPrivada)
 $op=Join-Path $PastaPrivada 'operacao'
 Remove-Item (Join-Path $op 'parar.sinal') -ErrorAction SilentlyContinue
