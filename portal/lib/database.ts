@@ -1,4 +1,4 @@
-import { CRIAR_CONTADOR_CHAMADOS_SQL, MIGRAR_CONTADOR_CHAMADOS_SQL } from './operacao-dados.ts';
+import { CRIAR_CONTADOR_CHAMADOS_SQL, MIGRAR_CONTADOR_CHAMADOS_SQL, migrarBuscaChamados } from './operacao-dados.ts';
 import { SCHEMA_VALIDACAO } from './operacao-validacao.ts';
 import { SCHEMA_RELATORIOS } from './relatorios.ts';
 import { passwordHash, tokenHash, PBKDF2_ITERACOES_ATUAL, PBKDF2_ITERACOES_LEGADO } from './criptografia.ts';
@@ -90,6 +90,8 @@ const columnMigrations: Array<[string, string, string]> = [
   ['agreement_items', 'revision', 'INTEGER NOT NULL DEFAULT 0'],
   ['tickets', 'request_key', 'TEXT'],
   ['tickets', 'request_hash', 'TEXT'],
+  ['tickets', 'search_text', 'TEXT'],
+  ['tickets', 'supplier_sort', 'TEXT'],
   ['ticket_events', 'request_key', 'TEXT'],
   // Janela coberta por cada relatorio diario: o inicio e o fim do relatorio
   // anterior, para nao haver lacuna nem sobreposicao entre envios.
@@ -217,6 +219,12 @@ async function initialize() {
       db.prepare('INSERT INTO schema_migrations (version,applied_at) VALUES (3,?)').bind(now()),
     ]);
   }
+  // Depois das migracoes que alteram codigo e fornecedor, normaliza o legado.
+  if (!await db.prepare('SELECT 1 ok FROM schema_migrations WHERE version=6').first()) {
+    await migrarBuscaChamados(db);
+    await db.prepare('INSERT OR IGNORE INTO schema_migrations(version,applied_at) VALUES(6,?)').bind(now()).run();
+  }
+  await db.prepare('CREATE INDEX IF NOT EXISTS idx_tickets_supplier_sort ON tickets(supplier_sort,updated_at DESC,id DESC)').run();
   await db.prepare('PRAGMA optimize').run();
 }
 

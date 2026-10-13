@@ -1,4 +1,5 @@
 'use client';
+import { COLUNAS_ORDENACAO_CHAMADOS } from '@/lib/operacao-dados';
 import { gerarChaveRelatorio } from '@/lib/relatorios';
 
 import { Reports } from '@/components/reports';
@@ -257,19 +258,18 @@ function FalhaDeCarregamento({erro,tentar,voltar}:{erro:string;tentar:()=>void;v
 
 function Tickets({busy,users,agreements,run,initialDetail}:JsonData){
   const [data,setData]=useState<AnyRow|null>(null),[group,setGroup]=useState<'ativos'|'fechados'|'cancelados'>('ativos'),[q,setQ]=useState(''),[open,setOpen]=useState<AnyRow|null>(null),[detail,setDetail]=useState<string|null>(initialDetail||null);
-  const {ordem,alternar,ordenar}=useOrdenacao('tickets');
+  const {ordem,alternar}=useOrdenacao('tickets');
+  const querySort=ordem?`&sort=${COLUNAS_ORDENACAO_CHAMADOS[ordem.coluna]}&direction=${ordem.direcao===1?'asc':'desc'}`:'';
   const [page,setPage]=useState(1);
-  const [agora]=useState(()=>Date.now());
   const [loadError,setLoadError]=useState('');
   const consulta=useRef(0);
-  const load=useCallback(async()=>{setLoadError('');try{const pedido=++consulta.current;const resposta=await api(`/api/tickets?page=${page}&pageSize=50&group=${group}&q=${encodeURIComponent(q)}`);if(pedido===consulta.current)setData(resposta)}catch(error){setLoadError(errorText(error))}},[page,group,q]);
+  const load=useCallback(async()=>{setLoadError('');try{const pedido=++consulta.current;const resposta=await api(`/api/tickets?page=${page}&pageSize=50&group=${group}&q=${encodeURIComponent(q)}${querySort}`);if(pedido===consulta.current)setData(resposta)}catch(error){setLoadError(errorText(error))}},[page,group,q,querySort]);
   useEffect(()=>{let active=true;queueMicrotask(()=>{if(active)void load()});return()=>{active=false}},[load]);
   if(loadError)return <FalhaDeCarregamento erro={loadError} tentar={()=>void load()}/>;
   if(!data) return <Loading label="Carregando chamados…"/>;
   if(detail) return <TicketDetail busy={busy} id={detail} users={users} agreements={agreements} onBack={()=>{setDetail(null);void load()}} run={run}/>;
   const s=data.stats||{};
-  const prioridade:AnyRow={alta:1,media:2,baixa:3};
-  const rows=ordenar(data.tickets||[],(r:AnyRow)=>[r.code,r.supplierName,prioridade[r.priority]||9,(ticketStatusMap[r.status]||[r.status])[0],(r.closedAt?Date.parse(r.closedAt):agora)-Date.parse(r.createdAt),r.requestedBy||'']);
+  const rows=data.tickets||[];
   const pageCount=data.pageCount,currentPage=data.page;
   const cards=[['Abertos',s.aberto],['Aguardando',s.aguardando],['Fechados',s.fechado]];
   return <div className="space-y-6">
@@ -282,7 +282,7 @@ function Tickets({busy,users,agreements,run,initialDetail}:JsonData){
     </div>
     {rows.length?<Card className="min-w-0"><CardContent className="min-w-0 px-0 pb-0"><Table className="w-full min-w-[900px] table-fixed">
       <colgroup>{[9,31,11,20,14,15].map((largura,indice)=><col key={indice} style={{width:`${largura}%`}}/>)}</colgroup>
-      <TableHeader><CabecalhoOrdenavel acoes={false} titulos={['Código','Fornecedor','Prioridade','Situação','Em aberto','Solicitante']} ordem={ordem} onAlternar={alternar}/></TableHeader>
+      <TableHeader><CabecalhoOrdenavel acoes={false} titulos={['Código','Fornecedor','Prioridade','Situação','Em aberto','Solicitante']} ordem={ordem} onAlternar={(coluna:number)=>{alternar(coluna);setPage(1)}}/></TableHeader>
       <TableBody>{rows.map((r:AnyRow)=><TableRow key={r.id}>
         <TableCell><button className="block w-full truncate text-left font-mono text-xs font-semibold text-primary hover:underline" title={r.code} onClick={()=>setDetail(r.id)}>{r.code}</button></TableCell>
 
