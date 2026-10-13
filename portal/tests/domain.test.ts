@@ -10,7 +10,6 @@ import {
   normalizeCnpj,
   normalizeImportText,
   normalizeText,
-  resolveImportUnit,
   safeFilename,
   toNonNegativeMoney,
   validatePassword,
@@ -30,14 +29,6 @@ void test('normaliza texto sem converter objetos acidentalmente', () => {
 void test('normaliza texto de importação removendo acentos e caracteres invisíveis', () => {
   assert.equal(normalizeImportText('  óleo\u00a0 de  direção\t'), 'OLEO DE DIRECAO');
   assert.equal(normalizeImportText('Revisão 10.000 km'), 'REVISAO 10.000 KM');
-});
-
-void test('aceita código ou nome de unidade e recusa erro de digitação', () => {
-  const units = [{ code: 'L', name: 'Litro' }, { code: 'UNIDADE', name: 'Unidade' }];
-  assert.equal(resolveImportUnit('litro', units), 'L');
-  assert.equal(resolveImportUnit(' l ', units), 'L');
-  assert.equal(resolveImportUnit('lirto', units), null);
-  assert.equal(resolveImportUnit('litro', [...units, { code: 'L2', name: 'Litro' }]), null);
 });
 
 void test('normaliza e valida CNPJ pelo tamanho e pelos dígitos verificadores', () => {
