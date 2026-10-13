@@ -2,7 +2,6 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
-  isAgreementEffective,
   isIsoDate,
   isValidCnpj,
   isValidState,
@@ -66,13 +65,6 @@ void test('aplica os limites de senha inicial', () => {
   assert.equal(validatePassword('123456789'), false);
   assert.equal(validatePassword('1234567890'), true);
   assert.equal(validatePassword('x'.repeat(201)), false);
-});
-
-void test('considera pesquisável somente o acordo vigente na data informada', () => {
-  assert.equal(isAgreementEffective({ status: 'active', startDate: '2026-01-01', endDate: '2026-12-31' }, '2026-08-31'), true);
-  assert.equal(isAgreementEffective({ status: 'active', startDate: '2026-09-01' }, '2026-08-31'), false);
-  assert.equal(isAgreementEffective({ status: 'active', startDate: '2025-01-01', endDate: '2026-08-30' }, '2026-08-31'), false);
-  assert.equal(isAgreementEffective({ status: 'draft', startDate: '2026-01-01' }, '2026-08-31'), false);
 });
 
 void test('remove caracteres perigosos do nome exportado pela importação', () => {

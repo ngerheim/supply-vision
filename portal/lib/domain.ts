@@ -107,13 +107,6 @@ export function validatePassword(value: unknown) {
   return password.length >= MIN_PASSWORD_LENGTH && password.length <= 200;
 }
 
-export function isAgreementEffective(
-  agreement: { status: string; startDate: string; endDate?: string | null },
-  today: string,
-) {
-  return agreement.status === 'active' && agreement.startDate <= today && (!agreement.endDate || agreement.endDate >= today);
-}
-
 export function safeFilename(value: unknown) {
   const filename = typeof value === 'string' && value.trim() ? value : 'arquivo.xlsx';
   return filename.replace(/[^\p{L}\p{N}._ -]/gu, '_').slice(0, 180);
