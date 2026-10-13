@@ -129,6 +129,20 @@ Verifica 'Pagina completa entrega CSS e JavaScript validos' {
 }
 Write-Host ''
 
+# Email reservado somente na base descartavel; hash/iteracoes reais preservados.
+$bancoFixture=(Get-ChildItem -LiteralPath $temp -Recurse -Filter '*.sqlite'|Where-Object {$_.Name-ne'metadata.sqlite'}|Select-Object -First 1).FullName
+$prepararAdmin=@'
+const fs=require('node:fs'),path=require('node:path'),{DatabaseSync}=require('node:sqlite');
+const raiz=fs.realpathSync.native(process.argv[2]),arquivo=fs.realpathSync.native(process.argv[3]);
+const relativa=path.relative(raiz,arquivo);
+if(!raiz.includes('portal-teste-')||!relativa||relativa.startsWith('..')||path.isAbsolute(relativa))throw new Error('Banco fora da fixture');
+const db=new DatabaseSync(arquivo);
+try{db.exec('PRAGMA busy_timeout=5000');if(db.prepare('SELECT COUNT(*) n FROM users').get().n!==1)throw new Error('Exige base nova');db.prepare("UPDATE users SET email=? WHERE role='admin'").run('admin@portal.test')}finally{db.close()}
+'@
+$scriptAdmin=Join-Path $temp 'preparar-admin.cjs'
+[IO.File]::WriteAllText($scriptAdmin,$prepararAdmin,(New-Object Text.UTF8Encoding($false)))
+& node $scriptAdmin $temp $bancoFixture
+if($LASTEXITCODE){throw 'Nao foi possivel preparar email reservado na base descartavel.'}
 $emailSemente = 'admin@portal.test'
 
 Verifica 'Primeiro login do administrador funciona' {
