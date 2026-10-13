@@ -118,7 +118,7 @@ function Executar-AcaoCentral([string]$Raiz,[string]$Privado,[string]$Startup,[s
   'atualizar' {
    if((Obter-TarefaSupplyVision $Raiz)-and!(Testar-Elevacao)){return @{elevar=$true}}
    $op=Join-Path $Privado 'operacao';New-Item -ItemType Directory -Force $op|Out-Null
-   $saida=Join-Path $op 'atualizacao-saida.log';$erro=Join-Path $op 'atualizacao-erro.log';Remove-Item $saida,$erro -Force -ErrorAction SilentlyContinue
+   $saida=Join-Path $op 'atualizacao-processo-saida.log';$erro=Join-Path $op 'atualizacao-erro.log';Remove-Item $saida,$erro -Force -ErrorAction SilentlyContinue
    $argumentos='-NoProfile -ExecutionPolicy Bypass -File "'+(Join-Path $Raiz 'scripts/atualizar-servidor.ps1')+'"'
    $proc=Start-Process powershell.exe -ArgumentList $argumentos -WindowStyle Hidden -PassThru -RedirectStandardOutput $saida -RedirectStandardError $erro
    return @{ok=$true;processo=$proc}
@@ -135,13 +135,13 @@ function Executar-AcaoCentral([string]$Raiz,[string]$Privado,[string]$Startup,[s
   }
   'migrar' {Preparar-Migracao $Raiz $Privado $Startup $Dados.destino $Dados.modo;return @{ok=$true}}
   'fim-atualizacao' {
-   $op=Join-Path $Privado 'operacao';$texto=@(Get-Content (Join-Path $op 'atualizacao-saida.log') -ErrorAction SilentlyContinue)-join"`n"
+   $op=Join-Path $Privado 'operacao';$texto=@(Get-Content (Join-Path $op 'atualizacao-processo-saida.log') -ErrorAction SilentlyContinue)-join"`n"
    $concluiu=($Dados.codigo-eq0)-or($texto-match'=== Atualizado: .+ ===')-or($texto-like'*Nada a fazer*')
    $versao=try{(& git -C $Raiz log -1 --date=format:'%d/%m/%Y' --pretty=format:'%h  %ad' 2>$null)}catch{'versao indisponivel'}
    if($concluiu){$mensagem=if($texto-like'*Nada a fazer*'){'O sistema ja esta na versao mais recente.'}else{'Sistema atualizado e operacao reiniciada.'}}
    else{
     $e=@(Get-Content (Join-Path $op 'atualizacao-erro.log') -ErrorAction SilentlyContinue|Select-Object -Last 8)
-    $s=@(Get-Content (Join-Path $op 'atualizacao-saida.log') -ErrorAction SilentlyContinue|Select-Object -Last 12)
+    $s=@(Get-Content (Join-Path $op 'atualizacao-processo-saida.log') -ErrorAction SilentlyContinue|Select-Object -Last 12)
     $mensagem=@($(if($e){'ERRO:';$e});$(if($s){'ULTIMAS ETAPAS:';$s}))-join"`n"
     if(!$mensagem){$mensagem='Consulte os registros da operacao para mais detalhes.'}
    }
