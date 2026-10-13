@@ -47,10 +47,3 @@ export function exigeTexto(value: unknown, maximo: number, campo: string) {
   return texto;
 }
 
-export function exigeLista(value: unknown, campo: string, maximo = LIMITE_LISTA) {
-  const lista = Array.isArray(value) ? value : [];
-  if (lista.length > maximo) {
-    throw new EntradaInvalida(`O campo "${campo}" tem ${lista.length} itens, acima do limite de ${maximo}.`);
-  }
-  return lista;
-}

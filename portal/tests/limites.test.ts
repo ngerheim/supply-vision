@@ -16,7 +16,7 @@ import test from 'node:test';
 // nenhum. Agora quebra, que é o comportamento desejado.
 import {
   CORPO_MAX_JSON, CORPO_MAX_LOGIN, CORPO_MAX_UPLOAD, EntradaInvalida,
-  LIMITES_CAMPO, LIMITE_LISTA, exigeLista, exigeTexto,
+  LIMITES_CAMPO, LIMITE_LISTA, exigeTexto,
 } from '../lib/limites-entrada.ts';
 
 const cabe = (texto: string, maximo: number) => {
@@ -96,13 +96,3 @@ void test('mensagem de erro diz qual campo e qual limite', () => {
   }
 });
 
-void test('exigeLista aceita no limite e recusa acima', () => {
-  const lista = (n: number) => Array.from({ length: n }, (_, i) => `id-${i}`);
-  assert.equal(exigeLista(lista(LIMITE_LISTA), 'modelos').length, LIMITE_LISTA);
-  assert.throws(() => exigeLista(lista(LIMITE_LISTA + 1), 'modelos'), EntradaInvalida);
-});
-
-void test('valor que não é lista vira lista vazia, não erro', () => {
-  assert.deepEqual(exigeLista(undefined, 'modelos'), []);
-  assert.deepEqual(exigeLista('texto', 'modelos'), []);
-});
