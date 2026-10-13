@@ -1,4 +1,12 @@
-﻿# Consultas e comandos da central executados em runspaces, nunca na thread WinForms.
+﻿function Testar-ConclusaoAtualizacao($Codigo,[string]$Saida){
+ $marcador=($Saida-match'(?m)^=== Atualizado: [0-9a-f]{7} -> [0-9a-f]{7} ===\s*$')-or($Saida-like'*Nada a fazer*')
+ # Codigo desconhecido admite marcador; codigo de falha explicito sempre prevalece.
+ return (($null-ne$Codigo)-and($Codigo-eq0)-and$marcador)-or(($null-eq$Codigo)-and$marcador)
+}
+function Filtrar-AvisosAtualizacao($Linhas){
+ return @($Linhas|Where-Object {$_-notmatch'(?i)\b(INEFFECTIVE_DYNAMIC_IMPORT|PLUGIN_TIMINGS)\b|^\s*npm\s+warn\b|^\s*(WARNING|AVISO): Nao foi possivel gravar a medicao'})
+}
+# Consultas e comandos da central executados em runspaces, nunca na thread WinForms.
 function Registrar-DiagnosticoCentral([string]$Privado,[string]$Texto){
  try{
   $pasta=Join-Path $Privado 'operacao';[void][IO.Directory]::CreateDirectory($pasta)
@@ -121,7 +129,8 @@ function Executar-AcaoCentral([string]$Raiz,[string]$Privado,[string]$Startup,[s
    $saida=Join-Path $op 'atualizacao-processo-saida.log';$erro=Join-Path $op 'atualizacao-erro.log';Remove-Item $saida,$erro -Force -ErrorAction SilentlyContinue
    $argumentos='-NoProfile -ExecutionPolicy Bypass -File "'+(Join-Path $Raiz 'scripts/atualizar-servidor.ps1')+'"'
    $proc=Start-Process powershell.exe -ArgumentList $argumentos -WindowStyle Hidden -PassThru -RedirectStandardOutput $saida -RedirectStandardError $erro
-   return @{ok=$true;processo=$proc}
+   [void]$proc.Handle # Conserva o handle para obter ExitCode apos encerrar (PowerShell 5.1).
+   return @{ok=$true;processo=$proc;saida='atualizacao-processo-saida.log'}
   }
   'modo' {
    if(!(Testar-SupervisorEncerrado $Privado)){throw 'Pare a operacao antes de mudar o modo de inicializacao.'}
@@ -135,14 +144,25 @@ function Executar-AcaoCentral([string]$Raiz,[string]$Privado,[string]$Startup,[s
   }
   'migrar' {Preparar-Migracao $Raiz $Privado $Startup $Dados.destino $Dados.modo;return @{ok=$true}}
   'fim-atualizacao' {
-   $op=Join-Path $Privado 'operacao';$texto=@(Get-Content (Join-Path $op 'atualizacao-processo-saida.log') -ErrorAction SilentlyContinue)-join"`n"
-   $concluiu=($Dados.codigo-eq0)-or($texto-match'=== Atualizado: .+ ===')-or($texto-like'*Nada a fazer*')
+   $op=Join-Path $Privado 'operacao'
+   $arquivoSaida=Join-Path $op 'atualizacao-processo-saida.log'
+   if(!$Dados.saida){
+    # Central ja aberta antes da troca: o worker le o codigo novo, mas stdout
+    # ainda esta no nome legado. Escolhe a captura mais recente, nao os tempos.
+    $captura=@('atualizacao-processo-saida.log','atualizacao-saida.log')|ForEach-Object {Get-Item -LiteralPath (Join-Path $op $_) -ErrorAction SilentlyContinue}|Where-Object {
+     # Na G0, este nome tambem podia conter apenas medicoes do pai.
+     @(Get-Content -LiteralPath $_.FullName -Tail 12 -ErrorAction SilentlyContinue|Where-Object {$_-match'\S'-and$_-notmatch'^\[\d{4}-\d{2}-\d{2} '}).Count-gt0
+    }|Sort-Object LastWriteTimeUtc -Descending|Select-Object -First 1
+    if($captura){$arquivoSaida=$captura.FullName}
+   }
+   $texto=@(Get-Content -LiteralPath $arquivoSaida -ErrorAction SilentlyContinue)-join"`n"
+   $concluiu=Testar-ConclusaoAtualizacao $Dados.codigo $texto
    $versao=try{(& git -C $Raiz log -1 --date=format:'%d/%m/%Y' --pretty=format:'%h  %ad' 2>$null)}catch{'versao indisponivel'}
    if($concluiu){$mensagem=if($texto-like'*Nada a fazer*'){'O sistema ja esta na versao mais recente.'}else{'Sistema atualizado e operacao reiniciada.'}}
    else{
-    $e=@(Get-Content (Join-Path $op 'atualizacao-erro.log') -ErrorAction SilentlyContinue|Select-Object -Last 8)
-    $s=@(Get-Content (Join-Path $op 'atualizacao-processo-saida.log') -ErrorAction SilentlyContinue|Select-Object -Last 12)
-    $mensagem=@($(if($e){'ERRO:';$e});$(if($s){'ULTIMAS ETAPAS:';$s}))-join"`n"
+    $e=@(Filtrar-AvisosAtualizacao @(Get-Content (Join-Path $op 'atualizacao-erro.log') -ErrorAction SilentlyContinue)|Select-Object -Last 8)
+    $s=@(Filtrar-AvisosAtualizacao @(Get-Content $arquivoSaida -ErrorAction SilentlyContinue)|Select-Object -Last 12)
+    $mensagem=@("Codigo de saida: $($Dados.codigo). Conclusao nao confirmada.";$(if($e){'ERRO:';$e});$(if($s){'ULTIMAS ETAPAS:';$s}))-join"`n"
     if(!$mensagem){$mensagem='Consulte os registros da operacao para mais detalhes.'}
    }
    return @{ok=$concluiu;mensagem=$mensagem;versao=$versao}

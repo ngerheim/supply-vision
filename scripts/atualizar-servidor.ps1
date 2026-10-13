@@ -37,10 +37,22 @@ function Nova-MedicaoAtualizacao([string]$Arquivo,[string]$Herdada='',[scriptblo
  return $m
 }
 function Registrar-TempoAtualizacao($Medicao,[string]$Texto){
- try{
-  [void][IO.Directory]::CreateDirectory((Split-Path $Medicao.arquivo -Parent))
-  [IO.File]::AppendAllText($Medicao.arquivo,($Texto+[Environment]::NewLine),(New-Object Text.UTF8Encoding($false)))
- }catch{Write-Warning 'Nao foi possivel gravar a medicao de tempos da atualizacao.' -WarningAction Continue}
+ # Arquivo proprio: a central legada mantem stdout aberto sem compartilhar escrita.
+ for($tentativa=0;$tentativa-lt3;$tentativa++){
+  $arquivo=$null;$escritor=$null
+  try{
+   [void][IO.Directory]::CreateDirectory((Split-Path $Medicao.arquivo -Parent))
+   $arquivo=[IO.File]::Open($Medicao.arquivo,[IO.FileMode]::Append,[IO.FileAccess]::Write,[IO.FileShare]::ReadWrite)
+   $escritor=New-Object IO.StreamWriter($arquivo,(New-Object Text.UTF8Encoding($false)))
+   $escritor.WriteLine($Texto);$escritor.Flush()
+   return
+  }catch{
+   if($tentativa-eq2){Write-Warning 'Nao foi possivel gravar a medicao de tempos da atualizacao.' -WarningAction Continue}
+  }finally{
+   try{if($escritor){$escritor.Dispose()}elseif($arquivo){$arquivo.Dispose()}}catch{}
+  }
+  if($tentativa-lt2){Start-Sleep -Milliseconds 100}
+ }
 }
 function Encerrar-EtapaMedida($Medicao,[string]$Resultado='concluido'){
  if(!$Medicao.etapa){return}
@@ -74,7 +86,7 @@ function Resumir-MedicaoAtualizacao($Medicao,[bool]$Delegada=$false){
 
 $medicaoEnvAnterior=$env:SV_MEDICAO_ATUALIZACAO
 $script:MedicaoDelegada=$false
-$script:MedicaoAtualizacao=Nova-MedicaoAtualizacao (Join-Path (Obter-PastaPrivada $Raiz) 'operacao/atualizacao-saida.log') $(if($JaAtualizado){$env:SV_MEDICAO_ATUALIZACAO}else{''})
+$script:MedicaoAtualizacao=Nova-MedicaoAtualizacao (Join-Path (Obter-PastaPrivada $Raiz) 'operacao/atualizacao-tempos.log') $(if($JaAtualizado){$env:SV_MEDICAO_ATUALIZACAO}else{''})
 function Etapa([string]$t) { Iniciar-EtapaMedida $script:MedicaoAtualizacao $t; Write-Host "`n== $t ==" -ForegroundColor Cyan }
 function Ok([string]$t) { Write-Host "   $t" -ForegroundColor Green }
 function Aviso([string]$t) { Write-Host "   $t" -ForegroundColor Yellow }
@@ -363,8 +375,11 @@ if (-not $JaAtualizado) {
   Encerrar-EtapaMedida $script:MedicaoAtualizacao 'continuacao delegada'
   $env:SV_MEDICAO_ATUALIZACAO=Exportar-MedicaoAtualizacao $script:MedicaoAtualizacao
   $script:MedicaoDelegada=$true
-  & powershell.exe @argumentosReexecucao
-  $rcFilho = $LASTEXITCODE
+  # No Windows PowerShell 5.1, stderr do filho nao pode virar excecao no pai.
+  $preferenciaFilho=$ErrorActionPreference
+  $ErrorActionPreference='Continue'
+  try { & powershell.exe @argumentosReexecucao; $rcFilho = $LASTEXITCODE }
+  finally { $ErrorActionPreference=$preferenciaFilho }
   if ($rcFilho -ne 0) {
     $contexto = Ler-EstadoOperacao $ContextoArquivo
     if ($contexto.fase -in @('revertido','recuperando')) {
@@ -465,11 +480,11 @@ if ($LASTEXITCODE -ne 0) { Reverter 'Interface ou consumidores obrigatorios nao 
 & $Node --experimental-strip-types (Join-Path $Portal 'scripts/operacao-validacao.mjs') --liberar
 if ($LASTEXITCODE -ne 0) { Reverter 'Falha ao liberar a operacao validada.' }
 Ok "Portal e consumidores no ar em $url"
-Write-Host "`n=== Atualizado: $($anterior.Substring(0,7)) -> $($remoto.Substring(0,7)) ===" -ForegroundColor Cyan
 Gravar-EstadoOperacao $ContextoArquivo @{anterior=$anterior;remoto=$remoto;fase='concluido'}
 git log -1 --pretty=format:'    %s'
 Write-Host ''
 Encerrar-EtapaMedida $script:MedicaoAtualizacao
+Write-Host "`n=== Atualizado: $($anterior.Substring(0,7)) -> $($remoto.Substring(0,7)) ===" -ForegroundColor Cyan
 exit 0
 } catch {
   $falha = $_
