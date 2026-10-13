@@ -14,7 +14,7 @@ void test('digitacao rapida faz uma requisicao apos 300 ms e preserva o texto ac
   const consulta = criarConsultaDebounced(recebidos.push.bind(recebidos), () => assert.fail('Sem erro esperado'));
   t.after(consulta.cancelar);
   for (const q of ['Á', 'ÁG', 'ÁGUA São Paulo']) {
-    consulta.executar(signal => api(`/api/tickets?q=${encodeURIComponent(q)}`, { signal }));
+    void consulta.executar(signal => api(`/api/tickets?q=${encodeURIComponent(q)}`, { signal }));
     t.mock.timers.tick(100);
   }
   assert.equal(pedidos.length, 0);
@@ -31,16 +31,16 @@ void test('aborta pedido anterior; resposta ou erro antigos nao substituem a con
   let antiga!: (valor: string) => void, falhaAntiga!: (erro: Error) => void;
   const consulta = criarConsultaDebounced<string>(valor => recebidos.push(valor), erro => erros.push(erro));
   t.after(consulta.cancelar);
-  consulta.executar(signal => { sinais.push(signal); return new Promise(resolve => { antiga = resolve; }); }, 0);
+  void consulta.executar(signal => { sinais.push(signal); return new Promise(resolve => { antiga = resolve; }); }, 0);
   t.mock.timers.tick(0);
-  consulta.executar(async () => 'nova', 0);
+  void consulta.executar(async () => 'nova', 0);
   assert.equal(sinais[0].aborted, true);
   t.mock.timers.tick(0); await setImmediate();
   antiga('antiga'); await setImmediate();
   assert.deepEqual(recebidos, ['nova']);
-  consulta.executar(() => new Promise((_, reject) => { falhaAntiga = reject; }), 0);
+  void consulta.executar(() => new Promise((_, reject) => { falhaAntiga = reject; }), 0);
   t.mock.timers.tick(0);
-  consulta.executar(async () => 'mais nova', 0);
+  void consulta.executar(async () => 'mais nova', 0);
   t.mock.timers.tick(0); await setImmediate();
   falhaAntiga(new Error('falha antiga')); await setImmediate();
   assert.deepEqual(recebidos, ['nova', 'mais nova']);
@@ -53,12 +53,12 @@ void test('desmontagem cancela timer e pedido; falha vigente continua visivel', 
   const erros: unknown[] = [];
   const consulta = criarConsultaDebounced(() => assert.fail('Nao recebe'), erro => erros.push(erro));
   t.after(consulta.cancelar);
-  consulta.executar(async () => { pedidos++; });
+  void consulta.executar(async () => { pedidos++; });
   consulta.cancelar(); t.mock.timers.tick(300); assert.equal(pedidos, 0);
-  consulta.executar(async () => { throw new Error('atual'); }, 0);
+  void consulta.executar(async () => { throw new Error('atual'); }, 0);
   t.mock.timers.tick(0); await setImmediate(); assert.equal(erros.length, 1);
   let sinal!: AbortSignal;
-  consulta.executar(signal => { sinal = signal; return new Promise(() => {}); }, 0);
+  void consulta.executar(signal => { sinal = signal; return new Promise(() => {}); }, 0);
   t.mock.timers.tick(0); consulta.cancelar(); assert.equal(sinal.aborted, true);
 });
 

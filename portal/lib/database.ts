@@ -1,4 +1,4 @@
-import { CRIAR_CONTADOR_CHAMADOS_SQL, MIGRAR_CONTADOR_CHAMADOS_SQL, migrarBuscaChamados } from './operacao-dados.ts';
+import { CRIAR_CONTADOR_CHAMADOS_SQL, MIGRAR_CONTADOR_CHAMADOS_SQL, migrarBuscaChamados, migrarIndicesListasGlobais } from './operacao-dados.ts';
 import { SCHEMA_VALIDACAO } from './operacao-validacao.ts';
 import { SCHEMA_RELATORIOS } from './relatorios.ts';
 import { passwordHash, tokenHash, PBKDF2_ITERACOES_ATUAL, PBKDF2_ITERACOES_LEGADO } from './criptografia.ts';
@@ -225,6 +225,7 @@ async function initialize() {
     await db.prepare('INSERT OR IGNORE INTO schema_migrations(version,applied_at) VALUES(6,?)').bind(now()).run();
   }
   await db.prepare('CREATE INDEX IF NOT EXISTS idx_tickets_supplier_sort ON tickets(supplier_sort,updated_at DESC,id DESC)').run();
+  await migrarIndicesListasGlobais(db, now());
   await db.prepare('PRAGMA optimize').run();
 }
 

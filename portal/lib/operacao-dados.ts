@@ -1,5 +1,18 @@
 import { textoBusca } from './busca.ts';
 
+export const INDICES_LISTAS_GLOBAIS_SQL = [
+  'CREATE INDEX IF NOT EXISTS idx_imports_created_global ON imports(created_at DESC)',
+  'CREATE INDEX IF NOT EXISTS idx_report_jobs_created_global ON report_jobs(created_at DESC,id DESC)',
+] as const;
+export async function migrarIndicesListasGlobais(db: D1Database, agora: string) {
+  if (await db.prepare('SELECT 1 ok FROM schema_migrations WHERE version=7').first()) return;
+  // DDL e marcador no mesmo batch transacional: queda/falha permite retomar.
+  await db.batch([
+    ...INDICES_LISTAS_GLOBAIS_SQL.map(sql => db.prepare(sql)),
+    db.prepare('INSERT OR IGNORE INTO schema_migrations(version,applied_at) VALUES(7,?)').bind(agora),
+  ]);
+}
+
 // Uma unica varredura na migracao, nunca na abertura de novos chamados.
 export const CRIAR_CONTADOR_CHAMADOS_SQL = 'CREATE TABLE IF NOT EXISTS ticket_counter (id INTEGER PRIMARY KEY CHECK(id=1), value INTEGER NOT NULL)';
 export const MIGRAR_CONTADOR_CHAMADOS_SQL = `INSERT OR IGNORE INTO ticket_counter(id,value)
