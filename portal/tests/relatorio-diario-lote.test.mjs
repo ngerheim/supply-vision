@@ -43,7 +43,7 @@ void test('conteudo e assunto/texto/HTML identicos ao legado; consultas 3/52/502
       const a=contar(db),b=contar(db);
       const antes=dadosAntes(a.db,'2026-10-13',agora,periodo),depois=dadosRelatorioDiario(b.db,'2026-10-13',agora,periodo);
       assert.equal(a.total,n+2);assert.equal(b.total,3);assert.deepEqual(depois,antes);
-      const email=d=>montarEmailRelatorioDiario('2026-10-13',d.totais,d.chamados,'http://portal',d.periodo);
+      const email=d=>montarEmailRelatorioDiario('2026-10-13',d.totais,d.chamados,'http://portal.test',d.periodo);
       assert.deepEqual(email(depois),email(antes));
       assert.deepEqual(dadosRelatorioDiario(db,'2026-10-13',agora),dadosAntes(db,'2026-10-13',agora,null));
       assert.equal(depois.chamados[0].atualizacoes.length,2);

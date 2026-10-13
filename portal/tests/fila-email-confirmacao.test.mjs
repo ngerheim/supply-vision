@@ -3,12 +3,12 @@ import test from 'node:test';
 import { DatabaseSync } from 'node:sqlite';
 import { MENSAGEM_NAO_CONFIRMADO, concluir, processarNotificacoes, reservar } from '../scripts/processar-emails.mjs';
 
-const config={PORTAL_URL:'http://portal',EMAIL_FROM_NAME:'Portal',SMTP_USER:'portal@exemplo.com'};
+const config={PORTAL_URL:'http://portal.test',EMAIL_FROM_NAME:'Portal',SMTP_USER:'portal@example.com'};
 const payload=JSON.stringify({ticketId:'t1',codigo:'SUP-1',fornecedor:'Oficina',prioridade:'media',situacao:'aberto',solicitante:'Ana',responsavel:'Bia',autor:'Ana',resumo:'Teste',alteracoes:[],mensagem:null});
 function banco(){
   const db=new DatabaseSync(':memory:');
-  db.exec(`CREATE TABLE users(id TEXT,email TEXT,active INTEGER,role TEXT); INSERT INTO users VALUES('bia','bia@exemplo.com',1,'editor'); CREATE TABLE email_notifications (id TEXT PRIMARY KEY,type TEXT,recipient_name TEXT,recipient_email TEXT,payload_json TEXT,status TEXT,attempts INTEGER,next_attempt_at TEXT,locked_at TEXT,sent_at TEXT,last_error TEXT,created_at TEXT,updated_at TEXT)`);
-  db.prepare("INSERT INTO email_notifications VALUES ('um','atribuicao','Bia','bia@exemplo.com',?,'pending',0,'2000-01-01T00:00:00.000Z',NULL,NULL,NULL,'2026-01-01','2026-01-01')").run(payload);
+  db.exec(`CREATE TABLE users(id TEXT,email TEXT,active INTEGER,role TEXT); INSERT INTO users VALUES('bia','bia@example.com',1,'editor'); CREATE TABLE email_notifications (id TEXT PRIMARY KEY,type TEXT,recipient_name TEXT,recipient_email TEXT,payload_json TEXT,status TEXT,attempts INTEGER,next_attempt_at TEXT,locked_at TEXT,sent_at TEXT,last_error TEXT,created_at TEXT,updated_at TEXT)`);
+  db.prepare("INSERT INTO email_notifications VALUES ('um','atribuicao','Bia','bia@example.com',?,'pending',0,'2000-01-01T00:00:00.000Z',NULL,NULL,NULL,'2026-01-01','2026-01-01')").run(payload);
   return db;
 }
 const transporte=()=>{const t={enviados:0,async sendMail(){t.enviados++}};return t};
@@ -39,7 +39,7 @@ for (const caso of ['desativado', 'viewer', 'email alterado', 'identidade altera
     try {
       if(caso==='desativado')db.exec('UPDATE users SET active=0');
       if(caso==='viewer')db.exec("UPDATE users SET role='viewer'");
-      if(caso==='email alterado')db.exec("UPDATE users SET email='outro@exemplo.com'");
+      if(caso==='email alterado')db.exec("UPDATE users SET email='outro@example.com'");
       if(caso==='identidade alterada')db.exec("ALTER TABLE email_notifications ADD COLUMN recipient_user_id TEXT; UPDATE email_notifications SET recipient_user_id='antigo'");
       await processarNotificacoes(db,config,t);
       assert.equal(t.enviados,0);

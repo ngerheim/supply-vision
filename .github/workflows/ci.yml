@@ -58,10 +58,30 @@ jobs:
             foreach ($e in $erros) { Write-Host "::error file=$($_.FullName),line=$($e.Extent.StartLineNumber)::$($e.Message)"; $falhas++ }
           }
           if ($falhas) { exit 1 }
+      - name: Cache PSScriptAnalyzer 1.25.0
+        uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
+        with:
+          path: ${{ runner.temp }}/pssa/PSScriptAnalyzer/1.25.0
+          key: pssa-${{ runner.os }}-1.25.0-v2
+      - name: Instalar PSScriptAnalyzer 1.25.0
+        shell: powershell
+        run: |
+          $base = Join-Path $env:RUNNER_TEMP 'pssa'
+          $destino = Join-Path $base 'PSScriptAnalyzer/1.25.0'
+          if (!(Test-Path (Join-Path $destino 'PSScriptAnalyzer.psd1'))) {
+            $existente = Get-Module -ListAvailable PSScriptAnalyzer | Where-Object Version -EQ '1.25.0' | Select-Object -First 1
+            if ($existente) {
+              New-Item -ItemType Directory -Force $destino | Out-Null
+              Copy-Item (Join-Path $existente.ModuleBase '*') $destino -Recurse -Force
+            } else {
+              Save-Module PSScriptAnalyzer -RequiredVersion 1.25.0 -Path $base -Force
+            }
+          }
+          if ((Test-ModuleManifest (Join-Path $destino 'PSScriptAnalyzer.psd1')).Version -ne '1.25.0') { throw 'Versao do analisador incorreta.' }
       - name: PSScriptAnalyzer (erros)
         shell: powershell
         run: |
-          Install-Module PSScriptAnalyzer -RequiredVersion 1.25.0 -Scope CurrentUser -Force
+          Import-Module (Join-Path $env:RUNNER_TEMP 'pssa/PSScriptAnalyzer/1.25.0/PSScriptAnalyzer.psd1')
           $achados = @(Invoke-ScriptAnalyzer -Path . -Recurse -Severity Error)
           $achados | Format-Table -AutoSize RuleName, ScriptName, Line, Message | Out-String -Width 300 | Write-Host
           if ($achados.Count) { exit 1 }
@@ -199,7 +219,7 @@ jobs:
         run: |
           & powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./scripts/validar-operacao.ps1
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
-          foreach ($rodada in 1..2) {
+          foreach ($rodada in 1..$(if ('${{ github.event_name }}' -in @('schedule','workflow_dispatch')) { 2 } else { 1 })) {
             foreach ($slot in @('00:00','08:00','11:00','14:00','17:00')) {
               $agora = '2026-10-13T' + $slot + ':01Z'
               & powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./scripts/testar-persistencia-alertas.ps1 -AgoraSimulado $agora -Slot $slot

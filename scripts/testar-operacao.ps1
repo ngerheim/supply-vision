@@ -1,4 +1,4 @@
-$ErrorActionPreference = 'Stop'
+﻿$ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'operacao-logica.ps1')
 function Igual($Esperado,$Atual,[string]$Caso){if($Esperado-ne$Atual){throw "${Caso}: esperado '$Esperado', obtido '$Atual'"}}
 $cfg=@{ALERTAS_HORARIOS='08:00,11:00,14:00,17:00';BACKUP_HORARIOS='12:30,17:45';LIMPEZA_HORARIO='05:30'}
@@ -110,3 +110,21 @@ try {
   Add-Content -LiteralPath $arquivoBackup -Value 'BACKUP_ANEXAR_BANCO=true'
   Igual $true ((Obter-AvisoBackup $raizBackup) -like '*habilitado*') 'anexo explicito'
 } finally { Remove-Item -LiteralPath $raizBackup -Recurse -Force }
+
+# Mesmas fixtures do Node e Python; somente diretorio descartavel.
+$casos=Get-Content (Join-Path $PSScriptRoot '../testes/fixtures/configuracao-env.json') -Raw -Encoding UTF8|ConvertFrom-Json
+$arquivo=Join-Path ([IO.Path]::GetTempPath()) ('sv-env-'+[guid]::NewGuid().ToString('N')+'.env')
+try {
+ foreach($caso in $casos){
+  if($caso.ausente){Remove-Item -LiteralPath $arquivo -Force -ErrorAction SilentlyContinue}
+  else{[IO.File]::WriteAllText($arquivo,$caso.texto,(New-Object Text.UTF8Encoding($false)))}
+  $falhou=$false;$valores=$null
+  try{$valores=Ler-ConfigOperacao $arquivo}catch{$falhou=$true}
+  Igual ([bool]$caso.erro) $falhou $caso.nome
+  if(!$falhou){
+   Igual @($caso.valores.PSObject.Properties).Count $valores.Count 'quantidade de chaves'
+   foreach($chave in $caso.valores.PSObject.Properties){Igual $chave.Value $valores[$chave.Name] $chave.Name}
+  }
+ }
+ Write-Host 'Contrato env compartilhado: aprovado.'
+}finally{Remove-Item -LiteralPath $arquivo -Force -ErrorAction SilentlyContinue}

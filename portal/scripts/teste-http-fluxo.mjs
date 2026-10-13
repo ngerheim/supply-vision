@@ -36,7 +36,7 @@ console.log('\n  TESTES HTTP EM FLUXO\n  --------------------');
 }
 
 {
-  const pedacos = ['{"email":"a@b.com","password":"', ...Array.from({ length: 4 }, () => 'P'.repeat(2048)), '"}'];
+  const pedacos = ['{"email":"a@example.com","password":"', ...Array.from({ length: 4 }, () => 'P'.repeat(2048)), '"}'];
   const r = await pedir({ caminho: '/api/login', pedacos,
     cabecalhos: { 'content-type': 'application/json', 'transfer-encoding': 'chunked' } });
   verifica('Login chunked acima de 2 KB e recusado sem revelar o motivo', r.status === 401 || detalhe(r));

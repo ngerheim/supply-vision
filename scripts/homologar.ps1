@@ -67,16 +67,20 @@ foreach($p in @($cfg['BACKUP_NETWORK_DIR'])){
  Item-Homologacao "Backups $p" {if(!$p-or!(Test-Path -LiteralPath $p)){throw 'pasta'};$arquivos=@(Get-ChildItem -LiteralPath $p -File|Sort-Object LastWriteTime -Descending);if(!$arquivos){throw 'vazio'};"$($arquivos.Count) arquivos; mais recente $($arquivos[0].LastWriteTime) (nao valida integridade)"}
 }
 Item-Homologacao 'Ultimas entregas' {
- $entregas=@(Get-ChildItem (Join-Path $privado 'alertas\estado-envios') -Filter '*.json' -File|Sort-Object LastWriteTime -Descending)
- if(!$entregas){throw 'sem entregas'}
+ $node=Localizar-NodeMaquina
+ $saida=& $node (Join-Path $Raiz 'portal/scripts/ultimas-entregas.mjs') --privado $privado
+ if($LASTEXITCODE){throw 'Consulta de entregas indisponivel.'}
+ $j=($saida-join"`n")|ConvertFrom-Json
  $resumo=@()
- foreach($registro in @($entregas|Select-Object -First 5)){
-  $j=Get-Content $registro.FullName -Raw -Encoding UTF8|ConvertFrom-Json
-  $estado=if($j.estado-in@('enviado','parcial','incerto')){$j.estado}else{'desconhecido'}
-  $resumo+="$($registro.LastWriteTime): $estado"
+ foreach($tipo in @('alertas','relatorios')){
+  $entregas=@($j.$tipo)
+  if(!$entregas){$resumo+="${tipo}: nenhum envio confirmado ainda";continue}
+  $itens=@($entregas|ForEach-Object {([datetimeoffset]::Parse($_.data).LocalDateTime.ToString('yyyy-MM-dd HH:mm:ss'))+': '+$_.estado})
+  $resumo+="${tipo}: "+($itens-join', ')
  }
- "$($entregas.Count) registros; ultimos cinco: $($resumo-join'; '); destinatarios omitidos"
-}
+ $resumo+=@($j.avisos)
+ @{nivel=$(if($j.avisos.Count-or(!$j.alertas-and!$j.relatorios)){'aviso'}else{'ok'});mensagem=(($resumo-join'; ')+'; destinatarios omitidos')}
+} -Classificar
 Item-Homologacao 'Disco' {$d=Get-PSDrive -Name ([IO.Path]::GetPathRoot($Raiz).Substring(0,1));$op=Ler-ConfigOperacao (Join-Path $privado 'comum\operacao.env');$gb=[math]::Round($d.Free/1GB,1);if($gb-lt[double]$op['ESPACO_MINIMO_GB']){throw 'disco'};"$gb GB livres"}
 foreach($tipo in @('supervisor','portal','emails','relatorios')){
  Item-Homologacao "Final do log $tipo" {

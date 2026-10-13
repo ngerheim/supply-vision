@@ -21,7 +21,7 @@ void test('digitacao rapida faz uma requisicao apos 300 ms e preserva o texto ac
   t.mock.timers.tick(199); assert.equal(pedidos.length, 0);
   t.mock.timers.tick(1); await setImmediate();
   assert.equal(pedidos.length, 1);
-  assert.equal(new URL(pedidos[0], 'http://portal').searchParams.get('q'), 'ÁGUA São Paulo');
+  assert.equal(new URL(pedidos[0], 'http://portal.test').searchParams.get('q'), 'ÁGUA São Paulo');
   assert.deepEqual(recebidos, [{ tickets: ['resultado'] }]);
 });
 

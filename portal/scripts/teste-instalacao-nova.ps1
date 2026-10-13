@@ -129,7 +129,21 @@ Verifica 'Pagina completa entrega CSS e JavaScript validos' {
 }
 Write-Host ''
 
-$emailSemente = 'admin@portal.local'
+# Email reservado somente na base descartavel; hash/iteracoes reais preservados.
+$bancoFixture=(Get-ChildItem -LiteralPath $temp -Recurse -Filter '*.sqlite'|Where-Object {$_.Name-ne'metadata.sqlite'}|Select-Object -First 1).FullName
+$prepararAdmin=@'
+const fs=require('node:fs'),path=require('node:path'),{DatabaseSync}=require('node:sqlite');
+const raiz=fs.realpathSync.native(process.argv[2]),arquivo=fs.realpathSync.native(process.argv[3]);
+const relativa=path.relative(raiz,arquivo);
+if(!raiz.includes('portal-teste-')||!relativa||relativa.startsWith('..')||path.isAbsolute(relativa))throw new Error('Banco fora da fixture');
+const db=new DatabaseSync(arquivo);
+try{db.exec('PRAGMA busy_timeout=5000');if(db.prepare('SELECT COUNT(*) n FROM users').get().n!==1)throw new Error('Exige base nova');db.prepare("UPDATE users SET email=? WHERE role='admin'").run('admin@portal.test')}finally{db.close()}
+'@
+$scriptAdmin=Join-Path $temp 'preparar-admin.cjs'
+[IO.File]::WriteAllText($scriptAdmin,$prepararAdmin,(New-Object Text.UTF8Encoding($false)))
+& node $scriptAdmin $temp $bancoFixture
+if($LASTEXITCODE){throw 'Nao foi possivel preparar email reservado na base descartavel.'}
+$emailSemente = 'admin@portal.test'
 
 Verifica 'Primeiro login do administrador funciona' {
   $corpo = @{ email = $emailSemente; password = $senhaTeste } | ConvertTo-Json
@@ -142,7 +156,7 @@ Verifica 'Primeiro login do administrador funciona' {
 
 Verifica 'Senha errada e recusada na instalacao nova' {
   try {
-    Invoke-WebRequest "$baseUrl/api/login" -Method POST -Body '{"email":"admin@portal.local","password":"errada"}' `
+    Invoke-WebRequest "$baseUrl/api/login" -Method POST -Body '{"email":"admin@portal.test","password":"errada"}' `
       -ContentType 'application/json' -UseBasicParsing -TimeoutSec 60 | Out-Null
     'aceitou senha errada'
   } catch { if ($_.Exception.Response.StatusCode.value__ -eq 401) { $true } else { "veio $($_.Exception.Response.StatusCode.value__)" } }
@@ -162,7 +176,7 @@ Verifica 'Sessao autenticada acessa o bootstrap' {
   if ($b.user.role -eq 'admin') { $true } else { "perfil inesperado: $($b.user.role)" }
 }
 
-$admin=((Invoke-WebRequest "$baseUrl/api/users" -WebSession $script:sessao -UseBasicParsing -TimeoutSec 60).Content|ConvertFrom-Json).users|Where-Object {$_.email -eq 'admin@portal.local'}|Select-Object -First 1
+$admin=((Invoke-WebRequest "$baseUrl/api/users" -WebSession $script:sessao -UseBasicParsing -TimeoutSec 60).Content|ConvertFrom-Json).users|Where-Object {$_.email -eq 'admin@portal.test'}|Select-Object -First 1
 Invoke-WebRequest "$baseUrl/api/users/$($admin.id)" -Method PUT -WebSession $script:sessao -ContentType 'application/json' -UseBasicParsing -TimeoutSec 60 -Body (@{dailyReportEnabled=$true;dailyReportTime='16:20';expectedRevision=$admin.revision}|ConvertTo-Json -Compress) | Out-Null
 Verifica 'Administrador configura destinatario e horario do relatorio diario' {
   $lista=(Invoke-WebRequest "$baseUrl/api/users" -WebSession $script:sessao -UseBasicParsing -TimeoutSec 60).Content|ConvertFrom-Json
@@ -174,8 +188,8 @@ Verifica 'Horario invalido do relatorio diario e recusado' {
 }
 
 # --- Fila de notificacoes dos chamados ---
-$usuarioEmail = 'responsavel-email@teste.local'
-$novoEmail = 'novo-responsavel-email@teste.local'
+$usuarioEmail = 'responsavel-email@teste.test'
+$novoEmail = 'novo-responsavel-email@teste.test'
 $u1 = (Invoke-WebRequest "$baseUrl/api/users" -Method POST -WebSession $script:sessao -ContentType 'application/json' -UseBasicParsing -TimeoutSec 60 `
   -Body (@{name='Responsavel Email';email=$usuarioEmail;password='senha-email-teste-123';role='editor'}|ConvertTo-Json)).Content|ConvertFrom-Json
 $u2 = (Invoke-WebRequest "$baseUrl/api/users" -Method POST -WebSession $script:sessao -ContentType 'application/json' -UseBasicParsing -TimeoutSec 60 `
@@ -240,7 +254,7 @@ if ($arquivoBanco) {
   $consulta = @'
 const { DatabaseSync } = require('node:sqlite');
 const db = new DatabaseSync(process.argv[2], { readOnly: true });
-const u = db.prepare("SELECT * FROM users WHERE email='admin@portal.local'").get() || {};
+const u = db.prepare("SELECT * FROM users WHERE email='admin@portal.test'").get() || {};
 const s = db.prepare('SELECT token FROM sessions LIMIT 1').get() || {};
 console.log(JSON.stringify({
   iteracoes: u.password_iterations,
@@ -376,7 +390,7 @@ Verifica 'Login com corpo muito acima do limite e recusado' {
   # mas o Invoke-WebRequest sempre calcula o cabecalho certo -- o teste nunca
   # exercitou esse caminho. O caso real (chunked, sem Content-Length) esta em
   # scripts/teste-http-fluxo.mjs, que escreve no socket em pedacos.
-  $corpo = '{"email":"a@b.com","password":"' + ('P' * 50000) + '"}'
+  $corpo = '{"email":"a@example.com","password":"' + ('P' * 50000) + '"}'
   $c = CodigoDe { Invoke-WebRequest "$baseUrl/api/login" -Method POST -Body $corpo -ContentType 'application/json' -UseBasicParsing -TimeoutSec 30 }
   # 401 generico e proposital no login: nao revela o motivo da recusa.
   if ($c -eq 401 -or $c -eq 413) { $true } else { "esperado 401 ou 413, veio $c" }

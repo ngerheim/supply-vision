@@ -8,14 +8,19 @@ const produto = path.resolve(portal, '..');
 export const privado = path.resolve(process.env.SUPPLY_VISION_PRIVADO || path.join(produto, 'privado'));
 export const portalPrivado = path.join(privado, 'portal');
 
-function lerArquivo(arquivo) {
-  if (!fs.existsSync(arquivo)) return {};
+// Contrato: testes/fixtures/configuracao-env.json; linhas malformadas sao erro.
+export function lerArquivo(arquivo, { obrigatorio = false } = {}) {
+  if (!fs.existsSync(arquivo)) {
+    if (obrigatorio) throw new Error('Configuracao obrigatoria ausente.');
+    return {};
+  }
   const config = {};
   for (const linha of fs.readFileSync(arquivo, 'utf8').split(/\r?\n/)) {
     const limpa = linha.trim();
     if (!limpa || limpa.startsWith('#')) continue;
     const separador = limpa.indexOf('=');
-    if (separador > 0) config[limpa.slice(0, separador).trim()] = limpa.slice(separador + 1).trim();
+    if (separador <= 0 || !limpa.slice(0, separador).trim()) throw new Error('Linha invalida na configuracao: esperado CHAVE=valor.');
+    config[limpa.slice(0, separador).trim()] = limpa.slice(separador + 1).trim();
   }
   return config;
 }

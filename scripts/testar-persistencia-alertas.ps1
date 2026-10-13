@@ -3,6 +3,7 @@
 # estado ja contenha o horario concluido.
 param([string]$AgoraSimulado='2026-10-13T14:00:01Z',[ValidatePattern('^\d{2}:\d{2}$')][string]$Slot='14:00')
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'espera-testes.ps1')
 $agoraFixo=[datetimeoffset]::Parse($AgoraSimulado,[Globalization.CultureInfo]::InvariantCulture).UtcDateTime
 $alvo=[datetime]::ParseExact(($agoraFixo.ToString('yyyy-MM-dd')+' '+$Slot),'yyyy-MM-dd HH:mm',[Globalization.CultureInfo]::InvariantCulture)
 if($agoraFixo-lt$alvo){throw 'O slot de teste deve estar devido no relogio simulado.'}
@@ -27,20 +28,7 @@ function Encerrar-ArvoreTeste($Processo) {
   $Processo.WaitForExit(15000) | Out-Null
 }
 try {
-  $dirs = @('scripts', 'portal\dist\server','portal\scripts', 'alertas\processo', 'privado\comum',
-            'privado\portal\configuracao', 'privado\portal\logs', 'privado\alertas\config',
-            'privado\alertas\logs', 'privado\alertas\relatorios\diarios',
-            'privado\alertas\parametros\de_para', 'privado\operacao', 'bin')
-  $dirs | ForEach-Object { New-Item -ItemType Directory -Force (Join-Path $temp $_) | Out-Null }
-  Copy-Item "$raizReal\scripts\supervisor.ps1", "$raizReal\scripts\operacao-logica.ps1", "$raizReal\scripts\validar-operacao.ps1", "$raizReal\scripts\notificacao.ps1", "$raizReal\scripts\avisos-admin.ps1","$raizReal\scripts\inicializacao-logica.ps1" "$temp\scripts"
- # Injecao somente na copia temporaria: nunca consulta o Portal real em 3000.
- $supervisorTeste=Join-Path $temp 'scripts/supervisor.ps1'
- $codigoTeste=[IO.File]::ReadAllText($supervisorTeste)
- $chamadaHealth='Consultar-HealthLocal $clienteHealth'
- if(!$codigoTeste.Contains($chamadaHealth)){throw 'Ponto de isolamento do health nao encontrado.'}
- $codigoTeste=$codigoTeste.Replace($chamadaHealth,($chamadaHealth+' "http://127.0.0.1:59999/api/health"'))
- [IO.File]::WriteAllText($supervisorTeste,$codigoTeste,(New-Object Text.UTF8Encoding($true)))
-
+ Preparar-InstalacaoSupervisorTeste $raizReal $temp
 
 
   # Injecao SOMENTE na copia descartavel: nenhum relogio de producao e alterado.
@@ -61,14 +49,7 @@ function Get-Date {
   $fonte=$fonte.Replace('function Salvar-Estado{',"function Salvar-Estado{`n Start-Sleep -Milliseconds 1200")
   [IO.File]::WriteAllText($arquivoSupervisor,$fonte,(New-Object Text.UTF8Encoding($true)))
 
- New-Item -ItemType Directory -Force "$temp\alertas\processo","$temp\privado\alertas\parametros\filtros"|Out-Null
- Copy-Item "$raizReal\alertas\parametros" "$temp\alertas" -Recurse -Force
- Copy-Item "$raizReal\alertas\processo\validar_parametros.py" "$temp\alertas\processo"
- $parametros=Join-Path $raizReal 'alertas/parametros'
- foreach($exemplo in @(Get-ChildItem $parametros -Recurse -File | Where-Object Name -Like '*.exemplo.*')){
-   $relativo=$exemplo.FullName.Substring($parametros.Length).TrimStart('\').Replace('.exemplo','')
-   Copy-Item $exemplo.FullName (Join-Path "$temp\privado\alertas\parametros" $relativo) -Force
- }
+
   # Python real, via juncao para o .venv do projeto (nao copia os 142 MB).
   & cmd.exe /c mklink /J "$temp\alertas\.venv" "$raizReal\alertas\.venv" | Out-Null
   if (-not (Test-Path "$temp\alertas\.venv\Scripts\python.exe")) { throw 'Nao foi possivel preparar o Python de teste.' }

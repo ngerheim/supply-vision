@@ -1,0 +1,28 @@
+[
+  {
+    "nome": "BOM, comentarios, vazio, aspas literais, igual no valor e repeticao",
+    "texto": "﻿  # comentario\r\n\r\n PRIMEIRO = valor \r\nVAZIO=\nASPAS=\"texto\"\nIGUAL=a=b # literal\nREPETIDA=antes\nREPETIDA=depois\n",
+    "valores": {
+      "PRIMEIRO": "valor",
+      "VAZIO": "",
+      "ASPAS": "\"texto\"",
+      "IGUAL": "a=b # literal",
+      "REPETIDA": "depois"
+    }
+  },
+  {
+    "nome": "linha sem separador",
+    "texto": "BOA=valor\nlinha invalida\n",
+    "erro": true
+  },
+  {
+    "nome": "chave vazia",
+    "texto": " = invalida\n",
+    "erro": true
+  },
+  {
+    "nome": "arquivo obrigatorio ausente",
+    "ausente": true,
+    "erro": true
+  }
+]

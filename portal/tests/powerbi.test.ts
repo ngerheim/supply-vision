@@ -21,7 +21,7 @@ void test('sem pagina, abre na primeira', () => {
 });
 
 void test('recusa o que nao for https://app.powerbi.com', () => {
-  for (const endereco of ['', undefined, 'nao e url', RELATORIO.replace('https:', 'http:'), 'https://exemplo.com/view?r=abc', RELATORIO.replace('app.powerbi.com', 'app.powerbi.com.exemplo.com')])
+  for (const endereco of ['', undefined, 'nao e url', RELATORIO.replace('https:', 'http:'), 'https://example.com/view?r=abc', RELATORIO.replace('app.powerbi.com', 'app.powerbi.com.example.com')])
     assert.equal(montarPowerBiUrl(endereco, 'x'), '');
 });
 

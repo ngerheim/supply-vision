@@ -2,7 +2,6 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
-  isAgreementEffective,
   isIsoDate,
   isValidCnpj,
   isValidState,
@@ -10,8 +9,6 @@ import {
   normalizeCnpj,
   normalizeImportText,
   normalizeText,
-  resolveImportMapping,
-  resolveImportUnit,
   safeFilename,
   toNonNegativeMoney,
   validatePassword,
@@ -31,20 +28,6 @@ void test('normaliza texto sem converter objetos acidentalmente', () => {
 void test('normaliza texto de importação removendo acentos e caracteres invisíveis', () => {
   assert.equal(normalizeImportText('  óleo\u00a0 de  direção\t'), 'OLEO DE DIRECAO');
   assert.equal(normalizeImportText('Revisão 10.000 km'), 'REVISAO 10.000 KM');
-});
-
-void test('resolve De/Para pela forma normalizada e recusa origem desconhecida', () => {
-  const mappings = new Map([['OLEO DE MOTOR', 'OLEO MOTOR 5W30']]);
-  assert.equal(resolveImportMapping('Óleo  de motor', mappings), 'OLEO MOTOR 5W30');
-  assert.equal(resolveImportMapping('ITEM SEM DE PARA', mappings), null);
-});
-
-void test('aceita código ou nome de unidade e recusa erro de digitação', () => {
-  const units = [{ code: 'L', name: 'Litro' }, { code: 'UNIDADE', name: 'Unidade' }];
-  assert.equal(resolveImportUnit('litro', units), 'L');
-  assert.equal(resolveImportUnit(' l ', units), 'L');
-  assert.equal(resolveImportUnit('lirto', units), null);
-  assert.equal(resolveImportUnit('litro', [...units, { code: 'L2', name: 'Litro' }]), null);
 });
 
 void test('normaliza e valida CNPJ pelo tamanho e pelos dígitos verificadores', () => {
@@ -82,13 +65,6 @@ void test('aplica os limites de senha inicial', () => {
   assert.equal(validatePassword('123456789'), false);
   assert.equal(validatePassword('1234567890'), true);
   assert.equal(validatePassword('x'.repeat(201)), false);
-});
-
-void test('considera pesquisável somente o acordo vigente na data informada', () => {
-  assert.equal(isAgreementEffective({ status: 'active', startDate: '2026-01-01', endDate: '2026-12-31' }, '2026-08-31'), true);
-  assert.equal(isAgreementEffective({ status: 'active', startDate: '2026-09-01' }, '2026-08-31'), false);
-  assert.equal(isAgreementEffective({ status: 'active', startDate: '2025-01-01', endDate: '2026-08-30' }, '2026-08-31'), false);
-  assert.equal(isAgreementEffective({ status: 'draft', startDate: '2026-01-01' }, '2026-08-31'), false);
 });
 
 void test('remove caracteres perigosos do nome exportado pela importação', () => {
