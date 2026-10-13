@@ -61,18 +61,27 @@ jobs:
       - name: Cache PSScriptAnalyzer 1.25.0
         uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
         with:
-          path: ~/Documents/WindowsPowerShell/Modules/PSScriptAnalyzer/1.25.0
-          key: pssa-${{ runner.os }}-1.25.0
+          path: ${{ runner.temp }}/pssa/PSScriptAnalyzer/1.25.0
+          key: pssa-${{ runner.os }}-1.25.0-v2
       - name: Instalar PSScriptAnalyzer 1.25.0
         shell: powershell
         run: |
-          if (!(Get-Module -ListAvailable PSScriptAnalyzer | Where-Object Version -EQ '1.25.0')) {
-            Install-Module PSScriptAnalyzer -RequiredVersion 1.25.0 -Scope CurrentUser -Force
+          $base = Join-Path $env:RUNNER_TEMP 'pssa'
+          $destino = Join-Path $base 'PSScriptAnalyzer/1.25.0'
+          if (!(Test-Path (Join-Path $destino 'PSScriptAnalyzer.psd1'))) {
+            $existente = Get-Module -ListAvailable PSScriptAnalyzer | Where-Object Version -EQ '1.25.0' | Select-Object -First 1
+            if ($existente) {
+              New-Item -ItemType Directory -Force $destino | Out-Null
+              Copy-Item (Join-Path $existente.ModuleBase '*') $destino -Recurse -Force
+            } else {
+              Save-Module PSScriptAnalyzer -RequiredVersion 1.25.0 -Path $base -Force
+            }
           }
+          if ((Test-ModuleManifest (Join-Path $destino 'PSScriptAnalyzer.psd1')).Version -ne '1.25.0') { throw 'Versao do analisador incorreta.' }
       - name: PSScriptAnalyzer (erros)
         shell: powershell
         run: |
-          Import-Module PSScriptAnalyzer -RequiredVersion 1.25.0
+          Import-Module (Join-Path $env:RUNNER_TEMP 'pssa/PSScriptAnalyzer/1.25.0/PSScriptAnalyzer.psd1')
           $achados = @(Invoke-ScriptAnalyzer -Path . -Recurse -Severity Error)
           $achados | Format-Table -AutoSize RuleName, ScriptName, Line, Message | Out-String -Width 300 | Write-Host
           if ($achados.Count) { exit 1 }
