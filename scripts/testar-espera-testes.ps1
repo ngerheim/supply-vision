@@ -1,4 +1,4 @@
-$ErrorActionPreference='Stop'
+﻿$ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'espera-testes.ps1')
 $script:ms=0;$script:consultas=0
 $agora={([datetime]'2026-01-01').AddMilliseconds($script:ms)}
@@ -28,3 +28,14 @@ try{
  if(!(Formatar-DiagnosticoTravaTeste $instancias).Contains('nao registrado')){throw 'Inicio atrasado sem manifesto nao diagnosticado'}
  Write-Host 'PASSOU: convergencia apos 8 s, timeout de 60 s, polling 500 ms e diagnostico por instancia.'
 }finally{Remove-Item -LiteralPath $dir -Recurse -Force}
+
+$fixture=Join-Path ([IO.Path]::GetTempPath()) ('sv-fixture-'+[guid]::NewGuid().ToString('N'))
+try{
+ Preparar-InstalacaoSupervisorTeste (Resolve-Path (Join-Path $PSScriptRoot '..')).Path $fixture
+ foreach($arq in @('scripts/supervisor.ps1','privado/alertas/parametros/de_para/itens.csv','alertas/processo/validar_parametros.py')){
+  if(!(Test-Path (Join-Path $fixture $arq))){throw "Fixture incompleta: $arq"}
+ }
+ $recusou=$false;try{Preparar-InstalacaoSupervisorTeste $PSScriptRoot $fixture}catch{$recusou=$true}
+ if(!$recusou){throw 'Fixture sobrescreveu destino existente.'}
+ Write-Host 'Fixture compartilhada: estrutura, exemplos e destino novo aprovados.'
+}finally{Remove-Item -LiteralPath $fixture -Recurse -Force -ErrorAction SilentlyContinue}
