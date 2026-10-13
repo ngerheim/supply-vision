@@ -38,15 +38,14 @@ def _carregar(path):
         if "=" not in texto:
             raise SystemExit(f"ERRO: linha inválida em {path} ({numero}): {texto!r}")
         chave, _, valor = texto.partition("=")
+        if not chave.strip():
+            raise SystemExit("ERRO: chave vazia na configuração.")
         valores[chave.strip().upper()] = valor.strip()
     return valores
 
 def _carregar_opcional(path):
     """Configuração de integração pode não existir em testes isolados/CI."""
-    try:
-        return _carregar(path)
-    except SystemExit:
-        return {}
+    return _carregar(path) if path.exists() else {}
 
 def _exigir(valores, chave, origem):
     valor = valores.get(chave, "")

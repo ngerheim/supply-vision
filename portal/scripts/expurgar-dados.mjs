@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
-import { privado, portalPrivado } from './configuracao.mjs';
+import { privado, portalPrivado, lerArquivo } from './configuracao.mjs';
 import { localizarBanco } from './banco-local.mjs';
 import { criarCopiaIntegra } from './backup.mjs';
 import { comBackupExclusivo } from './backup-exclusivo.mjs';
@@ -46,10 +46,7 @@ export async function executarExpurgo({ config, arquivo, pasta, agora = new Date
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
   try {
-    const config = {};
-    for (const linha of fs.readFileSync(path.join(privado, 'comum', 'operacao.env'), 'utf8').split(/\r?\n/)) {
-      const pos = linha.indexOf('='); if (pos > 0 && !linha.trim().startsWith('#')) config[linha.slice(0, pos).trim()] = linha.slice(pos + 1).trim();
-    }
+    const config = lerArquivo(path.join(privado, 'comum', 'operacao.env'));
     const regras = configurarExpurgo(config);
     if (regras.ativo) console.log('Expurgo:', await executarExpurgo({ config, arquivo: localizarBanco(), pasta: path.join(portalPrivado, 'backups') }));
   } catch { console.error('Expurgo bloqueado: confira backup, banco e configuracao.'); process.exitCode = 1; }
