@@ -59,11 +59,11 @@ try {
  New-Item -ItemType Directory $temp|Out-Null
  $arquivo=Join-Path $temp 'portal.env'
  foreach($valor in @('',('Ab'*32),'invalido',('a'*63),('g'*64))){
-  $texto="OUTRA=preservada`n";if($valor){$texto+="PORTAL_API_TOKEN=$valor`n"}
+  $texto="OUTRA=ação preservada`n";if($valor){$texto+="PORTAL_API_TOKEN=$valor`n"}
   [IO.File]::WriteAllText($arquivo,$texto)
   $alterada=Garantir-CredencialPortal $arquivo
   $cfg=Ler-ConfigOperacao $arquivo
-  if($cfg.PORTAL_API_TOKEN-notmatch'^[0-9a-fA-F]{64}$'-or$cfg.OUTRA-ne'preservada'){throw 'Credencial ou configuracao incorreta.'}
+  if($cfg.PORTAL_API_TOKEN-notmatch'^[0-9a-fA-F]{64}$'-or$cfg.OUTRA-ne'ação preservada'){throw 'Credencial ou configuracao incorreta.'}
   if($valor-eq('Ab'*32)){
    if($alterada-or[IO.File]::ReadAllText($arquivo)-cne$texto){throw 'Credencial valida foi regenerada ou arquivo alterado.'}
   }elseif(!$alterada){throw 'Credencial ausente/invalida nao foi reparada.'}

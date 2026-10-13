@@ -317,21 +317,21 @@ function Obter-EventoVigilancia([bool]$FalhaTarefa,[bool]$Saudavel) {
 function Garantir-CredencialPortal([string]$portalEnv) {
   $alterada = $false
   if (-not (Test-Path -LiteralPath $portalEnv -PathType Leaf)) { throw "Configuracao do Portal ausente: $portalEnv" }
-  $linha = @(Get-Content -LiteralPath $portalEnv) | Where-Object { $_ -match '^\s*PORTAL_API_TOKEN\s*=\s*(\S+)\s*$' } | Select-Object -Last 1
+  $linha = @(Get-Content -LiteralPath $portalEnv -Encoding UTF8) | Where-Object { $_ -match '^\s*PORTAL_API_TOKEN\s*=\s*(\S+)\s*$' } | Select-Object -Last 1
   $tokenAtual = if ($linha) { ($linha -split '=', 2)[1].Trim() } else { '' }
   if ($tokenAtual -notmatch '^[0-9a-fA-F]{64}$') {
     $bytes = New-Object byte[] 32
     $gerador = [Security.Cryptography.RandomNumberGenerator]::Create()
     try { $gerador.GetBytes($bytes) } finally { $gerador.Dispose() }
     $tokenAtual = ($bytes | ForEach-Object { $_.ToString('x2') }) -join ''
-    $conteudo = Get-Content -LiteralPath $portalEnv -Raw
+    $conteudo = Get-Content -LiteralPath $portalEnv -Raw -Encoding UTF8
     if ($conteudo -match '(?m)^\s*PORTAL_API_TOKEN\s*=') {
       $conteudo = [regex]::Replace($conteudo, '(?m)^\s*PORTAL_API_TOKEN\s*=.*$', "PORTAL_API_TOKEN=$tokenAtual")
     } else { $conteudo += "`r`nPORTAL_API_TOKEN=$tokenAtual`r`n" }
     [IO.File]::WriteAllText($portalEnv, $conteudo, (New-Object Text.UTF8Encoding($false)))
     $alterada = $true
   }
-  $confirmacao = @(Get-Content -LiteralPath $portalEnv) | Where-Object { $_ -match '^\s*PORTAL_API_TOKEN\s*=\s*[0-9a-fA-F]{64}\s*$' }
+  $confirmacao = @(Get-Content -LiteralPath $portalEnv -Encoding UTF8) | Where-Object { $_ -match '^\s*PORTAL_API_TOKEN\s*=\s*[0-9a-fA-F]{64}\s*$' }
   if (-not $confirmacao) { throw 'A credencial interna do Portal nao foi gravada corretamente.' }
   return $alterada
 }
