@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { lerArquivo } from '../scripts/configuracao.mjs';
 
 // Contrato nas tres linguagens: CHAVE=valor; comentarios de linha inteira;
@@ -17,6 +18,6 @@ for(const caso of casos)void test(`contrato env: ${caso.nome}`,t=>{
   if(caso.erro)assert.throws(()=>lerArquivo(arquivo),/Linha invalida/);
   else assert.deepEqual(lerArquivo(arquivo),caso.valores);
   fs.mkdirSync(path.join(pasta,'comum'));fs.writeFileSync(path.join(pasta,'comum/operacao.env'),caso.texto);
-  const filho=spawnSync(process.execPath,['--experimental-strip-types',new URL('../scripts/expurgar-dados.mjs',import.meta.url).pathname],{env:{...process.env,SUPPLY_VISION_PRIVADO:pasta},encoding:'utf8'});
+  const filho=spawnSync(process.execPath,['--experimental-strip-types',fileURLToPath(new URL('../scripts/expurgar-dados.mjs',import.meta.url))],{env:{...process.env,SUPPLY_VISION_PRIVADO:pasta},encoding:'utf8'});
   assert.equal(filho.status,caso.erro?1:0,filho.stderr);
 });
