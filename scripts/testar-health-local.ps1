@@ -2,7 +2,7 @@
 . (Join-Path $PSScriptRoot 'operacao-logica.ps1')
 . (Join-Path $PSScriptRoot 'espera-testes.ps1')
 $pasta=Join-Path ([IO.Path]::GetTempPath()) ('sv-health-'+[guid]::NewGuid().ToString('N'))
-$proc=$null;$cliente=$null;$proxyAntigo=[Net.WebRequest]::DefaultWebProxy
+$proc=$null;$cliente=$null;$clienteRecusa=$null;$proxyAntigo=[Net.WebRequest]::DefaultWebProxy
 try{
  New-Item -ItemType Directory $pasta|Out-Null
  $servidor=Join-Path $pasta 'servidor.mjs';$portaArquivo=Join-Path $pasta 'porta.txt'
@@ -34,9 +34,29 @@ const server=http.createServer((req,res)=>{
   if($registro-match'segredo-ficticio|example.com'){throw 'Registro vazou dados da resposta.'}
   Write-Host "OK health: $($caso[0]) $($r.duracaoMs) ms"
  }
+ # Mesmo prazo da producao: Windows pode levar 1-2 s para recusar a porta.
+ # O caso lento acima permanece com prazo de 1 s e exige timeout.
+ $clienteRecusa=Novo-ClienteHealth
  $escuta=New-Object Net.Sockets.TcpListener([Net.IPAddress]::Loopback,0);$escuta.Start();$fechada=$escuta.LocalEndpoint.Port;$escuta.Stop()
- $r=Consultar-HealthLocal $cliente "http://127.0.0.1:$fechada/api/health"
- if($r.motivo-ne'conexao-recusada'){throw 'Conexao recusada nao identificada.'}
+ $r=Consultar-HealthLocal $clienteRecusa "http://127.0.0.1:$fechada/api/health"
+ if($r.motivo-ne'conexao-recusada'-or$r.saudavel-or$r.http-ne0){throw "Conexao recusada nao identificada: motivo=$($r.motivo); duracao_ms=$($r.duracaoMs); http=$($r.http)."}
+ if($r.duracaoMs-lt0-or$r.duracaoMs-gt6000){throw 'Recusa excedeu prazo limitado.'}
+ Write-Host "OK health: conexao-recusada $($r.duracaoMs) ms"
+ # Tipos/codigos do .NET Framework, com textos deliberadamente contraditorios.
+ $socket=[Net.Sockets.SocketException]::new(10061)
+ $web=[Net.WebException]::new('texto sem significado',$socket,[Net.WebExceptionStatus]::ConnectFailure,$null)
+ $aninhada=[Net.Http.HttpRequestException]::new('timeout ficticio na mensagem',$web)
+ $casosErro=@(
+  @($aninhada,'conexao-recusada'),
+  @([Net.WebException]::new('tempo esgotado ficticio',$null,[Net.WebExceptionStatus]::ConnectFailure,$null),'conexao-recusada'),
+  @([Net.WebException]::new('conexao recusada ficticia',$null,[Net.WebExceptionStatus]::Timeout,$null),'timeout'),
+  @([Net.Sockets.SocketException]::new(10060),'timeout'),
+  @([OperationCanceledException]::new('recusada ficticia',$web),'timeout'),
+  @([Net.Http.HttpRequestException]::new('conexao recusada ficticia'),'falha-conexao'),
+  @([Exception]::new('timeout e recusa ficticios'),'erro-cliente')
+ )
+ foreach($caso in $casosErro){if((Classificar-ErroHealth $caso[0])-ne$caso[1]){throw "Classificacao por tipo/codigo falhou: $($caso[1])"}}
+ Write-Host 'OK health: excecoes aninhadas, codigos Windows e mensagens independentes do idioma'
  $recusou=$false;try{Consultar-HealthLocal $cliente 'http://portal.example.com/api/health'|Out-Null}catch{$recusou=$true}
  if(!$recusou){throw 'Health nao local foi aceito.'}
  # Executa os blocos REAIS de contagem/notificacao do supervisor.
@@ -56,6 +76,7 @@ const server=http.createServer((req,res)=>{
 }finally{
  [Net.WebRequest]::DefaultWebProxy=$proxyAntigo
  if($cliente){$cliente.cliente.Dispose()}
+ if($clienteRecusa){$clienteRecusa.cliente.Dispose()}
  if($proc){Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue;[void]$proc.WaitForExit(5000);$proc.Dispose()}
  Remove-Item -LiteralPath $pasta -Recurse -Force -ErrorAction SilentlyContinue
 }

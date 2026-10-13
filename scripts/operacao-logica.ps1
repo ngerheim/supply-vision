@@ -324,6 +324,29 @@ function Novo-ClienteHealth([ValidateRange(100,30000)][int]$TimeoutMs=5000){
  $cliente.MaxResponseContentBufferSize=8192
  return @{cliente=$cliente;handler=$handler}
 }
+# Percorre toda a cadeia: .NET Framework pode envolver SocketException em WebException.
+function Classificar-ErroHealth([Exception]$Erro){
+ $timeout=$false;$recusada=$false;$conexao=$false
+ while($Erro){
+  if($Erro-is[OperationCanceledException]){$timeout=$true}
+  if($Erro-is[Net.Sockets.SocketException]){
+   $conexao=$true
+   if($Erro.SocketErrorCode-eq[Net.Sockets.SocketError]::ConnectionRefused){$recusada=$true}
+   if($Erro.SocketErrorCode-eq[Net.Sockets.SocketError]::TimedOut){$timeout=$true}
+  }
+  if($Erro-is[Net.WebException]){
+   if($Erro.Status-eq[Net.WebExceptionStatus]::Timeout){$timeout=$true}
+   if($Erro.Status-eq[Net.WebExceptionStatus]::ConnectFailure){$recusada=$true}
+  }
+  if($Erro-is[Net.Http.HttpRequestException]){$conexao=$true}
+  $Erro=$Erro.InnerException
+ }
+ # Cancelamento/prazo vencido nao prova recusa, mesmo com erro de conexao interno.
+ if($timeout){return 'timeout'}
+ if($recusada){return 'conexao-recusada'}
+ if($conexao){return 'falha-conexao'}
+ return 'erro-cliente'
+}
 function Consultar-HealthLocal($Controle,[uri]$Endereco='http://127.0.0.1:3000/api/health'){
  if(!$Endereco.IsAbsoluteUri-or$Endereco.Scheme-ne'http'-or$Endereco.Host-ne'127.0.0.1'-or$Endereco.UserInfo){throw 'Health exige HTTP local sem credenciais.'}
  $tempo=[Diagnostics.Stopwatch]::StartNew();$resposta=$null;$codigo=0;$motivo='erro-cliente';$saudavel=$false
@@ -343,15 +366,7 @@ function Consultar-HealthLocal($Controle,[uri]$Endereco='http://127.0.0.1:3000/a
   }
  }catch{
   # Nunca registra Message/URL/corpo: somente categorias conhecidas.
-  $erro=$_.Exception
-  while($erro){
-   if($erro-is[OperationCanceledException]){$motivo='timeout';break}
-   if($erro-is[Net.Sockets.SocketException]){
-    $motivo=if($erro.SocketErrorCode-eq[Net.Sockets.SocketError]::ConnectionRefused){'conexao-recusada'}else{'falha-conexao'};break
-   }
-   if($erro-is[Net.Http.HttpRequestException]){$motivo='falha-conexao'}
-   $erro=$erro.InnerException
-  }
+  $motivo=Classificar-ErroHealth $_.Exception
  }finally{if($resposta){$resposta.Dispose()};$tempo.Stop()}
  return @{saudavel=$saudavel;motivo=$motivo;http=$codigo;duracaoMs=[int]$tempo.ElapsedMilliseconds}
 }
