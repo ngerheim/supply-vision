@@ -335,6 +335,15 @@ Desenvolva na máquina de origem, valide, commite e publique. No servidor, abra
 `Supply Vision.bat` e use **Atualizar sistema**. A central pede confirmação,
 acompanha o processo sem travar a janela e informa o resultado.
 
+Os tempos de cada etapa ficam em `privado/operacao/atualizacao-saida.log`,
+tanto pela central quanto pelo PowerShell: início, fim, duração, tempo total
+e tempo entre o encerramento e o primeiro health válido. Se o health não
+for confirmado, o resumo informa isso. A central guarda a saída completa dos
+comandos em `atualizacao-processo-saida.log` e os erros em
+`atualizacao-erro.log`, na mesma pasta. A primeira atualização que instalar
+esta medição pode ter um resumo parcial, pois o processo anterior ainda não
+registrava os tempos antes da troca de código.
+
 Para diagnóstico, o mesmo fluxo pode ser executado pelo PowerShell:
 
 ```powershell
