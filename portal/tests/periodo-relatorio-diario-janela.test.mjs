@@ -6,7 +6,7 @@ import { dadosRelatorioDiario, prepararRelatoriosDiarios, reservarRelatoriosDiar
 function banco(){
   const db=new DatabaseSync(':memory:');
   db.exec(`CREATE TABLE users(id TEXT PRIMARY KEY,name TEXT,active INTEGER,daily_report_enabled INTEGER,daily_report_time TEXT,role TEXT,email TEXT);
-  INSERT INTO users VALUES ('u1','Ana',1,1,'17:45','editor','a@exemplo.com');
+  INSERT INTO users VALUES ('u1','Ana',1,1,'17:45','editor','a@example.com');
   CREATE TABLE daily_report_deliveries (id TEXT PRIMARY KEY,user_id TEXT,report_date TEXT,status TEXT,attempts INTEGER,next_attempt_at TEXT,locked_at TEXT,sent_at TEXT,last_error TEXT,created_at TEXT,updated_at TEXT,UNIQUE(user_id,report_date));
   CREATE TABLE tickets(id TEXT,code TEXT,supplier_name TEXT,status TEXT,created_at TEXT,updated_at TEXT);
   CREATE TABLE ticket_events(ticket_id TEXT,user_id TEXT,kind TEXT,from_status TEXT,to_status TEXT,message TEXT,created_at TEXT);`);

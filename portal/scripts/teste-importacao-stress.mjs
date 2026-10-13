@@ -154,7 +154,7 @@ async function startServer() {
 }
 try {
   await startServer();
-  const login = await request('/api/login', { method: 'POST', body: { email: 'admin@portal.local', password: senha } });
+  const login = await request('/api/login', { method: 'POST', body: { email: 'admin@portal.test', password: senha } });
   assert.equal(login.status, 200); cookie = login.cookie;
   sqlitePath = locateSqlite(state); assert.ok(sqlitePath);
   reader = new DatabaseSync(sqlitePath, { readOnly: true });
@@ -187,7 +187,7 @@ try {
   });
 
   await check('Edicao antiga de usuario nao restaura permissao revogada', async () => {
-    const criado = await good('/api/users', { method: 'POST', body: { name: 'Administrador concorrente', email: 'concorrente@teste.local', password: senha, role: 'admin' } }, 201);
+    const criado = await good('/api/users', { method: 'POST', body: { name: 'Administrador concorrente', email: 'concorrente@teste.test', password: senha, role: 'admin' } }, 201);
     const antigo = (await good('/api/users')).users.find(u => u.id === criado.id);
     assert.ok(Number.isSafeInteger(antigo.revision));
     await good(`/api/users/${criado.id}`, { method: 'PUT', body: { role: 'viewer', expectedRevision: antigo.revision } });
@@ -199,8 +199,8 @@ try {
 
   await check('De/Para inicia vazio', async () => assert.deepEqual(await good('/api/mappings'), { items: [], models: [], units: [] }));
   await check('Falha na auditoria reverte edicao de usuario e suas sessoes', async () => {
-    const criado = await good('/api/users', { method: 'POST', body: { name: 'Usuario auditado', email: 'auditado@teste.local', password: senha, role: 'editor' } }, 201);
-    await good('/api/login', { method: 'POST', session: '', body: { email: 'auditado@teste.local', password: senha } });
+    const criado = await good('/api/users', { method: 'POST', body: { name: 'Usuario auditado', email: 'auditado@teste.test', password: senha, role: 'editor' } }, 201);
+    await good('/api/login', { method: 'POST', session: '', body: { email: 'auditado@teste.test', password: senha } });
     const antigo = (await good('/api/users')).users.find(u => u.id === criado.id);
     const antes = query('SELECT * FROM users WHERE id=?', criado.id), sessoes = query('SELECT * FROM sessions WHERE user_id=?', criado.id);
     const db = new DatabaseSync(sqlitePath);
@@ -429,8 +429,8 @@ try {
     assert.equal((await request(`/api/catalogs/models/${target.id}`, { method: 'DELETE' })).status, 409);
   });
   for (const role of ['editor', 'viewer']) {
-    await good('/api/users', { method: 'POST', body: { name: role, email: `${role}@teste.local`, password: senha, role } }, 201);
-    const session = (await request('/api/login', { method: 'POST', body: { email: `${role}@teste.local`, password: senha } })).cookie;
+    await good('/api/users', { method: 'POST', body: { name: role, email: `${role}@teste.test`, password: senha, role } }, 201);
+    const session = (await request('/api/login', { method: 'POST', body: { email: `${role}@teste.test`, password: senha } })).cookie;
     let permissionMappingId = itemMap.id;
     for (const method of ['GET', 'POST', 'PUT', 'DELETE']) await check(`${role}: ${method} De/Para respeita perfil`, async () => {
       const url = method === 'GET' ? '/api/mappings' : '/api/mappings/items' + (['PUT', 'DELETE'].includes(method) ? `/${permissionMappingId}` : '');
@@ -757,7 +757,7 @@ try {
     assert.equal(lote.filter(r=>r.status===429).length,19);
     assert.ok(performance.now()-inicio>=750,'Atraso progressivo foi contornado');
     const [legitimo, falha]=await Promise.all([
-      request('/api/login',{method:'POST',body:{email:'admin@portal.local',password:senha}}),
+      request('/api/login',{method:'POST',body:{email:'admin@portal.test',password:senha}}),
       request('/api/login',{method:'POST',body:{email:alvo,password:'senha-incorreta'}}),
     ]);
     assert.equal(legitimo.status,200); assert.equal(falha.status,401);
