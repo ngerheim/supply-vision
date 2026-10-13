@@ -185,7 +185,7 @@ public static class SvLogTeste {
  $r=Executar-AcaoCentral $PSScriptRoot $pastaMedicao '' 'fim-atualizacao' @{codigo=0}
  if(!$r.ok-or$r.mensagem-notlike'*versao mais recente*'){throw 'Central perdeu resultado sem atualizacao.'}
  [IO.File]::WriteAllText($saidaProcesso,'suite reprovada')
- [IO.File]::WriteAllText((Join-Path $opMedicao 'atualizacao-saida.log'),'Resumo atualizacao: total=12 s')
+ [IO.File]::WriteAllText((Join-Path $opMedicao 'atualizacao-saida.log'),'[2026-10-13 12:00:00] Resumo atualizacao: total=12 s')
  $r=Executar-AcaoCentral $PSScriptRoot $pastaMedicao '' 'fim-atualizacao' @{codigo=1}
  if($r.ok-or$r.mensagem-notlike'*suite reprovada*'){throw 'Central ocultou falha real com arquivo de tempos.'}
  # Avisos em stderr nao mudam o resultado real.
