@@ -15,7 +15,7 @@ function requisicaoEmFluxo(pedacos: Array<string | Uint8Array>, contentLength?: 
   });
   const headers = new Headers();
   if (contentLength !== undefined) headers.set('content-length', contentLength);
-  const request = new Request('http://portal.local/teste', {
+  const request = new Request('http://portal.test/teste', {
     method: 'POST', headers, body: stream, duplex: 'half',
   } as RequestInit & { duplex: 'half' });
   return { request };
@@ -56,7 +56,7 @@ for (const excedido of [false, true]) {
   void test(`corpo aberto ${excedido ? 'excedido' : 'lento'} termina no prazo e cancela leitura`, async () => {
     let cancelou = false;
     const stream=new ReadableStream<Uint8Array>({start(c){c.enqueue(new Uint8Array(excedido?2:1))},cancel(){cancelou=true}});
-    const request=new Request('http://portal.local',{method:'POST',body:stream,duplex:'half'} as RequestInit & {duplex:'half'});
+    const request=new Request('http://portal.test',{method:'POST',body:stream,duplex:'half'} as RequestInit & {duplex:'half'});
     await assert.rejects(corpoBinarioLimitado(request,1,{leituraMs:50,drenagemMs:10}),CorpoExpirado);
     assert.equal(cancelou,true);assert.equal(stream.locked,false);
   });

@@ -50,8 +50,8 @@ void test('aba oculta não consulta e atualização retorna quando fica visível
 
 void test('consulta automática valida a sessão sem renovar a atividade', () => {
   const agora = Date.parse('2026-10-06T12:00:00Z');
-  const automatica = new Request('http://portal/api/reports', { headers: CABECALHO_ATUALIZACAO_AUTOMATICA });
-  const manual = new Request('http://portal/api/reports');
+  const automatica = new Request('http://portal.test/api/reports', { headers: CABECALHO_ATUALIZACAO_AUTOMATICA });
+  const manual = new Request('http://portal.test/api/reports');
   assert.equal(registraAtividade(automatica, agora - 10 * 60000, agora), false);
   assert.equal(registraAtividade(automatica, 0, agora), false);
   assert.equal(registraAtividade(manual, agora - 10 * 60000, agora), true);

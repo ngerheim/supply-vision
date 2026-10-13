@@ -30,7 +30,7 @@ try {
     'CHAVE_NOVA=valor-padrao'
   )
   Set-Content -LiteralPath $destinoPortal -Value @(
-    'PORTAL_URL=http://servidor:3000',
+    'PORTAL_URL=http://servidor.test:3000',
     'BACKUP_EMAIL_TO=real@example.com'
   )
   Set-Content -LiteralPath (Join-Path $Raiz 'compartilhado\smtp.env.example') -Value @('SMTP_HOST=exemplo')
@@ -39,7 +39,7 @@ try {
   Reparar-ConfiguracaoPrivada
 
   $linhas = @(Get-Content -LiteralPath $destinoPortal)
-  if (($linhas | Where-Object { $_ -eq 'PORTAL_URL=http://servidor:3000' }).Count -ne 1) { throw 'O valor ja configurado foi alterado.' }
+  if (($linhas | Where-Object { $_ -eq 'PORTAL_URL=http://servidor.test:3000' }).Count -ne 1) { throw 'O valor ja configurado foi alterado.' }
   if (($linhas | Where-Object { $_ -like 'PORTAL_URL=*' }).Count -ne 1) { throw 'Chave existente foi duplicada.' }
   if (-not ($linhas | Where-Object { $_ -eq 'CHAVE_NOVA=valor-padrao' })) { throw 'Chave nova com valor padrao nao foi acrescentada.' }
   if (-not ($linhas | Where-Object { $_ -eq 'PORTAL_API_TOKEN=' })) { throw 'Chave nova vazia nao foi acrescentada.' }

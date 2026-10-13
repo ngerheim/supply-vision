@@ -15,12 +15,12 @@ try {
   New-Item -ItemType Directory -Force $temp | Out-Null
   $arq = Join-Path $temp 'portal.env'
 
-  Set-Content -LiteralPath $arq -Value @('PORTAL_URL=http://x:3000', 'PORTAL_API_TOKEN=aaa')
+  Set-Content -LiteralPath $arq -Value @('PORTAL_URL=http://x.test:3000', 'PORTAL_API_TOKEN=aaa')
   Chaves-Repetidas $arq
   if ($erros.Count) { throw "Arquivo correto foi reprovado: $($erros -join '; ')" }
   Write-Host '[OK] arquivo sem repeticao passa'
 
-  Set-Content -LiteralPath $arq -Value @('PORTAL_API_TOKEN=aaa', 'PORTAL_URL=http://x:3000', 'PORTAL_API_TOKEN=bbb')
+  Set-Content -LiteralPath $arq -Value @('PORTAL_API_TOKEN=aaa', 'PORTAL_URL=http://x.test:3000', 'PORTAL_API_TOKEN=bbb')
   Chaves-Repetidas $arq
   if (($erros -join ' ') -notlike '*PORTAL_API_TOKEN*') { throw 'Chave repetida com valores diferentes nao foi denunciada.' }
   if ($erros.Count -ne 1) { throw "Esperava um erro, vieram $($erros.Count)." }
