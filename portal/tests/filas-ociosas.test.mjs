@@ -41,7 +41,7 @@ void test('e-mail pendente ou trava vencida ainda abrem a escrita', () => comBan
 }));
 
 void test('relatorio diario sem entrega devida nao abre escrita', () => comBanco(DIARIOS + `
-  INSERT INTO users VALUES ('u','Ana','ana@exemplo.com',1,1,'editor');
+  INSERT INTO users VALUES ('u','Ana','ana@example.com',1,1,'editor');
   INSERT INTO daily_report_deliveries VALUES ('r','u','2026-10-05','sent',1,'2000-01-01T00:00:00.000Z',NULL,'2026-10-05T20:00:00.000Z',NULL,'2026-10-05T20:00:00.000Z','2026-10-05T20:00:00.000Z');`, (db, escritas) => {
   assert.deepEqual(reservarRelatoriosDiarios(db), []);
   assert.deepEqual(escritas, []);

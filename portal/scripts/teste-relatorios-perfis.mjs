@@ -67,7 +67,7 @@ try {
   assert.doesNotMatch(registro.detailsText, /itm_teste|revision|ite_historico/);
   console.log('[OK] Histórico traduz referências e valores, preservando o JSON original.');
   for (const role of ['viewer', 'editor']) {
-    const email = `${role}-relatorios@teste.local`;
+    const email = `${role}-relatorios@teste.test`;
     assert.equal(
       (
         await pedir('users', {
@@ -160,7 +160,7 @@ try {
           ...pedido('recorte'),
           from: '2020-02-30',
           to: '2020-01-31',
-          recipient: 'a@x.com\r\nBcc:b@x.com',
+          recipient: 'a@example.com\r\nBcc:b@example.com',
         },
       })
     ).status,

@@ -14,11 +14,11 @@ void test('snapshot inclui transacoes confirmadas no WAL sem fechar escritor', (
     const fonte = fs.readFileSync(new URL('../lib/database.ts', import.meta.url), 'utf8');
     for (const [, ddl] of fonte.matchAll(/`(CREATE TABLE IF NOT EXISTS [^`]+)`/g)) db.exec(ddl);
     db.exec('PRAGMA journal_mode=WAL; PRAGMA wal_autocheckpoint=0; PRAGMA wal_checkpoint(TRUNCATE)');
-    db.exec("INSERT INTO users VALUES ('u','Nome','a@b.com','salt','hash','viewer',1,'2026-10-06')");
+    db.exec("INSERT INTO users VALUES ('u','Nome','a@example.com','salt','hash','viewer',1,'2026-10-06')");
     assert.ok(fs.statSync(origem + '-wal').size > 0);
     assert.equal(criarSnapshot(origem, destino).users, 1);
     const copia = new DatabaseSync(destino, { readOnly: true });
-    try { assert.equal(copia.prepare('SELECT email FROM users').get().email, 'a@b.com'); }
+    try { assert.equal(copia.prepare('SELECT email FROM users').get().email, 'a@example.com'); }
     finally { copia.close(); }
     assert.throws(() => criarSnapshot(origem, destino), /ja existe/);
   } finally { db.close(); fs.rmSync(dir, { recursive: true, force: true }); }
