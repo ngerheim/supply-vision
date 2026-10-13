@@ -19,19 +19,11 @@ function Remover-DiretorioTemporario([string]$Caminho){
  }
 }
 try{
- $dirs=@('scripts','portal\dist\server','portal\scripts','alertas\.venv\Scripts','privado\comum','privado\portal\configuracao','privado\portal\logs','privado\alertas\config','privado\alertas\logs','privado\alertas\relatorios\diarios','privado\alertas\parametros\de_para','privado\operacao','bin')
- $dirs|ForEach-Object{New-Item -ItemType Directory -Force (Join-Path $temp $_)|Out-Null}
- Copy-Item "$raizReal\scripts\supervisor.ps1","$raizReal\scripts\operacao-logica.ps1","$raizReal\scripts\validar-operacao.ps1","$raizReal\scripts\notificacao.ps1","$raizReal\scripts\avisos-admin.ps1","$raizReal\scripts\inicializacao-logica.ps1" "$temp\scripts"
- $conteudos=@{'portal\dist\server\wrangler.json'='{}';'portal\dist\server\index.js'='const PORTAL_API_TOKEN="x";';'alertas\.venv\Scripts\python.exe'='teste';'privado\alertas\config\cfg_qlik.txt'='token';'privado\alertas\config\destinatarios.txt'='destino';'privado\alertas\parametros\de_para\itens.csv'='origem,destino';'privado\alertas\parametros\de_para\modelos.csv'='origem,destino';'acordos.xlsx'='teste'}
+ Preparar-InstalacaoSupervisorTeste $raizReal $temp
+ New-Item -ItemType Directory -Force "$temp\alertas\.venv\Scripts"|Out-Null
+ $conteudos=@{'portal\dist\server\wrangler.json'='{}';'portal\dist\server\index.js'='const PORTAL_API_TOKEN="x";';'alertas\.venv\Scripts\python.exe'='teste';'privado\alertas\config\cfg_qlik.txt'='token';'privado\alertas\config\destinatarios.txt'='destino';'acordos.xlsx'='teste'}
  foreach($item in $conteudos.GetEnumerator()){[IO.File]::WriteAllText((Join-Path $temp $item.Key),$item.Value)}
- New-Item -ItemType Directory -Force "$temp\alertas\processo","$temp\privado\alertas\parametros\filtros"|Out-Null
- Copy-Item "$raizReal\alertas\parametros" "$temp\alertas" -Recurse -Force
- Copy-Item "$raizReal\alertas\processo\validar_parametros.py" "$temp\alertas\processo"
- $parametros=Join-Path $raizReal 'alertas/parametros'
- foreach($exemplo in @(Get-ChildItem $parametros -Recurse -File | Where-Object Name -Like '*.exemplo.*')){
-   $relativo=$exemplo.FullName.Substring($parametros.Length).TrimStart('\').Replace('.exemplo','')
-   Copy-Item $exemplo.FullName (Join-Path "$temp\privado\alertas\parametros" $relativo) -Force
- }
+
  [IO.File]::WriteAllText("$temp\alertas\processo\pipeline.py","import json,os,pathlib,sys`npathlib.Path('../privado/operacao/pipeline-args.json').write_text(json.dumps({'args':sys.argv[1:],'ensaio':os.environ.get('MODO_ENSAIO'),'path':os.environ.get('PATH'),'cache':str(pathlib.Path(os.environ['XDG_CONFIG_HOME']).resolve()) if os.environ.get('XDG_CONFIG_HOME') else None,'cache_xdg':str(pathlib.Path(os.environ['XDG_CACHE_HOME']).resolve()) if os.environ.get('XDG_CACHE_HOME') else None,'cache_wrangler':str(pathlib.Path(os.environ['WRANGLER_CACHE_DIR']).resolve()) if os.environ.get('WRANGLER_CACHE_DIR') else None,'log_wrangler':str(pathlib.Path(os.environ['WRANGLER_LOG_PATH']).resolve()) if os.environ.get('WRANGLER_LOG_PATH') else None,'temp':str(pathlib.Path(os.environ['TEMP']).resolve())}))`nprint('pipeline ficticio concluido')")
  [IO.File]::WriteAllText("$temp\alertas\processo\verificar_saude.py", "import pathlib,time`npathlib.Path('../privado/operacao/saude-iniciada').write_text('ficticio')`ntime.sleep(600)")
  Remove-Item -LiteralPath "$temp\alertas\.venv\Scripts\python.exe" -Force
