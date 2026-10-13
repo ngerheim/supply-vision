@@ -7,6 +7,7 @@ function Novo-ControleAvisosAdmin([hashtable]$Config, [bool]$Ensaio, [string]$No
 
 function Nome-EventoAdmin([string]$Evento) {
   $nomes = @{
+    'orfaos-falharam'='Limpeza de processos órfãos incompleta'
     'tarefa-falhou'='Tarefa principal falhou ao iniciar'
  'vigilancia-health'='Vigilância: Portal indisponível'
  'portal-parou'='Portal parou de responder'

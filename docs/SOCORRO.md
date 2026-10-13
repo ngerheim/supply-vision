@@ -218,3 +218,8 @@ A central só considera a parada concluída quando o supervisor e as portas est�
 
 Para ajustar o prazo de parada da atualização, use
 `atualizar-servidor.ps1 -PrazoParadaSegundos 120` (padrão: 60 segundos).
+
+A conta da tarefa também precisa ser administradora local. A configuração
+valida essa condição e a homologação mostra o resultado. Se a limpeza de
+órfãos falhar por permissão, confira esse grupo com a TI; a partida registra
+um aviso e continua, sem encerrar processos de outras instalações.

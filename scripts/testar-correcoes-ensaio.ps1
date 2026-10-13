@@ -58,7 +58,7 @@ try{
  function Unregister-ScheduledTask {$script:removeu++}
  $redeFicticia=$pasta
  function Testar-UncMigracao {return $true} # Adaptador de caminho ficticio; regex UNC e testada em testar-migracao.ps1.
- Exigir-Correcao (!(Testar-RedeComoSystem $redeFicticia)) 'rede SYSTEM sem permissao reprova'
+ Exigir-Correcao (!(Testar-RedeDaContaTarefa $redeFicticia)) 'rede SYSTEM sem permissao reprova'
  $senha=New-Object Security.SecureString;foreach($c in 'Ficticio123!'.ToCharArray()){$senha.AppendChar($c)}
  $cred=[pscredential]::new('DOMINIO\ficticio',$senha);$script:redeOk=$true
  Exigir-Correcao (Testar-RedeContaMigracao $redeFicticia $cred) 'conta personalizada aprovada antes de ativar tarefa'

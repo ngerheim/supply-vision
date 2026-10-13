@@ -56,7 +56,7 @@ export function criarCopiaIntegra(origem) {
   console.log(`Historico local: copia do dia guardada (${DIAS_RETENCAO} dias)${apagados.length ? `; removidos: ${apagados.join(', ')}` : ''}.`);
 }
 
-function replicarNaRede(config) {
+export function replicarNaRede(config) {
   const pastaRede = config.BACKUP_NETWORK_DIR?.trim();
   if (!pastaRede) return null;
   fs.mkdirSync(pastaRede, { recursive: true });
@@ -133,20 +133,27 @@ async function enviar(config, copiaNaRede) {
   console.log(`Backup atual confirmado (${tamanhoMb} MB, SHA-256 ${hash.slice(0, 16)}); comprovante enviado por e-mail${anexar ? ' com o banco anexado' : ''}.`);
 }
 
+// O codigo 3 e exclusivo do backup pre-atualizacao: copia local ja validada.
+export async function executarBackup({ preAtualizacao = false, ensaio = modoEnsaio(),
+  copiar = () => criarCopiaIntegra(localizarBanco()), rede = () => replicarNaRede(lerConfigBruta()),
+  email = copia => enviar(lerConfig(), copia), registrar = console.warn } = {}) {
+  copiar();
+  if (ensaio) { console.log('ensaio: envio suprimido; backup local validado, backup em rede bloqueado.'); return 0; }
+  let copiaNaRede;
+  try { copiaNaRede = rede(); }
+  catch (erro) {
+    if (!preAtualizacao) throw erro;
+    registrar('AVISO: backup local validado; copia de rede falhou.');
+    return 3;
+  }
+  try { await email(copiaNaRede); }
+  catch (erro) {
+    if (!copiaNaRede) throw erro;
+    registrar('AVISO: backup local e na rede confirmados; comprovante não enviado.');
+  }
+  return 0;
+}
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
-  try { await comBackupExclusivo(pastaBackup, async () => {
-    criarCopiaIntegra(localizarBanco());
-    if (modoEnsaio()) {
-      console.log('ensaio: envio suprimido; backup local validado, backup em rede bloqueado.');
-      return;
-    }
-    // A redundância não depende do servidor de correio nem da configuração SMTP.
-    const copiaNaRede = replicarNaRede(lerConfigBruta());
-    try { await enviar(lerConfig(), copiaNaRede); }
-    catch (erro) {
-      if (!copiaNaRede) throw erro;
-      console.warn(`AVISO: backup local e na rede confirmados; comprovante não enviado: ${erro instanceof Error ? erro.message : 'falha de e-mail'}`);
-    }
-  }); }
+  try { process.exitCode = await comBackupExclusivo(pastaBackup, () => executarBackup({ preAtualizacao: process.argv.includes('--pre-atualizacao') })); }
   catch (erro) { console.error(`ERRO: ${erro instanceof Error ? erro.message : 'falha inesperada'}`); process.exitCode = 1; }
 }

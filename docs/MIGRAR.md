@@ -13,10 +13,11 @@ resolver. O assistente reutiliza a instalação, a semente e a tarefa já existe
 - Nome fictício `portal.empresa.local` apontando para o servidor; Portal em
   `http://portal.empresa.local:3000`.
 - Exemplo de backup em `\\servidor-arquivos\pasta\backups`.
-  A TI deve conceder escrita à conta do computador
-  `DOMINIO\SERVIDOR$`, tanto no compartilhamento quanto no NTFS.
-  O teste do assistente usa SYSTEM, a mesma conta da operação.
-- A tarefa roda como SYSTEM, uma conta com privilégios elevados. Restrinja quem
+  A TI deve conceder escrita à conta da tarefa no compartilhamento e no NTFS.
+  Se escolher SYSTEM, a permissão de rede deve ser para a conta do computador
+  `DOMINIO\SERVIDOR$`.
+  O assistente testa SYSTEM primeiro; em produção, a conta da tarefa pode ser uma conta de domínio administradora local.
+- A conta da tarefa tem privilégios de administradora local. Restrinja quem
   pode editar a instalação; veja [INSTALAR.md](INSTALAR.md).
 
 ## Primeiro: fazer um ensaio
