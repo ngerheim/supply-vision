@@ -139,3 +139,13 @@ void test('De/Para real normaliza acentos/espacos e recusa origem desconhecida',
     assert.equal(Boolean(row.error), !esperado);
   }
 });
+
+void test('unidade real resolve codigo/alias e recusa erro ou ambiguidade', () => {
+  const units = uniqueIndex([['L', {id:'litro',name:'L'}], ['LITRO', {id:'litro',name:'L'}], ['AMBIGUA', null]]);
+  for (const [entrada, esperado] of [['litro','litro'], [' l ','litro'], ['lirto',''], ['ambigua','']]) {
+    const row = parseImportRow({...source, MEDIDA:entrada}, 2);
+    resolveImportRows([row], {...refs,units});
+    assert.equal(row.unitId, esperado);
+    assert.equal(Boolean(row.error), !esperado);
+  }
+});

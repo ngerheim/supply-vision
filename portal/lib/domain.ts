@@ -58,12 +58,6 @@ export function normalizeImportColumn(value: unknown) {
   return Object.hasOwn(aliases, key) ? aliases[key] : key;
 }
 
-export function resolveImportUnit(value: unknown, units: ReadonlyArray<{ code: string; name: string }>) {
-  const key = normalizeImportText(value);
-  const matches = units.filter((unit) => normalizeImportText(unit.code) === key || normalizeImportText(unit.name) === key);
-  return key && matches.length === 1 ? normalizeImportText(matches[0].code) : null;
-}
-
 export function normalizeCnpj(value: unknown) {
   const text = typeof value === 'string' || typeof value === 'number' ? String(value) : '';
   return text.replace(/\D/g, '');
