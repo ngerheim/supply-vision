@@ -76,6 +76,19 @@ try {
  Write-Host '[OK] Prazo da rede: copia local preservada; codigo 3 continua e tarefa e retomada.'
 } finally {Remove-Item -LiteralPath $pastaBackupTeste -Recurse -Force}
 
+# Executa o bloco real de reexecucao com processo nativo sintetico.
+$inicioFilho=$source.IndexOf('  $preferenciaFilho=$ErrorActionPreference')
+$fimFilho=$source.IndexOf('  if ($rcFilho -ne 0)', $inicioFilho)
+$blocoFilho=[scriptblock]::Create($source.Substring($inicioFilho,$fimFilho-$inicioFilho))
+$script:hostTeste=(Get-Process -Id $PID).Path
+function powershell.exe { & $script:hostTeste @args; $global:LASTEXITCODE=$LASTEXITCODE }
+foreach($codigoFilho in @(0,7)){
+ $argumentosReexecucao=@('-NoProfile','-Command',("[Console]::Error.WriteLine('npm warn install-scripts fixture'); Write-Host '=== Atualizado: 0bd5245 -> ddf9939 ==='; exit "+$codigoFilho))
+ . $blocoFilho
+ if($rcFilho-ne$codigoFilho-or$ErrorActionPreference-ne'Stop'){throw 'Stderr mudou codigo do filho ou preferencia do pai.'}
+}
+Remove-Item Function:powershell.exe
+
 # Medicao real do atualizador com relogio fixo e pasta descartavel.
 $inicioFuncoes=$source.IndexOf('# Medicao sem dados')
 $fimFuncoes=$source.IndexOf('$medicaoEnvAnterior=',$inicioFuncoes)
@@ -84,7 +97,44 @@ if($inicioFuncoes-lt0-or$fimFuncoes-le$inicioFuncoes){throw 'Funcoes de medicao 
 $pastaMedicao=Join-Path ([IO.Path]::GetTempPath()) ('sv-medicao-'+[guid]::NewGuid().ToString('N'))
 try{
  $script:horaMedicao=[datetime]'2026-01-01T12:00:00Z'
- $arquivoMedicao=Join-Path $pastaMedicao 'atualizacao-saida.log'
+ $arquivoMedicao=Join-Path $pastaMedicao 'atualizacao-tempos.log'
+ # A central antiga ocupa stdout; o atualizador deve medir em outro arquivo.
+ [void][IO.Directory]::CreateDirectory($pastaMedicao)
+ $stdoutAntigo=Join-Path $pastaMedicao 'atualizacao-saida.log'
+ $bloqueio=[IO.File]::Open($stdoutAntigo,[IO.FileMode]::Create,[IO.FileAccess]::Write,[IO.FileShare]::None)
+ try{
+  $conflito=$false
+  try{[IO.File]::AppendAllText($stdoutAntigo,'conflito')}catch{$conflito=$true}
+  if(!$conflito){throw 'Fixture nao reproduziu bloqueio do stdout legado.'}
+  $medicaoLegada=Nova-MedicaoAtualizacao $arquivoMedicao
+  Registrar-TempoAtualizacao $medicaoLegada 'central antiga: medicao independente'
+  if([IO.File]::ReadAllText($arquivoMedicao)-notmatch'central antiga: medicao independente'){throw 'Stdout bloqueado impediu medicao.'}
+ }finally{$bloqueio.Dispose()}
+ # Abertura compartilhada permite leitura enquanto os tempos sao acrescentados.
+ $leitor=[IO.File]::Open($arquivoMedicao,[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::ReadWrite)
+ try{Registrar-TempoAtualizacao $medicaoLegada 'leitor compartilhado'}finally{$leitor.Dispose()}
+ if([IO.File]::ReadAllText($arquivoMedicao)-notmatch'leitor compartilhado'){throw 'Leitor impediu medicao.'}
+ # Bloqueio transitorio do arquivo proprio exige a nova tentativa curta.
+ Add-Type -TypeDefinition @'
+using System.IO;using System.Threading;
+public static class SvLogTeste {
+ public static void Liberar(FileStream arquivo) {
+  var thread=new Thread(()=>{Thread.Sleep(50);arquivo.Dispose();});
+  thread.IsBackground=true;thread.Start();
+ }
+}
+'@
+ $bloqueioTempo=[IO.File]::Open($arquivoMedicao,[IO.FileMode]::Open,[IO.FileAccess]::Write,[IO.FileShare]::None)
+ [SvLogTeste]::Liberar($bloqueioTempo)
+ Registrar-TempoAtualizacao $medicaoLegada 'gravado apos nova tentativa'
+ if([IO.File]::ReadAllText($arquivoMedicao)-notmatch'gravado apos nova tentativa'){throw 'Medicao nao repetiu apos bloqueio transitorio.'}
+ $bloqueioTempo=[IO.File]::Open($arquivoMedicao,[IO.FileMode]::Open,[IO.FileAccess]::Write,[IO.FileShare]::None)
+ try{
+  $global:LASTEXITCODE=0
+  Registrar-TempoAtualizacao $medicaoLegada 'bloqueio permanente'
+  if($LASTEXITCODE-ne0){throw 'Falha de medicao alterou codigo de sucesso.'}
+ }finally{$bloqueioTempo.Dispose()}
+ if(!$source.Contains("'operacao/atualizacao-tempos.log'")){throw 'Atualizador usa o arquivo ocupado pela central antiga.'}
  $m=Nova-MedicaoAtualizacao $arquivoMedicao '' {$script:horaMedicao}
  Iniciar-EtapaMedida $m 'Backup'
  $script:horaMedicao=$script:horaMedicao.AddSeconds(42)
@@ -125,7 +175,7 @@ try{
  Resumir-MedicaoAtualizacao $pai $true
  if([IO.File]::ReadAllText($arquivoMedicao)-notmatch("medicao="+$pai.id)){throw 'Filho sem resumo ocultou o resumo do pai.'}
  $centralFonte=[IO.File]::ReadAllText((Join-Path $PSScriptRoot 'central-logica.ps1'))
- if($centralFonte.Contains("'atualizacao-saida.log'")){throw 'Central disputa arquivo de medicao com o atualizador.'}
+ if($centralFonte.Contains("'atualizacao-tempos.log'")){throw 'Central usa medicao como stdout.'}
  if(!$source.Contains('$script:MedicaoAtualizacao.health=')-or!$source.Contains('$script:MedicaoAtualizacao.parada=')-or!$source.Contains('$env:SV_MEDICAO_ATUALIZACAO=Exportar-MedicaoAtualizacao')){throw 'Marcos reais da atualizacao nao instrumentados.'}
  # A central continua decidindo pelo resultado real, nunca pelas linhas de tempo.
  . (Join-Path $PSScriptRoot 'central-logica.ps1')
@@ -135,8 +185,40 @@ try{
  $r=Executar-AcaoCentral $PSScriptRoot $pastaMedicao '' 'fim-atualizacao' @{codigo=0}
  if(!$r.ok-or$r.mensagem-notlike'*versao mais recente*'){throw 'Central perdeu resultado sem atualizacao.'}
  [IO.File]::WriteAllText($saidaProcesso,'suite reprovada')
- [IO.File]::WriteAllText((Join-Path $opMedicao 'atualizacao-saida.log'),'=== Atualizado: exemplo ===')
+ [IO.File]::WriteAllText((Join-Path $opMedicao 'atualizacao-saida.log'),'Resumo atualizacao: total=12 s')
  $r=Executar-AcaoCentral $PSScriptRoot $pastaMedicao '' 'fim-atualizacao' @{codigo=1}
  if($r.ok-or$r.mensagem-notlike'*suite reprovada*'){throw 'Central ocultou falha real com arquivo de tempos.'}
+ # Avisos em stderr nao mudam o resultado real.
+ $avisos=@('INEFFECTIVE_DYNAMIC_IMPORT: aviso de build','PLUGIN_TIMINGS: aviso de build','npm warn install-scripts aviso')
+ [IO.File]::WriteAllLines((Join-Path $opMedicao 'atualizacao-erro.log'),$avisos)
+ [IO.File]::WriteAllText($saidaProcesso,'=== Atualizado: 0bd5245 -> ddf9939 ===')
+ $r=Executar-AcaoCentral $PSScriptRoot $pastaMedicao '' 'fim-atualizacao' @{codigo=0}
+ if(!$r.ok){throw 'Avisos em stderr converteram conclusao real em falha.'}
+ $r=Executar-AcaoCentral $PSScriptRoot $pastaMedicao '' 'fim-atualizacao' @{codigo=$null}
+ if(!$r.ok){throw 'Marcador valido nao resgatou ExitCode indisponivel.'}
+ $r=Executar-AcaoCentral $PSScriptRoot $pastaMedicao '' 'fim-atualizacao' @{codigo=1}
+ if($r.ok){throw 'Marcador ocultou codigo de falha explicito.'}
+ [IO.File]::WriteAllText($saidaProcesso,'suite reprovada')
+ [IO.File]::WriteAllLines((Join-Path $opMedicao 'atualizacao-erro.log'),(@('ERRO REAL: build falhou')+$avisos+$avisos+$avisos))
+ $r=Executar-AcaoCentral $PSScriptRoot $pastaMedicao '' 'fim-atualizacao' @{codigo=1}
+ if($r.ok-or$r.mensagem-notlike'*ERRO REAL*'-or$r.mensagem-match'INEFFECTIVE_DYNAMIC_IMPORT|PLUGIN_TIMINGS|npm warn'){throw 'Central nao filtrou avisos antes de selecionar erros reais.'}
+ [IO.File]::WriteAllText($saidaProcesso,'apenas etapa intermediaria')
+ $r=Executar-AcaoCentral $PSScriptRoot $pastaMedicao '' 'fim-atualizacao' @{codigo=0}
+ if($r.ok){throw 'Codigo zero sem conclusao foi aprovado.'}
+ # Central antiga inicia stdout legado; apos checkout worker usa logica nova.
+ [IO.File]::WriteAllText($saidaProcesso,'captura antiga sem conclusao')
+ [IO.File]::SetLastWriteTimeUtc($saidaProcesso,[datetime]::UtcNow.AddMinutes(-1))
+ $saidaLegada=Join-Path $opMedicao 'atualizacao-saida.log'
+ [IO.File]::WriteAllText($saidaLegada,'=== Atualizado: 0bd5245 -> ddf9939 ===')
+ $r=Executar-AcaoCentral $PSScriptRoot $pastaMedicao '' 'fim-atualizacao' @{codigo=$null}
+ if(!$r.ok){throw 'Central antiga perdeu captura apos trocar codigo.'}
+ $r=Executar-AcaoCentral $PSScriptRoot $pastaMedicao '' 'fim-atualizacao' @{codigo=0;saida='atualizacao-processo-saida.log'}
+ if($r.ok){throw 'Central nova aceitou marcador legado de execucao anterior.'}
+ # Central G0 sem metadado: tempos do pai nao substituem stdout novo.
+ [IO.File]::WriteAllText($saidaProcesso,'=== Atualizado: 0bd5245 -> ddf9939 ===')
+ [IO.File]::SetLastWriteTimeUtc($saidaProcesso,[datetime]::UtcNow.AddMinutes(-1))
+ [IO.File]::WriteAllText($saidaLegada,'[2026-10-13 12:00:00] Resumo atualizacao: total=12 s')
+ $r=Executar-AcaoCentral $PSScriptRoot $pastaMedicao '' 'fim-atualizacao' @{codigo=$null}
+ if(!$r.ok){throw 'Tempos do pai G0 esconderam conclusao do filho novo.'}
  Write-Host 'Medicao: etapas, duracao, reexecucao, resumo unico, falhas e central aprovados.'
 }finally{Remove-Item -LiteralPath $pastaMedicao -Recurse -Force -ErrorAction SilentlyContinue}

@@ -85,8 +85,9 @@ function Receber-ResultadosCentral {
  }
  # Apenas consulta o handle do processo; logs e Git ficam no worker.
  if($script:processoAtualizacao-and$script:processoAtualizacao.HasExited-and!$script:controle.trabalhos.ContainsKey('acao')){
+  $script:processoAtualizacao.WaitForExit();$script:processoAtualizacao.Refresh()
   $codigo=$script:processoAtualizacao.ExitCode;$script:processoAtualizacao.Dispose();$script:processoAtualizacao=$null
-  [void](Pedir-AcaoCentral 'fim-atualizacao' @{codigo=$codigo} {
+  [void](Pedir-AcaoCentral 'fim-atualizacao' @{codigo=$codigo;saida=$script:saidaAtualizacao} {
    param($r)
    $atualizar.Enabled=$true;$atualizar.Text='Atualizar sistema';if($r.versao){$v.Text=$r.versao}
    $titulo=if($r.ok){'Atualização concluída'}else{'Atualização não concluída'}
@@ -134,7 +135,7 @@ $atualizar.Add_Click({
   param($r)
   if($r.elevar){$atualizar.Enabled=$true;[Windows.Forms.MessageBox]::Show('Atualizar uma operação com a conta da tarefa exige elevação. A central será reaberta como administrador; clique Atualizar sistema nela.','Elevação necessária','OK','Information')|Out-Null;Reabrir-CentralElevada;return}
   if($r.erro){$atualizar.Enabled=$true;[Windows.Forms.MessageBox]::Show($r.mensagem,'Não foi possível atualizar','OK','Error')|Out-Null;return}
-  $script:processoAtualizacao=$r.processo;$atualizar.Text='Atualizando...'
+  $script:processoAtualizacao=$r.processo;$script:saidaAtualizacao=$r.saida;$atualizar.Text='Atualizando...'
  }){$atualizar.Enabled=$false}
 })
 $auto.Add_SelectionChangeCommitted({
