@@ -10,7 +10,6 @@ import {
   normalizeCnpj,
   normalizeImportText,
   normalizeText,
-  resolveImportMapping,
   resolveImportUnit,
   safeFilename,
   toNonNegativeMoney,
@@ -31,12 +30,6 @@ void test('normaliza texto sem converter objetos acidentalmente', () => {
 void test('normaliza texto de importação removendo acentos e caracteres invisíveis', () => {
   assert.equal(normalizeImportText('  óleo\u00a0 de  direção\t'), 'OLEO DE DIRECAO');
   assert.equal(normalizeImportText('Revisão 10.000 km'), 'REVISAO 10.000 KM');
-});
-
-void test('resolve De/Para pela forma normalizada e recusa origem desconhecida', () => {
-  const mappings = new Map([['OLEO DE MOTOR', 'OLEO MOTOR 5W30']]);
-  assert.equal(resolveImportMapping('Óleo  de motor', mappings), 'OLEO MOTOR 5W30');
-  assert.equal(resolveImportMapping('ITEM SEM DE PARA', mappings), null);
 });
 
 void test('aceita código ou nome de unidade e recusa erro de digitação', () => {

@@ -52,10 +52,6 @@ export function normalizeImportText(value: unknown) {
     .trim();
 }
 
-export function resolveImportMapping<T>(value: unknown, mappings: ReadonlyMap<string, T>) {
-  return mappings.get(normalizeImportText(value)) ?? null;
-}
-
 export function normalizeImportColumn(value: unknown) {
   const key = normalizeImportText(value).replace(/[\s/]+/g, '_');
   const aliases: Record<string, string> = { ITEM: 'PECA_SERVICO', UNIDADE: 'MEDIDA', VALOR: 'PRECO', MARCA: 'MARCAS' };
