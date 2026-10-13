@@ -33,6 +33,14 @@ try {
             'privado\alertas\parametros\de_para', 'privado\operacao', 'bin')
   $dirs | ForEach-Object { New-Item -ItemType Directory -Force (Join-Path $temp $_) | Out-Null }
   Copy-Item "$raizReal\scripts\supervisor.ps1", "$raizReal\scripts\operacao-logica.ps1", "$raizReal\scripts\validar-operacao.ps1", "$raizReal\scripts\notificacao.ps1", "$raizReal\scripts\avisos-admin.ps1","$raizReal\scripts\inicializacao-logica.ps1" "$temp\scripts"
+ # Injecao somente na copia temporaria: nunca consulta o Portal real em 3000.
+ $supervisorTeste=Join-Path $temp 'scripts/supervisor.ps1'
+ $codigoTeste=[IO.File]::ReadAllText($supervisorTeste)
+ $chamadaHealth='Consultar-HealthLocal $clienteHealth'
+ if(!$codigoTeste.Contains($chamadaHealth)){throw 'Ponto de isolamento do health nao encontrado.'}
+ $codigoTeste=$codigoTeste.Replace($chamadaHealth,($chamadaHealth+' "http://127.0.0.1:59999/api/health"'))
+ [IO.File]::WriteAllText($supervisorTeste,$codigoTeste,(New-Object Text.UTF8Encoding($true)))
+
 
 
   # Injecao SOMENTE na copia descartavel: nenhum relogio de producao e alterado.

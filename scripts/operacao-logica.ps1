@@ -312,3 +312,49 @@ function Obter-EventoVigilancia([bool]$FalhaTarefa,[bool]$Saudavel) {
  if(!$Saudavel){return 'vigilancia-health'}
  return ''
 }
+
+# Cliente exclusivo do health local: sem DNS, proxy, credenciais ou redirecionamento.
+function Novo-ClienteHealth([ValidateRange(100,30000)][int]$TimeoutMs=5000){
+ Add-Type -AssemblyName System.Net.Http
+ $handler=New-Object Net.Http.HttpClientHandler
+ $handler.UseDefaultCredentials=$false;$handler.UseProxy=$false;$handler.AllowAutoRedirect=$false;$handler.UseCookies=$false
+ $cliente=New-Object Net.Http.HttpClient($handler)
+ $cliente.Timeout=[timespan]::FromMilliseconds($TimeoutMs)
+ $cliente.MaxResponseContentBufferSize=8192
+ return @{cliente=$cliente;handler=$handler}
+}
+function Consultar-HealthLocal($Controle,[uri]$Endereco='http://127.0.0.1:3000/api/health'){
+ if(!$Endereco.IsAbsoluteUri-or$Endereco.Scheme-ne'http'-or$Endereco.Host-ne'127.0.0.1'-or$Endereco.UserInfo){throw 'Health exige HTTP local sem credenciais.'}
+ $tempo=[Diagnostics.Stopwatch]::StartNew();$resposta=$null;$codigo=0;$motivo='erro-cliente';$saudavel=$false
+ try{
+  # GetAsync padrao inclui o corpo no prazo total, limitado a 8 KiB.
+  $resposta=$Controle.cliente.GetAsync($Endereco).GetAwaiter().GetResult()
+  $codigo=[int]$resposta.StatusCode
+  if($codigo-ne200){$motivo='status-http'}
+  else{
+   try{
+    $texto=$resposta.Content.ReadAsStringAsync().GetAwaiter().GetResult()
+    if(!$texto.TrimStart().StartsWith('{')){throw 'Objeto JSON esperado.'}
+    $corpo=$texto|ConvertFrom-Json -ErrorAction Stop
+    $saudavel=$null-ne$corpo-and$corpo-isnot[array]-and$corpo-isnot[string]-and$corpo-isnot[ValueType]-and$corpo.status-is[string]-and$corpo.status-eq'ok'
+   }catch{$saudavel=$false}
+   $motivo=if($saudavel){'ok'}else{'corpo-invalido'}
+  }
+ }catch{
+  # Nunca registra Message/URL/corpo: somente categorias conhecidas.
+  $erro=$_.Exception
+  while($erro){
+   if($erro-is[OperationCanceledException]){$motivo='timeout';break}
+   if($erro-is[Net.Sockets.SocketException]){
+    $motivo=if($erro.SocketErrorCode-eq[Net.Sockets.SocketError]::ConnectionRefused){'conexao-recusada'}else{'falha-conexao'};break
+   }
+   if($erro-is[Net.Http.HttpRequestException]){$motivo='falha-conexao'}
+   $erro=$erro.InnerException
+  }
+ }finally{if($resposta){$resposta.Dispose()};$tempo.Stop()}
+ return @{saudavel=$saudavel;motivo=$motivo;http=$codigo;duracaoMs=[int]$tempo.ElapsedMilliseconds}
+}
+function Formatar-FalhaHealth($Resultado,[int]$FalhasSeguidas){
+ $motivo=if($Resultado.motivo-in@('timeout','conexao-recusada','falha-conexao','status-http','corpo-invalido','erro-cliente')){$Resultado.motivo}else{'erro-cliente'}
+ return "Health falhou: motivo=$motivo; duracao_ms=$([int]$Resultado.duracaoMs); http=$([int]$Resultado.http); falhas_seguidas=$FalhasSeguidas."
+}
