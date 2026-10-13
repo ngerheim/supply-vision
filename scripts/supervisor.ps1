@@ -91,9 +91,11 @@ if($SemLogin){
  $env:TEMP=$cache;$env:TMP=$cache
 }
 $codigoSupervisor=0
+$clienteHealth=$null
 try{$linhaUrl=@(Get-Content (Join-Path $Privado 'portal\configuracao\portal.env') -ErrorAction Stop)|Where-Object{$_ -like 'PORTAL_URL=*'}|Select-Object -First 1;if($linhaUrl){$PortalUrl=($linhaUrl -split '=',2)[1].Trim()}}catch{}
 try{
  Encerrar-OrfaosInstalacao $Raiz
+ $clienteHealth=Novo-ClienteHealth
  Log 'Supervisor iniciado.'
  if($ensaio){Log 'Modo ensaio ATIVO'}
  Avisar-Administrador $avisosAdmin 'supervisor-iniciado'
@@ -107,10 +109,11 @@ try{
   Iniciar-Processo 'portal' $Node @(('"'+(Join-Path $Portal 'scripts\iniciar-portal.mjs')+'"'),'lan') $Portal
   Iniciar-Processo 'emails' $Node @('--experimental-strip-types',('"'+(Join-Path $Portal 'scripts\processar-emails.mjs')+'"'),'--watch') $Portal
   Iniciar-Processo 'relatorios' $Node @('--experimental-strip-types',('"'+(Join-Path $Portal 'scripts\processar-relatorios.mjs')+'"')) $Portal
-  $saudavel=$false;try{$saudavel=((Invoke-RestMethod "$PortalUrl/api/health" -TimeoutSec 3).status-eq'ok')}catch{$saudavel=$false}
+  $resultadoHealth=Consultar-HealthLocal $clienteHealth
+  $saudavel=$resultadoHealth.saudavel
   # Uma falha isolada do health (ex.: banco momentaneamente ocupado) nao e
   # queda: so duas seguidas (~15 s) declaram o portal fora do ar.
-  if($saudavel){$falhasSaude=0}else{$falhasSaude++}
+  if($saudavel){$falhasSaude=0}else{$falhasSaude++;Log (Formatar-FalhaHealth $resultadoHealth $falhasSaude)}
   # Reinicia apenas o portal apos falhas persistentes e janela de inicializacao.
   # Nao interrompe Qlik/SMTP com resultado incerto para recuperar a interface.
   if(!$saudavel-and$falhasSaude-ge8-and((Get-Date)-$inicioPortal).TotalMinutes-ge3-and((Get-Date)-$ultimoReinicio).TotalMinutes-ge3){
@@ -142,6 +145,8 @@ try{
   # deixar quem pediu esperando ate 15s sem sinal de vida.
   for($i=0;$i-lt15-and!(Test-Path $PararFile);$i++){Start-Sleep 1;Atualizar-AvisosAdmin $avisosAdmin}
  }
-}catch{$codigoSupervisor=1;Log "ERRO FATAL: $($_.Exception.Message)";Log "Origem: $($_.ScriptStackTrace -replace '\s*\r?\n\s*',' | ')"}finally{@{atualizado=(Get-Date).ToString('o');ensaio=$ensaio;portal=$false;emails=$false;relatorios=$false;alertas='parado';backup='parado';limpeza='parada';manutencao=$false;disco='desconhecido'}|ConvertTo-Json -Compress|ForEach-Object{[void](Gravar-Tolerante $StatusFile $_)};Encerrar-AvisosAdmin $avisosAdmin;Log 'Encerrando a operacao.';if($portalPronto){[void](Notificar 'Supply Vision' 'Operacao encerrada. O Portal saiu do ar.')};foreach($p in $processos.Values){Encerrar $p};Encerrar $alerta;Encerrar $backup;Encerrar $limpeza;Encerrar $expurgo;Encerrar $verificacaoSaude;if(!$processos['portal']-or$processos['portal'].HasExited){Remove-Item -LiteralPath (Join-Path $Privado 'portal\configuracao\worker.env') -Force -ErrorAction SilentlyContinue};Remove-Item $PidFile,$PararFile -Force -ErrorAction SilentlyContinue;if($LockHandle){$LockHandle.Dispose()}}
+}catch{$codigoSupervisor=1;Log "ERRO FATAL: $($_.Exception.Message)";Log "Origem: $($_.ScriptStackTrace -replace '\s*\r?\n\s*',' | ')"}finally{
+ if($clienteHealth){$clienteHealth.cliente.Dispose()}
+ @{atualizado=(Get-Date).ToString('o');ensaio=$ensaio;portal=$false;emails=$false;relatorios=$false;alertas='parado';backup='parado';limpeza='parada';manutencao=$false;disco='desconhecido'}|ConvertTo-Json -Compress|ForEach-Object{[void](Gravar-Tolerante $StatusFile $_)};Encerrar-AvisosAdmin $avisosAdmin;Log 'Encerrando a operacao.';if($portalPronto){[void](Notificar 'Supply Vision' 'Operacao encerrada. O Portal saiu do ar.')};foreach($p in $processos.Values){Encerrar $p};Encerrar $alerta;Encerrar $backup;Encerrar $limpeza;Encerrar $expurgo;Encerrar $verificacaoSaude;if(!$processos['portal']-or$processos['portal'].HasExited){Remove-Item -LiteralPath (Join-Path $Privado 'portal\configuracao\worker.env') -Force -ErrorAction SilentlyContinue};Remove-Item $PidFile,$PararFile -Force -ErrorAction SilentlyContinue;if($LockHandle){$LockHandle.Dispose()}}
 
 if($SemLogin){exit $codigoSupervisor}
