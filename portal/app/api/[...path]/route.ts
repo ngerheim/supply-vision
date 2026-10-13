@@ -1,3 +1,4 @@
+import { leituraD1 } from '@/lib/leitura-d1';
 import { ipLoginAssinado } from '@/lib/ip-login.mjs';
 import { RESERVAR_CODIGO_CHAMADO_SQL, joinContagemHistorico, filtroChamados, dadosBuscaChamado, ordemChamados } from '@/lib/operacao-dados';
 import { ATUALIZAR_UNIDADE_SQL, ATUALIZAR_LOCALIDADE_SQL } from '@/lib/catalogos-sql';
@@ -107,8 +108,8 @@ async function denyWrite(request: Request, message: string, status = 403) {
 }
 const partsOf = (request: Request) => new URL(request.url).pathname.replace(/^\/api\/?/, '').split('/').filter(Boolean);
 const canWrite = (user: User) => user.role === 'admin' || user.role === 'editor';
-const all = async <T = Record<string, unknown>>(sql: string, values: unknown[] = []) => (await rawDb().prepare(sql).bind(...values).all<T>()).results;
-const first = async <T = Record<string, unknown>>(sql: string, values: unknown[] = []) => rawDb().prepare(sql).bind(...values).first<T>();
+const all = async <T = Record<string, unknown>>(sql: string, values: unknown[] = []) => (await leituraD1(sql, () => rawDb().prepare(sql).bind(...values).all<T>())).results;
+const first = async <T = Record<string, unknown>>(sql: string, values: unknown[] = []) => leituraD1(sql, () => rawDb().prepare(sql).bind(...values).first<T>());
 
 async function requireUser(request: Request) {
   const user = await currentUser(request);
