@@ -285,7 +285,7 @@ if (-not $JaAtualizado) {
 
   Etapa 'Backup do banco antes de trocar a versao'
   & $Node --experimental-strip-types (Join-Path $Portal 'scripts\backup.mjs') --pre-atualizacao
-  if ($LASTEXITCODE -eq 3) { Aviso 'Backup local validado; copia de rede falhou. Atualizacao continua.' }
+  if ($LASTEXITCODE -eq 3) { Aviso 'Backup local validado; rede falhou ou excedeu o prazo. Atualizacao continua; a operacao sera retomada ao terminar.' }
   elseif ($LASTEXITCODE -ne 0) { throw 'O backup falhou. Atualizacao cancelada — nao se troca versao sem copia do banco.' }
   Ok 'backup concluido'
   # portal-atual.sqlite e reescrito por todo backup, inclusive o diario do

@@ -372,6 +372,19 @@ máquina) ou quando `BACKUP_ANEXAR_BANCO=true`. O banco contém hashes de senha
 e toda a base comercial, então configurar a pasta de rede é o caminho
 recomendado. A troca é atômica.
 
+Em `privado/portal/configuracao/portal.env`, `BACKUP_NETWORK_TIMEOUT_SECONDS`
+define o prazo da etapa de rede inteira: cópia, conferência do hash e histórico.
+O padrão é 600 segundos (10 minutos); aceite apenas um inteiro de 1 a 86400.
+Se a rede travar, o processo dessa etapa é encerrado. A cópia local validada
+permanece disponível; o backup agendado registra falha, e a atualização avisa
+e continua usando essa cópia local, retomando a operação ao terminar.
+Pode sobrar um arquivo temporário incompleto na rede. No início da próxima
+execução, são removidos apenas arquivos regulares `portal-atual.<UUID v4>.tmp.sqlite`
+cuja última modificação tenha mais de uma hora. Temporários recentes, links,
+pastas, backups completos e arquivos de outros nomes são preservados.
+Falha nessa limpeza gera aviso e o backup continua; a limpeza usa o mesmo prazo da etapa de rede.
+No modo ensaio, a etapa de rede continua bloqueada.
+
 A cópia local e a réplica na rede são feitas antes de validar o SMTP.
 Se a réplica for confirmada, falha no comprovante gera aviso sem invalidar o
 backup; sem réplica, falha no e-mail continua sendo erro de redundância.
