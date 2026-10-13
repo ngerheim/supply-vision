@@ -378,8 +378,11 @@ O padrão é 600 segundos (10 minutos); aceite apenas um inteiro de 1 a 86400.
 Se a rede travar, o processo dessa etapa é encerrado. A cópia local validada
 permanece disponível; o backup agendado registra falha, e a atualização avisa
 e continua usando essa cópia local, retomando a operação ao terminar.
-Pode sobrar um arquivo temporário incompleto na rede. Ele não substitui a
-cópia atual e pode ser removido após conferir que nenhum backup está rodando.
+Pode sobrar um arquivo temporário incompleto na rede. No início da próxima
+execução, são removidos apenas arquivos regulares `portal-atual.<UUID v4>.tmp.sqlite`
+cuja última modificação tenha mais de uma hora. Temporários recentes, links,
+pastas, backups completos e arquivos de outros nomes são preservados.
+Falha nessa limpeza gera aviso e o backup continua; a limpeza usa o mesmo prazo da etapa de rede.
 No modo ensaio, a etapa de rede continua bloqueada.
 
 A cópia local e a réplica na rede são feitas antes de validar o SMTP.

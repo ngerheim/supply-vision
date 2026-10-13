@@ -53,7 +53,7 @@ export function prazoRedeMs(config) {
     throw new Error('BACKUP_NETWORK_TIMEOUT_SECONDS deve ser inteiro entre 1 e 86400.');
   return segundos * 1000;
 }
-export async function replicarNaRede(config, { origem = arquivoFinal, prazoMs, iniciar = () => fork(new URL('./backup-rede.mjs', import.meta.url), [], { execArgv: [], stdio: ['ignore','ignore','ignore','ipc'] }) } = {}) {
+export async function replicarNaRede(config, { origem = arquivoFinal, prazoMs, registrar = console.warn, iniciar = () => fork(new URL('./backup-rede.mjs', import.meta.url), [], { execArgv: [], stdio: ['ignore','ignore','ignore','ipc'] }) } = {}) {
   const pastaRede = config.BACKUP_NETWORK_DIR?.trim();
   if (!pastaRede) return null;
   const limite = prazoMs ?? prazoRedeMs(config);
@@ -62,7 +62,7 @@ export async function replicarNaRede(config, { origem = arquivoFinal, prazoMs, i
     let resposta, excedeu = false;
     const timer = setTimeout(() => { excedeu = true; filho.kill('SIGKILL'); }, limite);
     filho.once('error', erro => { clearTimeout(timer); reject(erro); });
-    filho.on('message', valor => { resposta = valor; });
+    filho.on('message', valor => { if (typeof valor?.aviso === 'string') registrar(valor.aviso); else resposta = valor; });
     filho.once('exit', codigo => {
       clearTimeout(timer);
       // Confirma o encerramento antes de liberar a trava ou retomar a operacao.
