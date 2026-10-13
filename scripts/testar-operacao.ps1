@@ -116,7 +116,8 @@ $casos=Get-Content (Join-Path $PSScriptRoot '../testes/fixtures/configuracao-env
 $arquivo=Join-Path ([IO.Path]::GetTempPath()) ('sv-env-'+[guid]::NewGuid().ToString('N')+'.env')
 try {
  foreach($caso in $casos){
-  [IO.File]::WriteAllText($arquivo,$caso.texto,(New-Object Text.UTF8Encoding($false)))
+  if($caso.ausente){Remove-Item -LiteralPath $arquivo -Force -ErrorAction SilentlyContinue}
+  else{[IO.File]::WriteAllText($arquivo,$caso.texto,(New-Object Text.UTF8Encoding($false)))}
   $falhou=$false;$valores=$null
   try{$valores=Ler-ConfigOperacao $arquivo}catch{$falhou=$true}
   Igual ([bool]$caso.erro) $falhou $caso.nome
@@ -126,4 +127,4 @@ try {
   }
  }
  Write-Host 'Contrato env compartilhado: aprovado.'
-}finally{Remove-Item -LiteralPath $arquivo -Force}
+}finally{Remove-Item -LiteralPath $arquivo -Force -ErrorAction SilentlyContinue}

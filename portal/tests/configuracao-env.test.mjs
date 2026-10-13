@@ -14,10 +14,11 @@ const casos=JSON.parse(fs.readFileSync(new URL('../../testes/fixtures/configurac
 for(const caso of casos)void test(`contrato env: ${caso.nome}`,t=>{
   const pasta=fs.mkdtempSync(path.join(fs.realpathSync.native(os.tmpdir()),'sv-env-'));
   t.after(()=>fs.rmSync(pasta,{recursive:true,force:true}));
-  const arquivo=path.join(pasta,'config.env');fs.writeFileSync(arquivo,caso.texto);
-  if(caso.erro)assert.throws(()=>lerArquivo(arquivo),/Linha invalida/);
+  const arquivo=path.join(pasta,'config.env');if(!caso.ausente)fs.writeFileSync(arquivo,caso.texto);
+  if(caso.erro)assert.throws(()=>lerArquivo(arquivo,{obrigatorio:true}),/Linha invalida|ausente/);
   else assert.deepEqual(lerArquivo(arquivo),caso.valores);
-  fs.mkdirSync(path.join(pasta,'comum'));fs.writeFileSync(path.join(pasta,'comum/operacao.env'),caso.texto);
+  if(caso.ausente)assert.deepEqual(lerArquivo(arquivo),{});
+  fs.mkdirSync(path.join(pasta,'comum'));if(!caso.ausente)fs.writeFileSync(path.join(pasta,'comum/operacao.env'),caso.texto);
   const filho=spawnSync(process.execPath,['--experimental-strip-types',fileURLToPath(new URL('../scripts/expurgar-dados.mjs',import.meta.url))],{env:{...process.env,SUPPLY_VISION_PRIVADO:pasta},encoding:'utf8'});
   assert.equal(filho.status,caso.erro?1:0,filho.stderr);
 });

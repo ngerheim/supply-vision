@@ -11,12 +11,16 @@ CASOS = json.loads((Path(__file__).resolve().parents[2] / "testes/fixtures/confi
 @pytest.mark.parametrize("caso", CASOS, ids=lambda caso: caso["nome"])
 def test_contrato_env(caso, tmp_path):
     arquivo = tmp_path / "config.env"
-    arquivo.write_text(caso["texto"], encoding="utf-8")
+    if not caso.get("ausente"):
+        arquivo.write_text(caso["texto"], encoding="utf-8")
     if caso.get("erro"):
         with pytest.raises(SystemExit):
             _carregar(arquivo)
-        with pytest.raises(SystemExit):
-            _carregar_opcional(arquivo)
+        if caso.get("ausente"):
+            assert _carregar_opcional(arquivo) == {}
+        else:
+            with pytest.raises(SystemExit):
+                _carregar_opcional(arquivo)
     else:
         assert _carregar(arquivo) == caso["valores"]
         assert _carregar_opcional(arquivo) == caso["valores"]

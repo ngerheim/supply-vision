@@ -46,7 +46,7 @@ export async function executarExpurgo({ config, arquivo, pasta, agora = new Date
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
   try {
-    const config = lerArquivo(path.join(privado, 'comum', 'operacao.env'));
+    const config = lerArquivo(path.join(privado, 'comum', 'operacao.env'), { obrigatorio: true });
     const regras = configurarExpurgo(config);
     if (regras.ativo) console.log('Expurgo:', await executarExpurgo({ config, arquivo: localizarBanco(), pasta: path.join(portalPrivado, 'backups') }));
   } catch { console.error('Expurgo bloqueado: confira backup, banco e configuracao.'); process.exitCode = 1; }

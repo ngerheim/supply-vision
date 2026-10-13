@@ -19,5 +19,10 @@
     "nome": "chave vazia",
     "texto": " = invalida\n",
     "erro": true
+  },
+  {
+    "nome": "arquivo obrigatorio ausente",
+    "ausente": true,
+    "erro": true
   }
 ]
