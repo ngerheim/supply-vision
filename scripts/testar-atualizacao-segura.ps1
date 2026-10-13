@@ -1,4 +1,4 @@
-# Exercita a conferencia real do atualizador com Git simulado, sem parar servicos.
+﻿# Exercita a conferencia real do atualizador com Git simulado, sem parar servicos.
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'operacao-logica.ps1')
 $source = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'atualizar-servidor.ps1') -Raw
@@ -47,3 +47,31 @@ $Reaplicar=$argumentos -contains '-Reaplicar'
 . $decidir
 if (!$mexeuNode -or !$mexeuPython) { throw 'Reparo sem diff dispensou dependencias.' }
 Write-Host '[OK] Reexecucao do reparo reinstala Node e Python.'
+
+# Codigo 3 do backup (inclusive prazo da rede): o bloco real preserva a copia
+# local e o reinicio real reabilita/dispara a tarefa, sem Agendador neste teste.
+$pastaBackupTeste=Join-Path ([IO.Path]::GetTempPath()) ('sv-backup-prazo-'+[guid]::NewGuid().ToString('N'))
+try {
+ New-Item -ItemType Directory -Path $pastaBackupTeste|Out-Null
+ $BackupAntesAtualizacaoOrigem=Join-Path $pastaBackupTeste 'local.sqlite'
+ $BackupAntesAtualizacao=Join-Path $pastaBackupTeste 'pre-atualizacao.sqlite'
+ Set-Content -LiteralPath $BackupAntesAtualizacaoOrigem 'snapshot local ficticio validado'
+ $ast=[Management.Automation.Language.Parser]::ParseFile((Join-Path $PSScriptRoot 'atualizar-servidor.ps1'),[ref]$null,[ref]$null)
+ $bloco=$ast.Find({param($n) $n-is[Management.Automation.Language.IfStatementAst]-and$n.Extent.Text.Contains("Etapa 'Backup do banco antes de trocar a versao'")},$true)
+ $reinicio=$ast.Find({param($n) $n-is[Management.Automation.Language.FunctionDefinitionAst]-and$n.Name-eq'Iniciar-OperacaoAtualizada'},$true)
+ function nodeBackupTeste {$global:LASTEXITCODE=3}
+ function Testar-SupervisorEncerrado {return $false}
+ function Parar-OperacaoAtualizacao {}
+ function Aviso {param($Texto);$script:avisoBackup=$Texto}
+ function Enable-ScheduledTask {$script:habilitouBackup=$true}
+ function Start-ScheduledTask {$script:retomouBackup=$true}
+ $Node='nodeBackupTeste';$Portal=$pastaBackupTeste;$Raiz=$pastaBackupTeste;$JaAtualizado=$false
+ $script:TarefaSemLogin=$true;$script:habilitouBackup=$false;$script:retomouBackup=$false
+ . ([scriptblock]::Create($bloco.Extent.Text))
+ if(!(Test-Path $BackupAntesAtualizacao)-or(Get-Content $BackupAntesAtualizacao -Raw)-ne(Get-Content $BackupAntesAtualizacaoOrigem -Raw)){throw 'Codigo 3 perdeu a copia local'}
+ if($script:avisoBackup-notmatch 'rede falhou ou excedeu o prazo'){throw 'Prazo de rede nao explica continuidade'}
+ . ([scriptblock]::Create($reinicio.Extent.Text))
+ Iniciar-OperacaoAtualizada
+ if(!$script:habilitouBackup-or!$script:retomouBackup){throw 'Retomada nao reabilitou/disparou tarefa'}
+ Write-Host '[OK] Prazo da rede: copia local preservada; codigo 3 continua e tarefa e retomada.'
+} finally {Remove-Item -LiteralPath $pastaBackupTeste -Recurse -Force}

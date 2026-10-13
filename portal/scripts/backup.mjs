@@ -1,7 +1,9 @@
 import { modoEnsaio } from './modo-ensaio.mjs';
 import { pathToFileURL } from 'node:url';
 import { comBackupExclusivo } from './backup-exclusivo.mjs';
-import { createHash } from 'node:crypto';
+import { fork } from 'node:child_process';
+import { hashArquivo } from './backup-rede.mjs';
+export { hashArquivo } from './backup-rede.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -10,17 +12,6 @@ import { criarTransportador, lerConfig, lerConfigBruta, portalPrivado } from './
 import { DIAS_RETENCAO, guardarNoHistorico } from './retencao-backup.mjs';
 import { localizarBanco as localizarBancoLocal } from './banco-local.mjs';
 import { montarCasca, escapar, paleta } from '../lib/email-visual.ts';
-
-// Leitura em blocos limita a memoria independentemente do tamanho do banco.
-export function hashArquivo(arquivo) {
-  const hash = createHash('sha256'), bloco = Buffer.allocUnsafe(1024 * 1024);
-  const fd = fs.openSync(arquivo, 'r');
-  try {
-    let lidos;
-    while ((lidos = fs.readSync(fd, bloco, 0, bloco.length, null)) > 0) hash.update(bloco.subarray(0, lidos));
-    return hash.digest('hex');
-  } finally { fs.closeSync(fd); }
-}
 
 const pastaBackup = path.join(portalPrivado, 'backups');
 const arquivoFinal = path.join(pastaBackup, 'portal-atual.sqlite');
@@ -56,28 +47,33 @@ export function criarCopiaIntegra(origem) {
   console.log(`Historico local: copia do dia guardada (${DIAS_RETENCAO} dias)${apagados.length ? `; removidos: ${apagados.join(', ')}` : ''}.`);
 }
 
-export function replicarNaRede(config) {
+export function prazoRedeMs(config) {
+  const segundos = Number(config.BACKUP_NETWORK_TIMEOUT_SECONDS?.trim() || '600');
+  if (!Number.isInteger(segundos) || segundos < 1 || segundos > 86400)
+    throw new Error('BACKUP_NETWORK_TIMEOUT_SECONDS deve ser inteiro entre 1 e 86400.');
+  return segundos * 1000;
+}
+export async function replicarNaRede(config, { origem = arquivoFinal, prazoMs, iniciar = () => fork(new URL('./backup-rede.mjs', import.meta.url), [], { execArgv: [], stdio: ['ignore','ignore','ignore','ipc'] }) } = {}) {
   const pastaRede = config.BACKUP_NETWORK_DIR?.trim();
   if (!pastaRede) return null;
-  fs.mkdirSync(pastaRede, { recursive: true });
-  const final = path.join(pastaRede, 'portal-atual.sqlite');
-  const temporario = path.join(pastaRede, 'portal-atual.tmp.sqlite');
-  const anterior = path.join(pastaRede, 'portal-atual.anterior.sqlite');
-  fs.rmSync(temporario, { force: true });
-  fs.copyFileSync(arquivoFinal, temporario);
-  const hashLocal = hashArquivo(arquivoFinal);
-  const hashRede = hashArquivo(temporario);
-  if (hashLocal !== hashRede) { fs.rmSync(temporario, { force: true }); throw new Error('A copia do backup na rede nao confere com a copia local.'); }
-  fs.rmSync(anterior, { force: true });
-  if (fs.existsSync(final)) fs.renameSync(final, anterior);
-  try { fs.renameSync(temporario, final); }
-  catch (erro) { if (fs.existsSync(anterior)) fs.renameSync(anterior, final); throw erro; }
-  fs.rmSync(anterior, { force: true });
-  console.log(`Copia atual na rede confirmada (SHA-256 ${hashRede.slice(0, 16)}).`);
-  // O historico tambem vai para a rede: se o notebook for perdido, e dela
-  // que se volta a um dia anterior ao erro.
-  guardarNoHistorico(pastaRede, final);
-  return final;
+  const limite = prazoMs ?? prazoRedeMs(config);
+  const resultado = await new Promise((resolve, reject) => {
+    const filho = iniciar();
+    let resposta, excedeu = false;
+    const timer = setTimeout(() => { excedeu = true; filho.kill('SIGKILL'); }, limite);
+    filho.once('error', erro => { clearTimeout(timer); reject(erro); });
+    filho.on('message', valor => { resposta = valor; });
+    filho.once('exit', codigo => {
+      clearTimeout(timer);
+      // Confirma o encerramento antes de liberar a trava ou retomar a operacao.
+      if (excedeu) reject(new Error(`Prazo do backup em rede excedido (${limite / 1000} s); processo encerrado, copia local validada preservada.`));
+      else if (codigo !== 0 || !resposta?.ok) reject(new Error(resposta?.erro || 'Processo de backup em rede falhou.'));
+      else resolve(resposta);
+    });
+    filho.send({ origem, pastaRede });
+  });
+  console.log(`Copia atual na rede confirmada (SHA-256 ${resultado.hash.slice(0, 16)}).`);
+  return resultado.arquivo;
 }
 async function enviar(config, copiaNaRede) {
   if (!config.BACKUP_EMAIL_TO) throw new Error('BACKUP_EMAIL_TO nao configurado.');
@@ -140,10 +136,10 @@ export async function executarBackup({ preAtualizacao = false, ensaio = modoEnsa
   copiar();
   if (ensaio) { console.log('ensaio: envio suprimido; backup local validado, backup em rede bloqueado.'); return 0; }
   let copiaNaRede;
-  try { copiaNaRede = rede(); }
+  try { copiaNaRede = await rede(); }
   catch (erro) {
     if (!preAtualizacao) throw erro;
-    registrar('AVISO: backup local validado; copia de rede falhou.');
+    registrar(`AVISO: backup local validado; copia de rede falhou. ${erro instanceof Error ? erro.message : ''}`);
     return 3;
   }
   try { await email(copiaNaRede); }
