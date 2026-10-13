@@ -35,7 +35,7 @@ jobs:
       - run: npm ci
       # A partida padrao nao pode precisar de suporte TypeScript implicito.
       - run: node --test tests/iniciar-portal.test.mjs tests/ip-login.test.mjs
-      - run: node --experimental-strip-types --test tests/operacao-dados.test.mjs tests/backup-atualizacao.test.mjs
+      - run: node --experimental-strip-types --test tests/operacao-dados.test.mjs tests/backup-atualizacao.test.mjs tests/chamados-paginacao.test.mjs
 
   powershell:
     name: PowerShell

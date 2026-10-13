@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { configurarExpurgo, executarExpurgo, expurgar } from '../scripts/expurgar-dados.mjs';
-import { CRIAR_CONTADOR_CHAMADOS_SQL, MIGRAR_CONTADOR_CHAMADOS_SQL, RESERVAR_CODIGO_CHAMADO_SQL, filtroChamados, joinContagemHistorico } from '../lib/operacao-dados.ts';
+import { CRIAR_CONTADOR_CHAMADOS_SQL, MIGRAR_CONTADOR_CHAMADOS_SQL, RESERVAR_CODIGO_CHAMADO_SQL, filtroChamados, joinContagemHistorico, dadosBuscaChamado } from '../lib/operacao-dados.ts';
 import { IpConcurrencyGate, KeyedConcurrencyGate } from '../lib/concurrency.ts';
 const agora = new Date('2026-10-09T12:00:00Z');
 const dias = n => new Date(agora.getTime() - n * 86400_000).toISOString();
@@ -65,8 +65,8 @@ void test('contador migra existentes uma vez e reserva numeros sem varrer chamad
 void test('busca e situacao filtram antes da paginacao; contagem historico usa users somente com busca', () => {
   const db=new DatabaseSync(':memory:');
   try {
-    db.exec('CREATE TABLE tickets(id TEXT,code TEXT,supplier_name TEXT,city TEXT,state TEXT,status TEXT,updated_at TEXT);CREATE INDEX idx_updated ON tickets(updated_at DESC,id DESC)');
-    for(let i=0;i<125;i++)db.prepare('INSERT INTO tickets VALUES(?,?,?,?,?,?,?)').run(String(i),`SUP-${i}`,'Fornecedor',null,null,i<120?'aberto':'fechado',String(i).padStart(3,'0'));
+    db.exec('CREATE TABLE tickets(id TEXT,code TEXT,supplier_name TEXT,city TEXT,state TEXT,status TEXT,updated_at TEXT,search_text TEXT,supplier_sort TEXT);CREATE INDEX idx_updated ON tickets(updated_at DESC,id DESC)');
+    for(let i=0;i<125;i++){const dados=dadosBuscaChamado({code:`SUP-${i}`,supplier_name:'Fornecedor',city:null,state:null});db.prepare('INSERT INTO tickets VALUES(?,?,?,?,?,?,?,?,?)').run(String(i),`SUP-${i}`,'Fornecedor',null,null,i<120?'aberto':'fechado',String(i).padStart(3,'0'),dados.searchText,dados.supplierSort);}
     const {where,values}=filtroChamados(new URLSearchParams('group=ativos&q=Fornecedor'));
     assert.equal(db.prepare(`SELECT COUNT(*) n FROM tickets t ${where}`).get(...values).n,120);
     assert.equal(db.prepare(`SELECT id FROM tickets t ${where} ORDER BY updated_at DESC,id DESC LIMIT 50 OFFSET 100`).all(...values).length,20);
