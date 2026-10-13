@@ -10,6 +10,7 @@ import { DatabaseSync } from 'node:sqlite';
 import * as XLSX from 'xlsx';
 import { abrirRequisicao, multipart } from './cliente-http.mjs';
 import { verificarAcessoConsulta } from './verificar-acesso-consulta.mjs';
+import { LIMITE_LISTA } from '../lib/limites-entrada.ts';
 import { verificarFiltrosBusca } from './verificar-filtros-busca.mjs';
 
 const portal = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -253,6 +254,17 @@ try {
     const dados=JSON.parse(registro.details);
     assert.equal(dados.antes.notes,a.notes);assert.equal(dados.depois.notes,'Observacao revisada');
     assert.equal((await good(`/api/agreements/${agreementId}`)).agreement.notes,'Observacao revisada');
+  });
+  await check('Limites de listas sao conferidos pelas rotas reais antes do banco', async () => {
+    for (const quantidade of [LIMITE_LISTA, LIMITE_LISTA + 1]) {
+      const ids=Array.from({length:quantidade},(_,i)=>`inexistente-${i}`);
+      const acordo=await request('/api/agreements',{method:'POST',body:{number:'LIMITE-TESTE',supplierId:supplier.id,startDate:'2026-01-01',locationIds:ids}});
+      assert.equal(acordo.status,400);
+      assert.equal(/acima do limite/.test(acordo.data.error),quantidade>LIMITE_LISTA);
+      const condicao=await request(`/api/agreements/${agreementId}/items`,{method:'POST',body:{catalogItemId:item.id,locationId:location.id,unitId:unit.id,price:10,modelIds:ids}});
+      assert.equal(condicao.status,400);
+      assert.equal(/no máximo/.test(condicao.data.error),quantidade>LIMITE_LISTA);
+    }
   });
   const replace = `/api/imports/agreement/${agreementId}`;
   await check('Upload excedido mantido aberto libera reserva em prazo limitado', async () => {
