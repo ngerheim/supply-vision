@@ -9,8 +9,11 @@ export const privado = path.resolve(process.env.SUPPLY_VISION_PRIVADO || path.jo
 export const portalPrivado = path.join(privado, 'portal');
 
 // Contrato: testes/fixtures/configuracao-env.json; linhas malformadas sao erro.
-export function lerArquivo(arquivo) {
-  if (!fs.existsSync(arquivo)) return {};
+export function lerArquivo(arquivo, { obrigatorio = false } = {}) {
+  if (!fs.existsSync(arquivo)) {
+    if (obrigatorio) throw new Error('Configuracao obrigatoria ausente.');
+    return {};
+  }
   const config = {};
   for (const linha of fs.readFileSync(arquivo, 'utf8').split(/\r?\n/)) {
     const limpa = linha.trim();
