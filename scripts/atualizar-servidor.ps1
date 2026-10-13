@@ -42,26 +42,6 @@ $BackupAntesAtualizacao = Join-Path $PastaBackupPortal 'pre-atualizacao.sqlite'
 function Etapa([string]$t) { Write-Host "`n== $t ==" -ForegroundColor Cyan }
 function Ok([string]$t) { Write-Host "   $t" -ForegroundColor Green }
 function Aviso([string]$t) { Write-Host "   $t" -ForegroundColor Yellow }
-function Garantir-CredencialPortal {
-  $portalEnv = Join-Path (Obter-PastaPrivada $Raiz) 'portal\configuracao\portal.env'
-  if (-not (Test-Path -LiteralPath $portalEnv -PathType Leaf)) { throw "Configuracao do Portal ausente: $portalEnv" }
-  $linha = @(Get-Content -LiteralPath $portalEnv) | Where-Object { $_ -match '^\s*PORTAL_API_TOKEN\s*=\s*(\S+)\s*$' } | Select-Object -Last 1
-  $tokenAtual = if ($linha) { ($linha -split '=', 2)[1].Trim() } else { '' }
-  if ($tokenAtual -notmatch '^[0-9a-fA-F]{64}$') {
-    $bytes = New-Object byte[] 32
-    $gerador = [Security.Cryptography.RandomNumberGenerator]::Create()
-    try { $gerador.GetBytes($bytes) } finally { $gerador.Dispose() }
-    $tokenAtual = ($bytes | ForEach-Object { $_.ToString('x2') }) -join ''
-    $conteudo = Get-Content -LiteralPath $portalEnv -Raw
-    if ($conteudo -match '(?m)^\s*PORTAL_API_TOKEN\s*=') {
-      $conteudo = [regex]::Replace($conteudo, '(?m)^\s*PORTAL_API_TOKEN\s*=.*$', "PORTAL_API_TOKEN=$tokenAtual")
-    } else { $conteudo += "`r`nPORTAL_API_TOKEN=$tokenAtual`r`n" }
-    [IO.File]::WriteAllText($portalEnv, $conteudo, (New-Object Text.UTF8Encoding($false)))
-    Ok 'credencial interna do Portal criada ou reparada na configuracao privada'
-  }
-  $confirmacao = @(Get-Content -LiteralPath $portalEnv) | Where-Object { $_ -match '^\s*PORTAL_API_TOKEN\s*=\s*[0-9a-fA-F]{64}\s*$' }
-  if (-not $confirmacao) { throw 'A credencial interna do Portal nao foi gravada corretamente.' }
-}
 
 # Os arquivos de privado\ nao sao versionados: quando uma versao nova passa a
 # esperar uma chave que ainda nao existe no servidor, a validacao reprova e a
@@ -334,7 +314,7 @@ Reparar-ConfiguracaoPrivada
 
 # O Portal e os Alertas compartilham uma credencial local. Ela precisa existir
 # antes do build, porque o endpoint interno a incorpora no servidor.
-Garantir-CredencialPortal
+if (Garantir-CredencialPortal (Join-Path (Obter-PastaPrivada $Raiz) 'portal/configuracao/portal.env')) { Ok 'credencial interna do Portal criada ou reparada' }
 
 if ($mexeuNode) {
   Etapa 'Dependencias Node mudaram: npm.cmd ci'
@@ -369,7 +349,7 @@ foreach ($s in $suites) {
   Ok $s.nome
 }
 foreach ($t in @('validar-operacao.ps1', 'testar-operacao.ps1', 'testar-supervisor-isolado.ps1', 'testar-persistencia-alertas.ps1')) {
-  if ($t -eq 'validar-operacao.ps1') { Garantir-CredencialPortal }
+  if ($t -eq 'validar-operacao.ps1') { [void](Garantir-CredencialPortal (Join-Path (Obter-PastaPrivada $Raiz) 'portal/configuracao/portal.env')) }
   # ErrorActionPreference='Stop' transforma QUALQUER escrita em stderr de um
   # programa externo em erro terminante. Um teste que reprova escrevendo no
   # stderr derrubava o atualizador aqui, antes de Reverter -- a versao nova

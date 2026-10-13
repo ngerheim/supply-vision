@@ -1,4 +1,4 @@
-# Confere as duas guardas da credencial interna do Portal, usando as funcoes
+﻿# Confere as duas guardas da credencial interna do Portal, usando as funcoes
 # reais do validar-operacao.ps1 num diretorio de mentira.
 $ErrorActionPreference = 'Stop'
 $fonte = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'validar-operacao.ps1') -Raw
@@ -52,3 +52,21 @@ if ($rota -match '__PORTAL_API_TOKEN__') {
 }
 Write-Host '[OK] credencial entregue e lida em tempo de execucao'
 Write-Host 'Credencial do Portal: 4 conferencias aprovadas.' -ForegroundColor Green
+
+. (Join-Path $PSScriptRoot 'operacao-logica.ps1')
+$temp=Join-Path ([IO.Path]::GetTempPath()) ('sv-token-'+[guid]::NewGuid().ToString('N'))
+try {
+ New-Item -ItemType Directory $temp|Out-Null
+ $arquivo=Join-Path $temp 'portal.env'
+ foreach($valor in @('',('Ab'*32),'invalido',('a'*63),('g'*64))){
+  $texto="OUTRA=preservada`n";if($valor){$texto+="PORTAL_API_TOKEN=$valor`n"}
+  [IO.File]::WriteAllText($arquivo,$texto)
+  $alterada=Garantir-CredencialPortal $arquivo
+  $cfg=Ler-ConfigOperacao $arquivo
+  if($cfg.PORTAL_API_TOKEN-notmatch'^[0-9a-fA-F]{64}$'-or$cfg.OUTRA-ne'preservada'){throw 'Credencial ou configuracao incorreta.'}
+  if($valor-eq('Ab'*32)){
+   if($alterada-or[IO.File]::ReadAllText($arquivo)-cne$texto){throw 'Credencial valida foi regenerada ou arquivo alterado.'}
+  }elseif(!$alterada){throw 'Credencial ausente/invalida nao foi reparada.'}
+ }
+ Write-Host '[OK] credencial compartilhada: ausente, valida preservada e invalidas reparadas'
+}finally{Remove-Item -LiteralPath $temp -Recurse -Force}
