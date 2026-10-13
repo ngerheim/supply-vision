@@ -27,7 +27,7 @@ void test('paleta e a mesma usada pelos Alertas', () => {
 });
 
 void test('nao usa recurso que o Outlook descarta', () => {
-  const html = montarCasca('T', 'S', '<p>x</p>', { texto: 'Abrir', url: 'http://x/' });
+  const html = montarCasca('T', 'S', '<p>x</p>', { texto: 'Abrir', url: 'http://x.test/' });
   for (const proibido of ['<script', '<link', 'display:flex', 'display:grid',
     '<svg', '@media', 'position:absolute']) {
     assert.ok(!html.includes(proibido), `recurso incompativel: ${proibido}`);
@@ -41,7 +41,7 @@ void test('estrutura e tabela com estilo inline', () => {
 });
 
 void test('titulo, subtitulo e botao sao escapados', () => {
-  const html = montarCasca('5 < 10', 'a & b', '', { texto: '"ir"', url: 'http://x/?a=1&b=2' });
+  const html = montarCasca('5 < 10', 'a & b', '', { texto: '"ir"', url: 'http://x.test/?a=1&b=2' });
   assert.ok(html.includes('&lt;'));
   assert.ok(html.includes('&amp;'));
   assert.ok(!html.includes('5 < 10'));
@@ -49,7 +49,7 @@ void test('titulo, subtitulo e botao sao escapados', () => {
 
 void test('botao so aparece quando informado', () => {
   assert.ok(!montarCasca('T', 'S', '').includes('Abrir'));
-  assert.ok(montarCasca('T', 'S', '', { texto: 'Abrir', url: 'http://x/' }).includes('Abrir'));
+  assert.ok(montarCasca('T', 'S', '', { texto: 'Abrir', url: 'http://x.test/' }).includes('Abrir'));
 });
 
 void test('escapar cobre os cinco caracteres perigosos', () => {

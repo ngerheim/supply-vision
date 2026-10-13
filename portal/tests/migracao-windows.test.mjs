@@ -53,7 +53,7 @@ try{
     for(const pasta of ['comum','portal/configuracao','alertas/config','alertas/parametros','operacao','banco'])fs.mkdirSync(path.join(origem,pasta),{recursive:true});
     fs.writeFileSync(path.join(origem,'comum/operacao.env'),'MODO_ENSAIO=0\nLIMPEZA_HORARIO=03:00\nESPACO_MINIMO_GB=1\n');
     fs.writeFileSync(path.join(origem,'comum/smtp.env'),'SMTP_PASS=SEGREDO-FICTICIO');
-    fs.writeFileSync(path.join(origem,'portal/configuracao/portal.env'),'PORTAL_URL=http://antigo:3000\nBACKUP_NETWORK_DIR=\\\\inexistente\\fixture\n');
+    fs.writeFileSync(path.join(origem,'portal/configuracao/portal.env'),'PORTAL_URL=http://antigo.test:3000\nBACKUP_NETWORK_DIR=\\\\inexistente\\fixture\n');
     fs.writeFileSync(path.join(origem,'operacao/estado.json'),'{}');
     const dbpath=path.join(origem,'banco/portal.sqlite'),db=new DatabaseSync(dbpath);
     for(const [,ddl] of fs.readFileSync(path.join(root,'portal/lib/database.ts'),'utf8').matchAll(/`(CREATE TABLE IF NOT EXISTS [^`]+)`/g))db.exec(ddl);
