@@ -265,12 +265,12 @@ function Tickets({busy,users,agreements,run,initialDetail}:JsonData){
   const [loadError,setLoadError]=useState('');
   const [consulta]=useState(()=>criarConsultaDebounced<AnyRow>(setData,erro=>setLoadError(errorText(erro))));
   const ultimaBusca=useRef(q);
-  const load=useCallback((atraso=0)=>{setLoadError('');consulta.executar(signal=>api(`/api/tickets?page=${page}&pageSize=50&group=${group}&q=${encodeURIComponent(q)}${querySort}`,{signal}),atraso)},[page,group,q,querySort,consulta]);
+  const load=useCallback(async(atraso=0)=>{setLoadError('');await consulta.executar(signal=>api(`/api/tickets?page=${page}&pageSize=50&group=${group}&q=${encodeURIComponent(q)}${querySort}`,{signal}),atraso)},[page,group,q,querySort,consulta]);
   useEffect(()=>{
     let active=true;
     const atraso=q!==ultimaBusca.current?300:0;
     ultimaBusca.current=q;
-    queueMicrotask(()=>{if(active)load(atraso)});
+    queueMicrotask(()=>{if(active)void load(atraso)});
     return()=>{active=false;consulta.cancelar()};
   },[load,q,consulta]);
   if(loadError)return <FalhaDeCarregamento erro={loadError} tentar={()=>void load()}/>;

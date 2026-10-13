@@ -61,3 +61,15 @@ void test('desmontagem cancela timer e pedido; falha vigente continua visivel', 
   consulta.executar(signal => { sinal = signal; return new Promise(() => {}); }, 0);
   t.mock.timers.tick(0); consulta.cancelar(); assert.equal(sinal.aborted, true);
 });
+
+void test('recarga manual so conclui depois da resposta; cancelamento libera quem aguarda', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  let responder!: () => void, concluiu = false;
+  const consulta = criarConsultaDebounced(() => {}, () => assert.fail('Sem erro esperado'));
+  t.after(consulta.cancelar);
+  const resposta = consulta.executar(() => new Promise<void>(resolve => { responder = resolve; }), 0).then(() => { concluiu = true; });
+  t.mock.timers.tick(0); await setImmediate(); assert.equal(concluiu, false);
+  responder(); await resposta; assert.equal(concluiu, true);
+  const cancelada = consulta.executar(() => new Promise(() => {}));
+  consulta.cancelar(); await cancelada;
+});

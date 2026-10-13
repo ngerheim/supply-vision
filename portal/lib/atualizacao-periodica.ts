@@ -41,11 +41,14 @@ export function criarConsultaDebounced<T>(receber: (resultado: T) => void, falha
   let sequencia = 0;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let controller: AbortController | undefined;
+  let finalizar: (() => void) | undefined;
   const cancelar = () => {
     sequencia++;
     if (timer !== undefined) clearTimeout(timer);
     timer = undefined;
     controller?.abort();
+    finalizar?.();
+    finalizar = undefined;
   };
   return {
     cancelar,
@@ -53,7 +56,9 @@ export function criarConsultaDebounced<T>(receber: (resultado: T) => void, falha
       cancelar();
       const pedido = sequencia, atual = new AbortController();
       controller = atual;
-      timer = setTimeout(() => {
+      return new Promise<void>(concluir => {
+        finalizar = concluir;
+        timer = setTimeout(() => {
         timer = undefined;
         void (async () => {
           try {
@@ -61,9 +66,13 @@ export function criarConsultaDebounced<T>(receber: (resultado: T) => void, falha
             if (!atual.signal.aborted && pedido === sequencia) receber(resultado);
           } catch (erro) {
             if (!atual.signal.aborted && pedido === sequencia) falhar(erro);
+          } finally {
+            concluir();
+            if (pedido === sequencia) finalizar = undefined;
           }
         })();
-      }, atraso);
+        }, atraso);
+      });
     },
   };
 }
