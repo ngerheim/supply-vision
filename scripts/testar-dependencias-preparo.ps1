@@ -33,6 +33,10 @@ function ValidarPythonMock {}
 function Registrar($Texto){Add-Content (Join-Path $Preparo 'passos.txt') $Texto}
 function Conferir-Isolamento {
  if($env:SV_PREPARO_RAIZ-ne$Preparo-or$env:TEMP-ne(Join-Path $Preparo '.cache')-or$env:SUPPLY_VISION_PRIVADO-ne(Join-Path $Preparo 'privado')-or$env:MODO_ENSAIO-ne'1'-or$env:PORTAL_BANCO_LOCAL-ne'sqlite'){throw 'Ambiente de producao herdado.'}
+ $cfg=Ler-ConfigOperacao (Join-Path $env:SUPPLY_VISION_PRIVADO 'portal/configuracao/portal.env')
+ $registro=Get-Content (Join-Path $Preparo ('.cache/preparo-portas/'+$PID.ToString()+'.json')) -Raw|ConvertFrom-Json
+ $porta=[int]$cfg['PORTAL_PORTA'];$relatorios=[int]$cfg['RELATORIOS_PORTA'];$url=[uri]$cfg['PORTAL_URL']
+ if($registro.pid-ne$PID-or@($registro.portas).Count-ne2-or$porta-eq$relatorios-or$porta-in@(3000,3001)-or$relatorios-in@(3000,3001)-or$registro.portas-notcontains$porta-or$registro.portas-notcontains$relatorios-or$url.Host-ne'127.0.0.1'-or$url.Port-ne$porta){throw 'Portas do preparo nao pertencem a fixture.'}
 }
 function git {$global:LASTEXITCODE=0;'2'*40}
 function npm.cmd {
