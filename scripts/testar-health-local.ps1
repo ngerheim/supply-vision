@@ -72,6 +72,14 @@ const server=http.createServer((req,res)=>{
  foreach($v in @($false,$true,$false,$false)){$saudavel=$v;$resultadoHealth=@{motivo='timeout';duracaoMs=200;http=0};. $bloco}
  if($falhasSaude-ne2-or$portalPronto-or$script:avisos-ne1){throw 'Duas falhas seguidas nao acionaram o aviso unico.'}
  if(@($script:logs|Where-Object {$_-like'Health falhou:*'}).Count-ne3){throw 'Nem toda falha foi registrada.'}
+ # Timer de HttpClient que nao conclui/cancela nao pode prender o supervisor.
+ $pendente=New-Object 'System.Threading.Tasks.TaskCompletionSource[System.Net.Http.HttpResponseMessage]'
+ $falso=New-Object PSObject -Property @{pedido=$pendente.Task;cancelou=$false}
+ $falso|Add-Member ScriptMethod GetAsync {param($Endereco);return $this.pedido}
+ $falso|Add-Member ScriptMethod CancelPendingRequests {$this.cancelou=$true}
+ $r=Consultar-HealthLocal @{cliente=$falso;prazoMs=100}
+ if($r.motivo-ne'timeout'-or!$falso.cancelou-or$r.duracaoMs-gt1500){throw 'Espera ignorou prazo quando cancelamento do HttpClient atrasou.'}
+ Write-Host 'OK health: espera limitada mesmo com timer/cancelamento pendente'
  Write-Host 'PASSOU: proxy, prazo total, HTTP, corpo, conexao, sigilo e duas falhas consecutivas.'
 }finally{
  [Net.WebRequest]::DefaultWebProxy=$proxyAntigo
