@@ -63,7 +63,8 @@ else{& (Join-Path $Preparo 'scripts/preparar-atualizacao.ps1') -Instalacao $Inst
 exit $LASTEXITCODE
 '@
   $arquivoRunner=Join-Path $preparo 'runner.ps1';[IO.File]::WriteAllText($arquivoRunner,$runner)
-  $saida=@(& $hostTeste -NoProfile -File $arquivoRunner $caso $instalacao $preparo 2>&1);$rc=$LASTEXITCODE
+  # Falhas provocadas escrevem em stderr; o codigo de saida decide o resultado.
+  $saida=@(Executar-PowerShellOculto @('-NoProfile','-File',$arquivoRunner,$caso,$instalacao,$preparo) $hostTeste);$rc=$LASTEXITCODE
   $passos=@(Get-Content (Join-Path $preparo 'passos.txt'))
   if(($rc-eq0)-ne($caso-in@('inalteradas','alteradas'))){throw "Preparo incorreto em $caso (rc=$rc): $saida"}
   if(($passos-contains'npm-ci')-ne($caso-eq'alteradas')-or($passos-contains'pip')-ne($caso-eq'alteradas')){throw "Decisao de dependencias incorreta: $caso"}
