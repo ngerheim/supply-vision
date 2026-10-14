@@ -41,6 +41,7 @@ try{
    try{Trocar-ArtefatosPreparo $raiz $preparo}catch{$falhou=$true;if($caso-eq'sucesso'){throw}}
    Exigir ($falhou-eq($caso-eq'falha-parcial')) 'Resultado inesperado da troca.'
    Exigir ((Get-Content (Join-Path $raiz 'portal/dist/versao'))-eq'nova') 'Dist nao entrou.'
+   if($caso-eq'falha-parcial'){Remove-Item (Join-Path $preparo 'trocado-portal-dist') -Force} # simula marcador perdido
    Restaurar-ArtefatosPreparo $raiz $preparo
    foreach($rel in @('portal/dist','portal/node_modules','alertas/.venv')){Exigir ((Get-Content (Join-Path $raiz "$rel/versao"))-eq'anterior') "Reversao incompleta: $rel"}
    Restaurar-ArtefatosPreparo $raiz $preparo # idempotente

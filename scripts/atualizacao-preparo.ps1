@@ -57,12 +57,13 @@ function Restaurar-ArtefatosPreparo([string]$Raiz,[string]$Preparo) {
  Validar-PastaPreparo $Raiz $Preparo
  foreach($rel in @('portal/dist','portal/node_modules','alertas/.venv')){
   $marca=Join-Path $Preparo ('trocado-'+($rel-replace'[/\\]','-'))
-  if(!(Test-Path -LiteralPath $marca)){continue}
   $destino=Join-Path $Raiz $rel;$antigo=Join-Path $Preparo ('anteriores/'+$rel);$falho=Join-Path $Preparo ('reprovados/'+$rel)
+  # Uma falha ao gravar o marcador pode vir DEPOIS de guardar o anterior.
+  if(!(Test-Path -LiteralPath $marca)-and!(Test-Path -LiteralPath $antigo)){continue}
   New-Item -ItemType Directory -Force (Split-Path $falho -Parent)|Out-Null
   if(Test-Path -LiteralPath $destino){[IO.Directory]::Move($destino,$falho)}
   if(Test-Path -LiteralPath $antigo){[IO.Directory]::Move($antigo,$destino)}
-  Remove-Item -LiteralPath $marca -Force
+  if(Test-Path -LiteralPath $marca){Remove-Item -LiteralPath $marca -Force}
  }
 }
 function Limpar-PastaPreparo([string]$Raiz,[string]$Preparo) {
