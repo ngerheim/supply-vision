@@ -1,6 +1,7 @@
 ﻿# Exercita a conferencia real do atualizador com Git simulado, sem parar servicos.
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'operacao-logica.ps1')
+function Executar-PowerShellOculto($Argumentos){ & powershell.exe @Argumentos }
 $source = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'atualizar-servidor.ps1') -Raw
 $start = $source.IndexOf("Etapa 'Conferindo o repositorio'")
 $end = $source.IndexOf('$mudou = git diff')
@@ -67,7 +68,10 @@ try {
  function Start-ScheduledTask {$script:retomouBackup=$true}
  $Node='nodeBackupTeste';$Portal=$pastaBackupTeste;$Raiz=$pastaBackupTeste;$JaAtualizado=$false
  $script:TarefaSemLogin=$true;$script:habilitouBackup=$false;$script:retomouBackup=$false
- . ([scriptblock]::Create($bloco.Extent.Text))
+ $inicioBackup=$source.IndexOf("  Etapa 'Backup do banco antes de trocar a versao'")
+ $fimBackup=$source.IndexOf('  Ok "copia de antes da atualizacao:', $inicioBackup)
+ $fimBackup=$source.IndexOf("`n",$fimBackup)
+ . ([scriptblock]::Create($source.Substring($inicioBackup,$fimBackup-$inicioBackup)))
  if(!(Test-Path $BackupAntesAtualizacao)-or(Get-Content $BackupAntesAtualizacao -Raw)-ne(Get-Content $BackupAntesAtualizacaoOrigem -Raw)){throw 'Codigo 3 perdeu a copia local'}
  if($script:avisoBackup-notmatch 'rede falhou ou excedeu o prazo'){throw 'Prazo de rede nao explica continuidade'}
  . ([scriptblock]::Create($reinicio.Extent.Text))

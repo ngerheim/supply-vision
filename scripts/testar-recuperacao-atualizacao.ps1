@@ -9,6 +9,8 @@ try {
     $raiz=Join-Path $pasta $caso
     foreach($dir in @('scripts','portal/scripts','alertas','compartilhado','privado/operacao','privado/portal/backups','privado/portal/configuracao','privado/comum')) { New-Item -ItemType Directory -Force (Join-Path $raiz $dir)|Out-Null }
     Copy-Item (Join-Path $raizReal 'scripts/operacao-logica.ps1') (Join-Path $raiz 'scripts')
+    Copy-Item (Join-Path $raizReal 'scripts/atualizacao-preparo.ps1') (Join-Path $raiz 'scripts')
+  Add-Content (Join-Path $raiz 'scripts/atualizacao-preparo.ps1') 'function Executar-PowerShellOculto($Argumentos){ & powershell.exe @Argumentos }'
     $fonte=Get-Content (Join-Path $raizReal 'scripts/atualizar-servidor.ps1') -Raw -Encoding UTF8
     # Injeta somente o executavel Python; o fluxo do atualizador e preservado.
     $fonte=$fonte.Replace("`$Python = Join-Path `$Alertas '.venv\Scripts\python.exe'", "`$Python = 'pythonmock'")
@@ -39,6 +41,15 @@ function git {
     'log' { 'Sintetico' }
     'reset' { $global:resetou=$true; Add-Content (Join-Path $Raiz 'reset.log') "reset $($args[2])" }
     'merge' { $global:novo=$true }
+    'worktree' {
+      if($args[1]-eq'add'){
+        $global:preparo=$args[3]
+        foreach($rel in @('portal/dist','portal/node_modules','alertas/.venv')){New-Item -ItemType Directory -Force (Join-Path $global:preparo $rel)|Out-Null}
+        [IO.File]::WriteAllText((Join-Path $global:preparo 'preparo-aprovado'),('2'*40))
+      }
+    }
+    '-C' {if($args[2]-eq'worktree'-and(Test-Path $global:preparo)){Remove-Item -LiteralPath $global:preparo -Recurse -Force}}
+
   }
 }
 function Localizar-NodeMaquina {return 'node'}
@@ -48,7 +59,7 @@ function Invoke-RestMethod { if($Caso -in @('saude-completa','consumidor')) { @{
 function node {
   $global:LASTEXITCODE=0
   $arquivo=@($args|Where-Object {$_-like '*.mjs'})|Select-Object -First 1
-  if($arquivo -like '*saude-operacao*' -and $Caso -in @('saude-completa','consumidor')){$global:LASTEXITCODE=1}
+  if(!$global:resetou -and $arquivo -like '*saude-operacao*' -and $Caso -in @('saude-completa','consumidor')){$global:LASTEXITCODE=1}
   if($arquivo -like '*restaurar-backup*') { Add-Content (Join-Path $Raiz 'restore.log') 'restore'; if($Caso -eq 'restauracao'){$global:LASTEXITCODE=1} }
 }
 function npm {
@@ -61,6 +72,7 @@ function pythonmock { $global:LASTEXITCODE=0; if($args[0] -eq '--version'){'Pyth
 function npm.cmd { npm @args }
 function powershell.exe {
   $global:LASTEXITCODE=0
+  if($args -contains '-Instalacao'){return}
   if($Caso -eq 'filho') {
     Gravar-EstadoOperacao (Join-Path $env:SUPPLY_VISION_PRIVADO 'operacao/atualizacao.json') @{anterior=('1'*40);remoto=('2'*40);fase='iniciada'}
     $global:LASTEXITCODE=1

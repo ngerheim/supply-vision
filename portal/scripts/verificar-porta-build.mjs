@@ -1,8 +1,15 @@
 // Vinext limpa dist antes de compilar. No Windows, o servidor pode manter
 // parte da pasta aberta: a limpeza parcial deixa a pagina sem CSS e JS.
 import { createConnection } from 'node:net';
+import path from 'node:path';
 
-const ocupada = await new Promise((resolve, reject) => {
+// So dispensa a porta publica dentro de um worktree de preparo isolado.
+const raiz = path.resolve(import.meta.dirname, '../..');
+const preparo = process.env.SV_PREPARO_RAIZ === raiz
+  && /^\..+-preparo-[0-9a-f]{32}$/.test(path.basename(raiz))
+  && process.env.SUPPLY_VISION_PRIVADO === path.join(raiz, 'privado');
+
+const ocupada = !preparo && await new Promise((resolve, reject) => {
   const socket = createConnection({ host: '127.0.0.1', port: 3000 });
   socket.once('connect', () => { socket.destroy(); resolve(true); });
   socket.once('error', (error) => {

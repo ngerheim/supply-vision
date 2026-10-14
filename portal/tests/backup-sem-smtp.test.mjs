@@ -17,7 +17,7 @@ for (const rede of [true, false]) void test(`backup sem SMTP ${rede ? 'replica n
   fs.mkdirSync(config,{recursive:true});
   fs.writeFileSync(path.join(config,'portal.env'),rede?`BACKUP_NETWORK_DIR=${pastaRede}\n`:'');
   const resultado=spawnSync(process.execPath,['--experimental-strip-types','scripts/backup.mjs'],{
-    cwd:path.resolve(import.meta.dirname,'..'),env:{...process.env,SUPPLY_VISION_PRIVADO:dir},encoding:'utf8',
+    cwd:path.resolve(import.meta.dirname,'..'),env:{...process.env,MODO_ENSAIO:'0',SUPPLY_VISION_PRIVADO:dir},encoding:'utf8',
   });
   assert.equal(resultado.status,rede?0:1,resultado.stderr);
   assert.ok(fs.existsSync(path.join(dir,'portal/backups/portal-atual.sqlite')));
@@ -28,4 +28,30 @@ for (const rede of [true, false]) void test(`backup sem SMTP ${rede ? 'replica n
     finally { copia.close(); }
     assert.equal(fs.readdirSync(path.join(pastaRede,'historico')).length,1);
   }
+});
+
+void test('CONCLUIR replica snapshot anterior mesmo se backup diario substituir portal-atual', (t) => {
+  const dir = criarTemporarioTeste('backup-snapshot-h1-');
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const backups = path.join(dir, 'portal/backups');
+  const config = path.join(dir, 'portal/configuracao');
+  const rede = path.join(dir, 'rede');
+  fs.mkdirSync(backups, { recursive: true });
+  fs.mkdirSync(config, { recursive: true });
+  fs.writeFileSync(path.join(config, 'portal.env'), `BACKUP_NETWORK_DIR=${rede}\n`);
+  for (const [nome, versao] of [['pre-atualizacao', 'anterior'], ['portal-atual', 'diario-novo']]) {
+    const db = new DatabaseSync(path.join(backups, `${nome}.sqlite`));
+    try { db.exec('CREATE TABLE teste(valor TEXT)'); db.prepare('INSERT INTO teste VALUES(?)').run(versao); }
+    finally { db.close(); }
+  }
+  const resultado = spawnSync(process.execPath, [
+    '--experimental-strip-types', 'scripts/backup.mjs', '--pre-atualizacao', '--somente-rede', '--snapshot-pre-atualizacao',
+  ], { cwd: path.resolve(import.meta.dirname, '..'), env: { ...process.env, MODO_ENSAIO: '0', SUPPLY_VISION_PRIVADO: dir }, encoding: 'utf8' });
+  assert.equal(resultado.status, 0, resultado.stderr);
+  const copia = new DatabaseSync(path.join(rede, 'portal-atual.sqlite'), { readOnly: true });
+  try { assert.equal(copia.prepare('SELECT valor FROM teste').get().valor, 'anterior'); }
+  finally { copia.close(); }
+  const atual = new DatabaseSync(path.join(backups, 'portal-atual.sqlite'), { readOnly: true });
+  try { assert.equal(atual.prepare('SELECT valor FROM teste').get().valor, 'diario-novo'); }
+  finally { atual.close(); }
 });

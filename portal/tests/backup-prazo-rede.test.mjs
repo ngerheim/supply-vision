@@ -9,6 +9,10 @@ import { DatabaseSync } from 'node:sqlite';
 import { executarBackup, replicarNaRede, prazoRedeMs, hashArquivo } from '../scripts/backup.mjs';
 import { limparTemporariosAntigos } from '../scripts/backup-rede.mjs';
 
+// Estes cenarios usam banco/rede locais descartaveis ou transporte falso.
+// O modo do atualizador nao pode suprimir a verificacao de envio/confirmacao.
+process.env.MODO_ENSAIO = '0';
+
 const worker=new URL('../scripts/backup-rede.mjs',import.meta.url);
 const temporario=id=>`portal-atual.${id.repeat(8)}-${id.repeat(4)}-4${id.repeat(3)}-8${id.repeat(3)}-${id.repeat(12)}.tmp.sqlite`;
 function fixture(t){
