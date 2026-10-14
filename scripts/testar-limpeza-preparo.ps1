@@ -15,6 +15,39 @@ try{
  $producao=Join-Path $raiz 'privado';New-Item -ItemType Directory $producao|Out-Null
  $sentinela=Join-Path $producao 'sentinela';[IO.File]::WriteAllText($sentinela,'preservar')
  (Get-Item $sentinela).IsReadOnly=$true
+ # Primeira atualizacao: o cancelamento pertence ao pai antigo. O preparador
+ # NOVO precisa remover a si proprio, sem exigir que o pai tenha a correcao.
+ $sobraLegada=Nova-PastaPreparo $raiz;$aprovadoLegado=Nova-PastaPreparo $raiz
+ New-Item -ItemType Directory $sobraLegada,$aprovadoLegado|Out-Null
+ [IO.File]::WriteAllText((Join-Path $sobraLegada 'residuo'),'preparo reprovado antigo')
+ [IO.File]::WriteAllText((Join-Path $aprovadoLegado 'preparo-aprovado'),'preservar para socorro')
+ $preparoLegado=Nova-PastaPreparo $raiz
+ & git -C $raiz worktree add --detach $preparoLegado --quiet
+ New-Item -ItemType Directory (Join-Path $preparoLegado 'scripts')|Out-Null
+ foreach($nome in @('atualizacao-preparo.ps1','operacao-logica.ps1','preparar-atualizacao.ps1')){Copy-Item (Join-Path $PSScriptRoot $nome) (Join-Path $preparoLegado 'scripts')}
+ [IO.File]::WriteAllText((Join-Path $preparoLegado 'scripts/preparar-configuracao-teste.ps1'),@'
+if($env:OS-eq'Windows_NT'){
+ $filho=Join-Path $env:SV_PREPARO_RAIZ 'segurar-handle.ps1'
+ [IO.File]::WriteAllText($filho,'param($Preparo) $h=[IO.File]::Open((Join-Path $Preparo "handle-bloqueado"),[IO.FileMode]::Create,[IO.FileAccess]::ReadWrite,[IO.FileShare]::None); [IO.File]::WriteAllText((Join-Path $Preparo "filho-pronto"),"ok"); while($true){Start-Sleep -Milliseconds 100}')
+ $p=Start-Process (Get-Process -Id $PID).Path -ArgumentList ('-NoProfile -File "'+$filho+'" "'+$env:SV_PREPARO_RAIZ+'"') -PassThru -WindowStyle Hidden
+ $limite=(Get-Date).AddSeconds(10)
+ while(!(Test-Path (Join-Path $env:SV_PREPARO_RAIZ 'filho-pronto'))){if((Get-Date)-gt$limite){throw 'Filho da fixture nao iniciou'};Start-Sleep -Milliseconds 100}
+ Write-Host "fixture-filho=$($p.Id)"
+}
+throw 'PREPARO_FALHA_COM_PAI_ANTIGO'
+'@)
+ $hostTeste=(Get-Process -Id $PID).Path
+ $saida=@(Executar-PowerShellOculto @('-NoProfile','-File',(Join-Path $preparoLegado 'scripts/preparar-atualizacao.ps1'),'-Instalacao',$raiz) $hostTeste)
+ Exigir-Limpeza ($LASTEXITCODE-eq1-and($saida-join' ')-like'*PREPARO_FALHA_COM_PAI_ANTIGO*') 'Falha do preparo novo nao confirmada.'
+ Exigir-Limpeza (!(Test-Path $preparoLegado)) "Preparador depende da limpeza do pai antigo: $saida"
+ Exigir-Limpeza (!(Test-Path $sobraLegada)-and(Test-Path $aprovadoLegado)) 'Bootstrap nao limpou reprovado antigo ou apagou preparo aprovado.'
+ Remover-ArvorePreparo $aprovadoLegado
+ if($env:OS-eq'Windows_NT'){
+  $texto=$saida-join' ';Exigir-Limpeza ($texto-match'fixture-filho=(\d+)') 'Fixture perdeu PID do filho com handle.'
+  Exigir-Limpeza (!(Get-Process -Id ([int]$Matches[1]) -ErrorAction SilentlyContinue)) 'Autolimpeza deixou filho do job vivo.'
+ }
+ Exigir-Limpeza (@(& git -C $raiz worktree list --porcelain|Where-Object {$_-like'worktree *'}).Count-eq1) 'Autolimpeza deixou registro Git.'
+ Write-Host '[OK] Preparador novo remove a propria pasta ao falhar com pai antigo.'
  foreach($caso in @('worktree','residual-sem-registro','transitoria','pendente')){
   $preparo=Nova-PastaPreparo $raiz
   if($caso-eq'worktree'){& git -C $raiz worktree add --detach $preparo --quiet;if($LASTEXITCODE){throw 'Worktree da fixture falhou.'}}

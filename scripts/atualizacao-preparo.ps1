@@ -102,6 +102,11 @@ namespace SupplyVision {
   [DllImport("kernel32.dll", SetLastError=true)] static extern bool AssignProcessToJobObject(IntPtr job, IntPtr process);
   [DllImport("kernel32.dll")] static extern IntPtr GetCurrentProcess();
   [DllImport("kernel32.dll")] static extern bool CloseHandle(IntPtr handle);
+  [DllImport("kernel32.dll")] static extern uint GetCurrentProcessId();
+  [DllImport("kernel32.dll", SetLastError=true)] static extern bool QueryInformationJobObject(IntPtr job, int kind, IntPtr info, uint size, out uint returned);
+  [DllImport("kernel32.dll", SetLastError=true)] static extern IntPtr OpenProcess(uint access, bool inherit, uint pid);
+  [DllImport("kernel32.dll", SetLastError=true)] static extern bool IsProcessInJob(IntPtr process, IntPtr job, out bool member);
+  [DllImport("kernel32.dll", SetLastError=true)] static extern bool TerminateProcess(IntPtr process, uint code);
   [DllImport("kernel32.dll", CharSet=CharSet.Unicode, SetLastError=true)] static extern uint GetFileAttributesW(string path);
   [DllImport("kernel32.dll", CharSet=CharSet.Unicode, SetLastError=true)] static extern bool SetFileAttributesW(string path, uint attrs);
   [DllImport("kernel32.dll", CharSet=CharSet.Unicode, SetLastError=true)] static extern IntPtr FindFirstFileW(string path, out FindData data);
@@ -125,6 +130,35 @@ namespace SupplyVision {
   public static void Remover(string path) {
    string full = Path.GetFullPath(path);
    RemoverInterno(full.StartsWith(@"\\") ? @"\\?\UNC\" + full.Substring(2) : @"\\?\" + full);
+  }
+  public static void EncerrarFilhos() {
+   if(job == IntPtr.Zero) return;
+   // O processo raiz precisa sobreviver para limpar seu proprio worktree.
+   // Revalida a associacao ao job para nao matar um PID reciclado da producao.
+   IntPtr buffer = Marshal.AllocHGlobal(65536);
+   DateTime limite = DateTime.UtcNow.AddSeconds(3);
+   try {
+    while(true) {
+     uint returned;
+     if(!QueryInformationJobObject(job, 3, buffer, 65536, out returned)) throw new Win32Exception();
+     int count = Marshal.ReadInt32(buffer, 4), filhos = 0;
+     for(int i = 0; i < count; i++) {
+      uint pid = (uint)(IntPtr.Size == 8 ? Marshal.ReadInt64(buffer, 8 + i * 8) : Marshal.ReadInt32(buffer, 8 + i * 4));
+      if(pid == GetCurrentProcessId()) continue;
+      filhos++;
+      IntPtr process = OpenProcess(0x1001, false, pid);
+      if(process == IntPtr.Zero) { int e = Marshal.GetLastWin32Error(); if(e == 87) continue; throw new Win32Exception(e); }
+      try {
+       bool member;
+       if(!IsProcessInJob(process, job, out member)) throw new Win32Exception();
+       if(member && !TerminateProcess(process, 1)) { int e = Marshal.GetLastWin32Error(); if(e != 5) throw new Win32Exception(e); }
+      } finally { CloseHandle(process); }
+     }
+     if(filhos == 0) return;
+     if(DateTime.UtcNow >= limite) throw new IOException("Filhos do PREPARAR nao encerraram em 3 s.");
+     System.Threading.Thread.Sleep(50);
+    }
+   } finally { Marshal.FreeHGlobal(buffer); }
   }
   static void RemoverInterno(string path) {
    uint attrs = GetFileAttributesW(path);
@@ -150,6 +184,9 @@ function Entrar-JobPreparo {
  if($env:OS-ne'Windows_NT'){return} # Suites portaveis usam processos simulados.
  Inicializar-PreparoNativo
  [SupplyVision.PreparoNativo]::EntrarJob()
+}
+function Encerrar-FilhosPreparo {
+ if($env:OS-eq'Windows_NT'){[SupplyVision.PreparoNativo]::EncerrarFilhos()}
 }
 function Processo-DestePreparo($Processo,[string]$Preparo) {
  $prefixo=[IO.Path]::GetFullPath($Preparo).TrimEnd('\','/')
@@ -203,11 +240,17 @@ function Limpar-PastaPreparo([string]$Raiz,[string]$Preparo) {
   throw "Limpeza do preparo pendente em $Preparo apos 4 tentativas: $ultimo"
  }finally{$ErrorActionPreference=$preferencia;$global:LASTEXITCODE=$codigoAntes}
 }
-function Limpar-PreparosAntigos([string]$Raiz,[hashtable]$Contexto=@{}) {
+function Limpar-PreparosAntigos([string]$Raiz,[hashtable]$Contexto=@{},[string]$PreparoAtual='', [switch]$SomenteReprovados) {
  Inicializar-PreparoNativo
  $prefixo='.'+(Split-Path $Raiz -Leaf)+'-preparo-'
  foreach($p in @(Get-ChildItem -LiteralPath (Split-Path $Raiz -Parent) -Directory -Force|Where-Object {$_.Name-match('^'+[regex]::Escape($prefixo)+'[0-9a-f]{32}$')})){
   try{Validar-PastaPreparo $Raiz $p.FullName}catch{Write-Warning $_.Exception.Message;continue}
+  if($p.FullName-eq$PreparoAtual){continue}
+  # Bootstrap pelo preparador novo: sem ler contexto privado da producao,
+  # conserva qualquer pasta que possa conter artefatos aprovados/de socorro.
+  if($SomenteReprovados-and((Test-Path (Join-Path $p.FullName 'preparo-aprovado'))-or(Test-Path (Join-Path $p.FullName 'anteriores')))){
+   Write-Warning "Preparo aprovado/recuperacao preservado: $($p.FullName)";continue
+  }
   if($Contexto.preparo-eq$p.FullName-and$Contexto.fase-in@('codigo','iniciada','recuperando')){Write-Warning "Preparo preservado para recuperacao: $($p.FullName)";continue}
   $emUso=$false
   foreach($nome in @('preparo-processo.json','preparo-atualizador.json')){

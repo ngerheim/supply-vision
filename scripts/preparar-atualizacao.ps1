@@ -24,6 +24,7 @@ $env:MINIFLARE_REGISTRY_PATH=Join-Path $Raiz '.cache/registry'
 # Antes de build/testes: a saida deste processo encerra a arvore inteira.
 Entrar-JobPreparo
 @{pid=$PID;inicio=(Get-Process -Id $PID).StartTime.ToUniversalTime().ToString('o')}|ConvertTo-Json|Set-Content (Join-Path $Raiz 'preparo-processo.json') -Encoding UTF8
+Limpar-PreparosAntigos $Instalacao -PreparoAtual $Raiz -SomenteReprovados
 function Executar-Preparo([scriptblock]$Comando,[string]$Falha) {
  $preferencia=$ErrorActionPreference;$inicio=[datetime]::UtcNow
  try{$ErrorActionPreference='Continue'; & $Comando; $codigo=$LASTEXITCODE}
@@ -83,4 +84,14 @@ try {
  }
  [IO.File]::WriteAllText((Join-Path $Raiz 'preparo-aprovado'),(& git rev-parse HEAD).Trim())
  exit 0
-}catch{Write-Error "PREPARAR falhou; operacao original continua no ar: $($_.Exception.Message)" -ErrorAction Continue;exit 1}
+}catch{
+ Write-Error "PREPARAR falhou; operacao original continua no ar: $($_.Exception.Message)" -ErrorAction Continue
+ try{
+  # Na primeira atualizacao o pai ainda e da versao anterior. Nao depender
+  # da limpeza antiga, que pode remover so o registro Git e deixar a pasta.
+  Encerrar-FilhosPreparo
+  Set-Location (Split-Path $Instalacao -Parent)
+  Limpar-PastaPreparo $Instalacao $Raiz
+ }catch{Write-Warning "PREPARAR: limpeza pendente em ${Raiz}: $($_.Exception.Message). A proxima atualizacao tentara limpar esta sobra."}
+ exit 1
+}

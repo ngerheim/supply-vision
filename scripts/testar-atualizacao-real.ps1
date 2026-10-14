@@ -167,10 +167,10 @@ try{
    if((Get-Content (Join-Path $privado 'operacao/supervisor.pid.json') -Raw|ConvertFrom-Json).pid-ne$pidBase){throw 'Supervisor original foi substituido no negativo.'}
    $pidsAntes=Get-Content (Join-Path $logs 'consumidores-antes.json') -Raw|ConvertFrom-Json
    foreach($nome in @('emails','relatorios')){if($pidsDepois[$nome]-ne$pidsAntes.$nome){throw "Consumidor $nome foi substituido no negativo."}}
-   if($caso-eq'negativo-final'){
-    $contexto=Get-Content (Join-Path $privado 'operacao/atualizacao.json') -Raw|ConvertFrom-Json
-    if($contexto.fase-ne'cancelado-preparo'-or$contexto.limpeza-ne'concluida'-or(Test-Path $contexto.preparo)){throw 'Negativo nao registrou cancelamento e limpeza do preparo.'}
-   }elseif(Test-Path (Join-Path $privado 'operacao/atualizacao.json')){throw 'Negativo da base alterou contexto de troca.'}
+   # A base atual ja inclui H2 e registra o cancelamento, inclusive no
+   # primeiro negativo. Contexto de cancelamento nao significa troca iniciada.
+   $contexto=Get-Content (Join-Path $privado 'operacao/atualizacao.json') -Raw|ConvertFrom-Json
+   if($contexto.fase-ne'cancelado-preparo'-or$contexto.limpeza-ne'concluida'-or(Test-Path $contexto.preparo)){throw 'Negativo nao registrou cancelamento e limpeza do preparo.'}
    Node-H2 -Argumentos @($apoio,'negativo',$raiz,$snapshot)
   }else{
    if(($null-ne$codigo-and$codigo-ne0)-or$head-ne$destino){throw 'Atualizacao nao chegou ao commit da PR.'}
