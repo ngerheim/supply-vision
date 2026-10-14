@@ -12,6 +12,7 @@ import { abrirRequisicao, multipart } from './cliente-http.mjs';
 import { verificarAcessoConsulta } from './verificar-acesso-consulta.mjs';
 import { LIMITE_LISTA } from '../lib/limites-entrada.ts';
 import { verificarFiltrosBusca } from './verificar-filtros-busca.mjs';
+import { passwordHash, PBKDF2_ITERACOES_LEGADO } from '../lib/criptografia.ts';
 
 const portal = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 fs.mkdirSync(path.join(portal, 'work'), { recursive: true });
@@ -168,6 +169,55 @@ try {
   assert.equal(login.status, 200); cookie = login.cookie;
   sqlitePath = locateSqlite(state); assert.ok(sqlitePath);
   reader = new DatabaseSync(sqlitePath, { readOnly: true });
+
+  await check('Cadastro recusa 9 caracteres e aceita 10 pela API', async () => {
+    const body = { name: 'Limite senha', email: 'limite-senha@teste.test', role: 'viewer', password: '123456789' };
+    const recusado = await request('/api/users', { method: 'POST', body });
+    assert.equal(recusado.status, 400);
+    assert.equal(recusado.data.error, 'A senha deve ter pelo menos 10 caracteres.');
+    assert.equal(query('SELECT id FROM users WHERE email=?', body.email).length, 0);
+    await good('/api/users', { method: 'POST', body: { ...body, password: '1234567890' } }, 201);
+    assert.equal((await request('/api/login', { method: 'POST', session: '', body: { email: body.email, password: '1234567890' } })).status, 200);
+  });
+
+  for (const propria of [false, true]) {
+    await check(`${propria ? 'Troca da propria senha' : 'Redefinicao pelo admin'} recusa 9 e aceita 10 caracteres`, async () => {
+      const email = `${propria ? 'propria' : 'admin-reset'}-senha@teste.test`;
+      const criado = await good('/api/users', { method: 'POST', body: { name: 'Limite troca', email, password: senha, role: propria ? 'admin' : 'viewer' } }, 201);
+      const login = await request('/api/login', { method: 'POST', session: '', body: { email, password: senha } });
+      assert.equal(login.status, 200);
+      const session = propria ? login.cookie : cookie;
+      const antes = query('SELECT * FROM users WHERE id=?', criado.id)[0];
+      const body = { expectedRevision: antes.revision, password: '123456789' };
+      const recusado = await request(`/api/users/${criado.id}`, { method: 'PUT', session, body });
+      assert.equal(recusado.status, 400);
+      assert.equal(recusado.data.error, 'A senha deve ter pelo menos 10 caracteres.');
+      assert.deepEqual(query('SELECT * FROM users WHERE id=?', criado.id)[0], antes);
+      assert.equal((await request('/api/session', { session: login.cookie })).data.user.id, criado.id);
+      // Campo vazio altera apenas o cadastro e preserva a senha atual.
+      await good(`/api/users/${criado.id}`, { method: 'PUT', session, body: { ...body, password: '' } });
+      const atual = query('SELECT * FROM users WHERE id=?', criado.id)[0];
+      assert.equal(atual.password_hash, antes.password_hash);
+      await good(`/api/users/${criado.id}`, { method: 'PUT', session, body: { expectedRevision: atual.revision, password: '1234567890' } });
+      assert.equal((await request('/api/session', { session: login.cookie })).data.user, null);
+      assert.equal((await request('/api/login', { method: 'POST', session: '', body: { email, password: '1234567890' } })).status, 200);
+    });
+  }
+
+  await check('Usuario existente com senha de 6 caracteres continua entrando', async () => {
+    const salt = 'sal-legado-ficticio', password = 'antiga';
+    const hash = await passwordHash(password, salt, PBKDF2_ITERACOES_LEGADO);
+    const db = new DatabaseSync(sqlitePath);
+    try {
+      db.prepare('INSERT INTO users(id,name,email,password_salt,password_hash,password_iterations,role,active,created_at) VALUES(?,?,?,?,?,?,?,?,?)')
+        .run('senha-legada-fixture', 'Legado ficticio', 'senha-legada@teste.test', salt, hash, PBKDF2_ITERACOES_LEGADO, 'viewer', 1, new Date().toISOString());
+    } finally { db.close(); }
+    const login = await request('/api/login', { method: 'POST', session: '', body: { email: 'senha-legada@teste.test', password } });
+    assert.equal(login.status, 200);
+    assert.equal(login.data.user.id, 'senha-legada-fixture');
+    assert.equal((await request('/api/bootstrap', { session: login.cookie })).status, 200);
+    assert.equal((await request('/api/login', { method: 'POST', session: '', body: { email: 'senha-legada@teste.test', password } })).status, 200);
+  });
 
   await check('Validacao de atualizacao permite consulta e bloqueia gravacoes HTTP', async()=>{
     const db=new DatabaseSync(sqlitePath),antes=businessSnapshot();
