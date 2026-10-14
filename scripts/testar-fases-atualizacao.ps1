@@ -7,7 +7,7 @@ $base=Join-Path ([IO.Path]::GetTempPath()) ('sv-fases-'+[guid]::NewGuid().ToStri
 $hostTeste=(Get-Process -Id $PID).Path
 $privadoAntes=$env:SUPPLY_VISION_PRIVADO
 try{
- foreach($caso in @('preparo-falha','sucesso','fumaca-falha','troca-parcial','rede-falha','ensaio')){
+ foreach($caso in @('preparo-falha','sucesso','fumaca-falha','troca-parcial','rede-falha','ensaio','medicao-ausente','relogio-falha','medicao-falha','fumaca-sem-medicao','fumaca-relogio-falha')){
   $raiz=Join-Path $base $caso
   foreach($dir in @('scripts','portal/scripts','portal/dist','portal/node_modules','alertas/.venv','privado/operacao','privado/portal/backups','privado/portal/configuracao','privado/comum','compartilhado')){New-Item -ItemType Directory -Force (Join-Path $raiz $dir)|Out-Null}
   Copy-Item (Join-Path $fonteRaiz 'scripts/operacao-logica.ps1') (Join-Path $raiz 'scripts')
@@ -16,6 +16,20 @@ try{
   $fonte=[IO.File]::ReadAllText((Join-Path $fonteRaiz 'scripts/atualizar-servidor.ps1'))
   $fonte=$fonte.Replace("`$Python = Join-Path `$Alertas '.venv\Scripts\python.exe'", "`$Python = 'pythonmock'")
   $fonte=$fonte.Replace("& (Join-Path `$Raiz 'INICIAR.bat') | Out-Null",'IniciarMock')
+  if($caso-in@('medicao-ausente','fumaca-sem-medicao')){
+   # Perde contexto antes de PARAR, exportacao e health, inclusive no filho.
+   $fonte=$fonte.Replace('Parar-OperacaoAtualizacao $PrazoParadaSegundos',('$script:MedicaoAtualizacao=$null; Parar-OperacaoAtualizacao $PrazoParadaSegundos'))
+   $fonte=$fonte.Replace('$env:SV_MEDICAO_ATUALIZACAO=Exportar-MedicaoAtualizacao',('$script:MedicaoAtualizacao=$null; $env:SV_MEDICAO_ATUALIZACAO=Exportar-MedicaoAtualizacao'))
+   $fonte=$fonte.Replace('Ok "Portal e consumidores no ar em $url"',('$script:MedicaoAtualizacao=$null; Ok "Portal e consumidores no ar em $url"'))
+  }
+  if($caso-in@('relogio-falha','fumaca-relogio-falha')){
+   $fonte=$fonte.Replace('$script:MedicaoAtualizacao=$null',('$script:MedicaoAtualizacao=@{relogio={throw "relogio ficticio falhou"}}'))
+  }
+  if($caso-eq'medicao-falha'){
+   $comeco=$fonte.IndexOf('function Nova-MedicaoAtualizacao')
+   $corpo=$fonte.IndexOf("`n",$comeco)+1
+   $fonte=$fonte.Insert($corpo," throw 'inicializacao da medicao falhou'`n")
+  }
   [IO.File]::WriteAllText((Join-Path $raiz 'scripts/atualizar-servidor.ps1'),$fonte)
   foreach($arquivo in @('portal/portal.env.example','compartilhado/smtp.env.example','compartilhado/operacao.env.example','privado/comum/smtp.env','privado/comum/operacao.env')){[IO.File]::WriteAllText((Join-Path $raiz $arquivo),'')}
   [IO.File]::WriteAllText((Join-Path $raiz 'privado/portal/configuracao/portal.env'),('PORTAL_API_TOKEN='+('a'*64)))
@@ -55,7 +69,7 @@ function node {
  if(($args-join' ')-like'*restaurar-backup*'){Registrar 'banco-restaurado';Copy-Item (Join-Path $Raiz 'privado/portal/backups/portal-atual.sqlite') (Join-Path $Raiz 'privado/banco-ficticio') -Force}
  if(($args-join' ')-like'*saude-operacao*'){
   Registrar 'fumaca'
-  if($Caso-eq'fumaca-falha'-and!$global:resetou){$global:LASTEXITCODE=1}
+  if($Caso-in@('fumaca-falha','fumaca-sem-medicao','fumaca-relogio-falha')-and!$global:resetou){$global:LASTEXITCODE=1}
  }
 }
 function Invoke-RestMethod {@{status='ok'}}
@@ -83,20 +97,20 @@ exit $LASTEXITCODE
   # O lancador drena stderr como texto sem NativeCommandError no PS 5.1.
   $saida=@(Executar-PowerShellOculto @('-NoProfile','-File',(Join-Path $raiz 'runner.ps1'),$caso,$raiz) $hostTeste);$rc=$LASTEXITCODE
   $passos=@(Get-Content (Join-Path $raiz 'passos.txt'))
-  if(($rc-eq0)-ne($caso-in@('sucesso','rede-falha','ensaio'))){throw "Resultado incorreto em $caso (rc=$rc): $saida"}
+  if(($rc-eq0)-ne($caso-in@('sucesso','rede-falha','ensaio','medicao-ausente','relogio-falha','medicao-falha'))){throw "Resultado incorreto em $caso (rc=$rc): $saida"}
   foreach($rel in @('portal/dist','portal/node_modules','alertas/.venv')){
-   $esperado=if($caso-in@('sucesso','rede-falha','ensaio')){'nova'}else{'anterior'}
+   $esperado=if($caso-in@('sucesso','rede-falha','ensaio','medicao-ausente','relogio-falha','medicao-falha')){'nova'}else{'anterior'}
    if((Get-Content (Join-Path $raiz "$rel/versao"))-ne$esperado){throw "Artefato incorreto: $caso / $rel; $saida"}
   }
   if($caso-eq'preparo-falha'){
    if($passos-contains'backup-local'-or$passos-contains'commit-novo'-or(Test-Path (Join-Path $raiz 'privado/operacao/parar.sinal'))){throw 'Preparo reprovado parou/alterou a instalacao.'}
-  }elseif($caso-in@('sucesso','rede-falha','ensaio')){
+  }elseif($caso-in@('sucesso','rede-falha','ensaio','medicao-ausente','relogio-falha','medicao-falha')){
    if([array]::IndexOf($passos,'backup-rede')-lt[array]::IndexOf($passos,'fumaca')-or$passos-notcontains'reexecucao'){throw 'Rede fora da fase CONCLUIR ou faltou reexecucao.'}
   }else{
    if($passos-notcontains'commit-anterior'){throw 'Commit nao foi revertido.'}
-   if(($passos-contains'banco-restaurado')-ne($caso-eq'fumaca-falha')){throw 'Restauracao de snapshot incorreta.'}
+   if(($passos-contains'banco-restaurado')-ne($caso-in@('fumaca-falha','fumaca-sem-medicao','fumaca-relogio-falha'))){throw 'Restauracao de snapshot incorreta.'}
   }
-  $bancoEsperado=if($caso-in@('sucesso','rede-falha','ensaio')){'banco-migrado'}else{'banco-anterior'}
+  $bancoEsperado=if($caso-in@('sucesso','rede-falha','ensaio','medicao-ausente','relogio-falha','medicao-falha')){'banco-migrado'}else{'banco-anterior'}
   if((Get-Content (Join-Path $raiz 'privado/banco-ficticio'))-ne$bancoEsperado){throw 'Snapshot nao foi restaurado completamente.'}
   if(@(Get-ChildItem -LiteralPath $base -Force|Where-Object Name -Like ".${caso}-preparo-*").Count){throw 'Preparo nao foi limpo.'}
   Write-Host "[OK] Fases H1: $caso"

@@ -91,6 +91,8 @@ jobs:
         env:
           SV_TESTES_INTEGRACAO_WINDOWS: '1'
         run: |
+          ./scripts/testar-medicao-tolerante.ps1
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
           ./scripts/testar-atualizacao-rapida.ps1
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           ./scripts/testar-fases-atualizacao.ps1

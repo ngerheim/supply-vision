@@ -25,73 +25,131 @@ $Raiz = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 . (Join-Path $PSScriptRoot 'operacao-logica.ps1')
 . (Join-Path $PSScriptRoot 'atualizacao-preparo.ps1')
 # Medicao sem dados de configuracao; falha ao registrar nunca muda a atualizacao.
+# Entrada direta/central/filho inicializam aqui. Blocos isolados podem nao ter
+# contexto nem helpers; a parada tem fallback UTC e a instrumentacao e opcional.
+function Obter-HoraMedicaoAtualizacao($Medicao) {
+ $codigoMedicao=Get-Variable -Name LASTEXITCODE -Scope Global -ValueOnly -ErrorAction SilentlyContinue
+ try{
+  $ErrorActionPreference='Stop'
+  if($Medicao.relogio-is[scriptblock]){
+   $hora=& $Medicao.relogio
+   if($hora-is[datetime]){return $hora}
+  }
+ }catch{}finally{$global:LASTEXITCODE=$codigoMedicao}
+ return [datetime]::UtcNow
+}
+function Inicializar-MedicaoAtualizacao([string]$Arquivo='',[string]$Herdada='') {
+ $codigoMedicao=Get-Variable -Name LASTEXITCODE -Scope Global -ValueOnly -ErrorAction SilentlyContinue
+ try{
+  $estado=Get-Variable -Name MedicaoAtualizacao -Scope Script -ErrorAction SilentlyContinue
+  if($estado-and$estado.Value-is[hashtable]){
+   # Completa contextos parciais sem reiniciar id, inicio ou marcos validos.
+   $m=$estado.Value;$padrao=Nova-MedicaoAtualizacao $Arquivo
+   foreach($chave in $padrao.Keys){if(!$m.ContainsKey($chave)){$m[$chave]=$padrao[$chave]}}
+   if($m.inicio-isnot[datetime]){$m.inicio=$padrao.inicio}
+   if($m.relogio-isnot[scriptblock]){$m.relogio=$padrao.relogio}
+   if($m.id-notmatch'^[0-9a-f]{32}$'){$m.id=$padrao.id}
+   if($Arquivo-and!$m.arquivo){$m.arquivo=$Arquivo}
+   return
+  }
+  $script:MedicaoAtualizacao=Nova-MedicaoAtualizacao $Arquivo $Herdada
+ }catch{}finally{$global:LASTEXITCODE=$codigoMedicao}
+}
 function Nova-MedicaoAtualizacao([string]$Arquivo,[string]$Herdada='',[scriptblock]$Relogio={ [datetime]::UtcNow }) {
- $agora=& $Relogio
- $m=@{arquivo=$Arquivo;relogio=$Relogio;inicio=$agora;parada=$null;health=$null;preparar=0;paradaDesconhecida=$false;etapa=$null;id=[guid]::NewGuid().ToString('N')}
- if($Herdada){try{
-  $j=$Herdada|ConvertFrom-Json -ErrorAction Stop
-  if($j.id-notmatch'^[0-9a-f]{32}$'){throw 'Medicao invalida.'}
-  $m.inicio=[datetime]::Parse($j.inicio,[Globalization.CultureInfo]::InvariantCulture,[Globalization.DateTimeStyles]::RoundtripKind)
-  if($j.parada){$m.parada=[datetime]::Parse($j.parada,[Globalization.CultureInfo]::InvariantCulture,[Globalization.DateTimeStyles]::RoundtripKind)}
-  $m.id=$j.id
-  if($j.preparar){$m.preparar=[double]$j.preparar}
- }catch{}} # Um contexto de medicao invalido nao interfere no contexto operacional.
- return $m
+ $codigoMedicao=Get-Variable -Name LASTEXITCODE -Scope Global -ValueOnly -ErrorAction SilentlyContinue
+ try{
+  $agora=Obter-HoraMedicaoAtualizacao @{relogio=$Relogio}
+  $m=@{arquivo=$Arquivo;relogio=$Relogio;inicio=$agora;parada=$null;health=$null;preparar=0;paradaDesconhecida=$false;etapa=$null;id=[guid]::NewGuid().ToString('N')}
+  if($Herdada){try{
+   $j=$Herdada|ConvertFrom-Json -ErrorAction Stop
+   if($j.id-notmatch'^[0-9a-f]{32}$'){throw 'Medicao invalida.'}
+   # PS 7 pode converter ISO em DateTime; PS 5.1 devolve string. Nao converter
+   # DateTime para string implicitamente: isso perderia fracao/Kind na reexecucao.
+   $m.inicio=if($j.inicio-is[datetime]){$j.inicio}else{[datetime]::Parse($j.inicio,[Globalization.CultureInfo]::InvariantCulture,[Globalization.DateTimeStyles]::RoundtripKind)}
+   if($j.parada){$m.parada=if($j.parada-is[datetime]){$j.parada}else{[datetime]::Parse($j.parada,[Globalization.CultureInfo]::InvariantCulture,[Globalization.DateTimeStyles]::RoundtripKind)}}
+   $m.id=$j.id
+   if($j.preparar){$m.preparar=[double]$j.preparar}
+  }catch{}} # Um contexto de medicao invalido nao interfere no contexto operacional.
+  return $m
+ }catch{}finally{$global:LASTEXITCODE=$codigoMedicao}
 }
 function Registrar-TempoAtualizacao($Medicao,[string]$Texto){
- # Arquivo proprio: a central legada mantem stdout aberto sem compartilhar escrita.
- for($tentativa=0;$tentativa-lt3;$tentativa++){
-  $arquivo=$null;$escritor=$null
-  try{
-   [void][IO.Directory]::CreateDirectory((Split-Path $Medicao.arquivo -Parent))
-   $arquivo=[IO.File]::Open($Medicao.arquivo,[IO.FileMode]::Append,[IO.FileAccess]::Write,[IO.FileShare]::ReadWrite)
-   $escritor=New-Object IO.StreamWriter($arquivo,(New-Object Text.UTF8Encoding($false)))
-   $escritor.WriteLine($Texto);$escritor.Flush()
-   return
-  }catch{
-   if($tentativa-eq2){Write-Warning 'Nao foi possivel gravar a medicao de tempos da atualizacao.' -WarningAction Continue}
-  }finally{
-   try{if($escritor){$escritor.Dispose()}elseif($arquivo){$arquivo.Dispose()}}catch{}
+ $codigoMedicao=Get-Variable -Name LASTEXITCODE -Scope Global -ValueOnly -ErrorAction SilentlyContinue
+ try{
+  if(!$Medicao-or!$Medicao.arquivo){return}
+  # Arquivo proprio: a central legada mantem stdout aberto sem compartilhar escrita.
+  for($tentativa=0;$tentativa-lt3;$tentativa++){
+   $arquivo=$null;$escritor=$null
+   try{
+    [void][IO.Directory]::CreateDirectory((Split-Path $Medicao.arquivo -Parent))
+    $arquivo=[IO.File]::Open($Medicao.arquivo,[IO.FileMode]::Append,[IO.FileAccess]::Write,[IO.FileShare]::ReadWrite)
+    $escritor=New-Object IO.StreamWriter($arquivo,(New-Object Text.UTF8Encoding($false)))
+    $escritor.WriteLine($Texto);$escritor.Flush()
+    return
+   }catch{
+    if($tentativa-eq2){Write-Warning 'Nao foi possivel gravar a medicao de tempos da atualizacao.' -WarningAction Continue}
+   }finally{
+    try{if($escritor){$escritor.Dispose()}elseif($arquivo){$arquivo.Dispose()}}catch{}
+   }
+   if($tentativa-lt2){Start-Sleep -Milliseconds 100}
   }
-  if($tentativa-lt2){Start-Sleep -Milliseconds 100}
- }
+ }catch{}finally{$global:LASTEXITCODE=$codigoMedicao}
 }
 function Encerrar-EtapaMedida($Medicao,[string]$Resultado='concluido'){
- if(!$Medicao.etapa){return}
- $fim=& $Medicao.relogio;$e=$Medicao.etapa
- $segundos=[math]::Max(0,[math]::Round(($fim-$e.inicio).TotalSeconds,2)).ToString('0.##',[Globalization.CultureInfo]::InvariantCulture)
- Registrar-TempoAtualizacao $Medicao ("[$($fim.ToLocalTime().ToString('yyyy-MM-dd HH:mm:ss'))] $($e.nome): $Resultado em $segundos s; inicio=$($e.inicio.ToLocalTime().ToString('HH:mm:ss')); fim=$($fim.ToLocalTime().ToString('HH:mm:ss')).")
- $Medicao.etapa=$null
+ $codigoMedicao=Get-Variable -Name LASTEXITCODE -Scope Global -ValueOnly -ErrorAction SilentlyContinue
+ try{
+  if(!$Medicao.etapa){return}
+  $fim=Obter-HoraMedicaoAtualizacao $Medicao;$e=$Medicao.etapa
+  $segundos=[math]::Max(0,[math]::Round(($fim-$e.inicio).TotalSeconds,2)).ToString('0.##',[Globalization.CultureInfo]::InvariantCulture)
+  Registrar-TempoAtualizacao $Medicao ("[$($fim.ToLocalTime().ToString('yyyy-MM-dd HH:mm:ss'))] $($e.nome): $Resultado em $segundos s; inicio=$($e.inicio.ToLocalTime().ToString('HH:mm:ss')); fim=$($fim.ToLocalTime().ToString('HH:mm:ss')).")
+  $Medicao.etapa=$null
+ }catch{}finally{$global:LASTEXITCODE=$codigoMedicao}
 }
 function Iniciar-EtapaMedida($Medicao,[string]$Nome){
- Encerrar-EtapaMedida $Medicao
- $inicio=& $Medicao.relogio;$Medicao.etapa=@{nome=$Nome;inicio=$inicio}
- Registrar-TempoAtualizacao $Medicao "[$($inicio.ToLocalTime().ToString('yyyy-MM-dd HH:mm:ss'))] ${Nome}: inicio."
+ $codigoMedicao=Get-Variable -Name LASTEXITCODE -Scope Global -ValueOnly -ErrorAction SilentlyContinue
+ try{
+  if(!$Medicao){return}
+  Encerrar-EtapaMedida $Medicao
+  $inicio=Obter-HoraMedicaoAtualizacao $Medicao;$Medicao.etapa=@{nome=$Nome;inicio=$inicio}
+  Registrar-TempoAtualizacao $Medicao "[$($inicio.ToLocalTime().ToString('yyyy-MM-dd HH:mm:ss'))] ${Nome}: inicio."
+ }catch{}finally{$global:LASTEXITCODE=$codigoMedicao}
 }
 function Exportar-MedicaoAtualizacao($Medicao){
- return (@{preparar=$Medicao.preparar;id=$Medicao.id;inicio=$Medicao.inicio.ToString('o');parada=$(if($Medicao.parada){$Medicao.parada.ToString('o')}else{''})}|ConvertTo-Json -Compress)
+ $codigoMedicao=Get-Variable -Name LASTEXITCODE -Scope Global -ValueOnly -ErrorAction SilentlyContinue
+ try{
+  if(!$Medicao){return ''}
+  return (@{preparar=$Medicao.preparar;id=$Medicao.id;inicio=$Medicao.inicio.ToString('o');parada=$(if($Medicao.parada){$Medicao.parada.ToString('o')}else{''})}|ConvertTo-Json -Compress)
+ }catch{return ''}finally{$global:LASTEXITCODE=$codigoMedicao}
 }
 function Resumir-MedicaoAtualizacao($Medicao,[bool]$Delegada=$false){
- Encerrar-EtapaMedida $Medicao 'encerrado'
- # O filho ja publicou o resumo da mesma execucao; nao duplica no pai.
- if($Delegada){try{if(@(Get-Content -LiteralPath $Medicao.arquivo -Tail 60 -Encoding UTF8 -ErrorAction Stop|Where-Object {$_-like"*Resumo atualizacao:*medicao=$($Medicao.id).*"}).Count){return}}catch{}}
- $fim=& $Medicao.relogio
- $total=[math]::Max(0,[math]::Round(($fim-$Medicao.inicio).TotalSeconds,2)).ToString('0.##',[Globalization.CultureInfo]::InvariantCulture)
- $parada=if($Medicao.paradaDesconhecida){'horario de encerramento indisponivel (reexecucao legada)'}else{'nao houve encerramento confirmado'}
- if($Medicao.parada){
-  $ate=if($Medicao.health){$Medicao.health}else{$fim}
-  $s=[math]::Max(0,[math]::Round(($ate-$Medicao.parada).TotalSeconds,2)).ToString('0.##',[Globalization.CultureInfo]::InvariantCulture)
-  $parada=if($Medicao.health){"$s s (encerramento ate health ok)"}else{"pelo menos $s s; health ok nao confirmado"}
- }
- $meta=if(!$Medicao.parada){'nao aplicavel'}elseif(!$Medicao.health){'nao confirmada'}elseif(($Medicao.health-$Medicao.parada).TotalSeconds-le60){'atingida'}else{'EXCEDIDA'}
- Registrar-TempoAtualizacao $Medicao "[$($fim.ToLocalTime().ToString('yyyy-MM-dd HH:mm:ss'))] Resumo atualizacao: total=$total s; operacao PARADA=$parada; PREPARAR=$($Medicao.preparar) s; meta parada <= 60 s: $meta; medicao=$($Medicao.id)."
+ $codigoMedicao=Get-Variable -Name LASTEXITCODE -Scope Global -ValueOnly -ErrorAction SilentlyContinue
+ try{
+  if(!$Medicao){return}
+  Encerrar-EtapaMedida $Medicao 'encerrado'
+  # O filho ja publicou o resumo da mesma execucao; nao duplica no pai.
+  if($Delegada){try{if(@(Get-Content -LiteralPath $Medicao.arquivo -Tail 60 -Encoding UTF8 -ErrorAction Stop|Where-Object {$_-like"*Resumo atualizacao:*medicao=$($Medicao.id).*"}).Count){return}}catch{}}
+  $fim=Obter-HoraMedicaoAtualizacao $Medicao
+  $total=[math]::Max(0,[math]::Round(($fim-$Medicao.inicio).TotalSeconds,2)).ToString('0.##',[Globalization.CultureInfo]::InvariantCulture)
+  $parada=if($Medicao.paradaDesconhecida){'horario de encerramento indisponivel (reexecucao legada)'}else{'nao houve encerramento confirmado'}
+  if($Medicao.parada){
+   $ate=if($Medicao.health){$Medicao.health}else{$fim}
+   $s=[math]::Max(0,[math]::Round(($ate-$Medicao.parada).TotalSeconds,2)).ToString('0.##',[Globalization.CultureInfo]::InvariantCulture)
+   $parada=if($Medicao.health){"$s s (encerramento ate health ok)"}else{"pelo menos $s s; health ok nao confirmado"}
+  }
+  $meta=if(!$Medicao.parada){'nao aplicavel'}elseif(!$Medicao.health){'nao confirmada'}elseif(($Medicao.health-$Medicao.parada).TotalSeconds-le60){'atingida'}else{'EXCEDIDA'}
+  Registrar-TempoAtualizacao $Medicao "[$($fim.ToLocalTime().ToString('yyyy-MM-dd HH:mm:ss'))] Resumo atualizacao: total=$total s; operacao PARADA=$parada; PREPARAR=$($Medicao.preparar) s; meta parada <= 60 s: $meta; medicao=$($Medicao.id)."
+ }catch{}finally{$global:LASTEXITCODE=$codigoMedicao}
 }
 
 $modoEnsaioEnvAnterior=$env:MODO_ENSAIO
 $medicaoEnvAnterior=$env:SV_MEDICAO_ATUALIZACAO
 $script:MedicaoDelegada=$false
-$script:MedicaoAtualizacao=Nova-MedicaoAtualizacao (Join-Path (Obter-PastaPrivada $Raiz) 'operacao/atualizacao-tempos.log') $(if($JaAtualizado){$env:SV_MEDICAO_ATUALIZACAO}else{''})
-function Etapa([string]$t) { Iniciar-EtapaMedida $script:MedicaoAtualizacao $t; Write-Host "`n== $t ==" -ForegroundColor Cyan }
+$script:MedicaoAtualizacao=$null
+try{Inicializar-MedicaoAtualizacao (Join-Path (Obter-PastaPrivada $Raiz) 'operacao/atualizacao-tempos.log') $(if($JaAtualizado){$env:SV_MEDICAO_ATUALIZACAO}else{''})}catch{}
+function Etapa([string]$t) {
+ try{Inicializar-MedicaoAtualizacao;Iniciar-EtapaMedida $script:MedicaoAtualizacao $t}catch{}
+ Write-Host "`n== $t ==" -ForegroundColor Cyan
+}
 function Ok([string]$t) { Write-Host "   $t" -ForegroundColor Green }
 function Aviso([string]$t) { Write-Host "   $t" -ForegroundColor Yellow }
 
@@ -184,16 +242,18 @@ function Iniciar-OperacaoAtualizada {
 function Parar-OperacaoAtualizacao([int]$Limite=60) {
  $script:ParadaSolicitada=$true
  if($script:TarefaSemLogin){Disable-ScheduledTask -TaskName 'Supply Vision' -TaskPath '\'|Out-Null}
- $inicioParada=& $script:MedicaoAtualizacao.relogio
+ # A funcao tambem e executada isoladamente pela fixture SYSTEM, sem helpers.
+ $inicioParada=[datetime]::UtcNow
+ try{Inicializar-MedicaoAtualizacao;$inicioParada=Obter-HoraMedicaoAtualizacao $script:MedicaoAtualizacao}catch{}
  if(!(Parar-Operacao $Raiz $Limite)){throw 'Supervisor ou portas nao encerraram no prazo; troca de codigo e banco bloqueada.'}
- if($script:MedicaoAtualizacao-and!$script:MedicaoAtualizacao.parada){$script:MedicaoAtualizacao.parada=$inicioParada}
+ try{if($script:MedicaoAtualizacao-and!$script:MedicaoAtualizacao.parada){$script:MedicaoAtualizacao.parada=$inicioParada}}catch{}
 }
 
 function Reverter([string]$motivo) {
   if ($script:Recuperando) { throw 'A recuperacao ja foi tentada. Operacao permanece parada.' }
-  Encerrar-EtapaMedida $script:MedicaoAtualizacao 'falhou'
+  try{Encerrar-EtapaMedida $script:MedicaoAtualizacao 'falhou'}catch{}
   Etapa 'Revertendo a atualizacao'
-  $script:MedicaoAtualizacao.health=$null
+  try{if($script:MedicaoAtualizacao){$script:MedicaoAtualizacao.health=$null}}catch{}
   $script:Recuperando = $true
   Parar-OperacaoAtualizacao $PrazoParadaSegundos
   Gravar-ContextoAtualizacao $ContextoArquivo @{anterior=$anterior;remoto=$remoto;fase='recuperando'}
@@ -259,7 +319,7 @@ function Reverter([string]$motivo) {
   if ($LASTEXITCODE -ne 0) { throw 'Codigo restaurado, mas falhou a solicitacao de inicio da operacao.' }
   & $Node (Join-Path $Portal 'scripts/saude-operacao.mjs')
   if($LASTEXITCODE-ne0){throw 'Versao anterior iniciada, mas a fumaça da reversao falhou.'}
-  $script:MedicaoAtualizacao.health=& $script:MedicaoAtualizacao.relogio
+  try{Inicializar-MedicaoAtualizacao;$script:MedicaoAtualizacao.health=Obter-HoraMedicaoAtualizacao $script:MedicaoAtualizacao}catch{}
   Write-Host "!! codigo revertido para $($anterior.Substring(0,7)). Inicio solicitado; confira a saude da operacao." -ForegroundColor Red
   Gravar-ContextoAtualizacao $ContextoArquivo @{anterior=$anterior;remoto=$remoto;fase='revertido'}
   exit 1
@@ -294,7 +354,7 @@ try {
     }
     $CodigoTrocado = $true
     $OperacaoParada = $true
-    $script:MedicaoAtualizacao.paradaDesconhecida=!$script:MedicaoAtualizacao.parada
+    try{Inicializar-MedicaoAtualizacao;$script:MedicaoAtualizacao.paradaDesconhecida=!$script:MedicaoAtualizacao.parada}catch{}
   }
 Etapa 'Conferindo o repositorio'
 $sujo = git status --porcelain
@@ -374,8 +434,11 @@ if (-not $JaAtualizado) {
   Executar-PowerShellOculto $argsPreparo
   $rcPreparo=$LASTEXITCODE
   $logPreparo=Join-Path $script:PastaPreparo 'preparo-tempos.log'
-  if(Test-Path $logPreparo){foreach($linha in @(Get-Content $logPreparo)){Registrar-TempoAtualizacao $script:MedicaoAtualizacao $linha}}
-  $script:MedicaoAtualizacao.preparar=[math]::Round(([datetime]::UtcNow-$inicioPreparo).TotalSeconds,2)
+  try{
+   Inicializar-MedicaoAtualizacao
+   if(Test-Path $logPreparo){foreach($linha in @(Get-Content $logPreparo)){Registrar-TempoAtualizacao $script:MedicaoAtualizacao $linha}}
+   $script:MedicaoAtualizacao.preparar=[math]::Round(([datetime]::UtcNow-$inicioPreparo).TotalSeconds,2)
+  }catch{}
   if($rcPreparo-ne0){throw 'PREPARAR reprovado. Atualizacao cancelada SEM parar a operacao ou alterar a instalacao.'}
   $aprovacao=Join-Path $script:PastaPreparo 'preparo-aprovado'
   if(!(Test-Path $aprovacao)-or(Get-Content $aprovacao -Raw).Trim()-ne$remoto){throw 'Preparo sem aprovacao do commit esperado; operacao continua no ar.'}
@@ -537,7 +600,7 @@ Etapa 'Conferindo interface e consumidores da operacao'
 if ($LASTEXITCODE -ne 0) { Reverter 'Interface ou consumidores obrigatorios nao ficaram saudaveis.' }
 & $Node --experimental-strip-types (Join-Path $Portal 'scripts/operacao-validacao.mjs') --liberar
 if ($LASTEXITCODE -ne 0) { Reverter 'Falha ao liberar a operacao validada.' }
-$script:MedicaoAtualizacao.health=& $script:MedicaoAtualizacao.relogio
+try{Inicializar-MedicaoAtualizacao;$script:MedicaoAtualizacao.health=Obter-HoraMedicaoAtualizacao $script:MedicaoAtualizacao}catch{}
 Ok "Portal e consumidores no ar em $url"
 Etapa 'CONCLUIR: backup de rede com a operacao NO AR'
 try {
@@ -554,8 +617,10 @@ Write-Host "`n=== Atualizado: $($anterior.Substring(0,7)) -> $($remoto.Substring
 exit 0
 } catch {
   $falha = $_
-  if($inicioPreparo-and!$script:MedicaoAtualizacao.preparar){$script:MedicaoAtualizacao.preparar=[math]::Round(([datetime]::UtcNow-$inicioPreparo).TotalSeconds,2)}
-  if($script:MedicaoAtualizacao){Encerrar-EtapaMedida $script:MedicaoAtualizacao 'falhou'}
+  try{
+   if($inicioPreparo-and!$script:MedicaoAtualizacao.preparar){$script:MedicaoAtualizacao.preparar=[math]::Round(([datetime]::UtcNow-$inicioPreparo).TotalSeconds,2)}
+   Encerrar-EtapaMedida $script:MedicaoAtualizacao 'falhou'
+  }catch{}
   if ($CodigoTrocado -and !$Recuperando) {
     # Se o filho caiu depois de iniciar mas antes de tratar a falha, o pai
     # restaura tambem o banco. Contexto desconhecido exige a mesma cautela.
@@ -583,7 +648,7 @@ exit 0
       else{Aviso "Preparo preservado para recuperacao: $script:PastaPreparo"}
     }catch{Aviso "Limpeza do preparo pendente: $script:PastaPreparo"}
   }
-  Resumir-MedicaoAtualizacao $script:MedicaoAtualizacao $script:MedicaoDelegada
+  try{Resumir-MedicaoAtualizacao $script:MedicaoAtualizacao $script:MedicaoDelegada}catch{}
   $env:SV_MEDICAO_ATUALIZACAO=$medicaoEnvAnterior
   $env:MODO_ENSAIO=$modoEnsaioEnvAnterior
 }
