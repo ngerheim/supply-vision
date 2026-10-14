@@ -172,10 +172,9 @@ async function initialize() {
     .bind(new Date(Date.now() - TRAVA_VALIDADE_MS).toISOString()).run();
   const existing = await db.prepare('SELECT id FROM users LIMIT 1').first();
   if (!existing) {
-    const initialPassword = (env as unknown as { INITIAL_ADMIN_PASSWORD?: string }).INITIAL_ADMIN_PASSWORD;
-    if (typeof initialPassword !== 'string' || !validatePassword(initialPassword)) {
-      throw new Error('Base vazia: defina INITIAL_ADMIN_PASSWORD com pelo menos 10 caracteres antes do primeiro acesso.');
-    }
+    const initialPassword = (env as unknown as { INITIAL_ADMIN_PASSWORD?: string }).INITIAL_ADMIN_PASSWORD ?? '';
+    const passwordError = validatePassword(initialPassword);
+    if (passwordError) throw new Error(`Base vazia: defina INITIAL_ADMIN_PASSWORD. ${passwordError}`);
     const salt = randomHex();
     const hash = await passwordHash(initialPassword, salt, PBKDF2_ITERACOES_ATUAL);
     const userId = id('usr');

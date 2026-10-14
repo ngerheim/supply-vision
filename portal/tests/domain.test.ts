@@ -11,6 +11,7 @@ import {
   normalizeText,
   safeFilename,
   toNonNegativeMoney,
+  MIN_PASSWORD_LENGTH,
   validatePassword,
 } from '../lib/domain.ts';
 
@@ -62,9 +63,13 @@ void test('preço inválido não vira zero, um ou infinito por coerção', () =>
 });
 
 void test('aplica os limites de senha inicial', () => {
-  assert.equal(validatePassword('123456789'), false);
-  assert.equal(validatePassword('1234567890'), true);
-  assert.equal(validatePassword('x'.repeat(201)), false);
+  assert.equal(MIN_PASSWORD_LENGTH, 10);
+  for (const value of ['123456789', '', null, 1234567890]) {
+    assert.equal(validatePassword(value), 'A senha deve ter pelo menos 10 caracteres.');
+  }
+  assert.equal(validatePassword('1234567890'), null);
+  assert.equal(validatePassword('x'.repeat(200)), null);
+  assert.equal(validatePassword('x'.repeat(201)), 'A senha deve ter no máximo 200 caracteres.');
 });
 
 void test('remove caracteres perigosos do nome exportado pela importação', () => {

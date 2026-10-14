@@ -1125,7 +1125,8 @@ async function createUser(request: Request, actor: User) {
   const name = exigeTexto(body.name, LIMITES_CAMPO.nome, 'nome'), email = exigeTexto(body.email, LIMITES_CAMPO.email, 'e-mail').toLowerCase(), role = body.role ?? 'viewer';
   if (!name || !email || typeof body.password !== 'string') return fail('Nome, e-mail e senha são obrigatórios.');
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return fail('Informe um e-mail válido.');
-  if (!validatePassword(body.password)) return fail('A senha deve ter entre 10 e 200 caracteres.');
+  const passwordError = validatePassword(body.password);
+  if (passwordError) return fail(passwordError);
   if (!isOneOf(role, ROLES)) return fail('Perfil de usuário inválido.');
   const salt = crypto.randomUUID(), hash = await passwordHash(body.password, salt, PBKDF2_ITERACOES_ATUAL), userId = id('usr');
   try {
@@ -1638,7 +1639,8 @@ async function updateUser(request:Request,actor:User,userId:string){
   if(!isOneOf(role,ROLES)) return fail('Perfil de usuário inválido.');
   if(body.password !== undefined && body.password !== '' && typeof body.password !== 'string') return fail('A nova senha é inválida.');
   const password=typeof body.password === 'string' && body.password !== '' ? body.password : null;
-  if(password !== null && !validatePassword(password)) return fail('A nova senha deve ter entre 10 e 200 caracteres.');
+  const passwordError=password === null ? null : validatePassword(password);
+  if(passwordError) return fail(passwordError);
   const active=situacaoAtiva(body.active,target.active);
   const dailyReportEnabled=active===1 && role!=='viewer'
     ? (body.dailyReportEnabled === undefined ? target.dailyReportEnabled : body.dailyReportEnabled === true ? 1 : 0) : 0;

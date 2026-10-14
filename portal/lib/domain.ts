@@ -102,9 +102,12 @@ export function toNonNegativeMoney(value: unknown) {
   return Number.isFinite(parsed) && parsed >= 0 && Number.isSafeInteger(cents) ? cents / 100 : null;
 }
 
+// Somente para definir/trocar senha; null indica senha válida.
 export function validatePassword(value: unknown) {
   const password = typeof value === 'string' ? value : '';
-  return password.length >= MIN_PASSWORD_LENGTH && password.length <= 200;
+  if (password.length < MIN_PASSWORD_LENGTH) return `A senha deve ter pelo menos ${MIN_PASSWORD_LENGTH} caracteres.`;
+  if (password.length > 200) return 'A senha deve ter no máximo 200 caracteres.';
+  return null;
 }
 
 export function safeFilename(value: unknown) {
