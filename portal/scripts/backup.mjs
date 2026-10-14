@@ -75,10 +75,10 @@ export async function replicarNaRede(config, { origem = arquivoFinal, prazoMs, r
   console.log(`Copia atual na rede confirmada (SHA-256 ${resultado.hash.slice(0, 16)}).`);
   return resultado.arquivo;
 }
-async function enviar(config, copiaNaRede) {
+async function enviar(config, copiaNaRede, origem = arquivoFinal) {
   if (!config.BACKUP_EMAIL_TO) throw new Error('BACKUP_EMAIL_TO nao configurado.');
-  const tamanho = fs.statSync(arquivoFinal).size;
-  const hash = hashArquivo(arquivoFinal);
+  const tamanho = fs.statSync(origem).size;
+  const hash = hashArquivo(origem);
   const tamanhoMb = (tamanho / 1024 / 1024).toFixed(2);
 
   // O anexo levava o banco INTEIRO para fora da empresa a cada horario de
@@ -122,7 +122,7 @@ async function enviar(config, copiaNaRede) {
         + `</table>`,
       ),
       attachments: anexar
-        ? [{ filename: 'portal-atual.sqlite', path: arquivoFinal, contentType: 'application/vnd.sqlite3' }]
+        ? [{ filename: 'portal-atual.sqlite', path: origem, contentType: 'application/vnd.sqlite3' }]
         : [],
     });
   } finally { transportador.close(); }
@@ -130,10 +130,11 @@ async function enviar(config, copiaNaRede) {
 }
 
 // O codigo 3 e exclusivo do backup pre-atualizacao: copia local ja validada.
-export async function executarBackup({ preAtualizacao = false, ensaio = modoEnsaio(),
+export async function executarBackup({ preAtualizacao = false, somenteLocal = false, somenteRede = false, ensaio = modoEnsaio(),
   copiar = () => criarCopiaIntegra(localizarBanco()), rede = () => replicarNaRede(lerConfigBruta()),
   email = copia => enviar(lerConfig(), copia), registrar = console.warn } = {}) {
-  copiar();
+  if (!somenteRede) copiar();
+  if (somenteLocal) return 0;
   if (ensaio) { console.log('ensaio: envio suprimido; backup local validado, backup em rede bloqueado.'); return 0; }
   let copiaNaRede;
   try { copiaNaRede = await rede(); }
@@ -150,6 +151,16 @@ export async function executarBackup({ preAtualizacao = false, ensaio = modoEnsa
   return 0;
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
-  try { process.exitCode = await comBackupExclusivo(pastaBackup, () => executarBackup({ preAtualizacao: process.argv.includes('--pre-atualizacao') })); }
+  try {
+    const origem = process.argv.includes('--snapshot-pre-atualizacao')
+      ? path.join(pastaBackup, 'pre-atualizacao.sqlite') : arquivoFinal;
+    process.exitCode = await comBackupExclusivo(pastaBackup, () => executarBackup({
+      preAtualizacao: process.argv.includes('--pre-atualizacao'),
+      somenteLocal: process.argv.includes('--somente-local'),
+      somenteRede: process.argv.includes('--somente-rede'),
+      rede: () => replicarNaRede(lerConfigBruta(), { origem }),
+      email: copia => enviar(lerConfig(), copia, origem),
+    }));
+  }
   catch (erro) { console.error(`ERRO: ${erro instanceof Error ? erro.message : 'falha inesperada'}`); process.exitCode = 1; }
 }

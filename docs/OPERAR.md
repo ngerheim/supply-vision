@@ -337,8 +337,9 @@ acompanha o processo sem travar a janela e informa o resultado.
 
 Os tempos de cada etapa ficam em `privado/operacao/atualizacao-tempos.log`,
 tanto pela central quanto pelo PowerShell: início, fim, duração, tempo total
-e tempo entre o encerramento e o primeiro health válido. Se o health não
-for confirmado, o resumo informa isso. A central guarda a saída completa dos
+e tempo de PREPARAR. A parada é medida desde a solicitação de encerramento
+até a liberação após health, assets, login e consumidores. O resumo indica
+se a meta de até 60 segundos foi atingida; sem confirmação, informa o tempo mínimo. A central guarda a saída completa dos
 comandos em `atualizacao-processo-saida.log` e os erros em
 `atualizacao-erro.log`, na mesma pasta. A primeira atualização que instalar
 esta medição pode ter um resumo parcial, pois o processo anterior ainda não
@@ -359,15 +360,43 @@ Para diagnóstico, o mesmo fluxo pode ser executado pelo PowerShell:
 .\scripts\atualizar-servidor.ps1            # aplica
 ```
 
-Ele exige a branch `main` limpa e sem commits locais divergentes, e interrompe
-a atualização se não conseguir consultar o repositório remoto. Faz backup antes
-de trocar a versão, instala dependências só quando mudaram e roda build e testes.
-Falhas nessas etapas acionam a tentativa de retorno ao código e às dependências
-anteriores; se o retorno também falhar, a operação permanece parada e o erro
-é informado. O Portal fica fora do ar durante a construção. Na validação final, permite
-somente consulta: gravações, envios, execuções e limpeza ficam pausados até
-a aprovação das verificações de saúde;
-reserve uma janela de manutenção, sem assumir duração fixa.
+Ele exige a branch `main` limpa e sem commits locais divergentes. A atualização
+usa três fases:
+
+1. **PREPARAR, operação no ar:** busca `origin/main` e monta um worktree irmão,
+   `.<nome-da-instalacao>-preparo-<UUID>`, no mesmo volume. Copia dependências
+   inalteradas para uma cópia independente; instala no preparo quando mudaram,
+   estão ausentes ou foi usado `-Reaplicar`. Links de pacotes locais são
+   materializados; links para fora das dependências/vendor são recusados.
+   Compila e executa Portal, Alertas e as quatro verificações operacionais.
+   Usa somente modelos fictícios, privado próprio, modo ensaio, SMTP em loopback
+   e portas 59997/59998 (fixtures do supervisor usam 59999). Não acessa o privado
+   da produção. Qualquer reprovação cancela sem solicitar a parada.
+2. **TROCAR, operação parada:** desabilita a tarefa quando aplicável, aguarda o
+   encerramento, faz backup local validado e snapshot fixo pré-atualização.
+   Aplica o commit e renomeia `dist`, `node_modules` e `.venv` já preparados,
+   guardando os anteriores em `preparo/anteriores/`. Relança o atualizador novo,
+   confere a configuração da instalação, religa e verifica health, assets,
+   login e consumidores. As migrações continuam na partida. Gravações e envios
+   ficam bloqueados até a fumaça passar.
+3. **CONCLUIR, operação no ar:** replica o snapshot para a rede com o mesmo
+   `BACKUP_NETWORK_TIMEOUT_SECONDS`, limpa o worktree e registra o resumo.
+   Falha de rede preserva a cópia local e avisa; não interrompe a operação.
+
+Falha na fumaça para novamente, restaura o snapshot se a versão nova chegou
+a iniciar (ela pode ter migrado), volta ao commit anterior e renomeia os
+artefatos guardados de volta, sem instalar ou recompilar. Religa e verifica
+a versão anterior. Se a recuperação falhar, preserva o preparo com os artefatos
+para socorro; se concluir ou falhar antes da troca, remove o worktree. Falha de
+limpeza é informada com o caminho para remoção posterior.
+
+A medição de 14/10 foi de 279 segundos parada em 296 totais. Retirando build,
+suítes e rede da parada, a estimativa é cerca de 30 segundos, com meta de até
+60 segundos. Banco, disco e partida podem alterar esse tempo; confirme pelo
+resumo no servidor. Na primeira instalação desta melhoria, um atualizador
+antigo já em memória ainda segue o fluxo antigo; as próximas usam as três fases.
+O caminho da instalação, `privado/`, tarefa, portas 3000/3001 e a escolha de
+`PORTAL_BANCO_LOCAL` da produção permanecem os mesmos.
 
 Depois de trocar a versão, o script se relança a partir do código que acabou de
 chegar. Sem isso, o PowerShell seguiria executando a versão carregada na
@@ -394,7 +423,8 @@ define o prazo da etapa de rede inteira: cópia, conferência do hash e históri
 O padrão é 600 segundos (10 minutos); aceite apenas um inteiro de 1 a 86400.
 Se a rede travar, o processo dessa etapa é encerrado. A cópia local validada
 permanece disponível; o backup agendado registra falha, e a atualização avisa
-e continua usando essa cópia local, retomando a operação ao terminar.
+e continua usando essa cópia local. Na atualização em três fases, a rede só
+é replicada depois que a operação já foi retomada.
 Pode sobrar um arquivo temporário incompleto na rede. No início da próxima
 execução, são removidos apenas arquivos regulares `portal-atual.<UUID v4>.tmp.sqlite`
 cuja última modificação tenha mais de uma hora. Temporários recentes, links,
@@ -506,7 +536,8 @@ Uma entrega já confirmada permite completar a agenda após reinício sem novo S
 ### Saude exigida apos atualizar
 
 Além de `/api/health`, o atualizador confere identidade, HTML e arquivos CSS/JS
-com o verificador de saúde completa. Depois exige estado recente do supervisor
+com o verificador de saúde completa, além de exigir resposta 401 com JSON
+no login para um corpo nulo, sem autenticar ou registrar tentativa de senha. Depois exige estado recente do supervisor
 e ciclos recentes dos consumidores de e-mail e relatórios, aguardando até um
 minuto para a primeira passagem. Falha aciona a recuperação da atualização.
 Esses sinais provam a partida local; não provam entrega SMTP nem acesso ao Qlik.

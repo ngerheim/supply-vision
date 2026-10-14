@@ -31,6 +31,14 @@ export async function verificarSaude(base = 'http://127.0.0.1:3000') {
     if (new URL(url).pathname.endsWith('.css') ? !tipo.includes('text/css') : !/(javascript|ecmascript)/i.test(tipo)) throw new Error(`Tipo invalido: ${url}`);
     if (!(await r.arrayBuffer()).byteLength) throw new Error(`Arquivo vazio: ${url}`);
   }));
+  // JSON nulo percorre a partida/migracoes e a rota de login sem criar
+  // sessao, tentativa de senha ou auditoria para um usuario de producao.
+  const login = await fetch(`${origem}/api/login`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', Origin: origem },
+    body: 'null', redirect: 'error', signal: AbortSignal.timeout(15000),
+  });
+  const respostaLogin = await login.json();
+  if (login.status !== 401 || !respostaLogin.error) throw new Error('Login indisponivel ou resposta invalida.');
   const config = lerConfigBruta();
   const aviso = !config.BACKUP_NETWORK_DIR?.trim() || config.BACKUP_ANEXAR_BANCO === 'true'
     ? '; AVISO: o backup envia o banco completo por e-mail' : '';

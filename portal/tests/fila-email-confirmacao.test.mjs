@@ -3,6 +3,10 @@ import test from 'node:test';
 import { DatabaseSync } from 'node:sqlite';
 import { MENSAGEM_NAO_CONFIRMADO, concluir, processarNotificacoes, reservar } from '../scripts/processar-emails.mjs';
 
+// Estes cenarios usam banco/rede locais descartaveis ou transporte falso.
+// O modo do atualizador nao pode suprimir a verificacao de envio/confirmacao.
+process.env.MODO_ENSAIO = '0';
+
 const config={PORTAL_URL:'http://portal.test',EMAIL_FROM_NAME:'Portal',SMTP_USER:'portal@example.com'};
 const payload=JSON.stringify({ticketId:'t1',codigo:'SUP-1',fornecedor:'Oficina',prioridade:'media',situacao:'aberto',solicitante:'Ana',responsavel:'Bia',autor:'Ana',resumo:'Teste',alteracoes:[],mensagem:null});
 function banco(){

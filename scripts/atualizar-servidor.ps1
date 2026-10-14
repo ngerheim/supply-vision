@@ -23,16 +23,18 @@ param([switch]$Simular,[switch]$Reaplicar,[switch]$JaAtualizado,[string]$VersaoA
 $ErrorActionPreference = 'Stop'
 $Raiz = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 . (Join-Path $PSScriptRoot 'operacao-logica.ps1')
+. (Join-Path $PSScriptRoot 'atualizacao-preparo.ps1')
 # Medicao sem dados de configuracao; falha ao registrar nunca muda a atualizacao.
 function Nova-MedicaoAtualizacao([string]$Arquivo,[string]$Herdada='',[scriptblock]$Relogio={ [datetime]::UtcNow }) {
  $agora=& $Relogio
- $m=@{arquivo=$Arquivo;relogio=$Relogio;inicio=$agora;parada=$null;health=$null;paradaDesconhecida=$false;etapa=$null;id=[guid]::NewGuid().ToString('N')}
+ $m=@{arquivo=$Arquivo;relogio=$Relogio;inicio=$agora;parada=$null;health=$null;preparar=0;paradaDesconhecida=$false;etapa=$null;id=[guid]::NewGuid().ToString('N')}
  if($Herdada){try{
   $j=$Herdada|ConvertFrom-Json -ErrorAction Stop
   if($j.id-notmatch'^[0-9a-f]{32}$'){throw 'Medicao invalida.'}
   $m.inicio=[datetime]::Parse($j.inicio,[Globalization.CultureInfo]::InvariantCulture,[Globalization.DateTimeStyles]::RoundtripKind)
   if($j.parada){$m.parada=[datetime]::Parse($j.parada,[Globalization.CultureInfo]::InvariantCulture,[Globalization.DateTimeStyles]::RoundtripKind)}
   $m.id=$j.id
+  if($j.preparar){$m.preparar=[double]$j.preparar}
  }catch{}} # Um contexto de medicao invalido nao interfere no contexto operacional.
  return $m
 }
@@ -67,7 +69,7 @@ function Iniciar-EtapaMedida($Medicao,[string]$Nome){
  Registrar-TempoAtualizacao $Medicao "[$($inicio.ToLocalTime().ToString('yyyy-MM-dd HH:mm:ss'))] ${Nome}: inicio."
 }
 function Exportar-MedicaoAtualizacao($Medicao){
- return (@{id=$Medicao.id;inicio=$Medicao.inicio.ToString('o');parada=$(if($Medicao.parada){$Medicao.parada.ToString('o')}else{''})}|ConvertTo-Json -Compress)
+ return (@{preparar=$Medicao.preparar;id=$Medicao.id;inicio=$Medicao.inicio.ToString('o');parada=$(if($Medicao.parada){$Medicao.parada.ToString('o')}else{''})}|ConvertTo-Json -Compress)
 }
 function Resumir-MedicaoAtualizacao($Medicao,[bool]$Delegada=$false){
  Encerrar-EtapaMedida $Medicao 'encerrado'
@@ -81,7 +83,8 @@ function Resumir-MedicaoAtualizacao($Medicao,[bool]$Delegada=$false){
   $s=[math]::Max(0,[math]::Round(($ate-$Medicao.parada).TotalSeconds,2)).ToString('0.##',[Globalization.CultureInfo]::InvariantCulture)
   $parada=if($Medicao.health){"$s s (encerramento ate health ok)"}else{"pelo menos $s s; health ok nao confirmado"}
  }
- Registrar-TempoAtualizacao $Medicao "[$($fim.ToLocalTime().ToString('yyyy-MM-dd HH:mm:ss'))] Resumo atualizacao: total=$total s; operacao PARADA=$parada; medicao=$($Medicao.id)."
+ $meta=if(!$Medicao.parada){'nao aplicavel'}elseif(!$Medicao.health){'nao confirmada'}elseif(($Medicao.health-$Medicao.parada).TotalSeconds-le60){'atingida'}else{'EXCEDIDA'}
+ Registrar-TempoAtualizacao $Medicao "[$($fim.ToLocalTime().ToString('yyyy-MM-dd HH:mm:ss'))] Resumo atualizacao: total=$total s; operacao PARADA=$parada; PREPARAR=$($Medicao.preparar) s; meta parada <= 60 s: $meta; medicao=$($Medicao.id)."
 }
 
 $medicaoEnvAnterior=$env:SV_MEDICAO_ATUALIZACAO
@@ -160,6 +163,13 @@ $OperacaoEstavaAtiva = $false
 $mexeuNode = $true
 $mexeuPython = $true
 $anterior = $VersaoAnterior
+$script:PastaPreparo=''
+$script:ArtefatosPreparados=$false
+function Gravar-ContextoAtualizacao($Arquivo,$Estado) {
+ if($script:PastaPreparo){$Estado.preparo=$script:PastaPreparo;$Estado.artefatos=$script:ArtefatosPreparados}
+ Gravar-EstadoOperacao $Arquivo $Estado
+}
+
 
 function Iniciar-OperacaoAtualizada {
  if($script:TarefaSemLogin){Enable-ScheduledTask -TaskName 'Supply Vision' -TaskPath '\'|Out-Null;Start-ScheduledTask -TaskName 'Supply Vision' -TaskPath '\';$global:LASTEXITCODE=0;return}
@@ -170,8 +180,9 @@ function Iniciar-OperacaoAtualizada {
 function Parar-OperacaoAtualizacao([int]$Limite=60) {
  $script:ParadaSolicitada=$true
  if($script:TarefaSemLogin){Disable-ScheduledTask -TaskName 'Supply Vision' -TaskPath '\'|Out-Null}
+ $inicioParada=& $script:MedicaoAtualizacao.relogio
  if(!(Parar-Operacao $Raiz $Limite)){throw 'Supervisor ou portas nao encerraram no prazo; troca de codigo e banco bloqueada.'}
- if($script:MedicaoAtualizacao-and!$script:MedicaoAtualizacao.parada){$script:MedicaoAtualizacao.parada=& $script:MedicaoAtualizacao.relogio}
+ if($script:MedicaoAtualizacao-and!$script:MedicaoAtualizacao.parada){$script:MedicaoAtualizacao.parada=$inicioParada}
 }
 
 function Reverter([string]$motivo) {
@@ -181,7 +192,7 @@ function Reverter([string]$motivo) {
   $script:MedicaoAtualizacao.health=$null
   $script:Recuperando = $true
   Parar-OperacaoAtualizacao $PrazoParadaSegundos
-  Gravar-EstadoOperacao $ContextoArquivo @{anterior=$anterior;remoto=$remoto;fase='recuperando'}
+  Gravar-ContextoAtualizacao $ContextoArquivo @{anterior=$anterior;remoto=$remoto;fase='recuperando'}
   Write-Host "`n!! $motivo" -ForegroundColor Red
   Write-Host '!! revertendo para a versao anterior' -ForegroundColor Red
   if ($NovaVersaoIniciada) {
@@ -221,6 +232,10 @@ function Reverter([string]$motivo) {
   git reset --hard $anterior --quiet
   if ($LASTEXITCODE -ne 0) { throw 'Nao foi possivel restaurar o codigo anterior. Operacao permanece parada.' }
   Remover-ArquivosIntroduzidos $Raiz $introduzidos
+  if($script:PastaPreparo){
+    Etapa 'Restaurando artefatos anteriores por renomeacao'
+    Restaurar-ArtefatosPreparo $Raiz $script:PastaPreparo
+  } else {
   if ($mexeuNode) {
     Etapa 'Restaurando dependencias Node'
     Push-Location $Portal
@@ -234,11 +249,15 @@ function Reverter([string]$motivo) {
   Etapa 'Reconstruindo a versao anterior'
   Push-Location $Portal
   try { & $Npm run build | Out-Null; if ($LASTEXITCODE -ne 0) { throw 'Falha ao reconstruir a versao anterior. Operacao permanece parada.' } } finally { Pop-Location }
+  } # Reexecucao legada sem artefatos: conserva recuperacao anterior.
   Etapa 'Solicitando inicio da versao anterior'
   Iniciar-OperacaoAtualizada
   if ($LASTEXITCODE -ne 0) { throw 'Codigo restaurado, mas falhou a solicitacao de inicio da operacao.' }
+  & $Node (Join-Path $Portal 'scripts/saude-operacao.mjs')
+  if($LASTEXITCODE-ne0){throw 'Versao anterior iniciada, mas a fumaça da reversao falhou.'}
+  $script:MedicaoAtualizacao.health=& $script:MedicaoAtualizacao.relogio
   Write-Host "!! codigo revertido para $($anterior.Substring(0,7)). Inicio solicitado; confira a saude da operacao." -ForegroundColor Red
-  Gravar-EstadoOperacao $ContextoArquivo @{anterior=$anterior;remoto=$remoto;fase='revertido'}
+  Gravar-ContextoAtualizacao $ContextoArquivo @{anterior=$anterior;remoto=$remoto;fase='revertido'}
   exit 1
 }
 
@@ -259,11 +278,16 @@ try {
       if ($LASTEXITCODE -ne 0) { throw 'Commit anterior nao pertence a esta atualizacao.' }
       $remoto = (git rev-parse --verify HEAD).Trim()
       New-Item -ItemType Directory -Force (Split-Path $ContextoArquivo -Parent) | Out-Null
-      Gravar-EstadoOperacao $ContextoArquivo @{anterior=$VersaoAnterior;remoto=$remoto;fase='codigo'}
+      Gravar-ContextoAtualizacao $ContextoArquivo @{anterior=$VersaoAnterior;remoto=$remoto;fase='codigo'}
     }
     $contexto = Ler-EstadoOperacao $ContextoArquivo
     if ($VersaoAnterior -notmatch '^[0-9a-f]{40}$' -or $contexto.anterior -ne $VersaoAnterior -or $contexto.fase -ne 'codigo') { throw 'Contexto de reexecucao invalido.' }
     $remoto = $contexto.remoto
+    if($contexto.preparo){
+      Validar-PastaPreparo $Raiz $contexto.preparo
+      $script:PastaPreparo=$contexto.preparo
+      $script:ArtefatosPreparados=[bool]$contexto.artefatos
+    }
     $CodigoTrocado = $true
     $OperacaoParada = $true
     $script:MedicaoAtualizacao.paradaDesconhecida=!$script:MedicaoAtualizacao.parada
@@ -292,6 +316,7 @@ if ($JaAtualizado) {
   Aviso "continuando a atualizacao ja com o codigo de $($remoto.Substring(0,7))"
 } else {
 
+$inicioPreparo=[datetime]::UtcNow
 Etapa 'Buscando novidades'
 git fetch origin --quiet
 if ($LASTEXITCODE -ne 0) { throw 'Falha ao buscar o repositorio remoto. Nada sera atualizado.' }
@@ -314,7 +339,7 @@ if ($Reaplicar -and $remoto -eq $anterior) {
 # So depois de $anterior apontar para a versao realmente anterior: na
 # reexecucao (-JaAtualizado) ele vem de -VersaoAnterior. Uma falha antes disso
 # fazia a recuperacao "reverter" para a propria versao nova.
-Validar-PythonAlertas $Python
+if($JaAtualizado){Validar-PythonAlertas $Python}
 
 $mudou = git diff --name-only "$anterior..$remoto"
 $mexeuNode = $mudou | Where-Object { $_ -eq 'portal/package-lock.json' -or $_ -eq 'portal/package.json' }
@@ -334,14 +359,32 @@ if ($Simular) {
 }
 
 if (-not $JaAtualizado) {
+  Etapa 'PREPARAR: versao nova com a operacao NO AR'
+  $script:PastaPreparo=Nova-PastaPreparo $Raiz
+  Validar-PastaPreparo $Raiz $script:PastaPreparo
+  & git worktree add --detach $script:PastaPreparo $remoto
+  if($LASTEXITCODE){throw 'Nao foi possivel montar o worktree; operacao continua no ar.'}
+  $argsPreparo=@('-NoProfile','-WindowStyle','Hidden','-ExecutionPolicy','Bypass','-File',(Join-Path $script:PastaPreparo 'scripts/preparar-atualizacao.ps1'),'-Instalacao',$Raiz)
+  if($mexeuNode){$argsPreparo+='-ReinstalarNode'}
+  if($mexeuPython){$argsPreparo+='-ReinstalarPython'}
+  Executar-PowerShellOculto $argsPreparo
+  $rcPreparo=$LASTEXITCODE
+  $logPreparo=Join-Path $script:PastaPreparo 'preparo-tempos.log'
+  if(Test-Path $logPreparo){foreach($linha in @(Get-Content $logPreparo)){Registrar-TempoAtualizacao $script:MedicaoAtualizacao $linha}}
+  $script:MedicaoAtualizacao.preparar=[math]::Round(([datetime]::UtcNow-$inicioPreparo).TotalSeconds,2)
+  if($rcPreparo-ne0){throw 'PREPARAR reprovado. Atualizacao cancelada SEM parar a operacao ou alterar a instalacao.'}
+  $aprovacao=Join-Path $script:PastaPreparo 'preparo-aprovado'
+  if(!(Test-Path $aprovacao)-or(Get-Content $aprovacao -Raw).Trim()-ne$remoto){throw 'Preparo sem aprovacao do commit esperado; operacao continua no ar.'}
+  # Reconfere o checkout antes de parar: o preparo pode levar alguns minutos.
+  if((git rev-parse HEAD).Trim()-ne$anterior-or(git status --porcelain)){throw 'Instalacao mudou durante PREPARAR; troca cancelada.'}
   $OperacaoEstavaAtiva = !(Testar-SupervisorEncerrado (Obter-PastaPrivada $Raiz))
-  Etapa 'Parando a operacao'
+  Etapa 'TROCAR: parando a operacao'
   Parar-OperacaoAtualizacao $PrazoParadaSegundos
   $OperacaoParada = $true
   Ok 'operacao parada'
 
   Etapa 'Backup do banco antes de trocar a versao'
-  & $Node --experimental-strip-types (Join-Path $Portal 'scripts\backup.mjs') --pre-atualizacao
+  & $Node --experimental-strip-types (Join-Path $Portal 'scripts\backup.mjs') --pre-atualizacao --somente-local
   if ($LASTEXITCODE -eq 3) { Aviso 'Backup local validado; rede falhou ou excedeu o prazo. Atualizacao continua; a operacao sera retomada ao terminar.' }
   elseif ($LASTEXITCODE -ne 0) { throw 'O backup falhou. Atualizacao cancelada — nao se troca versao sem copia do banco.' }
   Ok 'backup concluido'
@@ -359,10 +402,14 @@ if (-not $JaAtualizado) {
 if (-not $JaAtualizado) {
   Etapa 'Aplicando a nova versao'
   New-Item -ItemType Directory -Force (Split-Path $ContextoArquivo -Parent) | Out-Null
-  Gravar-EstadoOperacao $ContextoArquivo @{anterior=$anterior;remoto=$remoto;fase='codigo'}
+  Gravar-ContextoAtualizacao $ContextoArquivo @{anterior=$anterior;remoto=$remoto;fase='codigo'}
   $CodigoTrocado = $true
   git merge --ff-only $remoto --quiet
   if ($LASTEXITCODE -ne 0) { throw 'Falha ao aplicar a nova versao.' }
+  Etapa 'Trazendo artefatos prontos por renomeacao no mesmo volume'
+  Trocar-ArtefatosPreparo $Raiz $script:PastaPreparo
+  $script:ArtefatosPreparados=$true
+  Gravar-ContextoAtualizacao $ContextoArquivo @{anterior=$anterior;remoto=$remoto;fase='codigo'}
   Ok "agora em $($remoto.Substring(0,7))"
 
   # Daqui para a frente quem manda e o codigo novo. O PowerShell ja carregou
@@ -376,9 +423,10 @@ if (-not $JaAtualizado) {
   $env:SV_MEDICAO_ATUALIZACAO=Exportar-MedicaoAtualizacao $script:MedicaoAtualizacao
   $script:MedicaoDelegada=$true
   # No Windows PowerShell 5.1, stderr do filho nao pode virar excecao no pai.
+  $argumentosReexecucao=@('-WindowStyle','Hidden')+$argumentosReexecucao+@('-PrazoParadaSegundos',$PrazoParadaSegundos)
   $preferenciaFilho=$ErrorActionPreference
   $ErrorActionPreference='Continue'
-  try { & powershell.exe @argumentosReexecucao; $rcFilho = $LASTEXITCODE }
+  try { Executar-PowerShellOculto $argumentosReexecucao; $rcFilho = $LASTEXITCODE }
   finally { $ErrorActionPreference=$preferenciaFilho }
   if ($rcFilho -ne 0) {
     $contexto = Ler-EstadoOperacao $ContextoArquivo
@@ -399,6 +447,8 @@ Reparar-ConfiguracaoPrivada
 # antes do build, porque o endpoint interno a incorpora no servidor.
 if (Garantir-CredencialPortal (Join-Path (Obter-PastaPrivada $Raiz) 'portal/configuracao/portal.env')) { Ok 'credencial interna do Portal criada ou reparada' }
 
+if(!$script:ArtefatosPreparados){
+# Compatibilidade com pai legado que chegou sem fase PREPARAR.
 if ($mexeuNode) {
   Etapa 'Dependencias Node mudaram: npm.cmd ci'
   Push-Location $Portal; & $Npm ci --no-audit --no-fund; $rc = $LASTEXITCODE; Pop-Location
@@ -442,7 +492,7 @@ foreach ($t in @('validar-operacao.ps1', 'testar-operacao.ps1', 'testar-supervis
   $anterioPreferencia = $ErrorActionPreference
   $ErrorActionPreference = 'Continue'
   try {
-    $saidaTeste = @(& powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot $t) *>&1)
+    $saidaTeste = @(Executar-PowerShellOculto @('-NoProfile','-WindowStyle','Hidden','-ExecutionPolicy','Bypass','-File',(Join-Path $PSScriptRoot $t)) *>&1)
     $rc = $LASTEXITCODE
   } finally { $ErrorActionPreference = $anterioPreferencia }
   $saidaTeste | ForEach-Object { Write-Host "   $_" }
@@ -452,12 +502,18 @@ foreach ($t in @('validar-operacao.ps1', 'testar-operacao.ps1', 'testar-supervis
   }
 }
 Ok 'suites de operacao aprovadas'
+} else {
+ Ok 'Build e TODAS as suites aprovados no PREPARAR; artefatos ja instalados.'
+ Etapa 'Conferindo configuracao da instalacao antes da partida'
+ Executar-PowerShellOculto @('-NoProfile','-WindowStyle','Hidden','-ExecutionPolicy','Bypass','-File',(Join-Path $PSScriptRoot 'validar-operacao.ps1'))
+ if($LASTEXITCODE-ne0){Reverter 'Configuracao da instalacao reprovada antes da partida.'}
+}
 
 Etapa 'Religando a operacao'
 $NovaVersaoIniciada = $true
 & $Node --experimental-strip-types (Join-Path $Portal 'scripts/operacao-validacao.mjs') --ativar
 if ($LASTEXITCODE -ne 0) { Reverter 'Nao foi possivel bloquear gravacoes e envios durante a validacao.' }
-Gravar-EstadoOperacao $ContextoArquivo @{anterior=$anterior;remoto=$remoto;fase='iniciada'}
+Gravar-ContextoAtualizacao $ContextoArquivo @{anterior=$anterior;remoto=$remoto;fase='iniciada'}
 Iniciar-OperacaoAtualizada
 if ($LASTEXITCODE -ne 0) { Reverter 'Falha ao solicitar o inicio da nova versao.' }
 $url = 'http://127.0.0.1:3000'
@@ -472,15 +528,21 @@ for ($i = 0; $i -lt 60; $i++) {
   try { if ((Invoke-RestMethod "$url/api/health" -TimeoutSec 3).status -eq 'ok') { $noAr = $true; break } } catch { }
 }
 if (-not $noAr) { Reverter 'O Portal nao respondeu depois da atualizacao.' }
-$script:MedicaoAtualizacao.health=& $script:MedicaoAtualizacao.relogio
-
 Etapa 'Conferindo interface e consumidores da operacao'
 & $Node (Join-Path $Portal 'scripts/saude-operacao.mjs') $url
 if ($LASTEXITCODE -ne 0) { Reverter 'Interface ou consumidores obrigatorios nao ficaram saudaveis.' }
 & $Node --experimental-strip-types (Join-Path $Portal 'scripts/operacao-validacao.mjs') --liberar
 if ($LASTEXITCODE -ne 0) { Reverter 'Falha ao liberar a operacao validada.' }
+$script:MedicaoAtualizacao.health=& $script:MedicaoAtualizacao.relogio
 Ok "Portal e consumidores no ar em $url"
-Gravar-EstadoOperacao $ContextoArquivo @{anterior=$anterior;remoto=$remoto;fase='concluido'}
+Etapa 'CONCLUIR: backup de rede com a operacao NO AR'
+try {
+ & $Node --experimental-strip-types (Join-Path $Portal 'scripts/backup.mjs') --pre-atualizacao --somente-rede --snapshot-pre-atualizacao
+} catch {Aviso 'Falha ao replicar backup; copia local e snapshot preservados.'}
+if($LASTEXITCODE-ne0){Aviso 'Backup local e snapshot preservados; replicacao de rede falhou ou excedeu o prazo configurado.'}
+Etapa 'CONCLUIR: limpando pasta de preparo'
+try{Limpar-PastaPreparo $Raiz $script:PastaPreparo}catch{Aviso "Limpeza pendente: $script:PastaPreparo"}
+Gravar-ContextoAtualizacao $ContextoArquivo @{anterior=$anterior;remoto=$remoto;fase='concluido'}
 git log -1 --pretty=format:'    %s'
 Write-Host ''
 Encerrar-EtapaMedida $script:MedicaoAtualizacao
@@ -488,6 +550,7 @@ Write-Host "`n=== Atualizado: $($anterior.Substring(0,7)) -> $($remoto.Substring
 exit 0
 } catch {
   $falha = $_
+  if($inicioPreparo-and!$script:MedicaoAtualizacao.preparar){$script:MedicaoAtualizacao.preparar=[math]::Round(([datetime]::UtcNow-$inicioPreparo).TotalSeconds,2)}
   if($script:MedicaoAtualizacao){Encerrar-EtapaMedida $script:MedicaoAtualizacao 'falhou'}
   if ($CodigoTrocado -and !$Recuperando) {
     # Se o filho caiu depois de iniciar mas antes de tratar a falha, o pai
@@ -508,6 +571,14 @@ exit 0
   exit 1
 }
 } finally {
+  # Pai conserva o preparo se a recuperacao nao terminou; contem artefatos de socorro.
+  if(!$script:MedicaoDelegada-and$script:PastaPreparo){
+    try{
+      $estadoFinal=Ler-EstadoOperacao $ContextoArquivo
+      if(!$CodigoTrocado-or$estadoFinal.fase-in@('concluido','revertido')){Limpar-PastaPreparo $Raiz $script:PastaPreparo}
+      else{Aviso "Preparo preservado para recuperacao: $script:PastaPreparo"}
+    }catch{Aviso "Limpeza do preparo pendente: $script:PastaPreparo"}
+  }
   Resumir-MedicaoAtualizacao $script:MedicaoAtualizacao $script:MedicaoDelegada
   $env:SV_MEDICAO_ATUALIZACAO=$medicaoEnvAnterior
 }

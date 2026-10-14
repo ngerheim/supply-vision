@@ -13,3 +13,12 @@ void test('ensaio continua sem rede; SMTP sem redundancia ainda bloqueia', async
   assert.equal(await executarBackup({ ensaio: true, copiar() {}, rede: () => assert.fail(), email: () => assert.fail() }), 0);
   await assert.rejects(executarBackup({ ensaio: false, preAtualizacao: true, copiar() {}, rede: () => null, email: () => { throw new Error('smtp'); } }), /smtp/);
 });
+
+void test('fases separam copia local e rede sem repetir snapshot ou enviar durante parada', async () => {
+  const passos = [];
+  const opcoes = { ensaio: false, copiar: () => passos.push('local'), rede: () => { passos.push('rede'); return {}; }, email: () => passos.push('email') };
+  assert.equal(await executarBackup({ ...opcoes, somenteLocal: true }), 0);
+  assert.deepEqual(passos, ['local']);
+  assert.equal(await executarBackup({ ...opcoes, somenteRede: true }), 0);
+  assert.deepEqual(passos, ['local', 'rede', 'email']);
+});

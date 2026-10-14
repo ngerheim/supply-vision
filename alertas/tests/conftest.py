@@ -30,9 +30,12 @@ def pytest_configure(config):
     pasta = Path(tempfile.mkdtemp(prefix="sv-pytest-", dir=raiz))
     config._sv_pasta = pasta
     config._sv_ambiente = {k: os.environ.get(k) for k in
-                          ("SUPPLY_VISION_PRIVADO", "SUPPLY_VISION_PARAMETROS_DIR")}
+                          ("SUPPLY_VISION_PRIVADO", "SUPPLY_VISION_PARAMETROS_DIR", "MODO_ENSAIO")}
     os.environ["SUPPLY_VISION_PRIVADO"] = str(pasta / "privado")
     os.environ.pop("SUPPLY_VISION_PARAMETROS_DIR", None)
+    # Fixtures de envio usam SMTP falso e precisam verificar confirmacao/TLS.
+    # Os testes de ensaio definem o proprio modo por monkeypatch.
+    os.environ["MODO_ENSAIO"] = "0"
     privado = pasta / "privado"
     for origem, destino in [
         (RAIZ / "compartilhado/smtp.env.example", privado / "comum/smtp.env"),

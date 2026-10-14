@@ -3,13 +3,17 @@ import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { verificarSaude } from '../scripts/saude-completa.mjs';
 
-for (const caso of ['normal', 'js-ausente', 'html-no-css', 'api-alheia']) {
+for (const caso of ['normal', 'js-ausente', 'html-no-css', 'api-alheia', 'login-falhou']) {
   void test(`saude completa: ${caso}`, async () => {
     const servidor = createServer((req, res) => {
       if (req.url === '/api/health') {
         res.setHeader('Content-Type', 'application/json; charset=utf-8');
         res.setHeader('X-Content-Type-Options', 'nosniff');
         res.end(JSON.stringify({ app: caso === 'api-alheia' ? 'outro' : 'portal-suprimentos', status: 'ok' }));
+      } else if (req.url === '/api/login') {
+        res.statusCode = caso === 'login-falhou' ? 500 : 401;
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify({ error: 'E-mail ou senha inválidos.' }));
       } else if (req.url === '/') {
         res.setHeader('Content-Type', 'text/html');
         res.end('<link href="/estilo.css"><script src="/app.js"></script>');
