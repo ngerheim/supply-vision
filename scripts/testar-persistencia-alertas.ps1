@@ -28,6 +28,7 @@ function Encerrar-ArvoreTeste($Processo) {
   $Processo.WaitForExit(15000) | Out-Null
 }
 try {
+ $portasFixture=Reservar-PortasFixtureTeste
  Preparar-InstalacaoSupervisorTeste $raizReal $temp
 
 
@@ -83,7 +84,7 @@ time.sleep(30)
   foreach ($item in $conteudos.GetEnumerator()) { [IO.File]::WriteAllText((Join-Path $temp $item.Key), $item.Value) }
   [IO.File]::WriteAllText("$temp\bin\npm.cmd", "@echo off`r`nping 127.0.0.1 -n 120 >nul`r`n", [Text.Encoding]::ASCII)
   [IO.File]::WriteAllText("$temp\privado\comum\smtp.env", "SMTP_HOST=x`r`nSMTP_PORT=1`r`nSMTP_USER=x`r`nSMTP_PASSWORD=x`r`nEMAIL_FROM_NAME=x")
-  [IO.File]::WriteAllText("$temp\privado\portal\configuracao\portal.env", "PORTAL_URL=http://127.0.0.1:59999`r`nPORTAL_API_TOKEN=x`r`nBACKUP_EMAIL_TO=x")
+  [IO.File]::WriteAllText("$temp\privado\portal\configuracao\portal.env", "PORTAL_URL=http://127.0.0.1:$($portasFixture[0])`r`nPORTAL_PORTA=$($portasFixture[0])`r`nRELATORIOS_PORTA=$($portasFixture[1])`r`nPORTAL_API_TOKEN=x`r`nBACKUP_EMAIL_TO=x")
   [IO.File]::WriteAllText("$temp\privado\alertas\config\cfg_ambiente.txt", "QLIK_TENANT=x`r`nQLIK_APP_ID=x`r`nQLIK_OBJ_ID=x`r`nDESTINATARIO_ALERTA=x")
   [IO.File]::WriteAllText("$temp\privado\comum\operacao.env", "ALERTAS_HORARIOS=$Slot`r`nBACKUP_HORARIOS=23:59`r`nLIMPEZA_HORARIO=23:59`r`nESPACO_MINIMO_GB=1")
 

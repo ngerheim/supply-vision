@@ -128,3 +128,7 @@ try {
  }
  Write-Host 'Contrato env compartilhado: aprovado.'
 }finally{Remove-Item -LiteralPath $arquivo -Force -ErrorAction SilentlyContinue}
+
+Igual 3000 (Obter-PortaPortalLocal @{PORTAL_URL='https://portal.empresa.test'}) 'URL publica nao define porta local'
+Igual 42345 (Obter-PortaPortalLocal @{PORTAL_PORTA='42345'}) 'porta de fixture configurada'
+$portaRecusada=$false;try{Obter-PortaPortalLocal @{PORTAL_PORTA='0'}}catch{$portaRecusada=$true};Igual $true $portaRecusada 'porta invalida recusada'

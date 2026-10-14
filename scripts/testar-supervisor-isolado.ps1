@@ -49,7 +49,7 @@ function Remover-DiretorioTemporario([string]$Caminho){
  }
 }
 try{
- if($PortalReal-and@(Get-NetTCPConnection -LocalPort 3000 -State Listen -ErrorAction SilentlyContinue).Count){throw 'PortalReal exige porta 3000 livre; nao consulta instalacao existente.'}
+ $portasFixture=Reservar-PortasFixtureTeste;$portaFixture=$portasFixture[0];$urlFixture="http://127.0.0.1:$portaFixture"
  Registrar-FaseSupervisorTeste 'preparacao'
  Preparar-InstalacaoSupervisorTeste $raizReal $temp
  New-Item -ItemType Directory -Force "$temp\alertas\.venv\Scripts"|Out-Null
@@ -84,7 +84,7 @@ try{
  $npmFalso="@echo off`r`n:aguardar`r`nif exist `"..\privado\operacao\parar.sinal`" exit /b 0`r`nping 127.0.0.1 -n 2 >nul`r`ngoto aguardar`r`n"
  [IO.File]::WriteAllText("$temp\bin\npm.cmd",$npmFalso,[Text.Encoding]::ASCII)
  [IO.File]::WriteAllText("$temp\privado\comum\smtp.env","SMTP_HOST=x`r`nSMTP_PORT=1`r`nSMTP_USER=x`r`nSMTP_PASSWORD=x`r`nEMAIL_FROM_NAME=x")
- [IO.File]::WriteAllText("$temp\privado\portal\configuracao\portal.env","PORTAL_URL=http://127.0.0.1:3000`r`nPORTAL_BANCO_LOCAL=$BancoLocal`r`nINITIAL_ADMIN_PASSWORD=senha-ficticia-12345`r`nPORTAL_API_TOKEN=x`r`nBACKUP_EMAIL_TO=x")
+ [IO.File]::WriteAllText("$temp\privado\portal\configuracao\portal.env","PORTAL_URL=$urlFixture`r`nPORTAL_PORTA=$portaFixture`r`nRELATORIOS_PORTA=$($portasFixture[1])`r`nPORTAL_BANCO_LOCAL=$BancoLocal`r`nINITIAL_ADMIN_PASSWORD=senha-ficticia-12345`r`nPORTAL_API_TOKEN=x`r`nBACKUP_EMAIL_TO=x")
  [IO.File]::WriteAllText("$temp\privado\alertas\config\cfg_ambiente.txt","QLIK_TENANT=x`r`nQLIK_APP_ID=x`r`nQLIK_OBJ_ID=x`r`nDESTINATARIO_ALERTA=x")
  [IO.File]::WriteAllText("$temp\privado\comum\operacao.env","ALERTAS_HORARIOS=00:00`r`nBACKUP_HORARIOS=00:00`r`nLIMPEZA_HORARIO=00:00`r`nESPACO_MINIMO_GB=1`r`nMODO_ENSAIO=$(if($Ensaio){'1'}else{'0'})")
  [IO.File]::WriteAllText("$temp\privado\portal\configuracao\worker.env",'segredo-ficticio')
@@ -144,7 +144,7 @@ if($Atraso){Start-Sleep -Seconds $Atraso} # Simula VM lenta, somente no teste.
  $status=Get-Content $statusPath -Raw|ConvertFrom-Json;if(!$status.portal-or!$status.emails-or!$status.relatorios){throw 'Supervisor nao iniciou os processos simulados.'}
  if($PortalReal){
   Registrar-FaseSupervisorTeste "health-real-$BancoLocal"
-  if(!(Esperar-CondicaoTeste {try{(Invoke-WebRequest 'http://127.0.0.1:3000/api/health' -UseBasicParsing -TimeoutSec 2).StatusCode-eq200}catch{$false}} -Segundos 60)){throw "Portal real $BancoLocal nao ficou pronto."}
+  if(!(Esperar-CondicaoTeste {try{(Invoke-WebRequest "$urlFixture/api/health" -UseBasicParsing -TimeoutSec 2).StatusCode-eq200}catch{$false}} -Segundos 60)){throw "Portal real $BancoLocal nao ficou pronto."}
  }
  $saudeIniciada=$false
  for($i=0;$i-lt60;$i++){if(Test-Path "$temp\privado\operacao\saude-iniciada"){$saudeIniciada=$true;break};Start-Sleep -Milliseconds 500}
@@ -207,7 +207,7 @@ if($Atraso){Start-Sleep -Seconds $Atraso} # Simula VM lenta, somente no teste.
  $statusFinal=Get-Content $statusPath -Raw|ConvertFrom-Json;if($statusFinal.ensaio-ne[bool]$Ensaio){throw 'Status de encerramento perdeu o modo ensaio.'}
  if(Test-Path -LiteralPath "$temp\privado\portal\configuracao\worker.env"){throw 'Supervisor deixou worker.env depois de encerrar.'}
  if($PortalReal){
-  if(@(Get-NetTCPConnection -LocalPort 3000 -State Listen -ErrorAction SilentlyContinue).Count){throw 'Parada deixou a porta publica aberta.'}
+  if(@(Get-NetTCPConnection -LocalPort $portaFixture -State Listen -ErrorAction SilentlyContinue).Count){throw 'Parada deixou a porta publica aberta.'}
   # Sidecars podem permanecer apos parada forcada: a verificacao e de handles,
   # nao de existencia. Nao apaga WAL/SHM enquanto alguem pode estar usando.
   $bancos=@(Get-ChildItem (Join-Path $temp 'privado/portal/banco') -Recurse -File|Where-Object {$_.Name-match '\.sqlite(?:-wal|-shm)?$'})

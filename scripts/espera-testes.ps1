@@ -33,13 +33,6 @@ function Preparar-InstalacaoSupervisorTeste([string]$Raiz,[string]$Destino){
  foreach($nome in @('supervisor','operacao-logica','validar-operacao','notificacao','avisos-admin','inicializacao-logica')){
   Copy-Item (Join-Path $Raiz "scripts/$nome.ps1") (Join-Path $alvo 'scripts')
  }
- # Injecao somente na copia temporaria: nunca consulta o Portal real em 3000.
- $supervisorTeste=Join-Path $alvo 'scripts/supervisor.ps1'
- $codigoTeste=[IO.File]::ReadAllText($supervisorTeste)
- $chamadaHealth='Consultar-HealthLocal $clienteHealth'
- if(!$codigoTeste.Contains($chamadaHealth)){throw 'Ponto de isolamento do health nao encontrado.'}
- $codigoTeste=$codigoTeste.Replace($chamadaHealth,($chamadaHealth+' "http://127.0.0.1:59999/api/health"'))
- [IO.File]::WriteAllText($supervisorTeste,$codigoTeste,(New-Object Text.UTF8Encoding($true)))
  Copy-Item (Join-Path $Raiz 'alertas/parametros') (Join-Path $alvo 'alertas') -Recurse -Force
  Copy-Item (Join-Path $Raiz 'alertas/processo/validar_parametros.py') (Join-Path $alvo 'alertas/processo')
  $parametros=Join-Path $Raiz 'alertas/parametros'
@@ -70,4 +63,18 @@ function Encerrar-ArvoreTeste($Processo){
   try{if(!$kill.WaitForExit(5000)){$kill.Kill()}}finally{$kill.Dispose()}
  }else{try{$Processo.Kill($true)}catch{}}
  try{if(!$Processo.WaitForExit(5000)){$Processo.Kill()}}catch{}
+}
+
+# Portas escolhidas pelo SO; nenhuma fixture sonda os endpoints da producao.
+function Reservar-PortasFixtureTeste {
+ $ouvintes=@();$portas=@()
+ try{
+  foreach($i in 1..2){$o=New-Object Net.Sockets.TcpListener([Net.IPAddress]::Loopback,0);$o.Start();$ouvintes+=$o;$portas+=$o.LocalEndpoint.Port}
+ }finally{foreach($o in $ouvintes){$o.Stop()}}
+ if($env:SV_PREPARO_RAIZ){
+  $registro=Join-Path $env:SV_PREPARO_RAIZ '.cache/preparo-portas'
+  New-Item -ItemType Directory -Force $registro|Out-Null
+  @{pid=$PID;portas=$portas}|ConvertTo-Json|Set-Content (Join-Path $registro ($PID.ToString()+'.json')) -Encoding UTF8
+ }
+ return $portas
 }

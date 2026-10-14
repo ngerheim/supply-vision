@@ -20,6 +20,7 @@ import path from 'node:path';
 import readline from 'node:readline';
 import { DatabaseSync } from 'node:sqlite';
 
+import { portasOperacao } from './portas-operacao.mjs';
 import { lerConfigBruta, portalPrivado } from './configuracao.mjs';
 import { validarBanco as resumir } from './validar-banco.mjs';
 import { prepararRestauracao } from './restauracao-segura.mjs';
@@ -59,7 +60,7 @@ function localizarBanco() {
 // O PID do supervisor nao basta: o Portal pode ter sido iniciado a mao ou o
 // arquivo pode estar ausente ou velho. Se algo responde na porta do Portal, o
 // banco esta aberto por alguem, e a restauracao nao pode seguir.
-function portalRespondendo(porta = 3000) {
+function portalRespondendo(porta) {
   return new Promise((resolve) => {
     const conexao = net.connect({ host: '127.0.0.1', port: porta });
     const fim = (resposta) => { conexao.destroy(); resolve(resposta); };
@@ -72,18 +73,18 @@ function portalRespondendo(porta = 3000) {
 function operacaoNoAr() {
   // Com o portal no ar o arquivo esta aberto: sobrescrever deixaria o banco
   // inconsistente e o processo continuaria escrevendo no que foi substituido.
+  const lock = path.join(portalPrivado, '..', 'operacao', 'supervisor.lock');
+  if (fs.existsSync(lock)) {
+    try { const fd = fs.openSync(lock, 'r+'); fs.closeSync(fd); } catch { return true; }
+  }
   const pid = path.join(portalPrivado, '..', 'operacao', 'supervisor.pid.json');
   if (!fs.existsSync(pid)) return false;
   try {
-    const { pid: numero } = JSON.parse(fs.readFileSync(pid, 'utf8'));
+    const { pid: numero } = JSON.parse(fs.readFileSync(pid, 'utf8').replace(/^\uFEFF/, ''));
     if (!numero) return false;
     process.kill(numero, 0);
     return true;
-  } catch { return false; }
-}
-
-function portaRelatorios() {
-  try { return Number(lerConfigBruta().RELATORIOS_PORTA || 3001); } catch { return 3001; }
+  } catch (erro) { return erro.code === 'EPERM'; }
 }
 
 async function confirmar(pergunta) {
@@ -94,8 +95,9 @@ async function confirmar(pergunta) {
 }
 
 if (!fs.existsSync(origem)) throw new Error(`Backup nao encontrado: ${origem}`);
-if (operacaoNoAr() || await portalRespondendo()) throw new Error('A operacao esta no ar (supervisor ativo ou Portal respondendo na porta 3000). Pare a operacao antes de restaurar.');
-if (await portalRespondendo(portaRelatorios())) throw new Error(`O servico de relatorios esta respondendo na porta ${portaRelatorios()}. Pare-o antes de restaurar.`);
+const portas = portasOperacao(lerConfigBruta());
+if (operacaoNoAr() || await portalRespondendo(portas.portal)) throw new Error('A operacao esta no ar (supervisor ativo ou Portal respondendo na porta configurada). Pare a operacao antes de restaurar.');
+if (await portalRespondendo(portas.relatorios)) throw new Error(`O servico de relatorios esta respondendo na porta ${portas.relatorios}. Pare-o antes de restaurar.`);
 
 const liberarRestauracao = travarRestauracao(true);
 try {

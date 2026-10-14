@@ -16,7 +16,7 @@
     "email:watch": "node --experimental-strip-types scripts/processar-emails.mjs --watch",
     "lint": "oxlint",
     "typecheck": "tsc --noEmit",
-    "test": "node --test --experimental-strip-types tests/*.test.ts tests/*.test.mjs",
+    "test": "node --import ./scripts/isolamento-preparo.mjs --test --experimental-strip-types tests/*.test.ts tests/*.test.mjs",
     "format": "oxfmt",
     "test:restore": "node --experimental-strip-types scripts/testar-restauracao.mjs",
     "test:imports": "node --experimental-strip-types scripts/teste-importacao-stress.mjs"

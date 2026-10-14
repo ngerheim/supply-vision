@@ -1,7 +1,9 @@
+import { portasOperacao } from './portas-operacao.mjs';
 import { lerConfigBruta } from './configuracao.mjs';
 import { pathToFileURL } from 'node:url';
 
-export async function verificarSaude(base = 'http://127.0.0.1:3000') {
+export async function verificarSaude(base) {
+  base ||= `http://127.0.0.1:${portasOperacao(lerConfigBruta()).portal}`;
   const origem = new URL(base).origin;
   // Logo apos a partida o servidor ainda compila e migra sob demanda; um
   // primeiro pedido lento nao e defeito. Tenta de novo antes de reprovar.

@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import http from 'node:http';
 import { timingSafeEqual } from 'node:crypto';
+import { travarRestauracao } from './trava-restauracao.mjs';
 import { DatabaseSync } from 'node:sqlite';
 
 export function arquivoSqliteLocal(persistencia) {
@@ -12,23 +13,25 @@ export function arquivoSqliteLocal(persistencia) {
   return arquivos.length ? path.join(pasta, arquivos[0]) : null;
 }
 
-/** @param {{ persistencia?: string, token: string, arquivo?: string | null }} options */
-export function criarServidorSqlite({ persistencia, token, arquivo = null }) {
+/** @param {{ persistencia?: string, token: string, arquivo?: string | null, pastaRestauracao?: string | null }} options */
+export function criarServidorSqlite({ persistencia, token, arquivo = null, pastaRestauracao = null }) {
   if (!token || token.length < 32) throw new Error('SQLite local exige token interno.');
-  let db;
+  let db, liberarRestauracao;
   function abrir() {
     if (db) return db;
     const alvo = arquivo || arquivoSqliteLocal(persistencia);
     if (!alvo) throw new Error('SQLite local ainda nao inicializado.');
-    const candidato = new DatabaseSync(alvo);
+    if (pastaRestauracao) liberarRestauracao = travarRestauracao(false, pastaRestauracao);
+    let candidato;
     try {
+      candidato = new DatabaseSync(alvo);
       candidato.exec('PRAGMA busy_timeout=5000; PRAGMA foreign_keys=ON');
       // A restauracao prepara a copia com journal DELETE. Retomar em sqlite
       // precisa restabelecer WAL, assim como o workerd fazia ao abrir a base.
       const journal = candidato.prepare('PRAGMA journal_mode=WAL').get();
       if (journal.journal_mode !== 'wal') throw new Error('SQLite local exige suporte a WAL.');
       db = candidato;return db;
-    } catch (erro) { candidato.close();throw erro; }
+    } catch (erro) { candidato?.close();liberarRestauracao?.();liberarRestauracao = null;throw erro; }
   }
   function consultar({ sql, values }) {
     if (typeof sql !== 'string' || !Array.isArray(values)) throw new Error('Consulta invalida.');
@@ -67,7 +70,7 @@ export function criarServidorSqlite({ persistencia, token, arquivo = null }) {
       res.end(JSON.stringify({ success: true, resultados }));
     } catch (erro) { res.writeHead(500);res.end(JSON.stringify({ success: false, error: erro instanceof Error ? erro.message : 'Falha SQL.' })); }
   });
-  function fecharBanco() { db?.close();db = null; }
+  function fecharBanco() { db?.close();db = null;liberarRestauracao?.();liberarRestauracao = null; }
   servidor.on('close', fecharBanco);
   servidor.encerrar = () => {
     servidor.close();servidor.closeAllConnections();fecharBanco();

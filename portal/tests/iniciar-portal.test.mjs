@@ -86,3 +86,14 @@ void test('seletor do banco local usa sqlite por padrao e aceita reversao explic
   // E uma escolha do processo local, nao uma variavel a publicar na Cloudflare.
   assert.equal(montarArquivoVars({PORTAL_BANCO_LOCAL:'d1'}),'');
 });
+
+void test('partida usa a porta configurada tambem no ambiente descartavel', () => {
+  const config={PORTAL_URL:'http://127.0.0.1:4199',PORTAL_PORTA:'4199',RELATORIOS_PORTA:'4198'};
+  assert.deepEqual(montarArgumentos('local',null,config).slice(-4),['--ip','127.0.0.1','--port','4199']);
+  assert.deepEqual(montarArgumentos('',null,config).slice(-2),['--port','4199']);
+  assert.throws(()=>montarArgumentos('local',null,{RELATORIOS_PORTA:'invalida'}),/invalidas/);
+});
+
+void test('URL publica com proxy nao muda a porta local padrao', () => {
+  assert.deepEqual(montarArgumentos('local',null,{PORTAL_URL:'https://portal.empresa.test'}).slice(-2),['--port','3000']);
+});
