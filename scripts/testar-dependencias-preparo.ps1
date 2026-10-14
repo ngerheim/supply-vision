@@ -32,7 +32,7 @@ $ErrorActionPreference='Stop'
 function ValidarPythonMock {}
 function Registrar($Texto){Add-Content (Join-Path $Preparo 'passos.txt') $Texto}
 function Conferir-Isolamento {
- if($env:SUPPLY_VISION_PRIVADO-ne(Join-Path $Preparo 'privado')-or$env:MODO_ENSAIO-ne'1'-or$env:PORTAL_BANCO_LOCAL-ne'sqlite'){throw 'Ambiente de producao herdado.'}
+ if($env:SV_PREPARO_RAIZ-ne$Preparo-or$env:TEMP-ne(Join-Path $Preparo '.cache')-or$env:SUPPLY_VISION_PRIVADO-ne(Join-Path $Preparo 'privado')-or$env:MODO_ENSAIO-ne'1'-or$env:PORTAL_BANCO_LOCAL-ne'sqlite'){throw 'Ambiente de producao herdado.'}
 }
 function git {$global:LASTEXITCODE=0;'2'*40}
 function npm.cmd {

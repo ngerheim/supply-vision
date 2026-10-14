@@ -11,7 +11,7 @@ import { criarProxyIpLogin, reservarPortaLoopback } from './proxy-ip-login.mjs';
 // O mesmo transporte atende a instalacao e os testes descartaveis. O workerd
 // continua servindo o portal; em sqlite, suas consultas passam pelo Node.
 // Os consumidores externos continuam abrindo o arquivo por conta propria.
-export async function iniciarRuntimeLocal(argumentos, { projeto = path.resolve(import.meta.dirname, '..'), tokenIp = null, bancoLocal = 'sqlite', pararArquivo = null, pai = null } = {}) {
+export async function iniciarRuntimeLocal(argumentos, { projeto = path.resolve(import.meta.dirname, '..'), tokenIp = null, bancoLocal = 'sqlite', pararArquivo = null, pai = null, pastaRestauracao = null } = {}) {
   const args = [...argumentos];
   function retirar(nome, padrao) {
     const indice = args.indexOf(nome);
@@ -30,7 +30,7 @@ export async function iniciarRuntimeLocal(argumentos, { projeto = path.resolve(i
   const varsOriginal = retirar('--env-file', null);
   const temporario = fs.mkdtempSync(path.join(os.tmpdir(), 'portal-runtime-'));
   const token = randomBytes(32).toString('hex');
-  const sqlite = bancoLocal === 'sqlite' ? criarServidorSqlite({ persistencia, token }) : null;
+  const sqlite = bancoLocal === 'sqlite' ? criarServidorSqlite({ persistencia, token, pastaRestauracao }) : null;
   let proxy, processo, encerramento, vigilancia;
   async function encerrarArvore() {
     if (!processo?.pid) return;

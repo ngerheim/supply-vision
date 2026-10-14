@@ -15,7 +15,7 @@ function comRepositorio(conferir) {
     if (versionado) execFileSync('git', ['add', '--', nome], { cwd: raiz, stdio: 'pipe' });
   };
   try {
-    execFileSync('git', ['init'], { cwd: raiz, stdio: 'pipe' });
+    execFileSync('git', ['init', '--initial-branch=main'], { cwd: raiz, stdio: 'pipe' });
     conferir(raiz, gravar);
   } finally { fs.rmSync(raiz, { recursive: true, force: true }); }
 }
@@ -96,4 +96,24 @@ void test('SheetJS: hash fixado, comparacao com oficial e adulteracao bloqueada'
     assert.throws(()=>conferirXlsx(diferente),/hash/);
     assert.throws(()=>conferirXlsx(arquivo,diferente),/oficial/);
   }finally{fs.rmSync(dir,{recursive:true,force:true});}
+});
+
+void test('worktree detached preserva guardas de arquivos, historico e raiz Git', () => {
+  comRepositorio((raiz, gravar) => {
+    const git = args => execFileSync('git', ['-c','user.name=Teste','-c','user.email=teste@example.com',...args], {cwd:raiz,encoding:'utf8',stdio:'pipe'}).trim();
+    gravar('texto.txt','limpo');git(['commit','-m','base']);const base=git(['rev-parse','HEAD']);
+    const worktree = path.join(raiz, 'worktree-descartavel');
+    git(['worktree','add','--detach',worktree,base]);
+    try {
+      assert.equal(fs.statSync(path.join(worktree,'.git')).isFile(),true);
+      assert.deepEqual(arquivosComInfraInterna(worktree),[]);
+      fs.writeFileSync(path.join(worktree,'texto.txt'),padroesInfraInterna[0]);
+      execFileSync('git',['add','texto.txt'],{cwd:worktree});
+      execFileSync('git',['-c','user.name=Teste','-c','user.email=teste@example.com','commit','-m','fixture'],{cwd:worktree,stdio:'pipe'});
+      assert.deepEqual(arquivosComInfraInterna(worktree),['texto.txt']);
+      assert.equal(commitsComInfraInterna(worktree,base),true);
+      const aninhada = path.join(worktree,'sem-git');fs.mkdirSync(aninhada);
+      assert.throws(()=>arquivosComInfraInterna(aninhada),/Nao foi possivel/);
+    } finally { git(['worktree','remove','--force',worktree]); }
+  });
 });

@@ -40,3 +40,22 @@ cada atualizador tem limite de 15 minutos. O job tem limite de 25 minutos,
 incluindo setup/diagnosticos. Timeout encerra a arvore de teste e limpa a tarefa
 SYSTEM separada. Logs/amostras ficam em artifact por 7 dias; bancos e snapshots
 nao sao publicados.
+
+## Isolamento das suites do PREPARAR
+
+O preparador reserva portas locais pelo SO e grava `PORTAL_PORTA` e
+`RELATORIOS_PORTA` na configuracao ficticia. Partida, build, health, parada e
+restauracao usam essa configuracao. `PORTAL_URL` continua sendo a URL publica;
+um proxy HTTPS nao muda a porta local padrao 3000.
+
+`isolamento-preparo.mjs`, carregado pelo comando de testes e herdado pelos filhos,
+reprova arquivos/SQLite fora do worktree (inclusive links) e conexoes que nao
+pertencam a fixtures com portas reservadas naquele preparo. PID/trava e caches
+ficam na mesma raiz descartavel. Nenhuma barreira de restauracao/parada e ignorada;
+a ponte SQLite tambem participa da trava de restauracao enquanto mantem o banco
+aberto. Fora do PREPARAR, o preload nao muda o processo.
+
+A guarda publica do Git exige que a pasta informada seja a raiz exata do
+repositorio: um TEMP sem `.git` dentro do worktree nao pode herdar o Git ancestral
+e parecer aprovado. Fixtures com worktree/detached HEAD verificam que arquivos e
+commits proibidos continuam sendo detectados.

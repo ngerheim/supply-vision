@@ -7,7 +7,7 @@ $Raiz=(Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 . (Join-Path $PSScriptRoot 'operacao-logica.ps1')
 Validar-PastaPreparo $Instalacao $Raiz
 # Nao herdar caminhos, credenciais, caches ou modo de producao.
-Get-ChildItem Env: | Where-Object Name -Match '^(SUPPLY_VISION_|SV_|PORTAL_|SMTP_|EMAIL_|BACKUP_|QLIK_|ADMIN_|MODO_ENSAIO|RELATORIOS_|WRANGLER_|MINIFLARE_|XDG_|CLOUDFLARE_|CF_|NPM_CONFIG_|PIP_|PYTHONPATH$|VIRTUAL_ENV$)' | ForEach-Object {Remove-Item ('Env:'+$_.Name)}
+Get-ChildItem Env: | Where-Object Name -Match '^(SUPPLY_VISION_|SV_|PORTAL_|SMTP_|EMAIL_|BACKUP_|QLIK_|ADMIN_|MODO_ENSAIO|RELATORIOS_|WRANGLER_|MINIFLARE_|XDG_|CLOUDFLARE_|CF_|GIT_|NPM_CONFIG_|PIP_|PYTHONPATH$|VIRTUAL_ENV$|NODE_OPTIONS$)' | ForEach-Object {Remove-Item ('Env:'+$_.Name)}
 $env:SUPPLY_VISION_PRIVADO=Join-Path $Raiz 'privado'
 $env:PORTAL_BANCO_LOCAL='sqlite'
 $env:MODO_ENSAIO='1'
@@ -15,7 +15,7 @@ $env:SV_PREPARO_RAIZ=$Raiz
 $env:XDG_CONFIG_HOME=Join-Path $Raiz '.cache'
 $env:XDG_CACHE_HOME=$env:XDG_CONFIG_HOME
 [void][IO.Directory]::CreateDirectory($env:XDG_CONFIG_HOME)
-$env:TEMP=$env:XDG_CONFIG_HOME;$env:TMP=$env:XDG_CONFIG_HOME
+$env:TEMP=$env:XDG_CONFIG_HOME;$env:TMP=$env:XDG_CONFIG_HOME;$env:TMPDIR=$env:XDG_CONFIG_HOME
 $env:WRANGLER_CACHE_DIR=Join-Path $env:XDG_CONFIG_HOME 'wrangler'
 $env:WRANGLER_LOG_PATH=Join-Path $Raiz '.cache/wrangler.log'
 $env:WRANGLER_SEND_METRICS='false'
@@ -39,9 +39,15 @@ try {
  Add-Content (Join-Path $env:SUPPLY_VISION_PRIVADO 'comum/operacao.env') "`nMODO_ENSAIO=1`nADMIN_ALERTA_EMAIL="
  $configPortal=Join-Path $env:SUPPLY_VISION_PRIVADO 'portal/configuracao/portal.env'
  $texto=[IO.File]::ReadAllText($configPortal)
- $texto=[regex]::Replace($texto,'(?m)^PORTAL_URL=.*$','PORTAL_URL=http://127.0.0.1:59998')
+ $portasPreparo=@();$reservas=@()
+ try{foreach($i in 1..2){$reserva=New-Object Net.Sockets.TcpListener([Net.IPAddress]::Loopback,0);$reserva.Start();$reservas+=$reserva;$portasPreparo+=$reserva.LocalEndpoint.Port}}
+ finally{foreach($reserva in $reservas){$reserva.Stop()}}
+ $registroPortas=Join-Path $env:XDG_CONFIG_HOME 'preparo-portas'
+ New-Item -ItemType Directory -Force $registroPortas|Out-Null
+ @{pid=$PID;portas=$portasPreparo}|ConvertTo-Json|Set-Content (Join-Path $registroPortas ($PID.ToString()+'.json')) -Encoding UTF8
+ $texto=[regex]::Replace($texto,'(?m)^PORTAL_URL=.*$',('PORTAL_URL=http://127.0.0.1:'+$portasPreparo[0]))
  $texto=[regex]::Replace($texto,'(?m)^BACKUP_EMAIL_TO=.*$','BACKUP_EMAIL_TO=teste@example.invalid')
- [IO.File]::WriteAllText($configPortal,($texto+"`nRELATORIOS_PORTA=59997`n"))
+ [IO.File]::WriteAllText($configPortal,($texto+"`nPORTAL_PORTA=$($portasPreparo[0])`nRELATORIOS_PORTA=$($portasPreparo[1])`n"))
  $portal=Join-Path $Raiz 'portal';$alertas=Join-Path $Raiz 'alertas'
  if($ReinstalarNode-or!(Copiar-DependenciasPreparo (Join-Path $Instalacao 'portal/node_modules') (Join-Path $portal 'node_modules'))){
   Push-Location $portal
@@ -67,6 +73,7 @@ try {
  }finally{Pop-Location}
  Push-Location $alertas
  try{Executar-Preparo {& (Join-Path $alertas '.venv/Scripts/python.exe') -m pytest tests -q} 'Testes dos Alertas falharam no preparo.'}finally{Pop-Location}
+ $env:NODE_OPTIONS='--import="'+(New-Object Uri (Join-Path $portal 'scripts/isolamento-preparo.mjs')).AbsoluteUri+'"'
  foreach($teste in @('validar-operacao.ps1','testar-operacao.ps1','testar-supervisor-isolado.ps1','testar-persistencia-alertas.ps1')){
   Executar-Preparo {Executar-PowerShellOculto @('-NoProfile','-WindowStyle','Hidden','-ExecutionPolicy','Bypass','-File',(Join-Path $PSScriptRoot $teste))} "Teste operacional falhou no preparo: $teste"
  }

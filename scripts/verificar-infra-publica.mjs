@@ -53,7 +53,12 @@ export function lockfileSeguro(texto) {
   }
   return conferir(lock);
 }
+function exigirRaizGit(raiz) {
+  const topo = git(raiz, ['rev-parse', '--show-toplevel']).trim();
+  if (fs.realpathSync.native(topo) !== fs.realpathSync.native(raiz)) throw new Error('Nao foi possivel conferir: a pasta pertence a outro repositorio ancestral.');
+}
 export function arquivosComInfraInterna(raiz) {
+  exigirRaizGit(raiz);
   const arquivos = git(raiz, ['ls-files', '-z']).split('\0').filter(Boolean);
   return arquivos.filter(nome => {
     const conteudo = fs.readFileSync(path.join(raiz, nome)).toString('utf8');
@@ -62,6 +67,7 @@ export function arquivosComInfraInterna(raiz) {
 }
 export function commitsComInfraInterna(raiz, base) {
   if (!/^[a-f0-9]{40}$/i.test(base)) throw new Error('Base dos commits deve ser SHA completo.');
+  exigirRaizGit(raiz);
   const patch = git(raiz, ['log', '-p', '--format=commit %H%n%B', '--no-ext-diff', '--no-textconv', `${base}..HEAD`]);
   // Analisa adicoes, remocoes, contexto e mensagens; nao imprime dados encontrados.
   return contemInfra(patch);

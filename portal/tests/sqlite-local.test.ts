@@ -105,3 +105,18 @@ void test('base preparada pela restauracao em journal DELETE retorna a WAL ao ab
   const leitura=new DatabaseSync(arquivo,{readOnly:true});
   try{assert.equal(leitura.prepare('PRAGMA journal_mode').get()?.journal_mode,'wal');assert.equal(leitura.prepare('PRAGMA integrity_check').get()?.integrity_check,'ok');}finally{leitura.close();}
 });
+
+void test('ponte SQLite ativa impede restauracao mesmo sem supervisor/porta publica', async t => {
+  const { travarRestauracao } = await import('../scripts/trava-restauracao.mjs');
+  const pasta=fs.mkdtempSync(path.join(os.tmpdir(),'sv-ponte-restauracao-'));
+  const arquivo=path.join(pasta,'base.sqlite');const seed=new DatabaseSync(arquivo);seed.exec('CREATE TABLE dados(id INTEGER)');seed.close();
+  const token='a'.repeat(64);const servidor=criarServidorSqlite({arquivo,token,pastaRestauracao:pasta});
+  t.after(()=>{servidor.closeAllConnections();servidor.close();fs.rmSync(pasta,{recursive:true,force:true});});
+  await new Promise<void>(r=>servidor.listen(0,'127.0.0.1',r));
+  const porta=(servidor.address() as {port:number}).port;
+  const db=bancoSqliteLocal(String(porta),token,()=>{throw new Error('nao inicializar');});
+  await db.prepare('SELECT * FROM dados').all();
+  assert.throws(()=>travarRestauracao(true,pasta),/ao mesmo tempo/);
+  servidor.closeAllConnections();await new Promise<void>(r=>servidor.close(()=>r()));
+  const liberar=travarRestauracao(true,pasta);liberar();
+});

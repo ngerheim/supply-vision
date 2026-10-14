@@ -5,9 +5,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { DatabaseSync } from 'node:sqlite';
+import { reservarPortaLoopback } from '../scripts/proxy-ip-login.mjs';
 import { SCHEMA_RELATORIOS } from '../lib/relatorios.ts';
 
-void test('backup real e restauracao CLI recuperam estado e preservam copia anterior', () => {
+void test('backup real e restauracao CLI recuperam estado e preservam copia anterior', async () => {
   const dir = criarTemporarioTeste('sv-backup-e2e-');
   const banco = path.join(dir, 'portal/banco/estado/state/v3/d1/miniflare-D1DatabaseObject/teste.sqlite');
   fs.mkdirSync(path.dirname(banco), { recursive: true });
@@ -17,6 +18,9 @@ void test('backup real e restauracao CLI recuperam estado e preservam copia ante
   for (const ddl of SCHEMA_RELATORIOS) db.exec(ddl);
   db.exec("INSERT INTO users(id,name,email,password_hash,password_salt,created_at,role) VALUES('u','Antes','u@example.com','hash','salt','2026-01-01','admin')");
   db.exec("INSERT INTO report_jobs(id,request_key,action,created_by,created_at) VALUES('j','j','paralelo','u','2026-01-01')");
+  fs.mkdirSync(path.join(dir, 'portal/configuracao'), { recursive: true });
+  const portaPortal=await reservarPortaLoopback();
+  fs.writeFileSync(path.join(dir, 'portal/configuracao/portal.env'), `PORTAL_URL=http://127.0.0.1:${portaPortal}\nPORTAL_PORTA=${portaPortal}\nRELATORIOS_PORTA=${await reservarPortaLoopback()}\n`);
   const env = { ...process.env, SUPPLY_VISION_PRIVADO: dir };
   const cwd = path.resolve(import.meta.dirname, '..');
   try {

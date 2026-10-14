@@ -96,6 +96,8 @@ if($SemLogin){
  $env:WRANGLER_CACHE_DIR=Join-Path $cache 'wrangler';$env:WRANGLER_LOG_PATH=Join-Path $cache 'wrangler.log';$env:WRANGLER_SEND_METRICS='false'
  $env:TEMP=$cache;$env:TMP=$cache
 }
+$configPortalHealth=Ler-ConfigOperacao (Join-Path $Privado 'portal/configuracao/portal.env')
+$HealthUrl='http://127.0.0.1:'+(Obter-PortaPortalLocal $configPortalHealth)+'/api/health'
 $codigoSupervisor=0
 $clienteHealth=$null
 try{$linhaUrl=@(Get-Content (Join-Path $Privado 'portal\configuracao\portal.env') -ErrorAction Stop)|Where-Object{$_ -like 'PORTAL_URL=*'}|Select-Object -First 1;if($linhaUrl){$PortalUrl=($linhaUrl -split '=',2)[1].Trim()}}catch{}
@@ -115,7 +117,7 @@ try{
   Iniciar-Processo 'portal' $Node @(('"'+(Join-Path $Portal 'scripts\iniciar-portal.mjs')+'"'),'lan') $Portal
   Iniciar-Processo 'emails' $Node @('--experimental-strip-types',('"'+(Join-Path $Portal 'scripts\processar-emails.mjs')+'"'),'--watch') $Portal
   Iniciar-Processo 'relatorios' $Node @('--experimental-strip-types',('"'+(Join-Path $Portal 'scripts\processar-relatorios.mjs')+'"')) $Portal
-  $resultadoHealth=Consultar-HealthLocal $clienteHealth
+  $resultadoHealth=Consultar-HealthLocal $clienteHealth $HealthUrl
   $saudavel=$resultadoHealth.saudavel
   # Uma falha isolada do health (ex.: banco momentaneamente ocupado) nao e
   # queda: so duas seguidas (~15 s) declaram o portal fora do ar.

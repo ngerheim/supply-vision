@@ -259,20 +259,27 @@ function Remover-ArquivosIntroduzidos([string]$Raiz,[string[]]$Arquivos){
  }
 }
 
+function Obter-PortaPortalLocal([hashtable]$Config) {
+ $porta=3000
+ if($Config['PORTAL_PORTA']){$porta=[int]$Config['PORTAL_PORTA']}
+ if($porta-lt1-or$porta-gt65535){throw 'PORTAL_PORTA invalida.'}
+ return $porta
+}
+
 # A mesma barreira protege a central e o atualizador: PID/trava E portas.
 function Parar-Operacao([string]$Raiz,[int]$Limite=60) {
  $privado=Obter-PastaPrivada $Raiz
  $op=Join-Path $privado 'operacao'
- $porta=3001
+ $porta=3001;$portaPortal=3000
  $arquivo=Join-Path $privado 'portal/configuracao/portal.env'
- if(Test-Path -LiteralPath $arquivo){$cfg=Ler-ConfigOperacao $arquivo;if($cfg['RELATORIOS_PORTA']){$porta=[int]$cfg['RELATORIOS_PORTA']}}
+ if(Test-Path -LiteralPath $arquivo){$cfg=Ler-ConfigOperacao $arquivo;if($cfg['RELATORIOS_PORTA']){$porta=[int]$cfg['RELATORIOS_PORTA']};$portaPortal=Obter-PortaPortalLocal $cfg}
  if(!(Testar-SupervisorEncerrado $privado)){
   [IO.File]::WriteAllText((Join-Path $op 'parar.sinal'),'parar')
  }
  $prazo=[Diagnostics.Stopwatch]::StartNew()
  do {
   $encerrado=Testar-SupervisorEncerrado $privado
-  $portas=@(Get-NetTCPConnection -LocalPort 3000,$porta -State Listen -ErrorAction SilentlyContinue)
+  $portas=@(Get-NetTCPConnection -LocalPort $portaPortal,$porta -State Listen -ErrorAction SilentlyContinue)
   if($encerrado-and!$portas){return $true}
   if($prazo.Elapsed.TotalSeconds-ge$Limite){return $false}
   Start-Sleep -Milliseconds 500

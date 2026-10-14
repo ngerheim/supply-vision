@@ -23,6 +23,7 @@ import path from 'node:path';
 import process from 'node:process';
 import { iniciarRuntimeLocal } from './runtime-local.mjs';
 
+import { portasOperacao } from './portas-operacao.mjs';
 import { lerConfigBruta, portalPrivado } from './configuracao.mjs';
 
 // Lista fechada: so o que o codigo do Worker realmente le. Uma lista aberta
@@ -62,15 +63,17 @@ export function montarArquivoVars(config) {
   return linhas.length ? `${linhas.join('\n')}\n` : '';
 }
 
-export function montarArgumentos(modo, arquivoVars = null) {
+export function montarArgumentos(modo, arquivoVars = null, config = {}) {
   const base = [
     'dev',
     '--config', 'dist/server/wrangler.json',
     '--persist-to', path.join(portalPrivado, 'banco', 'estado', 'state'),
   ];
   if (arquivoVars) base.push('--env-file', arquivoVars);
-  if (modo === 'local') base.push('--ip', '127.0.0.1', '--port', '3000');
-  if (modo === 'lan') base.push('--ip', '0.0.0.0', '--port', '3000');
+  const { portal: porta } = portasOperacao(config);
+  if (modo === 'local') base.push('--ip', '127.0.0.1', '--port', String(porta));
+  if (modo === 'lan') base.push('--ip', '0.0.0.0', '--port', String(porta));
+  if (!['local', 'lan'].includes(modo) && config.PORTAL_PORTA) base.push('--port', String(porta));
   return base;
 }
 
@@ -90,8 +93,9 @@ if (process.argv[1] && path.resolve(process.argv[1]).endsWith('iniciar-portal.mj
     fs.mkdirSync(path.dirname(ARQUIVO_VARS), { recursive: true });
     fs.writeFileSync(ARQUIVO_VARS, conteudo, { encoding: 'utf8', mode: 0o600 });
   }
-  const runtime = await iniciarRuntimeLocal(montarArgumentos(modo, conteudo ? ARQUIVO_VARS : null), {
+  const runtime = await iniciarRuntimeLocal(montarArgumentos(modo, conteudo ? ARQUIVO_VARS : null, config), {
     bancoLocal,
+    pastaRestauracao: portalPrivado,
     pararArquivo: path.join(portalPrivado, '..', 'operacao', 'parar.sinal'),
     pai: process.ppid > 1 ? process.ppid : null,
     tokenIp: config.LOGIN_IP_POR_SOCKET === '1' ? config.PORTAL_API_TOKEN : null,
