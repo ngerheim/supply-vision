@@ -141,8 +141,8 @@ async function stopServer() {
     await pause(300);
   }
 }
-async function startServer() {
-  child = spawn(process.execPath, [path.join(portal, 'scripts/runtime-local.mjs'), 'dev', '--banco-local', bancoLocal, '--local', '--config', path.join(runtime, 'server/wrangler.json'), '--persist-to', state, '--var', `INITIAL_ADMIN_PASSWORD:${senha}`, '--ip', '127.0.0.1', '--port', String(port), '--inspector-port', '0'], {
+async function startServer(initialPassword = senha) {
+  child = spawn(process.execPath, [path.join(portal, 'scripts/runtime-local.mjs'), 'dev', '--banco-local', bancoLocal, '--local', '--config', path.join(runtime, 'server/wrangler.json'), '--persist-to', state, ...(initialPassword === null ? [] : ['--var', `INITIAL_ADMIN_PASSWORD:${initialPassword}`]), '--ip', '127.0.0.1', '--port', String(port), '--inspector-port', '0'], {
     cwd: portal, windowsHide: true, stdio: ['ignore', serverLog, serverLog],
     env: { ...process.env, XDG_CONFIG_HOME:path.join(output,'config'), XDG_CACHE_HOME:path.join(output,'cache'), NODE_ENV: 'development', WRANGLER_SEND_METRICS: 'false', WRANGLER_WRITE_LOGS: 'true', WRANGLER_LOG_PATH: path.join(output, 'wrangler.log'), MINIFLARE_REGISTRY_PATH: path.join(output, 'registry') },
   });
@@ -839,6 +839,23 @@ try {
     reader.close(); reader = null; await stopServer(); await startServer(); reader = new DatabaseSync(sqlitePath, { readOnly: true });
     assert.deepEqual(businessSnapshot(), before); assert.deepEqual(await good('/api/mappings'), mappings);
   });
+  for (const initialPassword of ['123456', null]) {
+    await check(`Administrador existente: initialize conclui com INITIAL_ADMIN_PASSWORD ${initialPassword === null ? 'ausente' : 'de 6 caracteres'}`, async () => {
+      assert.ok(query("SELECT id FROM users WHERE role='admin'").length > 0);
+      const before = query('SELECT * FROM users ORDER BY id');
+      const logOffset = fs.statSync(path.join(output, 'servidor.log')).size;
+      reader.close(); reader = null; await stopServer(); await startServer(initialPassword);
+      reader = new DatabaseSync(sqlitePath, { readOnly: true });
+      // Nova instancia executa initialize antes de responder a estas rotas.
+      const bootstrap = await good('/api/bootstrap');
+      assert.equal(bootstrap.user.role, 'admin');
+      assert.deepEqual(query('SELECT * FROM users ORDER BY id'), before);
+      const login = await request('/api/login', { method: 'POST', session: '', body: { email: 'admin@portal.test', password: senha } });
+      assert.equal(login.status, 200);
+      const startupLog = fs.readFileSync(path.join(output, 'servidor.log')).subarray(logOffset).toString();
+      assert.doesNotMatch(startupLog, /Base vazia: defina INITIAL_ADMIN_PASSWORD/);
+    });
+  }
   await check('Atualização de banco anterior cria tabelas vazias e preserva dados', async () => {
     const before = businessSnapshot();
     for (const table of ['agreements','agreement_items']) for (const row of before[table]) row.revision=0;
