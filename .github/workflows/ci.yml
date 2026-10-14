@@ -254,6 +254,56 @@ jobs:
         working-directory: portal
         run: npm run test:restore -- --fixture
 
+  atualizacao-real:
+    name: Atualizacao real
+    if: github.event_name == 'pull_request'
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+      - name: Obter main para calcular merge-base
+        shell: powershell
+        run: |
+          git fetch origin main
+          if ($LASTEXITCODE) { throw 'Nao foi possivel obter main para Atualizacao real.' }
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: portal/package-lock.json
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: |
+            alertas/config/requirements.txt
+            alertas/config/requirements-dev.txt
+      - name: Atualizar instalacao base e reprovar PREPARAR sem parada
+        timeout-minutes: 22
+        shell: powershell
+        env:
+          SV_TESTES_INTEGRACAO_WINDOWS: '1'
+        run: ./scripts/testar-atualizacao-real.ps1 -BaseRef origin/main -DestinoRef HEAD -LimiteSegundos 1200
+      - name: Guardar diagnostico da atualizacao (inclusive em falha)
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: atualizacao-real
+          retention-days: 7
+          if-no-files-found: ignore
+          path: |
+            ${{ runner.temp }}/sv-h2-*/fase.txt
+            ${{ runner.temp }}/sv-h2-*/*.log
+            ${{ runner.temp }}/sv-h2-*/negativo/*.log
+            ${{ runner.temp }}/sv-h2-*/negativo/*.jsonl
+            ${{ runner.temp }}/sv-h2-*/sucesso/*.log
+            ${{ runner.temp }}/sv-h2-*/sucesso/*.jsonl
+            ${{ runner.temp }}/sv-h2-*/instalacao/privado/operacao/atualizacao-tempos.log
+            ${{ runner.temp }}/sv-h2-*/instalacao/privado/operacao/supervisor.log
+
   alertas:
     name: Alertas
     runs-on: windows-latest
