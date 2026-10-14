@@ -107,7 +107,7 @@ $comando = "Set-Location '$projeto'; " +
   "`$env:WRANGLER_REGISTRY_PATH='$temp/wrangler-registry'; " +
   "`$env:WRANGLER_LOG_PATH='$temp/wrangler-logs'; " +
   "`$env:WRANGLER_SEND_METRICS='false'; " +
-  "npx wrangler dev --config dist/server/wrangler.json --persist-to '$temp' " +
+  "node scripts/runtime-local.mjs dev --config dist/server/wrangler.json --persist-to '$temp' " +
   "--var INITIAL_ADMIN_PASSWORD:'$senhaTeste' --var PORTAL_API_TOKEN:'relatorios-token-ci' --var RELATORIOS_PORTA:$($porta+1) --ip 127.0.0.1 --port $porta *> '$logServidor'"
 $script:processoServidor = (Start-Process powershell.exe -ArgumentList '-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', $comando -WindowStyle Hidden -PassThru).Id
 
@@ -411,6 +411,14 @@ Verifica 'Exclusoes respeitam a trava de uma operacao concorrente' {
   $codigoTeste=$LASTEXITCODE
   if($codigoTeste -ne 0){Start-Sleep -Seconds 2; Get-Content $logServidor | Select-String -Pattern 'erro nao tratado' -Context 0,15 | Out-Host}
   $codigoTeste -eq 0
+}
+Verifica 'Health repetido em ociosidade continua consultando o banco' {
+  & node (Join-Path $PSScriptRoot 'teste-health-repetido.mjs') | Out-Host
+  $LASTEXITCODE -eq 0
+}
+Verifica 'Health e opcoes funcionam durante escrita SQLite externa' {
+  & node (Join-Path $PSScriptRoot 'teste-sqlite-local-concorrente.mjs') $temp $arquivoBanco | Out-Host
+  $LASTEXITCODE -eq 0
 }
 Verifica 'Falhas de banco retornam 500 sem expor detalhes nem gravar parcialmente' {
   & node (Join-Path $PSScriptRoot 'teste-erros-banco.mjs') $temp $arquivoBanco | Out-Host
