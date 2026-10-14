@@ -51,6 +51,18 @@ function Node-H2([string[]]$Argumentos){
  & node.exe @Argumentos
  if($LASTEXITCODE){throw "Verificacao Node reprovou: $($Argumentos -join ' ')"}
 }
+function Obter-PidsConsumidoresH2 {
+ $todos=@(Get-CimInstance Win32_Process -Filter "Name='node.exe'" -ErrorAction Stop)
+ $pidsConsumidores=@{}
+ foreach($nome in @('emails','relatorios')){
+  $arquivo=Join-Path $raiz ('portal/scripts/processar-'+$nome+'.mjs')
+  $padrao='(?i)(?:^|[\s"''])'+[regex]::Escape($arquivo)+'(?:["'']|\s|$)'
+  $encontrados=@($todos|Where-Object {$_.CommandLine-match$padrao})
+  if($encontrados.Count-ne1){throw "Exige um consumidor real de $nome nesta instalacao; encontrados=$($encontrados.Count)."}
+  $pidsConsumidores[$nome]=[int]$encontrados[0].ProcessId
+ }
+ return $pidsConsumidores
+}
 function Login-H2 {
  $corpo=@{email='admin@h2.test';password='senha-ficticia-h2-12345'}|ConvertTo-Json
  $r=Invoke-WebRequest 'http://127.0.0.1:3000/api/login' -Method POST -ContentType 'application/json' -Body $corpo -SessionVariable sessao -UseBasicParsing -TimeoutSec 15
@@ -127,6 +139,7 @@ try{
    Node-H2 -Argumentos @($apoio,'pendencia',$raiz)
   }
   $logs=Join-Path $PastaTeste $caso;New-Item -ItemType Directory $logs|Out-Null
+  Obter-PidsConsumidoresH2|ConvertTo-Json|Set-Content (Join-Path $logs 'consumidores-antes.json') -Encoding UTF8
   $monitor=Start-Process node.exe -ArgumentList (@($apoio,'monitor',$raiz,$logs,$caso)|ForEach-Object{Proteger-ArgumentoAtualizacao $_}) -PassThru -WindowStyle Hidden -RedirectStandardOutput (Join-Path $logs 'monitor.log') -RedirectStandardError (Join-Path $logs 'monitor-erro.log')
   $processos+=$monitor
   if(!(Esperar-CondicaoTeste {Test-Path (Join-Path $logs 'monitor-pronto')} 15)){throw 'Monitor independente nao iniciou.'}
@@ -137,6 +150,8 @@ try{
   [IO.File]::WriteAllText((Join-Path $logs 'monitor-parar'),'ok')
   if(!(Esperar-ProcessoTeste $monitor 15)){throw 'Monitor nao encerrou em 15 s.'}
   foreach($p in @('atualizador.log','atualizador-erro.log','monitor.log','monitor-erro.log')){Get-Content (Join-Path $logs $p)|Write-Host}
+  $pidsDepois=Obter-PidsConsumidoresH2
+  $pidsDepois|ConvertTo-Json|Set-Content (Join-Path $logs 'consumidores-depois.json') -Encoding UTF8
   # ExitCode pode ser nulo no PS5.1; validar tambem marcador exclusivo e HEAD.
   $codigo=$atualizador.ExitCode;$saida=Get-Content (Join-Path $logs 'atualizador.log') -Raw
   if(($null-ne$monitor.ExitCode-and$monitor.ExitCode-ne0)-or!(Test-Path (Join-Path $logs 'monitor-aprovado'))){throw "Monitor reprovou $caso."}
@@ -144,6 +159,8 @@ try{
   if($caso-eq'negativo'){
    if($codigo-eq0-or$saida-notmatch'H2_FALHA_PREPARAR_INTENCIONAL'-or$head-ne$base){throw 'Falha PREPARAR nao confirmada, ou codigo alterado.'}
    if((Get-Content (Join-Path $privado 'operacao/supervisor.pid.json') -Raw|ConvertFrom-Json).pid-ne$pidBase){throw 'Supervisor original foi substituido no negativo.'}
+   $pidsAntes=Get-Content (Join-Path $logs 'consumidores-antes.json') -Raw|ConvertFrom-Json
+   foreach($nome in @('emails','relatorios')){if($pidsDepois[$nome]-ne$pidsAntes.$nome){throw "Consumidor $nome foi substituido no negativo."}}
    if(Test-Path (Join-Path $privado 'operacao/atualizacao.json')){throw 'Negativo alterou contexto de troca.'}
    Node-H2 -Argumentos @($apoio,'negativo',$raiz,$snapshot)
   }else{

@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 import test from 'node:test';
-import { conferirAmostras, conferirBanco, versoesEsperadas, semearBanco } from '../../scripts/ci/atualizacao-real.mjs';
+import { conferirAmostras, conferirBanco, versoesEsperadas, semearBanco, avaliarConsumidor, intervalosConsumidores, pidsConsumidores } from '../../scripts/ci/atualizacao-real.mjs';
 import path from 'node:path';
 import fs from 'node:fs';
 
-const ok = fase => ({ fase, health: true, supervisor: true, consumidores: true });
+const ok = fase => ({ fase, health: true, supervisor: true, consumidores: true, pidsConsumidores: { emails: 101, relatorios: 102 } });
 void test('H2 reprova quedas no PREPARAR/CONCLUIR e atualizacao sem parada', () => {
   assert.doesNotThrow(() => conferirAmostras([ok('PREPARAR'), { ...ok('TROCAR'), health: false }, ok('CONCLUIR')]));
   for (const fase of ['PREPARAR', 'CONCLUIR']) {
@@ -13,6 +13,36 @@ void test('H2 reprova quedas no PREPARAR/CONCLUIR e atualizacao sem parada', () 
   }
   assert.throws(() => conferirAmostras([ok('PREPARAR'), ok('TROCAR'), ok('CONCLUIR')]), /Nenhuma parada/);
   assert.throws(() => conferirAmostras([ok('PREPARAR'), { ...ok('PREPARAR'), consumidores: false }], true), /Operacao caiu/);
+});
+void test('H2 tolera atraso de ciclo sob carga, mas detecta processo morto e consumidor travado', () => {
+  const agora = Date.parse('2026-10-14T18:00:00Z');
+  const intervalos = intervalosConsumidores(path.resolve(import.meta.dirname, '../..'));
+  const vivo = () => {};
+  const morto = () => { throw Object.assign(new Error('morto'), { code: 'ESRCH' }); };
+  for (const intervalo of Object.values(intervalos)) {
+    const pulso = idade => new Date(agora - idade).toISOString();
+    assert.equal(avaliarConsumidor(101, pulso(31_000), intervalo, agora, vivo).disponivel, true);
+    assert.equal(avaliarConsumidor(101, pulso(0), intervalo, agora, morto).disponivel, false);
+    assert.equal(avaliarConsumidor(null, pulso(0), intervalo, agora, vivo).disponivel, false);
+    assert.equal(avaliarConsumidor(101, pulso(3 * intervalo + 5001), intervalo, agora, vivo).disponivel, false);
+    assert.equal(avaliarConsumidor(101, 'invalido', intervalo, agora, vivo).disponivel, false);
+    assert.equal(avaliarConsumidor(101, pulso(-5001), intervalo, agora, vivo).disponivel, false);
+  }
+});
+void test('H2 reprova troca de PID no PREPARAR e negativo, mesmo com ciclos recentes', () => {
+  const reiniciado = { ...ok('PREPARAR'), pidsConsumidores: { emails: 201, relatorios: 102 } };
+  for (const negativo of [false, true]) {
+    assert.throws(() => conferirAmostras([ok('PREPARAR'), reiniciado], negativo), /Consumidores reiniciaram/);
+  }
+  const trocado = { ...ok('CONCLUIR'), pidsConsumidores: { emails: 201, relatorios: 202 } };
+  assert.doesNotThrow(() => conferirAmostras([ok('PREPARAR'), { ...ok('TROCAR'), health: false }, trocado]));
+  assert.doesNotThrow(() => conferirAmostras([ok('PREPARAR'), ok('PREPARAR')], true));
+  assert.throws(() => conferirAmostras([{ ...ok('PREPARAR'), pidsConsumidores: {} }], true), /PIDs iniciais/);
+});
+void test('H2 extrai os PIDs atuais do log do supervisor, inclusive UTF8 BOM do PS5.1', () => {
+  const texto = '\uFEFF2026-10-14 12:00:00  emails iniciado (PID 101).\r\n2026-10-14 12:00:00  relatorios iniciado (PID 102).\r\n2026-10-14 12:01:00  emails iniciado (PID 201).\r\n';
+  assert.deepEqual(pidsConsumidores(texto), { emails: 201, relatorios: 102 });
+  assert.deepEqual(pidsConsumidores('sem partida'), { emails: null, relatorios: null });
 });
 void test('H2 detecta dados perdidos e migracoes ausentes, permitindo coluna nova', () => {
   const db = new DatabaseSync(':memory:');

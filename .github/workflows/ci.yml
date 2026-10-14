@@ -287,6 +287,8 @@ jobs:
         shell: powershell
         env:
           SV_TESTES_INTEGRACAO_WINDOWS: '1'
+          TEMP: ${{ runner.temp }}
+          TMP: ${{ runner.temp }}
         run: ./scripts/testar-atualizacao-real.ps1 -BaseRef origin/main -DestinoRef HEAD -LimiteSegundos 1200
       - name: Guardar diagnostico da atualizacao (inclusive em falha)
         if: always()
@@ -300,10 +302,16 @@ jobs:
             ${{ runner.temp }}/sv-h2-*/*.log
             ${{ runner.temp }}/sv-h2-*/negativo/*.log
             ${{ runner.temp }}/sv-h2-*/negativo/*.jsonl
+            ${{ runner.temp }}/sv-h2-*/negativo/consumidores-*.json
+            ${{ runner.temp }}/sv-h2-*/negativo/continuidade-preparar.json
             ${{ runner.temp }}/sv-h2-*/sucesso/*.log
             ${{ runner.temp }}/sv-h2-*/sucesso/*.jsonl
+            ${{ runner.temp }}/sv-h2-*/sucesso/consumidores-*.json
+            ${{ runner.temp }}/sv-h2-*/sucesso/continuidade-preparar.json
             ${{ runner.temp }}/sv-h2-*/instalacao/privado/operacao/atualizacao-tempos.log
             ${{ runner.temp }}/sv-h2-*/instalacao/privado/operacao/supervisor.log
+            ${{ runner.temp }}/sv-h2-*/instalacao/privado/operacao/emails-*.log
+            ${{ runner.temp }}/sv-h2-*/instalacao/privado/operacao/relatorios-*.log
 
   alertas:
     name: Alertas
