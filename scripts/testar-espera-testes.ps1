@@ -29,20 +29,71 @@ try{
  Write-Host 'PASSOU: convergencia apos 8 s, timeout de 60 s, polling 500 ms e diagnostico por instancia.'
 }finally{Remove-Item -LiteralPath $dir -Recurse -Force}
 
+# Executa apenas a resolucao do health da copia, com o transporte capturado.
+# Nenhum GET e feito: podemos testar tambem enderecos de producao proibidos.
+function Confirmar-HealthFixture([string]$Fixture,[int]$PortaEsperada,[int]$PortaProducao){
+ . (Join-Path $Fixture 'scripts/operacao-logica.ps1')
+ $Privado=Join-Path $Fixture 'privado';$clienteHealth=@{};$captura=@{chamadas=0;endereco=$null}
+ function Consultar-HealthLocal($Controle,[uri]$Endereco='http://127.0.0.1:3000/api/health'){
+  $captura.chamadas++;$captura.endereco=$Endereco
+  return @{saudavel=$true}
+ }
+ $erros=$null
+ $ast=[Management.Automation.Language.Parser]::ParseFile((Join-Path $Fixture 'scripts/supervisor.ps1'),[ref]$null,[ref]$erros)
+ if($erros.Count){throw 'Supervisor da fixture tem erro de sintaxe.'}
+ foreach($nome in @('configPortalHealth','HealthUrl')){
+  $atribuicoes=@($ast.FindAll({param($n) $n-is[Management.Automation.Language.AssignmentStatementAst]-and$n.Left-is[Management.Automation.Language.VariableExpressionAst]-and$n.Left.VariablePath.UserPath-eq$nome},$true))
+  if($atribuicoes.Count-ne1){throw "Resolucao do health ambiguo/ausente: $nome"}
+  . ([scriptblock]::Create($atribuicoes[0].Extent.Text))
+ }
+ $chamadas=@($ast.FindAll({param($n) $n-is[Management.Automation.Language.CommandAst]-and$n.GetCommandName()-eq'Consultar-HealthLocal'},$true))
+ if($chamadas.Count-ne1){throw 'Consulta do health ambiguo/ausente na fixture.'}
+ [void](. ([scriptblock]::Create($chamadas[0].Extent.Text)))
+ $u=$captura.endereco
+ if($captura.chamadas-ne1-or!$u-or!$u.IsAbsoluteUri-or$u.Scheme-ne'http'-or$u.Host-ne'127.0.0.1'-or$u.AbsolutePath-ne'/api/health'-or$u.UserInfo-or$u.Query-or$u.Fragment-or$u.Port-ne$PortaEsperada-or$u.Port-in@(3000,3001,$PortaProducao)){
+  throw 'Fixture perdeu isolamento do health: endpoint nao pertence a porta reservada da propria fixture.'
+ }
+}
 $fixture=Join-Path ([IO.Path]::GetTempPath()) ('sv-fixture-'+[guid]::NewGuid().ToString('N'))
+$producaoFicticia=$null
 try{
- Preparar-InstalacaoSupervisorTeste (Resolve-Path (Join-Path $PSScriptRoot '..')).Path $fixture
+ $raizFonte=(Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+ $supervisorOriginal=[IO.File]::ReadAllText((Join-Path $PSScriptRoot 'supervisor.ps1'))
+ Preparar-InstalacaoSupervisorTeste $raizFonte $fixture
  foreach($arq in @('scripts/supervisor.ps1','privado/alertas/parametros/de_para/itens.csv','alertas/processo/validar_parametros.py')){
   if(!(Test-Path (Join-Path $fixture $arq))){throw "Fixture incompleta: $arq"}
  }
- $supervisorFixture=[IO.File]::ReadAllText((Join-Path $fixture 'scripts/supervisor.ps1'))
- if(!$supervisorFixture.Contains('Consultar-HealthLocal $clienteHealth "http://127.0.0.1:59999/api/health"')){throw 'Fixture perdeu isolamento do health.'}
- $supervisorReal=[IO.File]::ReadAllText((Join-Path $PSScriptRoot 'supervisor.ps1'))
- if($supervisorReal.Contains('59999')){throw 'Injecao de teste alterou supervisor real.'}
+ $copia=Join-Path $fixture 'scripts/supervisor.ps1'
+ if([IO.File]::ReadAllText($copia)-ne$supervisorOriginal){throw 'Preparacao alterou o codigo copiado do supervisor.'}
+ # Mantem uma porta de producao ficticia ocupada durante a reserva da fixture.
+ $producaoFicticia=New-Object Net.Sockets.TcpListener([Net.IPAddress]::Loopback,0)
+ $producaoFicticia.Start();$portaProducao=$producaoFicticia.LocalEndpoint.Port
+ $portasFixture=Reservar-PortasFixtureTeste
+ $config=Join-Path $fixture 'privado/portal/configuracao/portal.env'
+ foreach($porta in $portasFixture){
+  [IO.File]::WriteAllText($config,"PORTAL_URL=https://portal.empresa.test`nPORTAL_PORTA=$porta`n")
+  Confirmar-HealthFixture $fixture $porta $portaProducao
+ }
+ foreach($caso in @('padrao','producao','config-ausente','chamada-sem-endereco')){
+  $conteudo=if($caso-eq'config-ausente'){'PORTAL_URL=https://portal.empresa.test'}else{"PORTAL_PORTA=$($portasFixture[0])"}
+  if($caso-eq'padrao'){$conteudo='PORTAL_PORTA=3000'}
+  if($caso-eq'producao'){$conteudo="PORTAL_PORTA=$portaProducao"}
+  [IO.File]::WriteAllText($config,$conteudo)
+  if($caso-eq'chamada-sem-endereco'){
+   $ast=[Management.Automation.Language.Parser]::ParseFile($copia,[ref]$null,[ref]$null)
+   $chamada=$ast.Find({param($n) $n-is[Management.Automation.Language.CommandAst]-and$n.GetCommandName()-eq'Consultar-HealthLocal'},$true)
+   [IO.File]::WriteAllText($copia,($supervisorOriginal.Remove($chamada.Extent.StartOffset,$chamada.Extent.Text.Length).Insert($chamada.Extent.StartOffset,'Consultar-HealthLocal $clienteHealth')))
+  }
+  $recusou=$false
+  try{Confirmar-HealthFixture $fixture $portasFixture[0] $portaProducao}catch{if($_.Exception.Message-notlike'Fixture perdeu isolamento do health:*'){throw};$recusou=$true}
+  if(!$recusou){throw "Verificacao aprovou health sem isolamento: $caso"}
+  [IO.File]::WriteAllText($copia,$supervisorOriginal)
+ }
+ if([IO.File]::ReadAllText((Join-Path $PSScriptRoot 'supervisor.ps1'))-ne$supervisorOriginal){throw 'Teste alterou supervisor real.'}
  $recusou=$false;try{Preparar-InstalacaoSupervisorTeste $PSScriptRoot $fixture}catch{$recusou=$true}
  if(!$recusou){throw 'Fixture sobrescreveu destino existente.'}
- Write-Host 'Fixture compartilhada: estrutura, exemplos e destino novo aprovados.'
-}finally{Remove-Item -LiteralPath $fixture -Recurse -Force -ErrorAction SilentlyContinue}
+ Write-Host 'Fixture compartilhada: health nas duas portas proprias; padrao/producao/fallback recusados; fonte e destino preservados.'
+}finally{if($producaoFicticia){$producaoFicticia.Stop()};Remove-Item -LiteralPath $fixture -Recurse -Force -ErrorAction SilentlyContinue}
 
 # Prazo externo e EOF herdado: a prontidao vem do proprio descendente, por
 # IPC. PID devolvido por spawn() sozinho nao prova que o Node chegou a iniciar.
