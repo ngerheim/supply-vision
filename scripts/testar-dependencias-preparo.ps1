@@ -13,6 +13,9 @@ try{
   foreach($dir in @('scripts','portal','compartilhado','alertas/config','alertas/parametros/de_para','alertas/parametros/filtros')){New-Item -ItemType Directory -Force (Join-Path $preparo $dir)|Out-Null}
   foreach($nome in @('atualizacao-preparo.ps1','preparar-configuracao-teste.ps1','operacao-logica.ps1')){Copy-Item (Join-Path $PSScriptRoot $nome) (Join-Path $preparo 'scripts')}
   Add-Content (Join-Path $preparo 'scripts/atualizacao-preparo.ps1') 'function Executar-PowerShellOculto($Argumentos){ & powershell.exe @Argumentos }'
+  # Preserva evidencias destas suites de decisoes; a remocao REAL e testada
+  # em testar-limpeza-preparo.ps1, inclusive com pai de versao anterior.
+  Add-Content (Join-Path $preparo 'scripts/atualizacao-preparo.ps1') 'function Limpar-PastaPreparo($Raiz,$Preparo){[IO.File]::WriteAllText((Join-Path $Preparo "limpeza-solicitada"),"ok")}'
   $codigo=[IO.File]::ReadAllText((Join-Path $PSScriptRoot 'preparar-atualizacao.ps1'))
   $codigo=$codigo.Replace('Validar-PythonAlertas','ValidarPythonMock')
   $codigo=$codigo.Replace("& (Join-Path `$alertas '.venv/Scripts/python.exe')",'& pythonmock')
@@ -74,6 +77,7 @@ exit $LASTEXITCODE
   if(($passos-contains'npm-ci')-ne($caso-eq'alteradas')-or($passos-contains'pip')-ne($caso-eq'alteradas')){throw "Decisao de dependencias incorreta: $caso"}
   if($rc-eq0-and@($passos|Where-Object {$_-like'operacional:*'}).Count-ne4){throw 'Removeu verificacao operacional.'}
   if((Test-Path (Join-Path $preparo 'preparo-aprovado'))-ne($rc-eq0)){throw 'Preparo reprovado foi aprovado.'}
+  if((Test-Path (Join-Path $preparo 'limpeza-solicitada'))-ne($rc-ne0)){throw 'Preparo nao solicitou limpeza ao reprovar.'}
   if((Get-Content (Join-Path $instalacao 'privado/sentinela'))-ne'producao ficticia'-or(Get-Content (Join-Path $instalacao 'portal/node_modules/versao'))-ne'reutilizada'){throw 'Preparo alterou instalacao.'}
   Write-Host "[OK] Dependencias e isolamento H1: $caso"
  }

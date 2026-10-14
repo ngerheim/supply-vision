@@ -378,6 +378,10 @@ usa três fases:
    limpeza; uma pendência mostra o caminho e o erro. A próxima atualização
    tenta limpar sobras antes de buscar novidades, mesmo sem commit novo.
    Preparos ativos e artefatos necessários à recuperação são preservados.
+   O preparador novo também encerra seus filhos e limpa a própria pasta quando
+   reprova, mesmo se o cancelamento for conduzido pelo atualizador antigo.
+   Ao iniciar, tenta limpar sobras reprovadas deixadas pelo pai antigo, sem ler
+   o contexto privado da produção; preparos aprovados são preservados nesse caso.
 2. **TROCAR, operação parada:** desabilita a tarefa quando aplicável, aguarda o
    encerramento, faz backup local validado e snapshot fixo pré-atualização.
    Aplica o commit e renomeia `dist`, `node_modules` e `.venv` já preparados,
