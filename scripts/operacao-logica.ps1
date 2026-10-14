@@ -322,13 +322,13 @@ function Novo-ClienteHealth([ValidateRange(100,30000)][int]$TimeoutMs=5000){
  $cliente=New-Object Net.Http.HttpClient($handler)
  $cliente.Timeout=[timespan]::FromMilliseconds($TimeoutMs)
  $cliente.MaxResponseContentBufferSize=8192
- return @{cliente=$cliente;handler=$handler}
+ return @{cliente=$cliente;handler=$handler;prazoMs=$TimeoutMs}
 }
 # Percorre toda a cadeia: .NET Framework pode envolver SocketException em WebException.
 function Classificar-ErroHealth([Exception]$Erro){
  $timeout=$false;$recusada=$false;$conexao=$false
  while($Erro){
-  if($Erro-is[OperationCanceledException]){$timeout=$true}
+  if($Erro-is[OperationCanceledException]-or$Erro-is[TimeoutException]){$timeout=$true}
   if($Erro-is[Net.Sockets.SocketException]){
    $conexao=$true
    if($Erro.SocketErrorCode-eq[Net.Sockets.SocketError]::ConnectionRefused){$recusada=$true}
@@ -352,7 +352,15 @@ function Consultar-HealthLocal($Controle,[uri]$Endereco='http://127.0.0.1:3000/a
  $tempo=[Diagnostics.Stopwatch]::StartNew();$resposta=$null;$codigo=0;$motivo='erro-cliente';$saudavel=$false
  try{
   # GetAsync padrao inclui o corpo no prazo total, limitado a 8 KiB.
-  $resposta=$Controle.cliente.GetAsync($Endereco).GetAwaiter().GetResult()
+  $pedido=$Controle.cliente.GetAsync($Endereco)
+  $prazo=if($Controle.prazoMs){[int]$Controle.prazoMs}else{5000}
+  # HttpClient.Timeout cancela por timer/ThreadPool. A espera local tambem
+  # precisa de prazo, mesmo se a continuacao do cancelamento estiver atrasada.
+  if(!$pedido.Wait($prazo)){
+   $Controle.cliente.CancelPendingRequests()
+   throw (New-Object TimeoutException 'Prazo local do health vencido.')
+  }
+  $resposta=$pedido.GetAwaiter().GetResult()
   $codigo=[int]$resposta.StatusCode
   if($codigo-ne200){$motivo='status-http'}
   else{
