@@ -96,3 +96,12 @@ void test('batch de escrita aguarda reserva externa sem reenviar ou confirmar pa
     assert.equal((await db.prepare('SELECT valor FROM dados WHERE id=1').first<{valor:string}>())?.valor,'confirmado');
   }finally{await fim;}
 });
+
+void test('base preparada pela restauracao em journal DELETE retorna a WAL ao abrir no executor', async t => {
+  const {arquivo,db}=await fixture(t);
+  const restaurado=new DatabaseSync(arquivo);
+  restaurado.exec('PRAGMA journal_mode=DELETE');restaurado.close();
+  await db.prepare('SELECT 1').first();
+  const leitura=new DatabaseSync(arquivo,{readOnly:true});
+  try{assert.equal(leitura.prepare('PRAGMA journal_mode').get()?.journal_mode,'wal');assert.equal(leitura.prepare('PRAGMA integrity_check').get()?.integrity_check,'ok');}finally{leitura.close();}
+});

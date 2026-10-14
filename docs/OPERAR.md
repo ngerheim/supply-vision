@@ -344,6 +344,14 @@ comandos em `atualizacao-processo-saida.log` e os erros em
 esta medição pode ter um resumo parcial, pois o processo anterior ainda não
 registrava os tempos antes da troca de código.
 
+O acesso ao banco local é escolhido por `PORTAL_BANCO_LOCAL=sqlite` em
+`privado/portal/configuracao/portal.env` (padrão quando ausente). Para voltar ao
+binding D1 anterior, **pare a operação**, altere para `PORTAL_BANCO_LOCAL=d1`
+e inicie novamente. Para retornar ao acesso nativo, faça o mesmo com `sqlite`.
+Não exige atualização, rebuild ou conversão do banco; arquivo e caminho são os
+mesmos. O modo `d1` pode voltar a apresentar o erro interno de commit token.
+Nunca mantenha duas operações abertas durante a troca.
+
 Para diagnóstico, o mesmo fluxo pode ser executado pelo PowerShell:
 
 ```powershell

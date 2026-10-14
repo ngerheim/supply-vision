@@ -135,3 +135,78 @@ Os logs e o resumo JSON ficam no diretório solicitado, com dados descartáveis.
 Validação local adicional: build, lint, typecheck, suite do Portal e testes
 PowerShell de health, atualização segura e central responsiva. WinForms real e
 Windows PowerShell 5.1 não foram exercitados neste ambiente Linux. Não aguardar CI.
+
+## Salvaguarda e compatibilidade do acesso local
+
+`PORTAL_BANCO_LOCAL=sqlite|d1` é lido de `portal.env` pelo launcher; ausente
+ou vazio significa `sqlite`. Valor inválido impede a partida. Para trocar,
+pare a operação, edite o arquivo e inicie novamente: não há rebuild ou conversão.
+No modo `d1`, o launcher não cria servidor SQL e limpa porta/token do adaptador;
+as consultas voltam a `env.DB`, mantendo o proxy HTTP corrigido.
+
+O Portal continua no processo workerd, iniciado pelo Wrangler (Node). Em
+`sqlite`, `lib/database.ts` seleciona `lib/sqlite-local.ts`: SQL parametrizado,
+valores e lotes chegam por HTTP autenticado a uma porta efêmera de loopback.
+O servidor `scripts/sqlite-local.mjs`, no mesmo processo Node do launcher
+`iniciar-portal.mjs`/`runtime-local.mjs`, executa `node:sqlite.DatabaseSync`.
+Não é um módulo SQLite carregado dentro do workerd. Somente a criação de uma
+base inexistente passa pelo D1, para preservar sua identidade original; o
+binding permanece declarado e pode manter uma conexão após essa inicialização.
+As consultas do Portal em uma base existente não passam por ele em `sqlite`.
+
+Não existe um único processo abrindo o arquivo: consumidores de emails e
+relatórios e expurgo continuam usando conexões Node independentes. O backup
+abre a origem somente para leitura e gera uma cópia consistente por `VACUUM INTO`;
+a restauração exige operação parada. A homologação consulta HTTP e seu diagnóstico
+de entregas abre o banco somente para leitura. Arquivo SQLite e caminho
+`estado/state/v3/d1/miniflare-D1DatabaseObject/<identidade>.sqlite` não mudam.
+
+O executor serializa suas consultas síncronas; a coordenação com os outros
+processos cabe aos locks do SQLite. WAL permite leitores durante escrita, mas
+apenas um escritor efetivo por vez. Executor, consumidores e expurgo usam
+`busy_timeout=5000`; backup não passa a herdar esse timeout. Transações de
+escrita dos lotes, reservas das filas e expurgo usam `BEGIN IMMEDIATE`.
+As travas de negócio permanecem atômicas pela chave primária, dono e validade
+na tabela `travas`, com revisões preservadas. Dois processos podem tentar
+escrever ao mesmo tempo: o segundo aguarda ou recebe SQLITE_BUSY se o prazo
+esgotar; não há promessa de espera ilimitada. A restauração prepara journal
+DELETE e agora o executor nativo restabelece WAL na abertura, como o D1 fazia.
+
+`teste-modos-banco-local.mjs` inicia o launcher real com base descartável,
+troca apenas `portal.env` em seis partidas e verifica identidade, formato,
+integridade, sessão preservada, reaplicação da migração 7 e seus dois índices
+em ambos os modos, backup com Portal aberto, expurgo, restauração CLI e
+retorno a WAL. Executa também o teste original de exclusões concorrentes em
+cada modo, sem novas tentativas. `teste-importacao-stress.mjs` usa o mesmo
+runtime, selecionável com `PORTAL_TESTE_BANCO_LOCAL`: 111 verificações passaram
+em sqlite e 111 em d1, incluindo rollback, travas e preservação no reinício.
+
+### Medição comparável (D1 anterior → SQLite nativo)
+
+Linux, Node 22.23.3, build idêntico e mesmo arquivo com 505 chamados,
+501 acordos e 501 condições sintéticas; mesmo proxy público nos dois modos.
+Por rota/modo: 10 aquecimentos e 100 respostas completas sequenciais, sem
+outro teste pesado em paralelo. As duas rotas autenticadas usam sessão real.
+Não são tempos do servidor Windows de produção nem uma garantia de ganho.
+
+| Rota | Mediana D1 / SQLite (ms) | p95 D1 / SQLite (ms) |
+| --- | --- | --- |
+| `/api/health` | 9,56 / 9,13 | 13,96 / 13,44 |
+| `/api/search/options` | 15,93 / 16,32 | 27,51 / 22,61 |
+| `/api/tickets?pageSize=50` | 14,01 / 14,61 | 19,03 / 19,99 |
+
+Neste ensaio os tempos ficaram próximos: health melhorou ligeiramente,
+mas as medianas de opções e listagem subiram. A finalidade da troca é retirar
+o caminho de bookmarks local, sem prometer menor latência em todas as rotas.
+
+Reproduzir, após build, com a porta 3000 livre:
+
+```sh
+node --experimental-strip-types scripts/teste-modos-banco-local.mjs work/modos
+PORTAL_TESTE_BANCO_LOCAL=sqlite npm run test:imports
+PORTAL_TESTE_BANCO_LOCAL=d1 npm run test:imports
+```
+
+Validação adicional desta salvaguarda: 381 testes passaram, 3 foram ignorados,
+nenhuma falha; lint, typecheck e build concluídos. Testes de integração acima
+usaram Node 22 em Linux; não substituem homologação no Windows.
