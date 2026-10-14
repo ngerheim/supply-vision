@@ -214,6 +214,19 @@ jobs:
         shell: powershell
         run: ./portal/scripts/teste-instalacao-nova.ps1
 
+      - name: Validar parada do supervisor com Portal real nos dois bancos
+        timeout-minutes: 11
+        shell: powershell
+        run: |
+          node --test portal/tests/runtime-local.test.mjs
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          foreach ($modo in @('sqlite','d1')) {
+            & powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./scripts/testar-reparo-configuracao.ps1 -BancoLocal $modo
+            if ($LASTEXITCODE) { exit $LASTEXITCODE }
+            & powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./scripts/testar-supervisor-isolado.ps1 -SemLogin -AvisoAdminTeste falha -PortalReal -BancoLocal $modo
+            if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          }
+
       - name: Validar operacao e persistencia dos alertas
         shell: powershell
         run: |
@@ -276,6 +289,7 @@ jobs:
           }
       - run: python -m pytest alertas/tests -q
       - name: Validar supervisor sem login, avisos e ensaio
+        timeout-minutes: 11
         shell: powershell
         run: |
           & powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./scripts/testar-supervisor-isolado.ps1 -SemLogin -AvisoAdminTeste falha

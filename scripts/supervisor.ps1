@@ -65,9 +65,15 @@ function Encerrar($p){
  try{
   $p.Refresh()
   if(!$p.HasExited){
+   # O launcher observa parar.sinal e fecha banco/ponte antes da arvore.
+   if((Test-Path $PararFile)-and$p.WaitForExit(2000)){return}
    # O processo pode sair entre a consulta e taskkill. Essa corrida nao pode
    # abortar o finally e deixar as demais arvores, inclusive saude, vivas.
-   try{& taskkill.exe /PID $p.Id /T /F 2>$null|Out-Null}catch{}
+   $encerrador=$null
+   try{
+    $encerrador=Start-Process taskkill.exe -ArgumentList @('/PID',"$($p.Id)",'/T','/F') -PassThru -WindowStyle Hidden
+    if(!$encerrador.WaitForExit(3000)){$encerrador.Kill();Log "AVISO: taskkill excedeu 3 s para PID $($p.Id)."}
+   }catch{}finally{if($encerrador){$encerrador.Dispose()}}
    if(!$p.WaitForExit(5000)){Log "AVISO: processo $($p.Id) nao encerrou; confira antes de reiniciar."}
   }
  }catch{Log "AVISO ao encerrar processo: $($_.Exception.Message)"}

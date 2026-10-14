@@ -131,7 +131,8 @@ public static class SvLogTeste {
  $bloqueioTempo=[IO.File]::Open($arquivoMedicao,[IO.FileMode]::Open,[IO.FileAccess]::Write,[IO.FileShare]::None)
  try{
   $global:LASTEXITCODE=0
-  Registrar-TempoAtualizacao $medicaoLegada 'bloqueio permanente'
+  $avisosBloqueio=@(Registrar-TempoAtualizacao $medicaoLegada 'bloqueio permanente' 3>&1)
+  if($avisosBloqueio.Count-ne1-or$avisosBloqueio[0]-isnot[Management.Automation.WarningRecord]){throw 'Bloqueio permanente nao gerou exatamente um aviso.'}
   if($LASTEXITCODE-ne0){throw 'Falha de medicao alterou codigo de sucesso.'}
  }finally{$bloqueioTempo.Dispose()}
  if(!$source.Contains("'operacao/atualizacao-tempos.log'")){throw 'Atualizador usa o arquivo ocupado pela central antiga.'}
@@ -168,8 +169,9 @@ public static class SvLogTeste {
  # Arquivo impedindo a criacao da pasta de log: apenas aviso, sem excecao.
  $obstaculo=Join-Path $pastaMedicao 'arquivo';[IO.File]::WriteAllText($obstaculo,'fixture')
  $impossivel=Nova-MedicaoAtualizacao (Join-Path $obstaculo 'saida.log')
- Iniciar-EtapaMedida $impossivel 'Backup' -WarningAction SilentlyContinue
- Resumir-MedicaoAtualizacao $impossivel -WarningAction SilentlyContinue
+ $avisosPasta=@(Iniciar-EtapaMedida $impossivel 'Backup' 3>&1; Resumir-MedicaoAtualizacao $impossivel 3>&1)
+ if($avisosPasta.Count-ne3-or@($avisosPasta|Where-Object {$_-isnot[Management.Automation.WarningRecord]}).Count){throw 'Pasta impossivel nao gerou os tres avisos previstos.'}
+ Write-Host '[OK] Medicao: quatro avisos esperados capturados em falhas provocadas; sucesso preservado.'
  # Falha antes de iniciar filho ainda gera resumo no pai.
  $pai=Nova-MedicaoAtualizacao $arquivoMedicao '' {$script:horaMedicao}
  Resumir-MedicaoAtualizacao $pai $true

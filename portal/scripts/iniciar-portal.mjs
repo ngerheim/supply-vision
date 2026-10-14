@@ -92,6 +92,8 @@ if (process.argv[1] && path.resolve(process.argv[1]).endsWith('iniciar-portal.mj
   }
   const runtime = await iniciarRuntimeLocal(montarArgumentos(modo, conteudo ? ARQUIVO_VARS : null), {
     bancoLocal,
+    pararArquivo: path.join(portalPrivado, '..', 'operacao', 'parar.sinal'),
+    pai: process.ppid > 1 ? process.ppid : null,
     tokenIp: config.LOGIN_IP_POR_SOCKET === '1' ? config.PORTAL_API_TOKEN : null,
   });
   const filho = runtime.processo;

@@ -67,6 +67,10 @@ export function criarServidorSqlite({ persistencia, token, arquivo = null }) {
       res.end(JSON.stringify({ success: true, resultados }));
     } catch (erro) { res.writeHead(500);res.end(JSON.stringify({ success: false, error: erro instanceof Error ? erro.message : 'Falha SQL.' })); }
   });
-  servidor.on('close', () => { db?.close();db = null; });
+  function fecharBanco() { db?.close();db = null; }
+  servidor.on('close', fecharBanco);
+  servidor.encerrar = () => {
+    servidor.close();servidor.closeAllConnections();fecharBanco();
+  };
   return servidor;
 }
