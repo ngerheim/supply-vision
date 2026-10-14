@@ -20,6 +20,10 @@ $env:WRANGLER_CACHE_DIR=Join-Path $env:XDG_CONFIG_HOME 'wrangler'
 $env:WRANGLER_LOG_PATH=Join-Path $Raiz '.cache/wrangler.log'
 $env:WRANGLER_SEND_METRICS='false'
 $env:MINIFLARE_REGISTRY_PATH=Join-Path $Raiz '.cache/registry'
+# Ate a compilacao do helper nativo usa o TEMP descartavel, nunca o da operacao.
+# Antes de build/testes: a saida deste processo encerra a arvore inteira.
+Entrar-JobPreparo
+@{pid=$PID;inicio=(Get-Process -Id $PID).StartTime.ToUniversalTime().ToString('o')}|ConvertTo-Json|Set-Content (Join-Path $Raiz 'preparo-processo.json') -Encoding UTF8
 function Executar-Preparo([scriptblock]$Comando,[string]$Falha) {
  $preferencia=$ErrorActionPreference;$inicio=[datetime]::UtcNow
  try{$ErrorActionPreference='Continue'; & $Comando; $codigo=$LASTEXITCODE}

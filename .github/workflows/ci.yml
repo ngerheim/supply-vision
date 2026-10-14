@@ -95,6 +95,8 @@ jobs:
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           ./scripts/testar-atualizacao-rapida.ps1
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          ./scripts/testar-limpeza-preparo.ps1
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
           ./scripts/testar-fases-atualizacao.ps1
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           ./scripts/testar-dependencias-preparo.ps1
@@ -304,11 +306,15 @@ jobs:
             ${{ runner.temp }}/sv-h2-*/negativo/*.jsonl
             ${{ runner.temp }}/sv-h2-*/negativo/consumidores-*.json
             ${{ runner.temp }}/sv-h2-*/negativo/continuidade-preparar.json
+            ${{ runner.temp }}/sv-h2-*/negativo-final/*.log
+            ${{ runner.temp }}/sv-h2-*/negativo-final/*.jsonl
+            ${{ runner.temp }}/sv-h2-*/negativo-final/*.json
             ${{ runner.temp }}/sv-h2-*/sucesso/*.log
             ${{ runner.temp }}/sv-h2-*/sucesso/*.jsonl
             ${{ runner.temp }}/sv-h2-*/sucesso/consumidores-*.json
             ${{ runner.temp }}/sv-h2-*/sucesso/continuidade-preparar.json
             ${{ runner.temp }}/sv-h2-*/instalacao/privado/operacao/atualizacao-tempos.log
+            ${{ runner.temp }}/sv-h2-*/instalacao/privado/operacao/atualizacao.json
             ${{ runner.temp }}/sv-h2-*/instalacao/privado/operacao/supervisor.log
             ${{ runner.temp }}/sv-h2-*/instalacao/privado/operacao/emails-*.log
             ${{ runner.temp }}/sv-h2-*/instalacao/privado/operacao/relatorios-*.log

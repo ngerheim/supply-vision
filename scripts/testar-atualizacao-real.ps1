@@ -132,15 +132,20 @@ try{
  $snapshot=Join-Path $PastaTeste 'antes.json'
  Node-H2 -Argumentos @($apoio,'snapshot',$raiz,$snapshot)
  $pidBase=(Get-Content (Join-Path $privado 'operacao/supervisor.pid.json') -Raw|ConvertFrom-Json).pid
- foreach($caso in @('negativo','sucesso')){
+ foreach($caso in @('negativo','sucesso','negativo-final')){
   Fase "atualizador completo: $caso"
   if($caso-eq'sucesso'){
    Git-H2 -Argumentos @('-C',$remoto,'update-ref','refs/heads/main',$destino)
    Node-H2 -Argumentos @($apoio,'pendencia',$raiz)
+  }elseif($caso-eq'negativo-final'){
+   Git-H2 -Argumentos @('-C',$remoto,'update-ref','refs/heads/main',$negativo)
+   Node-H2 -Argumentos @($apoio,'snapshot',$raiz,$snapshot)
+   $pidBase=(Get-Content (Join-Path $privado 'operacao/supervisor.pid.json') -Raw|ConvertFrom-Json).pid
   }
   $logs=Join-Path $PastaTeste $caso;New-Item -ItemType Directory $logs|Out-Null
   Obter-PidsConsumidoresH2|ConvertTo-Json|Set-Content (Join-Path $logs 'consumidores-antes.json') -Encoding UTF8
-  $monitor=Start-Process node.exe -ArgumentList (@($apoio,'monitor',$raiz,$logs,$caso)|ForEach-Object{Proteger-ArgumentoAtualizacao $_}) -PassThru -WindowStyle Hidden -RedirectStandardOutput (Join-Path $logs 'monitor.log') -RedirectStandardError (Join-Path $logs 'monitor-erro.log')
+  $modoMonitor=if($caso-eq'sucesso'){'sucesso'}else{'negativo'}
+  $monitor=Start-Process node.exe -ArgumentList (@($apoio,'monitor',$raiz,$logs,$modoMonitor)|ForEach-Object{Proteger-ArgumentoAtualizacao $_}) -PassThru -WindowStyle Hidden -RedirectStandardOutput (Join-Path $logs 'monitor.log') -RedirectStandardError (Join-Path $logs 'monitor-erro.log')
   $processos+=$monitor
   if(!(Esperar-CondicaoTeste {Test-Path (Join-Path $logs 'monitor-pronto')} 15)){throw 'Monitor independente nao iniciou.'}
   $argsAtualizador=@('-NoProfile','-ExecutionPolicy','Bypass','-File',(Join-Path $raiz 'scripts/atualizar-servidor.ps1'))
@@ -156,12 +161,16 @@ try{
   $codigo=$atualizador.ExitCode;$saida=Get-Content (Join-Path $logs 'atualizador.log') -Raw
   if(($null-ne$monitor.ExitCode-and$monitor.ExitCode-ne0)-or!(Test-Path (Join-Path $logs 'monitor-aprovado'))){throw "Monitor reprovou $caso."}
   $head=(Git-H2 -Argumentos @('-C',$raiz,'rev-parse','HEAD')).Trim()
-  if($caso-eq'negativo'){
-   if($codigo-eq0-or$saida-notmatch'H2_FALHA_PREPARAR_INTENCIONAL'-or$head-ne$base){throw 'Falha PREPARAR nao confirmada, ou codigo alterado.'}
+  if($caso-ne'sucesso'){
+   $headEsperado=if($caso-eq'negativo'){$base}else{$destino}
+   if($codigo-eq0-or$saida-notmatch'H2_FALHA_PREPARAR_INTENCIONAL'-or$head-ne$headEsperado){throw 'Falha PREPARAR nao confirmada, ou codigo alterado.'}
    if((Get-Content (Join-Path $privado 'operacao/supervisor.pid.json') -Raw|ConvertFrom-Json).pid-ne$pidBase){throw 'Supervisor original foi substituido no negativo.'}
    $pidsAntes=Get-Content (Join-Path $logs 'consumidores-antes.json') -Raw|ConvertFrom-Json
    foreach($nome in @('emails','relatorios')){if($pidsDepois[$nome]-ne$pidsAntes.$nome){throw "Consumidor $nome foi substituido no negativo."}}
-   if(Test-Path (Join-Path $privado 'operacao/atualizacao.json')){throw 'Negativo alterou contexto de troca.'}
+   if($caso-eq'negativo-final'){
+    $contexto=Get-Content (Join-Path $privado 'operacao/atualizacao.json') -Raw|ConvertFrom-Json
+    if($contexto.fase-ne'cancelado-preparo'-or$contexto.limpeza-ne'concluida'-or(Test-Path $contexto.preparo)){throw 'Negativo nao registrou cancelamento e limpeza do preparo.'}
+   }elseif(Test-Path (Join-Path $privado 'operacao/atualizacao.json')){throw 'Negativo da base alterou contexto de troca.'}
    Node-H2 -Argumentos @($apoio,'negativo',$raiz,$snapshot)
   }else{
    if(($null-ne$codigo-and$codigo-ne0)-or$head-ne$destino){throw 'Atualizacao nao chegou ao commit da PR.'}

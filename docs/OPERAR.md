@@ -370,8 +370,14 @@ usa três fases:
    materializados; links para fora das dependências/vendor são recusados.
    Compila e executa Portal, Alertas e as quatro verificações operacionais.
    Usa somente modelos fictícios, privado próprio, modo ensaio, SMTP em loopback
-   e portas 59997/59998 (fixtures do supervisor usam 59999). Não acessa o privado
-   da produção. Qualquer reprovação cancela sem solicitar a parada.
+   e portas próprias reservadas para cada ambiente descartável. Não acessa o
+   privado da produção. Qualquer reprovação cancela sem solicitar a parada.
+   No Windows, os filhos pertencem a um Job Object e terminam com o preparo.
+   A limpeza faz quatro tentativas, trata atributos e caminhos longos, e não
+   segue junctions. O contexto registra `cancelado-preparo` e a situação da
+   limpeza; uma pendência mostra o caminho e o erro. A próxima atualização
+   tenta limpar sobras antes de buscar novidades, mesmo sem commit novo.
+   Preparos ativos e artefatos necessários à recuperação são preservados.
 2. **TROCAR, operação parada:** desabilita a tarefa quando aplicável, aguarda o
    encerramento, faz backup local validado e snapshot fixo pré-atualização.
    Aplica o commit e renomeia `dist`, `node_modules` e `.venv` já preparados,
