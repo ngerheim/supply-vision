@@ -21,7 +21,7 @@ const state = path.join(output, 'state');
 const runtime = path.join(output, 'runtime');
 fs.cpSync(path.join(portal, 'dist'), runtime, { recursive: true });
 const serverLog = fs.openSync(path.join(output, 'servidor.log'), 'a');
-const senha = 'Teste-isolado-2026-0916';
+const senha = '12345';
 const bancoLocal = process.env.PORTAL_TESTE_BANCO_LOCAL || 'sqlite';
 if (!['sqlite','d1'].includes(bancoLocal)) throw new Error('PORTAL_TESTE_BANCO_LOCAL deve ser sqlite ou d1.');
 const checks = [], metrics = [];
@@ -170,37 +170,37 @@ try {
   sqlitePath = locateSqlite(state); assert.ok(sqlitePath);
   reader = new DatabaseSync(sqlitePath, { readOnly: true });
 
-  await check('Cadastro recusa 9 caracteres e aceita 10 pela API', async () => {
-    const body = { name: 'Limite senha', email: 'limite-senha@teste.test', role: 'viewer', password: '123456789' };
+  await check('Cadastro recusa 4 caracteres e aceita 5 pela API', async () => {
+    const body = { name: 'Limite senha', email: 'limite-senha@teste.test', role: 'viewer', password: '1234' };
     const recusado = await request('/api/users', { method: 'POST', body });
     assert.equal(recusado.status, 400);
-    assert.equal(recusado.data.error, 'A senha deve ter pelo menos 10 caracteres.');
+    assert.equal(recusado.data.error, 'A senha deve ter pelo menos 5 caracteres.');
     assert.equal(query('SELECT id FROM users WHERE email=?', body.email).length, 0);
-    await good('/api/users', { method: 'POST', body: { ...body, password: '1234567890' } }, 201);
-    assert.equal((await request('/api/login', { method: 'POST', session: '', body: { email: body.email, password: '1234567890' } })).status, 200);
+    await good('/api/users', { method: 'POST', body: { ...body, password: '12345' } }, 201);
+    assert.equal((await request('/api/login', { method: 'POST', session: '', body: { email: body.email, password: '12345' } })).status, 200);
   });
 
   for (const propria of [false, true]) {
-    await check(`${propria ? 'Troca da propria senha' : 'Redefinicao pelo admin'} recusa 9 e aceita 10 caracteres`, async () => {
+    await check(`${propria ? 'Troca da propria senha' : 'Redefinicao pelo admin'} recusa 4 e aceita 5 caracteres`, async () => {
       const email = `${propria ? 'propria' : 'admin-reset'}-senha@teste.test`;
       const criado = await good('/api/users', { method: 'POST', body: { name: 'Limite troca', email, password: senha, role: propria ? 'admin' : 'viewer' } }, 201);
       const login = await request('/api/login', { method: 'POST', session: '', body: { email, password: senha } });
       assert.equal(login.status, 200);
       const session = propria ? login.cookie : cookie;
       const antes = query('SELECT * FROM users WHERE id=?', criado.id)[0];
-      const body = { expectedRevision: antes.revision, password: '123456789' };
+      const body = { expectedRevision: antes.revision, password: '1234' };
       const recusado = await request(`/api/users/${criado.id}`, { method: 'PUT', session, body });
       assert.equal(recusado.status, 400);
-      assert.equal(recusado.data.error, 'A senha deve ter pelo menos 10 caracteres.');
+      assert.equal(recusado.data.error, 'A senha deve ter pelo menos 5 caracteres.');
       assert.deepEqual(query('SELECT * FROM users WHERE id=?', criado.id)[0], antes);
       assert.equal((await request('/api/session', { session: login.cookie })).data.user.id, criado.id);
       // Campo vazio altera apenas o cadastro e preserva a senha atual.
       await good(`/api/users/${criado.id}`, { method: 'PUT', session, body: { ...body, password: '' } });
       const atual = query('SELECT * FROM users WHERE id=?', criado.id)[0];
       assert.equal(atual.password_hash, antes.password_hash);
-      await good(`/api/users/${criado.id}`, { method: 'PUT', session, body: { expectedRevision: atual.revision, password: '1234567890' } });
+      await good(`/api/users/${criado.id}`, { method: 'PUT', session, body: { expectedRevision: atual.revision, password: '12345' } });
       assert.equal((await request('/api/session', { session: login.cookie })).data.user, null);
-      assert.equal((await request('/api/login', { method: 'POST', session: '', body: { email, password: '1234567890' } })).status, 200);
+      assert.equal((await request('/api/login', { method: 'POST', session: '', body: { email, password: '12345' } })).status, 200);
     });
   }
 
