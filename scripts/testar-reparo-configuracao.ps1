@@ -1,8 +1,9 @@
-param([ValidateSet('sqlite','d1')][string]$BancoLocal='sqlite')
+﻿param([ValidateSet('sqlite','d1')][string]$BancoLocal='sqlite')
 # Confere o reparo da configuracao privada usando a funcao real do atualizador,
 # num diretorio de mentira: nada do servidor e tocado.
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'operacao-logica.ps1')
+. (Join-Path $PSScriptRoot 'atualizacao-preparo.ps1')
 $fonte = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'atualizar-servidor.ps1') -Raw
 $inicio = $fonte.IndexOf('function Reparar-ConfiguracaoPrivada')
 $fim = $fonte.IndexOf("$" + "ContextoArquivo =") # definicoes precedem o controle de fases
@@ -70,7 +71,7 @@ try {
 # A reexecucao e o que faz uma correcao no proprio atualizador valer ja na
 # atualizacao que a traz; se ela sumir, o teste avisa.
 $ast=[Management.Automation.Language.Parser]::ParseInput($fonte,[ref]$null,[ref]$null)
-$chamada=$ast.Find({param($n) $n-is[Management.Automation.Language.CommandAst]-and$n.GetCommandName()-eq'powershell.exe'-and$n.Extent.Text.Contains('@argumentosReexecucao')},$true)
+$chamada=$ast.Find({param($n) $n-is[Management.Automation.Language.CommandAst]-and$n.GetCommandName()-eq'Executar-PowerShellOculto'-and$n.Extent.Text.Contains('$argumentosReexecucao')},$true)
 if (!$chamada -or $fonte -notmatch 'Argumentos-ReexecucaoAtualizador.*atualizar-servidor\.ps1') {
   throw 'O atualizador nao se relanca com o codigo novo.'
 }
@@ -85,21 +86,30 @@ try{
  $scriptNovo=Join-Path $tempFilho 'atualizar-servidor.ps1'
  [IO.File]::WriteAllText($scriptNovo,"throw 'codigo antigo nao pode executar'")
  $novo=@'
-param([switch]$JaAtualizado,[string]$VersaoAnterior,[switch]$Reaplicar)
+param([switch]$JaAtualizado,[string]$VersaoAnterior,[switch]$Reaplicar,[int]$Codigo)
 if(!$JaAtualizado-or!$Reaplicar-or$VersaoAnterior-ne('1'*40)){exit 9}
 [IO.File]::WriteAllText((Join-Path $PSScriptRoot 'novo.executado'),[IO.File]::ReadAllText((Join-Path $PSScriptRoot 'portal.env')))
 [Console]::Error.WriteLine('npm warn install-scripts fixture')
-exit 0
+exit $Codigo
 '@
  [IO.File]::WriteAllText($scriptNovo,$novo)
  [IO.File]::WriteAllText((Join-Path $tempFilho 'portal.env'),"PORTAL_BANCO_LOCAL=$BancoLocal")
- $argumentosReexecucao=Argumentos-ReexecucaoAtualizador $scriptNovo ('1'*40) $true
+ # Usa o lancador real, com o executavel do host apenas como ponto de injecao.
+ # Assim PS 5.1 e PS 7 exercitam CreateNoWindow, captura e codigo de saida.
  $script:hostReexecucao=(Get-Process -Id $PID).Path
- function powershell.exe { & $script:hostReexecucao @args; $global:LASTEXITCODE=$LASTEXITCODE }
- $preferenciaFilho=$ErrorActionPreference;$ErrorActionPreference='Continue'
- . ([scriptblock]::Create($blocoFilho.Extent.Text))
- if($rcFilho-ne0-or$ErrorActionPreference-ne'Stop'-or!(Test-Path (Join-Path $tempFilho 'novo.executado'))-or[IO.File]::ReadAllText((Join-Path $tempFilho 'novo.executado'))-ne"PORTAL_BANCO_LOCAL=$BancoLocal"){throw 'Reexecucao nao leu o codigo novo ou perdeu argumentos/codigo.'}
-}finally{Remove-Item Function:powershell.exe -ErrorAction SilentlyContinue;Remove-Item $tempFilho -Recurse -Force -ErrorAction SilentlyContinue}
+ $script:lancadorReexecucao=(Get-Command Executar-PowerShellOculto).ScriptBlock
+ function Executar-PowerShellOculto($Argumentos){ & $script:lancadorReexecucao $Argumentos $script:hostReexecucao }
+ foreach($codigoFilho in @(0,7)){
+  Remove-Item (Join-Path $tempFilho 'novo.executado') -Force -ErrorAction SilentlyContinue
+  $argumentosReexecucao=@(Argumentos-ReexecucaoAtualizador $scriptNovo ('1'*40) $true)+@('-Codigo',$codigoFilho)
+  $preferenciaFilho=$ErrorActionPreference;$ErrorActionPreference='Continue'
+  $saidaFilho=@(. ([scriptblock]::Create($blocoFilho.Extent.Text)))
+  if($rcFilho-ne$codigoFilho-or$ErrorActionPreference-ne'Stop'-or!(Test-Path (Join-Path $tempFilho 'novo.executado'))-or[IO.File]::ReadAllText((Join-Path $tempFilho 'novo.executado'))-ne"PORTAL_BANCO_LOCAL=$BancoLocal"){throw 'Reexecucao nao leu o codigo novo ou perdeu argumentos/codigo.'}
+  if(($saidaFilho-join' ')-notlike'*npm warn install-scripts fixture*'){throw 'Reexecucao perdeu stderr do filho.'}
+ }
+}finally{Remove-Item Function:Executar-PowerShellOculto -ErrorAction SilentlyContinue;Remove-Item $tempFilho -Recurse -Force -ErrorAction SilentlyContinue}
 if ($fonte -notmatch '(?m)^\s*Reparar-ConfiguracaoPrivada\s*$') { throw 'O reparo da configuracao nao e chamado na atualizacao.' }
 Write-Host '[OK] atualizador segue com o codigo novo depois do merge'
 Write-Host 'Reparo de configuracao: 4 conferencias aprovadas.' -ForegroundColor Green
+
+$global:LASTEXITCODE=0

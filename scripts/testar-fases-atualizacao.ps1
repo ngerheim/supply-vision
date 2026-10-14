@@ -1,6 +1,7 @@
 ﻿# Executa o atualizador inteiro com dependencias externas simuladas.
 # Worktree/artefatos/dados sao fixtures novas; nunca consulta uma instalacao real.
 $ErrorActionPreference='Stop'
+. (Join-Path $PSScriptRoot 'atualizacao-preparo.ps1')
 $fonteRaiz=(Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $base=Join-Path ([IO.Path]::GetTempPath()) ('sv-fases-'+[guid]::NewGuid().ToString('N'))
 $hostTeste=(Get-Process -Id $PID).Path
@@ -79,7 +80,8 @@ function powershell.exe {
 exit $LASTEXITCODE
 '@
   [IO.File]::WriteAllText((Join-Path $raiz 'runner.ps1'),$runner)
-  $saida=@(& $hostTeste -NoProfile -File (Join-Path $raiz 'runner.ps1') $caso $raiz 2>&1);$rc=$LASTEXITCODE
+  # O lancador drena stderr como texto sem NativeCommandError no PS 5.1.
+  $saida=@(Executar-PowerShellOculto @('-NoProfile','-File',(Join-Path $raiz 'runner.ps1'),$caso,$raiz) $hostTeste);$rc=$LASTEXITCODE
   $passos=@(Get-Content (Join-Path $raiz 'passos.txt'))
   if(($rc-eq0)-ne($caso-in@('sucesso','rede-falha','ensaio'))){throw "Resultado incorreto em $caso (rc=$rc): $saida"}
   foreach($rel in @('portal/dist','portal/node_modules','alertas/.venv')){
@@ -89,7 +91,7 @@ exit $LASTEXITCODE
   if($caso-eq'preparo-falha'){
    if($passos-contains'backup-local'-or$passos-contains'commit-novo'-or(Test-Path (Join-Path $raiz 'privado/operacao/parar.sinal'))){throw 'Preparo reprovado parou/alterou a instalacao.'}
   }elseif($caso-in@('sucesso','rede-falha','ensaio')){
-   if($passos.IndexOf('backup-rede')-lt$passos.IndexOf('fumaca')-or$passos-notcontains'reexecucao'){throw 'Rede fora da fase CONCLUIR ou faltou reexecucao.'}
+   if([array]::IndexOf($passos,'backup-rede')-lt[array]::IndexOf($passos,'fumaca')-or$passos-notcontains'reexecucao'){throw 'Rede fora da fase CONCLUIR ou faltou reexecucao.'}
   }else{
    if($passos-notcontains'commit-anterior'){throw 'Commit nao foi revertido.'}
    if(($passos-contains'banco-restaurado')-ne($caso-eq'fumaca-falha')){throw 'Restauracao de snapshot incorreta.'}
