@@ -25,15 +25,20 @@ async function parar(){
  const atual=servidor;
  if(atual.exitCode===null){
   const fim=new Promise(r=>atual.once('exit',r));
-  if(process.platform==='win32')spawnSync('taskkill.exe',['/PID',String(atual.pid),'/T','/F'],{stdio:'ignore',timeout:5000});
-  else process.kill(-atual.pid,'SIGTERM');
-  await fim;await esperar(300);
+  fs.writeFileSync(path.join(raiz,'operacao/parar.sinal'),'parar');
+  const encerrou=await Promise.race([fim.then(()=>true),esperar(6000).then(()=>false)]);
+  if(!encerrou){
+   if(process.platform==='win32')spawnSync('taskkill.exe',['/PID',String(atual.pid),'/T','/F'],{stdio:'ignore',timeout:5000});
+   else process.kill(-atual.pid,'SIGKILL');
+   throw new Error('Launcher nao encerrou em 6 s ao receber parar.sinal.');
+  }
+  await esperar(300);
  }
  fs.writeFileSync(path.join(destino,`servidor-${etapas.length}.log`),log);
  servidor=null;
 }
 async function iniciar(modo){
- configurar(modo);log='';
+ configurar(modo);log='';fs.mkdirSync(path.join(raiz,'operacao'),{recursive:true});fs.rmSync(path.join(raiz,'operacao/parar.sinal'),{force:true});
  servidor=spawn(process.execPath,[path.join(projeto,'scripts/iniciar-portal.mjs'),'local'],{cwd:projeto,env:ambiente,detached:process.platform!=='win32',stdio:['ignore','pipe','pipe']});
  servidor.stdout.on('data',d=>log+=d);servidor.stderr.on('data',d=>log+=d);
  let pronto=false;

@@ -210,3 +210,65 @@ PORTAL_TESTE_BANCO_LOCAL=d1 npm run test:imports
 Validação adicional desta salvaguarda: 381 testes passaram, 3 foram ignorados,
 nenhuma falha; lint, typecheck e build concluídos. Testes de integração acima
 usaram Node 22 em Linux; não substituem homologação no Windows.
+
+
+## Encerramento e regressões do CI Windows
+
+O cenário `testar-supervisor-isolado.ps1` original substitui o launcher por
+um Node fictício: não abre a ponte SQLite nem o workerd. Não foi possível
+reproduzir neste executor Linux a parada de 14 minutos da primeira execução
+Windows. A execução posterior consultada concluiu os dois cenários em cerca
+de 43 e 41 segundos; falhou depois na verificação textual do relançamento.
+Não há evidência para atribuir aquele travamento à ponte. Havia, entretanto,
+`WaitForExit()` sem prazo no teste, que pode esperar EOF dos leitores de stdout
+mesmo com o pai já encerrado, se um descendente herdou os pipes. A chamada agora
+é limitada. Um processo externo aplica prazo de 300 segundos ao cenário inteiro,
+inclusive preparação e limpeza, informa a fase a cada 30 segundos e encerra a
+árvore em caso de timeout. A regressão verifica processo que nunca conclui e
+pai encerrado com descendente mantendo stdout aberto. Um bloqueio provocado
+no cenário completo também falhou com fase explícita dentro do prazo de 1 segundo.
+
+Separadamente, o runtime tinha um defeito de encerramento reproduzível:
+`processo.kill()` encerrava apenas Wrangler, e o fechamento do DatabaseSync
+dependia do evento `close` do servidor HTTP. O ensaio anterior deixou um
+descendente resistente vivo e falhou após 5 segundos. Agora a parada fecha
+DatabaseSync explicitamente, destrói conexões da ponte/proxy e encerra a árvore
+com prazo (taskkill /T no Windows; grupo de processos no POSIX). O launcher
+observa `parar.sinal` e perda do PID pai. O supervisor dá dois segundos para
+a saída voluntária antes de forçar a árvore, com taskkill limitado a três segundos.
+Isso cobre o pedido normal/atualizador e o supervisor morto sem finally.
+Se o Windows mata também o launcher à força, nenhum callback JS é garantido:
+o sistema operacional libera seus handles; SQLite recupera WAL na próxima
+abertura. A existência de -wal/-shm não significa handle preso e não justifica
+apagá-los manualmente.
+
+Os seis testes do runtime cobrem sqlite/d1, parada explícita, sinal de parada,
+perda de um processo pai real, descendente resistente e POST incompleto. Após
+parada verificam porta reutilizável, checkpoint WAL sem escritor ocupado,
+integridade, dados preservados e arquivo renomeável. O launcher real passou
+novamente as seis partidas da integração, agora encerradas por `parar.sinal`
+com limite de seis segundos. O cenário Windows ganhou `-PortalReal -BancoLocal`
+e passa a testar supervisor sem login, aviso falho, banco real, handles de
+SQLite/WAL/SHM e porta 3000 em ambos os modos no job de instalação. Somente
+fixture temporária e consumidores fictícios são usados; porta ocupada é recusada.
+
+O relançamento estava correto: sua chamada passou para dentro de `try`, mas
+o teste exigia `& powershell.exe` no início da linha. A verificação agora usa
+AST e executa o bloco real de lançamento contra um script substituído no disco,
+com argumentos reais, código de saída e restauração de ErrorActionPreference.
+O reparo preserva `PORTAL_BANCO_LOCAL` em sqlite e d1; o filho lê a escolha do
+arquivo, sem argumento novo de produção.
+
+Os quatro warnings de medição eram esperados: um arquivo bloqueado de forma
+permanente produz um aviso, e uma pasta impossível produz três (início/fim/resumo).
+O teste os captura e exige exatamente essas quantidades; o log identifica as
+falhas provocadas. Casos normais, stdout legado bloqueado, leitura compartilhada,
+bloqueio transitório e contexto pai/filho continuam gravando o arquivo próprio.
+A implementação da medição não precisou ser alterada.
+
+Validação local: 387 testes do Portal aprovados, três ignorados; lint, typecheck,
+build; reparo/reexecução, atualização segura e parada executados nas duas escolhas;
+regressões de prazo e pipes herdados. PowerShell 7/Linux e Node 22 foram usados;
+O cenário completo Windows com Portal real e PowerShell 5.1 foi adicionado
+ao CI, sem aguardar sua execução. Stop-ScheduledTask não foi executado neste
+Linux; a perda real do PID pai e a liberação dos handles foram verificadas.

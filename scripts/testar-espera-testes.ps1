@@ -43,3 +43,30 @@ try{
  if(!$recusou){throw 'Fixture sobrescreveu destino existente.'}
  Write-Host 'Fixture compartilhada: estrutura, exemplos e destino novo aprovados.'
 }finally{Remove-Item -LiteralPath $fixture -Recurse -Force -ErrorAction SilentlyContinue}
+
+# Prazo externo e EOF herdado: nao depende de o cenario cooperar.
+$dir=Join-Path ([IO.Path]::GetTempPath()) ('sv-prazo-'+[guid]::NewGuid().ToString('N'))
+$travado=$null;$pai=$null;$descendente=$null
+try{
+ New-Item -ItemType Directory $dir|Out-Null
+ $node=(Get-Command node -ErrorAction Stop).Source
+ $eterno=Join-Path $dir 'eterno.cjs';[IO.File]::WriteAllText($eterno,'setInterval(()=>{},1000);')
+ $fase=Join-Path $dir 'fase.txt';[IO.File]::WriteAllText($fase,'espera-provocada')
+ $travado=Start-Process $node -ArgumentList ('"'+$eterno+'"') -PassThru
+ $relogio=[Diagnostics.Stopwatch]::StartNew()
+ if(Esperar-ProcessoTeste $travado 1 $fase){throw 'Cenario travado foi aprovado.'}
+ if($relogio.Elapsed.TotalSeconds-gt3){throw 'Prazo externo nao limitou o teste travado.'}
+ Encerrar-ArvoreTeste $travado
+ if(!$travado.WaitForExit(5000)){throw 'Watchdog deixou processo travado vivo.'}
+ $entrada=Join-Path $dir 'pai.cjs'
+ [IO.File]::WriteAllText($entrada,"const fs=require('node:fs'),path=require('node:path'),{spawn}=require('node:child_process');const filho=spawn(process.execPath,[path.join(__dirname,'eterno.cjs')],{stdio:'inherit'});fs.writeFileSync(path.join(__dirname,'filho.pid'),String(filho.pid));filho.unref();")
+ $pai=Start-Process $node -ArgumentList ('"'+$entrada+'"') -PassThru -RedirectStandardOutput (Join-Path $dir 'saida.log') -RedirectStandardError (Join-Path $dir 'erro.log')
+ if(!(Esperar-CondicaoTeste {$pai.Refresh();$pai.HasExited} -Segundos 5)){throw 'Pai da fixture nao saiu.'}
+ $descendente=Get-Process -Id ([int](Get-Content (Join-Path $dir 'filho.pid') -Raw))
+ $relogio.Restart()
+ if(!(Esperar-ProcessoTeste $pai 1)-or$relogio.Elapsed.TotalSeconds-gt1){throw 'EOF do descendente bloqueou espera por pai ja encerrado.'}
+ Write-Host '[OK] Watchdog limita processo travado e nao espera EOF herdado de descendente.'
+}finally{
+ foreach($p in @($descendente,$pai,$travado)){if($p){if(!$p.HasExited){Encerrar-ArvoreTeste $p};$p.Dispose()}}
+ Remove-Item $dir -Recurse -Force -ErrorAction SilentlyContinue
+}

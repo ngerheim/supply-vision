@@ -48,3 +48,26 @@ function Preparar-InstalacaoSupervisorTeste([string]$Raiz,[string]$Destino){
   Copy-Item $exemplo.FullName (Join-Path (Join-Path $alvo 'privado/alertas/parametros') $relativo) -Force
  }
 }
+
+# Espera apenas o processo, nunca WaitForExit() sem prazo (que espera tambem
+# EOF de pipes herdados por descendentes). O limite independe do filho.
+function Esperar-ProcessoTeste($Processo,[int]$Segundos,[string]$ArquivoFase=''){
+ $cronometro=[Diagnostics.Stopwatch]::StartNew();$ultimaFase='';$ultimoAviso=-30
+ do{
+  if($Processo.WaitForExit(100)){return $true}
+  $fase=if($ArquivoFase-and(Test-Path -LiteralPath $ArquivoFase)){Get-Content -LiteralPath $ArquivoFase -Raw -ErrorAction SilentlyContinue}else{'iniciando'}
+  if($fase-ne$ultimaFase-or$cronometro.Elapsed.TotalSeconds-$ultimoAviso-ge30){
+   Write-Host ("Cenario em andamento: fase=$fase; duracao=$([int]$cronometro.Elapsed.TotalSeconds) s; PID=$($Processo.Id).")
+   $ultimaFase=$fase;$ultimoAviso=$cronometro.Elapsed.TotalSeconds
+  }
+  if($cronometro.Elapsed.TotalSeconds-ge$Segundos){return $false}
+ }while($true)
+}
+function Encerrar-ArvoreTeste($Processo){
+ if(!$Processo){return}
+ if($env:OS-eq'Windows_NT'){
+  $kill=Start-Process taskkill.exe -ArgumentList @('/PID',"$($Processo.Id)",'/T','/F') -PassThru -WindowStyle Hidden
+  try{if(!$kill.WaitForExit(5000)){$kill.Kill()}}finally{$kill.Dispose()}
+ }else{try{$Processo.Kill($true)}catch{}}
+ try{if(!$Processo.WaitForExit(5000)){$Processo.Kill()}}catch{}
+}

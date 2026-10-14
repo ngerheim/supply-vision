@@ -1,3 +1,4 @@
+param([ValidateSet('sqlite','d1')][string]$BancoLocal='sqlite')
 # Confere o reparo da configuracao privada usando a funcao real do atualizador,
 # num diretorio de mentira: nada do servidor e tocado.
 $ErrorActionPreference = 'Stop'
@@ -27,11 +28,13 @@ try {
     'PORTAL_URL=http://localhost:3000',
     'PORTAL_API_TOKEN=',
     'BACKUP_EMAIL_TO=alguem@example.com',
-    'CHAVE_NOVA=valor-padrao'
+    'CHAVE_NOVA=valor-padrao',
+    'PORTAL_BANCO_LOCAL=sqlite'
   )
   Set-Content -LiteralPath $destinoPortal -Value @(
     'PORTAL_URL=http://servidor.test:3000',
-    'BACKUP_EMAIL_TO=real@example.com'
+    'BACKUP_EMAIL_TO=real@example.com',
+    "PORTAL_BANCO_LOCAL=$BancoLocal"
   )
   Set-Content -LiteralPath (Join-Path $Raiz 'compartilhado\smtp.env.example') -Value @('SMTP_HOST=exemplo')
   Set-Content -LiteralPath (Join-Path $Raiz 'privado\comum\smtp.env') -Value @('SMTP_HOST=servidor-real')
@@ -44,6 +47,7 @@ try {
   if (-not ($linhas | Where-Object { $_ -eq 'CHAVE_NOVA=valor-padrao' })) { throw 'Chave nova com valor padrao nao foi acrescentada.' }
   if (-not ($linhas | Where-Object { $_ -eq 'PORTAL_API_TOKEN=' })) { throw 'Chave nova vazia nao foi acrescentada.' }
   if (($avisos -join ' ') -notmatch 'PORTAL_API_TOKEN') { throw 'A chave vazia deveria virar aviso.' }
+  if(($linhas|Where-Object {$_-eq"PORTAL_BANCO_LOCAL=$BancoLocal"}).Count-ne1){throw 'Reparo alterou a escolha do banco local.'}
   Write-Host '[OK] chaves novas acrescentadas sem mexer nas existentes'
 
   $antes = Get-Content -LiteralPath $destinoPortal -Raw
@@ -65,9 +69,37 @@ try {
 
 # A reexecucao e o que faz uma correcao no proprio atualizador valer ja na
 # atualizacao que a traz; se ela sumir, o teste avisa.
-if ($fonte -notmatch '(?m)^\s*&\s*powershell\.exe\s+@argumentosReexecucao' -or $fonte -notmatch 'Argumentos-ReexecucaoAtualizador.*atualizar-servidor\.ps1') {
+$ast=[Management.Automation.Language.Parser]::ParseInput($fonte,[ref]$null,[ref]$null)
+$chamada=$ast.Find({param($n) $n-is[Management.Automation.Language.CommandAst]-and$n.GetCommandName()-eq'powershell.exe'-and$n.Extent.Text.Contains('@argumentosReexecucao')},$true)
+if (!$chamada -or $fonte -notmatch 'Argumentos-ReexecucaoAtualizador.*atualizar-servidor\.ps1') {
   throw 'O atualizador nao se relanca com o codigo novo.'
 }
+# Executa o try/finally real, lendo o script novo do disco, com os argumentos
+# reais. Uma chamada presente mas sem reexecucao funcional tambem deve falhar.
+$blocoFilho=$chamada.Parent
+while($blocoFilho-and$blocoFilho-isnot[Management.Automation.Language.TryStatementAst]){$blocoFilho=$blocoFilho.Parent}
+if(!$blocoFilho){throw 'Reexecucao sem protecao/restauracao da preferencia de erro.'}
+$tempFilho=Join-Path ([IO.Path]::GetTempPath()) ('sv-reexecucao-'+[guid]::NewGuid().ToString('N'))
+try{
+ New-Item -ItemType Directory $tempFilho|Out-Null
+ $scriptNovo=Join-Path $tempFilho 'atualizar-servidor.ps1'
+ [IO.File]::WriteAllText($scriptNovo,"throw 'codigo antigo nao pode executar'")
+ $novo=@'
+param([switch]$JaAtualizado,[string]$VersaoAnterior,[switch]$Reaplicar)
+if(!$JaAtualizado-or!$Reaplicar-or$VersaoAnterior-ne('1'*40)){exit 9}
+[IO.File]::WriteAllText((Join-Path $PSScriptRoot 'novo.executado'),[IO.File]::ReadAllText((Join-Path $PSScriptRoot 'portal.env')))
+[Console]::Error.WriteLine('npm warn install-scripts fixture')
+exit 0
+'@
+ [IO.File]::WriteAllText($scriptNovo,$novo)
+ [IO.File]::WriteAllText((Join-Path $tempFilho 'portal.env'),"PORTAL_BANCO_LOCAL=$BancoLocal")
+ $argumentosReexecucao=Argumentos-ReexecucaoAtualizador $scriptNovo ('1'*40) $true
+ $script:hostReexecucao=(Get-Process -Id $PID).Path
+ function powershell.exe { & $script:hostReexecucao @args; $global:LASTEXITCODE=$LASTEXITCODE }
+ $preferenciaFilho=$ErrorActionPreference;$ErrorActionPreference='Continue'
+ . ([scriptblock]::Create($blocoFilho.Extent.Text))
+ if($rcFilho-ne0-or$ErrorActionPreference-ne'Stop'-or!(Test-Path (Join-Path $tempFilho 'novo.executado'))-or[IO.File]::ReadAllText((Join-Path $tempFilho 'novo.executado'))-ne"PORTAL_BANCO_LOCAL=$BancoLocal"){throw 'Reexecucao nao leu o codigo novo ou perdeu argumentos/codigo.'}
+}finally{Remove-Item Function:powershell.exe -ErrorAction SilentlyContinue;Remove-Item $tempFilho -Recurse -Force -ErrorAction SilentlyContinue}
 if ($fonte -notmatch '(?m)^\s*Reparar-ConfiguracaoPrivada\s*$') { throw 'O reparo da configuracao nao e chamado na atualizacao.' }
 Write-Host '[OK] atualizador segue com o codigo novo depois do merge'
 Write-Host 'Reparo de configuracao: 4 conferencias aprovadas.' -ForegroundColor Green

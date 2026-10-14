@@ -2,7 +2,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { randomBytes } from 'node:crypto';
-import { spawn } from 'node:child_process';
+import { spawn, execFileSync } from 'node:child_process';
+import { setTimeout as esperar } from 'node:timers/promises';
 import { pathToFileURL } from 'node:url';
 import { criarServidorSqlite } from './sqlite-local.mjs';
 import { criarProxyIpLogin, reservarPortaLoopback } from './proxy-ip-login.mjs';
@@ -10,7 +11,7 @@ import { criarProxyIpLogin, reservarPortaLoopback } from './proxy-ip-login.mjs';
 // O mesmo transporte atende a instalacao e os testes descartaveis. O workerd
 // continua servindo o portal; em sqlite, suas consultas passam pelo Node.
 // Os consumidores externos continuam abrindo o arquivo por conta propria.
-export async function iniciarRuntimeLocal(argumentos, { projeto = path.resolve(import.meta.dirname, '..'), tokenIp = null, bancoLocal = 'sqlite' } = {}) {
+export async function iniciarRuntimeLocal(argumentos, { projeto = path.resolve(import.meta.dirname, '..'), tokenIp = null, bancoLocal = 'sqlite', pararArquivo = null, pai = null } = {}) {
   const args = [...argumentos];
   function retirar(nome, padrao) {
     const indice = args.indexOf(nome);
@@ -30,11 +31,29 @@ export async function iniciarRuntimeLocal(argumentos, { projeto = path.resolve(i
   const temporario = fs.mkdtempSync(path.join(os.tmpdir(), 'portal-runtime-'));
   const token = randomBytes(32).toString('hex');
   const sqlite = bancoLocal === 'sqlite' ? criarServidorSqlite({ persistencia, token }) : null;
-  let proxy, processo, encerrado = false;
+  let proxy, processo, encerramento, vigilancia;
+  async function encerrarArvore() {
+    if (!processo?.pid) return;
+    if (process.platform === 'win32') {
+      // kill() no Windows encerra somente Wrangler, deixando workerd orfao.
+      try { execFileSync('taskkill.exe', ['/PID', String(processo.pid), '/T', '/F'], { timeout: 3000, stdio: 'ignore', windowsHide: true }); }
+      catch { if (processo.exitCode === null) processo.kill(); }
+    } else {
+      try { process.kill(-processo.pid, 'SIGTERM'); } catch { /* grupo ja saiu */ }
+      await esperar(250);
+      try { process.kill(-processo.pid, 'SIGKILL'); } catch { /* grupo ja saiu */ }
+    }
+  }
   function encerrar() {
-    if (encerrado) return;encerrado = true;
-    processo?.kill();proxy?.close();proxy?.closeAllConnections();sqlite?.close();sqlite?.closeAllConnections();
-    try { fs.rmSync(temporario, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 }); } catch { console.warn('Nao foi possivel remover o arquivo temporario do runtime local.'); }
+    if (encerramento) return encerramento;
+    clearInterval(vigilancia);
+    // Fecha o banco explicitamente; nao depende do evento close do HTTP,
+    // que pode aguardar um cliente com POST incompleto indefinidamente.
+    sqlite?.encerrar();proxy?.close();proxy?.closeAllConnections();
+    encerramento = encerrarArvore().finally(() => {
+      try { fs.rmSync(temporario, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 }); } catch { console.warn('Nao foi possivel remover o arquivo temporario do runtime local.'); }
+    });
+    return encerramento;
   }
   try {
     if (sqlite) await new Promise((resolve, reject) => { sqlite.once('error', reject);sqlite.listen(0, '127.0.0.1', resolve); });
@@ -48,11 +67,16 @@ export async function iniciarRuntimeLocal(argumentos, { projeto = path.resolve(i
     // d1 tambem apaga valores antigos: nunca reutiliza a ponte da execucao anterior.
     fs.writeFileSync(arquivoVars, `${original}\n${varsBanco}`, { mode: 0o600 });
     const wrangler = path.join(projeto, 'node_modules/wrangler/bin/wrangler.js');
-    processo = spawn(process.execPath, [wrangler, ...args, '--persist-to', persistencia, '--env-file', arquivoVars, '--ip', '127.0.0.1', '--port', String(portaBackend)], { cwd: projeto, stdio: 'inherit' });
+    processo = spawn(process.execPath, [wrangler, ...args, '--persist-to', persistencia, '--env-file', arquivoVars, '--ip', '127.0.0.1', '--port', String(portaBackend)], { cwd: projeto, stdio: 'inherit', detached: process.platform !== 'win32' });
     processo.once('error', encerrar);
     processo.once('exit', encerrar);
+    if (pararArquivo || pai) vigilancia = setInterval(() => {
+      let paiSaiu = false;
+      if (pai) { try { process.kill(pai, 0); } catch (erro) { paiSaiu = erro.code === 'ESRCH'; } }
+      if ((pararArquivo && fs.existsSync(pararArquivo)) || paiSaiu) void encerrar();
+    }, 250);
     return { processo, encerrar, bancoLocal };
-  } catch (erro) { encerrar();throw erro; }
+  } catch (erro) { await encerrar();throw erro; }
 }
 
 if (process.argv[1] && pathToFileURL(path.resolve(process.argv[1])).href === import.meta.url) {
