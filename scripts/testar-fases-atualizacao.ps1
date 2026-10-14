@@ -7,12 +7,13 @@ $base=Join-Path ([IO.Path]::GetTempPath()) ('sv-fases-'+[guid]::NewGuid().ToStri
 $hostTeste=(Get-Process -Id $PID).Path
 $privadoAntes=$env:SUPPLY_VISION_PRIVADO
 try{
- foreach($caso in @('preparo-falha','sucesso','fumaca-falha','troca-parcial','rede-falha','ensaio','medicao-ausente','relogio-falha','medicao-falha','fumaca-sem-medicao','fumaca-relogio-falha')){
+ foreach($caso in @('preparo-falha','preparo-limpeza-falha','sucesso','fumaca-falha','troca-parcial','rede-falha','ensaio','medicao-ausente','relogio-falha','medicao-falha','fumaca-sem-medicao','fumaca-relogio-falha')){
   $raiz=Join-Path $base $caso
   foreach($dir in @('scripts','portal/scripts','portal/dist','portal/node_modules','alertas/.venv','privado/operacao','privado/portal/backups','privado/portal/configuracao','privado/comum','compartilhado')){New-Item -ItemType Directory -Force (Join-Path $raiz $dir)|Out-Null}
   Copy-Item (Join-Path $fonteRaiz 'scripts/operacao-logica.ps1') (Join-Path $raiz 'scripts')
   Copy-Item (Join-Path $fonteRaiz 'scripts/atualizacao-preparo.ps1') (Join-Path $raiz 'scripts')
   Add-Content (Join-Path $raiz 'scripts/atualizacao-preparo.ps1') 'function Executar-PowerShellOculto($Argumentos){ & powershell.exe @Argumentos }'
+  if($caso-eq'preparo-limpeza-falha'){Add-Content (Join-Path $raiz 'scripts/atualizacao-preparo.ps1') "function Remover-ArvorePreparo {throw 'Handle ficticio impediu limpeza.'}"}
   $fonte=[IO.File]::ReadAllText((Join-Path $fonteRaiz 'scripts/atualizar-servidor.ps1'))
   $fonte=$fonte.Replace("`$Python = Join-Path `$Alertas '.venv\Scripts\python.exe'", "`$Python = 'pythonmock'")
   $fonte=$fonte.Replace("& (Join-Path `$Raiz 'INICIAR.bat') | Out-Null",'IniciarMock')
@@ -53,7 +54,7 @@ function git {
   'worktree' {
    if($args[1]-eq'add'){$global:preparo=$args[3];New-Item -ItemType Directory -Force $global:preparo|Out-Null}
   }
-  '-C' {if($args[2]-eq'worktree'){Remove-Item -LiteralPath $global:preparo -Recurse -Force;Registrar 'limpeza'}}
+  '-C' {if($args[2]-eq'worktree'-and$args[3]-eq'remove'){if(Test-Path $global:preparo){Remove-Item -LiteralPath $global:preparo -Recurse -Force};Registrar 'limpeza'}}
  }
 }
 function Localizar-NodeMaquina {'node'}
@@ -78,7 +79,7 @@ function powershell.exe {
  $global:LASTEXITCODE=0
  if($args -contains '-Instalacao'){
   Registrar 'preparar'
-  if($Caso-eq'preparo-falha'){$global:LASTEXITCODE=1;return}
+  if($Caso-in@('preparo-falha','preparo-limpeza-falha')){$global:LASTEXITCODE=1;return}
   foreach($rel in @('portal/dist','portal/node_modules','alertas/.venv')){
    if($Caso-eq'troca-parcial'-and$rel-eq'alertas/.venv'){continue}
    New-Item -ItemType Directory -Force (Join-Path $global:preparo $rel)|Out-Null
@@ -102,8 +103,15 @@ exit $LASTEXITCODE
    $esperado=if($caso-in@('sucesso','rede-falha','ensaio','medicao-ausente','relogio-falha','medicao-falha')){'nova'}else{'anterior'}
    if((Get-Content (Join-Path $raiz "$rel/versao"))-ne$esperado){throw "Artefato incorreto: $caso / $rel; $saida"}
   }
-  if($caso-eq'preparo-falha'){
+  if($caso-in@('preparo-falha','preparo-limpeza-falha')){
    if($passos-contains'backup-local'-or$passos-contains'commit-novo'-or(Test-Path (Join-Path $raiz 'privado/operacao/parar.sinal'))){throw 'Preparo reprovado parou/alterou a instalacao.'}
+   $contexto=Get-Content (Join-Path $raiz 'privado/operacao/atualizacao.json') -Raw|ConvertFrom-Json
+   $limpeza=if($caso-eq'preparo-falha'){'concluida'}else{'pendente'}
+   if($contexto.fase-ne'cancelado-preparo'-or$contexto.limpeza-ne$limpeza-or((Test-Path $contexto.preparo)-ne($limpeza-eq'pendente'))){throw 'Cancelamento/limpeza do PREPARAR nao registrados.'}
+   if($limpeza-eq'pendente'){
+    if(($saida-join' ')-notlike'*Handle ficticio impediu limpeza*'){throw 'Aviso de limpeza pendente perdeu causa.'}
+    Remover-ArvorePreparo $contexto.preparo
+   }
   }elseif($caso-in@('sucesso','rede-falha','ensaio','medicao-ausente','relogio-falha','medicao-falha')){
    if([array]::IndexOf($passos,'backup-rede')-lt[array]::IndexOf($passos,'fumaca')-or$passos-notcontains'reexecucao'){throw 'Rede fora da fase CONCLUIR ou faltou reexecucao.'}
   }else{

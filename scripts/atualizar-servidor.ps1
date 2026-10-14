@@ -227,6 +227,8 @@ $mexeuPython = $true
 $anterior = $VersaoAnterior
 $script:PastaPreparo=''
 $script:ArtefatosPreparados=$false
+$script:FalhaPreparo=''
+$script:LimpezaPreparo='pendente'
 function Gravar-ContextoAtualizacao($Arquivo,$Estado) {
  if($script:PastaPreparo){$Estado.preparo=$script:PastaPreparo;$Estado.artefatos=$script:ArtefatosPreparados}
  Gravar-EstadoOperacao $Arquivo $Estado
@@ -326,6 +328,8 @@ function Reverter([string]$motivo) {
 }
 
 try {
+  # Tambem limpa se nao houver commit novo; -Simular continua sem escrita.
+  if(!$Simular-and!$JaAtualizado){Limpar-PreparosAntigos $Raiz (Ler-EstadoOperacao $ContextoArquivo)}
   # O pai conserva o contexto fora do checkout; o filho pode falhar ate no
   # pre-voo. Sem contexto verificavel, parametros internos nao autorizam reset.
   if ($JaAtualizado) {
@@ -428,6 +432,7 @@ if (-not $JaAtualizado) {
   Validar-PastaPreparo $Raiz $script:PastaPreparo
   & git worktree add --detach $script:PastaPreparo $remoto
   if($LASTEXITCODE){throw 'Nao foi possivel montar o worktree; operacao continua no ar.'}
+  @{pid=$PID;inicio=(Get-Process -Id $PID).StartTime.ToUniversalTime().ToString('o')}|ConvertTo-Json|Set-Content (Join-Path $script:PastaPreparo 'preparo-atualizador.json') -Encoding UTF8
   $argsPreparo=@('-NoProfile','-WindowStyle','Hidden','-ExecutionPolicy','Bypass','-File',(Join-Path $script:PastaPreparo 'scripts/preparar-atualizacao.ps1'),'-Instalacao',$Raiz)
   if($mexeuNode){$argsPreparo+='-ReinstalarNode'}
   if($mexeuPython){$argsPreparo+='-ReinstalarPython'}
@@ -608,8 +613,8 @@ try {
 } catch {Aviso 'Falha ao replicar backup; copia local e snapshot preservados.'}
 if($LASTEXITCODE-ne0){Aviso 'Backup local e snapshot preservados; replicacao de rede falhou ou excedeu o prazo configurado.'}
 Etapa 'CONCLUIR: limpando pasta de preparo'
-try{Limpar-PastaPreparo $Raiz $script:PastaPreparo}catch{Aviso "Limpeza pendente: $script:PastaPreparo"}
-Gravar-ContextoAtualizacao $ContextoArquivo @{anterior=$anterior;remoto=$remoto;fase='concluido'}
+try{Limpar-PastaPreparo $Raiz $script:PastaPreparo;$script:LimpezaPreparo='concluida'}catch{Aviso $_.Exception.Message}
+Gravar-ContextoAtualizacao $ContextoArquivo @{anterior=$anterior;remoto=$remoto;fase='concluido';limpeza=$script:LimpezaPreparo}
 git log -1 --pretty=format:'    %s'
 Write-Host ''
 Encerrar-EtapaMedida $script:MedicaoAtualizacao
@@ -617,6 +622,7 @@ Write-Host "`n=== Atualizado: $($anterior.Substring(0,7)) -> $($remoto.Substring
 exit 0
 } catch {
   $falha = $_
+  if(!$CodigoTrocado-and!$script:ParadaSolicitada-and$script:PastaPreparo){$script:FalhaPreparo=$falha.Exception.Message}
   try{
    if($inicioPreparo-and!$script:MedicaoAtualizacao.preparar){$script:MedicaoAtualizacao.preparar=[math]::Round(([datetime]::UtcNow-$inicioPreparo).TotalSeconds,2)}
    Encerrar-EtapaMedida $script:MedicaoAtualizacao 'falhou'
@@ -641,12 +647,17 @@ exit 0
 }
 } finally {
   # Pai conserva o preparo se a recuperacao nao terminou; contem artefatos de socorro.
-  if(!$script:MedicaoDelegada-and$script:PastaPreparo){
+  if(!$script:MedicaoDelegada-and$script:PastaPreparo-and$script:LimpezaPreparo-ne'concluida'){
     try{
       $estadoFinal=Ler-EstadoOperacao $ContextoArquivo
-      if(!$CodigoTrocado-or$estadoFinal.fase-in@('concluido','revertido')){Limpar-PastaPreparo $Raiz $script:PastaPreparo}
+      if(!$CodigoTrocado-or$estadoFinal.fase-in@('concluido','revertido')){Limpar-PastaPreparo $Raiz $script:PastaPreparo;$script:LimpezaPreparo='concluida'}
       else{Aviso "Preparo preservado para recuperacao: $script:PastaPreparo"}
-    }catch{Aviso "Limpeza do preparo pendente: $script:PastaPreparo"}
+      if($estadoFinal.fase-in@('concluido','revertido')){$estadoFinal.limpeza=$script:LimpezaPreparo;Gravar-ContextoAtualizacao $ContextoArquivo $estadoFinal}
+    }catch{Aviso $_.Exception.Message;try{Registrar-TempoAtualizacao $script:MedicaoAtualizacao $_.Exception.Message}catch{}}
+  }
+  if($script:FalhaPreparo){
+   try{Gravar-ContextoAtualizacao $ContextoArquivo @{anterior=$anterior;remoto=$remoto;fase='cancelado-preparo';limpeza=$script:LimpezaPreparo;erro=$script:FalhaPreparo}}
+   catch{Aviso "Nao foi possivel registrar o cancelamento em ${ContextoArquivo}: $($_.Exception.Message)"}
   }
   try{Resumir-MedicaoAtualizacao $script:MedicaoAtualizacao $script:MedicaoDelegada}catch{}
   $env:SV_MEDICAO_ATUALIZACAO=$medicaoEnvAnterior
