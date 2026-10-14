@@ -281,6 +281,7 @@ jobs:
           cache-dependency-path: |
             alertas/config/requirements.txt
             alertas/config/requirements-dev.txt
+            alertas/config/requirements-ci.txt
       - name: Atualizar instalacao base e reprovar PREPARAR sem parada
         timeout-minutes: 22
         shell: powershell
