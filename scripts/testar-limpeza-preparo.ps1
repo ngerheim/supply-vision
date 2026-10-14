@@ -1,4 +1,4 @@
-# Somente Git, arquivos e processos descartaveis; nenhum dado de producao.
+﻿# Somente Git, arquivos e processos descartaveis; nenhum dado de producao.
 $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'atualizacao-preparo.ps1')
 $base=Join-Path ([IO.Path]::GetTempPath()) ('sv-limpeza-'+[guid]::NewGuid().ToString('N'))
@@ -92,6 +92,46 @@ throw 'PREPARO_FALHA_COM_PAI_ANTIGO'
  }
  Exigir-Limpeza (Processo-DestePreparo @{CommandLine=('node "'+$preparo+'/filho.mjs"')} $preparo) 'Nao reconheceu processo descartavel.'
  Write-Host '[OK] Sobras ativas/resgate e processos de producao preservados.'
+ # Limpeza REAL em processo independente bloqueado por barreira da fixture.
+ $biblioteca=Join-Path $raiz 'scripts';New-Item -ItemType Directory -Force $biblioteca|Out-Null
+ foreach($nome in @('atualizacao-preparo.ps1','limpar-preparo-assincrono.ps1')){Copy-Item (Join-Path $PSScriptRoot $nome) $biblioteca}
+ Add-Content (Join-Path $biblioteca 'atualizacao-preparo.ps1') @'
+function Limpar-PastaPreparo($Raiz,$Preparo){
+ [IO.File]::WriteAllText((Join-Path $Raiz 'worker-pronto'),'ok')
+ $limite=(Get-Date).AddSeconds(30)
+ while(!(Test-Path (Join-Path $Raiz 'liberar-worker'))){if((Get-Date)-gt$limite){throw 'Barreira da fixture excedida'};Start-Sleep -Milliseconds 50}
+ if(Test-Path (Join-Path $Raiz 'falhar-worker')){throw 'Falha de limpeza ficticia'}
+ Remover-ArvorePreparo $Preparo
+}
+'@
+ $op=Join-Path $raiz 'privado/operacao';New-Item -ItemType Directory -Force $op|Out-Null
+ $preparo=Nova-PastaPreparo $raiz;New-Item -ItemType Directory $preparo|Out-Null
+ $medir=[Diagnostics.Stopwatch]::StartNew()
+ Iniciar-LimpezaPreparoSegundoPlano $raiz $preparo $op (Get-Process -Id $PID).Path
+ Exigir-Limpeza ($medir.Elapsed.TotalSeconds-lt5-and(Test-Path $preparo)) 'Chamador esperou a limpeza.'
+ $limite=(Get-Date).AddSeconds(15)
+ while(!(Test-Path (Join-Path $raiz 'worker-pronto'))){if((Get-Date)-gt$limite){throw 'Worker nao iniciou'};Start-Sleep -Milliseconds 50}
+ $recusou=$false;try{Confirmar-LimpezaAnterior (Join-Path $op 'limpeza-preparo.lock')}catch{$recusou=$_.Exception.Message-like'*em andamento*'}
+ Exigir-Limpeza $recusou 'Nova atualizacao admitida com limpeza ativa.'
+ [IO.File]::WriteAllText((Join-Path $raiz 'liberar-worker'),'ok')
+ $limite=(Get-Date).AddSeconds(15)
+ while(Test-Path (Join-Path $op 'limpeza-preparo.lock')){if((Get-Date)-gt$limite){throw 'Worker nao encerrou'};Start-Sleep -Milliseconds 50}
+ Exigir-Limpeza (!(Test-Path $preparo)-and(Get-Content $sentinela)-eq'preservar') 'Worker nao limpou ou alterou producao.'
+ Exigir-Limpeza ((Get-Content (Join-Path $op 'limpeza-preparo.json') -Raw|ConvertFrom-Json).resultado-eq'concluida') 'Resultado da limpeza ausente.'
+ Confirmar-LimpezaAnterior (Join-Path $op 'limpeza-preparo.lock')
+ [IO.File]::WriteAllText((Join-Path $raiz 'falhar-worker'),'ok')
+ $sobra=Nova-PastaPreparo $raiz;New-Item -ItemType Directory $sobra|Out-Null
+ Iniciar-LimpezaPreparoSegundoPlano $raiz $sobra $op (Get-Process -Id $PID).Path
+ $limite=(Get-Date).AddSeconds(15)
+ while(Test-Path (Join-Path $op 'limpeza-preparo.lock')){if((Get-Date)-gt$limite){throw 'Worker de falha nao encerrou'};Start-Sleep -Milliseconds 50}
+ Exigir-Limpeza ((Test-Path $sobra)-and(Get-Content (Join-Path $op 'limpeza-preparo.json') -Raw|ConvertFrom-Json).resultado-eq'pendente') 'Falha da limpeza nao preservou sobra.'
+ Limpar-PastaPreparo $raiz $sobra
+ Exigir-Limpeza (!(Test-Path $sobra)) 'Sobra do worker nao pode ser limpa depois.'
+ $lock=Join-Path $op 'limpeza-preparo.lock'
+ @{pid=2147483647;inicio=[datetime]::UtcNow.ToString('o')}|ConvertTo-Json|Set-Content $lock
+ Confirmar-LimpezaAnterior $lock
+ Exigir-Limpeza (!(Test-Path $lock)) 'Trava de worker morto nao foi tratada.'
+ Write-Host '[OK] Limpeza em segundo plano nao segura chamador e bloqueia nova atualizacao.'
  if($env:OS-eq'Windows_NT'){
   # Arvore REAL: filho segura FileShare.None, neto Node continua escrevendo.
   # O teste roda em outro processo: fechar o job nunca pode matar este pai.

@@ -20,7 +20,10 @@ function Copiar-ArvoreDependencias([string]$Origem,[string]$Destino,[string[]]$B
   foreach($base in $Bases){if($alvo.StartsWith($base,[StringComparison]::OrdinalIgnoreCase)){$seguro=$true}}
   if(!$seguro){throw 'Link de dependencia fora de node_modules/venv/vendor; preparo cancelado.'}
   # Materializa o destino. Nenhum link para instalacao/preparo sobrevive a troca.
-  Copiar-ArvoreDependencias $alvo $Destino $Bases ($Profundidade+1)
+  $medirLink=!!(Get-Command Iniciar-PassoPreparo -ErrorAction SilentlyContinue)
+  if($medirLink){Iniciar-PassoPreparo ('Materializacao de junction: '+$item.Name)}
+  $codigoLink='falhou'
+  try{Copiar-ArvoreDependencias $alvo $Destino $Bases ($Profundidade+1);$codigoLink='0'}finally{if($medirLink){Concluir-PassoPreparo $codigoLink}}
   return
  }
  if($item.PSIsContainer){
@@ -299,4 +302,105 @@ function Executar-PowerShellOculto([string[]]$Argumentos,[string]$Executavel='po
   if($falha){Write-Output $falha}
   $global:LASTEXITCODE=$processo.ExitCode
  }finally{$processo.Dispose()}
+}
+
+# A API publica e apenas uma otimizacao: qualquer ambiguidade usa todas as suites.
+function Consultar-CIPreparo([string]$Sha,[switch]$ForcarCompleto) {
+ $completo=@{rapido=$false;sha=$Sha;motivo='resposta inesperada da API'}
+ if($ForcarCompleto){$completo.motivo='preparo completo forcado';return $completo}
+ if($Sha-notmatch'^[0-9a-f]{40}$'){$completo.motivo='SHA invalido';return $completo}
+ $obrigatorios=@('Portal','Portal - instalacao nova e autenticacao real','PowerShell','Alertas','Atualizacao real','Node 22.13 - partida e operacao (ubuntu-latest)','Node 22.13 - partida e operacao (windows-latest)')
+ try{
+  $checks=@();$total=-1
+  for($pagina=1;$pagina-le5;$pagina++){
+   # Sem Authorization, sem token e sem ferramentas autenticadas do GitHub.
+   $j=Invoke-RestMethod -Uri "https://api.github.com/repos/ngerheim/supply-vision/commits/$Sha/check-runs?per_page=100&filter=latest&page=$pagina" -Headers @{Accept='application/vnd.github+json';'User-Agent'='Supply-Vision-Preparo';'X-GitHub-Api-Version'='2022-11-28'} -TimeoutSec 8 -ErrorAction Stop
+   if($null-eq$j.total_count-or($j.total_count-isnot[int]-and$j.total_count-isnot[long])-or$j.total_count-le0-or$j.total_count-gt500-or$null-eq$j.check_runs){return $completo}
+   if($total-ge0-and$total-ne$j.total_count){return $completo};$total=$j.total_count
+   $checks+=@($j.check_runs)
+   if($checks.Count-ge$total){break}
+   if(@($j.check_runs).Count-ne100){return $completo}
+  }
+  if($checks.Count-ne$total){return $completo}
+  foreach($c in $checks){
+   if(!$c.name-or$c.head_sha-cne$Sha-or$c.status-cne'completed'){$completo.motivo='check ausente, pendente ou SHA inesperado';return $completo}
+   if($c.conclusion-cne'success'-and!($c.name-ceq'Atualizacao real'-and$c.conclusion-ceq'skipped')){$completo.motivo=('check nao aprovado: '+$c.name);return $completo}
+  }
+  foreach($nome in $obrigatorios){
+   $encontrados=@($checks|Where-Object {$_.name-ceq$nome-and$_.app.slug-ceq'github-actions'-and$_.app.id-eq15368})
+   if($encontrados.Count-ne1){$completo.motivo=('job obrigatorio ausente ou ambiguo: '+$nome);return $completo}
+  }
+  return @{rapido=$true;sha=$Sha;motivo="CI aprovado para $Sha"}
+ }catch{$completo.motivo='falha ao consultar API publica do GitHub';return $completo}
+}
+function Plano-AndamentoAtualizacao([bool]$Rapido=$false) {
+ $preparo=@('Inicializacao isolada','Limpeza de preparos reprovados','Configuracao de teste','Dependencias Node','Materializacao de junctions Node','Dependencias Python','Validar-PythonAlertas','Consulta CI','Build do Portal')
+ if(!$Rapido){$preparo+=@('Testes do Portal','Testes dos Alertas')}
+ $preparo+=@('Teste operacional: validar-operacao.ps1','Teste operacional: testar-operacao.ps1')
+ if($Rapido){$preparo+='Fumaca do Portal compilado'}else{$preparo+=@('Teste operacional: testar-supervisor-isolado.ps1','Teste operacional: testar-persistencia-alertas.ps1')}
+ return @('Conferindo ambiente de atualizacao','Limpeza de preparos antigos','Conferindo o repositorio','Buscando novidades','PREPARAR: versao nova com a operacao NO AR','PREPARAR / Criacao do worktree')+@($preparo|ForEach-Object {'PREPARAR / '+$_})+@('PREPARAR / Aprovacao e conferencia','TROCAR: parando a operacao','Backup do banco antes de trocar a versao','Aplicando a nova versao','Trazendo artefatos prontos por renomeacao no mesmo volume','Seguindo com o script da nova versao','Conferindo a configuracao privada','Conferindo configuracao da instalacao antes da partida','Religando a operacao','Conferindo interface e consumidores da operacao','CONCLUIR: backup de rede com a operacao NO AR','CONCLUIR: delegando limpeza da pasta de preparo')
+}
+function Novo-AndamentoAtualizacao([string]$Arquivo,[string]$Tempos,[datetime]$Inicio=[datetime]::UtcNow) {
+ $duracoes=@{};$linhas=@()
+ try{if(Test-Path -LiteralPath $Tempos){$linhas=@(Get-Content -LiteralPath $Tempos -Tail 4000 -Encoding UTF8 -ErrorAction Stop)}}catch{}
+ $resumos=@(for($i=0;$i-lt$linhas.Count;$i++){if($linhas[$i]-match'Resumo atualizacao:'){$i}})
+ if($resumos.Count){
+  $fim=$resumos[-1];$comeco=if($resumos.Count-gt1){$resumos[-2]+1}else{0}
+  foreach($linha in $linhas[$comeco..$fim]){
+   if($linha-match'^PREPARAR / (.+): codigo=.+; duracao=([0-9.]+) s\.'){$duracoes['PREPARAR / '+$Matches[1]]=[double]::Parse($Matches[2],[Globalization.CultureInfo]::InvariantCulture)}
+   elseif($linha-match'^\[.+?\] (.+): .+ em ([0-9.]+) s;'){$duracoes[$Matches[1]]=[double]::Parse($Matches[2],[Globalization.CultureInfo]::InvariantCulture)}
+  }
+ }
+ return @{arquivo=$Arquivo;inicioGeral=$Inicio.ToString('o');inicioEtapa=$Inicio.ToString('o');nome='Iniciando atualizacao';numero=1;total=@(Plano-AndamentoAtualizacao).Count;modo='completo';estado='andamento';plano=@(Plano-AndamentoAtualizacao);duracoes=$duracoes}
+}
+function Ler-AndamentoAtualizacao([string]$Arquivo) {
+ try{$j=Get-Content -LiteralPath $Arquivo -Raw -Encoding UTF8 -ErrorAction Stop|ConvertFrom-Json -ErrorAction Stop;$h=@{};foreach($p in $j.PSObject.Properties){$h[$p.Name]=$p.Value};$h.arquivo=$Arquivo;return $h}catch{return $null}
+}
+function Publicar-AndamentoAtualizacao($Andamento,[string]$Nome,[string]$Estado='andamento',[string]$Modo='') {
+ $codigo=Get-Variable LASTEXITCODE -Scope Global -ValueOnly -ErrorAction SilentlyContinue
+ $temporario=$null
+ try{
+  if(!$Andamento-or!$Andamento.arquivo){return}
+  if($Modo){$Andamento.modo=$Modo;$Andamento.plano=@(Plano-AndamentoAtualizacao ($Modo-eq'rapido'));$Andamento.total=$Andamento.plano.Count}
+  if($Nome-ne$Andamento.nome){$Andamento.inicioEtapa=[datetime]::UtcNow.ToString('o')}
+  $Andamento.nome=$Nome;$Andamento.estado=$Estado
+  $indice=[array]::IndexOf([object[]]$Andamento.plano,$Nome)
+  if($indice-ge0){$Andamento.numero=$indice+1}
+  if($Estado-ne'andamento'){$Andamento.fim=[datetime]::UtcNow.ToString('o')}
+  [void][IO.Directory]::CreateDirectory((Split-Path $Andamento.arquivo -Parent))
+  $temporario=$Andamento.arquivo+'.'+[guid]::NewGuid().ToString('N')+'.tmp'
+  [IO.File]::WriteAllText($temporario,($Andamento|ConvertTo-Json -Depth 6),(New-Object Text.UTF8Encoding($false)))
+  if(Test-Path -LiteralPath $Andamento.arquivo){[IO.File]::Replace($temporario,$Andamento.arquivo,[NullString]::Value)}else{[IO.File]::Move($temporario,$Andamento.arquivo)}
+ }catch{}finally{if($temporario-and(Test-Path -LiteralPath $temporario)){Remove-Item -LiteralPath $temporario -Force -ErrorAction SilentlyContinue};$global:LASTEXITCODE=$codigo}
+}
+# Arquivo exclusivo mantido pelo worker. PID+inicio tambem protegem a janela de partida.
+function Confirmar-LimpezaAnterior([string]$Arquivo) {
+ if(!(Test-Path -LiteralPath $Arquivo)){return}
+ $h=$null
+ try{
+  try{$h=[IO.File]::Open($Arquivo,[IO.FileMode]::Open,[IO.FileAccess]::ReadWrite,[IO.FileShare]::None)}catch{throw 'Limpeza anterior em andamento; aguarde antes de atualizar novamente.'}
+  $leitor=New-Object IO.StreamReader($h);$j=$leitor.ReadToEnd()|ConvertFrom-Json -ErrorAction Stop
+  if(!$j.pid-or!$j.inicio){throw 'Identidade da limpeza anterior invalida; confira o registro de limpeza.'}
+  $p=Get-Process -Id ([int]$j.pid) -ErrorAction SilentlyContinue
+  if($p-and[math]::Abs(($p.StartTime.ToUniversalTime()-[datetime]::Parse($j.inicio).ToUniversalTime()).TotalSeconds)-lt2){throw 'Limpeza anterior em andamento; aguarde antes de atualizar novamente.'}
+ }finally{if($h){$h.Dispose()}}
+ Remove-Item -LiteralPath $Arquivo -Force
+}
+function Iniciar-LimpezaPreparoSegundoPlano([string]$Raiz,[string]$Preparo,[string]$Operacao,[string]$Executavel='powershell.exe') {
+ Validar-PastaPreparo $Raiz $Preparo
+ $arquivo=Join-Path $Operacao 'limpeza-preparo.lock'
+ Confirmar-LimpezaAnterior $arquivo
+ $h=[IO.File]::Open($arquivo,[IO.FileMode]::CreateNew,[IO.FileAccess]::Write,[IO.FileShare]::None)
+ try{$bytes=[Text.Encoding]::UTF8.GetBytes((@{pid=$PID;inicio=(Get-Process -Id $PID).StartTime.ToUniversalTime().ToString('o')}|ConvertTo-Json));$h.Write($bytes,0,$bytes.Length)}finally{$h.Dispose()}
+ try{
+  $info=New-Object Diagnostics.ProcessStartInfo
+  $info.FileName=$Executavel;$info.UseShellExecute=$false;$info.CreateNoWindow=$true
+  $argumentos=@('-NoProfile','-ExecutionPolicy','Bypass','-File',(Join-Path $Raiz 'scripts/limpar-preparo-assincrono.ps1'),'-Instalacao',$Raiz,'-Preparo',$Preparo,'-Operacao',$Operacao)
+  $info.Arguments=(@($argumentos|ForEach-Object {Proteger-ArgumentoAtualizacao $_})-join' ')
+  $info.RedirectStandardOutput=$true;$info.RedirectStandardError=$true
+  $p=[Diagnostics.Process]::Start($info)
+  [void]$p.StandardOutput.ReadToEndAsync();[void]$p.StandardError.ReadToEndAsync()
+  # Worker nao escreve em stdout; seus resultados vao para arquivos proprios.
+  $p.Dispose()
+ }catch{Remove-Item -LiteralPath $arquivo -Force;throw}
 }

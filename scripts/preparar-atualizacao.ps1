@@ -1,43 +1,64 @@
 ﻿# Executado em processo oculto separado, exclusivamente no worktree descartavel.
 [CmdletBinding()]
-param([Parameter(Mandatory=$true)][string]$Instalacao,[switch]$ReinstalarNode,[switch]$ReinstalarPython)
+param([Parameter(Mandatory=$true)][string]$Instalacao,[switch]$ReinstalarNode,[switch]$ReinstalarPython,[switch]$ForcarCompleto=($env:SV_PREPARO_COMPLETO-eq'1'),[string]$AndamentoArquivo,[string]$TemposArquivo)
 $ErrorActionPreference='Stop'
 $Raiz=(Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 . (Join-Path $PSScriptRoot 'atualizacao-preparo.ps1')
 . (Join-Path $PSScriptRoot 'operacao-logica.ps1')
 Validar-PastaPreparo $Instalacao $Raiz
-# Nao herdar caminhos, credenciais, caches ou modo de producao.
-Get-ChildItem Env: | Where-Object Name -Match '^(SUPPLY_VISION_|SV_|PORTAL_|SMTP_|EMAIL_|BACKUP_|QLIK_|ADMIN_|MODO_ENSAIO|RELATORIOS_|WRANGLER_|MINIFLARE_|XDG_|CLOUDFLARE_|CF_|GIT_|NPM_CONFIG_|PIP_|PYTHONPATH$|VIRTUAL_ENV$|NODE_OPTIONS$)' | ForEach-Object {Remove-Item ('Env:'+$_.Name)}
-$env:SUPPLY_VISION_PRIVADO=Join-Path $Raiz 'privado'
-$env:PORTAL_BANCO_LOCAL='sqlite'
-$env:MODO_ENSAIO='1'
-$env:SV_PREPARO_RAIZ=$Raiz
-$env:XDG_CONFIG_HOME=Join-Path $Raiz '.cache'
-$env:XDG_CACHE_HOME=$env:XDG_CONFIG_HOME
-[void][IO.Directory]::CreateDirectory($env:XDG_CONFIG_HOME)
-$env:TEMP=$env:XDG_CONFIG_HOME;$env:TMP=$env:XDG_CONFIG_HOME;$env:TMPDIR=$env:XDG_CONFIG_HOME
-$env:WRANGLER_CACHE_DIR=Join-Path $env:XDG_CONFIG_HOME 'wrangler'
-$env:WRANGLER_LOG_PATH=Join-Path $Raiz '.cache/wrangler.log'
-$env:WRANGLER_SEND_METRICS='false'
-$env:MINIFLARE_REGISTRY_PATH=Join-Path $Raiz '.cache/registry'
-# Ate a compilacao do helper nativo usa o TEMP descartavel, nunca o da operacao.
-# Antes de build/testes: a saida deste processo encerra a arvore inteira.
-Entrar-JobPreparo
-@{pid=$PID;inicio=(Get-Process -Id $PID).StartTime.ToUniversalTime().ToString('o')}|ConvertTo-Json|Set-Content (Join-Path $Raiz 'preparo-processo.json') -Encoding UTF8
-Limpar-PreparosAntigos $Instalacao -PreparoAtual $Raiz -SomenteReprovados
-function Executar-Preparo([scriptblock]$Comando,[string]$Falha) {
- $preferencia=$ErrorActionPreference;$inicio=[datetime]::UtcNow
- try{$ErrorActionPreference='Continue'; & $Comando; $codigo=$LASTEXITCODE}
- finally{$ErrorActionPreference=$preferencia}
- $nome=$Falha-replace' falhou no preparo\.',''-replace' falharam no preparo\.',''-replace' falhou no preparo:',':'
- $tempo=[math]::Round(([datetime]::UtcNow-$inicio).TotalSeconds,2)
- $linha="PREPARAR / ${nome}: codigo=$codigo; duracao=$tempo s."
- Add-Content -LiteralPath (Join-Path $Raiz 'preparo-tempos.log') -Value $linha
+if(!$TemposArquivo){$TemposArquivo=Join-Path (Obter-PastaPrivada $Instalacao) 'operacao/atualizacao-tempos.log'}
+if(!$AndamentoArquivo){$AndamentoArquivo=Join-Path (Obter-PastaPrivada $Instalacao) 'operacao/atualizacao-andamento.json'}
+$script:PassosPreparo=New-Object Collections.ArrayList
+$script:AndamentoPreparo=Ler-AndamentoAtualizacao $AndamentoArquivo
+if(!$script:AndamentoPreparo){$script:AndamentoPreparo=Novo-AndamentoAtualizacao $AndamentoArquivo $TemposArquivo}
+function Iniciar-PassoPreparo([string]$Nome) {
+ [void]$script:PassosPreparo.Add(@{nome=$Nome;inicio=[datetime]::UtcNow})
+ Publicar-AndamentoAtualizacao $script:AndamentoPreparo ('PREPARAR / '+$Nome)
+}
+function Concluir-PassoPreparo([string]$Codigo='0') {
+ if(!$script:PassosPreparo.Count){return}
+ $i=$script:PassosPreparo.Count-1;$p=$script:PassosPreparo[$i];$script:PassosPreparo.RemoveAt($i)
+ $tempo=([math]::Round(([datetime]::UtcNow-$p.inicio).TotalSeconds,2)).ToString('0.##',[Globalization.CultureInfo]::InvariantCulture)
+ $linha="PREPARAR / $($p.nome): codigo=$Codigo; duracao=$tempo s."
+ try{Add-Content -LiteralPath (Join-Path $Raiz 'preparo-tempos.log') -Value $linha -Encoding UTF8}catch{}
+ if($TemposArquivo){try{Add-Content -LiteralPath $TemposArquivo -Value $linha -Encoding UTF8}catch{}}
  Write-Host $linha
+}
+function Executar-Preparo([scriptblock]$Comando,[string]$Falha) {
+ $preferencia=$ErrorActionPreference;$codigo=1
+ $nome=$Falha-replace' falhou no preparo\.',''-replace' falharam no preparo\.',''-replace' falhou no preparo:',':'
+ Iniciar-PassoPreparo $nome
+ try{$ErrorActionPreference='Continue';$global:LASTEXITCODE=0; & $Comando; $ok=$?; $codigo=$LASTEXITCODE;if(!$ok-and$codigo-eq0){$codigo=1}}
+ finally{$ErrorActionPreference=$preferencia;Concluir-PassoPreparo ([string]$codigo)}
  if($codigo-ne0){throw $Falha}
 }
 Set-Location $Raiz
 try {
+ Iniciar-PassoPreparo 'Inicializacao isolada'
+ # Nao herdar caminhos, credenciais, caches ou modo de producao.
+ Get-ChildItem Env: | Where-Object Name -Match '^(SUPPLY_VISION_|SV_|PORTAL_|SMTP_|EMAIL_|BACKUP_|QLIK_|ADMIN_|MODO_ENSAIO|RELATORIOS_|WRANGLER_|MINIFLARE_|XDG_|CLOUDFLARE_|CF_|GIT_|NPM_CONFIG_|PIP_|PYTHONPATH$|VIRTUAL_ENV$|NODE_OPTIONS$)' | ForEach-Object {Remove-Item ('Env:'+$_.Name)}
+ $env:SUPPLY_VISION_PRIVADO=Join-Path $Raiz 'privado'
+ $env:PORTAL_BANCO_LOCAL='sqlite'
+ $env:MODO_ENSAIO='1'
+ $env:SV_PREPARO_RAIZ=$Raiz
+ $env:XDG_CONFIG_HOME=Join-Path $Raiz '.cache'
+ $env:XDG_CACHE_HOME=$env:XDG_CONFIG_HOME
+ [void][IO.Directory]::CreateDirectory($env:XDG_CONFIG_HOME)
+ $env:TEMP=$env:XDG_CONFIG_HOME;$env:TMP=$env:XDG_CONFIG_HOME;$env:TMPDIR=$env:XDG_CONFIG_HOME
+ $env:WRANGLER_REGISTRY_PATH=Join-Path $env:XDG_CONFIG_HOME 'wrangler-registry'
+ $env:WRANGLER_CACHE_DIR=Join-Path $env:XDG_CONFIG_HOME 'wrangler'
+ $env:WRANGLER_LOG_PATH=Join-Path $Raiz '.cache/wrangler.log'
+ $env:WRANGLER_SEND_METRICS='false'
+ $env:MINIFLARE_REGISTRY_PATH=Join-Path $Raiz '.cache/registry'
+ # Ate a compilacao do helper nativo usa o TEMP descartavel, nunca o da operacao.
+ # Antes de build/testes: a saida deste processo encerra a arvore inteira.
+ Entrar-JobPreparo
+ Concluir-PassoPreparo
+ @{pid=$PID;inicio=(Get-Process -Id $PID).StartTime.ToUniversalTime().ToString('o')}|ConvertTo-Json|Set-Content (Join-Path $Raiz 'preparo-processo.json') -Encoding UTF8
+ Iniciar-PassoPreparo 'Limpeza de preparos reprovados'
+ Limpar-PreparosAntigos $Instalacao -PreparoAtual $Raiz -SomenteReprovados
+ Concluir-PassoPreparo
+ Iniciar-PassoPreparo 'Configuracao de teste'
  & (Join-Path $PSScriptRoot 'preparar-configuracao-teste.ps1') -Destino $env:SUPPLY_VISION_PRIVADO
  # Somente modelos ficticios; nem mesmo SMTP/URL dos exemplos podem sair na rede.
  [IO.File]::WriteAllText((Join-Path $env:SUPPLY_VISION_PRIVADO 'comum/smtp.env'),"SMTP_HOST=127.0.0.1`nSMTP_PORT=1`nSMTP_USER=teste`nSMTP_PASSWORD=teste`nEMAIL_FROM_NAME=teste`n")
@@ -53,11 +74,15 @@ try {
  $texto=[regex]::Replace($texto,'(?m)^PORTAL_URL=.*$',('PORTAL_URL=http://127.0.0.1:'+$portasPreparo[0]))
  $texto=[regex]::Replace($texto,'(?m)^BACKUP_EMAIL_TO=.*$','BACKUP_EMAIL_TO=teste@example.invalid')
  [IO.File]::WriteAllText($configPortal,($texto+"`nPORTAL_PORTA=$($portasPreparo[0])`nRELATORIOS_PORTA=$($portasPreparo[1])`n"))
+ Concluir-PassoPreparo
  $portal=Join-Path $Raiz 'portal';$alertas=Join-Path $Raiz 'alertas'
+ Iniciar-PassoPreparo 'Dependencias Node'
  if($ReinstalarNode-or!(Copiar-DependenciasPreparo (Join-Path $Instalacao 'portal/node_modules') (Join-Path $portal 'node_modules'))){
   Push-Location $portal
   try{Executar-Preparo {& npm.cmd ci --no-audit --no-fund} 'npm ci falhou no preparo.'}finally{Pop-Location}
  }else{Write-Host 'Node: dependencias reaproveitadas por copia isolada.'}
+ Concluir-PassoPreparo
+ Iniciar-PassoPreparo 'Materializacao de junctions Node'
  # npm cria junctions para pacotes file: (fast-glob/vendor). Materializa antes
  # de mover node_modules; links absolutos apontariam para o preparo ja limpo.
  $modulos=Join-Path $portal 'node_modules'
@@ -66,25 +91,50 @@ try {
   [IO.Directory]::Move($modulos,($modulos+'-instalado'))
   [IO.Directory]::Move(($modulos+'-isolado'),$modulos)
  }
+ Concluir-PassoPreparo
+ Iniciar-PassoPreparo 'Dependencias Python'
  if($ReinstalarPython-or!(Copiar-DependenciasPreparo (Join-Path $Instalacao 'alertas/.venv') (Join-Path $alertas '.venv'))){
   Executar-Preparo {& python.exe -m venv (Join-Path $alertas '.venv')} 'Criacao do venv falhou no preparo.'
   Executar-Preparo {& (Join-Path $alertas '.venv/Scripts/python.exe') -m pip install -r (Join-Path $alertas 'config/requirements.txt') -r (Join-Path $alertas 'config/requirements-dev.txt') --quiet} 'pip install falhou no preparo.'
  }else{Write-Host 'Python: dependencias reaproveitadas por copia isolada.'}
+ Concluir-PassoPreparo
+ Iniciar-PassoPreparo 'Validar-PythonAlertas'
  Validar-PythonAlertas (Join-Path $alertas '.venv/Scripts/python.exe')
+ Concluir-PassoPreparo
+ Iniciar-PassoPreparo 'Consulta CI'
+ $sha=(& git rev-parse HEAD).Trim()
+ if($LASTEXITCODE-ne0){throw 'Nao foi possivel obter SHA do preparo.'}
+ $ci=Consultar-CIPreparo $sha -ForcarCompleto:$ForcarCompleto
+ Concluir-PassoPreparo
+ $modo=if($ci.rapido){'rapido'}else{'completo'}
+ $linhaModo=if($ci.rapido){"PREPARAR: modo rapido — $($ci.motivo)"}else{"PREPARAR: modo completo — motivo: $($ci.motivo)"}
+ Write-Host $linhaModo
+ try{Add-Content (Join-Path $Raiz 'preparo-tempos.log') $linhaModo -Encoding UTF8;if($TemposArquivo){Add-Content $TemposArquivo $linhaModo -Encoding UTF8}}catch{}
+ Publicar-AndamentoAtualizacao $script:AndamentoPreparo 'PREPARAR / Build do Portal' -Modo $modo
  Push-Location $portal
  try{
   Executar-Preparo {& npm.cmd run build} 'Build do Portal falhou no preparo.'
-  Executar-Preparo {& npm.cmd test} 'Testes do Portal falharam no preparo.'
+  if(!$ci.rapido){Executar-Preparo {& npm.cmd test} 'Testes do Portal falharam no preparo.'}
  }finally{Pop-Location}
+ if(!$ci.rapido){
  Push-Location $alertas
  try{Executar-Preparo {& (Join-Path $alertas '.venv/Scripts/python.exe') -m pytest tests -q} 'Testes dos Alertas falharam no preparo.'}finally{Pop-Location}
+ }
  $env:NODE_OPTIONS='--import="'+(New-Object Uri (Join-Path $portal 'scripts/isolamento-preparo.mjs')).AbsoluteUri+'"'
- foreach($teste in @('validar-operacao.ps1','testar-operacao.ps1','testar-supervisor-isolado.ps1','testar-persistencia-alertas.ps1')){
+ $testes=@('validar-operacao.ps1','testar-operacao.ps1')
+ if(!$ci.rapido){$testes+=@('testar-supervisor-isolado.ps1','testar-persistencia-alertas.ps1')}
+ foreach($teste in $testes){
   Executar-Preparo {Executar-PowerShellOculto @('-NoProfile','-WindowStyle','Hidden','-ExecutionPolicy','Bypass','-File',(Join-Path $PSScriptRoot $teste))} "Teste operacional falhou no preparo: $teste"
  }
- [IO.File]::WriteAllText((Join-Path $Raiz 'preparo-aprovado'),(& git rev-parse HEAD).Trim())
+ if($ci.rapido){Executar-Preparo {& node (Join-Path $portal 'scripts/fumaca-preparo.mjs') $portasPreparo[0] $portasPreparo[1]} 'Fumaca do Portal compilado falhou no preparo.'}
+ Iniciar-PassoPreparo 'Aprovacao e conferencia'
+ if((& git rev-parse HEAD).Trim()-cne$sha){throw 'SHA mudou durante o preparo.'}
+ [IO.File]::WriteAllText((Join-Path $Raiz 'preparo-aprovado'),$sha)
+ Concluir-PassoPreparo
  exit 0
 }catch{
+ while($script:PassosPreparo.Count){Concluir-PassoPreparo 'falhou'}
+ Publicar-AndamentoAtualizacao $script:AndamentoPreparo 'PREPARAR reprovado' 'falhou'
  Write-Error "PREPARAR falhou; operacao original continua no ar: $($_.Exception.Message)" -ErrorAction Continue
  try{
   # Na primeira atualizacao o pai ainda e da versao anterior. Nao depender

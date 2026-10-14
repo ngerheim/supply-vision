@@ -333,7 +333,12 @@ e confira uma nova execução antes de considerar a comparação completa.
 
 Desenvolva na máquina de origem, valide, commite e publique. No servidor, abra
 `Supply Vision.bat` e use **Atualizar sistema**. A central pede confirmação,
-acompanha o processo sem travar a janela e informa o resultado.
+acompanha o processo sem travar a janela e informa o resultado. O painel mostra
+etapa/total, modo, tempos decorridos e barra de progresso, consultando
+`privado/operacao/atualizacao-andamento.json` a cada segundo em runspace próprio.
+A estimativa restante usa os passos medidos na atualização anterior; sem histórico,
+mostra apenas o decorrido. Ao terminar ou falhar, mantém o resultado e o tempo total.
+Reabra a central depois de instalar esta versão para carregar o painel novo.
 
 Os tempos de cada etapa ficam em `privado/operacao/atualizacao-tempos.log`,
 tanto pela central quanto pelo PowerShell: início, fim, duração, tempo total
@@ -368,10 +373,22 @@ usa três fases:
    inalteradas para uma cópia independente; instala no preparo quando mudaram,
    estão ausentes ou foi usado `-Reaplicar`. Links de pacotes locais são
    materializados; links para fora das dependências/vendor são recusados.
-   Compila e executa Portal, Alertas e as quatro verificações operacionais.
+   Mede separadamente configuração fictícia, cópias Node/Python, junctions, worktree,
+   build e cada verificação em `preparo-tempos.log` e no log da instalação.
+   Consulta, sem token, os check-runs públicos do SHA exato. Exige todos concluídos
+   com sucesso e os sete nomes obrigatórios (incluindo as duas plataformas de
+   Node mínimo). Apenas `Atualizacao real`, que só executa em PR, admite `skipped`.
+   Ausência, falha, pendência ou resposta inesperada mantém o preparo completo.
+   Com CI aprovado, dispensa npm test, pytest, supervisor isolado e persistência;
+   mantém dependências, Validar-PythonAlertas, build, validar-operacao e testar-operacao,
+   e sobe o Portal compilado com banco fictício para conferir health e login.
+   A fumaça tem prazo de 17 s mais encerramento; qualquer reprovação cancela.
+   Para emergências, use `-ForcarCompleto` ou `SV_PREPARO_COMPLETO=1`.
+   O log registra o modo e o motivo. Se nomes/jobs do CI mudarem, o modo completo
+   prevalece até a lista em `Consultar-CIPreparo` ser atualizada.
    Usa somente modelos fictícios, privado próprio, modo ensaio, SMTP em loopback
    e portas próprias reservadas para cada ambiente descartável. Não acessa o
-   privado da produção. Qualquer reprovação cancela sem solicitar a parada.
+   banco ou configuração da produção; só publica tempos/andamento na pasta operacional. Qualquer reprovação cancela sem solicitar a parada.
    No Windows, os filhos pertencem a um Job Object e terminam com o preparo.
    A limpeza faz quatro tentativas, trata atributos e caminhos longos, e não
    segue junctions. O contexto registra `cancelado-preparo` e a situação da
@@ -390,7 +407,12 @@ usa três fases:
    login e consumidores. As migrações continuam na partida. Gravações e envios
    ficam bloqueados até a fumaça passar.
 3. **CONCLUIR, operação no ar:** replica o snapshot para a rede com o mesmo
-   `BACKUP_NETWORK_TIMEOUT_SECONDS`, limpa o worktree e registra o resumo.
+   `BACKUP_NETWORK_TIMEOUT_SECONDS`, delega a limpeza do worktree a um processo
+   independente e registra o resumo sem esperar a remoção. `limpeza-preparo.lock`
+   protege a limpeza em andamento: outra atualização é recusada até ela terminar.
+   Resultado e duração ficam em `limpeza-preparo.json` e `atualizacao-tempos.log`.
+   Falha deixa a sobra para a próxima atualização. Se o worker não puder iniciar,
+   mantém a limpeza síncrona de segurança.
    Falha de rede preserva a cópia local e avisa; não interrompe a operação.
 
 Falha na fumaça para novamente, restaura o snapshot se a versão nova chegou

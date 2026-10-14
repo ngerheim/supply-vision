@@ -12,7 +12,10 @@ O harness calcula `git merge-base origin/main HEAD`, monta uma instalacao `main`
 nesse commit e instala/builda suas dependencias. O remoto e outro clone local
 do checkout da PR; `origin/main` nele oferece o destino esperado pelo atualizador.
 O script da base executa `atualizar-servidor.ps1` sem parametros internos, incluindo
-a reexecucao pelo codigo novo. Nao ha mocks nem bypass de build/suites.
+a reexecucao pelo codigo novo. Não há mocks nem bypass de build/suites. O job define `SV_PREPARO_COMPLETO=1`
+para sempre exercitar todas as suítes, mesmo em uma reexecução com checks já
+concluídos. O harness aguarda a limpeza assíncrona somente para verificar a fixture;
+a central e o atualizador não aguardam esse worker.
 
 Toda configuracao e dado pertence a uma pasta `sv-h2-*` nova em TEMP. Ensaio,
 SMTP em loopback, avisos desligados, backup de rede vazio e agenda ja concluida

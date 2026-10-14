@@ -118,6 +118,34 @@ function Testar-SupervisorEncerrado { [SvCentralTeste]::Supervisor();return $fal
   Exigir-Central ($script:cliques-ge10-and!$controle.trabalhos['tarefa'].async.IsCompleted) 'WinForms atende cliques com worker lento'
   $janela.Close();$janela.Dispose();[SvCentralTeste]::Porta.Set()
  }else{Write-Host 'PULADO: WinForms real exige Windows; demais testes de runspace executados.'}
+ # Andamento real em arquivo, sem consultar Git nem Agendador na UI.
+ . (Join-Path $PSScriptRoot 'atualizacao-preparo.ps1')
+ $arquivoAndamento=Join-Path $Op 'atualizacao-andamento.json';$arquivoTempos=Join-Path $Op 'atualizacao-tempos.log'
+ $agora=[datetime]::UtcNow
+ $a=Novo-AndamentoAtualizacao $arquivoAndamento $arquivoTempos $agora.AddSeconds(-30)
+ Publicar-AndamentoAtualizacao $a 'PREPARAR / Build do Portal' -Modo rapido
+ $lido=Consultar-AndamentoCentral $Privado $agora
+ Exigir-Central ($lido.modo-eq'rapido'-and$lido.numero-gt1-and$lido.totalSegundos-eq30-and$null-eq$lido.restanteSegundos) 'arquivo de andamento sem historico mostra somente decorrido'
+ [IO.File]::WriteAllText($arquivoTempos,"PREPARAR / Build do Portal: codigo=0; duracao=72 s.`n[2026-01-01 00:00:00] Resumo atualizacao: total=731 s; medicao=ficticia.`n")
+ $a=Novo-AndamentoAtualizacao $arquivoAndamento $arquivoTempos $agora.AddSeconds(-30)
+ Publicar-AndamentoAtualizacao $a 'PREPARAR / Build do Portal' -Modo rapido
+ $lido=Consultar-AndamentoCentral $Privado $agora
+ Exigir-Central ($lido.restanteSegundos-ge71-and$lido.restanteSegundos-le72) 'estimativa usa duracao da atualizacao anterior'
+ [SvCentralTeste]::Porta.Reset()
+ [void](Iniciar-TrabalhoCentral $controle 'tarefa' {[SvCentralTeste]::Porta.Wait()})
+ Iniciar-ConsultaAndamentoCentral $controle $Raiz $Privado
+ $script:rAndamento=$null
+ Exigir-Central (Esperar-CondicaoTeste {$script:rAndamento=Receber-TrabalhoCentral $controle 'andamento';$null-ne$script:rAndamento} -Segundos 15) 'andamento chega com Agendador bloqueado'
+ Exigir-Central ($script:rAndamento.ok-and$script:rAndamento.valor.modo-eq'rapido') 'worker le arquivo publicado'
+ [SvCentralTeste]::Porta.Set()
+ [void](Esperar-CondicaoTeste {(Receber-TrabalhoCentral $controle 'tarefa')-ne$null} -Segundos 15)
+ Publicar-AndamentoAtualizacao $a 'Atualizacao concluida' 'concluido'
+ $lido=Consultar-AndamentoCentral $Privado
+ Exigir-Central ($lido.estado-eq'concluido'-and$lido.progresso-eq100-and$lido.resumo-like'*total=731 s*') 'resultado final e tempos totais'
+ Publicar-AndamentoAtualizacao $a 'Atualizacao falhou' 'falhou'
+ Exigir-Central ((Consultar-AndamentoCentral $Privado).estado-eq'falhou') 'resultado de falha'
+ [IO.File]::WriteAllText($arquivoAndamento,'{parcial')
+ Exigir-Central ($null-eq(Consultar-AndamentoCentral $Privado)) 'arquivo parcial nao derruba central'
  Write-Host 'PASSOU: central responsiva, cache, exclusao mutua, resultados antigos, cancelamento e botoes.'
 }finally{
  [SvCentralTeste]::Porta.Set();$env:SUPPLY_VISION_PRIVADO=$envAnterior
