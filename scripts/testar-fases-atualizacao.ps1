@@ -12,6 +12,7 @@ try{
   foreach($dir in @('scripts','portal/scripts','portal/dist','portal/node_modules','alertas/.venv','privado/operacao','privado/portal/backups','privado/portal/configuracao','privado/comum','compartilhado')){New-Item -ItemType Directory -Force (Join-Path $raiz $dir)|Out-Null}
   Copy-Item (Join-Path $fonteRaiz 'scripts/operacao-logica.ps1') (Join-Path $raiz 'scripts')
   Copy-Item (Join-Path $fonteRaiz 'scripts/atualizacao-preparo.ps1') (Join-Path $raiz 'scripts')
+  Add-Content (Join-Path $raiz 'scripts/atualizacao-preparo.ps1') 'function Iniciar-LimpezaPreparoSegundoPlano($Raiz,$Preparo,$Operacao){ Limpar-PastaPreparo $Raiz $Preparo }'
   Add-Content (Join-Path $raiz 'scripts/atualizacao-preparo.ps1') 'function Executar-PowerShellOculto($Argumentos){ & powershell.exe @Argumentos }'
   if($caso-eq'preparo-limpeza-falha'){Add-Content (Join-Path $raiz 'scripts/atualizacao-preparo.ps1') "function Remover-ArvorePreparo {throw 'Handle ficticio impediu limpeza.'}"}
   $fonte=[IO.File]::ReadAllText((Join-Path $fonteRaiz 'scripts/atualizar-servidor.ps1'))

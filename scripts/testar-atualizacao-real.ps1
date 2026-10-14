@@ -175,6 +175,7 @@ try{
   }else{
    if(($null-ne$codigo-and$codigo-ne0)-or$head-ne$destino){throw 'Atualizacao nao chegou ao commit da PR.'}
    $contexto=Get-Content (Join-Path $privado 'operacao/atualizacao.json') -Raw|ConvertFrom-Json
+   if(!(Esperar-CondicaoTeste {!(Test-Path (Join-Path $privado 'operacao/limpeza-preparo.lock'))} 120)){throw 'Limpeza em segundo plano nao encerrou na fixture.'}
    if($contexto.fase-ne'concluido'-or(Test-Path $contexto.preparo)){throw 'Contexto nao concluiu ou preparo permaneceu.'}
    Node-H2 -Argumentos @($apoio,'verificar',$raiz,$snapshot)
   }

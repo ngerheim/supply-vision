@@ -16,6 +16,9 @@ $t=New-Object Windows.Forms.Label;$t.Text='Supply Vision';$t.Font=New-Object Dra
 $v=New-Object Windows.Forms.Label;$v.Text=$versao;$v.ForeColor=[Drawing.Color]::FromArgb(160,188,214);$v.Location='32,64';$v.AutoSize=$true;$form.Controls.Add($v)
 $painel=New-Object Windows.Forms.Panel;$painel.Location='30,100';$painel.Size='505,115';$painel.BackColor=[Drawing.Color]::FromArgb(22,49,78);$form.Controls.Add($painel)
 $status=New-Object Windows.Forms.Label;$status.Location='18,14';$status.Size='470,90';$status.Font=New-Object Drawing.Font('Segoe UI Semibold',11);$painel.Controls.Add($status)
+$andamentoTexto=New-Object Windows.Forms.Label;$andamentoTexto.Location='18,7';$andamentoTexto.Size='470,83';$andamentoTexto.Visible=$false;$painel.Controls.Add($andamentoTexto)
+$andamentoBarra=New-Object Windows.Forms.ProgressBar;$andamentoBarra.Location='18,94';$andamentoBarra.Size='470,13';$andamentoBarra.Visible=$false;$painel.Controls.Add($andamentoBarra)
+$script:andamentoCentral=$null;$script:proximoAndamento=[datetime]::MinValue
 function Botao($texto,$x,$y){$b=New-Object Windows.Forms.Button;$b.Text=$texto;$b.Location=New-Object Drawing.Point($x,$y);$b.Size='240,42';$b.FlatStyle='Flat';$b.BackColor=[Drawing.Color]::FromArgb(30,91,145);$b.ForeColor='White';$b.FlatAppearance.BorderSize=0;$form.Controls.Add($b);return $b}
 $iniciar=Botao 'Iniciar operação' 30 235;$parar=Botao 'Parar operação' 295 235;$validar=Botao 'Validar configuração' 30 289;$restaurar=Botao 'Testar backup' 295 289
 $atualizar=Botao 'Atualizar sistema' 30 343;$atualizar.Size='505,42';$atualizar.BackColor=[Drawing.Color]::FromArgb(31,122,99)
@@ -35,6 +38,20 @@ $migrar=Botao 'Preparar migração' 30 661;$migrar.Size='505,42'
 $script:controle=Novo-ControleCentral
 $script:estadoCentral=$null;$script:tarefaCentral=@{modo=$null;aviso='Consultando inicialização...'}
 $script:processoAtualizacao=$null;$script:aoConcluirAcao=$null;$script:acaoTipo='';$script:suprimirMan=$false
+function Mostrar-AndamentoCentral {
+ $a=$script:andamentoCentral
+ if(!$a){return}
+ $andamentoTexto.Visible=$true;$andamentoBarra.Visible=$true;$status.Visible=$false
+ $etapa=$a.etapaSegundos;$total=$a.totalSegundos
+ if($a.estado-eq'andamento'){
+  $agora=[datetime]::UtcNow
+  $etapa=[math]::Max(0,[math]::Floor(($agora-$a.inicioEtapa).TotalSeconds));$total=[math]::Max(0,[math]::Floor(($agora-$a.inicioGeral).TotalSeconds))
+ }
+ $linha=if($a.estado-eq'andamento'){"Etapa $($a.numero) de $($a.total): $($a.nome)"}else{$a.nome}
+ $andamentoTexto.Text="$linha`nEtapa: $etapa s | Total: $total s | Modo $($a.modo)"
+ if($null-ne$a.restanteSegundos-and$a.estado-eq'andamento'){$andamentoTexto.Text+="`nRestante estimado: $($a.restanteSegundos) s"}
+ $andamentoBarra.Value=$a.progresso
+}
 function Mostrar-EstadoCentral {
  $d=$script:estadoCentral
  $avisoSessao.Text=Aviso-SessaoRemota $script:tarefaCentral.modo ($env:SESSIONNAME-like'RDP-*')
@@ -63,6 +80,14 @@ function Pedir-AcaoCentral([string]$Tipo,$Dados,[scriptblock]$Concluir){
  return $true
 }
 function Receber-ResultadosCentral {
+ $rAndamento=Receber-TrabalhoCentral $script:controle 'andamento'
+ if($rAndamento-and$rAndamento.geracao-eq$script:controle.geracao-and$rAndamento.ok-and$rAndamento.valor){$script:andamentoCentral=$rAndamento.valor}
+ [void](Cancelar-ConsultaCentral $script:controle 'andamento' 3000)
+ if([datetime]::UtcNow-ge$script:proximoAndamento){
+  Iniciar-ConsultaAndamentoCentral $script:controle $Raiz $Privado
+  $script:proximoAndamento=[datetime]::UtcNow.AddSeconds(1)
+ }
+ Mostrar-AndamentoCentral
  foreach($tipo in @('estado','tarefa')){
   $r=Receber-TrabalhoCentral $script:controle $tipo
   if($r-and$r.geracao-eq$script:controle.geracao){
@@ -90,6 +115,7 @@ function Receber-ResultadosCentral {
   [void](Pedir-AcaoCentral 'fim-atualizacao' @{codigo=$codigo;saida=$script:saidaAtualizacao} {
    param($r)
    $atualizar.Enabled=$true;$atualizar.Text='Atualizar sistema';if($r.versao){$v.Text=$r.versao}
+   if($r.andamento){$script:andamentoCentral=$r.andamento;Mostrar-AndamentoCentral}
    $titulo=if($r.ok){'Atualização concluída'}else{'Atualização não concluída'}
    [Windows.Forms.MessageBox]::Show($r.mensagem,$titulo,'OK',$(if($r.ok){'Information'}else{'Error'}))|Out-Null
   })
@@ -135,6 +161,7 @@ $atualizar.Add_Click({
   param($r)
   if($r.elevar){$atualizar.Enabled=$true;[Windows.Forms.MessageBox]::Show('Atualizar uma operação com a conta da tarefa exige elevação. A central será reaberta como administrador; clique Atualizar sistema nela.','Elevação necessária','OK','Information')|Out-Null;Reabrir-CentralElevada;return}
   if($r.erro){$atualizar.Enabled=$true;[Windows.Forms.MessageBox]::Show($r.mensagem,'Não foi possível atualizar','OK','Error')|Out-Null;return}
+  $script:andamentoCentral=$null;$andamentoTexto.Text='Iniciando atualização...';$andamentoTexto.Visible=$true;$andamentoBarra.Visible=$true;$andamentoBarra.Value=0;$status.Visible=$false;$script:proximoAndamento=[datetime]::MinValue
   $script:processoAtualizacao=$r.processo;$script:saidaAtualizacao=$r.saida;$atualizar.Text='Atualizando...'
  }){$atualizar.Enabled=$false}
 })
@@ -173,6 +200,6 @@ $form.Add_FormClosing({param($origem,$evento)
 try{[void]$form.ShowDialog()}
 finally{
  $timer.Stop();$pulso.Stop();$timer.Dispose();$pulso.Dispose()
- foreach($tipo in @('estado','tarefa')){[void](Cancelar-ConsultaCentral $script:controle $tipo 0);[void](Receber-TrabalhoCentral $script:controle $tipo)}
+ foreach($tipo in @('estado','tarefa','andamento')){[void](Cancelar-ConsultaCentral $script:controle $tipo 0);[void](Receber-TrabalhoCentral $script:controle $tipo)}
  $dicas.Dispose();$fonteAvisoEnsaio.Dispose();$form.Dispose()
 }

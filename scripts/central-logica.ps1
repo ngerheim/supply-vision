@@ -127,6 +127,7 @@ function Executar-AcaoCentral([string]$Raiz,[string]$Privado,[string]$Startup,[s
    if((Obter-TarefaSupplyVision $Raiz)-and!(Testar-Elevacao)){return @{elevar=$true}}
    $op=Join-Path $Privado 'operacao';New-Item -ItemType Directory -Force $op|Out-Null
    $saida=Join-Path $op 'atualizacao-processo-saida.log';$erro=Join-Path $op 'atualizacao-erro.log';Remove-Item $saida,$erro -Force -ErrorAction SilentlyContinue
+   Remove-Item -LiteralPath (Join-Path $op 'atualizacao-andamento.json') -Force -ErrorAction SilentlyContinue
    $argumentos='-NoProfile -ExecutionPolicy Bypass -File "'+(Join-Path $Raiz 'scripts/atualizar-servidor.ps1')+'"'
    $proc=Start-Process powershell.exe -ArgumentList $argumentos -WindowStyle Hidden -PassThru -RedirectStandardOutput $saida -RedirectStandardError $erro
    [void]$proc.Handle # Conserva o handle para obter ExitCode apos encerrar (PowerShell 5.1).
@@ -165,7 +166,9 @@ function Executar-AcaoCentral([string]$Raiz,[string]$Privado,[string]$Startup,[s
     $mensagem=@("Codigo de saida: $($Dados.codigo). Conclusao nao confirmada.";$(if($e){'ERRO:';$e});$(if($s){'ULTIMAS ETAPAS:';$s}))-join"`n"
     if(!$mensagem){$mensagem='Consulte os registros da operacao para mais detalhes.'}
    }
-   return @{ok=$concluiu;mensagem=$mensagem;versao=$versao}
+   $andamento=Consultar-AndamentoCentral $Privado
+   if($andamento){$mensagem+="`n`nTempo total: $($andamento.totalSegundos) s.";if($andamento.resumo){$mensagem+="`n$($andamento.resumo)"}}
+   return @{ok=$concluiu;mensagem=$mensagem;versao=$versao;andamento=$andamento}
   }
   default {throw 'Comando da central desconhecido.'}
  }
@@ -178,4 +181,36 @@ function Codigo-AcaoCentral {
   try{Executar-AcaoCentral $Raiz $Privado $Startup $Tipo $Dados}
   catch{return @{ok=$false;erro=$true;mensagem=$_.Exception.Message}}
  }
+}
+
+# Leitura pequena em worker proprio: nao disputa o worker do Agendador.
+function Consultar-AndamentoCentral([string]$Privado,[datetime]$Agora=[datetime]::UtcNow) {
+ try{
+  $op=Join-Path $Privado 'operacao'
+  $j=Get-Content -LiteralPath (Join-Path $op 'atualizacao-andamento.json') -Raw -Encoding UTF8 -ErrorAction Stop|ConvertFrom-Json -ErrorAction Stop
+  if(!$j.nome-or$j.numero-lt1-or$j.total-lt$j.numero-or$j.estado-notin@('andamento','concluido','falhou')){return $null}
+  $inicio=[datetime]::Parse($j.inicioGeral).ToUniversalTime();$inicioEtapa=[datetime]::Parse($j.inicioEtapa).ToUniversalTime()
+  $fim=if($j.estado-eq'andamento'){$Agora}else{[datetime]::Parse($j.fim).ToUniversalTime()}
+  $total=[math]::Max(0,[math]::Floor(($fim-$inicio).TotalSeconds));$etapa=[math]::Max(0,[math]::Floor(($fim-$inicioEtapa).TotalSeconds))
+  $restante=$null
+  if($j.estado-eq'andamento'-and$j.duracoes-and@($j.duracoes.PSObject.Properties).Count){
+   $estimativa=0;$conhecidas=0
+   for($i=([int]$j.numero-1);$i-lt@($j.plano).Count;$i++){
+    $p=$j.duracoes.PSObject.Properties[[string]$j.plano[$i]]
+    if($p){$valor=[double]$p.Value;if($i-eq([int]$j.numero-1)){$valor=[math]::Max(0,$valor-$etapa)};$estimativa+=$valor;$conhecidas++}
+   }
+   if($conhecidas){$restante=[math]::Ceiling($estimativa)}
+  }
+  $progresso=if($j.estado-eq'concluido'){100}else{[math]::Min(99,[math]::Floor(100*($j.numero-1)/$j.total))}
+  $resumo=''
+  if($j.estado-ne'andamento'){$resumo=@(Get-Content -LiteralPath (Join-Path $op 'atualizacao-tempos.log') -Tail 80 -Encoding UTF8 -ErrorAction SilentlyContinue|Where-Object {$_-like'*Resumo atualizacao:*'}|Select-Object -Last 1)-join''}
+  return @{nome=$j.nome;numero=[int]$j.numero;total=[int]$j.total;modo=$j.modo;estado=$j.estado;etapaSegundos=$etapa;totalSegundos=$total;restanteSegundos=$restante;progresso=$progresso;resumo=$resumo;inicioGeral=$inicio;inicioEtapa=$inicioEtapa}
+ }catch{return $null}
+}
+function Iniciar-ConsultaAndamentoCentral($Controle,[string]$Raiz,[string]$Privado) {
+ [void](Iniciar-TrabalhoCentral $Controle 'andamento' {
+  param($Raiz,$Privado)
+  . (Join-Path $Raiz 'scripts/central-logica.ps1')
+  Consultar-AndamentoCentral $Privado
+ } @($Raiz,$Privado))
 }

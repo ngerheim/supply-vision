@@ -18,7 +18,7 @@
 # so valeria na atualizacao seguinte. -JaAtualizado e -VersaoAnterior sao de
 # uso interno; nao devem ser chamados a mao.
 [CmdletBinding()]
-param([switch]$Simular,[switch]$Reaplicar,[switch]$JaAtualizado,[string]$VersaoAnterior,[ValidateRange(1,3600)][int]$PrazoParadaSegundos=60)
+param([switch]$ForcarCompleto=($env:SV_PREPARO_COMPLETO-eq'1'),[switch]$Simular,[switch]$Reaplicar,[switch]$JaAtualizado,[string]$VersaoAnterior,[ValidateRange(1,3600)][int]$PrazoParadaSegundos=60)
 
 $ErrorActionPreference = 'Stop'
 $Raiz = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
@@ -146,7 +146,15 @@ $medicaoEnvAnterior=$env:SV_MEDICAO_ATUALIZACAO
 $script:MedicaoDelegada=$false
 $script:MedicaoAtualizacao=$null
 try{Inicializar-MedicaoAtualizacao (Join-Path (Obter-PastaPrivada $Raiz) 'operacao/atualizacao-tempos.log') $(if($JaAtualizado){$env:SV_MEDICAO_ATUALIZACAO}else{''})}catch{}
+$script:AndamentoAtualizacao=$null
+$script:ResultadoAtualizacao='falhou'
+try{
+ $arquivoAndamento=Join-Path (Obter-PastaPrivada $Raiz) 'operacao/atualizacao-andamento.json'
+ if($JaAtualizado){$script:AndamentoAtualizacao=Ler-AndamentoAtualizacao $arquivoAndamento}
+ if(!$script:AndamentoAtualizacao){$script:AndamentoAtualizacao=Novo-AndamentoAtualizacao $arquivoAndamento (Join-Path (Obter-PastaPrivada $Raiz) 'operacao/atualizacao-tempos.log')}
+}catch{}
 function Etapa([string]$t) {
+ if(!$Simular){try{Publicar-AndamentoAtualizacao $script:AndamentoAtualizacao $t}catch{}}
  try{Inicializar-MedicaoAtualizacao;Iniciar-EtapaMedida $script:MedicaoAtualizacao $t}catch{}
  Write-Host "`n== $t ==" -ForegroundColor Cyan
 }
@@ -329,7 +337,11 @@ function Reverter([string]$motivo) {
 
 try {
   # Tambem limpa se nao houver commit novo; -Simular continua sem escrita.
-  if(!$Simular-and!$JaAtualizado){Limpar-PreparosAntigos $Raiz (Ler-EstadoOperacao $ContextoArquivo)}
+  if(!$Simular-and!$JaAtualizado){
+   Confirmar-LimpezaAnterior (Join-Path (Obter-PastaPrivada $Raiz) 'operacao/limpeza-preparo.lock')
+   Etapa 'Limpeza de preparos antigos'
+   Limpar-PreparosAntigos $Raiz (Ler-EstadoOperacao $ContextoArquivo)
+  }
   # O pai conserva o contexto fora do checkout; o filho pode falhar ate no
   # pre-voo. Sem contexto verificavel, parametros internos nao autorizam reset.
   if ($JaAtualizado) {
@@ -393,7 +405,7 @@ if ($LASTEXITCODE -ne 0) { throw 'Nao foi possivel identificar origin/main.' }
 $remoto = $remoto.Trim()
 git merge-base --is-ancestor $anterior $remoto
 if ($LASTEXITCODE -ne 0) { throw 'Ha commits locais ou historico divergente. Atualizacao cancelada para preservar o trabalho local.' }
-if ($remoto -eq $anterior -and -not $Reaplicar) { Ok 'Ja esta na versao mais recente. Nada a fazer.'; exit 0 }
+if ($remoto -eq $anterior -and -not $Reaplicar) { $script:ResultadoAtualizacao='concluido';Ok 'Ja esta na versao mais recente. Nada a fazer.'; exit 0 }
 
 if ($Reaplicar -and $remoto -eq $anterior) {
   Aviso 'modo de reparo: a versao atual sera reconstruida e validada novamente'
@@ -430,10 +442,19 @@ if (-not $JaAtualizado) {
   Etapa 'PREPARAR: versao nova com a operacao NO AR'
   $script:PastaPreparo=Nova-PastaPreparo $Raiz
   Validar-PastaPreparo $Raiz $script:PastaPreparo
+  Etapa 'PREPARAR / Criacao do worktree'
+  $inicioWorktree=[datetime]::UtcNow
   & git worktree add --detach $script:PastaPreparo $remoto
   if($LASTEXITCODE){throw 'Nao foi possivel montar o worktree; operacao continua no ar.'}
+  $tempoWorktree=([math]::Round(([datetime]::UtcNow-$inicioWorktree).TotalSeconds,2)).ToString('0.##',[Globalization.CultureInfo]::InvariantCulture)
+  $linhaWorktree="PREPARAR / Criacao do worktree: codigo=0; duracao=$tempoWorktree s."
+  try{Add-Content (Join-Path $script:PastaPreparo 'preparo-tempos.log') $linhaWorktree -Encoding UTF8;Registrar-TempoAtualizacao $script:MedicaoAtualizacao $linhaWorktree}catch{}
   @{pid=$PID;inicio=(Get-Process -Id $PID).StartTime.ToUniversalTime().ToString('o')}|ConvertTo-Json|Set-Content (Join-Path $script:PastaPreparo 'preparo-atualizador.json') -Encoding UTF8
+  try{Encerrar-EtapaMedida $script:MedicaoAtualizacao}catch{}
   $argsPreparo=@('-NoProfile','-WindowStyle','Hidden','-ExecutionPolicy','Bypass','-File',(Join-Path $script:PastaPreparo 'scripts/preparar-atualizacao.ps1'),'-Instalacao',$Raiz)
+  if($ForcarCompleto){$argsPreparo+='-ForcarCompleto'}
+  if($script:AndamentoAtualizacao){$argsPreparo+=@('-AndamentoArquivo',$script:AndamentoAtualizacao.arquivo)}
+  if($script:MedicaoAtualizacao.arquivo){$argsPreparo+=@('-TemposArquivo',$script:MedicaoAtualizacao.arquivo)}
   if($mexeuNode){$argsPreparo+='-ReinstalarNode'}
   if($mexeuPython){$argsPreparo+='-ReinstalarPython'}
   Executar-PowerShellOculto $argsPreparo
@@ -441,9 +462,12 @@ if (-not $JaAtualizado) {
   $logPreparo=Join-Path $script:PastaPreparo 'preparo-tempos.log'
   try{
    Inicializar-MedicaoAtualizacao
-   if(Test-Path $logPreparo){foreach($linha in @(Get-Content $logPreparo)){Registrar-TempoAtualizacao $script:MedicaoAtualizacao $linha}}
+   # O filho novo registra cada passo imediatamente; filho legado ainda copia ao voltar.
+   if($argsPreparo-notcontains'-TemposArquivo'-and(Test-Path $logPreparo)){foreach($linha in @(Get-Content $logPreparo)){Registrar-TempoAtualizacao $script:MedicaoAtualizacao $linha}}
    $script:MedicaoAtualizacao.preparar=[math]::Round(([datetime]::UtcNow-$inicioPreparo).TotalSeconds,2)
   }catch{}
+  if($script:AndamentoAtualizacao){$script:AndamentoAtualizacao=Ler-AndamentoAtualizacao $script:AndamentoAtualizacao.arquivo}
+  Etapa 'PREPARAR / Aprovacao e conferencia'
   if($rcPreparo-ne0){throw 'PREPARAR reprovado. Atualizacao cancelada SEM parar a operacao ou alterar a instalacao.'}
   $aprovacao=Join-Path $script:PastaPreparo 'preparo-aprovado'
   if(!(Test-Path $aprovacao)-or(Get-Content $aprovacao -Raw).Trim()-ne$remoto){throw 'Preparo sem aprovacao do commit esperado; operacao continua no ar.'}
@@ -575,7 +599,7 @@ foreach ($t in @('validar-operacao.ps1', 'testar-operacao.ps1', 'testar-supervis
 }
 Ok 'suites de operacao aprovadas'
 } else {
- Ok 'Build e TODAS as suites aprovados no PREPARAR; artefatos ja instalados.'
+ Ok 'Build e verificacoes exigidas pelo modo do PREPARAR aprovados; artefatos ja instalados.'
  Etapa 'Conferindo configuracao da instalacao antes da partida'
  Executar-PowerShellOculto @('-NoProfile','-WindowStyle','Hidden','-ExecutionPolicy','Bypass','-File',(Join-Path $PSScriptRoot 'validar-operacao.ps1'))
  if($LASTEXITCODE-ne0){Reverter 'Configuracao da instalacao reprovada antes da partida.'}
@@ -612,12 +636,16 @@ try {
  & $Node --experimental-strip-types (Join-Path $Portal 'scripts/backup.mjs') --pre-atualizacao --somente-rede --snapshot-pre-atualizacao
 } catch {Aviso 'Falha ao replicar backup; copia local e snapshot preservados.'}
 if($LASTEXITCODE-ne0){Aviso 'Backup local e snapshot preservados; replicacao de rede falhou ou excedeu o prazo configurado.'}
-Etapa 'CONCLUIR: limpando pasta de preparo'
-try{Limpar-PastaPreparo $Raiz $script:PastaPreparo;$script:LimpezaPreparo='concluida'}catch{Aviso $_.Exception.Message}
+Etapa 'CONCLUIR: delegando limpeza da pasta de preparo'
+if($script:PastaPreparo){
+ try{Iniciar-LimpezaPreparoSegundoPlano $Raiz $script:PastaPreparo (Join-Path (Obter-PastaPrivada $Raiz) 'operacao');$script:LimpezaPreparo='segundo-plano'}
+ catch{Aviso $_.Exception.Message;try{Limpar-PastaPreparo $Raiz $script:PastaPreparo;$script:LimpezaPreparo='concluida'}catch{Aviso $_.Exception.Message}}
+}
 Gravar-ContextoAtualizacao $ContextoArquivo @{anterior=$anterior;remoto=$remoto;fase='concluido';limpeza=$script:LimpezaPreparo}
 git log -1 --pretty=format:'    %s'
 Write-Host ''
 Encerrar-EtapaMedida $script:MedicaoAtualizacao
+$script:ResultadoAtualizacao='concluido'
 Write-Host "`n=== Atualizado: $($anterior.Substring(0,7)) -> $($remoto.Substring(0,7)) ===" -ForegroundColor Cyan
 exit 0
 } catch {
@@ -647,7 +675,7 @@ exit 0
 }
 } finally {
   # Pai conserva o preparo se a recuperacao nao terminou; contem artefatos de socorro.
-  if(!$script:MedicaoDelegada-and$script:PastaPreparo-and$script:LimpezaPreparo-ne'concluida'){
+  if(!$script:MedicaoDelegada-and$script:PastaPreparo-and$script:LimpezaPreparo-notin@('concluida','segundo-plano')){
     try{
       $estadoFinal=Ler-EstadoOperacao $ContextoArquivo
       if(!$CodigoTrocado-or$estadoFinal.fase-in@('concluido','revertido')){Limpar-PastaPreparo $Raiz $script:PastaPreparo;$script:LimpezaPreparo='concluida'}
@@ -659,6 +687,7 @@ exit 0
    try{Gravar-ContextoAtualizacao $ContextoArquivo @{anterior=$anterior;remoto=$remoto;fase='cancelado-preparo';limpeza=$script:LimpezaPreparo;erro=$script:FalhaPreparo}}
    catch{Aviso "Nao foi possivel registrar o cancelamento em ${ContextoArquivo}: $($_.Exception.Message)"}
   }
+  if(!$Simular-and!$script:MedicaoDelegada){try{Publicar-AndamentoAtualizacao $script:AndamentoAtualizacao $(if($script:ResultadoAtualizacao-eq'concluido'){'Atualizacao concluida'}else{'Atualizacao falhou'}) $script:ResultadoAtualizacao}catch{}}
   try{Resumir-MedicaoAtualizacao $script:MedicaoAtualizacao $script:MedicaoDelegada}catch{}
   $env:SV_MEDICAO_ATUALIZACAO=$medicaoEnvAnterior
   $env:MODO_ENSAIO=$modoEnsaioEnvAnterior

@@ -6,7 +6,7 @@ $base=Join-Path ([IO.Path]::GetTempPath()) ('sv-deps-'+[guid]::NewGuid().ToStrin
 $hostTeste=(Get-Process -Id $PID).Path
 $privadoAntes=$env:SUPPLY_VISION_PRIVADO
 try{
- foreach($caso in @('inalteradas','alteradas','build-falha','portal-falha','alertas-falha','operacional-falha')){
+ foreach($caso in @('inalteradas','alteradas','build-falha','portal-falha','alertas-falha','operacional-falha','ci-aprovado','ci-rede','ci-ausente','ci-pendente','ci-falho','ci-timeout','ci-cancelado','ci-skipped','ci-sha','ci-invalido','ci-forcado','ci-forcado-env','fumaca-falha')){
   $instalacao=Join-Path $base $caso
   $preparo=Nova-PastaPreparo $instalacao
   foreach($dir in @('portal/node_modules','alertas/.venv/Scripts','privado')){New-Item -ItemType Directory -Force (Join-Path $instalacao $dir)|Out-Null}
@@ -41,6 +41,24 @@ function Conferir-Isolamento {
  $porta=[int]$cfg['PORTAL_PORTA'];$relatorios=[int]$cfg['RELATORIOS_PORTA'];$url=[uri]$cfg['PORTAL_URL']
  if($registro.pid-ne$PID-or@($registro.portas).Count-ne2-or$porta-eq$relatorios-or$porta-in@(3000,3001)-or$relatorios-in@(3000,3001)-or$registro.portas-notcontains$porta-or$registro.portas-notcontains$relatorios-or$url.Host-ne'127.0.0.1'-or$url.Port-ne$porta){throw 'Portas do preparo nao pertencem a fixture.'}
 }
+function Invoke-RestMethod {
+ param($Uri,$Headers,$TimeoutSec,$ErrorAction)
+ if($Headers.ContainsKey('Authorization')-or$Uri-notlike'*commits/*/check-runs?*'-or$TimeoutSec-gt8){throw 'Consulta CI insegura'}
+ if($Caso-eq'ci-rede'){throw 'rede ficticia indisponivel'}
+ $nomes=@('Portal','Portal - instalacao nova e autenticacao real','PowerShell','Alertas','Atualizacao real','Node 22.13 - partida e operacao (ubuntu-latest)','Node 22.13 - partida e operacao (windows-latest)')
+ $checks=@(foreach($nome in $nomes){[pscustomobject]@{name=$nome;head_sha=('2'*40);status='completed';conclusion=$(if($nome-eq'Atualizacao real'){'skipped'}else{'success'});app=@{slug='github-actions';id=15368}}})
+ if($Caso-eq'ci-ausente'){$checks=$checks[1..6]}
+ if($Caso-eq'ci-pendente'){$checks[0].status='in_progress'}
+ if($Caso-eq'ci-falho'){$checks[0].conclusion='failure'}
+ if($Caso-eq'ci-timeout'){$checks[0].conclusion='timed_out'}
+ if($Caso-eq'ci-cancelado'){$checks[0].conclusion='cancelled'}
+ if($Caso-eq'ci-skipped'){$checks[0].conclusion='skipped'}
+ if($Caso-eq'ci-sha'){$checks[0].head_sha='3'*40}
+ if($Caso-eq'ci-invalido'){return @{total_count=20;check_runs=$checks}}
+ if($Caso-notlike'ci-*'-and$Caso-ne'fumaca-falha'){throw 'CI nao aprovado nesta fixture'}
+ return (@{total_count=$checks.Count;check_runs=$checks}|ConvertTo-Json -Depth 5|ConvertFrom-Json)
+}
+function node {Conferir-Isolamento;Registrar 'fumaca';$global:LASTEXITCODE=0;if($Caso-eq'fumaca-falha'){$global:LASTEXITCODE=1}}
 function git {$global:LASTEXITCODE=0;'2'*40}
 function npm.cmd {
  Conferir-Isolamento;$global:LASTEXITCODE=0
@@ -66,16 +84,26 @@ function powershell.exe {
  if($Caso-eq'operacional-falha'){$global:LASTEXITCODE=1}
 }
 if($Caso-eq'alteradas'){& (Join-Path $Preparo 'scripts/preparar-atualizacao.ps1') -Instalacao $Instalacao -ReinstalarNode -ReinstalarPython}
-else{& (Join-Path $Preparo 'scripts/preparar-atualizacao.ps1') -Instalacao $Instalacao}
+elseif($Caso-eq'ci-forcado'){& (Join-Path $Preparo 'scripts/preparar-atualizacao.ps1') -Instalacao $Instalacao -ForcarCompleto}
+else{if($Caso-eq'ci-forcado-env'){$env:SV_PREPARO_COMPLETO='1'};& (Join-Path $Preparo 'scripts/preparar-atualizacao.ps1') -Instalacao $Instalacao}
 exit $LASTEXITCODE
 '@
   $arquivoRunner=Join-Path $preparo 'runner.ps1';[IO.File]::WriteAllText($arquivoRunner,$runner)
   # Falhas provocadas escrevem em stderr; o codigo de saida decide o resultado.
   $saida=@(Executar-PowerShellOculto @('-NoProfile','-File',$arquivoRunner,$caso,$instalacao,$preparo) $hostTeste);$rc=$LASTEXITCODE
+  if(!(Test-Path (Join-Path $preparo 'passos.txt'))){throw "Preparador nao chegou aos comandos: $saida"}
   $passos=@(Get-Content (Join-Path $preparo 'passos.txt'))
-  if(($rc-eq0)-ne($caso-in@('inalteradas','alteradas'))){throw "Preparo incorreto em $caso (rc=$rc): $saida"}
+  if(($rc-eq0)-ne($caso-notin@('build-falha','portal-falha','alertas-falha','operacional-falha','fumaca-falha'))){throw "Preparo incorreto em $caso (rc=$rc): $saida"}
   if(($passos-contains'npm-ci')-ne($caso-eq'alteradas')-or($passos-contains'pip')-ne($caso-eq'alteradas')){throw "Decisao de dependencias incorreta: $caso"}
-  if($rc-eq0-and@($passos|Where-Object {$_-like'operacional:*'}).Count-ne4){throw 'Removeu verificacao operacional.'}
+  $rapido=$caso-in@('ci-aprovado','fumaca-falha')
+  if($rc-eq0-and@($passos|Where-Object {$_-like'operacional:*'}).Count-ne$(if($rapido){2}else{4})){throw 'Removeu verificacao operacional.'}
+  if($rapido-and($passos-contains'portal'-or$passos-contains'alertas'-or$passos-notcontains'fumaca')){throw 'Modo rapido nao respeitou suites/fumaca.'}
+  if(!$rapido-and$rc-eq0-and($passos-notcontains'portal'-or$passos-notcontains'alertas')){throw 'Fallback nao executou todas as suites.'}
+  if($rc-eq0){
+   $tempos=Get-Content (Join-Path $preparo 'preparo-tempos.log') -Raw
+   foreach($nome in @('Inicializacao isolada','Limpeza de preparos reprovados','Configuracao de teste','Dependencias Node','Materializacao de junctions Node','Dependencias Python','ValidarPythonMock','Consulta CI','Build do Portal','Aprovacao e conferencia')){if($tempos-notlike"*PREPARAR / ${nome}: codigo=0; duracao=*"){throw "Medicao ausente: $nome"}}
+   if($tempos-notlike"*modo $(if($rapido){'rapido'}else{'completo'})*"){throw 'Modo ausente no log.'}
+  }
   if((Test-Path (Join-Path $preparo 'preparo-aprovado'))-ne($rc-eq0)){throw 'Preparo reprovado foi aprovado.'}
   if((Test-Path (Join-Path $preparo 'limpeza-solicitada'))-ne($rc-ne0)){throw 'Preparo nao solicitou limpeza ao reprovar.'}
   if((Get-Content (Join-Path $instalacao 'privado/sentinela'))-ne'producao ficticia'-or(Get-Content (Join-Path $instalacao 'portal/node_modules/versao'))-ne'reutilizada'){throw 'Preparo alterou instalacao.'}

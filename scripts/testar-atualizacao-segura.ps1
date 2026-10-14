@@ -181,7 +181,9 @@ public static class SvLogTeste {
  Resumir-MedicaoAtualizacao $pai $true
  if([IO.File]::ReadAllText($arquivoMedicao)-notmatch("medicao="+$pai.id)){throw 'Filho sem resumo ocultou o resumo do pai.'}
  $centralFonte=[IO.File]::ReadAllText((Join-Path $PSScriptRoot 'central-logica.ps1'))
- if($centralFonte.Contains("'atualizacao-tempos.log'")){throw 'Central usa medicao como stdout.'}
+ $astCentral=[Management.Automation.Language.Parser]::ParseInput($centralFonte,[ref]$null,[ref]$null)
+ $capturas=@($astCentral.FindAll({param($n) $n-is[Management.Automation.Language.CommandAst]-and$n.GetCommandName()-eq'Start-Process'-and$n.Extent.Text-like'*-RedirectStandardOutput*'},$true))
+ if($capturas.Count-ne1-or$capturas[0].Extent.Text-notlike'*-RedirectStandardOutput $saida*'-or$centralFonte-notlike"*`$saida=Join-Path `$op 'atualizacao-processo-saida.log'*"){throw 'Central perdeu captura separada do stdout.'}
  if(!$source.Contains('$script:MedicaoAtualizacao.health=')-or!$source.Contains('$script:MedicaoAtualizacao.parada=')-or!$source.Contains('$env:SV_MEDICAO_ATUALIZACAO=Exportar-MedicaoAtualizacao')){throw 'Marcos reais da atualizacao nao instrumentados.'}
  # A central continua decidindo pelo resultado real, nunca pelas linhas de tempo.
  . (Join-Path $PSScriptRoot 'central-logica.ps1')
