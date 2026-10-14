@@ -163,7 +163,9 @@ janela de console sobrando. Só depois considere a instalação concluída.
 
 ## Versões mínimas e ambientes antigos
 
-O Portal exige **Node.js 22.13.0 ou superior**, com npm. Sem `winget`, instale
+O Portal exige **Node.js 22.13.0 ou superior**, com npm. O servidor e os jobs
+principais do CI usam **24.20.0**; o mínimo 22.13 também é testado em Windows e
+Linux. Sem `winget`, instale
 Node.js e Python manualmente antes de executar o instalador, e abra um novo
 terminal para atualizar o PATH. Confira `node --version`, `npm.cmd --version` e
 `python --version`. Uma versão já instalada abaixo do mínimo é recusada;
