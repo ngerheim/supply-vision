@@ -74,6 +74,13 @@ try{
  foreach($cmd in @('node "C:\Outra\portal\scripts\processar-relatorios.mjs"','node "C:\Supply Vision extra\portal\scripts\processar-relatorios.mjs"','node app.js')){
   Exigir-Correcao (!(Processo-OrfaoDestaInstalacao @{Name='node.exe';CommandLine=$cmd} $root)) 'outro Node preservado'
  }
+ $preparo='C:\.Supply Vision-preparo-'+('a'*32)
+ foreach($nome in @('processar-emails','processar-relatorios','iniciar-portal')){
+  $cmd='node "'+$root+'\portal\scripts\'+$nome+'.mjs"'
+  Exigir-Correcao (!(Processo-OrfaoDestaInstalacao @{Name='node.exe';CommandLine=$cmd} $preparo)) 'limpeza do worktree nao seleciona consumidor/Portal da producao'
+  $cmd='node "'+$preparo+'\portal\scripts\'+$nome+'.mjs"'
+  Exigir-Correcao (!(Processo-OrfaoDestaInstalacao @{Name='node.exe';CommandLine=$cmd} $root)) 'limpeza da producao nao seleciona processo do worktree'
+ }
  $script:processos=@([pscustomobject]@{Name='node.exe';CommandLine='node "C:\Supply Vision\portal\scripts\processar-relatorios.mjs"';ProcessId=123;CreationDate='inicio'},[pscustomobject]@{Name='node.exe';CommandLine='node outra.js';ProcessId=456;CreationDate='inicio'})
  function Get-CimInstance {param($ClassName,$Filter,$ErrorAction);if($Filter){$script:processos|Where-Object ProcessId -EQ 123}else{$script:processos}}
  function Get-Process {}

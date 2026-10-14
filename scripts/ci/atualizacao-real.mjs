@@ -66,10 +66,39 @@ function manifesto(raiz) {
   return Object.fromEntries(pastas.flatMap(p => arquivos(path.join(raiz, p))).sort().map(p => [path.relative(raiz, p),
     fs.lstatSync(p).isSymbolicLink() ? `link:${fs.readlinkSync(p)}` : crypto.createHash('sha256').update(fs.readFileSync(p)).digest('hex')]));
 }
-export function conferirAmostras(amostras, negativo = false) {
+export function intervalosConsumidores(raiz) {
+  // Ler o codigo da instalacao em execucao, inclusive a base anterior da PR.
+  // Nao aceitar silenciosamente um intervalo desconhecido se o runner mudar.
+  const email = fs.readFileSync(path.join(raiz, 'portal/scripts/processar-emails.mjs'), 'utf8').match(/if \(observar\).*setTimeout\(resolve,\s*([\d_]+)\)/);
+  const relatorios = fs.readFileSync(path.join(raiz, 'portal/scripts/processar-relatorios.mjs'), 'utf8').match(/Date\.now\(\) - ultimoPulso >= ([\d_]+)/);
+  assert.ok(email && relatorios, 'Intervalos dos consumidores desconhecidos; reveja o monitor H2');
+  return { emails: Number(email[1].replaceAll('_', '')), relatorios: Number(relatorios[1].replaceAll('_', '')) };
+}
+export function avaliarConsumidor(pid, heartbeat, intervaloMs, agora = Date.now(), testarVivo = id => process.kill(id, 0)) {
+  assert.ok(Number.isFinite(intervaloMs) && intervaloMs > 0, 'Intervalo do consumidor invalido');
+  let vivo = false, erro = null;
+  if (Number.isInteger(pid) && pid > 0) {
+    try { testarVivo(pid); vivo = true; } catch (e) { erro = e.code || e.message; }
+  }
+  const idade = agora - Date.parse(heartbeat);
+  // Tres ciclos e o busy_timeout SQLite (5 s) toleram a carga do build/suites.
+  // Processo morto reprova imediatamente, mesmo com heartbeat ainda recente.
+  const limiteMs = 3 * intervaloMs + 5000;
+  return { pid, vivo, heartbeat: heartbeat ?? null, idadeMs: Number.isFinite(idade) ? idade : null,
+    intervaloMs, limiteMs, erro, disponivel: vivo && Number.isFinite(idade) && idade >= -5000 && idade <= limiteMs };
+}
+export function pidsConsumidores(texto) {
+  return Object.fromEntries(['emails', 'relatorios'].map(nome => {
+    const inicios = [...texto.matchAll(new RegExp(` ${nome} iniciado \\(PID (\\d+)\\)\\.`, 'g'))];
+    return [nome, inicios.length ? Number(inicios.at(-1)[1]) : null];
+  }));
+}
+export function conferirAmostras(amostras, negativo = false, pidsAntes = amostras[0]?.pidsConsumidores) {
   assert.ok(amostras.some(a => a.fase === 'PREPARAR'), 'PREPARAR nao observado');
+  assert.ok(pidsAntes?.emails > 0 && pidsAntes?.relatorios > 0, 'PIDs iniciais dos consumidores ausentes');
   for (const a of amostras) {
     if (negativo || a.fase !== 'TROCAR') assert.ok(a.health && a.supervisor && a.consumidores, `Operacao caiu fora de TROCAR: ${JSON.stringify(a)}`);
+    if (negativo || a.fase === 'PREPARAR') assert.deepEqual(a.pidsConsumidores, pidsAntes, `Consumidores reiniciaram no PREPARAR: ${JSON.stringify(a)}`);
   }
   if (!negativo) {
     assert.deepEqual([...new Set(amostras.map(a => a.fase))], ['PREPARAR', 'TROCAR', 'CONCLUIR']);
@@ -82,39 +111,55 @@ async function monitorar(raiz, pasta, negativo) {
   const log = path.join(raiz, 'privado/operacao/atualizacao-tempos.log');
   const offset = fs.existsSync(log) ? fs.readFileSync(log, 'utf8').length : 0;
   const amostras = [];
+  const pidsAntes = JSON.parse(fs.readFileSync(path.join(pasta, 'consumidores-antes.json'), 'utf8').replace(/^\uFEFF/, ''));
+  const intervalos = intervalosConsumidores(raiz);
   let fase = 'PREPARAR';
-  fs.writeFileSync(path.join(pasta, 'monitor-pronto'), 'ok');
   do {
     const texto = fs.existsSync(log) ? fs.readFileSync(log, 'utf8').slice(offset) : '';
     const fases = [...texto.matchAll(/\] (PREPARAR|TROCAR|CONCLUIR):[^\n]*inicio\./g)].map(m => m[1]);
     if (fases.length) fase = fases.at(-1);
     let health = false;
     try { const r = await fetch('http://127.0.0.1:3000/api/health', { signal: AbortSignal.timeout(2000) }); health = r.ok && (await r.json()).status === 'ok'; } catch { /* parada medida */ }
-    let supervisor = false, consumidores = false, pid = null;
+    let supervisor = false, consumidores = false, pid = null, erro = null, detalhesConsumidores = {};
+    let pids = {};
     try {
       const st = JSON.parse(fs.readFileSync(path.join(raiz, 'privado/operacao/status.json'), 'utf8').replace(/^\uFEFF/, ''));
       const ident = JSON.parse(fs.readFileSync(path.join(raiz, 'privado/operacao/supervisor.pid.json'), 'utf8').replace(/^\uFEFF/, ''));
       process.kill(ident.pid, 0); pid = ident.pid;
       supervisor = st.ensaio === true && Date.now() - Date.parse(st.atualizado) < 30_000 && st.portal && st.emails && st.relatorios;
+      pids = pidsConsumidores(fs.readFileSync(path.join(raiz, 'privado/operacao/supervisor.log'), 'utf8'));
       const db = banco(raiz);
-      try { consumidores = ['email_runner', 'report_runner'].every(t => {
+      try { for (const [nome, t] of [['emails', 'email_runner'], ['relatorios', 'report_runner']]) {
         const r = db.prepare(`SELECT heartbeat_at FROM ${t} WHERE id=1`).get();
-        return r && Date.now() - Date.parse(r.heartbeat_at) < 30_000;
-      }); } finally { db.close(); }
-    } catch { /* partida/parada medida */ }
+        detalhesConsumidores[nome] = avaliarConsumidor(pids[nome], r?.heartbeat_at, intervalos[nome]);
+      }
+      consumidores = Object.values(detalhesConsumidores).every(c => c.disponivel);
+      } finally { db.close(); }
+    } catch (e) { erro = `${e.code || e.name}: ${e.message}`; }
     // A fase pode mudar enquanto o pedido HTTP aguarda a parada.
     const recentes = fs.existsSync(log) ? [...fs.readFileSync(log, 'utf8').slice(offset).matchAll(/\] (PREPARAR|TROCAR|CONCLUIR):[^\n]*inicio\./g)] : [];
     if (recentes.length) fase = recentes.at(-1)[1];
-    const a = { instante: Date.now(), fase, health, supervisor: !!supervisor, consumidores: !!consumidores, pid };
+    const a = { instante: Date.now(), fase, health, supervisor: !!supervisor, consumidores: !!consumidores, pid,
+      pidsConsumidores: pids, detalhesConsumidores, erro };
     amostras.push(a);
     fs.appendFileSync(path.join(pasta, 'amostras.jsonl'), `${JSON.stringify(a)}\n`);
+    if (amostras.length === 1) {
+      conferirAmostras(amostras, true, pidsAntes);
+      fs.writeFileSync(path.join(pasta, 'monitor-pronto'), 'ok');
+    }
     if (fs.existsSync(path.join(pasta, 'monitor-parar'))) break;
     await new Promise(resolve => setTimeout(resolve, 500));
   } while (true);
   const fasesRegistradas = [...fs.readFileSync(log, 'utf8').slice(offset).matchAll(/\] (PREPARAR|TROCAR|CONCLUIR):[^\n]*inicio\./g)].map(m => m[1]);
   const transicoes = fasesRegistradas.filter((f, i) => f !== fasesRegistradas[i - 1]);
   assert.deepEqual(transicoes, negativo ? ['PREPARAR'] : ['PREPARAR', 'TROCAR', 'CONCLUIR'], 'Ordem das fases no log invalida');
-  conferirAmostras(amostras, negativo);
+  const preparar = amostras.filter(a => a.fase === 'PREPARAR');
+  const continuidade = { antes: pidsAntes, fimPreparar: preparar.at(-1)?.pidsConsumidores,
+    maioresIdadesMs: Object.fromEntries(['emails', 'relatorios'].map(nome => [nome,
+      Math.max(...preparar.map(a => a.detalhesConsumidores[nome]?.idadeMs ?? -1))])) };
+  fs.writeFileSync(path.join(pasta, 'continuidade-preparar.json'), JSON.stringify(continuidade, null, 2));
+  console.log(`Continuidade PREPARAR: ${JSON.stringify(continuidade)}`);
+  conferirAmostras(amostras, negativo, pidsAntes);
   if (negativo) assert.equal(new Set(amostras.map(a => a.pid)).size, 1, 'Supervisor reiniciou no negativo');
   fs.writeFileSync(path.join(pasta, 'monitor-aprovado'), 'ok');
   const paradas = amostras.filter(a => !a.health);
