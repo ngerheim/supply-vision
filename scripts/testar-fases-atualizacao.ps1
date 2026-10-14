@@ -6,7 +6,7 @@ $base=Join-Path ([IO.Path]::GetTempPath()) ('sv-fases-'+[guid]::NewGuid().ToStri
 $hostTeste=(Get-Process -Id $PID).Path
 $privadoAntes=$env:SUPPLY_VISION_PRIVADO
 try{
- foreach($caso in @('preparo-falha','sucesso','fumaca-falha','troca-parcial','rede-falha')){
+ foreach($caso in @('preparo-falha','sucesso','fumaca-falha','troca-parcial','rede-falha','ensaio')){
   $raiz=Join-Path $base $caso
   foreach($dir in @('scripts','portal/scripts','portal/dist','portal/node_modules','alertas/.venv','privado/operacao','privado/portal/backups','privado/portal/configuracao','privado/comum','compartilhado')){New-Item -ItemType Directory -Force (Join-Path $raiz $dir)|Out-Null}
   Copy-Item (Join-Path $fonteRaiz 'scripts/operacao-logica.ps1') (Join-Path $raiz 'scripts')
@@ -19,6 +19,7 @@ try{
   foreach($arquivo in @('portal/portal.env.example','compartilhado/smtp.env.example','compartilhado/operacao.env.example','privado/comum/smtp.env','privado/comum/operacao.env')){[IO.File]::WriteAllText((Join-Path $raiz $arquivo),'')}
   [IO.File]::WriteAllText((Join-Path $raiz 'privado/portal/configuracao/portal.env'),('PORTAL_API_TOKEN='+('a'*64)))
   foreach($rel in @('portal/dist','portal/node_modules','alertas/.venv')){[IO.File]::WriteAllText((Join-Path $raiz "$rel/versao"),'anterior')}
+  if($caso-eq'ensaio'){[IO.File]::WriteAllText((Join-Path $raiz 'privado/comum/operacao.env'),'MODO_ENSAIO=1')}
   [IO.File]::WriteAllText((Join-Path $raiz 'privado/banco-ficticio'),'banco-anterior')
   $env:SUPPLY_VISION_PRIVADO=Join-Path $raiz 'privado'
   $runner=@'
@@ -49,7 +50,7 @@ function IniciarMock {$global:LASTEXITCODE=0;Registrar 'iniciar';if(!$global:res
 function node {
  $global:LASTEXITCODE=0
  if($args -contains '--somente-local'){Registrar 'backup-local';Copy-Item (Join-Path $Raiz 'privado/banco-ficticio') (Join-Path $Raiz 'privado/portal/backups/portal-atual.sqlite')}
- if($args -contains '--somente-rede'){Registrar 'backup-rede';if($Caso-eq'rede-falha'){$global:LASTEXITCODE=3}}
+ if($args -contains '--somente-rede'){if($Caso-eq'ensaio'-and$env:MODO_ENSAIO-ne'1'){throw 'Backup perdeu modo ensaio.'};Registrar 'backup-rede';if($Caso-eq'rede-falha'){$global:LASTEXITCODE=3}}
  if(($args-join' ')-like'*restaurar-backup*'){Registrar 'banco-restaurado';Copy-Item (Join-Path $Raiz 'privado/portal/backups/portal-atual.sqlite') (Join-Path $Raiz 'privado/banco-ficticio') -Force}
  if(($args-join' ')-like'*saude-operacao*'){
   Registrar 'fumaca'
@@ -80,20 +81,20 @@ exit $LASTEXITCODE
   [IO.File]::WriteAllText((Join-Path $raiz 'runner.ps1'),$runner)
   $saida=@(& $hostTeste -NoProfile -File (Join-Path $raiz 'runner.ps1') $caso $raiz 2>&1);$rc=$LASTEXITCODE
   $passos=@(Get-Content (Join-Path $raiz 'passos.txt'))
-  if(($rc-eq0)-ne($caso-in@('sucesso','rede-falha'))){throw "Resultado incorreto em $caso (rc=$rc): $saida"}
+  if(($rc-eq0)-ne($caso-in@('sucesso','rede-falha','ensaio'))){throw "Resultado incorreto em $caso (rc=$rc): $saida"}
   foreach($rel in @('portal/dist','portal/node_modules','alertas/.venv')){
-   $esperado=if($caso-in@('sucesso','rede-falha')){'nova'}else{'anterior'}
+   $esperado=if($caso-in@('sucesso','rede-falha','ensaio')){'nova'}else{'anterior'}
    if((Get-Content (Join-Path $raiz "$rel/versao"))-ne$esperado){throw "Artefato incorreto: $caso / $rel; $saida"}
   }
   if($caso-eq'preparo-falha'){
    if($passos-contains'backup-local'-or$passos-contains'commit-novo'-or(Test-Path (Join-Path $raiz 'privado/operacao/parar.sinal'))){throw 'Preparo reprovado parou/alterou a instalacao.'}
-  }elseif($caso-in@('sucesso','rede-falha')){
+  }elseif($caso-in@('sucesso','rede-falha','ensaio')){
    if($passos.IndexOf('backup-rede')-lt$passos.IndexOf('fumaca')-or$passos-notcontains'reexecucao'){throw 'Rede fora da fase CONCLUIR ou faltou reexecucao.'}
   }else{
    if($passos-notcontains'commit-anterior'){throw 'Commit nao foi revertido.'}
    if(($passos-contains'banco-restaurado')-ne($caso-eq'fumaca-falha')){throw 'Restauracao de snapshot incorreta.'}
   }
-  $bancoEsperado=if($caso-in@('sucesso','rede-falha')){'banco-migrado'}else{'banco-anterior'}
+  $bancoEsperado=if($caso-in@('sucesso','rede-falha','ensaio')){'banco-migrado'}else{'banco-anterior'}
   if((Get-Content (Join-Path $raiz 'privado/banco-ficticio'))-ne$bancoEsperado){throw 'Snapshot nao foi restaurado completamente.'}
   if(@(Get-ChildItem -LiteralPath $base -Force|Where-Object Name -Like ".${caso}-preparo-*").Count){throw 'Preparo nao foi limpo.'}
   Write-Host "[OK] Fases H1: $caso"

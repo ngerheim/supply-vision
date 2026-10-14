@@ -87,6 +87,7 @@ function Resumir-MedicaoAtualizacao($Medicao,[bool]$Delegada=$false){
  Registrar-TempoAtualizacao $Medicao "[$($fim.ToLocalTime().ToString('yyyy-MM-dd HH:mm:ss'))] Resumo atualizacao: total=$total s; operacao PARADA=$parada; PREPARAR=$($Medicao.preparar) s; meta parada <= 60 s: $meta; medicao=$($Medicao.id)."
 }
 
+$modoEnsaioEnvAnterior=$env:MODO_ENSAIO
 $medicaoEnvAnterior=$env:SV_MEDICAO_ATUALIZACAO
 $script:MedicaoDelegada=$false
 $script:MedicaoAtualizacao=Nova-MedicaoAtualizacao (Join-Path (Obter-PastaPrivada $Raiz) 'operacao/atualizacao-tempos.log') $(if($JaAtualizado){$env:SV_MEDICAO_ATUALIZACAO}else{''})
@@ -111,6 +112,9 @@ $Python = Join-Path $Alertas '.venv\Scripts\python.exe'
 $PastaBackupPortal = Join-Path (Obter-PastaPrivada $Raiz) 'portal\backups'
 $BackupAntesAtualizacaoOrigem = Join-Path $PastaBackupPortal 'portal-atual.sqlite'
 $BackupAntesAtualizacao = Join-Path $PastaBackupPortal 'pre-atualizacao.sqlite'
+# Chamada direta e central seguem o mesmo modo do supervisor, inclusive backup.
+$configModo=Join-Path (Obter-PastaPrivada $Raiz) 'comum/operacao.env'
+if(Test-Path -LiteralPath $configModo){[void](Aplicar-ModoEnsaio (Ler-ConfigOperacao $configModo))}
 
 # Os arquivos de privado\ nao sao versionados: quando uma versao nova passa a
 # esperar uma chave que ainda nao existe no servidor, a validacao reprova e a
@@ -581,4 +585,5 @@ exit 0
   }
   Resumir-MedicaoAtualizacao $script:MedicaoAtualizacao $script:MedicaoDelegada
   $env:SV_MEDICAO_ATUALIZACAO=$medicaoEnvAnterior
+  $env:MODO_ENSAIO=$modoEnsaioEnvAnterior
 }
