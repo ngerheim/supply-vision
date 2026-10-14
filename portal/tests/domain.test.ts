@@ -63,11 +63,11 @@ void test('preço inválido não vira zero, um ou infinito por coerção', () =>
 });
 
 void test('aplica os limites de senha inicial', () => {
-  assert.equal(MIN_PASSWORD_LENGTH, 10);
-  for (const value of ['123456789', '', null, 1234567890]) {
-    assert.equal(validatePassword(value), 'A senha deve ter pelo menos 10 caracteres.');
+  assert.equal(MIN_PASSWORD_LENGTH, 5);
+  for (const value of ['1234', '', null, 12345]) {
+    assert.equal(validatePassword(value), 'A senha deve ter pelo menos 5 caracteres.');
   }
-  assert.equal(validatePassword('1234567890'), null);
+  assert.equal(validatePassword('12345'), null);
   assert.equal(validatePassword('x'.repeat(200)), null);
   assert.equal(validatePassword('x'.repeat(201)), 'A senha deve ter no máximo 200 caracteres.');
 });
