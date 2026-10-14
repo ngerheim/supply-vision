@@ -1,3 +1,4 @@
+import { bancoSqliteLocal } from './sqlite-local.ts';
 import { CRIAR_CONTADOR_CHAMADOS_SQL, MIGRAR_CONTADOR_CHAMADOS_SQL, migrarBuscaChamados, migrarIndicesListasGlobais } from './operacao-dados.ts';
 import { SCHEMA_VALIDACAO } from './operacao-validacao.ts';
 import { SCHEMA_RELATORIOS } from './relatorios.ts';
@@ -103,14 +104,14 @@ async function applyColumnMigrations() {
   for (const [table, column, type] of columnMigrations) {
     let info: { results?: Array<{ name: string }> };
     try {
-      info = await env.DB.prepare(`PRAGMA table_info(${table})`).all<{ name: string }>();
+      info = await rawDb().prepare(`PRAGMA table_info(${table})`).all<{ name: string }>();
     } catch {
       // Tabela ainda nao existe nesta base: nada a migrar.
       continue;
     }
     if ((info.results || []).some((c) => c.name === column)) continue;
     try {
-      await env.DB.prepare(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`).run();
+      await rawDb().prepare(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`).run();
     } catch (erro) {
       // Coluna criada em paralelo por outra instancia e resultado aceitavel.
       // Qualquer outra falha precisa aparecer AGORA: engolindo tudo, uma
@@ -122,7 +123,13 @@ async function applyColumnMigrations() {
   }
 }
 
-export const rawDb = () => env.DB;
+let sqliteLocal: ReturnType<typeof bancoSqliteLocal> | null = null;
+export const rawDb = () => {
+  if (!env.PORTAL_SQLITE_PORTA && !env.PORTAL_SQLITE_TOKEN) return env.DB;
+  if (!env.PORTAL_SQLITE_PORTA || !env.PORTAL_SQLITE_TOKEN) throw new Error('Runtime SQLite local incompleto.');
+  sqliteLocal ??= bancoSqliteLocal(String(env.PORTAL_SQLITE_PORTA), String(env.PORTAL_SQLITE_TOKEN), () => env.DB.prepare('SELECT 1').first());
+  return sqliteLocal as unknown as typeof env.DB;
+};
 
 const hex = (bytes: Uint8Array) => Array.from(bytes).map((b) => b.toString(16).padStart(2, '0')).join('');
 const randomHex = (length = 16) => { const bytes = new Uint8Array(length); crypto.getRandomValues(bytes); return hex(bytes); };

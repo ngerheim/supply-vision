@@ -34,10 +34,10 @@ try {
   db.prepare('UPDATE agreements SET current_version_id=? WHERE id=?').run(versao, acordo);
   db.prepare('INSERT INTO agreement_items (id,version_id,location_id,catalog_item_id,vehicle_model_id,unit_id,price,created_at,updated_at) VALUES (?,?,?,?,?,?,10,?,?)').run(item, versao, prefixo, prefixo, prefixo, prefixo, stamp, stamp);
   db.prepare('INSERT INTO travas VALUES (?,?,?)').run(`acordo:${acordo}`, prefixo, stamp);
-  for (const rota of [`items/${item}`, `agreements/${acordo}`]) {
-    const response = await fetch(`${url}/api/${rota}`, { method: 'DELETE', headers });
-    assert.equal(response.status, 409, await response.text());
-  }
+  // A reserva externa permanece ocupada durante oito exclusoes simultaneas.
+  const bloqueadas = await Promise.all(Array.from({length:8}, (_,i) =>
+    fetch(`${url}/api/${i%2 ? `items/${item}` : `agreements/${acordo}`}`, { method: 'DELETE', headers })));
+  for (const response of bloqueadas) assert.equal(response.status, 409, await response.text());
   assert.equal(db.prepare('SELECT COUNT(*) n FROM agreement_items WHERE id=?').get(item).n, 1);
   assert.equal(db.prepare('SELECT dono FROM travas WHERE chave=?').get(`acordo:${acordo}`).dono, prefixo);
   db.prepare('DELETE FROM travas WHERE chave=? AND dono=?').run(`acordo:${acordo}`, prefixo);
@@ -86,8 +86,11 @@ try {
     // Revisao antiga e recusada sem apagar nada.
     const antiga = await fetch(`${url}/api/${rota}?expectedRevision=${revisao + 1}`, { method: 'DELETE', headers });
     assert.equal(antiga.status, 409, await antiga.text());
-    const response = await fetch(`${url}/api/${rota}?expectedRevision=${revisao}`, { method: 'DELETE', headers });
-    assert.equal(response.status, 200, await response.text());
+    const concorrentes = await Promise.all(Array.from({length:4}, () =>
+      fetch(`${url}/api/${rota}?expectedRevision=${revisao}`, { method: 'DELETE', headers })));
+    assert.equal(concorrentes.filter(r=>r.status===200).length,1,'Somente uma exclusao pode confirmar');
+    for (const response of concorrentes) assert.ok([200,409,404].includes(response.status),await response.text());
+    assert.equal(db.prepare("SELECT COUNT(*) n FROM audit_logs WHERE entity_id=? AND action='DELETE'").get(chave).n,1);
   }
   const removed=JSON.parse(db.prepare("SELECT details FROM audit_logs WHERE entity_id=? AND action='DELETE'").get(item).details);
   assert.equal(removed.antes.price,12.5);assert.equal(removed.antes.vehicle_model_id,prefixo);assert.equal(removed.depois,null);
