@@ -20,9 +20,15 @@ export function criarServidorSqlite({ persistencia, token, arquivo = null }) {
     if (db) return db;
     const alvo = arquivo || arquivoSqliteLocal(persistencia);
     if (!alvo) throw new Error('SQLite local ainda nao inicializado.');
-    db = new DatabaseSync(alvo);
-    db.exec('PRAGMA busy_timeout=5000; PRAGMA foreign_keys=ON');
-    return db;
+    const candidato = new DatabaseSync(alvo);
+    try {
+      candidato.exec('PRAGMA busy_timeout=5000; PRAGMA foreign_keys=ON');
+      // A restauracao prepara a copia com journal DELETE. Retomar em sqlite
+      // precisa restabelecer WAL, assim como o workerd fazia ao abrir a base.
+      const journal = candidato.prepare('PRAGMA journal_mode=WAL').get();
+      if (journal.journal_mode !== 'wal') throw new Error('SQLite local exige suporte a WAL.');
+      db = candidato;return db;
+    } catch (erro) { candidato.close();throw erro; }
   }
   function consultar({ sql, values }) {
     if (typeof sql !== 'string' || !Array.isArray(values)) throw new Error('Consulta invalida.');
