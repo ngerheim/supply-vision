@@ -57,3 +57,10 @@ bloqueia a pasta, e reforça com as extensões `*.xlsx`, `*.sqlite`, `*.db` e
 
 > **Atenção:** esta pasta de exemplo *não* é ignorada pelo Git — a regra
 > `/privado/` casa apenas com o nome exato. Nunca coloque dado real aqui.
+
+## Termos proibidos locais
+
+`termos-proibidos.exemplo.txt` documenta o modelo opcional de
+`privado/termos-proibidos.txt`: UTF-8, um termo literal por linha, sem distinguir
+maiúsculas. Linhas vazias e comentários com `#` são ignorados. A lista real nunca
+entra no Git. Sem o arquivo, inclusive no CI, só as regras genéricas são usadas.
