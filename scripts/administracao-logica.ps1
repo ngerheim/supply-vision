@@ -1,4 +1,12 @@
 ﻿. (Join-Path $PSScriptRoot 'atualizacao-preparo.ps1')
+function Obter-VersaoAdministrada([string]$Raiz) {
+ $r=Executar-NativoOperacao 'git' @('-C',$Raiz,'log','-1','--date=format:%d/%m/%Y','--pretty=format:%h  %ad')
+ if($r.codigo-eq0){
+  $versao=@($r.stdout|Where-Object {$_-match'^[0-9a-f]{7,40}\s+\d{2}/\d{2}/\d{4}$'}|Select-Object -First 1)
+  if($versao.Count){return $versao[0]}
+ }
+ return 'versao indisponivel'
+}
 function Testar-ConclusaoAtualizacao($Codigo,[string]$Saida){
  $marcador=($Saida-match'(?m)^=== Atualizado: [0-9a-f]{7} -> [0-9a-f]{7} ===\s*$')-or($Saida-like'*Nada a fazer*')
  # Codigo desconhecido admite marcador; codigo de falha explicito sempre prevalece.
@@ -49,7 +57,7 @@ function Consultar-EstadoCentral([string]$Privado,[double]$InterfaceMs=0,[bool]$
  $aviso=if($ensaio){Obter-AvisoEnsaio $true}else{Obter-AvisoBackup $Privado}
  $migrada=Test-Path -LiteralPath (Join-Path $Privado 'operacao/migrada.sinal')
  $tempoConfig=$medir.ElapsedMilliseconds;$versao=$null;$tempoGit=0
- if($Registrar-and$Raiz){$medir.Restart();$versao=try{(& git -C $Raiz log -1 --date=format:'%d/%m/%Y' --pretty=format:'%h  %ad' 2>$null)}catch{'versao indisponivel'};$tempoGit=$medir.ElapsedMilliseconds}
+ if($Registrar-and$Raiz){$medir.Restart();$versao=Obter-VersaoAdministrada $Raiz;$tempoGit=$medir.ElapsedMilliseconds}
  $total.Stop()
  if(!$SomenteLeitura-and($Registrar-or$total.ElapsedMilliseconds-ge1000-or$estado-ne'ok')){
   Registrar-DiagnosticoCentral $Privado "Central estado: total_ms=$($total.ElapsedMilliseconds); supervisor_ms=$tempoSupervisor; estado_ms=$tempoEstado; configuracao_ms=$tempoConfig; git_ms=$tempoGit; interface_ms=$([math]::Round($InterfaceMs,2)); resultado=$estado."
@@ -61,18 +69,21 @@ function Executar-AcaoCentral([string]$Raiz,[string]$Privado,[string]$Startup,[s
   'iniciar' {Iniciar-OperacaoConfigurada $Raiz;return @{ok=$true}}
   'parar' {return @{ok=(Parar-Operacao $Raiz)}}
   'validar' {
-   $saida=& powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $Raiz 'scripts/validar-operacao.ps1') 2>&1
-   if($LASTEXITCODE){throw ($saida-join"`n")};return @{ok=$true;mensagem='Configuracao aprovada.'}
+   $r=Executar-NativoOperacao 'powershell.exe' @('-NoProfile','-ExecutionPolicy','Bypass','-File',(Join-Path $Raiz 'scripts/validar-operacao.ps1'))
+   $saida=$r.saida
+   if($r.codigo-ne0){throw ($saida-join"`n")};return @{ok=$true;mensagem='Configuracao aprovada.'}
   }
   'testar-backup' {
-   $saida=& (Localizar-NodeMaquina) --experimental-strip-types (Join-Path $Raiz 'portal/scripts/testar-restauracao.mjs') 2>&1
-   if($LASTEXITCODE){throw ($saida-join"`n")};return @{ok=$true;mensagem=($saida-join"`n")}
+   $r=Executar-NativoOperacao (Localizar-NodeMaquina) @('--experimental-strip-types',(Join-Path $Raiz 'portal/scripts/testar-restauracao.mjs'))
+   $saida=$r.saida
+   if($r.codigo-ne0){throw ($saida-join"`n")};return @{ok=$true;mensagem=($saida-join"`n")}
   }
   'restaurar' {
    if(!(Parar-Operacao $Raiz)){throw 'A operacao nao encerrou. Restauracao cancelada para nao mexer no banco com o portal no ar.'}
    $argumentos=@((Join-Path $Raiz 'portal/scripts/restaurar-backup.mjs'),'--sim');if($Dados.anterior){$argumentos+='--anterior'}
-   $saida=& (Localizar-NodeMaquina) --experimental-strip-types @argumentos 2>&1
-   if($LASTEXITCODE){throw ($saida-join"`n")};return @{ok=$true;mensagem=(($saida-join"`n")+"`n`nInicie a operacao para voltar ao ar.")}
+   $r=Executar-NativoOperacao (Localizar-NodeMaquina) (@('--experimental-strip-types')+$argumentos)
+   $saida=$r.saida
+   if($r.codigo-ne0){throw ($saida-join"`n")};return @{ok=$true;mensagem=(($saida-join"`n")+"`n`nInicie a operacao para voltar ao ar.")}
   }
   'atualizar' {
    if((Obter-TarefaSupplyVision $Raiz)-and!(Testar-Elevacao)){return @{elevar=$true}}
@@ -103,7 +114,7 @@ function Executar-AcaoCentral([string]$Raiz,[string]$Privado,[string]$Startup,[s
    }
    $texto=@(Get-Content -LiteralPath $arquivoSaida -ErrorAction SilentlyContinue)-join"`n"
    $concluiu=Testar-ConclusaoAtualizacao $Dados.codigo $texto
-   $versao=try{(& git -C $Raiz log -1 --date=format:'%d/%m/%Y' --pretty=format:'%h  %ad' 2>$null)}catch{'versao indisponivel'}
+   $versao=Obter-VersaoAdministrada $Raiz
    if($concluiu){$mensagem=if($texto-like'*Nada a fazer*'){'O sistema ja esta na versao mais recente.'}else{'Sistema atualizado e operacao reiniciada.'}}
    else{
     $e=@(Filtrar-AvisosAtualizacao @(Get-Content (Join-Path $op 'atualizacao-erro.log') -ErrorAction SilentlyContinue)|Select-Object -Last 8)

@@ -91,8 +91,8 @@ function Liberar-AcessoOperacao([string]$Raiz,[string]$Privado,[string]$Conta='S
   Write-Progress -Activity 'Permissoes da tarefa Supply Vision' -Status "Pasta $($indice+1) de $($pastas.Count). Aguarde." -PercentComplete ([int](100*$indice/$pastas.Count))
   $indice++
   Write-Host "Preparando permissoes em $p. Pode levar alguns minutos; aguarde."
-  & "$env:SystemRoot\System32\icacls.exe" $p /grant @regras /T /Q | Out-Null
-  if($LASTEXITCODE){Write-Progress -Activity 'Permissoes da tarefa Supply Vision' -Completed;throw 'Falha ao preparar permissoes da operacao. A tarefa nao foi ativada.'}
+  $r=Executar-NativoOperacao "$env:SystemRoot\System32\icacls.exe" (@($p,'/grant')+$regras+@('/T','/Q'))
+  if($r.codigo-ne0){Write-Progress -Activity 'Permissoes da tarefa Supply Vision' -Completed;throw 'Falha ao preparar permissoes da operacao. A tarefa nao foi ativada.'}
  }
  Write-Progress -Activity 'Permissoes da tarefa Supply Vision' -Completed
 }
@@ -108,7 +108,7 @@ function Definir-ModoInicializacao([string]$Raiz,[string]$Privado,[string]$Start
  if($plano.CriarTarefa){
   $node=Localizar-NodeMaquina $NodeExecutavel
   if(!(Test-Path -LiteralPath (Join-Path (Split-Path $node) 'npm.cmd') -PathType Leaf)){throw 'npm.cmd nao encontrado ao lado do Node instalado na maquina.'}
-  $v=(& $node --version | Out-String).Trim();if($v-notmatch '^v(\d+\.\d+\.\d+)' -or [version]$Matches[1]-lt[version]'22.13.0'){throw 'A tarefa exige Node >= 22.13.'}
+  $r=Executar-NativoOperacao $node @('--version');$v=($r.stdout-join"`n").Trim();if($r.codigo-ne0-or$v-notmatch '^v(\d+\.\d+\.\d+)' -or [version]$Matches[1]-lt[version]'22.13.0'){throw 'A tarefa exige Node >= 22.13.'}
   $cfg=Ler-ConfigOperacao (Join-Path $Privado 'portal\configuracao\portal.env');Validar-BackupSemLogin 'computador' $cfg['BACKUP_NETWORK_DIR']
   $conta=if($Credencial){$Credencial.UserName}else{'SYSTEM'}
   if(!(Testar-ContaAdministradora $conta)){throw 'A conta da tarefa deve ser administradora local. Peca a TI a permissao antes de configurar.'}
@@ -142,7 +142,9 @@ function Iniciar-OperacaoConfigurada([string]$Raiz) {
  $ErrorActionPreference='Stop'
  Exigir-InstalacaoNaoMigrada (Obter-PastaPrivada $Raiz)
  if(Obter-TarefaSupplyVision $Raiz){Start-ScheduledTask -TaskName 'Supply Vision' -TaskPath '\';$global:LASTEXITCODE=0;return}
- & (Join-Path $Raiz 'INICIAR.bat') | Out-Null
+ $r=Executar-NativoOperacao (Join-Path $Raiz 'INICIAR.bat')
+ $global:LASTEXITCODE=$r.codigo
+ if($r.codigo-ne0){throw 'Falha ao solicitar inicio da operacao.'}
 }
 function Aviso-SessaoRemota([string]$Modo,[bool]$Remota) {
  if($Modo-eq'login'-and$Remota){return 'Na sessão RDP, use Desconectar; não use Sair. Sair encerra a operação neste modo.'}

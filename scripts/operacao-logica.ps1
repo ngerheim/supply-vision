@@ -1,4 +1,28 @@
-﻿function Obter-PastaPrivada([string]$Raiz) {
+﻿# PS5.1 converte stderr nativo redirecionado em ErrorRecord. Captura como texto,
+# sem deixar Stop interromper o chamador, e decide somente pelo codigo de saida.
+function Executar-NativoOperacao([string]$Executavel,[string[]]$Argumentos=@(),[scriptblock]$AoReceber) {
+ $preferencia=$ErrorActionPreference
+ $codigoAntes=Get-Variable LASTEXITCODE -ValueOnly -ErrorAction SilentlyContinue
+ $codigo=1;$saida=@();$stdout=New-Object 'Collections.Generic.List[string]'
+ try{
+  $ErrorActionPreference='Continue'
+  $PSNativeCommandUseErrorActionPreference=$false
+  [void](Get-Command $Executavel -ErrorAction Stop)
+  $global:LASTEXITCODE=0
+  $saida=@(& $Executavel @Argumentos 2>&1|ForEach-Object {
+   $texto=[string]$_
+   if($_-isnot[Management.Automation.ErrorRecord]){$stdout.Add($texto)}
+   if($AoReceber){& $AoReceber $texto|Out-Null}
+   $texto
+  })
+  $codigo=$LASTEXITCODE
+  if($null-eq$codigo){$codigo=1}
+ }catch{$saida+=([string]$_);$codigo=1}
+ finally{$ErrorActionPreference=$preferencia;$global:LASTEXITCODE=$codigoAntes}
+ return @{codigo=[int]$codigo;saida=@($saida);stdout=@($stdout.ToArray())}
+}
+
+function Obter-PastaPrivada([string]$Raiz) {
   if ($env:SUPPLY_VISION_PRIVADO) {
     $env:SUPPLY_VISION_PRIVADO = [IO.Path]::GetFullPath($env:SUPPLY_VISION_PRIVADO)
     return $env:SUPPLY_VISION_PRIVADO
@@ -154,8 +178,9 @@ function Validar-PythonAlertas([string]$Executavel) {
   # Le a saida inteira. Select-Object -First 1 interromperia o python.exe ao
   # receber a primeira linha, e o Windows PowerShell 5.1 registra entao
   # $LASTEXITCODE = -1 mesmo com a versao lida corretamente.
-  $saida = (& $Executavel --version 2>&1 | Out-String).Trim()
-  if ($LASTEXITCODE -ne 0 -or $saida -notmatch 'Python (\d+\.\d+\.\d+)') { throw 'Nao foi possivel verificar o Python dos Alertas.' }
+  $r=Executar-NativoOperacao $Executavel @('--version')
+  $saida=($r.saida-join"`n").Trim()
+  if ($r.codigo -ne 0 -or $saida -notmatch 'Python (\d+\.\d+\.\d+)') { throw 'Nao foi possivel verificar o Python dos Alertas.' }
   if ([version]$Matches[1] -lt [version]'3.12.0') {
     throw 'Alertas exigem Python 3.12 ou superior. Instale-o e recrie alertas/.venv com a operacao parada antes de atualizar; preserve privado/.'
   }
@@ -240,7 +265,8 @@ function Encerrar-OrfaosInstalacao([string]$Raiz){
    $atual=Get-CimInstance Win32_Process -Filter "ProcessId=$($p.ProcessId)" -ErrorAction Stop
    if(!$atual-or$atual.CreationDate-ne$p.CreationDate-or!(Processo-OrfaoDestaInstalacao $atual $Raiz)){continue}
    if(Get-Command Log -ErrorAction SilentlyContinue){Log "Encerrando processo orfao desta instalacao: PID $($p.ProcessId)."}
-   & taskkill.exe /PID $p.ProcessId /T /F|Out-Null
+   $r=Executar-NativoOperacao 'taskkill.exe' @('/PID',[string]$p.ProcessId,'/T','/F')
+   if($r.codigo-ne0){Avisar-FalhaOrfaos;continue}
    if(Get-Process -Id $p.ProcessId -ErrorAction SilentlyContinue){Avisar-FalhaOrfaos}
   }catch{Avisar-FalhaOrfaos}
  }
@@ -250,8 +276,8 @@ function Remover-ArquivosIntroduzidos([string]$Raiz,[string[]]$Arquivos){
   if(!$relativo-or$relativo-match '^(?i:privado)(?:[\\/]|$)'){continue}
   $alvo=[IO.Path]::GetFullPath((Join-Path $Raiz $relativo));$base=[IO.Path]::GetFullPath($Raiz).TrimEnd([IO.Path]::DirectorySeparatorChar)+[IO.Path]::DirectorySeparatorChar
   if(!$alvo.StartsWith($base,[StringComparison]::OrdinalIgnoreCase)){throw 'Caminho de recuperacao fora da instalacao.'}
-  & git -C $Raiz check-ignore -q -- $relativo
-  if($LASTEXITCODE-eq0){continue};if($LASTEXITCODE-ne1){throw 'Nao foi possivel conferir arquivos ignorados antes da recuperacao.'}
+  $r=Executar-NativoOperacao 'git' @('-C',$Raiz,'check-ignore','-q','--',$relativo)
+  if($r.codigo-eq0){continue};if($r.codigo-ne1){throw 'Nao foi possivel conferir arquivos ignorados antes da recuperacao.'}
   $parent=Split-Path $alvo -Parent;$link=$false
   while($parent-and$parent.StartsWith($base,[StringComparison]::OrdinalIgnoreCase)){if((Get-Item -LiteralPath $parent -ErrorAction SilentlyContinue).Attributes-band[IO.FileAttributes]::ReparsePoint){$link=$true;break};$parent=Split-Path $parent -Parent}
   if($link){continue}
