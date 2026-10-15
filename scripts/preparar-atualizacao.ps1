@@ -86,6 +86,7 @@ try {
  [IO.File]::WriteAllText($configPortal,($texto+"`nPORTAL_PORTA=$($portasPreparo[0])`nRELATORIOS_PORTA=$($portasPreparo[1])`n"))
  Concluir-PassoPreparo
  $portal=Join-Path $Raiz 'portal';$alertas=Join-Path $Raiz 'alertas'
+ Iniciar-PassoPreparo 'Metadados das dependencias'
  # Metadados capturados antes de TROCAR; falha usa copia/instalacao.
  $assinaturaAtual=$null;$impedimentoReserva=''
  try{
@@ -94,6 +95,7 @@ try {
   $assinaturaAtual=Obter-AssinaturaDependencias $Raiz 'python.exe'
  }catch{$impedimentoReserva='metadados/ambiente indisponiveis'}
  if($IgnorarReserva-or(($ReinstalarNode-or$ReinstalarPython)-and$origem.sha-eq$assinaturaAtual.sha)){$impedimentoReserva='reinstalacao forcada'}
+ Concluir-PassoPreparo
  $usoReserva=Usar-ReservaDependencias $Instalacao $Raiz $assinaturaAtual $impedimentoReserva
  Iniciar-PassoPreparo 'Dependencias Node'
  if($usoReserva.usada){$caminhoNode='reserva reaproveitada'}
@@ -145,9 +147,11 @@ try {
  Push-Location $alertas
  try{Executar-Preparo {& (Join-Path $alertas '.venv/Scripts/python.exe') -m pytest tests -q} 'Testes dos Alertas falharam no preparo.'}finally{Pop-Location}
  }
+ Iniciar-PassoPreparo 'Configuracao dos testes operacionais'
  $env:NODE_OPTIONS='--import="'+(New-Object Uri (Join-Path $portal 'scripts/isolamento-preparo.mjs')).AbsoluteUri+'"'
  $testes=@('validar-operacao.ps1','testar-operacao.ps1')
  if(!$ci.rapido){$testes+=@('testar-supervisor-isolado.ps1','testar-persistencia-alertas.ps1')}
+ Concluir-PassoPreparo
  foreach($teste in $testes){
   Executar-Preparo {Executar-PowerShellOculto @('-NoProfile','-WindowStyle','Hidden','-ExecutionPolicy','Bypass','-File',(Join-Path $PSScriptRoot $teste))} "Teste operacional falhou no preparo: $teste"
  }

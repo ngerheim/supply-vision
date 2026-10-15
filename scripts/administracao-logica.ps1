@@ -185,8 +185,8 @@ function Iniciar-AtualizacaoAdministrada([string]$Raiz,[string]$Privado,[bool]$C
  $trava=$null
  try{
   try{$trava=[IO.File]::Open((Join-Path $op 'atualizacao-disparo.lock'),[IO.FileMode]::OpenOrCreate,[IO.FileAccess]::ReadWrite,[IO.FileShare]::None)}
-  catch{throw 'Disparo de atualizacao em andamento. Use sv acompanhar.'}
-  if(Consultar-AtualizacaoAdministrada $Raiz $Privado){throw 'Atualizacao em andamento. Use sv acompanhar.'}
+  catch{throw 'Disparo de atualizacao em andamento. Use supv acompanhar.'}
+  if(Consultar-AtualizacaoAdministrada $Raiz $Privado){throw 'Atualizacao em andamento. Use supv acompanhar.'}
   try{Confirmar-LimpezaAnterior (Join-Path $op 'limpeza-preparo.lock')}
   catch{throw ('Limpeza de preparo: '+$_.Exception.Message)}
   $saida=Join-Path $op 'atualizacao-processo-saida.log';$erro=Join-Path $op 'atualizacao-erro.log'

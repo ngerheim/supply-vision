@@ -68,17 +68,19 @@ try{
  & git -C $r add .
  & git -C $r -c user.name=Fixture -c user.email=fixture@example.invalid commit -qm fixture
  $assinatura=Obter-AssinaturaDependencias $r 'python'
- foreach($caso in @('valida','troca-falha','lockfile','requirements','node','python','ausente','arquivo','marcador-link','incompleta','corrompida','sem-registro','link-raiz','link-externo','link-interno','em-uso','sha','registro','reinstalar','volume','falha-movimento')){
+ foreach($caso in @('valida','troca-falha','lockfile','requirements','node','python','ausente','arquivo','marcador-link','incompleta','corrompida','removido','tamanho','data','pasta-removida','inventario-legado','sem-registro','link-raiz','link-externo','link-interno','em-uso','sha','registro','reinstalar','volume','falha-movimento')){
   $p=Nova-PastaPreparo $r;New-Item -ItemType Directory -Force $p|Out-Null
   foreach($rel in @('portal/node_modules','alertas/.venv')){
    $antigo=Join-Path $p ('anteriores/'+$rel);$ativo=Join-Path $r $rel
-   New-Item -ItemType Directory -Force $antigo,$ativo|Out-Null
+   New-Item -ItemType Directory -Force $antigo,$ativo,(Join-Path $antigo 'vazia')|Out-Null
    [IO.File]::WriteAllText((Join-Path $antigo 'pacote'),'reserva')
    [IO.File]::WriteAllText((Join-Path $ativo 'pacote'),'producao')
   }
   [IO.File]::WriteAllText((Join-Path $p 'dependencias-origem.json'),($assinatura|ConvertTo-Json -Depth 6))
   [void](Guardar-ReservaDependencias $r $p)
   $reserva=Pasta-ReservaDependencias $r;$registro=Join-Path $reserva 'registro.json'
+  $j=Get-Content $registro -Raw|ConvertFrom-Json
+  foreach($rel in @('portal/node_modules','alertas/.venv')){Exigir ($j.inventarios.$rel-match'^metadados-v2;arquivos=1;pastas=1;assinatura=[a-f0-9]{64}$') 'Inventario nao registra contagens e assinatura dos metadados.'}
   $a=$assinatura.Clone();$a.hashes=@{};foreach($chave in $assinatura.hashes.Keys){$a.hashes[$chave]=$assinatura.hashes[$chave]}
   switch($caso){
    'lockfile' {$a.hashes['portal/package-lock.json']='diferente'}
@@ -89,7 +91,12 @@ try{
    'arquivo' {Remover-ArvorePreparo $reserva;[IO.File]::WriteAllText($reserva,'corrompida')}
    'marcador-link' {New-Item -ItemType $(if($env:OS-eq'Windows_NT'){'Junction'}else{'SymbolicLink'}) -Path (Join-Path $reserva 'descartar') -Target (Join-Path $r 'portal/node_modules')|Out-Null}
    'incompleta' {Remover-ArvorePreparo (Join-Path $reserva 'alertas/.venv')}
-   'corrompida' {[IO.File]::WriteAllText((Join-Path $reserva 'portal/node_modules/pacote'),'mudanca')}
+   'corrompida' {[IO.File]::WriteAllText((Join-Path $reserva 'portal/node_modules/pacote'),'mudanca');[IO.File]::SetLastWriteTimeUtc((Join-Path $reserva 'portal/node_modules/pacote'),[datetime]::UtcNow.AddSeconds(20))}
+   'removido' {Remove-Item (Join-Path $reserva 'portal/node_modules/pacote')}
+   'tamanho' {$f=Join-Path $reserva 'portal/node_modules/pacote';$data=[IO.File]::GetLastWriteTimeUtc($f);[IO.File]::WriteAllText($f,'reserva com tamanho alterado');[IO.File]::SetLastWriteTimeUtc($f,$data)}
+   'data' {$f=Join-Path $reserva 'portal/node_modules/pacote';[IO.File]::SetLastWriteTimeUtc($f,([IO.File]::GetLastWriteTimeUtc($f)).AddSeconds(20))}
+   'pasta-removida' {Remove-Item (Join-Path $reserva 'alertas/.venv/vazia')}
+   'inventario-legado' {$j.inventarios.'portal/node_modules'='a'*64;$j|ConvertTo-Json -Depth 6|Set-Content $registro}
    'sem-registro' {Remove-Item -LiteralPath $registro -Force}
    'sha' {$j=Get-Content $registro -Raw|ConvertFrom-Json;$j.sha='0'*40;$j|ConvertTo-Json -Depth 6|Set-Content $registro}
    'registro' {Set-Content $registro 'nao e json'}
@@ -109,8 +116,13 @@ try{
   $emUsoReal=(Get-Command Reserva-DependenciasEmUso).ScriptBlock;$volumeReal=(Get-Command Mesmo-VolumeDependencias).ScriptBlock
   function Reserva-DependenciasEmUso($Pasta){return $script:reservaEmUso}
   function Mesmo-VolumeDependencias($Raiz,$Preparo){return $script:volumeReserva}
+  $script:medicoesReserva=@();$script:pilhaReserva=New-Object Collections.ArrayList
+  function Iniciar-PassoPreparo($Nome){$script:medicoesReserva+=$Nome;[void]$script:pilhaReserva.Add($Nome)}
+  function Concluir-PassoPreparo($Codigo){$script:pilhaReserva.RemoveAt($script:pilhaReserva.Count-1)}
   try{$uso=Usar-ReservaDependencias $r $p $a $(if($caso-eq'reinstalar'){'reinstalacao solicitada'}else{''})}
-  finally{Set-Item Function:Reserva-DependenciasEmUso $emUsoReal;Set-Item Function:Mesmo-VolumeDependencias $volumeReal}
+  finally{Set-Item Function:Reserva-DependenciasEmUso $emUsoReal;Set-Item Function:Mesmo-VolumeDependencias $volumeReal;Remove-Item Function:Iniciar-PassoPreparo,Function:Concluir-PassoPreparo}
+  Exigir ($script:pilhaReserva.Count-eq0) 'Medicao da reserva ficou aberta apos sucesso/falha.'
+  if($caso-eq'valida'){foreach($nome in @('Conferencia geral da reserva','Conferencia da reserva Node','Conferencia da reserva Python','Consumo da reserva')){Exigir ($script:medicoesReserva-contains$nome) ("Passo da reserva ausente: $nome")}}
   Exigir ($uso.usada-eq($caso-in@('valida','troca-falha'))) "Reserva: resultado incorreto em ${caso}: $($uso.motivo)"
   Exigir (!(Test-Path $reserva)) "Reserva invalida nao foi isolada: $caso"
   foreach($rel in @('portal/node_modules','alertas/.venv')){
@@ -141,6 +153,9 @@ try{
   [void](Guardar-ReservaDependencias $r $p)
   $reserva=Pasta-ReservaDependencias $r
   $h=[IO.File]::Open((Join-Path $reserva 'portal/node_modules/pacote'),[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::None)
+  $script:medicoesReserva=@();$script:pilhaReserva=New-Object Collections.ArrayList
+  function Iniciar-PassoPreparo($Nome){$script:medicoesReserva+=$Nome;[void]$script:pilhaReserva.Add($Nome)}
+  function Concluir-PassoPreparo($Codigo){$script:pilhaReserva.RemoveAt($script:pilhaReserva.Count-1)}
   try{$uso=Usar-ReservaDependencias $r $p $assinatura;Exigir (!$uso.usada) 'Reutilizou reserva com handle real em uso.'}finally{$h.Dispose()}
   if(Test-Path $reserva){
    Exigir (Test-Path (Join-Path $reserva 'descartar')) 'Reserva bloqueada nao foi invalidada.'

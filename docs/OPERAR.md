@@ -7,48 +7,54 @@ Windows e continua funcionando depois de sair da sessão RDP.
 Supervisionados: Portal na LAN, fila de e-mails, serviço de relatórios manuais,
 pipeline dos Alertas, backup do banco e limpeza diária.
 
-## CLI `sv` (fase 1)
+## CLI `supv` (fase 1)
 
-Use `sv` no cmd ou PowerShell. O instalador e a atualização acrescentam a raiz da
-instalação ao PATH do usuário, sem duplicar entradas. **Abra um terminal novo**
-depois dessa configuração. No terminal já aberto, use `C:\SupplyVision\sv.cmd`
-(ajuste o caminho). Execute `sv help` ou `sv <comando> --help` para exemplos.
+Use `supv` no cmd ou PowerShell. O nome evita o alias interno `sv` (`Set-Variable`)
+do PowerShell. A instalação e a atualização removem o antigo `sv.cmd` e
+acrescentam a raiz da instalação ao PATH do usuário, sem duplicar entradas. **Abra um terminal novo**
+depois dessa configuração. No terminal já aberto, use `C:\SupplyVision\supv.cmd`
+(ajuste o caminho). Execute `supv help` ou `supv <comando> --help` para exemplos.
 As mensagens da CLI usam ASCII; código de saída `0` indica sucesso e qualquer
 outro valor indica falha (`echo %errorlevel%` no cmd, `$LASTEXITCODE` no PowerShell).
 
 | Comando | Uso |
 | --- | --- |
-| `sv status` | Operação e módulos, commit/data, health local/rede, tarefa/modo, manutenção, atualização, limpeza pendente, reserva e último resumo. Somente leitura. |
-| `sv iniciar` / `sv parar` | Aguarda o início com health local ou a parada completa. |
-| `sv atualizar [--completo]` | Inicia a atualização e acompanha etapas, duração, total, estimativa e modo rápido/completo. `--completo` força todas as suítes. |
-| `sv acompanhar` | Reconecta ao progresso; sem atualização ativa, mostra o último resultado disponível. |
-| `sv homologar [--copiar] [--destino arquivo.txt]` | Exibe e mantém o relatório atual, com o mesmo mascaramento. `--copiar` envia o relatório à área de transferência. Itens reprovados retornam falha. |
-| `sv saude [--desde "yyyy-MM-dd HH:mm"]` | Últimas 24 h por padrão; falhas de health por motivo e ocorrência, marca `partida` até 30 s após iniciar o supervisor, conta partidas no período. |
-| `sv logs <supervisor\|portal\|atualizacao\|emails\|relatorios> [-n 80]` | Últimas linhas de cada log atual, com mascaramento de credenciais, e-mails e conteúdo sensível. |
-| `sv config validar` | Executa a validação operacional existente. |
-| `sv backup testar` | Testa restauração como na central. |
-| `sv backup restaurar [--anterior] [--sim]` | Para a operação e restaura o backup mais recente, ou o anterior. Digite `RESTAURAR`; `--sim` permite automação. |
-| `sv modo <desligado\|login\|computador>` | Altera a inicialização com a operação parada; exige administrador. |
-| `sv manutencao on` / `sv manutencao off` | Liga ou desliga a pausa de rotinas automáticas. |
-| `sv firewall restringir` | Executa o script atual de restrição, mantendo o teste interativo pela LAN; exige administrador. |
-| `sv migrar --destino "E:\semente" --modo <ensaio\|definitiva>` | Prepara a migração como a central; exige administrador. Definitiva exige digitar `MIGRAR` e bloqueia esta instalação. |
+| `supv status` | Operação e módulos, commit/data, health local/rede, tarefa/modo, manutenção, atualização, limpeza pendente, reserva e último resumo. Somente leitura. |
+| `supv iniciar` / `supv parar` | Aguarda o início com health local ou a parada completa. |
+| `supv atualizar [--completo]` | Inicia a atualização e acompanha etapas, duração, total, estimativa e modo rápido/completo. `--completo` força todas as suítes. |
+| `supv acompanhar` | Reconecta ao progresso; sem atualização ativa, mostra o último resultado disponível. |
+| `supv homologar [--copiar] [--destino arquivo.txt]` | Exibe e mantém o relatório atual, com o mesmo mascaramento. `--copiar` usa exatamente o mesmo texto ASCII mostrado e salvo, da mesma execução e horário. Itens reprovados retornam falha. |
+| `supv saude [--desde "yyyy-MM-dd HH:mm"]` | Últimas 24 h por padrão; falhas de health por motivo e ocorrência, marca `partida` até 30 s após iniciar o supervisor, conta partidas no período. |
+| `supv logs <supervisor\|portal\|atualizacao\|emails\|relatorios> [-n 80] [--bruto]` | Últimas linhas de cada log atual, com mascaramento de credenciais, e-mails e conteúdo sensível. |
+| `supv config validar` | Executa a validação operacional existente. |
+| `supv backup testar` | Testa restauração como na central. |
+| `supv backup restaurar [--anterior] [--sim]` | Para a operação e restaura o backup mais recente, ou o anterior. Digite `RESTAURAR`; `--sim` permite automação. |
+| `supv modo <desligado\|login\|computador>` | Altera a inicialização com a operação parada; exige administrador. |
+| `supv manutencao on` / `supv manutencao off` | Liga ou desliga a pausa de rotinas automáticas. |
+| `supv firewall restringir` | Executa o script atual de restrição, mantendo o teste interativo pela LAN; exige administrador. |
+| `supv migrar --destino "E:\semente" --modo <ensaio\|definitiva>` | Prepara a migração como a central; exige administrador. Definitiva exige digitar `MIGRAR` e bloqueia esta instalação. |
 
 Para comandos que precisam de elevação, abra o terminal como administrador. A CLI
 informa a exigência e falha sem abrir outra janela elevada. Controle de operação
 com tarefa agendada também exige esse terminal. Consultas de estado e logs não
 exigem elevação quando a conta consegue ler os arquivos e a tarefa.
 
+`supv logs atualizacao` filtra progresso `Updating files: NN%` e blocos
+`[PLUGIN_TIMINGS]`/`[INEFFECTIVE_DYNAMIC_IMPORT]` nos logs de stdout/stderr,
+preservando erros reais. Use `--bruto` para incluir esses diagnósticos; o
+mascaramento de dados sensíveis continua ativo.
+
 A atualização roda em processo próprio e oculto, compartilhado com a central.
 **Ctrl+C ou fechar o terminal encerra apenas o acompanhamento**: o trabalho
-continua. Use `sv acompanhar` em outro terminal para voltar. Um novo disparo é
+continua. Use `supv acompanhar` em outro terminal para voltar. Um novo disparo é
 recusado enquanto houver atualização ou limpeza de preparo em andamento;
-consulte `sv status` e `sv logs atualizacao`. Não remova travas de processos ativos.
+consulte `supv status` e `supv logs atualizacao`. Não remova travas de processos ativos.
 
-O recorte de `sv saude --desde` usa a hora local do servidor nos registros do
+O recorte de `supv saude --desde` usa a hora local do servidor nos registros do
 supervisor. Para o Portal, as contagens de HTTP 5xx, `D1_ERROR` e retentativas D1
 abrangem os logs atuais **desde o último reinício**, sem aplicar o recorte a linhas
 que não têm data. Ausência de falhas nesses arquivos não comprova períodos
-anteriores. `sv status` consulta ambos os endpoints de health sem alterar arquivos;
+anteriores. `supv status` consulta ambos os endpoints de health sem alterar arquivos;
 endpoint indisponível aparece no diagnóstico e não impede as demais consultas.
 
 Nesta fase, `Supply Vision.bat`, `INICIAR.bat`, `PARAR.bat`,
@@ -420,9 +426,14 @@ usa três fases:
    `.<nome-da-instalacao>-preparo-<UUID>`, no mesmo volume. Primeiro tenta mover
    a reserva `.<nome-da-instalacao>-dependencias-reserva`, fora da instalação.
    Confere hashes de package-lock/package.json e todos os requirements*.txt,
-   versões exatas de Node/Python, SHA ancestral, data e inventário SHA-256 dos
-   arquivos. O SHA registra a origem; commits novos com dependências iguais
-   podem reutilizar a reserva. Remove caches de execução antes de usar.
+   versões exatas de Node/Python, SHA ancestral, data e inventário dos metadados
+   dos arquivos (caminho relativo, tamanho e LastWriteTimeUtc), com contagem de
+   arquivos e pastas. A assinatura resume somente esses metadados; não lê o
+   conteúdo de cada dependência. A reserva fica em pasta exclusiva, e build,
+   fumaça e testes operacionais continuam verificando as dependências. Reservas
+   com o inventário antigo são descartadas uma vez e refeitas no novo formato.
+   O SHA registra a origem; commits novos com dependências iguais podem
+   reutilizar a reserva. Remove caches de execução antes de usar.
    Reserva ausente, incompleta, corrompida, em uso, com links ou ambiente diferente
    usa a cópia isolada; a recusada vai para descarte no worktree. Nunca retira
    dependências da produção durante o preparo. `-Reaplicar` força reinstalação.
@@ -475,6 +486,10 @@ usa três fases:
    Resultado e duração ficam em `limpeza-preparo.json` e `atualizacao-tempos.log`.
    O log registra reserva/cópia/instalação e o motivo para Node e Python; tempos
    do preparo têm um único escritor, inclusive quando o pai é de versão antiga.
+   A conferência aparece em passos próprios: `Conferencia geral da reserva`,
+   `Conferencia da reserva Node` e `Conferencia da reserva Python`; metadados,
+   consumo e descarte também têm medição. O motivo do modo completo identifica
+   o check ausente, pendente ou reprovado, com estado/conclusão quando disponíveis.
    Falha deixa a sobra para a próxima atualização. Se o worker não puder iniciar,
    mantém a limpeza síncrona de segurança.
    Falha de rede preserva a cópia local e avisa; não interrompe a operação.

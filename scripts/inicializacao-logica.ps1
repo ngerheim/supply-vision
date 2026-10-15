@@ -151,7 +151,7 @@ function Aviso-SessaoRemota([string]$Modo,[bool]$Remota) {
  return ''
 }
 
-function Acrescentar-ComandoSvAoPath([string]$Raiz,[string]$Atual) {
+function Acrescentar-ComandoSupvAoPath([string]$Raiz,[string]$Atual) {
  $raizPath=[IO.Path]::GetFullPath($Raiz).TrimEnd('\','/')
  $partes=@($Atual-split';'|Where-Object {$_})
  foreach($parte in $partes){
@@ -160,10 +160,15 @@ function Acrescentar-ComandoSvAoPath([string]$Raiz,[string]$Atual) {
  }
  return ((@($partes)+$raizPath)-join';')
 }
-function Instalar-ComandoSv([string]$Raiz) {
+function Remover-ComandoSvLegado([string]$Raiz) {
+ $legado=Join-Path $Raiz 'sv.cmd'
+ if(Test-Path -LiteralPath $legado -PathType Leaf){Remove-Item -LiteralPath $legado -Force -ErrorAction Stop}
+}
+function Instalar-ComandoSupv([string]$Raiz) {
+ Remover-ComandoSvLegado $Raiz
  $atual=[Environment]::GetEnvironmentVariable('Path','User')
- $novo=Acrescentar-ComandoSvAoPath $Raiz $atual
+ $novo=Acrescentar-ComandoSupvAoPath $Raiz $atual
  if($novo-ceq$atual){return}
  [Environment]::SetEnvironmentVariable('Path',$novo,'User')
- Write-Host 'Comando sv adicionado ao PATH do usuario. Abra um terminal novo para usar sv.'
+ Write-Host 'Comando supv adicionado ao PATH do usuario. Abra um terminal novo para usar supv.'
 }

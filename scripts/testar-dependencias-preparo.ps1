@@ -17,7 +17,7 @@ function Exigir-StringsDuplasAscii([string]$Codigo,[string]$Nome) {
   }
  }
 }
-foreach($nome in @('preparar-atualizacao.ps1','atualizacao-preparo.ps1','atualizar-servidor.ps1','limpar-preparo-assincrono.ps1','sv.ps1')){
+foreach($nome in @('preparar-atualizacao.ps1','atualizacao-preparo.ps1','atualizar-servidor.ps1','limpar-preparo-assincrono.ps1','supv.ps1')){
  $codigoAscii=[IO.File]::ReadAllText((Join-Path $PSScriptRoot $nome))
  Exigir-StringsDuplasAscii $codigoAscii $nome
  # Simula a leitura ANSI do PS5.1 de uma copia UTF8 sem BOM, tambem no PS7.
@@ -79,8 +79,8 @@ function Invoke-RestMethod {
  if($Caso-eq'ci-rede'){throw 'rede ficticia indisponivel'}
  $nomes=@('Portal','Portal - instalacao nova e autenticacao real','PowerShell','Alertas','Atualizacao real','Node 22.13 - partida e operacao (ubuntu-latest)','Node 22.13 - partida e operacao (windows-latest)')
  $checks=@(foreach($nome in $nomes){[pscustomobject]@{name=$nome;head_sha=('2'*40);status='completed';conclusion=$(if($nome-eq'Atualizacao real'){'skipped'}else{'success'});app=@{slug='github-actions';id=15368}}})
- if($Caso-eq'ci-ausente'){$checks=$checks[1..6]}
- if($Caso-eq'ci-pendente'){$checks[0].status='in_progress'}
+ if($Caso-eq'ci-ausente'){$checks=@($checks|Where-Object name -ne 'PowerShell')}
+ if($Caso-eq'ci-pendente'){$checks[3].status='in_progress'}
  if($Caso-eq'ci-falho'){$checks[0].conclusion='failure'}
  if($Caso-eq'ci-timeout'){$checks[0].conclusion='timed_out'}
  if($Caso-eq'ci-cancelado'){$checks[0].conclusion='cancelled'}
@@ -148,6 +148,17 @@ exit $LASTEXITCODE
    }
    foreach($tipo in @('Node','Python')){if(@($linhasTempos|Where-Object {$_-like("Dependencias ${tipo}: *motivo: *")}).Count-ne1){throw "Caminho de dependencias ausente: $tipo"}}
    if($tempos-notlike"*modo $(if($rapido){'rapido'}else{'completo'})*"){throw 'Modo ausente no log.'}
+   $motivoEsperado=switch($caso){
+    'ci-pendente' {'check pendente: Alertas (in_progress)'}
+    'ci-ausente' {'check obrigatorio ausente: PowerShell'}
+    'ci-falho' {'check nao aprovado: Portal (completed/failure)'}
+    'ci-timeout' {'check nao aprovado: Portal (completed/timed_out)'}
+    'ci-cancelado' {'check nao aprovado: Portal (completed/cancelled)'}
+    'ci-skipped' {'check nao aprovado: Portal (completed/skipped)'}
+    'ci-sha' {'SHA inesperado no check: Portal (completed/success)'}
+   }
+   if($motivoEsperado-and!$tempos.Contains($motivoEsperado)){throw "Motivo do modo completo sem check/estado: $caso"}
+
   }
   if((Test-Path (Join-Path $preparo 'preparo-aprovado'))-ne($rc-eq0)){throw 'Preparo reprovado foi aprovado.'}
   if((Test-Path (Join-Path $preparo 'limpeza-solicitada'))-ne($rc-ne0)){throw 'Preparo nao solicitou limpeza ao reprovar.'}

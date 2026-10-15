@@ -44,3 +44,21 @@ function Analisar-SaudeSupervisor([string[]]$Linhas,[datetime]$Desde) {
  }
  return @{reinicios=$reinicios;falhas=$falhas}
 }
+
+function Filtrar-LogsAtualizacao([string[]]$Linhas) {
+ $diagnostico=$false
+ foreach($linha in $Linhas){
+  # Cores nao podem esconder o inicio/fim do bloco de aviso.
+  $limpa=$linha-replace'\x1B\[[0-?]*[ -/]*[@-~]',''
+  if($limpa-match'^\s*Updating files:\s*\d+%'){continue}
+  if($limpa-match'\[(PLUGIN_TIMINGS|INEFFECTIVE_DYNAMIC_IMPORT)\]'){$diagnostico=$true;continue}
+  if($diagnostico){
+   # Preserva erros reais mesmo indentados, sem depender de uma linha vazia.
+   if($limpa-match'(?i)^\s*(?:\[[^]]+\]\s*)?(?:error|erro|fatal|exception|TypeError|SyntaxError|ReferenceError|failed|failure)\b|\bnpm\s+ERR!|\b(?:build|compilation) failed\b'){$diagnostico=$false}
+   elseif(!$limpa.Trim()){$diagnostico=$false;continue}
+   elseif($limpa-match'^\s+|^[\u2500-\u257F]|^[-*]\s+.*\d+(?:\.\d+)?\s*(?:ms|s|%)|^(Your build|The following plugins|Consider |Note:|See |is dynamically imported)'){continue}
+   else{$diagnostico=$false}
+  }
+  $linha
+ }
+}
