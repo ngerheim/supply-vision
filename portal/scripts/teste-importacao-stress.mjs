@@ -812,7 +812,23 @@ try {
     const alvo='alvo-inexistente@example.invalid';
     for(let i=0;i<5;i++)assert.equal((await request('/api/login',{method:'POST',body:{email:alvo,password:'senha-incorreta'}})).status,401);
     const inicio=performance.now();
-    const lote=await Promise.all(Array.from({length:20},()=>request('/api/login',{method:'POST',body:{email:alvo,password:'senha-incorreta'}})));
+    const resultados=await Promise.allSettled(Array.from({length:20},()=>request('/api/login',{method:'POST',body:{email:alvo,password:'senha-incorreta'}})));
+    const lote=resultados.filter(r=>r.status==='fulfilled').map(r=>r.value);
+    const distribuicao=new Map();
+    for(const r of resultados){
+      const status=r.status==='fulfilled'?r.value.status:'sem-status';
+      distribuicao.set(status,(distribuicao.get(status)||0)+1);
+    }
+    console.log(`Login paralelo por alvo - status: ${[...distribuicao].sort(([a],[b])=>String(a).localeCompare(String(b))).map(([status,n])=>`${status}x${n}`).join(', ')}`);
+    for(const [indice,r] of resultados.entries()){
+      if(r.status==='rejected'){
+        const erro=r.reason;
+        console.log(`Login paralelo por alvo - requisicao ${indice+1} sem status: ${JSON.stringify({erro:erro?.message||String(erro),codigo:erro?.code,causa:erro?.cause?.message,codigoCausa:erro?.cause?.code})}`);
+      }else if(![401,429].includes(r.value.status)){
+        const corpo=typeof r.value.data==='string'?r.value.data:JSON.stringify(r.value.data);
+        console.log(`Login paralelo por alvo - requisicao ${indice+1} HTTP ${r.value.status}: ${corpo.slice(0,500)}`);
+      }
+    }
     assert.equal(lote.filter(r=>r.status===401).length,1);
     assert.equal(lote.filter(r=>r.status===429).length,19);
     assert.ok(performance.now()-inicio>=750,'Atraso progressivo foi contornado');
