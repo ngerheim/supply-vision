@@ -60,6 +60,118 @@ try{
  Exigir (($saida[0].Trim()|ConvertFrom-Json)-eq$argumento) 'Lancador oculto alterou argumentos.'
  Exigir (($saida-join' ')-like'*stderr-ficticio*') 'Lancador oculto perdeu stderr.'
  Write-Host '[OK] Processo oculto: argumentos, stdout, stderr e codigo 7.'
+ # Reserva real em disco: publica anteriores somente apos conclusao, depois
+ # consome de uma vez. Falhas nunca movem dependencias da instalacao ativa.
+ $r=Join-Path $base 'reserva';New-Item -ItemType Directory -Force (Join-Path $r 'portal'),(Join-Path $r 'alertas/config')|Out-Null
+ foreach($rel in @('portal/package-lock.json','portal/package.json','alertas/config/requirements.txt','alertas/config/requirements-dev.txt')){[IO.File]::WriteAllText((Join-Path $r $rel),'fixture')}
+ & git -C $r init -q
+ & git -C $r add .
+ & git -C $r -c user.name=Fixture -c user.email=fixture@example.invalid commit -qm fixture
+ $assinatura=Obter-AssinaturaDependencias $r 'python'
+ foreach($caso in @('valida','troca-falha','lockfile','requirements','node','python','ausente','arquivo','marcador-link','incompleta','corrompida','sem-registro','link-raiz','link-externo','link-interno','em-uso','sha','registro','reinstalar','volume','falha-movimento')){
+  $p=Nova-PastaPreparo $r;New-Item -ItemType Directory -Force $p|Out-Null
+  foreach($rel in @('portal/node_modules','alertas/.venv')){
+   $antigo=Join-Path $p ('anteriores/'+$rel);$ativo=Join-Path $r $rel
+   New-Item -ItemType Directory -Force $antigo,$ativo|Out-Null
+   [IO.File]::WriteAllText((Join-Path $antigo 'pacote'),'reserva')
+   [IO.File]::WriteAllText((Join-Path $ativo 'pacote'),'producao')
+  }
+  [IO.File]::WriteAllText((Join-Path $p 'dependencias-origem.json'),($assinatura|ConvertTo-Json -Depth 6))
+  [void](Guardar-ReservaDependencias $r $p)
+  $reserva=Pasta-ReservaDependencias $r;$registro=Join-Path $reserva 'registro.json'
+  $a=$assinatura.Clone();$a.hashes=@{};foreach($chave in $assinatura.hashes.Keys){$a.hashes[$chave]=$assinatura.hashes[$chave]}
+  switch($caso){
+   'lockfile' {$a.hashes['portal/package-lock.json']='diferente'}
+   'requirements' {$a.hashes['alertas/config/requirements-dev.txt']='diferente'}
+   'node' {$a.node='v0.0.1'}
+   'python' {$a.python='Python 0.0.1'}
+   'ausente' {Remover-ArvorePreparo $reserva}
+   'arquivo' {Remover-ArvorePreparo $reserva;[IO.File]::WriteAllText($reserva,'corrompida')}
+   'marcador-link' {New-Item -ItemType $(if($env:OS-eq'Windows_NT'){'Junction'}else{'SymbolicLink'}) -Path (Join-Path $reserva 'descartar') -Target (Join-Path $r 'portal/node_modules')|Out-Null}
+   'incompleta' {Remover-ArvorePreparo (Join-Path $reserva 'alertas/.venv')}
+   'corrompida' {[IO.File]::WriteAllText((Join-Path $reserva 'portal/node_modules/pacote'),'mudanca')}
+   'sem-registro' {Remove-Item -LiteralPath $registro -Force}
+   'sha' {$j=Get-Content $registro -Raw|ConvertFrom-Json;$j.sha='0'*40;$j|ConvertTo-Json -Depth 6|Set-Content $registro}
+   'registro' {Set-Content $registro 'nao e json'}
+   'link-raiz' {Remover-ArvorePreparo $reserva;New-Item -ItemType $(if($env:OS-eq'Windows_NT'){'Junction'}else{'SymbolicLink'}) -Path $reserva -Target (Join-Path $r 'portal/node_modules')|Out-Null}
+   'link-externo' {New-Item -ItemType $(if($env:OS-eq'Windows_NT'){'Junction'}else{'SymbolicLink'}) -Path (Join-Path $reserva 'portal/node_modules/link') -Target (Join-Path $r 'portal/node_modules')|Out-Null}
+   'link-interno' {New-Item -ItemType $(if($env:OS-eq'Windows_NT'){'Junction'}else{'SymbolicLink'}) -Path (Join-Path $reserva 'portal/node_modules/link') -Target (Join-Path $reserva 'alertas/.venv')|Out-Null}
+   'falha-movimento' {New-Item -ItemType Directory -Force (Join-Path $p 'alertas/.venv')|Out-Null}
+  }
+  # Caches criados depois de guardar tambem sao removidos antes de validar.
+  if($caso-eq'valida'){
+   foreach($cache in @('portal/node_modules/.cache','portal/node_modules/.mf','portal/node_modules/.wrangler','alertas/.venv/__pycache__')){
+    New-Item -ItemType Directory -Force (Join-Path $reserva $cache)|Out-Null
+    [IO.File]::WriteAllText((Join-Path $reserva ($cache+'/execucao')),'descartar')
+   }
+  }
+  $script:reservaEmUso=$caso-eq'em-uso';$script:volumeReserva=$caso-ne'volume'
+  $emUsoReal=(Get-Command Reserva-DependenciasEmUso).ScriptBlock;$volumeReal=(Get-Command Mesmo-VolumeDependencias).ScriptBlock
+  function Reserva-DependenciasEmUso($Pasta){return $script:reservaEmUso}
+  function Mesmo-VolumeDependencias($Raiz,$Preparo){return $script:volumeReserva}
+  try{$uso=Usar-ReservaDependencias $r $p $a $(if($caso-eq'reinstalar'){'reinstalacao solicitada'}else{''})}
+  finally{Set-Item Function:Reserva-DependenciasEmUso $emUsoReal;Set-Item Function:Mesmo-VolumeDependencias $volumeReal}
+  Exigir ($uso.usada-eq($caso-in@('valida','troca-falha'))) "Reserva: resultado incorreto em ${caso}: $($uso.motivo)"
+  Exigir (!(Test-Path $reserva)) "Reserva invalida nao foi isolada: $caso"
+  foreach($rel in @('portal/node_modules','alertas/.venv')){
+   Exigir ((Get-Content (Join-Path $r ($rel+'/pacote')))-eq'producao') "Reserva alterou producao: $caso"
+   if($uso.usada){Exigir ((Get-Content (Join-Path $p ($rel+'/pacote')))-eq'reserva') 'Nao moveu ambas dependencias.'}
+  }
+  if($uso.usada){
+   Exigir (!(Test-Path (Join-Path $p 'portal/node_modules/.cache'))) 'Cache de producao entrou no preparo.'
+   if($caso-eq'troca-falha'){
+    foreach($d in @((Join-Path $r 'portal/dist'),(Join-Path $p 'portal/dist'))){New-Item -ItemType Directory -Force $d|Out-Null;[IO.File]::WriteAllText((Join-Path $d 'pacote'),'dist')}
+    Remover-ArvorePreparo (Join-Path $p 'alertas/.venv')
+    $falhou=$false;try{Trocar-ArtefatosPreparo $r $p}catch{$falhou=$true}
+    Exigir $falhou 'Fixture nao falhou no meio da troca.'
+    Restaurar-ArtefatosPreparo $r $p
+    foreach($rel in @('portal/node_modules','alertas/.venv')){Exigir ((Get-Content (Join-Path $r ($rel+'/pacote')))-eq'producao') 'Rollback de reserva perdeu dependencias ativas.'}
+    Exigir (!(Test-Path (Pasta-ReservaDependencias $r))) 'Rollback republicou reserva consumida.'
+   }
+   # Falha de build depois do consumo: perde apenas reserva/preparo.
+   Limpar-PastaPreparo $r $p
+   Exigir ((Get-Content (Join-Path $r 'portal/node_modules/pacote'))-eq'producao') 'Falha de preparo removeu dependencias ativas.'
+  }else{Remover-ArvorePreparo $p}
+  Write-Host "[OK] Reserva: $caso"
+ }
+ if($env:OS-eq'Windows_NT'){
+  $p=Nova-PastaPreparo $r;New-Item -ItemType Directory -Force $p|Out-Null
+  foreach($rel in @('portal/node_modules','alertas/.venv')){New-Item -ItemType Directory -Force (Join-Path $p ('anteriores/'+$rel))|Out-Null;[IO.File]::WriteAllText((Join-Path $p ('anteriores/'+$rel+'/pacote')),'reserva')}
+  [IO.File]::WriteAllText((Join-Path $p 'dependencias-origem.json'),($assinatura|ConvertTo-Json -Depth 6))
+  [void](Guardar-ReservaDependencias $r $p)
+  $reserva=Pasta-ReservaDependencias $r
+  $h=[IO.File]::Open((Join-Path $reserva 'portal/node_modules/pacote'),[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::None)
+  try{$uso=Usar-ReservaDependencias $r $p $assinatura;Exigir (!$uso.usada) 'Reutilizou reserva com handle real em uso.'}finally{$h.Dispose()}
+  if(Test-Path $reserva){
+   Exigir (Test-Path (Join-Path $reserva 'descartar')) 'Reserva bloqueada nao foi invalidada.'
+   Descartar-ReservaDependencias $r $p
+  }
+  Exigir ((Get-Content (Join-Path $r 'portal/node_modules/pacote'))-eq'producao') 'Handle da reserva afetou producao.'
+  Remover-ArvorePreparo $p
+  Write-Host '[OK] Reserva: handle exclusivo real do Windows.'
+ }
+
+ # Destino de publicacao ocupado: nao aparece reserva parcial. nao ha reserva parcial.
+ $p=Nova-PastaPreparo $r;New-Item -ItemType Directory -Force $p|Out-Null
+ foreach($rel in @('portal/node_modules','alertas/.venv')){New-Item -ItemType Directory -Force (Join-Path $p ('anteriores/'+$rel))|Out-Null;[IO.File]::WriteAllText((Join-Path $p ('anteriores/'+$rel+'/pacote')),'ficticio')}
+ [IO.File]::WriteAllText((Join-Path $p 'dependencias-origem.json'),($assinatura|ConvertTo-Json -Depth 6))
+ New-Item -ItemType Directory -Force (Join-Path $p 'reserva-nova/registro.json')|Out-Null
+ $falhou=$false;try{Guardar-ReservaDependencias $r $p}catch{$falhou=$true}
+ Exigir ($falhou-and!(Test-Path (Pasta-ReservaDependencias $r))) 'Publicou reserva incompleta apos falha.'
+ Exigir ((Get-Content (Join-Path $r 'alertas/.venv/pacote'))-eq'producao') 'Falha ao guardar alterou producao.'
+ Remover-ArvorePreparo $p
+ # Codigos documentados do robocopy, inclusive sucesso com diferencas.
+ function robocopy.exe {$global:LASTEXITCODE=$script:codigoRobo}
+ try{
+  foreach($codigo in @(0,1,2,3,4,5,6,7,8,16)){
+   $script:codigoRobo=$codigo;$global:LASTEXITCODE=42;$falhou=$false
+   try{Executar-RobocopyDependencias 'origem ficticia' 'destino ficticio'}catch{$falhou=$true}
+   Exigir ($falhou-eq($codigo-ge8)) "Codigo robocopy incorreto: $codigo"
+   Exigir ($LASTEXITCODE-eq42) 'Robocopy perdeu codigo anterior.'
+  }
+ }finally{Remove-Item Function:robocopy.exe}
+ Write-Host '[OK] Robocopy: 0-7 sucesso, 8/16 falha; codigo anterior preservado.'
+
  $rejeitou=$false;try{Validar-PastaPreparo $raiz $raiz}catch{$rejeitou=$true};Exigir $rejeitou 'Aceitou instalacao como preparo.'
 }finally{if(Test-Path $base){Remove-Item $base -Recurse -Force}}
 

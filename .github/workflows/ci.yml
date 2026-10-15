@@ -302,7 +302,7 @@ jobs:
             alertas/config/requirements.txt
             alertas/config/requirements-dev.txt
             alertas/config/requirements-ci.txt
-      - name: Atualizar instalacao base e reprovar PREPARAR sem parada
+      - name: Atualizar por copia e reserva; reprovar PREPARAR sem parada
         timeout-minutes: 22
         shell: powershell
         env:
@@ -332,6 +332,9 @@ jobs:
             ${{ runner.temp }}/sv-h2-*/sucesso/*.jsonl
             ${{ runner.temp }}/sv-h2-*/sucesso/consumidores-*.json
             ${{ runner.temp }}/sv-h2-*/sucesso/continuidade-preparar.json
+            ${{ runner.temp }}/sv-h2-*/sucesso-reserva/*.log
+            ${{ runner.temp }}/sv-h2-*/sucesso-reserva/*.jsonl
+            ${{ runner.temp }}/sv-h2-*/sucesso-reserva/*.json
             ${{ runner.temp }}/sv-h2-*/instalacao/privado/operacao/atualizacao-tempos.log
             ${{ runner.temp }}/sv-h2-*/instalacao/privado/operacao/atualizacao.json
             ${{ runner.temp }}/sv-h2-*/instalacao/privado/operacao/supervisor.log

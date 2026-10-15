@@ -369,10 +369,18 @@ Ele exige a branch `main` limpa e sem commits locais divergentes. A atualizaçã
 usa três fases:
 
 1. **PREPARAR, operação no ar:** busca `origin/main` e monta um worktree irmão,
-   `.<nome-da-instalacao>-preparo-<UUID>`, no mesmo volume. Copia dependências
-   inalteradas para uma cópia independente; instala no preparo quando mudaram,
-   estão ausentes ou foi usado `-Reaplicar`. Links de pacotes locais são
-   materializados; links para fora das dependências/vendor são recusados.
+   `.<nome-da-instalacao>-preparo-<UUID>`, no mesmo volume. Primeiro tenta mover
+   a reserva `.<nome-da-instalacao>-dependencias-reserva`, fora da instalação.
+   Confere hashes de package-lock/package.json e todos os requirements*.txt,
+   versões exatas de Node/Python, SHA ancestral, data e inventário SHA-256 dos
+   arquivos. O SHA registra a origem; commits novos com dependências iguais
+   podem reutilizar a reserva. Remove caches de execução antes de usar.
+   Reserva ausente, incompleta, corrompida, em uso, com links ou ambiente diferente
+   usa a cópia isolada; a recusada vai para descarte no worktree. Nunca retira
+   dependências da produção durante o preparo. `-Reaplicar` força reinstalação.
+   No Windows, cópias físicas usam robocopy /MT:16 (0–7 sucesso, >=8 falha).
+   Árvores com links mantêm a cópia conservadora: pacotes locais materializados
+   e links para fora das dependências/vendor recusados.
    Mede separadamente configuração fictícia, cópias Node/Python, junctions, worktree,
    build e cada verificação em `preparo-tempos.log` e no log da instalação.
    Consulta, sem token, os check-runs públicos do SHA exato. Exige todos concluídos
@@ -410,7 +418,15 @@ usa três fases:
    `BACKUP_NETWORK_TIMEOUT_SECONDS`, delega a limpeza do worktree a um processo
    independente e registra o resumo sem esperar a remoção. `limpeza-preparo.lock`
    protege a limpeza em andamento: outra atualização é recusada até ela terminar.
+   Depois do contexto concluído, o worker renomeia as dependências anteriores
+   para uma única reserva e publica seu registro somente quando completa.
+   Falha/reversão preserva os anteriores para recuperação e não publica reserva.
+   A remoção continua nativa, com links tratados como folhas, caminhos longos e
+   atributos; não usa rd /s nem robocopy /MIR sobre árvores com links. Guardar a
+   reserva evita apagar node_modules e .venv nessa limpeza.
    Resultado e duração ficam em `limpeza-preparo.json` e `atualizacao-tempos.log`.
+   O log registra reserva/cópia/instalação e o motivo para Node e Python; tempos
+   do preparo têm um único escritor, inclusive quando o pai é de versão antiga.
    Falha deixa a sobra para a próxima atualização. Se o worker não puder iniciar,
    mantém a limpeza síncrona de segurança.
    Falha de rede preserva a cópia local e avisa; não interrompe a operação.
