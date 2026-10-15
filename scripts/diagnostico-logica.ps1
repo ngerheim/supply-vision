@@ -51,14 +51,16 @@ function Filtrar-LogsAtualizacao([string[]]$Linhas) {
   # Cores nao podem esconder o inicio/fim do bloco de aviso.
   $limpa=$linha-replace'\x1B\[[0-?]*[ -/]*[@-~]',''
   if($limpa-match'^\s*Updating files:\s*\d+%'){continue}
+  # Erros encerram o bloco de aviso mesmo quando falta a linha em branco.
+  $erro=$limpa-match'(?i)^\s*(?:\[[^]]+\]\s*)?(?:error|erro|fatal|exception|TypeError|SyntaxError|ReferenceError|failed|failure)\b|\bnpm\s+ERR!|\b(?:build|compilation) failed\b'
+  if($erro){$diagnostico=$false;$linha;continue}
   if($limpa-match'\[(PLUGIN_TIMINGS|INEFFECTIVE_DYNAMIC_IMPORT)\]'){$diagnostico=$true;continue}
   if($diagnostico){
-   # Preserva erros reais mesmo indentados, sem depender de uma linha vazia.
-   if($limpa-match'(?i)^\s*(?:\[[^]]+\]\s*)?(?:error|erro|fatal|exception|TypeError|SyntaxError|ReferenceError|failed|failure)\b|\bnpm\s+ERR!|\b(?:build|compilation) failed\b'){$diagnostico=$false}
-   elseif(!$limpa.Trim()){$diagnostico=$false;continue}
-   elseif($limpa-match'^\s+|^[\u2500-\u257F]|^[-*]\s+.*\d+(?:\.\d+)?\s*(?:ms|s|%)|^(Your build|The following plugins|Consider |Note:|See |is dynamically imported)'){continue}
-   else{$diagnostico=$false}
+   # O diagnostico inteiro vai ate a linha vazia, sem adivinhar indentacao.
+   if(!$limpa.Trim()){$diagnostico=$false}
+   continue
   }
+  if($limpa-match'^\s*(?:\d+ callbacks? (?:are|is) listed without a time|[-*] plugin\b|and \d+ more\b|See https://rolldown\.rs/|The slowest callbacks\b|Additional callback time\b|`?output\.codeSplitting.* is a function|Learn more: https://nextjs\.org/docs/messages/middleware-to-proxy|npx @next/codemod\b)'){continue}
   $linha
  }
 }

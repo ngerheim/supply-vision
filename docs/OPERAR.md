@@ -23,7 +23,7 @@ outro valor indica falha (`echo %errorlevel%` no cmd, `$LASTEXITCODE` no PowerSh
 | `supv iniciar` / `supv parar` | Aguarda o início com health local ou a parada completa. |
 | `supv atualizar [--completo]` | Inicia a atualização e acompanha etapas, duração, total, estimativa e modo rápido/completo. `--completo` força todas as suítes. |
 | `supv acompanhar` | Reconecta ao progresso; sem atualização ativa, mostra o último resultado disponível. |
-| `supv homologar [--copiar] [--destino arquivo.txt]` | Exibe e mantém o relatório atual, com o mesmo mascaramento. `--copiar` usa exatamente o mesmo texto ASCII mostrado e salvo, da mesma execução e horário. Itens reprovados retornam falha. |
+| `supv homologar [--copiar] [--destino arquivo.txt]` | Exibe e mantém o relatório atual, com o mesmo mascaramento. `--copiar` usa exatamente o mesmo texto ASCII mostrado e salvo, da mesma execução e horário. A cópia tem prazo de 5 s; falha ou timeout avisa e encerra, mantendo o arquivo. Itens reprovados retornam falha. |
 | `supv saude [--desde "yyyy-MM-dd HH:mm"]` | Últimas 24 h por padrão; falhas de health por motivo e ocorrência, marca `partida` até 30 s após iniciar o supervisor, conta partidas no período. |
 | `supv logs <supervisor\|portal\|atualizacao\|emails\|relatorios> [-n 80] [--bruto]` | Últimas linhas de cada log atual, com mascaramento de credenciais, e-mails e conteúdo sensível. |
 | `supv config validar` | Executa a validação operacional existente. |
@@ -431,7 +431,10 @@ usa três fases:
    arquivos e pastas. A assinatura resume somente esses metadados; não lê o
    conteúdo de cada dependência. A reserva fica em pasta exclusiva, e build,
    fumaça e testes operacionais continuam verificando as dependências. Reservas
-   com o inventário antigo são descartadas uma vez e refeitas no novo formato.
+   com registro de formato diferente de `2` são descartadas antes de inventariar
+   arquivos, com o motivo `formato antigo da reserva`, e refeitas uma vez.
+   A enumeração reutiliza os metadados do filesystem, sem ler conteúdo, e limpa
+   caches durante a mesma travessia do inventário.
    O SHA registra a origem; commits novos com dependências iguais podem
    reutilizar a reserva. Remove caches de execução antes de usar.
    Reserva ausente, incompleta, corrompida, em uso, com links ou ambiente diferente

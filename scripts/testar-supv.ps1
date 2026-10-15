@@ -1,4 +1,4 @@
-﻿# Uma instalacao ficticia; sem tarefa, firewall, clipboard ou dados reais.
+﻿# Uma instalacao ficticia; sem tarefa, firewall ou dados reais.
 $ErrorActionPreference='Stop'
 $origem=$PSScriptRoot
 . (Join-Path $origem 'supv.ps1')
@@ -115,9 +115,24 @@ try{
   'segredo-ficticio pessoa@example.com',
   ([string][char]27+'[33m[PLUGIN_TIMINGS] diagnostico'+[char]27+'[0m'),
   'The following plugins spent time:',
+  '13 callbacks are listed without a time...',
+  'sem indentacao: continuacao desconhecida do diagnostico',
+  '   and 7 more',
+  'The slowest callbacks...',
+  'Additional callback time...',
   '  plugin lento: 88 s',
   '- plugin tabela: 123 ms',
   '',
+  'build progrediu entre diagnosticos',
+  '13 callbacks are listed without a time...',
+  '  - plugin tabela: 5 ms',
+  '   and 7 more',
+  'The slowest callbacks...',
+  'Additional callback time...',
+  'See https://rolldown.rs/diagnostics',
+  '`output.codeSplitting.groups` is a function...',
+  'Learn more: https://nextjs.org/docs/messages/middleware-to-proxy',
+  'npx @next/codemod@canary middleware-to-proxy .',
   '[INEFFECTIVE_DYNAMIC_IMPORT] diagnostico',
   '  caminho do modulo',
   ([string][char]0x2502+' continuacao de codigo'),
@@ -126,8 +141,10 @@ try{
   'ERRO REAL final'
  )
  foreach($nome in @('atualizacao-erro.log','atualizacao-processo-saida.log')){Set-Content (Join-Path $op $nome) $ruido -Encoding UTF8}
+ $completo=Capturar-Supv {Executar-ComandoSupv (Ler-ComandoSupv @('logs','atualizacao','-n','80'))}
+ Exigir-Supv ($completo-like'*build progrediu entre diagnosticos*'-and$completo-like'*erro real preservado*'-and$completo-notmatch'Updating files|PLUGIN_TIMINGS|INEFFECTIVE_DYNAMIC_IMPORT|plugin lento|plugin tabela|caminho do modulo|continuacao de codigo|callbacks|and 7 more|sem indentacao|rolldown|codeSplitting|Learn more|codemod') 'bloco completo ate linha vazia e mensagens avulsas filtrados; erros e progresso real preservados'
  $limpo=Capturar-Supv {Executar-ComandoSupv (Ler-ComandoSupv @('logs','atualizacao','-n','2'))}
- Exigir-Supv ($limpo-like'*erro real preservado*'-and$limpo-like'*ERRO REAL final*'-and$limpo-notmatch'Updating files|PLUGIN_TIMINGS|INEFFECTIVE_DYNAMIC_IMPORT|plugin lento|plugin tabela|caminho do modulo|continuacao de codigo') 'logs atualizacao filtra blocos e progresso antes do tail; preserva erros'
+ Exigir-Supv ($limpo-like'*erro real preservado*'-and$limpo-like'*ERRO REAL final*'-and$limpo-notmatch'Updating files|PLUGIN_TIMINGS|INEFFECTIVE_DYNAMIC_IMPORT|plugin lento|plugin tabela|caminho do modulo|continuacao de codigo|callbacks|and 7 more|sem indentacao|rolldown|codeSplitting|Learn more|codemod') 'logs atualizacao filtra blocos e progresso antes do tail; preserva erros'
  $bruto=Capturar-Supv {Executar-ComandoSupv (Ler-ComandoSupv @('logs','atualizacao','--bruto'))}
  Exigir-Supv ($bruto-like'*Updating files*'-and$bruto-like'*PLUGIN_TIMINGS*'-and$bruto-like'*caminho do modulo*'-and$bruto-like'*ERRO REAL final*'-and$bruto-notmatch'segredo-ficticio|pessoa@example.com') '--bruto conserva diagnosticos, continuacoes e erros com mascaramento'
  $script:chamadas=@();$script:elevado=$false;$script:resposta='nao';$script:paradaOk=$true
@@ -184,11 +201,62 @@ try{
   [IO.File]::WriteAllText($args[$i+1],$conteudo,(New-Object Text.UTF8Encoding($false)))
   $global:LASTEXITCODE=0
  }
- function Set-Clipboard {param($Value) $script:copiado=$Value}
+ $copiarReal=(Get-Command Copiar-RelatorioSupv).ScriptBlock
+ function Copiar-RelatorioSupv {param($Texto) $script:copiado=$Texto;return $true}
  $textoCli=Capturar-Supv {Executar-ComandoSupv (Ler-ComandoSupv @('homologar','--destino',$relatorio,'--copiar'))}
  $salvo=[IO.File]::ReadAllText($relatorio)
  Exigir-Supv ($script:homologacoes-eq1-and$script:copiado-ceq$salvo-and$textoCli.Contains($salvo)-and$salvo-notmatch'[^\x00-\x7F]') 'homologar --copiar: uma execucao; mesmo texto e horario ASCII no console, arquivo e copia'
  Remove-Item Function:powershell.exe
+ Set-Item Function:Copiar-RelatorioSupv $copiarReal
+ # Processos reais exercitam sucesso, erro e bloqueio do worker sem clipboard real.
+ $codigoCopiaReal=(Get-Command Obter-CodigoCopiaSupv).ScriptBlock
+ try{
+  function Obter-CodigoCopiaSupv {return '[Environment]::Exit(0)'}
+  Exigir-Supv (Copiar-RelatorioSupv $salvo) 'worker da copia termina com codigo 0'
+  function Obter-CodigoCopiaSupv {return '[Environment]::Exit(1)'}
+  Exigir-Supv (!(Copiar-RelatorioSupv $salvo)) 'falha da copia retorna sem excecao'
+  $script:pidCopia=Join-Path $base 'copia.pid'
+  function Obter-CodigoCopiaSupv {return ("[IO.File]::WriteAllText('"+$script:pidCopia.Replace("'","''")+"',[string]`$PID);Start-Sleep -Seconds 30")}
+  $tempo=[Diagnostics.Stopwatch]::StartNew()
+  $copiou=Copiar-RelatorioSupv $salvo -LimiteMs 3000
+  Exigir-Supv (!$copiou-and$tempo.Elapsed.TotalSeconds-lt5-and(Test-Path $script:pidCopia)) 'copia bloqueada respeita timeout e retorna'
+  $pidWorker=[int][IO.File]::ReadAllText($script:pidCopia)
+  Exigir-Supv (!(Get-Process -Id $pidWorker -ErrorAction SilentlyContinue)) 'timeout encerra worker da copia'
+ }finally{Set-Item Function:Obter-CodigoCopiaSupv $codigoCopiaReal}
+ # CLI inteira em processo filho: caminho real de clipboard/STA no CI Windows.
+ if($env:OS-eq'Windows_NT'){
+  $homologador=Join-Path $script:supvRaiz 'scripts/homologar.ps1'
+  $originalHomologador=[IO.File]::ReadAllText($homologador)
+  Set-Content $homologador 'param($Destino) [IO.File]::WriteAllText($Destino,"Relatorio ASCII da fixture");exit 0' -Encoding ASCII
+  $cliFixture=Join-Path $script:supvRaiz 'scripts/supv.ps1'
+  $originalCli=[IO.File]::ReadAllText($cliFixture)
+  try{
+   foreach($casoCopia in @('normal','bloqueada')){
+    $fonteCli=$originalCli
+    if($casoCopia-eq'bloqueada'){$fonteCli=$fonteCli.Replace('[Windows.Forms.Clipboard]::SetText([IO.File]::ReadAllText($env:SUPV_RELATORIO_COPIA))','Start-Sleep -Seconds 30')}
+    [IO.File]::WriteAllText($cliFixture,$fonteCli,(New-Object Text.UTF8Encoding($true)))
+    $filhoCopia=New-Object Diagnostics.Process
+    try{
+     $filhoCopia.StartInfo.FileName=$hostTeste
+     $filhoCopia.StartInfo.Arguments='-NoProfile -File "'+$cliFixture+'" homologar --copiar --destino "'+$relatorio+'"'
+     $filhoCopia.StartInfo.UseShellExecute=$false;$filhoCopia.StartInfo.CreateNoWindow=$true
+     $filhoCopia.StartInfo.RedirectStandardOutput=$true;$filhoCopia.StartInfo.RedirectStandardError=$true
+     [void]$filhoCopia.Start()
+     $stdoutCopia=$filhoCopia.StandardOutput.ReadToEndAsync();$stderrCopia=$filhoCopia.StandardError.ReadToEndAsync()
+     Exigir-Supv ($filhoCopia.WaitForExit(15000)) ("homologar --copiar encerra processo em ate 15 s: $casoCopia")
+     $textoCopia=$stdoutCopia.Result
+     Exigir-Supv ($filhoCopia.ExitCode-eq0-and$textoCopia-like'*Relatorio ASCII da fixture*') ("homologar --copiar retorna codigo 0: $casoCopia")
+     if($casoCopia-eq'bloqueada'){Exigir-Supv ($textoCopia-like'*AVISO: copia indisponivel ou prazo de 5 s excedido*') 'timeout da copia avisa sem travar a CLI'}
+    }finally{
+     if($filhoCopia.Id-and!$filhoCopia.HasExited){$filhoCopia.Kill()}
+     $filhoCopia.Dispose()
+    }
+   }
+  }finally{
+   [IO.File]::WriteAllText($homologador,$originalHomologador)
+   [IO.File]::WriteAllText($cliFixture,$originalCli,(New-Object Text.UTF8Encoding($true)))
+  }
+ }
  # Restaura consulta real para testar disparo, reconexao e recusa por identidade.
  . (Join-Path $origem 'administracao-logica.ps1')
  if($env:OS-ne'Windows_NT'){

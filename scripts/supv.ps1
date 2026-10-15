@@ -6,6 +6,45 @@ $supvRaiz=(Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 foreach($supvNome in @('operacao-logica','inicializacao-logica','migracao-logica','administracao-logica','diagnostico-logica','atualizacao-preparo')){
  . (Join-Path $PSScriptRoot ($supvNome+'.ps1'))
 }
+# A area de transferencia pertence a um processo STA isolado. Nem COM nem
+# handles herdados podem impedir o encerramento do cliente supv.
+function Obter-CodigoCopiaSupv {
+ return @'
+$ErrorActionPreference='Stop'
+try {
+ Add-Type -AssemblyName System.Windows.Forms
+ [Windows.Forms.Clipboard]::SetText([IO.File]::ReadAllText($env:SUPV_RELATORIO_COPIA))
+ [Environment]::Exit(0)
+} catch { [Environment]::Exit(1) }
+'@
+}
+function Copiar-RelatorioSupv([string]$Texto,[int]$LimiteMs=5000) {
+ $arquivo=Join-Path ([IO.Path]::GetTempPath()) ('supv-copia-'+[guid]::NewGuid().ToString('N')+'.txt')
+ $processo=New-Object Diagnostics.Process
+ try{
+  [IO.File]::WriteAllText($arquivo,$Texto,[Text.Encoding]::ASCII)
+  $info=New-Object Diagnostics.ProcessStartInfo
+  $info.FileName=(Get-Process -Id $PID).Path
+  $sta=if($env:OS-eq'Windows_NT'){'-STA '}else{''}
+  $codigo=[Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes((Obter-CodigoCopiaSupv)))
+  $info.Arguments=$sta+'-NoProfile -NonInteractive -EncodedCommand '+$codigo
+  $info.UseShellExecute=$false;$info.CreateNoWindow=$true
+  $info.RedirectStandardInput=$true;$info.RedirectStandardOutput=$true;$info.RedirectStandardError=$true
+  $info.EnvironmentVariables['SUPV_RELATORIO_COPIA']=$arquivo
+  $processo.StartInfo=$info
+  [void]$processo.Start()
+  $processo.StandardInput.Close()
+  # Drena sem esperar EOF indefinidamente, inclusive no caminho de falha.
+  $saida=$processo.StandardOutput.ReadToEndAsync();$erro=$processo.StandardError.ReadToEndAsync()
+  if(!$processo.WaitForExit($LimiteMs)){return $false}
+  return $processo.ExitCode-eq0
+ }catch{return $false}
+ finally{
+  try{if($processo.Id-and!$processo.HasExited){$processo.Kill();[void]$processo.WaitForExit(250)}}catch{}
+  $processo.Dispose()
+  Remove-Item -LiteralPath $arquivo -Force -ErrorAction SilentlyContinue
+ }
+}
 function Converter-TextoSupv([string]$Texto){
  $Texto=$Texto.Replace([string][char]0x2705,'[OK]').Replace([string][char]0x274C,'[ERRO]').Replace([string][char]0x26A0,'[AVISO]')
  $normal=$Texto.Normalize([Text.NormalizationForm]::FormD)
@@ -217,7 +256,10 @@ function Executar-ComandoSupv($c){
    $texto=(@($original-split'\r?\n'|ForEach-Object {Converter-TextoSupv (Mascarar-Homologacao $_ $script:supvSegredos)})-join[Environment]::NewLine)
    [IO.File]::WriteAllText([IO.Path]::GetFullPath($destino),$texto,[Text.Encoding]::ASCII)
    Write-Host $texto -NoNewline
-   if($o['--copiar']){Set-Clipboard -Value $texto;Escrever-Supv 'Relatorio copiado para a area de transferencia.'}
+   if($o['--copiar']){
+    if(Copiar-RelatorioSupv $texto){Escrever-Supv 'Relatorio copiado para a area de transferencia.'}
+    else{Escrever-Supv 'AVISO: copia indisponivel ou prazo de 5 s excedido. Relatorio salvo no destino informado.'}
+   }
    # A execucao do diagnostico concluiu; itens reprovados tambem sinalizam falha.
    if($reprovado){return 1};return 0
   }
