@@ -5,9 +5,9 @@ import { SCHEMA_RELATORIOS } from './relatorios.ts';
 import { passwordHash, tokenHash, PBKDF2_ITERACOES_ATUAL, PBKDF2_ITERACOES_LEGADO } from './criptografia.ts';
 export { passwordHash, tokenHash, PBKDF2_ITERACOES_ATUAL, PBKDF2_ITERACOES_LEGADO } from './criptografia.ts';
 import { registraAtividade } from './atualizacao-periodica.ts';
-import { LIMPAR_TRAVAS_VENCIDAS_SQL, RENOVAR_TRAVA_SQL, TravaPerdida, TRAVA_VALIDADE_MS } from './travas-sql.ts';
+import { LIMPAR_TRAVAS_VENCIDAS_SQL, RENOVAR_TRAVA_SQL, TravaPerdida, TRAVA_VALIDADE_MS } from './controle-escrita.ts';
 import { MIGRAR_FORNECEDORES_CHAMADOS_SQL } from './chamados.ts';
-import { TRIGGERS_REVISAO, TABELAS_CADASTRO } from './revisoes-sql.ts';
+import { TRIGGERS_REVISAO, TABELAS_CADASTRO } from './controle-escrita.ts';
 import { env } from 'cloudflare:workers';
 import { type Role, validatePassword } from '@/lib/domain';
 

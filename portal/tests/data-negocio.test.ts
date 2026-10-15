@@ -19,6 +19,8 @@ void test('virada de mes e de ano pelo calendario de Sao Paulo', () => {
 });
 
 void test('nenhuma consulta volta a usar o relogio UTC do SQLite', () => {
-  const rota = readFileSync(resolve(import.meta.dirname, '../app/api/[...path]/route.ts'), 'utf8');
+  const rota = [
+    '../app/api/[...path]/route.ts', '../lib/acordos-api.ts', '../lib/exportacoes-api.ts',
+  ].map(arquivo => readFileSync(resolve(import.meta.dirname, arquivo), 'utf8')).join('\n');
   assert.doesNotMatch(rota, /date\(\s*'now'/, "use date(?1) com dataDeNegocio() em vez de date('now')");
 });
