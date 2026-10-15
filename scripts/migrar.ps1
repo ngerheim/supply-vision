@@ -23,7 +23,7 @@ function Conferir-Workerd([string]$Portal){
  $exe=Join-Path $Portal 'node_modules\@cloudflare\workerd-windows-64\bin\workerd.exe'
  if(!(Test-Path -LiteralPath $exe)){throw 'workerd.exe ausente. Confira o antivirus e execute npm.cmd ci na pasta portal.'}
  try{$r=Executar-WorkerdVersao $exe;$saida=$r.saida;$codigo=$r.codigo}catch{$codigo=1}
- if($codigo-or$saida-notmatch 'workerd'){throw 'O motor do Portal (workerd) nao executou. Confira Visual C++ Redistributable 2015+ x64 e o antivirus. Reinicie apos instalar; consulte docs/SOCORRO.md (write EOF).'}
+ if($codigo-or$saida-notmatch 'workerd'){throw 'O motor do Portal (workerd) nao executou. Confira Visual C++ Redistributable 2015+ x64 e o antivirus. Reinicie apos instalar; consulte AGENTS.md#diagnostico-e-recuperacao (write EOF).'}
  Write-Host 'Motor do Portal (workerd) executou corretamente.'
 }
 function Avisar-Bitdefender {
@@ -260,7 +260,7 @@ try{
    Write-Host ('Nao foi possivel gravar como SYSTEM. Peca a TI permissao no compartilhamento e no NTFS para '+$dominio+'\'+$env:COMPUTERNAME+'$. No ensaio o backup em rede permanece bloqueado.') -ForegroundColor Yellow
    if(!$ContinuarSemRede){
     $escolha=Read-Host 'Digite CONTA para usar uma conta de dominio, SIM para continuar sem rede, ou Enter para parar'
-    if($escolha-eq'CONTA'){$script:credencialTarefa=Get-Credential -Message 'Conta de dominio para backup e tarefa Supply Vision';if(!$script:credencialTarefa-or!(Testar-RedeContaMigracao $rede $script:credencialTarefa)){throw 'A conta nao conseguiu gravar na pasta de backup. A tarefa definitiva nao foi alterada.'};$script:contaPersonalizada=$true;Write-Host 'Quando a senha desta conta mudar, sera necessario reconfigurar a tarefa. Veja docs/OPERAR.md.'}
+    if($escolha-eq'CONTA'){$script:credencialTarefa=Get-Credential -Message 'Conta de dominio para backup e tarefa Supply Vision';if(!$script:credencialTarefa-or!(Testar-RedeContaMigracao $rede $script:credencialTarefa)){throw 'A conta nao conseguiu gravar na pasta de backup. A tarefa definitiva nao foi alterada.'};$script:contaPersonalizada=$true;Write-Host 'Quando a senha desta conta mudar, sera necessario reconfigurar a tarefa. Veja AGENTS.md#supervisor-e-atualizacao.'}
     elseif($escolha-ne'SIM'){throw 'Permissao de rede pendente. Peca ajuda a TI e execute novamente.'}
    }
   }
@@ -291,7 +291,7 @@ try{
  if(!(Test-Path -LiteralPath (Split-Path $logFalha -Parent))){$logFalha=Join-Path ([IO.Path]::GetTempPath()) ('Supply-Vision-migracao-erro-'+$PID+'.log')}
  try{[IO.File]::WriteAllText($logFalha,'Migracao nao concluida. '+$erroMigracao,(New-Object Text.UTF8Encoding($true)))}catch{}
  Write-Host $erroMigracao -ForegroundColor Red
- Write-Host 'Migracao nao concluida. Preserve os arquivos e consulte docs/SOCORRO.md.' -ForegroundColor Red
+ Write-Host 'Migracao nao concluida. Preserve os arquivos e consulte AGENTS.md#diagnostico-e-recuperacao.' -ForegroundColor Red
  Write-Host "Log: $logFalha"
  if(!$RepositorioTeste){[void](Read-Host 'A janela permanece aberta. Pressione Enter somente depois de anotar o erro e o log')}
  throw

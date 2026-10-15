@@ -3,7 +3,7 @@ import test from 'node:test';
 import { categorizar, contarLinhas, inventario } from '../../scripts/inventario-metricas.mjs';
 void test('inventario: categorias exclusivas, exclusoes e linhas fisicas',()=>{
   for(const nome of ['privado/config.env','portal/vendor/lib.js','portal/package-lock.json','LICENSE','portal/public/favicon.svg'])assert.equal(categorizar(nome),null);
-  assert.equal(categorizar('README.md'),'docs');assert.equal(categorizar('.github/CODEOWNERS'),'ci');
+  assert.equal(categorizar('AGENTS.md'),'docs');assert.equal(categorizar('.github/CODEOWNERS'),'ci');
   for(const nome of ['portal/tests/a.ts','testes/fixtures/a.json','scripts/testar-a.ps1'])assert.equal(categorizar(nome),'testes');
   assert.equal(categorizar('portal/lib/a.ts'),'producao');
   for(const [texto,linhas] of [['',0],['a',1],['a\n',1],['a\r\nb\r\n',2],['a\n\n',2]])assert.equal(contarLinhas(texto),linhas);

@@ -1,3 +1,6 @@
+// H2 usa o atualizador real da base e do destino, sem dispensar build ou suites.
+// O negativo verifica continuidade sem trocar HEAD/dados; os positivos verificam
+// troca e reserva reutilizada. TEMP isola os dados; artefatos nao incluem bancos.
 // Apoio exclusivo da integracao H2: exige uma instalacao descartavel em TEMP.
 import assert from 'node:assert/strict';
 import fs from 'node:fs';

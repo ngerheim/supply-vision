@@ -112,10 +112,8 @@ try{
  $destinoFalha=Join-Path $pasta 'instalacao-falha';$falhou=$false
  try{& ([scriptblock]::Create($codigo)) -Destino $destinoFalha -Zip (Join-Path $pasta 'inexistente.zip')}catch{$falhou=$true}
  Exigir-Correcao ($falhou-and$script:pausou-and$script:politica-eq'Process/Bypass'-and(Test-Path ($destinoFalha+'.migracao-erro.log'))) 'falha real de prevoo grava log e espera usuario'
- foreach($doc in @('INSTALAR','MIGRAR','SOCORRO')){
-  $manual=Get-Content (Join-Path $raizReal "docs/$doc.md") -Raw -Encoding UTF8
-  Exigir-Correcao ($manual.Contains('Bitdefender')-and$manual.Contains('controle avançado de ameaças')-and$manual.Contains('unable to unlink')-and$manual-match 'reinici') "orientacao antivirus em $doc"
- }
+ $manual=Get-Content (Join-Path $raizReal 'AGENTS.md') -Raw -Encoding UTF8
+ Exigir-Correcao ($manual.Contains('Bitdefender')-and$manual.Contains('controle avançado de ameaças')-and$manual.Contains('unable to unlink')-and$manual-match 'reinici') 'contrato de diagnostico antivirus no mapa IA'
  $inicializacao=Get-Content (Join-Path $PSScriptRoot 'inicializacao-logica.ps1') -Raw -Encoding UTF8
  $configurar=Get-Content (Join-Path $PSScriptRoot 'configurar-inicializacao.ps1') -Raw -Encoding UTF8
  Exigir-Correcao ($inicializacao.Contains('Write-Progress')-and$configurar.Contains('configurada com sucesso')) 'progresso das permissoes e confirmacao de sucesso'

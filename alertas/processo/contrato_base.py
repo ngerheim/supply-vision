@@ -9,11 +9,9 @@ O descarte de colunas acontece aqui, e não no hipercubo, de propósito:
 reduzir o cubo no Qlik faz linhas distintas colapsarem, porque ele devolve
 uma linha por combinação de dimensões. Aqui é projeção pura.
 
-A deduplicação foi medida sobre a base completa (ver docs/wiki): com as 22
-colunas do objeto não há nenhuma linha repetida; com as 11 usadas aparecem
-poucas, todas criadas pelo próprio descarte e todas artefato de lançamento. Ela registra quantas removeu porque deduplicação silenciosa
-deixa de ser regra e vira comportamento emergente: no dia em que o modelo de
-dados mudar, o número muda sozinho e ninguém vê.
+A projeção pode criar duplicatas antes ausentes na base completa. A contagem
+removida precisa ser registrada: mudanças na fonte não podem alterar a regra
+silenciosamente ou esconder multiplicação de linhas na extração.
 """
 
 

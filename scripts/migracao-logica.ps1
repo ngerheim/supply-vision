@@ -36,6 +36,6 @@ function Preparar-Migracao([string]$Raiz,[string]$Privado,[string]$Startup,[stri
   }
  }
  Write-Host 'Leve esta pasta ao servidor e abra MIGRAR.bat. A semente tem dados e credenciais: proteja o pen drive.'
- if($Modo-eq'definitiva'){Write-Host 'Notebook bloqueado. Para voltar atras, siga docs/MIGRAR.md; nunca mantenha duas producoes.'}
+ if($Modo-eq'definitiva'){Write-Host 'Notebook bloqueado. Para voltar atras, siga AGENTS.md#supervisor-e-atualizacao; nunca mantenha duas producoes.'}
  else{Write-Host 'Notebook voltou a producao. No servidor, escolha Ensaio.'}
 }
