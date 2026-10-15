@@ -141,6 +141,52 @@ try{
   Set-Item Function:Mostrar-ResultadoSupv $resultadoReal
   Set-Item Function:Consultar-AtualizacaoAdministrada $consultaReal
  }
+ # O modo permanece indefinido ate a decisao; o motivo viaja com o JSON.
+ & {
+  $privadoTeste=Join-Path $base 'andamento-ficticio'
+  $arquivo=Join-Path $privadoTeste 'operacao/atualizacao-andamento.json'
+  $andamento=Novo-AndamentoAtualizacao $arquivo (Join-Path $privadoTeste 'tempos.log')
+  $consulta=[array]::IndexOf([object[]]$andamento.plano,'PREPARAR / Consulta CI')
+  foreach($etapa in $andamento.plano[0..$consulta]){
+   Publicar-AndamentoAtualizacao $andamento $etapa
+   $lido=Consultar-AndamentoAdministrado $privadoTeste
+   Exigir-Supv ($lido.modo-eq'a definir'-and!$lido.motivoModo) "modo a definir: $etapa"
+  }
+  foreach($modoTeste in @('rapido','completo')){
+   $motivo=if($modoTeste-eq'rapido'){'CI da PR #321 (abcdef0) verde, conteudo identico ao da main (1234567)'}else{'check obrigatorio ausente: Portal'}
+   Publicar-AndamentoAtualizacao $andamento 'PREPARAR / Build do Portal' -Modo $modoTeste -MotivoModo $motivo
+   $lido=Consultar-AndamentoAdministrado $privadoTeste
+   Exigir-Supv ($lido.modo-eq$modoTeste-and$lido.motivoModo-eq$motivo) "decisao $modoTeste preserva motivo"
+   Publicar-AndamentoAtualizacao $andamento 'PREPARAR / Configuracao dos testes operacionais'
+   Exigir-Supv ((Consultar-AndamentoAdministrado $privadoTeste).motivoModo-eq$motivo) "etapas seguintes preservam motivo $modoTeste"
+  }
+ }
+ # Consultas identicas nao imprimem de novo; segundos e modo ainda atualizam.
+ & {
+  $a=@{numero=1;total=37;nome='Conferindo ambiente de atualizacao';modo='a definir';motivoModo='';estado='andamento';etapaSegundos=0;totalSegundos=0;restanteSegundos=$null}
+  $exibicao=@{}
+  $motivo='CI da PR #321 (abcdef0) verde, conteudo identico ao da main (1234567)'
+  $texto=Capturar-Supv {
+   Mostrar-ProgressoSupv $a $exibicao;Mostrar-ProgressoSupv $a $exibicao
+   $a.etapaSegundos=1;$a.totalSegundos=1;Mostrar-ProgressoSupv $a $exibicao
+   $a.nome='PREPARAR / Consulta CI';Mostrar-ProgressoSupv $a $exibicao;Mostrar-ProgressoSupv $a $exibicao
+   $a.modo='rapido';$a.motivoModo=$motivo;Mostrar-ProgressoSupv $a $exibicao
+   $a.nome='PREPARAR / Build do Portal';Mostrar-ProgressoSupv $a $exibicao
+   foreach($i in 1..17){Mostrar-ProgressoSupv $a $exibicao}
+   $a.numero=37;$a.nome='Atualizacao concluida';$a.estado='concluido';Mostrar-ProgressoSupv $a $exibicao
+   foreach($i in 2..18){$a.totalSegundos=$i;Mostrar-ProgressoSupv $a $exibicao}
+  }
+  $linhas=@($texto-split"`n")
+  Exigir-Supv (@($linhas|Where-Object {$_-like'Etapa *'}).Count-eq6) 'andamento imprime apenas mudanca de etapa, segundos ou modo'
+  Exigir-Supv (@($linhas|Where-Object {$_-like'*Consulta CI*modo a definir'}).Count-eq1) 'consulta CI ainda mostra modo a definir'
+  Exigir-Supv (@($linhas|Where-Object {$_-like'Modo rapido:*'}).Count-eq1-and$texto.Contains("Modo rapido: $motivo")) 'motivo rapido aparece exatamente uma vez'
+  Exigir-Supv ($texto.IndexOf('Consulta CI')-lt$texto.IndexOf('Modo rapido:')-and$texto.IndexOf('Modo rapido:')-lt$texto.IndexOf('Build do Portal')) 'motivo vem apos consulta CI e antes do build'
+  Exigir-Supv (@($linhas|Where-Object {$_-like'Etapa 37 de 37: Atualizacao concluida*'}).Count-eq1) 'conclusao aparece uma vez mesmo aguardando o processo'
+  $a.modo='completo';$a.estado='andamento';$a.nome='PREPARAR / Build do Portal';$a.motivoModo="preparo completo forcado`r`npor fixture"
+  $exibicao=@{}
+  $texto=Capturar-Supv {Mostrar-ProgressoSupv $a $exibicao;Mostrar-ProgressoSupv $a $exibicao}
+  Exigir-Supv (@($texto-split"`n"|Where-Object {$_-eq'Modo completo: preparo completo forcado por fixture'}).Count-eq1) 'motivo completo aparece exatamente uma vez'
+ }
  # Comparacao exata de alvos: nao apaga arquivos existentes nem outra instalacao.
  $alvoLegado=Join-Path $script:supvRaiz ('Supply Vision'+'.bat')
  Exigir-Supv (Testar-AlvoAtalhoAposentado $script:supvRaiz $alvoLegado '') 'atalho aponta exatamente para alvo removido'
@@ -411,10 +457,12 @@ $ErrorActionPreference='Stop'
 $op=Join-Path (Obter-PastaPrivada (Split-Path $PSScriptRoot)) 'operacao'
 $andamento=Novo-AndamentoAtualizacao (Join-Path $op 'atualizacao-andamento.json') (Join-Path $op 'atualizacao-tempos.log')
 $modo=if($ForcarCompleto){'completo'}else{'rapido'}
-Publicar-AndamentoAtualizacao $andamento 'PREPARAR / Build do Portal' -Modo $modo
+Publicar-AndamentoAtualizacao $andamento 'PREPARAR / Consulta CI'
+Publicar-AndamentoAtualizacao $andamento 'PREPARAR / Build do Portal' -Modo $modo -MotivoModo 'decisao ficticia do CI'
 Start-Sleep -Seconds 4
 if(Test-Path (Join-Path $op 'provocar-falha')){Publicar-AndamentoAtualizacao $andamento 'Falha ficticia' 'falhou';Write-Output 'Falha ficticia';exit 7}
 Publicar-AndamentoAtualizacao $andamento 'Atualizacao concluida' 'concluido'
+Start-Sleep -Seconds 3
 Write-Output '=== Atualizado: 1234567 -> abcdef0 ==='
 exit 0
 '@
@@ -425,6 +473,8 @@ exit 0
  Recusar-Supv {Iniciar-AtualizacaoAdministrada $script:supvRaiz $script:supvPrivado} '*Atualizacao em andamento*'
  $texto=Capturar-Supv {Executar-ComandoSupv (Ler-ComandoSupv @('acompanhar'))}
  Exigir-Supv ($texto-like'*Etapa * de *'-and$texto-like'*Tempo total:*'-and$texto-like'*Sistema atualizado*') 'acompanhar reconecta e apresenta resultado real'
+ Exigir-Supv (@($texto-split"`n"|Where-Object {$_-eq'Modo completo: decisao ficticia do CI'}).Count-eq1) 'reconexao exibe motivo da decisao uma vez'
+ Exigir-Supv (@($texto-split"`n"|Where-Object {$_-like'Etapa *: Atualizacao concluida*'}).Count-eq1) 'worker real aguardado sem repetir conclusao'
  $r.processo.WaitForExit();Exigir-Supv ($r.processo.ExitCode-eq0) 'worker preserva codigo de sucesso'
  $texto=Capturar-Supv {Executar-ComandoSupv (Ler-ComandoSupv @('acompanhar'))}
  Exigir-Supv ($texto-like'*Nao ha atualizacao*'-and$texto-like'*Sistema atualizado*') 'sem atualizacao mostra ultimo resultado'

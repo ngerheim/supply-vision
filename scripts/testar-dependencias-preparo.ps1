@@ -193,6 +193,10 @@ exit $LASTEXITCODE
    }
    foreach($tipo in @('Node','Python')){if(@($linhasTempos|Where-Object {$_-like("Dependencias ${tipo}: *motivo: *")}).Count-ne1){throw "Caminho de dependencias ausente: $tipo"}}
    if($tempos-notlike"*modo $(if($rapido){'rapido'}else{'completo'})*"){throw 'Modo ausente no log.'}
+   $andamentoModo=Get-Content (Join-Path $instalacao 'privado/operacao/atualizacao-andamento.json') -Raw -Encoding UTF8|ConvertFrom-Json
+   $modoEsperado=if($rapido){'rapido'}else{'completo'}
+   if($andamentoModo.modo-ne$modoEsperado-or!$andamentoModo.motivoModo){throw 'Decisao ou motivo ausente no acompanhamento.'}
+   if(!$tempos.Contains($andamentoModo.motivoModo)){throw 'Motivo do acompanhamento difere do log.'}
    $motivoEsperado=switch($caso){
     'ci-pr-verde' {'CI da PR #123 (3333333) verde, conteudo identico ao da main (2222222)'}
     'ci-pr-queued' {'CI da PR #123 (3333333) verde, conteudo identico ao da main (2222222)'}

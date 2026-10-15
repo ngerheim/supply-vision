@@ -114,10 +114,28 @@ function Executar-AcaoSupv([string]$Tipo,$Dados=@{}){
  if(!$r.ok){throw 'Comando nao concluido. Consulte supv logs supervisor ou supv logs atualizacao.'}
  return $r
 }
-function Mostrar-ProgressoSupv($a){
- if(!$a){Escrever-Supv 'Aguardando arquivo de andamento...';return}
- $restante=if($null-eq$a.restanteSegundos){'indisponivel'}else{"$($a.restanteSegundos) s"}
- Escrever-Supv "Etapa $($a.numero) de $($a.total): $($a.nome) | etapa $($a.etapaSegundos) s | total $($a.totalSegundos) s | restante estimado: $restante | modo $($a.modo)"
+function Mostrar-ProgressoSupv($a,$Exibicao=$null){
+ $texto='Aguardando arquivo de andamento...'
+ $terminal=$false
+ if($a){
+  $modo=if($a.modo-in@('rapido','completo')){$a.modo}else{'a definir'}
+  if($a.motivoModo-and$modo-ne'a definir'-and($null-eq$Exibicao-or!$Exibicao.motivoMostrado)){
+   $motivo=([string]$a.motivoModo -replace '\s+', ' ').Trim()
+   Escrever-Supv ("Modo ${modo}: "+$motivo)
+   if($null-ne$Exibicao){$Exibicao.motivoMostrado=$true}
+  }
+  $restante=if($null-eq$a.restanteSegundos){'indisponivel'}else{"$($a.restanteSegundos) s"}
+  $texto="Etapa $($a.numero) de $($a.total): $($a.nome) | etapa $($a.etapaSegundos) s | total $($a.totalSegundos) s | restante estimado: $restante | modo $modo"
+  $terminal=$a.estado-in@('concluido','falhou')
+ }
+ if($null-ne$Exibicao){
+  # A conclusao fica fixa enquanto o worker termina; os demais textos mudam
+  # somente com o andamento visivel, sem repetir a cada consulta do processo.
+  if(($terminal-and$Exibicao.terminalMostrado)-or$texto-eq$Exibicao.ultimaLinha){return}
+  $Exibicao.ultimaLinha=$texto
+  if($terminal){$Exibicao.terminalMostrado=$true}
+ }
+ Escrever-Supv $texto
 }
 function Mostrar-ResultadoSupv($Codigo=$null){
  $r=Executar-AcaoAdministrada $script:supvRaiz $script:supvPrivado $script:supvStartup 'fim-atualizacao' @{codigo=$Codigo;saida='atualizacao-processo-saida.log'}
@@ -178,11 +196,12 @@ function Suspender-QuickEditSupv {
 
 function Acompanhar-AtualizacaoSupv($Processo=$null){
  $console=Suspender-QuickEditSupv
+ $exibicao=@{}
  try{
  Escrever-Supv 'Ctrl+C ou fechar o terminal encerra apenas o acompanhamento. Para voltar: supv acompanhar.'
  while($true){
   $p=if($Processo){$Processo}else{Consultar-AtualizacaoAdministrada $script:supvRaiz $script:supvPrivado}
-  Mostrar-ProgressoSupv (Consultar-AndamentoAdministrado $script:supvPrivado)
+  Mostrar-ProgressoSupv (Consultar-AndamentoAdministrado $script:supvPrivado) $exibicao
   if(!$p-or$p.HasExited){break}
   # O recibo pertence a esta execucao; tambem permite reconectar quando o
   # sistema ainda conserva um processo encerrado na tabela de processos.

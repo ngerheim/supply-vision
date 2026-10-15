@@ -674,17 +674,18 @@ function Novo-AndamentoAtualizacao([string]$Arquivo,[string]$Tempos,[datetime]$I
    elseif($linha-match'^\[.+?\] (.+): .+ em ([0-9.]+) s;'){$duracoes[$Matches[1]]=[double]::Parse($Matches[2],[Globalization.CultureInfo]::InvariantCulture)}
   }
  }
- return @{arquivo=$Arquivo;inicioGeral=$Inicio.ToString('o');inicioEtapa=$Inicio.ToString('o');nome='Iniciando atualizacao';numero=1;total=@(Plano-AndamentoAtualizacao).Count;modo='completo';estado='andamento';plano=@(Plano-AndamentoAtualizacao);duracoes=$duracoes}
+ return @{arquivo=$Arquivo;inicioGeral=$Inicio.ToString('o');inicioEtapa=$Inicio.ToString('o');nome='Iniciando atualizacao';numero=1;total=@(Plano-AndamentoAtualizacao).Count;modo='a definir';motivoModo='';estado='andamento';plano=@(Plano-AndamentoAtualizacao);duracoes=$duracoes}
 }
 function Ler-AndamentoAtualizacao([string]$Arquivo) {
  try{$j=Get-Content -LiteralPath $Arquivo -Raw -Encoding UTF8 -ErrorAction Stop|ConvertFrom-Json -ErrorAction Stop;$h=@{};foreach($p in $j.PSObject.Properties){$h[$p.Name]=$p.Value};$h.arquivo=$Arquivo;return $h}catch{return $null}
 }
-function Publicar-AndamentoAtualizacao($Andamento,[string]$Nome,[string]$Estado='andamento',[string]$Modo='') {
+function Publicar-AndamentoAtualizacao($Andamento,[string]$Nome,[string]$Estado='andamento',[string]$Modo='',[string]$MotivoModo='') {
  $codigo=Get-Variable LASTEXITCODE -Scope Global -ValueOnly -ErrorAction SilentlyContinue
  $temporario=$null
  try{
   if(!$Andamento-or!$Andamento.arquivo){return}
   if($Modo){$Andamento.modo=$Modo;$Andamento.plano=@(Plano-AndamentoAtualizacao ($Modo-eq'rapido'));$Andamento.total=$Andamento.plano.Count}
+  if($MotivoModo){$Andamento.motivoModo=$MotivoModo}
   if($Nome-ne$Andamento.nome){$Andamento.inicioEtapa=[datetime]::UtcNow.ToString('o')}
   $Andamento.nome=$Nome;$Andamento.estado=$Estado
   $indice=[array]::IndexOf([object[]]$Andamento.plano,$Nome)

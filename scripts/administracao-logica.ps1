@@ -133,7 +133,7 @@ function Consultar-AndamentoAdministrado([string]$Privado,[datetime]$Agora=[date
   $progresso=if($j.estado-eq'concluido'){100}else{[math]::Min(99,[math]::Floor(100*($j.numero-1)/$j.total))}
   $resumo=''
   if($j.estado-ne'andamento'){$resumo=@(Get-Content -LiteralPath (Join-Path $op 'atualizacao-tempos.log') -Tail 80 -Encoding UTF8 -ErrorAction SilentlyContinue|Where-Object {$_-like'*Resumo atualizacao:*'}|Select-Object -Last 1)-join''}
-  return @{nome=$j.nome;numero=[int]$j.numero;total=[int]$j.total;modo=$j.modo;estado=$j.estado;etapaSegundos=$etapa;totalSegundos=$total;restanteSegundos=$restante;progresso=$progresso;resumo=$resumo;inicioGeral=$inicio;inicioEtapa=$inicioEtapa}
+  return @{nome=$j.nome;numero=[int]$j.numero;total=[int]$j.total;modo=$j.modo;motivoModo=$j.motivoModo;estado=$j.estado;etapaSegundos=$etapa;totalSegundos=$total;restanteSegundos=$restante;progresso=$progresso;resumo=$resumo;inicioGeral=$inicio;inicioEtapa=$inicioEtapa}
  }catch{return $null}
 }
 
