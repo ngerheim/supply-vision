@@ -2,6 +2,7 @@
 $ErrorActionPreference='Stop'
 $origem=$PSScriptRoot
 . (Join-Path $origem 'supv.ps1')
+& (Join-Path $origem 'testar-console-supv.ps1')
 $base=Join-Path ([IO.Path]::GetTempPath()) ('supv-cli-'+[guid]::NewGuid().ToString('N'))
 $anterior=$env:SUPPLY_VISION_PRIVADO
 $hostTeste=(Get-Process -Id $PID).Path
@@ -34,6 +35,63 @@ try{
   $r=Executar-NativoOperacao 'powershell.exe' @('-NoProfile','-ExecutionPolicy','Bypass','-File',$invocar,$script:supvRaiz)
   Exigir-Supv ($r.codigo-eq0-and($r.saida-join' ')-like'*Supply Vision - supv <comando>*') 'powershell.exe resolve supv help pelo PATH e retorna 0'
  }else{Write-Host 'PULADO: resolucao de supv.cmd pelo powershell.exe exige Windows.'}
+
+ # Acompanhamento restaura o guard em sucesso, erro e interrupcao da pipeline.
+ Add-Type -TypeDefinition 'public sealed class SupvGuardTeste : System.IDisposable { public bool Disposed; public void Dispose(){Disposed=true;} }'
+ $suspenderReal=(Get-Command Suspender-QuickEditSupv).ScriptBlock
+ $progressoReal=(Get-Command Mostrar-ProgressoSupv).ScriptBlock
+ $resultadoReal=(Get-Command Mostrar-ResultadoSupv).ScriptBlock
+ $consultaReal=(Get-Command Consultar-AtualizacaoAdministrada).ScriptBlock
+ try{
+  function Suspender-QuickEditSupv {return $script:guardTeste}
+  function Consultar-AtualizacaoAdministrada {return $null}
+  function Mostrar-ResultadoSupv {return $true}
+  foreach($casoConsole in @('sucesso','erro','interrupcao')){
+   $script:guardTeste=New-Object SupvGuardTeste
+   $script:casoConsole=$casoConsole
+   function Mostrar-ProgressoSupv {
+    if($script:casoConsole-eq'erro'){throw 'erro ficticio'}
+    if($script:casoConsole-eq'interrupcao'){throw (New-Object OperationCanceledException)}
+   }
+   try{[void](Acompanhar-AtualizacaoSupv)}catch{}
+   Exigir-Supv $script:guardTeste.Disposed ("QuickEdit restaurado: $casoConsole")
+  }
+ }finally{
+  Set-Item Function:Suspender-QuickEditSupv $suspenderReal
+  Set-Item Function:Mostrar-ProgressoSupv $progressoReal
+  Set-Item Function:Mostrar-ResultadoSupv $resultadoReal
+  Set-Item Function:Consultar-AtualizacaoAdministrada $consultaReal
+ }
+ # Comparacao exata de alvos: nao apaga arquivos existentes nem outra instalacao.
+ $alvoLegado=Join-Path $script:supvRaiz ('Supply Vision'+'.bat')
+ Exigir-Supv (Testar-AlvoAtalhoAposentado $script:supvRaiz $alvoLegado '') 'atalho aponta exatamente para alvo removido'
+ Exigir-Supv (Testar-AlvoAtalhoAposentado $script:supvRaiz 'powershell.exe' ('-NoProfile -File "'+(Join-Path $script:supvRaiz ('scripts/central'+'.ps1'))+'"')) 'atalho PowerShell aponta para script removido'
+ Exigir-Supv (!(Testar-AlvoAtalhoAposentado $script:supvRaiz (Join-Path $base ('Supply Vision'+'.bat')) '')) 'preserva outra instalacao'
+ Exigir-Supv (!(Testar-AlvoAtalhoAposentado $script:supvRaiz 'powershell.exe' ('-File "'+(Join-Path $script:supvRaiz 'scripts/homologar.ps1')+'"'))) 'preserva alvo mantido'
+ Set-Content $alvoLegado 'existente'
+ Exigir-Supv (!(Testar-AlvoAtalhoAposentado $script:supvRaiz $alvoLegado '')) 'preserva alvo existente'
+ Remove-Item $alvoLegado
+ if($env:OS-eq'Windows_NT'){
+  $desktopTeste=Join-Path $base 'desktop';[void][IO.Directory]::CreateDirectory($desktopTeste)
+  $inicioTeste=Join-Path $base 'startup';[void][IO.Directory]::CreateDirectory($inicioTeste)
+  $ws=New-Object -ComObject WScript.Shell
+  try{
+   foreach($nomeAtalho in @('Supply Vision','Supply Vision outra','Outro')){
+    $atalho=$ws.CreateShortcut((Join-Path $desktopTeste ($nomeAtalho+'.lnk')))
+    $atalho.TargetPath=if($nomeAtalho-eq'Supply Vision outra'){Join-Path $base ('Supply Vision'+'.bat')}else{$alvoLegado}
+    $atalho.Save();[void][Runtime.InteropServices.Marshal]::FinalReleaseComObject($atalho)
+   }
+  }finally{[void][Runtime.InteropServices.Marshal]::FinalReleaseComObject($ws)}
+  $entradaTeste=Join-Path $inicioTeste 'Supply Vision.cmd'
+  [IO.File]::WriteAllText($entradaTeste,("@echo off`r`nstart `"`" `"$(Join-Path $script:supvRaiz ('INICIAR'+'.bat'))`"`r`n"))
+  Atualizar-EntradasLegadas $script:supvRaiz @($desktopTeste) $inicioTeste
+  Atualizar-EntradasLegadas $script:supvRaiz @($desktopTeste) $inicioTeste
+  Exigir-Supv (!(Test-Path (Join-Path $desktopTeste 'Supply Vision.lnk'))-and(Test-Path (Join-Path $desktopTeste 'Supply Vision outra.lnk'))-and(Test-Path (Join-Path $desktopTeste 'Outro.lnk'))) 'limpeza real idempotente preserva outros atalhos'
+  Exigir-Supv ([IO.File]::ReadAllText($entradaTeste)-eq(Montar-InicializacaoLogin $script:supvRaiz)) 'entrada de login migrada para supv'
+  [IO.File]::WriteAllText($entradaTeste,'customizado')
+  Atualizar-EntradasLegadas $script:supvRaiz @($desktopTeste) $inicioTeste
+  Exigir-Supv ([IO.File]::ReadAllText($entradaTeste)-eq'customizado') 'entrada de login customizada preservada'
+ }
 
  $op=Join-Path $script:supvPrivado 'operacao'
  Set-Content (Join-Path $script:supvPrivado 'comum/operacao.env') 'MODO_ENSAIO=0' -Encoding UTF8
@@ -284,7 +342,7 @@ exit 0
  Set-Content (Join-Path $script:supvRaiz 'scripts/atualizar-servidor.ps1') $atualizador -Encoding UTF8
  $r=Iniciar-AtualizacaoAdministrada $script:supvRaiz $script:supvPrivado $true;[void]$processos.Add($r.processo)
  Exigir-Supv (!$r.processo.HasExited-and$r.processo.Id-ne$PID) 'atualizar dispara processo independente'
- Exigir-Supv (Esperar-Supv {(Consultar-AndamentoCentral $script:supvPrivado).modo-eq'completo'}) '--completo chega como -ForcarCompleto'
+ Exigir-Supv (Esperar-Supv {(Consultar-AndamentoAdministrado $script:supvPrivado).modo-eq'completo'}) '--completo chega como -ForcarCompleto'
  Recusar-Supv {Iniciar-AtualizacaoAdministrada $script:supvRaiz $script:supvPrivado} '*Atualizacao em andamento*'
  $texto=Capturar-Supv {Executar-ComandoSupv (Ler-ComandoSupv @('acompanhar'))}
  Exigir-Supv ($texto-like'*Etapa * de *'-and$texto-like'*Tempo total:*'-and$texto-like'*Sistema atualizado*') 'acompanhar reconecta e apresenta resultado real'

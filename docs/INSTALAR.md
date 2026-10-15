@@ -15,7 +15,7 @@ usar pen drive em toda atualização futura.
 .\scripts\preparar-semente.ps1 -Destino D:\
 ```
 
-Pare a operacao na central antes de executar. Gera
+Execute `supv parar` antes de executar. Gera
 `supply-vision-semente-<data>.zip` com um snapshot consistente do banco,
 configuracao, parametros e estado persistente de slots e entregas. O script
 recusa um supervisor ainda ativo; nao usa um backup antigo no lugar do banco.
@@ -69,15 +69,14 @@ No notebook atual, nada muda: o instalador sem parâmetro continua criando o
 atalho que inicia ao entrar no Windows. Uma tarefa sem login já instalada é
 preservada ao reexecutar o instalador sem parâmetro.
 
-Na central, pare a operação e escolha uma das três opções:
+Execute `supv parar` e escolha em terminal como administrador:
 
-- **Desligado:** sem início automático; Iniciar operação continua disponível.
-- **Ao entrar no Windows (atual):** usa a pasta Inicializar do usuário.
-- **Ao ligar o computador, sem login:** cria a tarefa **Supply Vision**, como
+- `supv modo desligado`: sem início automático; `supv iniciar` continua disponível.
+- `supv modo login`: usa a pasta Inicializar do usuário.
+- `supv modo computador`: cria a tarefa **Supply Vision**, como
   **NT AUTHORITY\SYSTEM**, com atraso de um minuto após ligar o computador.
 
-Mudar o modo exige **Executar como administrador**. A central oferece reabrir
-com elevação; nela, escolha o modo novamente. As opções são exclusivas: a tarefa
+Mudar o modo exige terminal com **Executar como administrador**. As opções são exclusivas: a tarefa
 remove o atalho do usuário que a configurou, e escolher login remove a tarefa.
 Se houve instalação por outros usuários, confira que eles não tenham atalhos
 antigos na própria pasta Inicializar.
@@ -126,7 +125,7 @@ para gerenciar os processos da instalação. A configuração valida essa condi�
 **Teste final no servidor:** reinicie sem fazer login, aguarde o minuto de
 atraso e a inicialização, e confirme de outra máquina que
 **http://portal.empresa.local:3000** está no ar. Só depois abra RDP para conferir
-central, logs e backup. No ensaio, mantenha `MODO_ENSAIO=1`: e-mails e cópia em
+`supv status`, logs e backup. No ensaio, mantenha `MODO_ENSAIO=1`: e-mails e cópia em
 rede continuam bloqueados. Consulte OPERAR para descartar os dados do ensaio
 antes da instalação definitiva.
 

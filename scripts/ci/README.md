@@ -15,7 +15,7 @@ O script da base executa `atualizar-servidor.ps1` sem parametros internos, inclu
 a reexecucao pelo codigo novo. Não há mocks nem bypass de build/suites. O job define `SV_PREPARO_COMPLETO=1`
 para sempre exercitar todas as suítes, mesmo em uma reexecução com checks já
 concluídos. O harness aguarda a limpeza assíncrona somente para verificar a fixture;
-a central e o atualizador não aguardam esse worker.
+o supv e o atualizador não aguardam esse worker.
 
 Toda configuracao e dado pertence a uma pasta `sv-h2-*` nova em TEMP. Ensaio,
 SMTP em loopback, avisos desligados, backup de rede vazio e agenda ja concluida

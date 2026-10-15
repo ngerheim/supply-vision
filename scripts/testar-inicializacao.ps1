@@ -35,5 +35,16 @@ Iniciar-OperacaoConfigurada 'ficticio'
 if($script:chamadas.Count-ne1-or$script:chamadas[0]-ne'Supply Vision'){throw 'Inicio nao encaminhou para a tarefa.'}
 function Start-ScheduledTask {throw 'sem permissao simulada'}
 $falhou=$false;try{Iniciar-OperacaoConfigurada 'ficticio'}catch{$falhou=$true}
-if(!$falhou){throw 'Falha da tarefa foi ignorada pela central.'}
+if(!$falhou){throw 'Falha da tarefa foi ignorada pelo supv.'}
 Write-Host 'Inicializacao: tarefa, contas, exclusao, UNC, RDP e notificacao aprovados.'
+
+function Obter-TarefaSupplyVision {return $null}
+$script:inicioDireto=$null
+function Start-Process {param($FilePath,$WindowStyle,$ArgumentList,$ErrorAction) $script:inicioDireto=@($FilePath,$WindowStyle,$ArgumentList)}
+Iniciar-OperacaoConfigurada (Join-Path ([IO.Path]::GetTempPath()) 'Supply Vision teste')
+if($script:inicioDireto[0]-ne'powershell.exe'-or$script:inicioDireto[1]-ne'Hidden'-or$script:inicioDireto[2]-notmatch'-File "[^"]+supervisor.ps1"'){throw 'Inicio direto perdeu caminho citado ou janela oculta.'}
+function Start-Process {throw 'partida recusada'}
+$falhou=$false;try{Iniciar-OperacaoConfigurada 'ficticio'}catch{$falhou=$_.Exception.Message-eq'partida recusada'}
+if(!$falhou){throw 'Falha de inicio direto foi ignorada.'}
+if((Montar-InicializacaoLogin (Join-Path ([IO.Path]::GetTempPath()) 'Supply Vision teste'))-notlike'*supv.cmd*iniciar*'){throw 'Login nao usa supv.'}
+Write-Host 'Inicio direto, caminhos com espacos, falha e login via supv aprovados.'

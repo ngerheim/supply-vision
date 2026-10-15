@@ -27,12 +27,12 @@ outro valor indica falha (`echo %errorlevel%` no cmd, `$LASTEXITCODE` no PowerSh
 | `supv saude [--desde "yyyy-MM-dd HH:mm"]` | Últimas 24 h por padrão; falhas de health por motivo e ocorrência, marca `partida` até 30 s após iniciar o supervisor, conta partidas no período. |
 | `supv logs <supervisor\|portal\|atualizacao\|emails\|relatorios> [-n 80] [--bruto]` | Últimas linhas de cada log atual, com mascaramento de credenciais, e-mails e conteúdo sensível. |
 | `supv config validar` | Executa a validação operacional existente. |
-| `supv backup testar` | Testa restauração como na central. |
+| `supv backup testar` | Testa a restauração do backup. |
 | `supv backup restaurar [--anterior] [--sim]` | Para a operação e restaura o backup mais recente, ou o anterior. Digite `RESTAURAR`; `--sim` permite automação. |
 | `supv modo <desligado\|login\|computador>` | Altera a inicialização com a operação parada; exige administrador. |
 | `supv manutencao on` / `supv manutencao off` | Liga ou desliga a pausa de rotinas automáticas. |
 | `supv firewall restringir` | Executa o script atual de restrição, mantendo o teste interativo pela LAN; exige administrador. |
-| `supv migrar --destino "E:\semente" --modo <ensaio\|definitiva>` | Prepara a migração como a central; exige administrador. Definitiva exige digitar `MIGRAR` e bloqueia esta instalação. |
+| `supv migrar --destino "E:\semente" --modo <ensaio\|definitiva>` | Prepara a migração; exige administrador. Definitiva exige digitar `MIGRAR` e bloqueia esta instalação. |
 
 Para comandos que precisam de elevação, abra o terminal como administrador. A CLI
 informa a exigência e falha sem abrir outra janela elevada. Controle de operação
@@ -44,7 +44,7 @@ exigem elevação quando a conta consegue ler os arquivos e a tarefa.
 preservando erros reais. Use `--bruto` para incluir esses diagnósticos; o
 mascaramento de dados sensíveis continua ativo.
 
-A atualização roda em processo próprio e oculto, compartilhado com a central.
+A atualização roda em processo próprio e oculto.
 **Ctrl+C ou fechar o terminal encerra apenas o acompanhamento**: o trabalho
 continua. Use `supv acompanhar` em outro terminal para voltar. Um novo disparo é
 recusado enquanto houver atualização ou limpeza de preparo em andamento;
@@ -57,36 +57,27 @@ que não têm data. Ausência de falhas nesses arquivos não comprova períodos
 anteriores. `supv status` consulta ambos os endpoints de health sem alterar arquivos;
 endpoint indisponível aparece no diagnóstico e não impede as demais consultas.
 
-Nesta fase, `Supply Vision.bat`, `INICIAR.bat`, `PARAR.bat`,
-`portal/Restringir Acesso da Rede.cmd` e `scripts/homologar.ps1` continuam disponíveis
-como alternativas. A remoção fica para a fase 2, após validação no servidor.
+`INSTALAR.bat` e `MIGRAR.bat` continuam disponíveis para máquinas sem `supv`.
+A atualização remove apenas atalhos Supply Vision que apontem para arquivos
+aposentados desta instalação e adapta a entrada de login criada pelo instalador.
+Atalhos para outros arquivos ou instalações são preservados.
 
-## Central
-
-`Supply Vision.bat` mostra o estado e oferece iniciar, parar, atualizar o
-sistema, validar a configuração, testar/restaurar backup, ligar a inicialização
-automática e o modo manutenção. Portal é acessado pelo endereço da instalação;
-registros ficam em `privado/operacao/`. Ela exibe o
-commit em uso e o espaço livre em disco.
+## Manutenção
 
 O **modo manutenção** mantém Portal e e-mails no ar, mas pausa novos Alertas,
 backups e limpezas. Rotinas já iniciadas terminam. Use durante
 diagnóstico e execução manual. Pedidos manuais do Portal continuam disponíveis;
-a pausa não encerra rotinas em andamento e não substitui Parar operação para restaurar o banco.
+a pausa não encerra rotinas em andamento e não substitui `supv parar` para restaurar o banco.
 
 ## Início automático e operação por RDP
 
-A central oferece **Desligado**, **Ao entrar no Windows (atual)** e
-**Ao ligar o computador, sem login**. O notebook mantém o modo atual até alguém
-escolher outro. Pare a operação antes de mudar; a central pede elevação e
-reabre como administrador quando necessário. Escolha o modo novamente na
-janela elevada. Ativar a tarefa remove o atalho de login do usuário que a
-configurou; ativar login remove a tarefa. A instalação por outros usuários
-pode ter deixado atalhos na pasta Inicializar deles: confira esses atalhos.
+Use `supv modo desligado`, `supv modo login` ou `supv modo computador`
+em terminal como administrador, após `supv parar`. O modo atual é preservado
+até ser alterado. Ativar a tarefa remove a entrada de login do usuário;
+ativar login remove a tarefa. Confira entradas de outros usuários na pasta Inicializar.
 
 No modo **Ao entrar no Windows**, ao encerrar o acesso remoto use
-**Desconectar**, nunca **Sair**: Sair encerra a operação. A central mostra esse
-aviso quando está aberta por RDP nesse modo.
+**Desconectar**, nunca **Sair**: Sair encerra a operação. Use `supv status` para conferir o modo de inicialização.
 
 No modo **sem login**, a tarefa **Supply Vision** inicia um minuto após ligar,
 sem limite de duração. Se falhar, tenta novamente a cada minuto, até três
@@ -94,15 +85,15 @@ vezes. Ela roda como **NT AUTHORITY\SYSTEM** por padrão; não precisa de senha.
 A tarefa impede instâncias simultâneas, e a trava de arquivo do supervisor
 protege também contra uma tentativa de início pela sessão do usuário.
 
-**Iniciar operação** dispara a tarefa. **Parar operação** grava o sinal e
+`supv iniciar` dispara a tarefa. `supv parar` grava o sinal e
 aguarda o supervisor encerrar de verdade. O status é lido dos arquivos da
 operação, inclusive quando o processo está fora da sessão RDP. O grupo local Supply Vision Operadores reúne a conta da tarefa e os
 administradores; reconfigurar não retira o acesso dos operadores anteriores.
-Abra a central elevada se houver erro de permissão. Se um
+Abra o terminal como administrador se houver erro de permissão. Se um
 processo da conta da tarefa travar e precisar ser encerrado à força, será necessária
 elevação. Não apague a trava nem tente abrir um segundo supervisor.
 
-**Atualizar sistema** no modo sem login exige a central elevada. O atualizador
+`supv atualizar` no modo sem login exige terminal como administrador. O atualizador
 desabilita a tarefa durante a parada e a atualização, espera o encerramento e
 volta a habilitar e iniciar a mesma tarefa ao retomar. As notificações na tela
 continuam no modo atual. Sem sessão interativa, a indisponibilidade é registrada
@@ -122,7 +113,7 @@ privilégios. Veja INSTALAR para escolher a conta e os parâmetros do instalador
 
 O teste que confirma este modo é reiniciar o servidor **sem fazer login** e,
 de outra máquina, abrir **http://portal.empresa.local:3000** após o atraso e a
-inicialização. Depois confira os registros pela central em RDP.
+inicialização. Depois confira os registros com `supv` em RDP.
 
 ## Modo ensaio no servidor novo
 
@@ -137,7 +128,7 @@ Para ligar, antes de iniciar a operação no servidor novo, abra
 MODO_ENSAIO=1
 ```
 
-Pare e inicie a operação pela central para aplicar a mudança. Confira o aviso
+Execute `supv parar` e `supv iniciar` para aplicar a mudança. Confira o aviso
 **MODO ENSAIO — nenhum e-mail ou backup em rede** e, no
 `privado/operacao/supervisor.log`, a mensagem **Modo ensaio ATIVO**.
 O supervisor passa esse modo aos programas que inicia; eles não precisam
@@ -170,8 +161,7 @@ $env:MODO_ENSAIO = '1'
 ```
 
 Para sair desse modo em um terminal de testes, use `$env:MODO_ENSAIO = '0'`.
-Isso não altera uma operação já iniciada: para ela vale parar e iniciar pela
-central, com o arquivo configurado.
+Isso não altera uma operação já iniciada: para ela vale usar `supv parar` e `supv iniciar`, com o arquivo configurado.
 
 ## Avisos por e-mail para o administrador
 
@@ -182,8 +172,7 @@ Os avisos na tela continuam existindo. Para receber também por e-mail, abra
 ADMIN_ALERTA_EMAIL=administrador@example.com,outro@example.com
 ```
 
-Use vírgula para separar mais de um endereço. Pare e inicie a operação pela
-central após alterar. A chave ausente ou vazia mantém o recurso desligado,
+Use vírgula para separar mais de um endereço. Execute `supv parar` e `supv iniciar` após alterar. A chave ausente ou vazia mantém o recurso desligado,
 sem tentativa de envio. Para desligar, remova a linha ou deixe
 `ADMIN_ALERTA_EMAIL=` e reinicie a operação.
 
@@ -293,9 +282,9 @@ originais continuam preservados no banco e no backup. Para registros antigos,
 os nomes vêm dos cadastros disponíveis hoje; cadastros excluídos são indicados
 como **Cadastro não disponível**, sem mostrar identificadores internos.
 
-**Validar configuração** confere arquivos/chaves obrigatórios, parâmetros da
+`supv config validar` confere arquivos/chaves obrigatórios, parâmetros da
 agenda, programas, build e escrita nas pastas privadas. Não testa autenticação
-Qlik/SMTP nem garante acesso à rede. A central apresenta falha se o verificador
+Qlik/SMTP nem garante acesso à rede. `supv status` apresenta falha se o verificador
 retornar erro, sem anunciar aprovação indevida.
 
 ## Reinício automático do Portal
@@ -340,7 +329,7 @@ Não há recuperação automática de dias anteriores.
 sufixos por dia e a mesma regra de valor vazio. O exemplo público usa `18:00`;
 para duas cópias diárias, por exemplo, configure `BACKUP_HORARIOS=12:30,17:30`.
 Confira o arquivo privado: os horários da instalação podem ser diferentes.
-Depois de alterar a agenda, pare e inicie a operação pela central.
+Depois de alterar a agenda, execute `supv parar` e `supv iniciar`.
 
 ## Configuração dos Alertas e do remetente
 
@@ -364,7 +353,7 @@ da chave. Os lembretes são verificados na rotina das 08:00, aos 30, 15, 7, 3 e
 
 Em `privado/comum/smtp.env`, `EMAIL_FROM_NAME` define o nome visível do
 remetente; o endereço continua sendo `SMTP_USER`. Após alterar configurações,
-reinicie a operação e use **Validar configuração**. Isso não comprova
+reinicie a operação e use `supv config validar`. Isso não comprova
 conectividade ou autenticação Qlik/SMTP. Não publique esses arquivos privados.
 
 ## Quarentena dos Alertas
@@ -385,20 +374,19 @@ e confira uma nova execução antes de considerar a comparação completa.
 
 ## Publicar uma melhoria
 
-Desenvolva na máquina de origem, valide, commite e publique. No servidor, abra
-`Supply Vision.bat` e use **Atualizar sistema**. A central pede confirmação,
-acompanha o processo sem travar a janela e informa o resultado. O painel mostra
-etapa/total, modo, tempos decorridos e barra de progresso, consultando
-`privado/operacao/atualizacao-andamento.json` a cada segundo em runspace próprio.
-A estimativa restante usa os passos medidos na atualização anterior; sem histórico,
-mostra apenas o decorrido. Ao terminar ou falhar, mantém o resultado e o tempo total.
-Reabra a central depois de instalar esta versão para carregar o painel novo.
+Desenvolva na máquina de origem, valide, commite e publique. No servidor, execute
+`supv atualizar` (ou `supv atualizar --completo`). O terminal mostra etapa/total,
+modo, tempo decorrido e estimativa restante, baseada na atualização anterior.
+Use `supv acompanhar` para reconectar e consultar o resultado.
+Durante o acompanhamento, o Modo de Edição Rápida (QuickEdit) fica desativado:
+clicar no console não pausa a saída. O modo original é restaurado ao sair,
+inclusive por erro ou Ctrl+C. Redirecionamento e CI não alteram o console.
 
 Os tempos de cada etapa ficam em `privado/operacao/atualizacao-tempos.log`,
-tanto pela central quanto pelo PowerShell: início, fim, duração, tempo total
+tanto com `supv` quanto pelo PowerShell: início, fim, duração, tempo total
 e tempo de PREPARAR. A parada é medida desde a solicitação de encerramento
 até a liberação após health, assets, login e consumidores. O resumo indica
-se a meta de até 60 segundos foi atingida; sem confirmação, informa o tempo mínimo. A central guarda a saída completa dos
+se a meta de até 60 segundos foi atingida; sem confirmação, informa o tempo mínimo. O atualizador guarda a saída completa dos
 comandos em `atualizacao-processo-saida.log` e os erros em
 `atualizacao-erro.log`, na mesma pasta. A primeira atualização que instalar
 esta medição pode ter um resumo parcial, pois o processo anterior ainda não
@@ -555,8 +543,8 @@ subpasta da pasta de rede. Também são preservadas as sete cópias diárias mai
 recentes, mesmo após uma pausa de mais de sete dias. Só são apagadas cópias
 fora da janela que excedam esse mínimo. É o
 que permite voltar a um ponto anterior a um erro que já entrou no backup do
-dia (um acordo apagado por engano, por exemplo). Para restaurar, a central
-oferece a cópia mais recente ou a do último dia anterior; um dia específico
+dia (um acordo apagado por engano, por exemplo). Para restaurar, `supv backup restaurar` usa a cópia mais recente e
+`supv backup restaurar --anterior` usa a do último dia anterior; um dia específico
 sai por `node portal\scripts\restaurar-backup.mjs --data AAAA-MM-DD`, com a
 operação parada.
 
@@ -607,7 +595,7 @@ Consequências práticas:
   abriu a tabela errada.
 
 Para configurar ou trocar o relatório: edite as duas chaves no `portal.env` e
-reinicie a operação pela central. Os valores são lidos quando o Portal sobe;
+execute `supv parar` e `supv iniciar`. Os valores são lidos quando o Portal sobe;
 não é preciso recompilar. Se as chaves estiverem ausentes ou forem
 inválidas, a aba informa que o relatório está temporariamente indisponível. O
 endereço real nunca deve ser colocado em arquivo versionado.
@@ -701,18 +689,18 @@ Restrinja o acesso a rede empresarial confiavel. Para trafegar fora dessa rede,
 homologue HTTPS no proxy, cookies seguros e a origem do Portal antes de liberar
 acesso. Esta correcao nao instala certificados nem altera a rede do servidor.
 
-Para preparar uma semente pela central e levar a operação ao servidor, siga
+Para preparar uma semente com `supv` e levar a operação ao servidor, siga
 [Assistente de migração](MIGRAR.md). A opção Migração definitiva bloqueia
 novos inícios no notebook; o guia explica como voltar atrás com segurança.
 
 ## Parar a tarefa e atualizar sua senha
 
-**Pare pela central e aguarde o encerramento.** Não use Parar no Agendador:
+**Execute `supv parar` e aguarde o encerramento.** Não use Parar no Agendador:
 o Windows pode encerrar somente o supervisor e deixar processos de e-mail,
 relatórios ou Portal vivos. Na próxima partida, o supervisor encerra os processos
 órfãos identificados pelos caminhos desta instalação; não encerra outros Node.
 
-Se a tarefa usa conta de domínio e a senha mudou, pare pela central e abra
+Se a tarefa usa conta de domínio e a senha mudou, execute `supv parar` e abra
 PowerShell como administrador na pasta da instalação:
 
 ```powershell
@@ -720,7 +708,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\configurar-inici
 ```
 
 Informe a senha nova, aguarde as permissões e a confirmação de sucesso. Inicie
-pela central e confira os serviços e o backup. Quando a TI liberar SYSTEM pela
+com `supv` e confira os serviços e o backup. Quando a TI liberar SYSTEM pela
 conta de computador no compartilhamento e no NTFS, use o mesmo comando sem
 `-ContaPersonalizada` para voltar a SYSTEM. A senha não é gravada em arquivo
 ou log pelo Supply Vision; o Windows guarda as credenciais da tarefa.
@@ -731,25 +719,25 @@ ou log pelo Supply Vision; o Windows guarda as credenciais da tarefa.
 A conta da tarefa deve ser **administradora local**; a configuração valida isso
 e a homologação mostra a condição. A TI também deve liberar o logon em lote e
 a escrita da conta no compartilhamento e no NTFS. Se a senha mudar ou expirar,
-a tarefa poderá deixar de iniciar. A central e a homologação explicam o erro;
+a tarefa poderá deixar de iniciar. `supv status` e `supv homologar` explicam o erro;
 consulte a seção “A conta da tarefa não consegue entrar” em SOCORRO.md.
 
 Abra PowerShell como administrador e execute novamente
 `.\scripts\configurar-inicializacao.ps1 -Modo computador -ContaPersonalizada`.
-Informe a senha atual, inicie pela central e confira o Portal e o backup.
+Informe a senha atual, execute `supv iniciar` e confira o Portal e o backup.
 Quando a TI liberar a conta do computador, rode o mesmo comando sem
 `-ContaPersonalizada` para voltar a SYSTEM. O grupo de operadores é preservado.
 
-Pare sempre pela **central**, não pelo Agendador. Se a limpeza de órfãos não
+Pare sempre com `supv parar`, não pelo Agendador. Se a limpeza de órfãos não
 conseguir ler ou encerrar um processo, a partida segue e registra um aviso no
 log e para o administrador (quando e-mail habilitado); confira permissões e
-portas na central elevada. O Node das ações e da atualização vem da instalação
+portas em terminal como administrador. O Node das ações e da atualização vem da instalação
 da máquina. Falha somente na cópia de rede do backup pré-atualização não impede
 a troca: a cópia local íntegra é preservada e o aviso exige verificar a rede.
 
 O Windows aplica novos membros do grupo de operadores numa nova sessão.
-Se precisar usar a central sem elevação após configurar o grupo, no modo
-sem login entre novamente no Windows; a tarefa continua fora da sessão RDP.
+Para consultar estado e logs após configurar o grupo, entre novamente no Windows;
+a tarefa continua fora da sessão RDP. Comandos de controle da tarefa exigem elevação.
 
 ## Retenção de registros operacionais
 

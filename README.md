@@ -17,8 +17,8 @@ migrado para um servidor dedicado.
 
 ## O dia a dia
 
-Abra **`Supply Vision.bat`** para iniciar, parar e atualizar a operação, validar
-configuração e conferir backups. Acesse o Portal pelo endereço da instalação.
+Use `supv iniciar`, `supv parar`, `supv atualizar`, `supv config validar` e
+`supv backup testar` para controlar e conferir a operação. Acesse o Portal pelo endereço da instalação.
 Administradores executam os relatórios e recortes históricos na aba **Relatórios**,
 com acompanhamento e download. Recortes não enviam e-mail e seus arquivos
 expiram após 24 horas. Veja [o guia de operação](docs/OPERAR.md).
@@ -28,8 +28,8 @@ expiram após 24 horas. Veja [o guia de operação](docs/OPERAR.md).
 | Quero | Comando | Onde |
 |---|---|---|
 | Instalar pela primeira vez | `INSTALAR.bat` | [docs/INSTALAR.md](docs/INSTALAR.md) |
-| Receber uma melhoria | `Supply Vision.bat` → Atualizar sistema | [docs/OPERAR.md](docs/OPERAR.md) |
-| Resolver um problema | `Supply Vision.bat` → Validar | [docs/SOCORRO.md](docs/SOCORRO.md) |
+| Receber uma melhoria | `supv atualizar` | [docs/OPERAR.md](docs/OPERAR.md) |
+| Resolver um problema | `supv config validar` | [docs/SOCORRO.md](docs/SOCORRO.md) |
 
 ## Regra de dados
 
@@ -42,10 +42,10 @@ copiados entre máquinas.
 ## Desenvolvimento
 
 As correções são feitas nesta raiz, commitadas e publicadas. O computador
-servidor apenas recebe versões pelo `atualizar-servidor.ps1`; ele nunca deve
+servidor apenas recebe versões por `supv atualizar`; ele nunca deve
 ter alteração local.
 
-A versão em uso é o commit: a central mostra o hash e a data.
+A versão em uso é o commit: `supv status` mostra o hash e a data.
 
 ## Operacao via LAN e futura hospedagem completa
 

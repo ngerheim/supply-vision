@@ -12,7 +12,7 @@ instalar, operar o conjunto ou socorrer a operação, veja `docs/` na raiz.
 
 ## Como abrir
 
-A operação é iniciada e encerrada pela central **`Supply Vision.bat`**, na raiz
+A operação é iniciada com `supv iniciar` e encerrada com `supv parar`, na raiz
 do produto. Ela controla o Portal, os e-mails, os Alertas e os backups.
 
 Em outro computador, `localhost` aponta para aquele computador, não para o
@@ -74,7 +74,7 @@ novo nome sem migração de perfil. As permissões são verificadas também na A
   e localidades.
 - **Histórico** *(Admin)* — tudo que foi alterado, por quem e quando, com
   filtros e paginação de 50.
-- **Manutenção** *(todos)* — relatório de manutenção no Power BI; não é o modo de pausa da central.
+- **Manutenção** *(todos)* — relatório de manutenção no Power BI; não é o modo de pausa `supv manutencao on`.
 - **Relatórios** *(Admin)* — gerar/enviar relatório diário e recorte sem e-mail,
   fila, registros e download válido por 24 horas para históricos. Veja [operação](../docs/OPERAR.md#relatórios-no-portal).
 - **E-mails** *(Admin)* — fila de notificações dos chamados.
@@ -201,7 +201,7 @@ data, o que impede duplicidade após reinício.
 O portal no ar é a **versão compilada**. Alterar o código e reiniciar mantém a
 versão antiga.
 
-Use **`Supply Vision.bat` → Atualizar sistema** (`scripts/atualizar-servidor.ps1`).
+Use `supv atualizar` (`scripts/atualizar-servidor.ps1`).
 Ele faz backup do banco, recebe a versão nova, reinstala dependências, compila,
 testa e religa a operação. Se algo falhar, volta ao código anterior e, se a
 versão nova já tiver rodado sobre o banco, restaura o backup feito antes da
@@ -308,7 +308,7 @@ e preservar essa proteção; não habilite `TRUSTED_PROXY` sem o proxy confiáve
 ## Backup e recuperação
 
 A rotina de backup (cópia local e na rede, histórico de 7 dias, comprovante por
-e-mail) e a restauração pela central estão em
+e-mail) e a restauração com `supv backup restaurar` estão em
 [`docs/OPERAR.md`](../docs/OPERAR.md#backup), que é a única fonte desse
 assunto; este arquivo não repete o procedimento para os dois não divergirem.
 
@@ -352,7 +352,7 @@ Arquivos e relatórios sintéticos ficam em `work/`, fora do Git.
 
 ## Acesso pela rede
 
-`Restringir Acesso da Rede.cmd` fecha o acesso pela LAN sem apagar dados.
+`supv firewall restringir` fecha o acesso pela LAN sem apagar dados.
 `scripts/abrir-firewall-lan.ps1` libera a porta 3000, que o instalador não abre
 por conta própria.
 

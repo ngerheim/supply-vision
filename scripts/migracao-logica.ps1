@@ -5,12 +5,12 @@ function Parar-ParaMigracao([string]$Privado) {
  New-Item -ItemType File -Force (Join-Path $op 'parar.sinal')|Out-Null
  $limite=(Get-Date).AddSeconds(90)
  while(!(Testar-SupervisorEncerrado $Privado)){
-  if((Get-Date)-ge$limite){throw 'A operacao nao parou. Abra a central como administrador e pare antes de tentar novamente.'}
+  if((Get-Date)-ge$limite){throw 'A operacao nao parou. Execute supv parar em terminal como administrador antes de tentar novamente.'}
   Start-Sleep 1
  }
 }
 function Preparar-Migracao([string]$Raiz,[string]$Privado,[string]$Startup,[string]$Destino,[ValidateSet('ensaio','definitiva')][string]$Modo) {
- if(!(Testar-Elevacao)){throw 'Preparar migracao exige abrir a central como administrador.'}
+ if(!(Testar-Elevacao)){throw 'Preparar migracao exige executar supv migrar em terminal como administrador.'}
  if(Test-Path (Join-Path $Privado 'operacao\migrada.sinal')){throw 'Esta instalacao foi migrada para outro servidor'}
  New-Item -ItemType Directory -Force $Destino|Out-Null
  $t=Obter-TarefaSupplyVision $Raiz

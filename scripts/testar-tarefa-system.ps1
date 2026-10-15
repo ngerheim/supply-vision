@@ -41,8 +41,7 @@ try{
  [IO.File]::WriteAllText((Join-Path $pasta 'scripts\supervisor.ps1'),$falso)
  Copy-Item (Join-Path $PSScriptRoot 'notificacao.ps1') (Join-Path $pasta 'scripts\notificacao.ps1')
  $node=(Get-Command node.exe).Source
- [IO.File]::WriteAllText((Join-Path $pasta 'PARAR.bat'),"@echo off`r`ntype nul > `"$(Join-Path $privado 'operacao\parar.sinal')`"`r`nexit /b 0`r`n",[Text.Encoding]::ASCII)
- # Mesma ativacao usada pela central, com diretorios exclusivamente ficticios.
+ # Mesma ativacao usada pelo supv, com diretorios exclusivamente ficticios.
  $criou=$true
  Definir-ModoInicializacao $pasta $privado $startup 'computador' $node
  if(Test-Path $startup){throw 'Ativacao manteve atalho de login.'}
@@ -54,7 +53,7 @@ try{
  if($st.toast-or!(Get-Content (Join-Path $privado 'operacao\supervisor.log') -Raw).Contains('sem sessao interativa')){throw 'Notificacao SYSTEM nao foi suprimida e registrada.'}
  if($st.conta-ne'S-1-5-18'-or!$st.semLogin){throw 'Supervisor nao executou como SYSTEM sem login.'}
  # O runner precisa ler e escrever os arquivos deixados pela SYSTEM.
- Set-Content (Join-Path $privado 'operacao\central-escreveu') 'ok'
+ Set-Content (Join-Path $privado 'operacao\operador-escreveu') 'ok'
  if(Testar-SupervisorEncerrado $privado){throw 'Trava SYSTEM nao foi observada pelo runner.'}
  Iniciar-OperacaoConfigurada $pasta # IgnoreNew evita outra instancia.
  Start-Sleep -Milliseconds 500

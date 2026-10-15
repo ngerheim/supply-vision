@@ -6,7 +6,7 @@ O ensaio de acesso registrado neste documento não substitui o SQLite nem
 os cadastros de produção. A funcionalidade atual de relatórios acrescenta
 as tabelas `report_jobs` e `report_runner` automaticamente, preservando os dados existentes.
 As operações normais de login continuam registrando sessões e auditoria.
-Após integrar os commits na main, atualizar pelo Supply Vision.bat no servidor.
+Após integrar os commits na main, executar `supv atualizar` no servidor.
 
 O carregamento de consulta omite métricas administrativas, cadastro de unidades
 e marcas e dados cadastrais de fornecedores que essas telas não usam. O detalhe

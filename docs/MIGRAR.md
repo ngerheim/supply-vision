@@ -22,8 +22,8 @@ resolver. O assistente reutiliza a instalação, a semente e a tarefa já existe
 
 ## Primeiro: fazer um ensaio
 
-1. No notebook, abra a central como administrador. Clique **Preparar migração**.
-2. Escolha **Sim — Semente para ensaio**. Escolha uma pasta no pen drive.
+1. No notebook, abra um terminal como administrador.
+2. Execute `supv migrar --destino "E:\semente" --modo ensaio`, ajustando a pasta do pen drive.
    A operação para para copiar o banco de maneira consistente e depois inicia
    novamente. O notebook continua sendo a produção.
 3. Leve a pasta inteira ao servidor: o zip, `MIGRAR.bat` e `migrar.ps1`.
@@ -63,8 +63,8 @@ um relatório novo execute `scripts/homologar.ps1`.
    `privado.ensaio-<data>-<identificador>`. **Nada é apagado**. A pasta tem dados e
    credenciais: mantenha-a protegida. Essa opção recusa instalações sem
    `MODO_ENSAIO=1`. A fila pendente do ensaio nunca deve virar produção.
-2. No notebook, clique **Preparar migração**, escolha **Não — Migração definitiva**
-   e confirme a pasta do pen drive. A operação para, prepara a semente e remove
+2. No notebook, execute `supv migrar --destino "E:\semente" --modo definitiva`
+   como administrador, ajustando a pasta do pen drive. Digite `MIGRAR` para confirmar. A operação para, prepara a semente e remove
    a inicialização automática desta instalação (tarefa e atalho do usuário).
    O marcador `privado/operacao/migrada.sinal` bloqueia novas inicializações.
 3. Leve os três arquivos novos ao servidor. Execute novamente `MIGRAR.bat` e
@@ -75,8 +75,8 @@ um relatório novo execute `scripts/homologar.ps1`.
 
 Para voltar atrás: primeiro pare a operação do servidor e desligue sua
 inicialização automática. No notebook, remova **apenas**
-`privado/operacao/migrada.sinal`, escolha o modo de inicialização na central
-como administrador e inicie. Isso recupera os dados da origem no instante da
+`privado/operacao/migrada.sinal`, configure `supv modo computador` ou `supv modo login` em terminal como administrador
+e execute `supv iniciar`. Isso recupera os dados da origem no instante da
 semente; alterações feitas no servidor depois da troca exigem avaliação antes
 por alguém responsável pelo banco. Confira também atalhos de outros usuários.
 
@@ -94,7 +94,7 @@ mas a disponibilidade da pasta de rede é conferida com a conta da sessão RDP;
 o teste de escrita como SYSTEM é a etapa separada do assistente. Ele mascara
 segredos e e-mails, omite dados das entregas e mostra só as últimas dez linhas
 dos logs operacionais. A presença de um backup não comprova sua integridade;
-use a opção **Testar backup** da central para isso.
+execute `supv backup testar` para isso.
 
 ## Antivirus antes do ensaio
 
@@ -113,7 +113,7 @@ na janela de credenciais. Outra tarefa temporária testa essa conta antes da
 configuração definitiva. A senha não vai para arquivos, logs nem checkpoint.
 Ao retomar, pode ser necessário informá-la novamente.
 
-**Se a senha da conta mudar, reconfigure a tarefa.** Pela central, pare a operação
+**Se a senha da conta mudar, reconfigure a tarefa.** Execute `supv parar`
 e aguarde encerrar. Em PowerShell como administrador, na pasta da instalação:
 
 ```powershell
@@ -121,6 +121,6 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\configurar-inici
 ```
 
 Informe a senha nova, aguarde o ajuste das permissões e a mensagem de sucesso.
-Inicie pela central e confira o Portal e o backup. Para voltar a SYSTEM depois
+Execute `supv iniciar` e confira o Portal e o backup. Para voltar a SYSTEM depois
 que a TI liberar a conta de computador no compartilhamento e no NTFS, repita o
 comando **sem `-ContaPersonalizada`**. Consulte OPERAR.

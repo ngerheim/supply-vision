@@ -104,7 +104,6 @@ if(Test-Path (Join-Path $Privado 'portal\backups\portal-atual.sqlite')){Rodar $N
 Instalar-ComandoSupv $Raiz
 Write-Host "`nSupply Vision instalado e validado." -ForegroundColor Green
 $Startup=Join-Path ([Environment]::GetFolderPath('Startup')) 'Supply Vision.cmd'
-$Inicio=Join-Path $Raiz 'INICIAR.bat'
 if(Testar-Elevacao){[void](Preparar-GrupoOperadores)}
 if(!$ModoInicializacao-and(Obter-TarefaSupplyVision $Raiz)){Write-Host 'Modo sem login existente preservado.';exit 0}
 if($ModoInicializacao){
@@ -112,6 +111,6 @@ if($ModoInicializacao){
  Definir-ModoInicializacao $Raiz $Privado $Startup $ModoInicializacao -Credencial $credencial
  Write-Host "Modo de inicializacao configurado: $ModoInicializacao";exit 0
 }
-$linha="@echo off`r`nstart `"`" `"$Inicio`"`r`n"
+$linha=Montar-InicializacaoLogin $Raiz
 [IO.File]::WriteAllText($Startup,$linha,[Text.Encoding]::ASCII)
 Write-Host 'Inicializacao automatica no login do Windows configurada.'

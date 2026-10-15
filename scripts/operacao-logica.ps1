@@ -292,7 +292,7 @@ function Obter-PortaPortalLocal([hashtable]$Config) {
  return $porta
 }
 
-# A mesma barreira protege a central e o atualizador: PID/trava E portas.
+# A mesma barreira protege o supv e o atualizador: PID/trava E portas.
 function Parar-Operacao([string]$Raiz,[int]$Limite=60) {
  $privado=Obter-PastaPrivada $Raiz
  $op=Join-Path $privado 'operacao'

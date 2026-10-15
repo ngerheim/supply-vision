@@ -17,7 +17,7 @@ function Exigir-StringsDuplasAscii([string]$Codigo,[string]$Nome) {
   }
  }
 }
-foreach($nome in @('preparar-atualizacao.ps1','atualizacao-preparo.ps1','atualizar-servidor.ps1','limpar-preparo-assincrono.ps1','supv.ps1')){
+foreach($nome in @('preparar-atualizacao.ps1','atualizacao-preparo.ps1','atualizar-servidor.ps1','limpar-preparo-assincrono.ps1','supv.ps1','inicializacao-logica.ps1','administracao-logica.ps1','testar-console-supv.ps1')){
  $codigoAscii=[IO.File]::ReadAllText((Join-Path $PSScriptRoot $nome))
  Exigir-StringsDuplasAscii $codigoAscii $nome
  # Simula a leitura ANSI do PS5.1 de uma copia UTF8 sem BOM, tambem no PS7.
