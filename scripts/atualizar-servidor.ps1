@@ -292,7 +292,7 @@ function Reverter([string]$motivo) {
       Write-Host '!! ============================================================' -ForegroundColor Red
       Write-Host '!! O BANCO NAO FOI RESTAURADO. A operacao permanece PARADA.' -ForegroundColor Red
       Write-Host "!! Copia de antes da atualizacao: $BackupAntesAtualizacao" -ForegroundColor Red
-      Write-Host '!! Siga docs\SOCORRO.md (restauracao do banco) antes de religar.' -ForegroundColor Red
+      Write-Host '!! Siga AGENTS.md#diagnostico-e-recuperacao (restauracao do banco) antes de religar.' -ForegroundColor Red
       Write-Host '!! ============================================================' -ForegroundColor Red
       throw 'Banco nao restaurado; troca de codigo cancelada. Operacao permanece parada.'
     }
@@ -530,7 +530,7 @@ if (-not $JaAtualizado) {
   if ($rcFilho -ne 0) {
     $contexto = Ler-EstadoOperacao $ContextoArquivo
     if ($contexto.fase -in @('revertido','recuperando')) {
-      if ($contexto.fase -eq 'recuperando') { Aviso 'A recuperacao do filho nao concluiu. Operacao permanece parada; confira docs/SOCORRO.md.' }
+      if ($contexto.fase -eq 'recuperando') { Aviso 'A recuperacao do filho nao concluiu. Operacao permanece parada; confira AGENTS.md#diagnostico-e-recuperacao.' }
       exit $rcFilho
     }
     $NovaVersaoIniciada = $contexto.fase -eq 'iniciada'
@@ -668,7 +668,7 @@ exit 0
       catch { $NovaVersaoIniciada = $true }
     }
     try { Reverter $falha.Exception.Message }
-    catch { Write-Host "RECUPERACAO FALHOU: $($_.Exception.Message). Nao religue antes de conferir docs/SOCORRO.md." -ForegroundColor Red }
+    catch { Write-Host "RECUPERACAO FALHOU: $($_.Exception.Message). Nao religue antes de conferir AGENTS.md#diagnostico-e-recuperacao." -ForegroundColor Red }
   } elseif (!$CodigoTrocado -and !$Recuperando -and $script:ParadaSolicitada) {
     # Inclui a parada incompleta: reabilita antes de tentar retomar.
     try { Recuperar-OperacaoAntesDaTroca $Raiz $script:TarefaSemLogin $OperacaoEstavaAtiva }

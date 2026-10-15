@@ -37,7 +37,7 @@ for (const evento of Object.keys(EVENTOS_ADMIN)) void test(`${evento}: envia uma
   assert.deepEqual(mensagem.to, ['um@example.com', 'dois@example.com']);
   assert.deepEqual(mensagem.from, { name: config.EMAIL_FROM_NAME, address: config.SMTP_USER });
   assert.match(mensagem.subject, /^\[Supply Vision\] .+ — .+/);
-  assert.match(mensagem.text, /Data\/hora:/); assert.match(mensagem.text, /O que fazer:/); assert.match(mensagem.text, /docs\/SOCORRO\.md/);
+  assert.match(mensagem.text, /Data\/hora:/); assert.match(mensagem.text, /O que fazer:/); assert.match(mensagem.text, /AGENTS\.md/);
   assert.ok(mensagem.text.includes(EVENTOS_ADMIN[evento].secao));
   assert.ok(!JSON.stringify(mensagem).includes(config.SMTP_PASSWORD));
   assert.equal(await enviarAvisoAdmin(evento, { ...opcoes, agora: new Date(instante.getTime() + 60 * 60_000) }), 'enviado');
@@ -97,11 +97,13 @@ void test('controle corrompido impede envio e nao altera outros bancos', async t
 });
 
 void test('mensagens usam somente conteudo fixo, maquina e horario e apontam secoes existentes', () => {
-  const manual = fs.readFileSync(new URL('../../docs/SOCORRO.md', import.meta.url), 'utf8');
+  const manual = fs.readFileSync(new URL('../../AGENTS.md', import.meta.url), 'utf8');
   for (const [evento, dados] of Object.entries(EVENTOS_ADMIN)) {
     assert.ok(manual.includes(`## ${dados.secao}`));
+    assert.equal(dados.ancora, dados.secao.toLowerCase().replaceAll(' ', '-'));
     const mensagem = montarAviso(evento, instante, 'SERVIDOR-TESTE');
     assert.equal(mensagem.subject, `[Supply Vision] ${dados.nome} — SERVIDOR-TESTE`);
+    assert.ok(mensagem.text.includes(`main/AGENTS.md#${dados.ancora}`));
     assert.match(mensagem.text, /08\/10\/2026/); assert.match(mensagem.text, /11:00:00/);
   }
 });

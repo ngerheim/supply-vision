@@ -14,6 +14,8 @@ export function arquivoSqliteLocal(persistencia) {
 }
 
 /** @param {{ persistencia?: string, token: string, arquivo?: string | null, pastaRestauracao?: string | null }} options */
+// Serializa apenas este executor; consumidores e expurgo tem outras conexoes.
+// WAL coordena leitores, mas o segundo escritor ainda pode exceder busy_timeout.
 export function criarServidorSqlite({ persistencia, token, arquivo = null, pastaRestauracao = null }) {
   if (!token || token.length < 32) throw new Error('SQLite local exige token interno.');
   let db, liberarRestauracao;
