@@ -137,7 +137,7 @@ try {
  $linhaModo=if($ci.rapido){"PREPARAR: modo rapido - $($ci.motivo)"}else{"PREPARAR: modo completo - motivo: $($ci.motivo)"}
  Write-Host $linhaModo
  try{Add-Content (Join-Path $Raiz 'preparo-tempos.log') $linhaModo -Encoding UTF8;if($publicarTempos){Add-Content $TemposArquivo $linhaModo -Encoding UTF8}}catch{}
- Publicar-AndamentoAtualizacao $script:AndamentoPreparo 'PREPARAR / Build do Portal' -Modo $modo
+ Publicar-AndamentoAtualizacao $script:AndamentoPreparo 'PREPARAR / Build do Portal' -Modo $modo -MotivoModo $ci.motivo
  Push-Location $portal
  try{
   Executar-Preparo {& npm.cmd run build} 'Build do Portal falhou no preparo.'
