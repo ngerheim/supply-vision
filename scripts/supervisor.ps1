@@ -20,12 +20,12 @@ try { $LockHandle=[IO.File]::Open($LockFile,[IO.FileMode]::OpenOrCreate,[IO.File
 catch { Write-Host 'A operacao ja esta ativa.'; exit 0 }
 $PidFile=Join-Path $Operacao 'supervisor.pid.json';$EstadoFile=Join-Path $Operacao 'estado.json';$StatusFile=Join-Path $Operacao 'status.json';$PararFile=Join-Path $Operacao 'parar.sinal';$Log=Join-Path $Operacao 'supervisor.log'
 # Registrar nunca pode derrubar a operacao: o log pode estar aberto por quem o
-# le (central, antivirus, editor) no instante da gravacao.
+# le (supv, antivirus, editor) no instante da gravacao.
 function Log([string]$m){$l="$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')  $m";if($Visivel){Write-Host $l};try{Add-Content $Log $l -Encoding UTF8;$linhas=@(Get-Content $Log -ErrorAction SilentlyContinue);if($linhas.Count-gt1200){$linhas|Select-Object -Last 1000|Set-Content $Log -Encoding UTF8}}catch{}}
 $avisosLimitados=@{}
 function Log-Limitado([string]$chave,[string]$m,[int]$minutos){$agora=Get-Date;if($avisosLimitados[$chave]-and$agora-lt$avisosLimitados[$chave].AddMinutes($minutos)){return};$avisosLimitados[$chave]=$agora;Log $m}
 # Grava por arquivo temporario e troca, com novas tentativas. Arquivo em uso
-# por um leitor (central.ps1, antivirus) e transitorio: devolve $false em vez
+# por um leitor (supv status, antivirus) e transitorio: devolve $false em vez
 # de lancar, e quem chamou decide se registra e segue.
 function Gravar-Tolerante([string]$caminho,[string]$texto){
  for($t=1;$t-le5;$t++){
@@ -147,7 +147,7 @@ try{
   if($config['EXPURGO_HABILITADO']-eq'1'-and!$manutencao-and!$expurgo){$d=Obter-SlotDevido 'expurgo' $config.LIMPEZA_HORARIO $estado (Get-Date);if($d-and(Pode-Tentar 'expurgo')){$estado['tentativa-expurgo']=(Get-Date).ToString('o');$expurgoChave=$d.chave;$expurgo=Start-Process $Node -ArgumentList @('--experimental-strip-types','scripts\expurgar-dados.mjs') -WorkingDirectory $Portal -WindowStyle Hidden -PassThru;Log 'Expurgo iniciado com backup local previo.';Salvar-Estado}}
   $livreGb=[math]::Round((Get-Item $Raiz).PSDrive.Free/1GB,1);$disco=if($livreGb-lt[double]$config.ESPACO_MINIMO_GB){'baixo'}else{'ok'}
   $hoje=(Get-Date).ToString('yyyy-MM-dd');if($disco-eq'baixo'-and$estado['aviso-disco']-ne$hoje){Log "ALERTA: apenas $livreGb GB livres no disco.";Avisar-Administrador $avisosAdmin 'disco-baixo';$estado['aviso-disco']=$hoje;Salvar-Estado}
-  @{atualizado=(Get-Date).ToString('o');ensaio=$ensaio;portal=!!($processos['portal']-and!$processos['portal'].HasExited);emails=!!($processos['emails']-and!$processos['emails'].HasExited);relatorios=!!($processos['relatorios']-and!$processos['relatorios'].HasExited);alertas=if($alerta){'executando'}elseif($manutencao){'pausados'}else{'aguardando'};backup=if($backup){'executando'}elseif($manutencao){'pausado'}else{'aguardando'};limpeza=if($limpeza){'executando'}elseif($manutencao){'pausada'}else{'aguardando'};manutencao=$manutencao;espacoLivreGb=$livreGb;disco=$disco}|ConvertTo-Json -Compress|ForEach-Object{if(!(Gravar-Tolerante $StatusFile $_)){Log-Limitado 'status' 'AVISO: status.json em uso por outro processo; a central pode mostrar a situacao com atraso.' 60}}
+  @{atualizado=(Get-Date).ToString('o');ensaio=$ensaio;portal=!!($processos['portal']-and!$processos['portal'].HasExited);emails=!!($processos['emails']-and!$processos['emails'].HasExited);relatorios=!!($processos['relatorios']-and!$processos['relatorios'].HasExited);alertas=if($alerta){'executando'}elseif($manutencao){'pausados'}else{'aguardando'};backup=if($backup){'executando'}elseif($manutencao){'pausado'}else{'aguardando'};limpeza=if($limpeza){'executando'}elseif($manutencao){'pausada'}else{'aguardando'};manutencao=$manutencao;espacoLivreGb=$livreGb;disco=$disco}|ConvertTo-Json -Compress|ForEach-Object{if(!(Gravar-Tolerante $StatusFile $_)){Log-Limitado 'status' 'AVISO: status.json em uso por outro processo; supv status pode mostrar a situacao com atraso.' 60}}
   }catch{Log-Limitado ("volta:"+$_.Exception.Message) "ERRO na volta do supervisor (a operacao segue): $($_.Exception.Message) | Origem: $($_.ScriptStackTrace -replace '\s*\r?\n\s*',' | ')" 10}
   # Dorme em fatias de 1s para enxergar o pedido de parada logo, em vez de
   # deixar quem pediu esperando ate 15s sem sinal de vida.

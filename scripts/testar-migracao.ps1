@@ -37,11 +37,10 @@ try{
  try{
   $env:SUPPLY_VISION_PRIVADO=$pasta;$bloqueou=$false
   try{Iniciar-OperacaoConfigurada (Split-Path $PSScriptRoot)}catch{$bloqueou=$_.Exception.Message-like'*migrada*'}
-  Exigir $bloqueou 'central recusa inicio configurado antes de consultar tarefa'
+  Exigir $bloqueou 'supv recusa inicio configurado antes de consultar tarefa'
  }finally{$env:SUPPLY_VISION_PRIVADO=$privadoAnterior}
  $raiz=Split-Path $PSScriptRoot
- Exigir ((Get-Content (Join-Path $raiz 'INICIAR.bat') -Raw)-match'Exigir-InstalacaoNaoMigrada') 'BAT usa guarda'
- Exigir ((Get-Content (Join-Path $PSScriptRoot 'administracao-logica.ps1') -Raw)-match'Iniciar-OperacaoConfigurada') 'central usa guarda'
+ Exigir ((Get-Content (Join-Path $PSScriptRoot 'administracao-logica.ps1') -Raw)-match'Iniciar-OperacaoConfigurada') 'supv usa guarda'
  Exigir ((Get-Content (Join-Path $PSScriptRoot 'inicializacao-logica.ps1') -Raw)-match'Exigir-InstalacaoNaoMigrada') 'inicio configurado usa guarda'
  # Origem com componentes simulados: orquestrador real, sem tocar tarefa ou dados reais.
  $raizFalsa=Join-Path $pasta 'origem';New-Item -ItemType Directory -Force (Join-Path $raizFalsa 'scripts')|Out-Null

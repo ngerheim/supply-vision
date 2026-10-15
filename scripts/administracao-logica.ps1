@@ -15,19 +15,7 @@ function Testar-ConclusaoAtualizacao($Codigo,[string]$Saida){
 function Filtrar-AvisosAtualizacao($Linhas){
  return @($Linhas|Where-Object {$_-notmatch'(?i)\b(INEFFECTIVE_DYNAMIC_IMPORT|PLUGIN_TIMINGS)\b|^\s*npm\s+warn\b|^\s*(WARNING|AVISO): Nao foi possivel gravar a medicao'})
 }
-# Consultas e comandos da central executados em runspaces, nunca na thread WinForms.
-function Registrar-DiagnosticoCentral([string]$Privado,[string]$Texto){
- try{
-  $pasta=Join-Path $Privado 'operacao';[void][IO.Directory]::CreateDirectory($pasta)
-  $arquivo=Join-Path $pasta 'central-diagnostico.log'
-  if((Test-Path -LiteralPath $arquivo)-and(Get-Item -LiteralPath $arquivo).Length-gt524288){
-   $ultimas=@(Get-Content -LiteralPath $arquivo -Encoding UTF8|Select-Object -Last 300)
-   [IO.File]::WriteAllLines($arquivo,$ultimas,(New-Object Text.UTF8Encoding($false)))
-  }
-  [IO.File]::AppendAllText($arquivo,((Get-Date -Format 'yyyy-MM-dd HH:mm:ss')+' '+$Texto+[Environment]::NewLine),(New-Object Text.UTF8Encoding($false)))
- }catch{} # Medicao nao pode impedir leitura nem acao.
-}
-function Consultar-TarefaCentral([string]$Raiz,[string]$Privado,[string]$Startup,[switch]$SomenteLeitura){
+function Consultar-TarefaAdministrada([string]$Raiz,[string]$Startup){
  $total=[Diagnostics.Stopwatch]::StartNew();$medir=[Diagnostics.Stopwatch]::StartNew();$t=$null;$info=$null;$tempoInfo=0;$resultado='ok';$aviso=''
  try{
   if(Get-Command Get-ScheduledTask -ErrorAction SilentlyContinue){
@@ -41,12 +29,11 @@ function Consultar-TarefaCentral([string]$Raiz,[string]$Privado,[string]$Startup
    $aviso=Obter-FalhaLogonTarefa ([long]$info.LastTaskResult)
   }
   $modo=if($t){'computador'}elseif($Startup-and(Test-Path -LiteralPath $Startup)){'login'}else{'desligado'}
- }catch{$tempoTarefa=if($null-eq$tempoTarefa){$medir.ElapsedMilliseconds}else{$tempoTarefa};$modo=$null;$resultado='erro';$aviso='Agendador indisponivel; consulte central-diagnostico.log e tente novamente.'}
+ }catch{$tempoTarefa=if($null-eq$tempoTarefa){$medir.ElapsedMilliseconds}else{$tempoTarefa};$modo=$null;$resultado='erro';$aviso='Agendador indisponivel; execute supv homologar e tente novamente.'}
  $total.Stop()
- if(!$SomenteLeitura){Registrar-DiagnosticoCentral $Privado "Central tarefa: total_ms=$($total.ElapsedMilliseconds); tarefa_ms=$tempoTarefa; tarefa_info_ms=$tempoInfo; resultado=$resultado."}
  return @{modo=$modo;aviso=$aviso;totalMs=$total.ElapsedMilliseconds;tarefaMs=$tempoTarefa;infoMs=$tempoInfo;resultado=$resultado}
 }
-function Consultar-EstadoCentral([string]$Privado,[double]$InterfaceMs=0,[bool]$Registrar=$false,[string]$Raiz,[switch]$SomenteLeitura){
+function Consultar-EstadoAdministrado([string]$Privado,[string]$Raiz){
  $total=[Diagnostics.Stopwatch]::StartNew();$medir=[Diagnostics.Stopwatch]::StartNew()
  $ativo=!(Testar-SupervisorEncerrado $Privado);$tempoSupervisor=$medir.ElapsedMilliseconds
  $medir.Restart();$st=$null;$estado='ok';$arquivo=Join-Path $Privado 'operacao/status.json'
@@ -57,14 +44,11 @@ function Consultar-EstadoCentral([string]$Privado,[double]$InterfaceMs=0,[bool]$
  $aviso=if($ensaio){Obter-AvisoEnsaio $true}else{Obter-AvisoBackup $Privado}
  $migrada=Test-Path -LiteralPath (Join-Path $Privado 'operacao/migrada.sinal')
  $tempoConfig=$medir.ElapsedMilliseconds;$versao=$null;$tempoGit=0
- if($Registrar-and$Raiz){$medir.Restart();$versao=Obter-VersaoAdministrada $Raiz;$tempoGit=$medir.ElapsedMilliseconds}
+ if($Raiz){$medir.Restart();$versao=Obter-VersaoAdministrada $Raiz;$tempoGit=$medir.ElapsedMilliseconds}
  $total.Stop()
- if(!$SomenteLeitura-and($Registrar-or$total.ElapsedMilliseconds-ge1000-or$estado-ne'ok')){
-  Registrar-DiagnosticoCentral $Privado "Central estado: total_ms=$($total.ElapsedMilliseconds); supervisor_ms=$tempoSupervisor; estado_ms=$tempoEstado; configuracao_ms=$tempoConfig; git_ms=$tempoGit; interface_ms=$([math]::Round($InterfaceMs,2)); resultado=$estado."
- }
  return @{ativo=$ativo;status=$st;ensaio=$ensaio;avisoBackup=$aviso;migrada=$migrada;totalMs=$total.ElapsedMilliseconds;supervisorMs=$tempoSupervisor;estadoMs=$tempoEstado;configMs=$tempoConfig;versao=$versao;gitMs=$tempoGit}
 }
-function Executar-AcaoCentral([string]$Raiz,[string]$Privado,[string]$Startup,[string]$Tipo,$Dados){
+function Executar-AcaoAdministrada([string]$Raiz,[string]$Privado,[string]$Startup,[string]$Tipo,$Dados){
  switch($Tipo){
   'iniciar' {Iniciar-OperacaoConfigurada $Raiz;return @{ok=$true}}
   'parar' {return @{ok=(Parar-Operacao $Raiz)}}
@@ -104,7 +88,7 @@ function Executar-AcaoCentral([string]$Raiz,[string]$Privado,[string]$Startup,[s
    $op=Join-Path $Privado 'operacao'
    $arquivoSaida=Join-Path $op 'atualizacao-processo-saida.log'
    if(!$Dados.saida){
-    # Central ja aberta antes da troca: o worker le o codigo novo, mas stdout
+    # Atualizador iniciado antes da troca: o worker le o codigo novo, mas stdout
     # ainda esta no nome legado. Escolhe a captura mais recente, nao os tempos.
     $captura=@('atualizacao-processo-saida.log','atualizacao-saida.log')|ForEach-Object {Get-Item -LiteralPath (Join-Path $op $_) -ErrorAction SilentlyContinue}|Where-Object {
      # Na G0, este nome tambem podia conter apenas medicoes do pai.
@@ -122,14 +106,14 @@ function Executar-AcaoCentral([string]$Raiz,[string]$Privado,[string]$Startup,[s
     $mensagem=@("Codigo de saida: $($Dados.codigo). Conclusao nao confirmada.";$(if($e){'ERRO:';$e});$(if($s){'ULTIMAS ETAPAS:';$s}))-join"`n"
     if(!$mensagem){$mensagem='Consulte os registros da operacao para mais detalhes.'}
    }
-   $andamento=Consultar-AndamentoCentral $Privado
+   $andamento=Consultar-AndamentoAdministrado $Privado
    if($andamento){$mensagem+="`n`nTempo total: $($andamento.totalSegundos) s.";if($andamento.resumo){$mensagem+="`n$($andamento.resumo)"}}
    return @{ok=$concluiu;mensagem=$mensagem;versao=$versao;andamento=$andamento}
   }
-  default {throw 'Comando da central desconhecido.'}
+  default {throw 'Comando de administracao desconhecido.'}
  }
 }
-function Consultar-AndamentoCentral([string]$Privado,[datetime]$Agora=[datetime]::UtcNow) {
+function Consultar-AndamentoAdministrado([string]$Privado,[datetime]$Agora=[datetime]::UtcNow) {
  try{
   $op=Join-Path $Privado 'operacao'
   $j=Get-Content -LiteralPath (Join-Path $op 'atualizacao-andamento.json') -Raw -Encoding UTF8 -ErrorAction Stop|ConvertFrom-Json -ErrorAction Stop

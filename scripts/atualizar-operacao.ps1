@@ -1,4 +1,4 @@
-# Worker independente compartilhado pela central e pelo sv. Nunca aguarda o cliente.
+# Worker independente usado pelo supv. Nunca aguarda o cliente.
 [CmdletBinding()]
 param([Parameter(Mandatory=$true)][ValidatePattern('^[0-9a-f]{32}$')][string]$Execucao,[switch]$Completo)
 $ErrorActionPreference='Stop'
@@ -13,7 +13,7 @@ try{
  $argumentos=@('-NoProfile','-ExecutionPolicy','Bypass','-File',(Join-Path $PSScriptRoot 'atualizar-servidor.ps1'))
  if($Completo){$argumentos+='-ForcarCompleto'}
  $linha=(@($argumentos|ForEach-Object {Proteger-ArgumentoAtualizacao $_})-join' ')
- # O worker possui as capturas. Fechar a CLI/central nao fecha os pipes nem
+ # O worker possui as capturas. Fechar a CLI nao fecha os pipes nem
  # interrompe a drenagem do stdout/stderr do atualizador (PS5.1).
  $filho=Start-Process powershell.exe -ArgumentList $linha -NoNewWindow -PassThru -RedirectStandardOutput $saida -RedirectStandardError $erro
  [void]$filho.Handle

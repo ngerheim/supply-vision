@@ -17,7 +17,7 @@ try{
   if($caso-eq'preparo-limpeza-falha'){Add-Content (Join-Path $raiz 'scripts/atualizacao-preparo.ps1') "function Remover-ArvorePreparo {throw 'Handle ficticio impediu limpeza.'}"}
   $fonte=[IO.File]::ReadAllText((Join-Path $fonteRaiz 'scripts/atualizar-servidor.ps1'))
   $fonte=$fonte.Replace("`$Python = Join-Path `$Alertas '.venv\Scripts\python.exe'", "`$Python = 'pythonmock'")
-  $fonte=$fonte.Replace("& (Join-Path `$Raiz 'INICIAR.bat') | Out-Null",'IniciarMock')
+  $fonte=$fonte.Replace('Start-Process powershell.exe -WindowStyle Hidden -ArgumentList', 'IniciarMock -ArgumentList')
   if($caso-in@('medicao-ausente','fumaca-sem-medicao')){
    # Perde contexto antes de PARAR, exportacao e health, inclusive no filho.
    $fonte=$fonte.Replace('Parar-OperacaoAtualizacao $PrazoParadaSegundos',('$script:MedicaoAtualizacao=$null; Parar-OperacaoAtualizacao $PrazoParadaSegundos'))

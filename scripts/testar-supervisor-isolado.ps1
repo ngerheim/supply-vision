@@ -188,7 +188,7 @@ if($Atraso){Start-Sleep -Seconds $Atraso} # Simula VM lenta, somente no teste.
   }
  }
 
- # status.json preso por outro processo (central, antivirus) durante mais de
+ # status.json preso por outro processo (supv, antivirus) durante mais de
  # uma volta: o supervisor registra aviso e segue; antes, encerrava tudo.
  Registrar-FaseSupervisorTeste 'status-bloqueado'
  $antes=$status.atualizado

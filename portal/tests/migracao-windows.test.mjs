@@ -28,7 +28,6 @@ void test('assistente Windows: semente, SYSTEM, health, homologacao e retomada',
     fs.mkdirSync(path.join(repo,'alertas/.venv/Scripts'),{recursive:true});
     fs.copyFileSync(path.join(root,'alertas/.venv/Scripts/python.exe'),path.join(repo,'alertas/.venv/Scripts/python.exe'));
     fs.copyFileSync(path.join(root,'alertas/.venv/pyvenv.cfg'),path.join(repo,'alertas/.venv/pyvenv.cfg'));
-    fs.copyFileSync(path.join(root,'INICIAR.bat'),path.join(repo,'INICIAR.bat'));
     // Componentes externos ao assistente: instalacao e firewall simulados.
     // A definicao/registro SYSTEM usam a funcao de producao.
     fs.writeFileSync(path.join(repo,'scripts/instalar.ps1'),`param($ModoInicializacao)
@@ -78,7 +77,7 @@ Preparar-Migracao $Raiz $Privado (Join-Path $Destino 'startup-ficticio.cmd') $De
     ps(preparar,['-Raiz',root,'-Privado',origem,'-Destino',dir,'-Modo','definitiva']);
     assert.ok(!fs.existsSync(path.join(origem,'retomou')));
     assert.ok(fs.existsSync(path.join(origem,'operacao/migrada.sinal')));
-    const bloqueio=comando(`$env:SUPPLY_VISION_PRIVADO='${origem.replaceAll("'","''")}'; & '${path.join(root,'INICIAR.bat').replaceAll("'","''")}'`).toString();
+    const bloqueio=comando(`$env:SUPPLY_VISION_PRIVADO='${origem.replaceAll("'","''")}'; . '${path.join(root,'scripts/inicializacao-logica.ps1').replaceAll("'","''")}'; try { Iniciar-OperacaoConfigurada '${root.replaceAll("'","''")}' } catch { Write-Output $_.Exception.Message }`).toString();
     assert.match(bloqueio,/migrada/);
     assert.ok(fs.existsSync(path.join(dir,'MIGRAR.bat')));
     assert.ok(fs.existsSync(path.join(dir,'migrar.ps1')));

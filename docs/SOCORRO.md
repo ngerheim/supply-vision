@@ -1,7 +1,6 @@
 # Socorro
 
-Comece com `supv status` e `supv config validar`. Como alternativa nesta fase,
-abra `Supply Vision.bat` e use **Validar configuração**. Consulte os arquivos em
+Comece com `supv status` e `supv config validar`. Consulte os arquivos em
 `privado/operacao/`; os registros de pedidos manuais também aparecem em **Portal → Relatórios**.
 **Não apague logs nem bancos durante o diagnóstico.**
 
@@ -49,13 +48,11 @@ Para restaurar, use `supv backup testar` e então
 `supv migrar --destino "E:\semente" --modo definitiva` exige digitar `MIGRAR` e
 bloqueia a origem; consulte [MIGRAR.md](MIGRAR.md) antes de executar.
 
-A central e os atalhos antigos continuam funcionando nesta fase. A restrição de
-rede também pode ser aberta por `portal/Restringir Acesso da Rede.cmd`, e o
-relatório pelo atalho de `scripts/homologar.ps1`.
+Use `supv firewall restringir` para restringir a rede e `supv homologar` para gerar o relatório.
 
 ## O Portal não responde na LAN
 
-1. Veja na central se está online ou reiniciando.
+1. Execute `supv status` para conferir o Portal.
 2. Confirme se abre em `http://localhost:3000` no próprio notebook.
 3. Consulte `privado/operacao/portal-erro.log` e `supervisor.log`.
 4. Se funciona localmente, o problema é IP ou firewall da LAN.
@@ -104,7 +101,7 @@ Veja [Quarentena dos Alertas](OPERAR.md#quarentena-dos-alertas).
 
 ## Os e-mails pararam
 
-1. Verifique o estado **E-mails** na central.
+1. Verifique o estado **E-mails** com `supv status`.
 2. Consulte `privado/operacao/emails-erro.log` e
    `privado/portal/logs/portal-email.log`.
 3. Valide o SMTP sem imprimir a senha.
@@ -113,14 +110,14 @@ Veja [Quarentena dos Alertas](OPERAR.md#quarentena-dos-alertas).
 ## O backup não chegou
 
 1. Consulte `supervisor.log` e o horário em `estado.json`.
-2. Use **Testar backup** na central.
+2. Execute `supv backup testar`.
 3. Confira o acesso ao `BACKUP_NETWORK_DIR` — credencial de rede que não
    sobrevive a reinício é causa comum.
 4. Se o backup estiver inválido, **não sobrescreva o banco atual**.
 
 ## Espaço em disco baixo
 
-A central mostra o espaço livre e o supervisor registra alerta abaixo de
+`supv status` mostra o espaço livre e o supervisor registra alerta abaixo de
 `ESPACO_MINIMO_GB`. A limpeza diária já apaga o que passou da retenção. Para
 lixo estrutural, rode `scripts\faxina.ps1` (com a operação parada, para que ele
 também recolha o rastreamento do wrangler).
@@ -132,8 +129,7 @@ mesmo `portal.env` que os Alertas leem — então os dois lados enxergam o mesmo
 valor e trocar a credencial não exige mais recompilar.
 
 Resta uma forma de eles discordarem: **chave repetida no `portal.env`**, com
-duas linhas `PORTAL_API_TOKEN` de valores diferentes. A **Validar configuração**
-da central recusa isso, e o build também.
+duas linhas `PORTAL_API_TOKEN` de valores diferentes. `supv config validar` recusa isso, e o build também.
 
 ```powershell
 $arq = (Resolve-Path '.\privado\portal\configuracao\portal.env').Path
@@ -144,7 +140,7 @@ Deve aparecer uma linha só. Se aparecerem duas, apague a sobrando e reinicie a
 operação — não é preciso recompilar.
 
 Se a linha é única e o 401 persiste, o Portal em execução subiu por um caminho
-que não entrega a credencial. Pare e inicie a operação pela central: quem
+que não entrega a credencial. Execute `supv parar` e `supv iniciar`: quem
 repassa é o `portal/scripts/iniciar-portal.mjs`, usado pelo `start:lan`.
 
 ## Recuperar a instalação do zero
@@ -174,7 +170,7 @@ desfazer manualmente uma versão que passou nos testes mas se comportou mal:
 git log --oneline -5
 git reset --hard <commit anterior>
 cd portal; npm.cmd run build; cd ..
-INICIAR.bat
+supv iniciar
 ```
 
 O `git reset` não mexe no banco (ele vive em `privado/`, que o Git ignora),
@@ -206,7 +202,7 @@ Ao final, registre horário, sintoma, ação tomada e arquivos preservados.
 
 ## Relatórios indisponíveis no Portal
 
-1. Confira se a operação foi iniciada na central e se o serviço aparece disponível na aba.
+1. Confira se a operação foi iniciada com `supv status` e se o serviço aparece disponível na aba.
 2. Consulte `privado/operacao/relatorios-erro.log` e `relatorios-saida.log`.
 3. Confira Python em `alertas/.venv/Scripts/python.exe`, `PORTAL_API_TOKEN` e se a porta interna está livre (padrão 3001).
 4. Se a tarefa falhou por execução concorrente, aguarde a rotina automática terminar.
@@ -239,11 +235,11 @@ Se o Wrangler mostrar apenas `write EOF`, confira o Microsoft Visual C++
 Redistributable 2015+ x64 e execute novamente o instalador: ele testa o workerd e
 explica se o motor não consegue iniciar. Reinicie após instalar o runtime se
 necessário. No PowerShell use `npm.cmd`, pois `npm.ps1` pode ser bloqueado pela
-política padrão. Para parar a operação, use a central, não o Agendador.
+política padrão. Para parar a operação, use `supv parar`, não o Agendador.
 
 ## A conta da tarefa não consegue entrar
 
-A central e a homologação mostram erros de usuário/senha, senha expirada ou falta
+`supv status` e `supv homologar` mostram erros de usuário/senha, senha expirada ou falta
 do direito de executar tarefas em lote. Abra PowerShell como administrador e rode:
 
 ```powershell
@@ -263,7 +259,7 @@ limite persistente de um aviso por tipo a cada 60 minutos. Para desligar:
 
 Quando a parada para atualização excede o prazo, a versão ainda não foi trocada:
 a tarefa é reabilitada e a retomada solicitada se a operação estava ativa.
-A central só considera a parada concluída quando o supervisor e as portas estão livres.
+`supv parar` só considera a parada concluída quando o supervisor e as portas estão livres.
 
 Para ajustar o prazo de parada da atualização, use
 `atualizar-servidor.ps1 -PrazoParadaSegundos 120` (padrão: 60 segundos).

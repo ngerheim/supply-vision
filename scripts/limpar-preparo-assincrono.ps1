@@ -1,4 +1,4 @@
-# Worker independente: nao herda stdout da central nem o job do PREPARAR.
+# Worker independente: nao herda stdout do cliente nem o job do PREPARAR.
 [CmdletBinding()]
 param([Parameter(Mandatory=$true)][string]$Instalacao,[Parameter(Mandatory=$true)][string]$Preparo,[Parameter(Mandatory=$true)][string]$Operacao)
 $ErrorActionPreference='Stop'

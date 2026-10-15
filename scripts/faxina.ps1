@@ -58,7 +58,7 @@ if ($portalNoAr) {
 Write-Host "`n-- Rastreamento de observabilidade (regenera sozinho) --" -ForegroundColor Yellow
 if ($portalNoAr) {
   Write-Host '  [PULADO] o Portal esta no ar; esses arquivos estao abertos pelo wrangler.' -ForegroundColor DarkGray
-  Write-Host '           pare a operacao (PARAR.bat) e rode a faxina de novo para limpa-los.' -ForegroundColor DarkGray
+  Write-Host '           pare a operacao (supv parar) e rode a faxina de novo para limpa-los.' -ForegroundColor DarkGray
 } else {
   $obs = Join-Path $Privado 'portal\banco\estado\state\v3\observability\miniflare-wobs-trace-store'
   Remover $obs 'rastreamento do wrangler (recriado na proxima subida)'

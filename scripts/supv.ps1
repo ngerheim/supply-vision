@@ -106,7 +106,7 @@ function Exigir-AdministradorSupv {
  if(!(Testar-Elevacao)){throw 'Este comando exige permissao: abra o terminal como administrador.'}
 }
 function Executar-AcaoSupv([string]$Tipo,$Dados=@{}){
- $valores=@(& {Executar-AcaoCentral $script:supvRaiz $script:supvPrivado $script:supvStartup $Tipo $Dados} 6>&1)
+ $valores=@(& {Executar-AcaoAdministrada $script:supvRaiz $script:supvPrivado $script:supvStartup $Tipo $Dados} 6>&1)
  $r=$null
  foreach($valor in $valores){if($valor-is[hashtable]-and$valor.ContainsKey('ok')){$r=$valor}elseif($valor-is[hashtable]-and$valor.elevar){$r=$valor}else{Escrever-Supv ([string]$valor)}}
  if($r.elevar){Exigir-AdministradorSupv;throw 'Atualizacao nao iniciada.'}
@@ -120,15 +120,69 @@ function Mostrar-ProgressoSupv($a){
  Escrever-Supv "Etapa $($a.numero) de $($a.total): $($a.nome) | etapa $($a.etapaSegundos) s | total $($a.totalSegundos) s | restante estimado: $restante | modo $($a.modo)"
 }
 function Mostrar-ResultadoSupv($Codigo=$null){
- $r=Executar-AcaoCentral $script:supvRaiz $script:supvPrivado $script:supvStartup 'fim-atualizacao' @{codigo=$Codigo;saida='atualizacao-processo-saida.log'}
+ $r=Executar-AcaoAdministrada $script:supvRaiz $script:supvPrivado $script:supvStartup 'fim-atualizacao' @{codigo=$Codigo;saida='atualizacao-processo-saida.log'}
  Escrever-Supv $r.mensagem
  return [bool]$r.ok
 }
+function Inicializar-TipoConsoleSupv {
+ if(!('SupplyVision.ConsoleAcompanhamento'-as[type])){
+  Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+namespace SupplyVision {
+ public sealed class ConsoleAcompanhamento : IDisposable {
+  [DllImport("kernel32.dll")] public static extern IntPtr GetStdHandle(int id);
+  [DllImport("kernel32.dll")] public static extern bool GetConsoleMode(IntPtr h, out uint mode);
+  [DllImport("kernel32.dll")] public static extern bool SetConsoleMode(IntPtr h, uint mode);
+  private delegate bool Handler(uint signal);
+  [DllImport("kernel32.dll")] private static extern bool SetConsoleCtrlHandler(Handler handler, bool add);
+  private readonly IntPtr handle;
+  private readonly uint original;
+  private readonly Handler handler;
+  private bool active;
+  private ConsoleAcompanhamento(IntPtr h, uint mode) {
+   handle=h; original=mode; handler=OnSignal;
+  }
+  public static ConsoleAcompanhamento Begin() {
+   uint mode; var h=GetStdHandle(-10);
+   if(!GetConsoleMode(h, out mode)) return null;
+   var guard=new ConsoleAcompanhamento(h, mode);
+   // ENABLE_EXTENDED_FLAGS is required to change ENABLE_QUICK_EDIT_MODE.
+   if(!SetConsoleCtrlHandler(guard.handler, true)) return null;
+   guard.active=true;
+   if(!SetConsoleMode(h, (mode | 0x80u) & ~0x40u)) { guard.Dispose(); return null; }
+   return guard;
+  }
+  private bool OnSignal(uint signal) {
+   // Restore before PowerShell handles Ctrl+C/Break or console close.
+   SetConsoleMode(handle, original);
+   return false;
+  }
+  public void Dispose() {
+   if(!active) return;
+   SetConsoleMode(handle, original);
+   SetConsoleCtrlHandler(handler, false);
+   active=false;
+   GC.KeepAlive(handler);
+  }
+ }
+}
+'@
+ }
+}
+function Suspender-QuickEditSupv {
+ if($env:OS-ne'Windows_NT'-or[Console]::IsInputRedirected-or[Console]::IsOutputRedirected){return $null}
+ Inicializar-TipoConsoleSupv
+ return [SupplyVision.ConsoleAcompanhamento]::Begin()
+}
+
 function Acompanhar-AtualizacaoSupv($Processo=$null){
+ $console=Suspender-QuickEditSupv
+ try{
  Escrever-Supv 'Ctrl+C ou fechar o terminal encerra apenas o acompanhamento. Para voltar: supv acompanhar.'
  while($true){
   $p=if($Processo){$Processo}else{Consultar-AtualizacaoAdministrada $script:supvRaiz $script:supvPrivado}
-  Mostrar-ProgressoSupv (Consultar-AndamentoCentral $script:supvPrivado)
+  Mostrar-ProgressoSupv (Consultar-AndamentoAdministrado $script:supvPrivado)
   if(!$p-or$p.HasExited){break}
   # O recibo pertence a esta execucao; tambem permite reconectar quando o
   # sistema ainda conserva um processo encerrado na tabela de processos.
@@ -149,6 +203,7 @@ function Acompanhar-AtualizacaoSupv($Processo=$null){
   if(Test-Path -LiteralPath $arquivo){$codigo=(Get-Content -LiteralPath $arquivo -Raw -Encoding UTF8|ConvertFrom-Json).codigo}
  }
  return Mostrar-ResultadoSupv $codigo
+ }finally{if($console){$console.Dispose()}}
 }
 function Consultar-HealthSupv([string]$Url){
  if(!$Url){return 'nao configurado'}
@@ -161,8 +216,8 @@ function Consultar-HealthSupv([string]$Url){
  }catch{return 'indisponivel'}
 }
 function Mostrar-StatusSupv {
- $d=Consultar-EstadoCentral $script:supvPrivado 0 $true $script:supvRaiz -SomenteLeitura
- $t=Consultar-TarefaCentral $script:supvRaiz $script:supvPrivado $script:supvStartup -SomenteLeitura
+ $d=Consultar-EstadoAdministrado $script:supvPrivado $script:supvRaiz
+ $t=Consultar-TarefaAdministrada $script:supvRaiz $script:supvStartup
  Escrever-Supv ('Operacao: '+$(if($d.ativo){'ativa'}else{'parada'}))
  if($d.migrada){Escrever-Supv 'Esta instalacao foi migrada para outro servidor.'}
  if($d.status){
@@ -179,7 +234,7 @@ function Mostrar-StatusSupv {
  Escrever-Supv ('Ensaio: '+(@([string]$d.ensaio,$d.avisoBackup|Where-Object {$_})-join' | '))
  $p=Consultar-AtualizacaoAdministrada $script:supvRaiz $script:supvPrivado
  Escrever-Supv ('Atualizacao: '+$(if($p){'em andamento'}else{'sem processo ativo'}))
- $andamento=Consultar-AndamentoCentral $script:supvPrivado
+ $andamento=Consultar-AndamentoAdministrado $script:supvPrivado
  if($andamento){Mostrar-ProgressoSupv $andamento}
  Escrever-Supv ('Limpeza de preparo em segundo plano: '+(Consultar-LimpezaAdministrada $script:supvPrivado))
  $reserva=Pasta-ReservaDependencias $script:supvRaiz

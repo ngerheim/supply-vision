@@ -15,8 +15,6 @@ try {
     # Injeta somente o executavel Python; o fluxo do atualizador e preservado.
     $fonte=$fonte.Replace("`$Python = Join-Path `$Alertas '.venv\Scripts\python.exe'", "`$Python = 'pythonmock'")
     [IO.File]::WriteAllText((Join-Path $raiz 'scripts/atualizar-servidor.ps1'),$fonte,(New-Object Text.UTF8Encoding($true)))
-    Set-Content (Join-Path $raiz 'PARAR.bat') '@echo off'
-    Set-Content (Join-Path $raiz 'INICIAR.bat') "@echo off`r`necho iniciou>>inicio.log`r`nexit /b 0"
     foreach($arq in @('portal/portal.env.example','compartilhado/smtp.env.example','compartilhado/operacao.env.example')) { Set-Content (Join-Path $raiz $arq) '' }
     foreach($arq in @('privado/comum/smtp.env','privado/comum/operacao.env')) { Set-Content (Join-Path $raiz $arq) '' }
     $env:SUPPLY_VISION_PRIVADO=Join-Path $raiz 'privado'
@@ -52,6 +50,11 @@ function git {
 
   }
 }
+function Start-Process {
+ param($FilePath,$WindowStyle,$ArgumentList,$ErrorAction)
+ Add-Content (Join-Path $Raiz 'inicio.log') 'iniciou'
+ if($Caso-eq'partida'-and!(Test-Path (Join-Path $Raiz 'falhou.log'))){Set-Content (Join-Path $Raiz 'falhou.log') 'falha';throw 'partida ficticia falhou'}
+}
 function Localizar-NodeMaquina {return 'node'}
 function Get-NetTCPConnection {}
 function Start-Sleep {}
@@ -84,7 +87,6 @@ else { & (Join-Path $Raiz 'scripts/atualizar-servidor.ps1') -JaAtualizado -Versa
 exit $LASTEXITCODE
 '@
     [IO.File]::WriteAllText((Join-Path $raiz 'runner.ps1'),$runner)
-    if($caso -eq 'partida') { Set-Content (Join-Path $raiz 'INICIAR.bat') "@echo off`r`necho iniciou>>inicio.log`r`nif not exist falhou.log (echo falha>falhou.log & exit /b 1)`r`nexit /b 0" }
     $preferencia=$ErrorActionPreference;$ErrorActionPreference='Continue'
     try { $saida=@(& powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $raiz 'runner.ps1') $caso $raiz 2>&1);$rc=$LASTEXITCODE } finally { $ErrorActionPreference=$preferencia }
     if($rc -eq 0) { throw "Falha $caso foi declarada sucesso: $saida" }

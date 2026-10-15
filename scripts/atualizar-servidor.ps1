@@ -25,7 +25,7 @@ $Raiz = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 . (Join-Path $PSScriptRoot 'operacao-logica.ps1')
 . (Join-Path $PSScriptRoot 'atualizacao-preparo.ps1')
 # Medicao sem dados de configuracao; falha ao registrar nunca muda a atualizacao.
-# Entrada direta/central/filho inicializam aqui. Blocos isolados podem nao ter
+# Entrada direta/supv/filho inicializam aqui. Blocos isolados podem nao ter
 # contexto nem helpers; a parada tem fallback UTC e a instrumentacao e opcional.
 function Obter-HoraMedicaoAtualizacao($Medicao) {
  $codigoMedicao=Get-Variable -Name LASTEXITCODE -Scope Global -ValueOnly -ErrorAction SilentlyContinue
@@ -77,7 +77,7 @@ function Registrar-TempoAtualizacao($Medicao,[string]$Texto){
  $codigoMedicao=Get-Variable -Name LASTEXITCODE -Scope Global -ValueOnly -ErrorAction SilentlyContinue
  try{
   if(!$Medicao-or!$Medicao.arquivo){return}
-  # Arquivo proprio: a central legada mantem stdout aberto sem compartilhar escrita.
+  # Arquivo proprio: um cliente legado mantem stdout aberto sem compartilhar escrita.
   for($tentativa=0;$tentativa-lt3;$tentativa++){
    $arquivo=$null;$escritor=$null
    try{
@@ -179,7 +179,7 @@ $Python = Join-Path $Alertas '.venv\Scripts\python.exe'
 $PastaBackupPortal = Join-Path (Obter-PastaPrivada $Raiz) 'portal\backups'
 $BackupAntesAtualizacaoOrigem = Join-Path $PastaBackupPortal 'portal-atual.sqlite'
 $BackupAntesAtualizacao = Join-Path $PastaBackupPortal 'pre-atualizacao.sqlite'
-# Chamada direta e central seguem o mesmo modo do supervisor, inclusive backup.
+# Chamada direta e supv seguem o mesmo modo do supervisor, inclusive backup.
 $configModo=Join-Path (Obter-PastaPrivada $Raiz) 'comum/operacao.env'
 if(Test-Path -LiteralPath $configModo){[void](Aplicar-ModoEnsaio (Ler-ConfigOperacao $configModo))}
 
@@ -248,7 +248,8 @@ function Iniciar-OperacaoAtualizada {
  if($script:TarefaSemLogin){Enable-ScheduledTask -TaskName 'Supply Vision' -TaskPath '\'|Out-Null;Start-ScheduledTask -TaskName 'Supply Vision' -TaskPath '\';$global:LASTEXITCODE=0;return}
  $logica=Join-Path $PSScriptRoot 'inicializacao-logica.ps1'
  if(Test-Path $logica){. $logica;Iniciar-OperacaoConfigurada $Raiz;return}
- & (Join-Path $Raiz 'INICIAR.bat') | Out-Null
+ Start-Process powershell.exe -WindowStyle Hidden -ArgumentList ('-NoProfile -ExecutionPolicy Bypass -File "'+(Join-Path $Raiz 'scripts/supervisor.ps1')+'"') -ErrorAction Stop
+ $global:LASTEXITCODE=0
 }
 function Parar-OperacaoAtualizacao([int]$Limite=60) {
  $script:ParadaSolicitada=$true

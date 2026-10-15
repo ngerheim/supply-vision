@@ -134,7 +134,7 @@ function Definir-ModoInicializacao([string]$Raiz,[string]$Privado,[string]$Start
  }
  if($plano.RemoverTarefa-and$t){Unregister-ScheduledTask -TaskName 'Supply Vision' -TaskPath '\' -Confirm:$false}
  if($plano.CriarAtalho){
-  $linha="@echo off`r`nstart `"`" `"$(Join-Path $Raiz 'INICIAR.bat')`"`r`n"
+  $linha=Montar-InicializacaoLogin $Raiz
   [IO.File]::WriteAllText($Startup,$linha,[Text.Encoding]::ASCII)
  }elseif($plano.RemoverAtalho-and(Test-Path -LiteralPath $Startup)){Remove-Item -LiteralPath $Startup -Force}
 }
@@ -142,9 +142,8 @@ function Iniciar-OperacaoConfigurada([string]$Raiz) {
  $ErrorActionPreference='Stop'
  Exigir-InstalacaoNaoMigrada (Obter-PastaPrivada $Raiz)
  if(Obter-TarefaSupplyVision $Raiz){Start-ScheduledTask -TaskName 'Supply Vision' -TaskPath '\';$global:LASTEXITCODE=0;return}
- $r=Executar-NativoOperacao (Join-Path $Raiz 'INICIAR.bat')
- $global:LASTEXITCODE=$r.codigo
- if($r.codigo-ne0){throw 'Falha ao solicitar inicio da operacao.'}
+ Start-Process powershell.exe -WindowStyle Hidden -ArgumentList ('-NoProfile -ExecutionPolicy Bypass -File "'+(Join-Path $Raiz 'scripts/supervisor.ps1')+'"') -ErrorAction Stop
+ $global:LASTEXITCODE=0
 }
 function Aviso-SessaoRemota([string]$Modo,[bool]$Remota) {
  if($Modo-eq'login'-and$Remota){return 'Na sessão RDP, use Desconectar; não use Sair. Sair encerra a operação neste modo.'}
@@ -166,9 +165,52 @@ function Remover-ComandoSvLegado([string]$Raiz) {
 }
 function Instalar-ComandoSupv([string]$Raiz) {
  Remover-ComandoSvLegado $Raiz
+ Atualizar-EntradasLegadas $Raiz
  $atual=[Environment]::GetEnvironmentVariable('Path','User')
  $novo=Acrescentar-ComandoSupvAoPath $Raiz $atual
  if($novo-ceq$atual){return}
  [Environment]::SetEnvironmentVariable('Path',$novo,'User')
  Write-Host 'Comando supv adicionado ao PATH do usuario. Abra um terminal novo para usar supv.'
+}
+
+function Montar-InicializacaoLogin([string]$Raiz) {
+ return "@echo off`r`ncall `"$(Join-Path $Raiz 'supv.cmd')`" iniciar`r`n"
+}
+
+# Somente alvos aposentados desta instalacao, nunca atalhos de outras pastas.
+function Testar-AlvoAtalhoAposentado([string]$Raiz,[string]$Alvo,[string]$Argumentos) {
+ $alvos=@(('Supply Vision'+'.bat'),('INICIAR'+'.bat'),('PARAR'+'.bat'),('scripts/central'+'.ps1'),('portal/Restringir Acesso da Rede'+'.cmd'))
+ foreach($relativo in $alvos){
+  $caminho=[IO.Path]::GetFullPath((Join-Path $Raiz $relativo))
+  if(Test-Path -LiteralPath $caminho){continue}
+  if($Alvo-eq$caminho){return $true}
+  # O instalador pode usar powershell.exe -File, com caminho absoluto citado.
+  if([IO.Path]::GetFileName($Alvo)-in@('powershell.exe','pwsh.exe')-and$Argumentos-match('(?i)(?:^|\s)-File\s+"'+[regex]::Escape($caminho)+'"\s*$')){return $true}
+ }
+ return $false
+}
+function Atualizar-EntradasLegadas([string]$Raiz,[string[]]$Desktops=@([Environment]::GetFolderPath('Desktop'),[Environment]::GetFolderPath('CommonDesktopDirectory')),[string]$Inicio=[Environment]::GetFolderPath('Startup')) {
+ if($env:OS-ne'Windows_NT'){return}
+ $shell=$null
+ try{
+  $shell=New-Object -ComObject WScript.Shell
+  foreach($desktop in @($Desktops|Select-Object -Unique)){
+   if(!$desktop-or!(Test-Path -LiteralPath $desktop)){continue}
+   foreach($arquivo in @(Get-ChildItem -LiteralPath $desktop -Filter 'Supply Vision*.lnk' -File)){
+    if($arquivo.Name-notin@('Supply Vision.lnk','Supply Vision - Homologacao.lnk')){continue}
+    $atalho=$null
+    try{
+     $atalho=$shell.CreateShortcut($arquivo.FullName)
+     if(Testar-AlvoAtalhoAposentado $Raiz $atalho.TargetPath $atalho.Arguments){Remove-Item -LiteralPath $arquivo.FullName -Force -ErrorAction Stop}
+    }finally{if($atalho){[void][Runtime.InteropServices.Marshal]::FinalReleaseComObject($atalho)}}
+   }
+  }
+ }finally{if($shell){[void][Runtime.InteropServices.Marshal]::FinalReleaseComObject($shell)}}
+ if($Inicio){
+  $arquivo=Join-Path $inicio 'Supply Vision.cmd'
+  $legado="@echo off`r`nstart `"`" `"$(Join-Path $Raiz ('INICIAR'+'.bat'))`"`r`n"
+  if((Test-Path -LiteralPath $arquivo)-and[IO.File]::ReadAllText($arquivo)-eq$legado){
+   [IO.File]::WriteAllText($arquivo,(Montar-InicializacaoLogin $Raiz),[Text.Encoding]::ASCII)
+  }
+ }
 }
