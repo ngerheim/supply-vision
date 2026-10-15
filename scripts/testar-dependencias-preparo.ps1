@@ -17,7 +17,7 @@ function Exigir-StringsDuplasAscii([string]$Codigo,[string]$Nome) {
   }
  }
 }
-foreach($nome in @('preparar-atualizacao.ps1','atualizacao-preparo.ps1','atualizar-servidor.ps1','limpar-preparo-assincrono.ps1')){
+foreach($nome in @('preparar-atualizacao.ps1','atualizacao-preparo.ps1','atualizar-servidor.ps1','limpar-preparo-assincrono.ps1','sv.ps1')){
  $codigoAscii=[IO.File]::ReadAllText((Join-Path $PSScriptRoot $nome))
  Exigir-StringsDuplasAscii $codigoAscii $nome
  # Simula a leitura ANSI do PS5.1 de uma copia UTF8 sem BOM, tambem no PS7.
@@ -35,7 +35,7 @@ foreach($amostra in $amostras){
  try{Exigir-StringsDuplasAscii $amostra 'controle-negativo'}catch{$recusou=$_.Exception.Message-like'*nao ASCII*'}
  if(!$recusou){throw 'Guarda nao detectou string interpolada nao ASCII.'}
 }
-Write-Host '[OK] Strings duplas ASCII e parser ANSI de copias sem BOM nos quatro scripts.'
+Write-Host '[OK] Strings duplas ASCII e parser ANSI de copias sem BOM nos scripts operacionais e na CLI.'
 try{
  foreach($caso in @('inalteradas','alteradas','build-falha','portal-falha','alertas-falha','operacional-falha','ci-aprovado','ci-log-explicito','ci-rede','ci-ausente','ci-pendente','ci-falho','ci-timeout','ci-cancelado','ci-skipped','ci-sha','ci-invalido','ci-forcado','ci-forcado-env','fumaca-falha')){
   $instalacao=Join-Path $base $caso

@@ -1,8 +1,51 @@
 # Socorro
 
-Abra `Supply Vision.bat` e use **Validar configuração**. Consulte os arquivos em
+Comece com `sv status` e `sv config validar`. Como alternativa nesta fase,
+abra `Supply Vision.bat` e use **Validar configuração**. Consulte os arquivos em
 `privado/operacao/`; os registros de pedidos manuais também aparecem em **Portal → Relatórios**.
 **Não apague logs nem bancos durante o diagnóstico.**
+
+## Diagnóstico pelo terminal
+
+```cmd
+sv status
+sv saude
+sv saude --desde "2026-10-15 08:00"
+sv logs supervisor -n 120
+sv logs portal -n 120
+sv logs atualizacao
+sv homologar --copiar --destino "C:\Temp\homologacao.txt"
+```
+
+Os logs e o relatório exibidos pelo `sv` usam o mascaramento da homologação.
+O arquivo `.txt` permanece salvo; itens reprovados fazem `sv homologar` retornar
+código diferente de zero. Os logs originais continuam privados e não devem ser
+publicados. As contagens do Portal cobrem somente os arquivos atuais desde o
+último reinício; `--desde` recorta os eventos datados do supervisor. A marca
+`partida` identifica falhas até 30 segundos após `Supervisor iniciado`, inclusive
+quando essa partida ocorreu pouco antes do período escolhido.
+
+Se `sv` não for reconhecido, abra um terminal novo após instalar/atualizar ou
+execute `C:\SupplyVision\sv.cmd help`, ajustando a pasta. Se aparecer
+`abra o terminal como administrador`, feche essa janela e abra cmd/PowerShell com
+**Executar como administrador**; a CLI não faz autoelevação.
+
+Se fechou o acompanhamento de uma atualização, execute `sv acompanhar`.
+A atualização continua em processo oculto. Antes de repetir `sv atualizar`,
+consulte `sv status` e `sv logs atualizacao`: atualização ativa ou limpeza de
+preparo em andamento impedem outro disparo. Um registro antigo com identidade válida é removido apenas no próximo disparo;
+registro ilegível exige conferir `limpeza-preparo.log` antes de seguir a recuperação existente;
+não apague travas enquanto houver processo ativo.
+
+Para restaurar, use `sv backup testar` e então
+`sv backup restaurar [--anterior]`. A restauração para a operação e exige digitar
+`RESTAURAR`; `--sim` é destinado à automação. Ao terminar, use `sv iniciar`.
+`sv migrar --destino "E:\semente" --modo definitiva` exige digitar `MIGRAR` e
+bloqueia a origem; consulte [MIGRAR.md](MIGRAR.md) antes de executar.
+
+A central e os atalhos antigos continuam funcionando nesta fase. A restrição de
+rede também pode ser aberta por `portal/Restringir Acesso da Rede.cmd`, e o
+relatório pelo atalho de `scripts/homologar.ps1`.
 
 ## O Portal não responde na LAN
 

@@ -10,26 +10,11 @@ $caminhoRelatorio=[IO.Path]::GetFullPath($Destino)
 $raizPrivada=[IO.Path]::GetFullPath($privado).TrimEnd('\')+'\'
 if([IO.Path]::GetExtension($caminhoRelatorio)-ne'.txt'-or$caminhoRelatorio.StartsWith($raizPrivada,[StringComparison]::OrdinalIgnoreCase)){throw 'Escolha um arquivo .txt fora da pasta privado para o relatorio.'}
 $linhas=New-Object 'Collections.Generic.List[string]'
-$segredos=@()
-foreach($arquivo in @(Get-ChildItem -LiteralPath $privado -Filter '*.env' -Recurse -File -ErrorAction SilentlyContinue)){
- foreach($l in Get-Content $arquivo.FullName -Encoding UTF8){
-  if($l-match '^\s*([^#=]+)=(.+)$'){
-   $chave=$Matches[1];$valor=$Matches[2]
-   if($chave-match '(?i)TOKEN|PASS|SENHA|SECRET|SMTP|EMAIL|KEY'){$segredos+=$valor.Trim()}
-  }
- }
-}
-function Mascarar-Homologacao([string]$Texto){
- foreach($s in $segredos){if($s){$Texto=$Texto.Replace($s,'[mascarado]')}}
- $Texto=[regex]::Replace($Texto,'[\w.+-]+@[\w.-]+\.[a-zA-Z]{2,}','[email mascarado]')
- $Texto=[regex]::Replace($Texto,'(?i)(authorization|bearer|token|password|senha|secret|api[_-]?key)\s*[:= ]\s*\S+','$1=[mascarado]')
- # Nao reproduz URLs com credenciais nem linhas com consultas ou registros de banco.
- if($Texto-match '(?i)://[^/\s]+@|\b(SELECT|INSERT|UPDATE|DELETE)\b|[{}]|\b(chamado|usuario|preco|payload)\s*[:=]'){return '[conteudo omitido]'}
- return $Texto
-}
+. (Join-Path $PSScriptRoot 'diagnostico-logica.ps1')
+$segredos=Obter-SegredosHomologacao $privado
 function Item-Homologacao([string]$Nome,[scriptblock]$Conferir,[switch]$Classificar){
- try{$detalhe=& $Conferir;$icone='✅';if($Classificar){$icone=switch($detalhe.nivel){'ok'{'✅'} 'aviso'{'⚠️'} 'erro'{'❌'}};$detalhe=$detalhe.mensagem};$linhas.Add($icone+' '+(Mascarar-Homologacao $Nome)+': '+(Mascarar-Homologacao ($detalhe-join' ')))}
- catch{$linhas.Add('❌ '+(Mascarar-Homologacao $Nome)+': nao aprovado/indisponivel. Consulte docs/SOCORRO.md.')} # Nao publica excecoes que podem conter segredos.
+ try{$detalhe=& $Conferir;$icone='✅';if($Classificar){$icone=switch($detalhe.nivel){'ok'{'✅'} 'aviso'{'⚠️'} 'erro'{'❌'}};$detalhe=$detalhe.mensagem};$linhas.Add($icone+' '+(Mascarar-Homologacao $Nome $segredos)+': '+(Mascarar-Homologacao ($detalhe-join' ') $segredos))}
+ catch{$linhas.Add('❌ '+(Mascarar-Homologacao $Nome $segredos)+': nao aprovado/indisponivel. Consulte docs/SOCORRO.md.')} # Nao publica excecoes que podem conter segredos.
 }
 $linhas.Add('Supply Vision — verificacao somente leitura — '+(Get-Date -Format 'yyyy-MM-dd HH:mm:ss'))
 Item-Homologacao 'Commit e alteracoes locais' {
@@ -94,7 +79,7 @@ foreach($tipo in @('supervisor','portal','emails','relatorios')){
   $logs=@($pastas|ForEach-Object{Get-ChildItem -LiteralPath $_ -File -ErrorAction SilentlyContinue}|Where-Object {$_.Name-in$nomes}|Sort-Object LastWriteTime -Descending)
   if(!$logs){throw 'sem log'}
   $linhas.Add('--- '+$tipo+' ---')
-  foreach($l in @(Get-Content -LiteralPath $logs[0].FullName -Encoding UTF8 -Tail 10)){$linhas.Add((Mascarar-Homologacao $l))}
+  foreach($l in @(Get-Content -LiteralPath $logs[0].FullName -Encoding UTF8 -Tail 10)){$linhas.Add((Mascarar-Homologacao $l $segredos))}
   'ultimas 10 linhas (dados sensiveis mascarados)'
  }
 }

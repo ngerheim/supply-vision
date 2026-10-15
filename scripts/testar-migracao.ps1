@@ -16,11 +16,11 @@ Exigir ((Decidir-CloneMigracao $true $false $false $false)-eq'recusar') 'recusar
 Exigir ((Decidir-CloneMigracao $true $false $true $true)-eq'recusar') 'nao arquivar instalacao com dados'
 Exigir (Permitir-DescarteEnsaio @{MODO_ENSAIO='1'}) 'descarte ensaio'
 foreach($cfg in @(@{},@{MODO_ENSAIO='0'})){Exigir (!(Permitir-DescarteEnsaio $cfg)) 'recusa producao'}
-$ast=[System.Management.Automation.Language.Parser]::ParseFile((Join-Path $PSScriptRoot 'homologar.ps1'),[ref]$null,[ref]$null)
+$ast=[System.Management.Automation.Language.Parser]::ParseFile((Join-Path $PSScriptRoot 'diagnostico-logica.ps1'),[ref]$null,[ref]$null)
 $f=$ast.Find({param($n) $n-is[System.Management.Automation.Language.FunctionDefinitionAst]-and$n.Name-eq'Mascarar-Homologacao'},$true)
 . ([scriptblock]::Create($f.Extent.Text))
 $segredos=@('ficticio-segredo')
-$mascarado=Mascarar-Homologacao 'smtp=ficticio-segredo pessoa@example.com Bearer abc123'
+$mascarado=Mascarar-Homologacao 'smtp=ficticio-segredo pessoa@example.com Bearer abc123' $segredos
 Exigir ($mascarado-notmatch'ficticio-segredo|pessoa@example.com|abc123') 'mascarar segredos e emails'
 Exigir ((Mascarar-Homologacao 'SELECT * FROM users')-eq'[conteudo omitido]') 'omitir banco'
 $pasta=Join-Path ([IO.Path]::GetTempPath()) ('sv-migracao-pura-'+[guid]::NewGuid().ToString('N'))
@@ -41,7 +41,7 @@ try{
  }finally{$env:SUPPLY_VISION_PRIVADO=$privadoAnterior}
  $raiz=Split-Path $PSScriptRoot
  Exigir ((Get-Content (Join-Path $raiz 'INICIAR.bat') -Raw)-match'Exigir-InstalacaoNaoMigrada') 'BAT usa guarda'
- Exigir ((Get-Content (Join-Path $PSScriptRoot 'central-logica.ps1') -Raw)-match'Iniciar-OperacaoConfigurada') 'central usa guarda'
+ Exigir ((Get-Content (Join-Path $PSScriptRoot 'administracao-logica.ps1') -Raw)-match'Iniciar-OperacaoConfigurada') 'central usa guarda'
  Exigir ((Get-Content (Join-Path $PSScriptRoot 'inicializacao-logica.ps1') -Raw)-match'Exigir-InstalacaoNaoMigrada') 'inicio configurado usa guarda'
  # Origem com componentes simulados: orquestrador real, sem tocar tarefa ou dados reais.
  $raizFalsa=Join-Path $pasta 'origem';New-Item -ItemType Directory -Force (Join-Path $raizFalsa 'scripts')|Out-Null

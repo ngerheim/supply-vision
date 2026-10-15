@@ -90,7 +90,7 @@ try{
  # JSON reais do supervisor, tanto UTF8 sem BOM quanto com BOM do PS5.1.
  $falso=Join-Path $pasta 'homologacao';$priv=Join-Path $falso 'dados-ficticios'
  New-Item -ItemType Directory -Force (Join-Path $falso 'scripts'),(Join-Path $priv 'operacao')|Out-Null
- foreach($arq in @('homologar.ps1','operacao-logica.ps1','inicializacao-logica.ps1')){Copy-Item (Join-Path $PSScriptRoot $arq) (Join-Path $falso 'scripts')}
+ foreach($arq in @('diagnostico-logica.ps1','homologar.ps1','operacao-logica.ps1','inicializacao-logica.ps1')){Copy-Item (Join-Path $PSScriptRoot $arq) (Join-Path $falso 'scripts')}
  $env:SUPPLY_VISION_PRIVADO=$priv
  foreach($bom in @($false,$true)){
   [IO.File]::WriteAllText((Join-Path $priv 'operacao/status.json'),(@{ensaio=$true;portal=$true;emails=$true;relatorios=$true;atualizado=(Get-Date).ToString('o')}|ConvertTo-Json -Compress),(New-Object Text.UTF8Encoding($bom)))

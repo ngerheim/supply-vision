@@ -7,6 +7,54 @@ Windows e continua funcionando depois de sair da sessão RDP.
 Supervisionados: Portal na LAN, fila de e-mails, serviço de relatórios manuais,
 pipeline dos Alertas, backup do banco e limpeza diária.
 
+## CLI `sv` (fase 1)
+
+Use `sv` no cmd ou PowerShell. O instalador e a atualização acrescentam a raiz da
+instalação ao PATH do usuário, sem duplicar entradas. **Abra um terminal novo**
+depois dessa configuração. No terminal já aberto, use `C:\SupplyVision\sv.cmd`
+(ajuste o caminho). Execute `sv help` ou `sv <comando> --help` para exemplos.
+As mensagens da CLI usam ASCII; código de saída `0` indica sucesso e qualquer
+outro valor indica falha (`echo %errorlevel%` no cmd, `$LASTEXITCODE` no PowerShell).
+
+| Comando | Uso |
+| --- | --- |
+| `sv status` | Operação e módulos, commit/data, health local/rede, tarefa/modo, manutenção, atualização, limpeza pendente, reserva e último resumo. Somente leitura. |
+| `sv iniciar` / `sv parar` | Aguarda o início com health local ou a parada completa. |
+| `sv atualizar [--completo]` | Inicia a atualização e acompanha etapas, duração, total, estimativa e modo rápido/completo. `--completo` força todas as suítes. |
+| `sv acompanhar` | Reconecta ao progresso; sem atualização ativa, mostra o último resultado disponível. |
+| `sv homologar [--copiar] [--destino arquivo.txt]` | Exibe e mantém o relatório atual, com o mesmo mascaramento. `--copiar` envia o relatório à área de transferência. Itens reprovados retornam falha. |
+| `sv saude [--desde "yyyy-MM-dd HH:mm"]` | Últimas 24 h por padrão; falhas de health por motivo e ocorrência, marca `partida` até 30 s após iniciar o supervisor, conta partidas no período. |
+| `sv logs <supervisor\|portal\|atualizacao\|emails\|relatorios> [-n 80]` | Últimas linhas de cada log atual, com mascaramento de credenciais, e-mails e conteúdo sensível. |
+| `sv config validar` | Executa a validação operacional existente. |
+| `sv backup testar` | Testa restauração como na central. |
+| `sv backup restaurar [--anterior] [--sim]` | Para a operação e restaura o backup mais recente, ou o anterior. Digite `RESTAURAR`; `--sim` permite automação. |
+| `sv modo <desligado\|login\|computador>` | Altera a inicialização com a operação parada; exige administrador. |
+| `sv manutencao on` / `sv manutencao off` | Liga ou desliga a pausa de rotinas automáticas. |
+| `sv firewall restringir` | Executa o script atual de restrição, mantendo o teste interativo pela LAN; exige administrador. |
+| `sv migrar --destino "E:\semente" --modo <ensaio\|definitiva>` | Prepara a migração como a central; exige administrador. Definitiva exige digitar `MIGRAR` e bloqueia esta instalação. |
+
+Para comandos que precisam de elevação, abra o terminal como administrador. A CLI
+informa a exigência e falha sem abrir outra janela elevada. Controle de operação
+com tarefa agendada também exige esse terminal. Consultas de estado e logs não
+exigem elevação quando a conta consegue ler os arquivos e a tarefa.
+
+A atualização roda em processo próprio e oculto, compartilhado com a central.
+**Ctrl+C ou fechar o terminal encerra apenas o acompanhamento**: o trabalho
+continua. Use `sv acompanhar` em outro terminal para voltar. Um novo disparo é
+recusado enquanto houver atualização ou limpeza de preparo em andamento;
+consulte `sv status` e `sv logs atualizacao`. Não remova travas de processos ativos.
+
+O recorte de `sv saude --desde` usa a hora local do servidor nos registros do
+supervisor. Para o Portal, as contagens de HTTP 5xx, `D1_ERROR` e retentativas D1
+abrangem os logs atuais **desde o último reinício**, sem aplicar o recorte a linhas
+que não têm data. Ausência de falhas nesses arquivos não comprova períodos
+anteriores. `sv status` consulta ambos os endpoints de health sem alterar arquivos;
+endpoint indisponível aparece no diagnóstico e não impede as demais consultas.
+
+Nesta fase, `Supply Vision.bat`, `INICIAR.bat`, `PARAR.bat`,
+`portal/Restringir Acesso da Rede.cmd` e `scripts/homologar.ps1` continuam disponíveis
+como alternativas. A remoção fica para a fase 2, após validação no servidor.
+
 ## Central
 
 `Supply Vision.bat` mostra o estado e oferece iniciar, parar, atualizar o
