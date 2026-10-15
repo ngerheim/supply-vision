@@ -62,52 +62,65 @@ using System.IO;
 using System.Text;
 using System.Collections.Generic;
 using System.Security.Cryptography;
+using System.Runtime.InteropServices;
+using Microsoft.Win32.SafeHandles;
+using System.ComponentModel;
 namespace SupplyVision {
  public static class ArvoreDependencias {
-  public static void SemLinks(string path) {
-   string full = Path.GetFullPath(path);
-   for(string p = full; !String.IsNullOrEmpty(p); p = Path.GetDirectoryName(p)) {
+  static void AncestraisSemLinks(string path) {
+   for(string p = Path.GetFullPath(path); !String.IsNullOrEmpty(p); p = Path.GetDirectoryName(p)) {
     if((File.GetAttributes(p) & FileAttributes.ReparsePoint) != 0) throw new IOException("Reparse point nas dependencias: " + p);
    }
-   Conferir(full, 0);
   }
-  static void Conferir(string path, int depth) {
+  public static void SemLinks(string path) { AncestraisSemLinks(path); Conferir(new DirectoryInfo(path), 0); }
+  static void Conferir(DirectoryInfo directory, int depth) {
    if(depth > 64) throw new IOException("Profundidade excessiva nas dependencias.");
-   FileAttributes a = File.GetAttributes(path);
-   if((a & FileAttributes.ReparsePoint) != 0) throw new IOException("Reparse point nas dependencias: " + path);
-   if((a & FileAttributes.Directory) != 0) foreach(string p in Directory.GetFileSystemEntries(path)) Conferir(p, depth + 1);
+   foreach(FileSystemInfo item in directory.EnumerateFileSystemInfos()) {
+    if((item.Attributes & FileAttributes.ReparsePoint) != 0) throw new IOException("Reparse point nas dependencias: " + item.FullName);
+    if((item.Attributes & FileAttributes.Directory) != 0) Conferir((DirectoryInfo)item, depth + 1);
+   }
+  }
+  [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true, ExactSpelling = true)]
+  static extern SafeFileHandle CreateFileW(string name, uint access, uint share, IntPtr security, uint creation, uint flags, IntPtr template);
+  static void ConferirUso(string path) {
+   if(Environment.OSVersion.Platform == PlatformID.Win32NT) {
+    // Acesso apenas a metadados: share=0 ainda recusa handles de leitura/escrita,
+    // sem abrir conteudo nem disparar uma leitura/varredura do pacote inteiro.
+    using(SafeFileHandle handle = CreateFileW(path, 0, 0, IntPtr.Zero, 3, 0x00200000, IntPtr.Zero)) {
+     if(handle.IsInvalid) throw new Win32Exception(Marshal.GetLastWin32Error(), path);
+    }
+   } else using(FileStream handle = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.None, 1)) { }
   }
   static string Hex(byte[] bytes) { return BitConverter.ToString(bytes).Replace("-", "").ToLowerInvariant(); }
-  static void Inventariar(string root, string path, StringBuilder entries, ref long files, ref long dirs) {
-   string[] children = Directory.GetFileSystemEntries(path); Array.Sort(children, StringComparer.Ordinal);
-   foreach(string p in children) {
-    string rel = p.Substring(root.Length).Replace('\\', '/');
-    FileAttributes a = File.GetAttributes(p);
-    if((a & FileAttributes.ReparsePoint) != 0) throw new IOException("Reparse point nas dependencias: " + p);
-    if((a & FileAttributes.Directory) != 0) {
-     dirs++; entries.Append("D:").Append(rel.Length).Append(':').Append(rel).Append('\n'); Inventariar(root, p, entries, ref files, ref dirs);
-    } else using(FileStream f = new FileStream(p, FileMode.Open, FileAccess.Read, FileShare.None)) {
-     // Abre somente para conferir uso exclusivo e tamanho; nunca le conteudo.
-     files++; entries.Append("F:").Append(rel.Length).Append(':').Append(rel).Append(':').Append(f.Length).Append(':').Append(File.GetLastWriteTimeUtc(p).Ticks).Append('\n');
+  static bool Cache(string name) { return name == ".cache" || name == ".mf" || name == ".wrangler" || name == ".miniflare" || name == "__pycache__"; }
+  static void Inventariar(string root, DirectoryInfo directory, StringBuilder entries, ref long files, ref long dirs, int depth, Action<string> limpar) {
+   if(depth > 64) throw new IOException("Profundidade excessiva nas dependencias.");
+   // FileSystemInfo reutiliza os metadados retornados pela enumeracao no Windows.
+   // Ordenacao ordinal torna a assinatura independente da ordem do filesystem.
+   List<FileSystemInfo> children = new List<FileSystemInfo>(directory.EnumerateFileSystemInfos());
+   children.Sort(delegate(FileSystemInfo a, FileSystemInfo b) { return StringComparer.Ordinal.Compare(a.Name, b.Name); });
+   foreach(FileSystemInfo item in children) {
+    string p = item.FullName, rel = p.Substring(root.Length).Replace('\\', '/');
+    if((item.Attributes & FileAttributes.ReparsePoint) != 0) throw new IOException("Reparse point nas dependencias: " + p);
+    if((item.Attributes & FileAttributes.Directory) != 0) {
+     if(limpar != null && Cache(item.Name)) { SemLinks(p); limpar(p); continue; }
+     dirs++; entries.Append("D:").Append(rel.Length).Append(':').Append(rel).Append('\n');
+     Inventariar(root, (DirectoryInfo)item, entries, ref files, ref dirs, depth + 1, limpar);
+    } else {
+     ConferirUso(p);
+     FileInfo f = (FileInfo)item;
+     files++; entries.Append("F:").Append(rel.Length).Append(':').Append(rel).Append(':').Append(f.Length).Append(':').Append(f.LastWriteTimeUtc.Ticks).Append('\n');
     }
    }
   }
-  public static string Inventario(string path) {
-   SemLinks(path); StringBuilder entries = new StringBuilder(); long files = 0, dirs = 0;
-   Inventariar(Path.GetFullPath(path), path, entries, ref files, ref dirs);
+  public static string Inventario(string path) { return Inventario(path, null); }
+  public static string Inventario(string path, Action<string> limpar) {
+   AncestraisSemLinks(path); StringBuilder entries = new StringBuilder(); long files = 0, dirs = 0;
+   Inventariar(Path.GetFullPath(path), new DirectoryInfo(path), entries, ref files, ref dirs, 0, limpar);
    // SHA256 apenas do texto dos metadados, nao do conteudo dos arquivos.
    using(SHA256 hash = SHA256.Create()) return "metadados-v2;arquivos=" + files + ";pastas=" + dirs + ";assinatura=" + Hex(hash.ComputeHash(Encoding.UTF8.GetBytes(entries.ToString())));
   }
-  public static string[] Caches(string path) {
-   SemLinks(path); List<string> found = new List<string>(); CachesInterno(path, found); return found.ToArray();
-  }
-  static void CachesInterno(string path, List<string> found) {
-   foreach(string p in Directory.GetDirectories(path)) {
-    string n = Path.GetFileName(p);
-    if(n == ".cache" || n == ".mf" || n == ".wrangler" || n == ".miniflare" || n == "__pycache__") found.Add(p);
-    else CachesInterno(p, found);
-   }
-  }
+
  }
 }
 '@
@@ -155,11 +168,11 @@ function Obter-AssinaturaDependencias([string]$Raiz,[string]$Python) {
   }
   $node=(& node --version|Out-String).Trim();if($LASTEXITCODE-or$node-notmatch'^v\d+\.\d+\.\d+$'){throw 'Versao Node desconhecida.'}
   $pythonVersao=(& $Python --version|Out-String).Trim();if($LASTEXITCODE-or$pythonVersao-notmatch'^Python \d+\.\d+\.\d+$'){throw 'Versao Python desconhecida.'}
-  return @{formato=1;sha=$sha;data=[datetime]::UtcNow.ToString('o');node=$node;python=$pythonVersao;hashes=$hashes}
+  return @{formato=2;sha=$sha;data=[datetime]::UtcNow.ToString('o');node=$node;python=$pythonVersao;hashes=$hashes}
  }finally{$global:LASTEXITCODE=$antes}
 }
 function Comparar-AssinaturaDependencias($Registro,$Atual) {
- if($Registro.formato-ne1-or$Registro.sha-notmatch'^[0-9a-f]{40}$'-or!$Registro.data){return 'registro invalido'}
+ if($Registro.formato-ne2-or$Registro.sha-notmatch'^[0-9a-f]{40}$'-or!$Registro.data){return 'registro invalido'}
  try{[void][datetime]::Parse($Registro.data)}catch{return 'data invalida'}
  if($Registro.node-cne$Atual.node){return 'Node diferente'}
  if($Registro.python-cne$Atual.python){return 'Python diferente'}
@@ -170,9 +183,10 @@ function Comparar-AssinaturaDependencias($Registro,$Atual) {
  foreach($rel in $novos){if($Registro.hashes.$rel-cne$Atual.hashes[$rel]){return 'requirements diferentes'}}
  return ''
 }
-function Limpar-CachesReserva([string]$Pasta) {
+function Inventariar-ReservaLimpa([string]$Pasta) {
  Inicializar-ArvoreDependencias
- foreach($cache in [SupplyVision.ArvoreDependencias]::Caches($Pasta)){Remover-ArvorePreparo $cache}
+ # Delegate chamado so por pasta de cache, nunca por arquivo do inventario.
+ return [SupplyVision.ArvoreDependencias]::Inventario($Pasta,[Action[string]]{param($cache) Remover-ArvorePreparo $cache})
 }
 function Descartar-ReservaDependencias([string]$Raiz,[string]$Preparo) {
  Validar-PastaPreparo $Raiz $Preparo
@@ -224,11 +238,15 @@ function Usar-ReservaDependencias([string]$Raiz,[string]$Preparo,$Atual,[string]
    if($Impedimento){throw $Impedimento}
    if(Test-Path -LiteralPath (Join-Path $reserva 'descartar')){throw 'reserva pendente de descarte'}
    if(!(Mesmo-VolumeDependencias $Raiz $Preparo)){throw 'volume diferente ou ancestral com link'}
+   $arquivoRegistro=Join-Path $reserva 'registro.json'
+   if(!(Mesmo-VolumeDependencias $reserva $arquivoRegistro)){throw 'registro com reparse point'}
+   $h=[IO.File]::Open($arquivoRegistro,[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::None)
+   $leitor=New-Object IO.StreamReader($h);$registro=$leitor.ReadToEnd()|ConvertFrom-Json -ErrorAction Stop
+   # Versao antes de qualquer travessia dos pacotes (inclusive caches/links).
+   if($registro.formato-ne2){throw 'formato antigo da reserva'}
+   if(!$Atual){throw 'metadados/ambiente indisponiveis'}
    if(!(Testar-ArvoreFisica $reserva)){throw 'reserva com reparse point ou incompleta'}
    if(Reserva-DependenciasEmUso $reserva){throw 'reserva em uso'}
-   if(!$Atual){throw 'metadados/ambiente indisponiveis'}
-   $h=[IO.File]::Open((Join-Path $reserva 'registro.json'),[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::None)
-   $leitor=New-Object IO.StreamReader($h);$registro=$leitor.ReadToEnd()|ConvertFrom-Json -ErrorAction Stop
    $motivo=Comparar-AssinaturaDependencias $registro $Atual;if($motivo){throw $motivo}
    # SHA e proveniencia: deve existir no repositorio e ser ancestral do
    # destino. Nao se exige SHA igual ao destino (isso impediria atualizar).
@@ -241,8 +259,7 @@ function Usar-ReservaDependencias([string]$Raiz,[string]$Preparo,$Atual,[string]
    $tipo=if($rel-eq'portal/node_modules'){'Node'}else{'Python'}
    Executar-PassoReserva ("Conferencia da reserva $tipo") {
     if(!(Test-Path -LiteralPath $p -PathType Container)){throw 'reserva incompleta'}
-    Limpar-CachesReserva $p
-    if([SupplyVision.ArvoreDependencias]::Inventario($p)-cne$registro.inventarios.$rel){throw 'reserva incompleta, corrompida ou em uso'}
+    if((Inventariar-ReservaLimpa $p)-cne$registro.inventarios.$rel){throw 'reserva incompleta, corrompida ou em uso'}
    }
   }
   if($medir){Iniciar-PassoPreparo 'Consumo da reserva'}
@@ -285,9 +302,7 @@ function Guardar-ReservaDependencias([string]$Raiz,[string]$Preparo) {
   $p=Join-Path $Preparo ('anteriores/'+$rel)
   $tipo=if($rel-eq'portal/node_modules'){'Node'}else{'Python'}
   $inventarios[$rel]=Executar-PassoReserva ("Inventario da reserva $tipo") {
-   if(!(Testar-ArvoreFisica $p)){throw 'Dependencias anteriores com links ou ausentes; sem reserva.'}
-   Limpar-CachesReserva $p
-   [SupplyVision.ArvoreDependencias]::Inventario($p)
+   Inventariar-ReservaLimpa $p
   }
  }
  Descartar-ReservaDependencias $Raiz $Preparo
@@ -295,6 +310,7 @@ function Guardar-ReservaDependencias([string]$Raiz,[string]$Preparo) {
   $p=Join-Path $candidata $rel;[void][IO.Directory]::CreateDirectory((Split-Path $p -Parent))
   [IO.Directory]::Move((Join-Path $Preparo ('anteriores/'+$rel)),$p)
  }
+ $registro.formato=2
  $registro.data=[datetime]::UtcNow.ToString('o')
  $registro|Add-Member -NotePropertyName inventarios -NotePropertyValue $inventarios -Force
  [IO.File]::WriteAllText((Join-Path $candidata 'registro.json'),($registro|ConvertTo-Json -Depth 6))

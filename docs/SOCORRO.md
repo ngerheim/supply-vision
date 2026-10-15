@@ -20,7 +20,9 @@ supv homologar --copiar --destino "C:\Temp\homologacao.txt"
 
 Os logs e o relatório exibidos pelo `supv` usam o mascaramento da homologação.
 O relatório mostrado, salvo em `.txt` e copiado com `--copiar` usa o mesmo texto
-ASCII, da mesma execução e horário. `logs atualizacao` omite progresso do Git e
+ASCII, da mesma execução e horário. A cópia roda em processo separado com prazo
+de 5 s; se falhar ou bloquear, avisa e encerra, mantendo o arquivo salvo.
+`logs atualizacao` omite progresso do Git e
 blocos de diagnóstico do build; `--bruto` inclui essas linhas, mantendo o mascaramento.
 O arquivo `.txt` permanece salvo; itens reprovados fazem `supv homologar` retornar
 código diferente de zero. Os logs originais continuam privados e não devem ser

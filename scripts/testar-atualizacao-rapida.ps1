@@ -68,7 +68,7 @@ try{
  & git -C $r add .
  & git -C $r -c user.name=Fixture -c user.email=fixture@example.invalid commit -qm fixture
  $assinatura=Obter-AssinaturaDependencias $r 'python'
- foreach($caso in @('valida','troca-falha','lockfile','requirements','node','python','ausente','arquivo','marcador-link','incompleta','corrompida','removido','tamanho','data','pasta-removida','inventario-legado','sem-registro','link-raiz','link-externo','link-interno','em-uso','sha','registro','reinstalar','volume','falha-movimento')){
+ foreach($caso in @('valida','troca-falha','lockfile','requirements','node','python','ausente','arquivo','marcador-link','incompleta','corrompida','removido','tamanho','data','pasta-removida','inventario-legado','formato-antigo','sem-registro','link-raiz','link-externo','link-interno','em-uso','sha','registro','reinstalar','volume','falha-movimento')){
   $p=Nova-PastaPreparo $r;New-Item -ItemType Directory -Force $p|Out-Null
   foreach($rel in @('portal/node_modules','alertas/.venv')){
    $antigo=Join-Path $p ('anteriores/'+$rel);$ativo=Join-Path $r $rel
@@ -97,6 +97,7 @@ try{
    'data' {$f=Join-Path $reserva 'portal/node_modules/pacote';[IO.File]::SetLastWriteTimeUtc($f,([IO.File]::GetLastWriteTimeUtc($f)).AddSeconds(20))}
    'pasta-removida' {Remove-Item (Join-Path $reserva 'alertas/.venv/vazia')}
    'inventario-legado' {$j.inventarios.'portal/node_modules'='a'*64;$j|ConvertTo-Json -Depth 6|Set-Content $registro}
+   'formato-antigo' {$j.formato=1;$j.inventarios.'portal/node_modules'='a'*64;$j|ConvertTo-Json -Depth 6|Set-Content $registro}
    'sem-registro' {Remove-Item -LiteralPath $registro -Force}
    'sha' {$j=Get-Content $registro -Raw|ConvertFrom-Json;$j.sha='0'*40;$j|ConvertTo-Json -Depth 6|Set-Content $registro}
    'registro' {Set-Content $registro 'nao e json'}
@@ -119,8 +120,14 @@ try{
   $script:medicoesReserva=@();$script:pilhaReserva=New-Object Collections.ArrayList
   function Iniciar-PassoPreparo($Nome){$script:medicoesReserva+=$Nome;[void]$script:pilhaReserva.Add($Nome)}
   function Concluir-PassoPreparo($Codigo){$script:pilhaReserva.RemoveAt($script:pilhaReserva.Count-1)}
+  $fisicaReal=(Get-Command Testar-ArvoreFisica).ScriptBlock;$inventarioReal=(Get-Command Inventariar-ReservaLimpa).ScriptBlock
+  if($caso-eq'formato-antigo'){
+   function Testar-ArvoreFisica {throw 'NAO deve conferir arquivos do formato antigo'}
+   function Inventariar-ReservaLimpa {throw 'NAO deve inventariar o formato antigo'}
+  }
   try{$uso=Usar-ReservaDependencias $r $p $a $(if($caso-eq'reinstalar'){'reinstalacao solicitada'}else{''})}
-  finally{Set-Item Function:Reserva-DependenciasEmUso $emUsoReal;Set-Item Function:Mesmo-VolumeDependencias $volumeReal;Remove-Item Function:Iniciar-PassoPreparo,Function:Concluir-PassoPreparo}
+  finally{Set-Item Function:Testar-ArvoreFisica $fisicaReal;Set-Item Function:Inventariar-ReservaLimpa $inventarioReal;Set-Item Function:Reserva-DependenciasEmUso $emUsoReal;Set-Item Function:Mesmo-VolumeDependencias $volumeReal;Remove-Item Function:Iniciar-PassoPreparo,Function:Concluir-PassoPreparo}
+  if($caso-eq'formato-antigo'){Exigir ($uso.motivo-ceq'formato antigo da reserva'-and$script:medicoesReserva-notcontains'Conferencia da reserva Node') 'Formato antigo deve ser descartado antes de qualquer inventario.'}
   Exigir ($script:pilhaReserva.Count-eq0) 'Medicao da reserva ficou aberta apos sucesso/falha.'
   if($caso-eq'valida'){foreach($nome in @('Conferencia geral da reserva','Conferencia da reserva Node','Conferencia da reserva Python','Consumo da reserva')){Exigir ($script:medicoesReserva-contains$nome) ("Passo da reserva ausente: $nome")}}
   Exigir ($uso.usada-eq($caso-in@('valida','troca-falha'))) "Reserva: resultado incorreto em ${caso}: $($uso.motivo)"
