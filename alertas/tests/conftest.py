@@ -93,6 +93,11 @@ def rodar(monkeypatch, tmp_path):
     fake_parametros.normalizar = normalizar
     monkeypatch.setitem(sys.modules, "parametros", fake_parametros)
 
+    for nome in ("contrato_comparacao", "leitura_dados", "vigencia_acordos",
+                 "qualidade_acordos", "regras_comparacao", "resumo_comparacao",
+                 "planilhas_comparacao"):
+        monkeypatch.delitem(sys.modules, nome, raising=False)
+
     spec = importlib.util.spec_from_file_location(
         "rodar_test", ROOT / "processo" / "rodar.py"
     )

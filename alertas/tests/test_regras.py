@@ -171,8 +171,10 @@ def test_tres_grupos_sao_mutuamente_exclusivos(rodar):
 
 
 def test_nomes_de_modelo_e_item_sao_traduzidos_com_fallback(rodar):
-    rodar.MODELOS.update({"M": "MODELO PADRONIZADO"})
-    rodar.SINONIMOS.update({"ITEM": "ITEM PADRONIZADO"})
+    import regras_comparacao
+
+    regras_comparacao.MODELOS.update({"M": "MODELO PADRONIZADO"})
+    regras_comparacao.SINONIMOS.update({"ITEM": "ITEM PADRONIZADO"})
     resultado = rodar.processar(base(qtd=2), acordo([90]))
     assert resultado.loc[0, "Modelo"] == "MODELO PADRONIZADO"
     assert resultado.loc[0, "Item"] == "ITEM PADRONIZADO"
@@ -351,6 +353,8 @@ def test_vigencia_brasileira_aceita_hora(rodar):
 
 
 def test_listas_de_exclusao_comparam_texto_normalizado(rodar, monkeypatch, tmp_path):
+    import leitura_dados
+
     compras = pd.DataFrame({
         "Grupo Despesa": ["Pneus", "PEÇAS"], "Modelo": ["Gol", " onix  "],
         "Codigo OS": ["1", "2"], "Data Abertura": ["01/10/2026"] * 2,
@@ -362,11 +366,11 @@ def test_listas_de_exclusao_comparam_texto_normalizado(rodar, monkeypatch, tmp_p
     caminho = tmp_path / "base.xlsx"
     compras.to_excel(caminho, index=False)
 
-    monkeypatch.setattr(rodar, "GRUPOS_EXCLUIR", {"pneus"})
+    monkeypatch.setattr(leitura_dados, "GRUPOS_EXCLUIR", {"pneus"})
     assert rodar.carregar_base(caminho)["Codigo OS"].tolist() == ["2"]
-    monkeypatch.setattr(rodar, "GRUPOS_EXCLUIR", set())
-    monkeypatch.setattr(rodar, "MODELOS_EXCLUIR", {"ONIX"})
+    monkeypatch.setattr(leitura_dados, "GRUPOS_EXCLUIR", set())
+    monkeypatch.setattr(leitura_dados, "MODELOS_EXCLUIR", {"ONIX"})
     assert rodar.carregar_base(caminho)["Codigo OS"].tolist() == ["1"]
-    monkeypatch.setattr(rodar, "MODELOS_EXCLUIR", set())
-    monkeypatch.setattr(rodar, "FORNECEDORES_EXCLUIR", {"OFICINA SAO  JOSE"})
+    monkeypatch.setattr(leitura_dados, "MODELOS_EXCLUIR", set())
+    monkeypatch.setattr(leitura_dados, "FORNECEDORES_EXCLUIR", {"OFICINA SAO  JOSE"})
     assert rodar.carregar_base(caminho)["Codigo OS"].tolist() == ["2"]
