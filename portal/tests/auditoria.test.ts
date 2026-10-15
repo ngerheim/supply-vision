@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { DatabaseSync } from 'node:sqlite';
-import { MAX_EXPORT_AUDITORIA, erroExportacaoAuditoria, BUSCA_LITERAL_AUDITORIA_SQL } from '../lib/auditoria-limites.ts';
+import { MAX_EXPORT_AUDITORIA, erroExportacaoAuditoria, BUSCA_LITERAL_AUDITORIA_SQL } from '../lib/auditoria-api.ts';
 
 void test('busca de histórico trata porcentagem, sublinhado e barra como texto', () => {
  const db=new DatabaseSync(':memory:');

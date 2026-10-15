@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
-import { ATUALIZAR_UNIDADE_SQL, ATUALIZAR_LOCALIDADE_SQL } from '../lib/catalogos-sql.ts';
+import { ATUALIZAR_UNIDADE_SQL, ATUALIZAR_LOCALIDADE_SQL } from '../lib/catalogos-api.ts';
 void test('referencias inclusive historicas impedem reinterpretar unidade e localidade',()=>{
   const db=new DatabaseSync(':memory:');
   try {

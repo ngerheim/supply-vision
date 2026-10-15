@@ -6,7 +6,7 @@ import { SCHEMA_RELATORIOS } from '../lib/relatorios.ts';
 import { INDICES_LISTAS_GLOBAIS_SQL, migrarIndicesListasGlobais } from '../lib/operacao-dados.ts';
 
 const fonte = fs.readFileSync(new URL('../lib/database.ts', import.meta.url), 'utf8');
-const rota = fs.readFileSync(new URL('../app/api/[...path]/route.ts', import.meta.url), 'utf8');
+const rota = fs.readFileSync(new URL('../lib/importacoes-api.ts', import.meta.url), 'utf8');
 const relatorios = fs.readFileSync(new URL('../lib/relatorios-api.ts', import.meta.url), 'utf8');
 // Executa as consultas REAIS das listas, com JOINs, projecoes e LIMIT originais.
 const consultas = [

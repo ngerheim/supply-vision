@@ -31,7 +31,13 @@
 | `scripts/atualizar-servidor.ps1` | Coordenacao da atualizacao e recuperacao |
 | `scripts/atualizacao-preparo.ps1` | Worktree, portas, dependencias e gates do PREPARAR |
 | `scripts/migrar.ps1`, `migracao-logica.ps1` | Ensaio, transferencia e bloqueio da origem |
-| `portal/app/api/[...path]/route.ts` | API, autorizacao e operacoes de negocio |
+| `portal/app/api/[...path]/route.ts` | Roteamento HTTP, autenticacao, origem, corpo JSON e erros comuns |
+| `portal/lib/sessao-api.ts`, `usuarios-api.ts` | Login, logout e administracao de usuarios; SQL junto dos handlers |
+| `portal/lib/acordos-api.ts`, `catalogos-api.ts`, `mapeamentos-api.ts` | Acordos, condicoes, busca de precos, cadastros e De/Para |
+| `portal/lib/importacoes-api.ts`, `chamados-api.ts` | Importacao/publicacao e operacoes de chamados |
+| `portal/lib/auditoria-api.ts`, `notificacoes-api.ts`, `exportacoes-api.ts` | Historico, entregas/reenvio de e-mail e downloads |
+| `portal/lib/bootstrap-api.ts`, `api-compartilhada.ts` | Dados iniciais e contrato comum dos modulos da API |
+| `portal/lib/controle-escrita.ts` | SQL puro de revisoes e travas, sem importar database.ts |
 | `portal/lib/database.ts` | Schema, migracoes, sessoes e cookies |
 | `portal/lib/domain.ts`, `importacao.ts` | Validacao, normalizacao e publicacao |
 | `portal/components/portal-app.tsx` | Estado da interface e permissoes visuais |

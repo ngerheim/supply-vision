@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 import test from 'node:test';
-import { AUDITAR_USUARIO_SQL, ATUALIZAR_USUARIO_SQL, ATUALIZAR_USUARIO_COM_SENHA_SQL, ENCERRAR_SESSOES_REDEFINIDAS_SQL, ENCERRAR_SESSOES_ALTERADAS_SQL } from '../lib/usuarios-sql.ts';
+import { AUDITAR_USUARIO_SQL, ATUALIZAR_USUARIO_SQL, ATUALIZAR_USUARIO_COM_SENHA_SQL, ENCERRAR_SESSOES_REDEFINIDAS_SQL, ENCERRAR_SESSOES_ALTERADAS_SQL } from '../lib/usuarios-api.ts';
 
 function banco() {
   const db = new DatabaseSync(':memory:');

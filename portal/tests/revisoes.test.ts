@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { DatabaseSync } from 'node:sqlite';
-import { TRIGGERS_REVISAO, TABELAS_CADASTRO, revisaoConfere } from '../lib/revisoes-sql.ts';
+import { TRIGGERS_REVISAO, TABELAS_CADASTRO, revisaoConfere } from '../lib/controle-escrita.ts';
 
 void test('revisões avançam em edição, publicação e UPSERT mesmo sem alterar o timestamp', () => {
   const db = new DatabaseSync(':memory:');
