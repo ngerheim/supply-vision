@@ -101,6 +101,7 @@ if(!$SemTestes){
 & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $Raiz 'scripts\validar-operacao.ps1') -Raiz $Raiz
 if($LASTEXITCODE){throw 'Configuracao operacional reprovada.'}
 if(Test-Path (Join-Path $Privado 'portal\backups\portal-atual.sqlite')){Rodar $Node @('scripts\testar-restauracao.mjs') $Portal}
+Instalar-ComandoSv $Raiz
 Write-Host "`nSupply Vision instalado e validado." -ForegroundColor Green
 $Startup=Join-Path ([Environment]::GetFolderPath('Startup')) 'Supply Vision.cmd'
 $Inicio=Join-Path $Raiz 'INICIAR.bat'

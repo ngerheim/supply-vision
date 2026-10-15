@@ -22,7 +22,7 @@ try{
  $Raiz=Join-Path $pasta 'repo';$Privado=Join-Path $pasta 'privado';$Startup=Join-Path $pasta 'inicio.cmd'
  foreach($dir in @((Join-Path $Raiz 'scripts'),(Join-Path $Privado 'comum'),(Join-Path $Privado 'operacao'),(Join-Path $Privado 'portal/configuracao'))){New-Item -ItemType Directory -Force $dir|Out-Null}
  $env:SUPPLY_VISION_PRIVADO=$Privado
- foreach($nome in @('operacao-logica','inicializacao-logica','central-logica')){Copy-Item (Join-Path $PSScriptRoot "$nome.ps1") (Join-Path $Raiz 'scripts')}
+ foreach($nome in @('operacao-logica','inicializacao-logica','administracao-logica','central-logica','atualizacao-preparo')){Copy-Item (Join-Path $PSScriptRoot "$nome.ps1") (Join-Path $Raiz 'scripts')}
  Set-Content (Join-Path $Privado 'comum/operacao.env') 'MODO_ENSAIO=0'
  Set-Content (Join-Path $Privado 'operacao/status.json') '{"portal":true,"emails":true,"ensaio":false}'
  Set-Content (Join-Path $Privado 'portal/configuracao/portal.env') 'BACKUP_EMAIL_TO=teste@example.com'
@@ -79,7 +79,7 @@ function Testar-SupervisorEncerrado { [SvCentralTeste]::Supervisor();return $fal
  function Localizar-NodeMaquina {return 'node-ficticio'}
  function node-ficticio {$script:chamadas+=('node '+($args-join' '));$global:LASTEXITCODE=0;return 'backup conferido'}
  function powershell.exe {$script:chamadas+='validar';$global:LASTEXITCODE=0;return 'validado'}
- function Start-Process {$script:chamadas+='atualizar';return @{Id=123}}
+ function Start-Process {$script:chamadas+='atualizar';return @{Id=123;StartTime=[datetime]::UtcNow}}
  function Testar-Elevacao {return $script:elevado}
  function Testar-SupervisorEncerrado {return $true}
  function Definir-ModoInicializacao {$script:chamadas+='modo'}

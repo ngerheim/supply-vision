@@ -148,3 +148,20 @@ function Aviso-SessaoRemota([string]$Modo,[bool]$Remota) {
  if($Modo-eq'login'-and$Remota){return 'Na sessão RDP, use Desconectar; não use Sair. Sair encerra a operação neste modo.'}
  return ''
 }
+
+function Acrescentar-ComandoSvAoPath([string]$Raiz,[string]$Atual) {
+ $raizPath=[IO.Path]::GetFullPath($Raiz).TrimEnd('\','/')
+ $partes=@($Atual-split';'|Where-Object {$_})
+ foreach($parte in $partes){
+  $expandida=[Environment]::ExpandEnvironmentVariables($parte.Trim().Trim('"')).TrimEnd('\','/')
+  if($expandida-eq$raizPath){return $Atual}
+ }
+ return ((@($partes)+$raizPath)-join';')
+}
+function Instalar-ComandoSv([string]$Raiz) {
+ $atual=[Environment]::GetEnvironmentVariable('Path','User')
+ $novo=Acrescentar-ComandoSvAoPath $Raiz $atual
+ if($novo-ceq$atual){return}
+ [Environment]::SetEnvironmentVariable('Path',$novo,'User')
+ Write-Host 'Comando sv adicionado ao PATH do usuario. Abra um terminal novo para usar sv.'
+}

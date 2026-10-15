@@ -10,7 +10,7 @@ $dir=Join-Path ([IO.Path]::GetTempPath()) ('sv-pos-migracao-'+[guid]::NewGuid().
 $anterior=$env:SUPPLY_VISION_PRIVADO
 try{
  $repo=Join-Path $dir 'repo';New-Item -ItemType Directory -Force (Join-Path $repo 'scripts')|Out-Null
- foreach($arq in @('operacao-logica.ps1','inicializacao-logica.ps1','homologar.ps1')){Copy-Item (Join-Path $PSScriptRoot $arq) (Join-Path $repo 'scripts')}
+ foreach($arq in @('operacao-logica.ps1','inicializacao-logica.ps1','diagnostico-logica.ps1','homologar.ps1')){Copy-Item (Join-Path $PSScriptRoot $arq) (Join-Path $repo 'scripts')}
  $fonte=Get-Content (Join-Path $PSScriptRoot 'migrar.ps1') -Raw -Encoding UTF8
  # Somente a verificacao de elevacao e simulada; retomada, pergunta e checkpoint reais.
  $fonte=$fonte.Replace('$admin=([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)','$admin=$true')
