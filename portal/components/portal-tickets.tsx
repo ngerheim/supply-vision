@@ -1,0 +1,735 @@
+'use client';
+import { COLUNAS_ORDENACAO_CHAMADOS } from '@/lib/operacao-dados';
+import { gerarChaveRelatorio } from '@/lib/relatorios';
+import { api, errorText } from '@/lib/api';
+import { criarConsultaDebounced } from '@/lib/atualizacao-periodica';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  CheckCircle2,
+  MessageSquare,
+  Pencil,
+  Plus,
+  RefreshCw,
+  Search,
+} from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import { Textarea } from '@/components/ui/textarea';
+import {
+  Info,
+  type JsonData,
+  type AnyRow,
+  Loading,
+  PaginacaoDeLista,
+  FalhaDeCarregamento,
+  Field,
+  SelectField,
+  Empty,
+} from './portal-presentation';
+import { useOrdenacao, CabecalhoOrdenavel } from './portal-table';
+
+const ticketStatusMap: AnyRow = {
+  aberto: ['Aberto', 'bg-sky-50 text-sky-700 ring-1 ring-sky-200'],
+  aguardando_fornecedor: [
+    'Aguardando fornecedor',
+    'bg-violet-50 text-violet-700 ring-1 ring-violet-200',
+  ],
+  fechado: [
+    'Fechado',
+    'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200',
+  ],
+  cancelado: ['Cancelado', 'bg-slate-100 text-slate-600 ring-1 ring-slate-200'],
+};
+const priorityMap: AnyRow = {
+  alta: ['Alta', 'bg-red-50 text-red-700'],
+  media: ['Média', 'bg-amber-50 text-amber-700'],
+  baixa: ['Baixa', 'bg-slate-100 text-slate-600'],
+};
+function tempoEmAberto(criadoEm: string, fechadoEm?: string | null) {
+  const inicio = new Date(criadoEm).getTime(),
+    fim = fechadoEm ? new Date(fechadoEm).getTime() : Date.now();
+  const ms = Math.max(fim - inicio, 0),
+    horas = Math.floor(ms / 3600000),
+    dias = Math.floor(horas / 24);
+  const rotulo =
+    dias >= 1
+      ? `${dias}d ${horas % 24}h`
+      : horas >= 1
+        ? `${horas}h ${Math.floor((ms % 3600000) / 60000)}min`
+        : `${Math.floor(ms / 60000)}min`;
+  return { dias, horas, rotulo, encerrado: !!fechadoEm };
+}
+function Sla({ createdAt, closedAt }: JsonData) {
+  const t = tempoEmAberto(createdAt, closedAt);
+  if (t.encerrado)
+    return (
+      <div>
+        <p className="font-medium tabular-nums">{t.rotulo}</p>
+        <p className="text-[11px] text-muted-foreground">até o encerramento</p>
+      </div>
+    );
+  const tom =
+    t.dias >= 15
+      ? 'text-red-700'
+      : t.dias >= 7
+        ? 'text-amber-700'
+        : 'text-foreground';
+  const aviso =
+    t.dias >= 15
+      ? 'acima de 15 dias'
+      : t.dias >= 7
+        ? 'acima de 7 dias'
+        : 'em andamento';
+  return (
+    <div>
+      <p className={`font-semibold tabular-nums ${tom}`}>{t.rotulo}</p>
+      <p
+        className={`text-[11px] ${t.dias >= 7 ? tom : 'text-muted-foreground'}`}
+      >
+        {aviso}
+      </p>
+    </div>
+  );
+}
+function TicketStatus({ value }: JsonData) {
+  const x = ticketStatusMap[value] || [value, 'bg-slate-100'];
+  return <Badge className={x[1]}>{x[0]}</Badge>;
+}
+export function Tickets({
+  busy,
+  users,
+  agreements,
+  run,
+  initialDetail,
+}: JsonData) {
+  const [data, setData] = useState<AnyRow | null>(null),
+    [group, setGroup] = useState<'ativos' | 'fechados' | 'cancelados'>(
+      'ativos',
+    ),
+    [q, setQ] = useState(''),
+    [open, setOpen] = useState<AnyRow | null>(null),
+    [detail, setDetail] = useState<string | null>(initialDetail || null);
+  const { ordem, alternar } = useOrdenacao('tickets');
+  const querySort = ordem
+    ? `&sort=${COLUNAS_ORDENACAO_CHAMADOS[ordem.coluna]}&direction=${ordem.direcao === 1 ? 'asc' : 'desc'}`
+    : '';
+  const [page, setPage] = useState(1);
+  const [loadError, setLoadError] = useState('');
+  const [consulta] = useState(() =>
+    criarConsultaDebounced<AnyRow>(setData, (erro) =>
+      setLoadError(errorText(erro)),
+    ),
+  );
+  const ultimaBusca = useRef(q);
+  const load = useCallback(
+    async (atraso = 0) => {
+      setLoadError('');
+      await consulta.executar(
+        (signal) =>
+          api(
+            `/api/tickets?page=${page}&pageSize=50&group=${group}&q=${encodeURIComponent(q)}${querySort}`,
+            { signal },
+          ),
+        atraso,
+      );
+    },
+    [page, group, q, querySort, consulta],
+  );
+  useEffect(() => {
+    let active = true;
+    const atraso = q !== ultimaBusca.current ? 300 : 0;
+    ultimaBusca.current = q;
+    queueMicrotask(() => {
+      if (active) void load(atraso);
+    });
+    return () => {
+      active = false;
+      consulta.cancelar();
+    };
+  }, [load, q, consulta]);
+  if (loadError)
+    return <FalhaDeCarregamento erro={loadError} tentar={() => void load()} />;
+  if (!data) return <Loading label="Carregando chamados…" />;
+  if (detail)
+    return (
+      <TicketDetail
+        busy={busy}
+        id={detail}
+        users={users}
+        agreements={agreements}
+        onBack={() => {
+          setDetail(null);
+          void load();
+        }}
+        run={run}
+      />
+    );
+  const s = data.stats || {};
+  const rows = data.tickets || [];
+  const pageCount = data.pageCount,
+    currentPage = data.page;
+  const cards = [
+    ['Abertos', s.aberto],
+    ['Aguardando', s.aguardando],
+    ['Fechados', s.fechado],
+  ];
+  return (
+    <div className="space-y-6">
+      <section className="grid gap-3 sm:grid-cols-3">
+        {cards.map(([label, value]: JsonData, i: number) => (
+          <Card
+            key={label}
+            className="overflow-hidden shadow-sm animate-in fade-in slide-in-from-bottom-2 fill-mode-both"
+            style={{ animationDelay: `${i * 60}ms` }}
+          >
+            <CardContent>
+              <p className="text-sm font-medium text-muted-foreground">
+                {label}
+              </p>
+              <p className="mt-2 text-4xl font-semibold tabular-nums tracking-[-.045em]">
+                {Number(value || 0)}
+              </p>
+            </CardContent>
+          </Card>
+        ))}
+      </section>
+      <div
+        className="flex flex-wrap gap-2 rounded-xl border bg-muted/35 p-1.5"
+        role="tablist"
+        aria-label="Situação dos chamados"
+      >
+        {(
+          [
+            [
+              'ativos',
+              'Ativos',
+              Number(s.aberto || 0) + Number(s.aguardando || 0),
+            ],
+            ['fechados', 'Finalizados', s.fechado],
+            ['cancelados', 'Cancelados', s.cancelado],
+          ] as const
+        ).map(([key, label, count]) => (
+          <Button
+            key={key}
+            role="tab"
+            aria-selected={group === key}
+            variant={group === key ? 'default' : 'ghost'}
+            onClick={() => {
+              setGroup(key);
+              setPage(1);
+            }}
+          >
+            {label}
+            <Badge
+              className={
+                group === key
+                  ? 'bg-white/20 text-white'
+                  : 'bg-background text-foreground'
+              }
+            >
+              {Number(count || 0)}
+            </Badge>
+          </Button>
+        ))}
+      </div>
+      <output>
+        {data.total} chamados; página {currentPage} de {pageCount}.
+      </output>
+      <div className="flex flex-wrap gap-3">
+        <div className="relative min-w-0 basis-64 flex-1">
+          <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            className="pl-9"
+            placeholder="Código, fornecedor ou cidade"
+            aria-label="Pesquisar chamados"
+            value={q}
+            onChange={(e) => {
+              setQ(e.target.value);
+              setPage(1);
+            }}
+          />
+        </div>
+        <Button onClick={() => setOpen({ priority: 'media' })}>
+          <Plus /> Novo chamado
+        </Button>
+      </div>
+      {rows.length ? (
+        <Card className="min-w-0">
+          <CardContent className="min-w-0 px-0 pb-0">
+            <Table className="w-full min-w-[900px] table-fixed">
+              <colgroup>
+                {[9, 31, 11, 20, 14, 15].map((largura, indice) => (
+                  <col key={indice} style={{ width: `${largura}%` }} />
+                ))}
+              </colgroup>
+              <TableHeader>
+                <CabecalhoOrdenavel
+                  acoes={false}
+                  titulos={[
+                    'Código',
+                    'Fornecedor',
+                    'Prioridade',
+                    'Situação',
+                    'Em aberto',
+                    'Solicitante',
+                  ]}
+                  ordem={ordem}
+                  onAlternar={(coluna: number) => {
+                    alternar(coluna);
+                    setPage(1);
+                  }}
+                />
+              </TableHeader>
+              <TableBody>
+                {rows.map((r: AnyRow) => (
+                  <TableRow key={r.id}>
+                    <TableCell>
+                      <button
+                        className="block w-full truncate text-left font-mono text-xs font-semibold text-primary hover:underline"
+                        title={r.code}
+                        onClick={() => setDetail(r.id)}
+                      >
+                        {r.code}
+                      </button>
+                    </TableCell>
+
+                    <TableCell>
+                      <span
+                        className="block truncate font-medium"
+                        title={r.supplierName}
+                      >
+                        {r.supplierName || 'Não informado'}
+                      </span>
+                    </TableCell>
+
+                    <TableCell>
+                      <Badge
+                        className={
+                          (priorityMap[r.priority] || ['—', 'bg-slate-100'])[1]
+                        }
+                      >
+                        {(priorityMap[r.priority] || ['—'])[0]}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <TicketStatus value={r.status} />
+                    </TableCell>
+                    <TableCell className="text-sm">
+                      <Sla createdAt={r.createdAt} closedAt={r.closedAt} />
+                    </TableCell>
+                    <TableCell
+                      className="truncate text-sm"
+                      title={r.requestedBy || 'Não informado'}
+                    >
+                      {r.requestedBy || '—'}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+          <PaginacaoDeLista
+            pagina={currentPage}
+            paginas={pageCount}
+            alterar={setPage}
+          />
+        </Card>
+      ) : (
+        <Empty
+          icon={MessageSquare}
+          title="Nenhum chamado"
+          text="Abra um chamado para registrar uma necessidade de negociação."
+        />
+      )}
+      {open && (
+        <TicketDialog
+          busy={busy}
+          open
+          value={open}
+          users={users}
+          agreements={agreements}
+          onClose={() => setOpen(null)}
+          onSave={(body: AnyRow, submissionKey: string) =>
+            run(async () => {
+              await api('/api/tickets', {
+                method: 'POST',
+                headers: {
+                  'content-type': 'application/json',
+                  'idempotency-key': submissionKey,
+                },
+                body: JSON.stringify(body),
+              });
+              setOpen(null);
+              await load();
+            }, 'Chamado aberto.')
+          }
+        />
+      )}
+    </div>
+  );
+}
+
+function TicketDetail({ busy, id, users, agreements, onBack, run }: JsonData) {
+  const tentativaAndamento = useRef<{ message: string; key: string } | null>(
+    null,
+  );
+  const [d, setD] = useState<AnyRow | null>(null),
+    [msg, setMsg] = useState(''),
+    [status, setStatus] = useState(''),
+    [statusMessage, setStatusMessage] = useState(''),
+    [editing, setEditing] = useState(false);
+  const [loadError, setLoadError] = useState('');
+  const load = useCallback(async () => {
+    setLoadError('');
+    try {
+      const x = await api(`/api/tickets/${id}`);
+      setD(x);
+      setStatus(x.ticket.status);
+      setStatusMessage('');
+    } catch (error) {
+      setLoadError(errorText(error));
+    }
+  }, [id]);
+  useEffect(() => {
+    let active = true;
+    queueMicrotask(() => {
+      if (active) void load();
+    });
+    return () => {
+      active = false;
+    };
+  }, [load]);
+  if (loadError)
+    return (
+      <FalhaDeCarregamento
+        erro={loadError}
+        tentar={() => void load()}
+        voltar={onBack}
+      />
+    );
+  if (!d) return <Loading label="Abrindo chamado…" />;
+  const t = d.ticket;
+  return (
+    <div className="space-y-5">
+      <div className="flex flex-wrap items-center gap-3">
+        <Button variant="outline" onClick={onBack}>
+          ← Voltar
+        </Button>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="truncate text-2xl font-semibold tracking-[-.02em]">
+              {t.supplier_name}
+            </h2>
+            <TicketStatus value={t.status} />
+            <Badge
+              className={(priorityMap[t.priority] || ['—', 'bg-slate-100'])[1]}
+            >
+              {(priorityMap[t.priority] || ['—'])[0]}
+            </Badge>
+          </div>
+          <p className="text-sm text-muted-foreground font-mono">{t.code}</p>
+        </div>
+        <Button variant="outline" onClick={() => void load()}>
+          <RefreshCw /> Atualizar
+        </Button>
+        <Button onClick={() => setEditing(true)}>
+          <Pencil /> Editar chamado
+        </Button>
+      </div>
+      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <Info
+          label="Local"
+          value={t.city ? [t.city, t.state].filter(Boolean).join(' / ') : '—'}
+        />
+        <Info label="Solicitante" value={t.requestedBy || '—'} />
+        <Info label="Responsável" value={t.assignedTo || 'Não atribuído'} />
+        <Card size="sm">
+          <CardContent>
+            <p className="text-xs text-muted-foreground">
+              {t.closed_at ? 'Tempo até encerrar' : 'Tempo em aberto'}
+            </p>
+            <div className="mt-1">
+              <Sla createdAt={t.created_at} closedAt={t.closed_at} />
+            </div>
+          </CardContent>
+        </Card>
+      </section>
+      {(t.scope || t.notes) && (
+        <Card size="sm" className="max-w-3xl">
+          <CardContent className="space-y-3 text-sm">
+            {t.scope && (
+              <div>
+                <p className="text-xs font-medium text-muted-foreground">
+                  Escopo
+                </p>
+                <p className="mt-1 whitespace-pre-wrap break-words">
+                  {t.scope}
+                </p>
+              </div>
+            )}
+            {t.notes && (
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Observações
+                </p>
+                <p className="mt-1 whitespace-pre-wrap">{t.notes}</p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+      <Card size="sm">
+        <CardContent className="grid gap-3 sm:grid-cols-[minmax(12rem,14rem)_minmax(0,1fr)_auto] sm:items-end">
+          <SelectField
+            label="Alterar para"
+            value={status}
+            onChange={setStatus}
+            rows={Object.entries(ticketStatusMap).map(([k, v]: JsonData) => ({
+              id: k,
+              name: v[0],
+            }))}
+          />
+          <Field label="Mensagem da alteração (opcional)">
+            <Input
+              value={statusMessage}
+              onChange={(e) => setStatusMessage(e.target.value)}
+            />
+          </Field>
+          <Button
+            disabled={status === t.status}
+            onClick={() =>
+              run(async () => {
+                await api(`/api/tickets/${id}`, {
+                  method: 'PUT',
+                  headers: { 'content-type': 'application/json' },
+                  body: JSON.stringify({
+                    status,
+                    statusMessage,
+                    expectedRevision: t.revision,
+                  }),
+                });
+                await load();
+              }, 'Situação atualizada.')
+            }
+          >
+            <RefreshCw /> Aplicar
+          </Button>
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader className="border-b">
+          <CardTitle>Histórico</CardTitle>
+        </CardHeader>
+        <CardContent className="pt-5">
+          <ol className="relative space-y-5 border-l border-dashed pl-6">
+            {d.events.map((e: AnyRow) => (
+              <li
+                key={e.id}
+                className="relative animate-in fade-in slide-in-from-left-2 fill-mode-both"
+              >
+                <span
+                  className={`absolute -left-[31px] grid size-5 place-items-center rounded-full ring-4 ring-background ${e.kind === 'status' ? 'bg-amber-500' : e.kind === 'created' ? 'bg-teal-500' : 'bg-slate-300'}`}
+                />
+                <div className="flex flex-wrap items-baseline gap-2">
+                  <span className="text-sm font-semibold">
+                    {e.user || 'Sistema'}
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    {new Date(e.createdAt).toLocaleString('pt-BR')}
+                  </span>
+                </div>
+                {e.kind === 'status' && (
+                  <p className="mt-1 text-sm">
+                    Situação alterada de{' '}
+                    <b>
+                      {(ticketStatusMap[e.fromStatus] || [e.fromStatus])[0]}
+                    </b>{' '}
+                    para{' '}
+                    <b>{(ticketStatusMap[e.toStatus] || [e.toStatus])[0]}</b>.
+                  </p>
+                )}
+                {e.message && (
+                  <p className="mt-1 whitespace-pre-wrap break-words text-sm">
+                    {e.message}
+                  </p>
+                )}
+              </li>
+            ))}
+          </ol>
+          <div className="mt-6 space-y-3 border-t pt-5">
+            <Field label="Registrar andamento">
+              <Textarea value={msg} onChange={(e) => setMsg(e.target.value)} />
+            </Field>
+            <div className="flex justify-end">
+              <Button
+                disabled={!msg.trim()}
+                onClick={() =>
+                  run(async () => {
+                    if (
+                      !tentativaAndamento.current ||
+                      tentativaAndamento.current.message !== msg
+                    )
+                      tentativaAndamento.current = {
+                        message: msg,
+                        key: gerarChaveRelatorio(),
+                      };
+                    await api(`/api/tickets/${id}/events`, {
+                      method: 'POST',
+                      headers: {
+                        'content-type': 'application/json',
+                        'idempotency-key': tentativaAndamento.current.key,
+                      },
+                      body: JSON.stringify({ message: msg }),
+                    });
+                    tentativaAndamento.current = null;
+                    setMsg('');
+                    await load();
+                  }, 'Andamento registrado.')
+                }
+              >
+                <Plus /> Adicionar
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+      {editing && (
+        <TicketDialog
+          busy={busy}
+          open
+          value={{
+            id: t.id,
+            expectedRevision: t.revision,
+            supplierName: t.supplier_name,
+            city: t.city,
+            state: t.state,
+            scope: t.scope,
+            priority: t.priority,
+            assignedTo: t.assigned_to,
+            agreementId: t.agreement_id,
+            notes: t.notes,
+          }}
+          users={users}
+          agreements={agreements}
+          onClose={() => setEditing(false)}
+          onSave={(body: AnyRow) =>
+            run(async () => {
+              await api(`/api/tickets/${id}`, {
+                method: 'PUT',
+                headers: { 'content-type': 'application/json' },
+                body: JSON.stringify(body),
+              });
+              setEditing(false);
+              await load();
+            }, 'Chamado atualizado.')
+          }
+        />
+      )}
+    </div>
+  );
+}
+
+function TicketDialog({ busy, open, value, users, onClose, onSave }: JsonData) {
+  const [form, setForm] = useState<AnyRow>(value || { priority: 'media' }),
+    editing = !!value?.id;
+  const [submissionKey] = useState(() =>
+    Array.from(crypto.getRandomValues(new Uint8Array(16)), (byte) =>
+      byte.toString(16).padStart(2, '0'),
+    ).join(''),
+  );
+  return (
+    <Dialog open={open} onOpenChange={(x) => !x && !busy && onClose()}>
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>
+            {editing ? 'Editar chamado' : 'Novo chamado'}
+          </DialogTitle>
+        </DialogHeader>
+        <fieldset disabled={busy} className="grid gap-4 sm:grid-cols-2">
+          <Field label="Fornecedor *" className="sm:col-span-2">
+            <Input
+              required
+              aria-label="Fornecedor"
+              maxLength={120}
+              value={form.supplierName || ''}
+              onChange={(e) =>
+                setForm({ ...form, supplierName: e.target.value })
+              }
+            />
+          </Field>
+          <Field label="Cidade">
+            <Input
+              value={form.city || ''}
+              onChange={(e) => setForm({ ...form, city: e.target.value })}
+            />
+          </Field>
+          <Field label="UF">
+            <Input
+              maxLength={2}
+              value={form.state || ''}
+              onChange={(e) =>
+                setForm({ ...form, state: e.target.value.toUpperCase() })
+              }
+            />
+          </Field>
+          <SelectField
+            label="Prioridade"
+            value={form.priority || 'media'}
+            onChange={(v: string) => setForm({ ...form, priority: v })}
+            rows={[
+              { id: 'alta', name: 'Alta' },
+              { id: 'media', name: 'Média' },
+              { id: 'baixa', name: 'Baixa' },
+            ]}
+          />
+          <SelectField
+            label="Responsável"
+            value={form.assignedTo || ''}
+            onChange={(v: string) => setForm({ ...form, assignedTo: v })}
+            rows={users || []}
+          />
+
+          <Field label="Escopo pretendido" className="sm:col-span-2">
+            <Input
+              value={form.scope || ''}
+              onChange={(e) => setForm({ ...form, scope: e.target.value })}
+            />
+          </Field>
+          <Field label="Observações" className="sm:col-span-2">
+            <Textarea
+              value={form.notes || ''}
+              onChange={(e) => setForm({ ...form, notes: e.target.value })}
+            />
+          </Field>
+        </fieldset>
+        <DialogFooter>
+          <Button disabled={busy} variant="outline" onClick={onClose}>
+            Cancelar
+          </Button>
+          <Button
+            disabled={busy || !form.supplierName?.trim()}
+            onClick={() => onSave(form, submissionKey)}
+          >
+            <CheckCircle2 /> {editing ? 'Salvar alterações' : 'Abrir chamado'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}

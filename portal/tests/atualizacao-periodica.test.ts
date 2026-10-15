@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
-import test from 'node:test';
+import test, { before } from 'node:test';
 import { setImmediate } from 'node:timers/promises';
+import { fileURLToPath } from 'node:url';
 import { CABECALHO_ATUALIZACAO_AUTOMATICA, iniciarAtualizacaoPeriodica, registraAtividade } from '../lib/atualizacao-periodica.ts';
 import { api } from '../lib/api.ts';
 
@@ -69,4 +70,45 @@ void test('cliente envia o cabeçalho de consulta automática só quando pedido'
   await api('/api/reports', { headers: CABECALHO_ATUALIZACAO_AUTOMATICA });
   await api('/api/reports');
   assert.deepEqual(recebidos, ['1', null]);
+});
+
+let salvarEAtualizar: typeof import('../components/portal-app.tsx').salvarEAtualizar;
+before(async () => {
+  // Compila o export do consumidor TSX sem abrir servidor. O tree shaking
+  // dispensa as telas neste teste do contrato de salvar e atualizar.
+  const { build } = await import('vite');
+  const bundle = await build({
+    configFile: false,
+    logLevel: 'silent',
+    resolve: { alias: { '@': fileURLToPath(new URL('../', import.meta.url)) } },
+    plugins: [{
+      name: 'contrato-salvar-atualizar',
+      resolveId: id => id.endsWith('/contrato') || id === 'contrato' ? '\0contrato' : undefined,
+      load: id => id === '\0contrato'
+        ? `export { salvarEAtualizar } from ${JSON.stringify(fileURLToPath(new URL('../components/portal-app.tsx', import.meta.url)))};`
+        : undefined,
+    }],
+    build: {
+      write: false,
+      lib: { entry: 'contrato', formats: ['es'] },
+      rolldownOptions: { treeshake: { moduleSideEffects: false } },
+    },
+  });
+  const result = Array.isArray(bundle) ? bundle[0] : bundle;
+  if (!('output' in result)) throw new Error('Bundle de contrato ausente');
+  const chunk = result.output.find(output => output.type === 'chunk');
+  if (!chunk) throw new Error('Export de contrato ausente');
+  ({ salvarEAtualizar } = await import(`data:text/javascript;base64,${Buffer.from(chunk.code).toString('base64')}`));
+});
+void test('falha na recarga após salvar preserva confirmação e não repete escrita', async () => {
+  const events: string[] = [];
+  const result = await salvarEAtualizar(async () => { events.push('save'); return 42; },
+    async () => { events.push('refresh'); throw new Error('offline'); },
+    () => events.push('saved'), () => events.push('refresh-error'));
+  assert.equal(result, 42);
+  assert.deepEqual(events, ['save', 'saved', 'refresh', 'refresh-error']);
+});
+void test('falha ao salvar não confirma sucesso nem recarrega', async () => {
+  const unexpected = () => { assert.fail('não deve ser executado'); };
+  await assert.rejects(salvarEAtualizar(async () => { throw new Error('save-error'); }, unexpected, unexpected, unexpected), /save-error/);
 });

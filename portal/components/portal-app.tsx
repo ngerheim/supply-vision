@@ -1,48 +1,27 @@
 'use client';
-import { COLUNAS_ORDENACAO_CHAMADOS } from '@/lib/operacao-dados';
-import { gerarChaveRelatorio } from '@/lib/relatorios';
-
 import { Reports } from '@/components/reports';
-import { rotuloAcaoHistorico, rotuloEntidadeHistorico } from '@/lib/historico-legivel';
-import { GRUPOS_NAVEGACAO, NOMES_PERFIL, podeAcessarAba, type Nav } from '@/lib/navegacao';
-import { correspondeSituacaoAcordo } from '@/lib/situacao-acordos';
-
+import { podeAcessarAba, type Nav } from '@/lib/navegacao';
 import { api, errorText } from '@/lib/api';
 import { EmailNotifications } from '@/components/email-notifications';
 import { Imports } from '@/components/imports';
 import { AgreementDialog, ItemDialog } from '@/components/agreement-dialogs';
-import { SearchMultiSelect, type SearchOption } from '@/components/search-multi-select';
-import { CAMPOS_BUSCA, filtrosVazios, parametrosBusca } from '@/lib/filtros-busca';
-import { salvarEAtualizar } from '@/lib/salvar-e-atualizar';
-import { criarConsultaDebounced } from '@/lib/atualizacao-periodica';
-import { SearchSelect } from '@/components/search-select';
-import { BRAZILIAN_STATES, MIN_PASSWORD_LENGTH, validatePassword } from '@/lib/domain';
-import { correspondeBusca } from '@/lib/busca';
+import { filtrosVazios } from '@/lib/filtros-busca';
 import { dataDeNegocio } from '@/lib/data-negocio';
-import { normalizeImportText } from '@/lib/domain';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import {
-  AlertTriangle, CheckCircle2, Database, Download, Factory, FileUp, Handshake, History,
-  ExternalLink, LoaderCircle, LogOut, MessageSquare, PackageSearch, PanelLeftClose, PanelLeftOpen, Pencil, Plus, RefreshCw, Search, Settings, ShieldCheck,
-  Trash2, Upload, Wrench, ArrowDown, ArrowUp, ArrowUpDown,
-} from 'lucide-react';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Badge } from '@/components/ui/badge';
+import { AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
-import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Textarea } from '@/components/ui/textarea';
-
-type JsonData = ReturnType<typeof JSON.parse>;
-type AnyRow = Record<string, JsonData>;
-
-const money = (value: number) => new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(value ?? 0);
-const date = (value?: string|null) => value ? new Intl.DateTimeFormat('pt-BR').format(new Date(`${value.slice(0,10)}T12:00:00`)) : 'Indeterminado';
-const cnpj = (value: string) => (value || '').replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5');
+import { Card, CardContent } from '@/components/ui/card';
+import { type JsonData, type AnyRow, Loading } from './portal-presentation';
+import { Login } from './portal-login';
+import { Sidebar } from './portal-sidebar';
+import { SearchPage } from './portal-search';
+import { Maintenance } from './portal-maintenance';
+import { Agreements, AgreementDetail } from './portal-agreements';
+import { CatalogPage, Catalogs, CatalogDialog } from './portal-catalogs';
+import { Tickets } from './portal-tickets';
+import { ChangeHistory } from './portal-history';
+import { Administration } from './portal-users';
+import { Mappings } from './portal-mappings';
 
 export default function PortalApp() {
   const [user,setUser]=useState<AnyRow|null|undefined>(undefined), [data,setData]=useState<AnyRow|null>(null), [nav,setNav]=useState<Nav>('search');
@@ -116,304 +95,9 @@ export default function PortalApp() {
   </main>;
 }
 
-function Loading({label}:{label:string}){return <div className="grid min-h-screen place-items-center bg-[#eef2f5]"><div className="flex items-center gap-3 rounded-2xl bg-white px-6 py-5 shadow-lg"><LoaderCircle className="size-5 animate-spin text-primary"/><span className="text-sm font-medium">{label}</span></div></div>}
-function Login({onLogin,message}:{onLogin:(u:AnyRow)=>void;message?:string}){const [email,setEmail]=useState(''),[password,setPassword]=useState(''),[error,setError]=useState(''),[busy,setBusy]=useState(false);const submit=async(e:React.SyntheticEvent<HTMLFormElement>)=>{e.preventDefault();setBusy(true);setError('');try{const x=await api('/api/login',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({email,password})});onLogin(x.user)}catch(err:unknown){setError(errorText(err))}finally{setBusy(false)}};return <main className="relative grid min-h-screen place-items-center overflow-hidden bg-[#0a1420] p-6"><div className="pointer-events-none absolute inset-0 opacity-70 [background-image:radial-gradient(ellipse_at_15%_10%,rgba(45,212,191,.20)_0,transparent_45%),radial-gradient(ellipse_at_85%_80%,rgba(56,189,248,.16)_0,transparent_45%)]"/><div className="pointer-events-none absolute inset-0 opacity-[.05] [background-image:linear-gradient(rgba(255,255,255,.6)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,.6)_1px,transparent_1px)] [background-size:56px_56px]"/><section className="relative w-full max-w-md space-y-6 animate-in fade-in zoom-in-95 duration-500"><h1 className="text-center text-4xl font-semibold tracking-[-.04em] text-white sm:text-5xl">Portal Suprimentos</h1><Card className="border-white/10 bg-white p-3 text-foreground shadow-[0_30px_80px_-20px_rgb(0_0_0/.55)]"><CardContent className="pt-6"><form className="space-y-4" onSubmit={submit}>{message&&<output className="block text-sm text-muted-foreground">{message}</output>}<Field label="E-mail"><Input className="h-11" type="email" autoComplete="username" value={email} onChange={e=>setEmail(e.target.value)}/></Field><Field label="Senha"><Input className="h-11" type="password" autoComplete="current-password" value={password} onChange={e=>setPassword(e.target.value)}/></Field>{error&&<Alert variant="destructive" className="animate-in fade-in slide-in-from-top-1"><AlertTriangle/><AlertTitle>Não foi possível entrar</AlertTitle><AlertDescription>{error}</AlertDescription></Alert>}<Button type="submit" className="h-11 w-full transition-transform active:scale-[.985]" disabled={busy||!email||!password}>{busy?<LoaderCircle className="animate-spin"/>:<ShieldCheck/>} Entrar</Button></form></CardContent></Card></section></main>}
-
-const navItems:Record<Nav,{label:string;icon:typeof PackageSearch}>={
-  search:{label:'Buscar',icon:PackageSearch}, maintenance:{label:'Manutenção',icon:Wrench},
-  tickets:{label:'Chamados',icon:MessageSquare}, agreements:{label:'Acordos',icon:Handshake},
-  suppliers:{label:'Fornecedores',icon:Factory}, imports:{label:'Importações',icon:FileUp},
-  catalogs:{label:'Cadastros',icon:Database}, mappings:{label:'De/Para',icon:RefreshCw},
-  reports:{label:'Relatórios',icon:FileUp}, history:{label:'Histórico',icon:History},
-  notifications:{label:'E-mails',icon:MessageSquare}, admin:{label:'Usuários',icon:Settings},
-};
-function Sidebar({nav,setNav,user,onLogout,collapsed,onToggle}:JsonData){
-  return <aside className={`fixed inset-y-0 left-0 z-30 flex w-16 flex-col overflow-hidden border-r border-sidebar-border bg-sidebar text-sidebar-foreground transition-[width] duration-300 ${collapsed?'lg:w-16':'lg:w-44'}`}>
-    <div className="pointer-events-none absolute inset-0 opacity-60 [background-image:radial-gradient(ellipse_at_20%_0%,rgba(45,212,191,.14)_0,transparent_55%)]"/>
-    <nav className="relative flex-1 overflow-y-auto px-2 py-5 text-sm lg:px-3" aria-label="Navegação principal">
-      <button type="button" onClick={onToggle} title={collapsed?'Expandir barra lateral':'Recolher barra lateral'} aria-label={collapsed?'Expandir barra lateral':'Recolher barra lateral'} aria-expanded={!collapsed} className="mb-3 hidden w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-xs opacity-45 hover:bg-sidebar-accent hover:opacity-100 lg:flex">{collapsed?<PanelLeftOpen className="size-4 shrink-0"/>:<PanelLeftClose className="size-4 shrink-0"/>}{!collapsed&&<span className="truncate">Recolher menu</span>}</button>
-      {GRUPOS_NAVEGACAO.filter(grupo=>podeAcessarAba(user.role,grupo.abas[0])).map(grupo=><fieldset key={grupo.nome} aria-label={grupo.nome} className="mb-3 space-y-1 border-t border-sidebar-border pt-3">{!collapsed&&<p className="hidden px-3 pb-2 text-[10px] font-bold uppercase tracking-[.15em] opacity-45 lg:block">{grupo.nome}</p>}{grupo.abas.map(aba=><NavButton key={aba} {...navItems[aba]} active={nav===aba} onClick={()=>setNav(aba)} collapsed={collapsed}/>)}</fieldset>)}
-    </nav>
-    <div className="border-t border-sidebar-border p-3">{!collapsed&&<p className="mb-2 hidden truncate text-xs opacity-60 lg:block">{roleName(user.role)}</p>}<Button size="icon-sm" variant="ghost" onClick={onLogout} aria-label="Sair" title="Sair"><LogOut/></Button></div>
-  </aside>;
+export async function salvarEAtualizar<T>(save: () => Promise<T>, refresh: () => Promise<unknown>, onSaved: () => void, onRefreshError: (error: unknown) => void): Promise<T> {
+  const result = await save();
+  onSaved();
+  try { await refresh(); } catch (error) { onRefreshError(error); }
+  return result;
 }
-function NavButton({label,icon:Icon,active,onClick,collapsed}:JsonData){return <button onClick={onClick} title={label} aria-label={label} aria-current={active?'page':undefined} className={`group relative flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-all duration-200 ${active?'bg-sidebar-primary text-sidebar-primary-foreground shadow-sm':'opacity-55 hover:translate-x-0.5 hover:bg-sidebar-accent hover:opacity-100'}`}>{active&&<span className="absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-full bg-teal-300"/>}<Icon className="size-4 shrink-0"/>{!collapsed&&<span className="hidden flex-1 truncate lg:block">{label}</span>}</button>}
-
-
-
-function SearchPage({catalogs,openAgreement,filters,setFilters}:JsonData){
-  const [rows,setRows]=useState<AnyRow[]>([]),[meta,setMeta]=useState<AnyRow>({}),[loading,setLoading]=useState(false),[searched,setSearched]=useState(false),[searchError,setSearchError]=useState('');
-  const [searchedQuery,setSearchedQuery]=useState('');
-  type Options = Record<typeof CAMPOS_BUSCA[number], SearchOption[]>;
-  const [optionResult,setOptionResult]=useState<{query:string;options:Options}|null>(null);
-  const [optionError,setOptionError]=useState(''),[optionRevision,setOptionRevision]=useState(0);
-  const query=parametrosBusca(filters).toString();
-  const loadingOptions=optionResult?.query!==query || !!optionError;
-  useEffect(()=>{
-    const controller=new AbortController();
-    const timer=setTimeout(()=>{
-      setOptionError('');
-      void api<{options:Options}>(`/api/search/options?${query}`,{signal:controller.signal})
-        .then(result=>{if(!controller.signal.aborted)setOptionResult({query,options:result.options})})
-        .catch(error=>{if(!controller.signal.aborted)setOptionError(errorText(error))});
-    },150);
-    return ()=>{clearTimeout(timer);controller.abort()};
-  },[query,optionRevision]);
-  const labels={state:'Estado',location:'Cidade',model:'Modelo',item:'Peça ou serviço',supplier:'Fornecedor'};
-  const selectedOptions:Options={
-    state:Array.from(new Set<string>((catalogs.locations||[]).map((x:AnyRow)=>String(x.state)))).map(uf=>({id:uf,name:uf})),
-    location:(catalogs.locations||[]).map((x:AnyRow)=>({id:x.id,name:x.city})),
-    model:catalogs.models||[],item:catalogs.items||[],
-    supplier:(catalogs.suppliers||[]).map((x:AnyRow)=>({id:x.id,name:x.tradeName})),
-  };
-  const search=async()=>{setLoading(true);setSearchError('');try{const p=parametrosBusca(filters);const x=await api(`/api/search?${p}`);setRows(x.rows);setMeta({total:x.total,truncated:x.truncated,limit:x.limit});setSearched(true);setSearchedQuery(query)}catch(error){setSearchError(errorText(error));setSearched(false);setRows([])}finally{setLoading(false)}};return <div className="space-y-5"><Card className="overflow-hidden"><CardContent className="grid gap-3 pt-5 md:grid-cols-2 xl:grid-cols-[minmax(5rem,.45fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.15fr)_minmax(0,1.4fr)]">{(['state','location','model','item','supplier'] as const).map(campo=><SearchMultiSelect key={campo} label={labels[campo]} value={filters[campo]} onChange={(v:string[])=>setFilters({...filters,[campo]:v})} options={optionResult?.options[campo]||[]} selectedOptions={selectedOptions[campo]} loading={loadingOptions}/>) }<div className="flex items-center justify-between gap-3 md:col-span-2 xl:col-span-5"><Button variant="ghost" className="text-muted-foreground" onClick={()=>{setFilters(filtrosVazios());setSearched(false);setRows([])}}>Limpar filtros</Button><Button size="lg" className="transition-transform active:scale-[.97]" onClick={search} disabled={loading}>{loading?<LoaderCircle className="animate-spin"/>:<Search/>} Pesquisar</Button></div></CardContent></Card>{optionError&&<Alert variant="destructive"><AlertTriangle/><AlertTitle>Não foi possível atualizar os filtros</AlertTitle><AlertDescription>{optionError} <Button variant="outline" onClick={()=>setOptionRevision(v=>v+1)}>Tentar novamente</Button></AlertDescription></Alert>}{searchError&&<Alert variant="destructive"><AlertTriangle/><AlertTitle>Não foi possível pesquisar</AlertTitle><AlertDescription>{searchError}</AlertDescription></Alert>}{searched&&searchedQuery===query?<Card><CardHeader className="border-b"><CardTitle>{meta.truncated?`Mostrando ${rows.length.toLocaleString('pt-BR')} de ${Number(meta.total).toLocaleString('pt-BR')} condições`:`${Number(meta.total??rows.length).toLocaleString('pt-BR')} condições encontradas`}</CardTitle>{meta.truncated&&<Alert variant="destructive" className="mt-3"><AlertTriangle/><AlertTitle>Resultado incompleto</AlertTitle><AlertDescription>A consulta encontrou {Number(meta.total).toLocaleString('pt-BR')} condições e apenas as {rows.length.toLocaleString('pt-BR')} primeiras estão na tabela. Use os filtros de item, modelo, cidade ou fornecedor para reduzir a lista antes de comparar preços.</AlertDescription></Alert>}</CardHeader><CardContent className="px-0 pb-0"><Table><TableHeader><TableRow><TableHead>Peça / serviço</TableHead><TableHead>Modelo</TableHead><TableHead>Fornecedor</TableHead><TableHead>Cidade</TableHead><TableHead>Marcas</TableHead><TableHead>Unidade</TableHead><TableHead className="text-right">Preço</TableHead></TableRow></TableHeader><TableBody>{rows.map(r=><TableRow key={r.id}><TableCell className="font-medium"><button className="text-left text-primary hover:underline" onClick={()=>openAgreement(r.agreementId)}>{r.item}</button></TableCell><TableCell>{r.model}</TableCell><TableCell><p className="font-medium">{r.supplier}</p><p className="text-xs text-muted-foreground">{r.number}</p></TableCell><TableCell>{r.city} / {r.state}</TableCell><TableCell className="max-w-64 truncate text-muted-foreground">{r.brands||'Livre'}</TableCell><TableCell>{r.unit}</TableCell><TableCell className="text-right font-semibold tabular-nums">{r.courtesy?<Badge className="bg-sky-50 text-sky-700">Cortesia</Badge>:money(r.price)}</TableCell></TableRow>)}</TableBody></Table></CardContent></Card>:<Empty icon={Search} title="Monte sua pesquisa" text="As opções se ajustam às escolhas nos outros filtros. Selecione uma ou mais opções e clique em Pesquisar."/>}</div>}
-
-/* A aba nao guarda copia nem consulta banco: ela emoldura uma pagina do
-   relatorio publicado no Power BI. O endereco chega pelo bootstrap, so depois
-   do login, e e montado no servidor (lib/powerbi.ts). */
-function Maintenance({url}:{url:string}){
-  /* Trocar a key remonta o iframe do zero. E a unica forma de recarregar um
-     quadro de outra origem: o portal nao consegue falar com o conteudo dele. */
-  const [recarga,setRecarga]=useState(0);
-  if(!url)return <div className="space-y-5"><h1 className="text-2xl font-semibold">Histórico de Manutenção</h1><Alert><AlertTriangle/><AlertTitle>Relatório temporariamente indisponível</AlertTitle><AlertDescription>O endereço do Power BI está ausente ou inválido na configuração deste servidor. Avise a equipe responsável pelo Portal.</AlertDescription></Alert></div>;
-  return <div className="space-y-4">
-    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-      <div><h1 className="text-2xl font-semibold">Histórico de Manutenção</h1></div>
-      <div className="flex flex-wrap gap-2 sm:justify-end">
-        <Button variant="outline" onClick={()=>setRecarga(valor=>valor+1)}><RefreshCw/> Recarregar</Button>
-        <Button variant="outline" onClick={()=>window.open(url,'_blank','noopener,noreferrer')}><ExternalLink/> Abrir em nova aba</Button>
-      </div>
-    </div>
-    <Card className="overflow-hidden shadow-sm">
-      <CardContent className="p-0">
-        <iframe key={recarga} src={url} title="Histórico de Manutenção — relatório do Power BI" className="h-[calc(100vh-11rem)] min-h-[640px] w-full border-0" allowFullScreen sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-forms allow-downloads"/>
-      </CardContent>
-    </Card>
-  </div>;
-}
-
-function Agreements({data,onOpen,onNew,canWrite}:JsonData){const [q,setQ]=useState(''),[status,setStatus]=useState('');const rows=data.agreements.filter((r:AnyRow)=>(!q||correspondeBusca(`${r.number} ${r.supplier} ${r.cnpj} ${r.locations}`,q))&&correspondeSituacaoAcordo(r.effectiveStatus||r.status,status));return <div className="space-y-5"><div className="flex flex-wrap gap-3"><div className="relative min-w-0 basis-64 flex-1"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"/><Input className="pl-9" placeholder="Número, fornecedor, CNPJ ou cidade" value={q} onChange={e=>setQ(e.target.value)}/></div><NativeSelect className="w-48" value={status} onChange={e=>setStatus(e.target.value)}><NativeSelectOption value="">Todas as situações</NativeSelectOption><NativeSelectOption value="active">Vigente</NativeSelectOption><NativeSelectOption value="expiring">Vence em até 60 dias</NativeSelectOption><NativeSelectOption value="scheduled">Agendado</NativeSelectOption><NativeSelectOption value="expired">Expirado</NativeSelectOption><NativeSelectOption value="suspended">Suspenso</NativeSelectOption></NativeSelect>{canWrite&&<Button variant="outline" onClick={()=>{window.location.href='/api/export/agreements'}}><Download/> Exportar acordos</Button>}{canWrite&&<Button onClick={onNew}><Plus/> Novo</Button>}</div><AgreementTable rows={rows} onOpen={onOpen} title={`${rows.length} acordos`}/></div>}
-
-function AgreementTable({rows,onOpen,title}:JsonData){const [page,setPage]=useState(1);const pageCount=Math.max(1,Math.ceil(rows.length/50)),currentPage=Math.min(page,pageCount);const {ordem,alternar,ordenar}=useOrdenacao('agreements');/* Itens e vigencia sao numero e data: ordenar pelo texto exibido poria "10" antes de "9" e 01/12 antes de 02/01, entao ordena-se pelo valor de origem. */const ordenadas=ordenar(rows,(r:AnyRow)=>[r.number,r.supplier,r.locations,r.effectiveStatus||r.status]);return <Card><CardHeader className="border-b"><CardTitle>{title}</CardTitle></CardHeader><CardContent className="px-0 pb-0"><Table><TableHeader><CabecalhoOrdenavel acoes={false} titulos={['Acordo','Fornecedor','Localidades','Situação']} ordem={ordem} onAlternar={alternar}/></TableHeader><TableBody>{ordenadas.slice((currentPage-1)*50,currentPage*50).map((r:AnyRow)=><TableRow key={r.id}><TableCell><button className="text-left" onClick={()=>onOpen(r.id)}><span className="block font-mono text-xs font-semibold text-primary hover:underline">{r.number}</span></button></TableCell><TableCell><p className="font-medium">{r.supplier}</p><p className="text-xs text-muted-foreground">{cnpj(r.cnpj)}</p></TableCell><TableCell className="max-w-72 truncate">{r.locations||'—'}</TableCell><TableCell><Status value={r.effectiveStatus||r.status}/></TableCell></TableRow>)}</TableBody></Table></CardContent><PaginacaoDeLista pagina={currentPage} paginas={pageCount} alterar={setPage}/></Card>}
-
-function AgreementDetail({id,revision,canWrite,isAdmin,onBack,onEdit,onItem,onImport,onDelete,run}:JsonData){const [detail,setDetail]=useState<AnyRow|null>(null),[q,setQ]=useState(''),[loadError,setLoadError]=useState(''),[moreBusy,setMoreBusy]=useState(false),[ordem,setOrdem]=useState({coluna:0,direcao:1});const sortKeys=['item','model','location','brands','unit','price'];const querySort=`sort=${sortKeys[ordem.coluna]}&direction=${ordem.direcao===1?'asc':'desc'}`;const alternar=(coluna:number)=>setOrdem(atual=>({coluna,direcao:atual.coluna===coluna?-atual.direcao:1}));const loadMore=async()=>{if(!detail||moreBusy)return;setMoreBusy(true);try{const next=await api(`/api/agreements/${id}?${querySort}&offset=${detail.items.length}`);if(next.version!==detail.version||next.totalItems!==detail.totalItems){setDetail(null);await load();return}setDetail({...next,items:[...detail.items,...next.items]})}catch(error){setLoadError(errorText(error))}finally{setMoreBusy(false)}};const load=useCallback(async()=>{try{const next=await api(`/api/agreements/${id}?${querySort}`);setDetail(next);setLoadError('')}catch(error){setLoadError(errorText(error))}},[id,querySort]);useEffect(()=>{void load()},[load,revision]);if(loadError)return <div className="space-y-4"><p role="alert">{loadError}</p><Button onClick={()=>void load()}>Tentar novamente</Button><Button variant="outline" onClick={onBack}>← Voltar</Button></div>;if(!detail)return <Loading label="Abrindo acordo…"/>;const a=detail.agreement, items=detail.items.filter((x:AnyRow)=>!q||correspondeBusca(`${x.item} ${x.model} ${x.city} ${x.brands}`,q));return <div className="space-y-5"><div className="flex flex-wrap items-center gap-3"><Button variant="outline" onClick={onBack}>← Voltar</Button><div className="min-w-0 flex-1"><div className="flex items-center gap-2"><h2 className="truncate text-2xl font-semibold">{a.number}</h2><Status value={a.effectiveStatus||a.status}/></div><p className="text-sm text-muted-foreground">{a.supplier} · {cnpj(a.cnpj)}</p></div>{canWrite&&<><Button variant="outline" onClick={()=>onEdit({...a,locationIds:detail.locations.map((x:AnyRow)=>x.id),supplierId:a.supplier_id,startDate:a.start_date,endDate:a.end_date})}><Pencil/> Editar acordo</Button><Button variant="outline" onClick={onImport}><Upload/> Substituir tabela</Button>{isAdmin&&<Button variant="outline" className="text-destructive hover:bg-destructive/10" onClick={()=>onDelete(a,detail)}><Trash2/> Excluir acordo</Button>}<Button onClick={()=>onItem({agreementId:id,modelIds:[],price:'',locationIds:detail.locations.map((x:AnyRow)=>x.id),locationId:detail.locations.length===1?detail.locations[0].id:''})}><Plus/> Nova condição</Button></>}</div><section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"><Info label="Início" value={date(a.start_date)}/><Info label="Fim" value={date(a.end_date)}/></section>{a.notes&&<Card size="sm"><CardContent><p className="text-xs font-medium text-muted-foreground">Observações</p><p className="mt-1 whitespace-pre-wrap break-words">{a.notes}</p></CardContent></Card>}<Card><CardHeader className="border-b sm:grid-cols-[1fr_auto]"><div><CardTitle>Tabela vigente</CardTitle></div><div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"/><Input className="pl-9" aria-label="Filtrar condições carregadas" value={q} onChange={e=>setQ(e.target.value)}/></div></CardHeader><CardContent className="px-0 pb-0"><Table><TableHeader className="sticky top-0 z-10 bg-card"><CabecalhoOrdenavel titulos={['Item','Modelo','Local','Marcas','Unid.','Preço']} ordem={ordem} onAlternar={alternar} acoes={canWrite}/></TableHeader><TableBody>{items.map((r:AnyRow)=><TableRow key={r.id}><TableCell className="font-medium">{r.item}</TableCell><TableCell>{r.model}</TableCell><TableCell>{r.city} / {r.state}</TableCell><TableCell className="max-w-56 truncate text-muted-foreground">{r.brands||'Livre'}</TableCell><TableCell>{r.unit}</TableCell><TableCell className="text-right font-semibold">{r.courtesy?<Badge className="bg-sky-50 text-sky-700">Cortesia</Badge>:money(r.price)}</TableCell>{canWrite&&<TableCell><div className="flex justify-end gap-1"><Button size="icon-sm" variant="ghost" aria-label="Editar condição" onClick={()=>onItem({...r,agreementId:id,modelIds:[r.modelId],locationIds:detail.locations.map((x:AnyRow)=>x.id)})}><Pencil/></Button><Button size="icon-sm" variant="ghost" aria-label="Remover condição" className="text-destructive" onClick={()=>confirm('Remover esta condição?')&&run(async()=>{await api(`/api/items/${r.id}?expectedRevision=${encodeURIComponent(String(r.revision))}`,{method:'DELETE'});await load()},'Condição removida.')}><Trash2/></Button></div></TableCell>}</TableRow>)}</TableBody></Table></CardContent>{detail.items.length<detail.totalItems&&<div className="space-y-2 p-4"><p className="text-sm text-muted-foreground">A ordenação considera todas as condições. O filtro considera apenas as já carregadas.</p><Button variant="outline" disabled={moreBusy} onClick={()=>void loadMore()}>{moreBusy?'Carregando…':'Carregar mais condições'}</Button></div>}</Card></div>}
-function Info({label,value}:JsonData){return <Card size="sm"><CardContent><p className="text-xs text-muted-foreground">{label}</p><p className="mt-1 font-semibold">{value}</p></CardContent></Card>}
-
-// Ordenacao no cliente: a listagem ja vem inteira do servidor, entao nao ha
-// motivo para ida e volta. Sao tres estados por coluna — crescente, decrescente
-// e sem ordenacao — para dar como voltar a ordem original. A comparacao usa
-// colacao pt-BR com numeric, para "HILUX 2.10" vir depois de "HILUX 2.8" e
-// acento nao jogar a palavra para o fim da lista.
-function useOrdenacao(chave?:string){
-  const [escolha,setEscolha]=useState<AnyRow|null>(null);
-  // A escolha guarda a aba em que foi feita. Trocar de aba muda o significado
-  // das colunas, entao a escolha antiga passa a ser ignorada — derivado, sem
-  // efeito colateral, que e o que o react-compiler exige.
-  const ordem=escolha&&escolha.chave===chave?escolha:null;
-  const alternar=(coluna:number)=>setEscolha(!ordem||ordem.coluna!==coluna?{chave,coluna,direcao:1}:ordem.direcao===1?{chave,coluna,direcao:-1}:null);
-  // Converte so o que tem representacao textual obvia. String() sobre valor de
-  // tipo desconhecido produziria "[object Object]" numa celula que fosse um no
-  // de JSX, e a ordenacao sairia errada sem ninguem notar.
-  const texto=(valor:unknown)=>typeof valor==='string'?valor:typeof valor==='number'||typeof valor==='boolean'?String(valor):'';
-  const ordenar=(linhas:AnyRow[],valores:(linha:AnyRow)=>unknown[])=>{
-    if(!ordem) return linhas;
-    const colacao=new Intl.Collator('pt-BR',{numeric:true,sensitivity:'base'});
-    return [...linhas].sort((a,b)=>colacao.compare(texto(valores(a)[ordem.coluna]),texto(valores(b)[ordem.coluna]))*ordem.direcao);
-  };
-  return {ordem,alternar,ordenar};
-}
-
-function CabecalhoOrdenavel({titulos,ordem,onAlternar,acoes=true}:JsonData){
-  return <TableRow>{titulos.map((titulo:string,indice:number)=><TableHead key={titulo}>
-    <button type="button" className="flex items-center gap-1 hover:text-foreground" onClick={()=>onAlternar(indice)} aria-label={`Ordenar por ${titulo}`}>
-      {titulo}{ordem?.coluna===indice?(ordem.direcao===1?<ArrowUp className="size-3"/>:<ArrowDown className="size-3"/>):<ArrowUpDown className="size-3 opacity-40"/>}
-    </button>
-  </TableHead>)}{acoes&&<TableHead/>}</TableRow>;
-}
-
-function CatalogPage({type,rows,onAdd,onEdit,onDelete}:JsonData){const [q,setQ]=useState(''),[page,setPage]=useState(1);const {ordem,alternar,ordenar}=useOrdenacao(type);const names:AnyRow={suppliers:['Fornecedores'],items:['Peças e serviços'],models:['Modelos de veículos'],units:['Unidades de medida'],locations:['Localidades']};const list=rows.filter((r:AnyRow)=>correspondeBusca(JSON.stringify(r),q)),ordered=ordenar(list,(r:AnyRow)=>catalogCells(type,r)),pageCount=Math.max(1,Math.ceil(list.length/25)),currentPage=Math.min(page,pageCount),visible=type==='suppliers'?ordered.slice((currentPage-1)*25,currentPage*25):ordered;return <div className="space-y-5"><div className="flex gap-3"><div className="relative flex-1"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"/><Input className="pl-9" aria-label={`Pesquisar ${names[type][0].toLowerCase()}`} value={q} onChange={e=>{setQ(e.target.value);setPage(1)}}/></div><Button onClick={onAdd}><Plus/> Novo</Button></div><Card><CardContent className="px-0 pb-0"><Table horizontalControls={type==='suppliers'} className={type==='suppliers'?'w-full min-w-[850px] table-fixed':undefined}>{type==='suppliers'&&<colgroup>{[38,22,23,7,10].map((width,i)=><col key={i} style={{width:`${width}%`}}/>)}</colgroup>}<TableHeader><CabecalhoOrdenavel titulos={catalogHeaders(type)} ordem={ordem} onAlternar={alternar}/></TableHeader><TableBody>{visible.map((r:AnyRow)=><TableRow key={r.id}>{catalogCells(type,r).map((x,i)=><TableCell key={i} className={i===0?'truncate font-medium':'truncate'} title={String(x)}>{x}</TableCell>)}<TableCell><div className="flex justify-end gap-1"><Button size="icon-sm" variant="ghost" aria-label="Editar" onClick={()=>onEdit(r)}><Pencil/></Button>{onDelete&&<Button size="icon-sm" variant="ghost" aria-label="Excluir" className="text-destructive hover:bg-destructive/10" onClick={()=>onDelete(r)}><Trash2/></Button>}</div></TableCell></TableRow>)}</TableBody></Table></CardContent>{type==='suppliers'&&pageCount>1&&<div className="flex justify-end gap-2 border-t p-3"><Button variant="outline" disabled={currentPage===1} onClick={()=>setPage(currentPage-1)}>Anterior</Button><Button variant="outline" disabled={currentPage===pageCount} onClick={()=>setPage(currentPage+1)}>Próxima</Button></div>}</Card></div>}
-function Catalogs({data,onAdd,onEdit,onDelete}:JsonData){const [type,setType]=useState('items');const labels:AnyRow={items:'Peças e serviços',models:'Modelos',units:'Unidades',locations:'Localidades'};return <div className="space-y-5"><div className="flex flex-wrap gap-2">{Object.entries(labels).map(([k,v])=><Button key={k} variant={type===k?'default':'outline'} onClick={()=>setType(k)}>{String(v)}</Button>)}</div><CatalogPage type={type} rows={data.catalogs[type]} onAdd={()=>onAdd(type)} onEdit={(row:AnyRow)=>onEdit(type,row)} onDelete={(row:AnyRow)=>onDelete(type,row)}/></div>}
-function catalogHeaders(type:string){if(type==='suppliers')return['Nome','CNPJ','Cidade','UF'];if(type==='locations')return['UF','Cidade'];if(type==='units')return['Unidade'];if(type==='items')return['Nome'];return['Nome']}
-function catalogCells(type:string,r:AnyRow){if(type==='suppliers')return[r.tradeName,cnpj(r.cnpj),r.city||'—',r.state||'—'];if(type==='locations')return[r.state,r.city];if(type==='units')return[r.code];if(type==='items')return[r.name];return[r.name]}
-
-const ticketStatusMap:AnyRow={aberto:['Aberto','bg-sky-50 text-sky-700 ring-1 ring-sky-200'],aguardando_fornecedor:['Aguardando fornecedor','bg-violet-50 text-violet-700 ring-1 ring-violet-200'],fechado:['Fechado','bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200'],cancelado:['Cancelado','bg-slate-100 text-slate-600 ring-1 ring-slate-200']};
-const priorityMap:AnyRow={alta:['Alta','bg-red-50 text-red-700'],media:['Média','bg-amber-50 text-amber-700'],baixa:['Baixa','bg-slate-100 text-slate-600']};
-function tempoEmAberto(criadoEm:string,fechadoEm?:string|null){
-  const inicio=new Date(criadoEm).getTime(), fim=fechadoEm?new Date(fechadoEm).getTime():Date.now();
-  const ms=Math.max(fim-inicio,0), horas=Math.floor(ms/3600000), dias=Math.floor(horas/24);
-  const rotulo=dias>=1?`${dias}d ${horas%24}h`:horas>=1?`${horas}h ${Math.floor((ms%3600000)/60000)}min`:`${Math.floor(ms/60000)}min`;
-  return {dias,horas,rotulo,encerrado:!!fechadoEm};
-}
-function Sla({createdAt,closedAt}:JsonData){
-  const t=tempoEmAberto(createdAt,closedAt);
-  if(t.encerrado) return <div><p className="font-medium tabular-nums">{t.rotulo}</p><p className="text-[11px] text-muted-foreground">até o encerramento</p></div>;
-  const tom=t.dias>=15?'text-red-700':t.dias>=7?'text-amber-700':'text-foreground';
-  const aviso=t.dias>=15?'acima de 15 dias':t.dias>=7?'acima de 7 dias':'em andamento';
-  return <div><p className={`font-semibold tabular-nums ${tom}`}>{t.rotulo}</p><p className={`text-[11px] ${t.dias>=7?tom:'text-muted-foreground'}`}>{aviso}</p></div>;
-}
-function TicketStatus({value}:JsonData){const x=ticketStatusMap[value]||[value,'bg-slate-100'];return <Badge className={x[1]}>{x[0]}</Badge>}
-
-function PaginacaoDeLista({pagina,paginas,alterar}:{pagina:number;paginas:number;alterar:(pagina:number)=>void}){return paginas>1?<div className="flex justify-end gap-2 border-t p-3"><Button variant="outline" disabled={pagina===1} onClick={()=>alterar(pagina-1)}>Anterior</Button><Button variant="outline" disabled={pagina===paginas} onClick={()=>alterar(pagina+1)}>Próxima</Button></div>:null}
-
-function FalhaDeCarregamento({erro,tentar,voltar}:{erro:string;tentar:()=>void;voltar?:()=>void}){return <Alert variant="destructive"><AlertTriangle/><AlertTitle>Não foi possível carregar</AlertTitle><AlertDescription><p>{erro}</p><div className="mt-3 flex gap-2"><Button variant="outline" onClick={tentar}>Tentar novamente</Button>{voltar&&<Button variant="outline" onClick={voltar}>← Voltar</Button>}</div></AlertDescription></Alert>}
-
-function Tickets({busy,users,agreements,run,initialDetail}:JsonData){
-  const [data,setData]=useState<AnyRow|null>(null),[group,setGroup]=useState<'ativos'|'fechados'|'cancelados'>('ativos'),[q,setQ]=useState(''),[open,setOpen]=useState<AnyRow|null>(null),[detail,setDetail]=useState<string|null>(initialDetail||null);
-  const {ordem,alternar}=useOrdenacao('tickets');
-  const querySort=ordem?`&sort=${COLUNAS_ORDENACAO_CHAMADOS[ordem.coluna]}&direction=${ordem.direcao===1?'asc':'desc'}`:'';
-  const [page,setPage]=useState(1);
-  const [loadError,setLoadError]=useState('');
-  const [consulta]=useState(()=>criarConsultaDebounced<AnyRow>(setData,erro=>setLoadError(errorText(erro))));
-  const ultimaBusca=useRef(q);
-  const load=useCallback(async(atraso=0)=>{setLoadError('');await consulta.executar(signal=>api(`/api/tickets?page=${page}&pageSize=50&group=${group}&q=${encodeURIComponent(q)}${querySort}`,{signal}),atraso)},[page,group,q,querySort,consulta]);
-  useEffect(()=>{
-    let active=true;
-    const atraso=q!==ultimaBusca.current?300:0;
-    ultimaBusca.current=q;
-    queueMicrotask(()=>{if(active)void load(atraso)});
-    return()=>{active=false;consulta.cancelar()};
-  },[load,q,consulta]);
-  if(loadError)return <FalhaDeCarregamento erro={loadError} tentar={()=>void load()}/>;
-  if(!data) return <Loading label="Carregando chamados…"/>;
-  if(detail) return <TicketDetail busy={busy} id={detail} users={users} agreements={agreements} onBack={()=>{setDetail(null);void load()}} run={run}/>;
-  const s=data.stats||{};
-  const rows=data.tickets||[];
-  const pageCount=data.pageCount,currentPage=data.page;
-  const cards=[['Abertos',s.aberto],['Aguardando',s.aguardando],['Fechados',s.fechado]];
-  return <div className="space-y-6">
-    <section className="grid gap-3 sm:grid-cols-3">{cards.map(([label,value]:JsonData,i:number)=><Card key={label} className="overflow-hidden shadow-sm animate-in fade-in slide-in-from-bottom-2 fill-mode-both" style={{animationDelay:`${i*60}ms`}}><CardContent><p className="text-sm font-medium text-muted-foreground">{label}</p><p className="mt-2 text-4xl font-semibold tabular-nums tracking-[-.045em]">{Number(value||0)}</p></CardContent></Card>)}</section>
-    <div className="flex flex-wrap gap-2 rounded-xl border bg-muted/35 p-1.5" role="tablist" aria-label="Situação dos chamados">{([['ativos','Ativos',Number(s.aberto||0)+Number(s.aguardando||0)],['fechados','Finalizados',s.fechado],['cancelados','Cancelados',s.cancelado]] as const).map(([key,label,count])=><Button key={key} role="tab" aria-selected={group===key} variant={group===key?'default':'ghost'} onClick={()=>{setGroup(key);setPage(1)}}>{label}<Badge className={group===key?'bg-white/20 text-white':'bg-background text-foreground'}>{Number(count||0)}</Badge></Button>)}</div>
-    <output>{data.total} chamados; página {currentPage} de {pageCount}.</output>
-    <div className="flex flex-wrap gap-3">
-      <div className="relative min-w-0 basis-64 flex-1"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"/><Input className="pl-9" placeholder="Código, fornecedor ou cidade" aria-label="Pesquisar chamados" value={q} onChange={e=>{setQ(e.target.value);setPage(1)}}/></div>
-      <Button onClick={()=>setOpen({priority:'media'})}><Plus/> Novo chamado</Button>
-    </div>
-    {rows.length?<Card className="min-w-0"><CardContent className="min-w-0 px-0 pb-0"><Table className="w-full min-w-[900px] table-fixed">
-      <colgroup>{[9,31,11,20,14,15].map((largura,indice)=><col key={indice} style={{width:`${largura}%`}}/>)}</colgroup>
-      <TableHeader><CabecalhoOrdenavel acoes={false} titulos={['Código','Fornecedor','Prioridade','Situação','Em aberto','Solicitante']} ordem={ordem} onAlternar={(coluna:number)=>{alternar(coluna);setPage(1)}}/></TableHeader>
-      <TableBody>{rows.map((r:AnyRow)=><TableRow key={r.id}>
-        <TableCell><button className="block w-full truncate text-left font-mono text-xs font-semibold text-primary hover:underline" title={r.code} onClick={()=>setDetail(r.id)}>{r.code}</button></TableCell>
-
-        <TableCell><span className="block truncate font-medium" title={r.supplierName}>{r.supplierName||'Não informado'}</span></TableCell>
-
-        <TableCell><Badge className={(priorityMap[r.priority]||['—','bg-slate-100'])[1]}>{(priorityMap[r.priority]||['—'])[0]}</Badge></TableCell>
-        <TableCell><TicketStatus value={r.status}/></TableCell>
-        <TableCell className="text-sm"><Sla createdAt={r.createdAt} closedAt={r.closedAt}/></TableCell>
-        <TableCell className="truncate text-sm" title={r.requestedBy||'Não informado'}>{r.requestedBy||'—'}</TableCell>
-      </TableRow>)}</TableBody>
-    </Table></CardContent><PaginacaoDeLista pagina={currentPage} paginas={pageCount} alterar={setPage}/></Card>:<Empty icon={MessageSquare} title="Nenhum chamado" text="Abra um chamado para registrar uma necessidade de negociação."/>}
-    {open&&<TicketDialog busy={busy} open value={open} users={users} agreements={agreements} onClose={()=>setOpen(null)} onSave={(body:AnyRow,submissionKey:string)=>run(async()=>{await api('/api/tickets',{method:'POST',headers:{'content-type':'application/json','idempotency-key':submissionKey},body:JSON.stringify(body)});setOpen(null);await load()},'Chamado aberto.')}/>}
-  </div>;
-}
-
-function TicketDetail({busy,id,users,agreements,onBack,run}:JsonData){
-  const tentativaAndamento=useRef<{message:string;key:string}|null>(null);
-  const [d,setD]=useState<AnyRow|null>(null),[msg,setMsg]=useState(''),[status,setStatus]=useState(''),[statusMessage,setStatusMessage]=useState(''),[editing,setEditing]=useState(false);
-  const [loadError,setLoadError]=useState('');
-  const load=useCallback(async()=>{setLoadError('');try{const x=await api(`/api/tickets/${id}`);setD(x);setStatus(x.ticket.status);setStatusMessage('')}catch(error){setLoadError(errorText(error))}},[id]);
-  useEffect(()=>{let active=true;queueMicrotask(()=>{if(active)void load()});return()=>{active=false}},[load]);
-  if(loadError)return <FalhaDeCarregamento erro={loadError} tentar={()=>void load()} voltar={onBack}/>;
-  if(!d) return <Loading label="Abrindo chamado…"/>;
-  const t=d.ticket;
-  return <div className="space-y-5">
-    <div className="flex flex-wrap items-center gap-3"><Button variant="outline" onClick={onBack}>← Voltar</Button><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><h2 className="truncate text-2xl font-semibold tracking-[-.02em]">{t.supplier_name}</h2><TicketStatus value={t.status}/><Badge className={(priorityMap[t.priority]||['—','bg-slate-100'])[1]}>{(priorityMap[t.priority]||['—'])[0]}</Badge></div><p className="text-sm text-muted-foreground font-mono">{t.code}</p></div><Button variant="outline" onClick={()=>void load()}><RefreshCw/> Atualizar</Button><Button onClick={()=>setEditing(true)}><Pencil/> Editar chamado</Button></div>
-    <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"><Info label="Local" value={t.city?[t.city,t.state].filter(Boolean).join(' / '):'—'}/><Info label="Solicitante" value={t.requestedBy||'—'}/><Info label="Responsável" value={t.assignedTo||'Não atribuído'}/><Card size="sm"><CardContent><p className="text-xs text-muted-foreground">{t.closed_at?'Tempo até encerrar':'Tempo em aberto'}</p><div className="mt-1"><Sla createdAt={t.created_at} closedAt={t.closed_at}/></div></CardContent></Card></section>
-    {(t.scope||t.notes)&&<Card size="sm" className="max-w-3xl"><CardContent className="space-y-3 text-sm">{t.scope&&<div><p className="text-xs font-medium text-muted-foreground">Escopo</p><p className="mt-1 whitespace-pre-wrap break-words">{t.scope}</p></div>}{t.notes&&<div><p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Observações</p><p className="mt-1 whitespace-pre-wrap">{t.notes}</p></div>}</CardContent></Card>}
-    <Card size="sm"><CardContent className="grid gap-3 sm:grid-cols-[minmax(12rem,14rem)_minmax(0,1fr)_auto] sm:items-end"><SelectField label="Alterar para" value={status} onChange={setStatus} rows={Object.entries(ticketStatusMap).map(([k,v]:JsonData)=>({id:k,name:v[0]}))}/><Field label="Mensagem da alteração (opcional)"><Input value={statusMessage} onChange={e=>setStatusMessage(e.target.value)}/></Field><Button disabled={status===t.status} onClick={()=>run(async()=>{await api(`/api/tickets/${id}`,{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify({status,statusMessage,expectedRevision:t.revision})});await load()},'Situação atualizada.')}><RefreshCw/> Aplicar</Button></CardContent></Card>
-    <Card><CardHeader className="border-b"><CardTitle>Histórico</CardTitle></CardHeader><CardContent className="pt-5">
-      <ol className="relative space-y-5 border-l border-dashed pl-6">{d.events.map((e:AnyRow)=><li key={e.id} className="relative animate-in fade-in slide-in-from-left-2 fill-mode-both"><span className={`absolute -left-[31px] grid size-5 place-items-center rounded-full ring-4 ring-background ${e.kind==='status'?'bg-amber-500':e.kind==='created'?'bg-teal-500':'bg-slate-300'}`}/><div className="flex flex-wrap items-baseline gap-2"><span className="text-sm font-semibold">{e.user||'Sistema'}</span><span className="text-xs text-muted-foreground">{new Date(e.createdAt).toLocaleString('pt-BR')}</span></div>{e.kind==='status'&&<p className="mt-1 text-sm">Situação alterada de <b>{(ticketStatusMap[e.fromStatus]||[e.fromStatus])[0]}</b> para <b>{(ticketStatusMap[e.toStatus]||[e.toStatus])[0]}</b>.</p>}{e.message&&<p className="mt-1 whitespace-pre-wrap break-words text-sm">{e.message}</p>}</li>)}</ol>
-      <div className="mt-6 space-y-3 border-t pt-5"><Field label="Registrar andamento"><Textarea value={msg} onChange={e=>setMsg(e.target.value)}/></Field><div className="flex justify-end"><Button disabled={!msg.trim()} onClick={()=>run(async()=>{if(!tentativaAndamento.current||tentativaAndamento.current.message!==msg)tentativaAndamento.current={message:msg,key:gerarChaveRelatorio()};await api(`/api/tickets/${id}/events`,{method:'POST',headers:{'content-type':'application/json','idempotency-key':tentativaAndamento.current.key},body:JSON.stringify({message:msg})});tentativaAndamento.current=null;setMsg('');await load()},'Andamento registrado.')}><Plus/> Adicionar</Button></div></div>
-    </CardContent></Card>
-    {editing&&<TicketDialog busy={busy} open value={{id:t.id,expectedRevision:t.revision,supplierName:t.supplier_name,city:t.city,state:t.state,scope:t.scope,priority:t.priority,assignedTo:t.assigned_to,agreementId:t.agreement_id,notes:t.notes}} users={users} agreements={agreements} onClose={()=>setEditing(false)} onSave={(body:AnyRow)=>run(async()=>{await api(`/api/tickets/${id}`,{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify(body)});setEditing(false);await load()},'Chamado atualizado.')}/>}
-  </div>;
-}
-
-function TicketDialog({busy,open,value,users,onClose,onSave}:JsonData){
-  const [form,setForm]=useState<AnyRow>(value||{priority:'media'}),editing=!!value?.id;
-  const [submissionKey]=useState(()=>Array.from(crypto.getRandomValues(new Uint8Array(16)),byte=>byte.toString(16).padStart(2,'0')).join(''));
-  return <Dialog open={open} onOpenChange={(x)=>!x&&!busy&&onClose()}><DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
-    <DialogHeader><DialogTitle>{editing?'Editar chamado':'Novo chamado'}</DialogTitle></DialogHeader>
-    <fieldset disabled={busy} className="grid gap-4 sm:grid-cols-2">
-      <Field label="Fornecedor *" className="sm:col-span-2"><Input required aria-label="Fornecedor" maxLength={120} value={form.supplierName||''} onChange={e=>setForm({...form,supplierName:e.target.value})}/></Field>
-      <Field label="Cidade"><Input value={form.city||''} onChange={e=>setForm({...form,city:e.target.value})}/></Field>
-      <Field label="UF"><Input maxLength={2} value={form.state||''} onChange={e=>setForm({...form,state:e.target.value.toUpperCase()})}/></Field>
-      <SelectField label="Prioridade" value={form.priority||'media'} onChange={(v:string)=>setForm({...form,priority:v})} rows={[{id:'alta',name:'Alta'},{id:'media',name:'Média'},{id:'baixa',name:'Baixa'}]}/>
-      <SelectField label="Responsável" value={form.assignedTo||''} onChange={(v:string)=>setForm({...form,assignedTo:v})} rows={users||[]}/>
-
-      <Field label="Escopo pretendido" className="sm:col-span-2"><Input value={form.scope||''} onChange={e=>setForm({...form,scope:e.target.value})}/></Field>
-      <Field label="Observações" className="sm:col-span-2"><Textarea value={form.notes||''} onChange={e=>setForm({...form,notes:e.target.value})}/></Field>
-    </fieldset>
-    <DialogFooter><Button disabled={busy} variant="outline" onClick={onClose}>Cancelar</Button><Button disabled={busy||!form.supplierName?.trim()} onClick={()=>onSave(form,submissionKey)}><CheckCircle2/> {editing?'Salvar alterações':'Abrir chamado'}</Button></DialogFooter>
-  </DialogContent></Dialog>;
-}
-
-function ChangeHistory({users}:JsonData){
-  const [logs,setLogs]=useState<AnyRow[]>([]),[meta,setMeta]=useState<AnyRow>({page:1,pageCount:1,total:0}),[page,setPage]=useState(1),[loading,setLoading]=useState(true),[recarregar,setRecarregar]=useState(0),[erro,setErro]=useState(''),[f,setFiltros]=useState({user:'',action:'',entity:'',q:'',from:'',to:''});
-  const setF=(next:AnyRow)=>{setFiltros(next as never);setPage(1)};
-  useEffect(()=>{
-    // Flag local por execucao do efeito. Trocar de pagina rapido dispara varias
-    // consultas: sem isto, uma resposta lenta sobrescreveria outra mais nova.
-    // O cleanup desliga a flag, o que tambem cobre o componente sair da tela
-    // antes de a resposta chegar.
-    let ativa=true;
-    // setState direto no corpo do efeito dispara renderizacao em cascata; o
-    // microtask adia para depois do efeito e mantem o indicador de carregando.
-    queueMicrotask(()=>{ if(ativa){setLoading(true);setErro('')} });
-    const p=new URLSearchParams(Object.entries(f).filter(([,v])=>v));
-    p.set('page',String(page));p.set('pageSize','50');
-    void api(`/api/audit?${p}`).then((result:AnyRow)=>{
-      if(!ativa)return; // resposta superada: descarta
-      setLogs(result.logs);
-      setMeta({page:result.page,pageCount:result.pageCount,total:result.total,pageSize:result.pageSize});
-    }).catch((e:unknown)=>{
-      // Sem este catch, uma indisponibilidade momentanea do servidor virava
-      // rejeicao sem tratamento e a tela ficava carregando para sempre.
-      if(!ativa)return;
-      setErro(e instanceof Error?e.message:'Não foi possível carregar o histórico.');
-      setLogs([]);
-    }).finally(()=>{ if(ativa) setLoading(false); });
-    // Invalida esta consulta se o componente sair da tela antes da resposta.
-    return ()=>{ativa=false};
-  },[f,page,recarregar]);
-  const load=()=>setRecarregar((n)=>n+1);
-  const actionTone=(a:string)=>a==='CREATE'?'bg-emerald-50 text-emerald-700':a==='DELETE'?'bg-red-50 text-red-700':a==='IMPORT'?'bg-violet-50 text-violet-700':a==='LOGIN'?'bg-slate-100 text-slate-600':'bg-sky-50 text-sky-700';
-  const entityName=rotuloEntidadeHistorico;
-  return <div className="space-y-5">
-    <Card><CardHeader><CardTitle>Filtros</CardTitle></CardHeader><CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
-      <Field label="Busca" className="xl:col-span-2"><Input placeholder="Detalhe, registro ou usuário" value={f.q} onChange={e=>setF({...f,q:e.target.value})}/></Field>
-      <SelectField label="Usuário" value={f.user} onChange={(v:string)=>setF({...f,user:v})} rows={users||[]}/>
-      <SelectField label="Ação" value={f.action} onChange={(v:string)=>setF({...f,action:v})} rows={[{id:'CREATE',name:'Criação'},{id:'UPDATE',name:'Alteração'},{id:'DELETE',name:'Exclusão'},{id:'UPSERT',name:'Inclusão em lote'},{id:'IMPORT',name:'Importação'},{id:'COMMENT',name:'Andamento'},{id:'LOGIN',name:'Acesso'}]}/>
-      <Field label="De"><Input type="date" value={f.from} onChange={e=>setF({...f,from:e.target.value})}/></Field>
-      <Field label="Até"><Input type="date" value={f.to} onChange={e=>setF({...f,to:e.target.value})}/></Field>
-    </CardContent></Card>
-    <Card><CardHeader className="border-b sm:grid-cols-[1fr_auto]"><CardTitle>Histórico</CardTitle><div className="flex gap-2"><Button variant="outline" onClick={()=>window.open(`/api/audit/export?${new URLSearchParams(Object.entries(f).filter(([,v])=>v))}`,'_blank','noopener,noreferrer')}><Download/> Exportar Excel</Button><Button variant="outline" onClick={load}><RefreshCw/> Atualizar</Button></div></CardHeader><CardContent className="px-0 pb-0"><Table><TableHeader className="sticky top-0 z-10 bg-card"><TableRow><TableHead>Quando</TableHead><TableHead>Usuário</TableHead><TableHead>Ação</TableHead><TableHead>Registro</TableHead><TableHead>Detalhes</TableHead></TableRow></TableHeader><TableBody>{logs.map(r=><TableRow key={r.id}><TableCell className="whitespace-nowrap text-sm tabular-nums">{new Date(r.createdAt).toLocaleString('pt-BR')}</TableCell><TableCell><p className="text-sm font-medium">{r.user||'Sistema'}</p><p className="text-[11px] text-muted-foreground">{r.userEmail||''}</p></TableCell><TableCell><Badge className={actionTone(r.action)}>{rotuloAcaoHistorico(r.action)}</Badge></TableCell><TableCell className="text-sm">{entityName(r.entity)}</TableCell><TableCell className="max-w-[28rem] whitespace-pre-wrap break-words text-sm text-muted-foreground">{r.detailsText||r.details}</TableCell></TableRow>)}</TableBody></Table>{!loading&&erro&&<div className="p-8"><Alert variant="destructive"><AlertTriangle/><AlertTitle>Não foi possível carregar o histórico</AlertTitle><AlertDescription><p>{erro}</p><Button className="mt-3" size="sm" variant="outline" onClick={load}><RefreshCw/> Tentar de novo</Button></AlertDescription></Alert></div>}{!loading&&!erro&&!logs.length&&<div className="p-10 text-center text-sm text-muted-foreground">Nenhuma modificação com esses filtros.</div>}</CardContent>{meta.pageCount>1&&<div className="flex flex-wrap items-center justify-between gap-3 border-t px-5 py-3"><div className="flex items-center gap-1"><Button size="sm" variant="outline" disabled={loading||meta.page<=1} onClick={()=>setPage(1)}>Primeira</Button><Button size="sm" variant="outline" disabled={loading||meta.page<=1} onClick={()=>setPage(meta.page-1)}>← Anterior</Button><Button size="sm" variant="outline" disabled={loading||meta.page>=meta.pageCount} onClick={()=>setPage(meta.page+1)}>Próxima →</Button><Button size="sm" variant="outline" disabled={loading||meta.page>=meta.pageCount} onClick={()=>setPage(meta.pageCount)}>Última</Button></div></div>}</Card>
-  </div>;
-}
-
-function Administration({user,initialUsers,run}:JsonData){const [users,setUsers]=useState<AnyRow[]>(initialUsers||[]),[open,setOpen]=useState(false),[edit,setEdit]=useState<AnyRow|null>(null);const load=useCallback(async()=>{const result=await api('/api/users');setUsers(result.users)},[]);const isAdmin=user.role==='admin';return <div className="space-y-5"><div className="flex flex-wrap justify-between gap-3"><div className="flex gap-2"><Button variant="outline" onClick={()=>window.open('/api/export','_blank','noopener,noreferrer')}><Download/> Exportar dados</Button><Button variant="outline" onClick={()=>void run(load)}>Atualizar lista</Button>{isAdmin&&<Button onClick={()=>setOpen(true)}><Plus/> Novo usuário</Button>}</div></div><Card><CardContent className="px-0 pb-0"><Table><TableHeader><TableRow><TableHead>Nome</TableHead><TableHead>E-mail</TableHead><TableHead>Perfil</TableHead><TableHead>Relatório diário</TableHead><TableHead>Situação</TableHead><TableHead/></TableRow></TableHeader><TableBody>{users.map(r=><TableRow key={r.id} className={r.active?'':'opacity-50'}><TableCell className="font-medium">{r.name}{r.id===user.id?<Badge className="ml-2 bg-teal-50 text-teal-700">você</Badge>:null}</TableCell><TableCell className="text-sm">{r.email}</TableCell><TableCell><Badge className={r.role==='admin'?'bg-violet-50 text-violet-700':r.role==='editor'?'bg-sky-50 text-sky-700':'bg-slate-100 text-slate-600'}>{roleName(r.role)}</Badge></TableCell><TableCell>{r.dailyReportEnabled?<span className="text-sm font-medium">Diariamente às {r.dailyReportTime}</span>:<span className="text-sm text-muted-foreground">Não recebe</span>}</TableCell><TableCell><Badge className={r.active?'bg-emerald-50 text-emerald-700':'bg-slate-100 text-slate-600'}>{r.active?'Ativo':'Inativo'}</Badge></TableCell><TableCell className="text-right">{isAdmin&&<Button size="icon-sm" variant="ghost" onClick={()=>setEdit({...r})}><Pencil/></Button>}</TableCell></TableRow>)}</TableBody></Table></CardContent></Card><UserDialog open={open} onClose={()=>setOpen(false)} onSave={(body:AnyRow)=>run(async()=>{await api('/api/users',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});setOpen(false);await load()},'Usuário criado.')}/>{edit&&<UserEditDialog open value={edit} self={user} onClose={()=>setEdit(null)} onSave={(body:AnyRow)=>run(async()=>{await api(`/api/users/${body.id}`,{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify(body)});setEdit(null);await load()},'Usuário atualizado.')}/>}</div>}
-
-function UserEditDialog({open,value,self,onClose,onSave}:JsonData){const [form,setForm]=useState<AnyRow>({...value,expectedRevision:value.revision,password:''});const isSelf=value.id===self.id;const passwordError=form.password ? validatePassword(form.password) : null;return <Dialog open={open} onOpenChange={(x)=>!x&&onClose()}><DialogContent><DialogHeader><DialogTitle>Editar usuário</DialogTitle><DialogDescription>{value.email}</DialogDescription></DialogHeader><div className="space-y-4"><Field label="Nome"><Input value={form.name||''} onChange={e=>setForm({...form,name:e.target.value})}/></Field><SelectField label="Perfil" value={form.role||'viewer'} onChange={(v:string)=>setForm({...form,role:v,dailyReportEnabled:v==='viewer'?false:form.dailyReportEnabled})} rows={[{id:'viewer',name:'Consulta'},{id:'editor',name:'Suprimentos'},{id:'admin',name:'Administrador'}]}/><Field label="Nova senha"><Input type="password" minLength={MIN_PASSWORD_LENGTH} maxLength={200} aria-invalid={!!passwordError} placeholder="Deixe em branco para manter a atual" value={form.password||''} onChange={e=>setForm({...form,password:e.target.value})}/>{passwordError&&<p role="alert" className="mt-1 text-sm text-destructive">{passwordError}</p>}<p className="mt-1 text-xs text-muted-foreground">Ao redefinir, as sessões abertas deste usuário são encerradas.</p></Field><div className="rounded-lg border p-3"><div className="flex items-center gap-2"><Checkbox id="daily-report-enabled" disabled={form.role==='viewer'} checked={form.role!=='viewer'&&!!form.dailyReportEnabled} onCheckedChange={(c:JsonData)=>setForm({...form,dailyReportEnabled:!!c})}/><label htmlFor="daily-report-enabled" className="cursor-pointer text-sm font-medium">Receber relatório diário de chamados</label></div>{form.dailyReportEnabled?<Field label="Horário de envio" className="mt-3"><Input type="time" value={form.dailyReportTime||'17:45'} onChange={e=>setForm({...form,dailyReportTime:e.target.value})}/></Field>:null}</div><label className="flex cursor-pointer items-center gap-2 rounded-lg border p-3"><Checkbox checked={form.active!==false&&form.active!==0} onCheckedChange={(c:JsonData)=>setForm({...form,active:!!c})} disabled={isSelf}/><span className="text-sm">Conta ativa{isSelf?' (não é possível desativar a própria conta)':''}</span></label></div><DialogFooter><Button variant="outline" onClick={onClose}>Cancelar</Button><Button disabled={!!passwordError} onClick={()=>!passwordError&&onSave(form)}><CheckCircle2/> Salvar</Button></DialogFooter></DialogContent></Dialog>}
-
-function Mappings({catalogs,run}:JsonData){
-  const [data,setData]=useState<AnyRow>({items:[],models:[]}),[type,setType]=useState<'items'|'models'|'units'>('items'),[edit,setEdit]=useState<AnyRow|null>(null),[loading,setLoading]=useState(true);
-  const [loadError,setLoadError]=useState('');
-  const load=useCallback(async()=>{setLoading(true);setLoadError('');try{setData(await api('/api/mappings'))}catch(error){setLoadError(errorText(error))}finally{setLoading(false)}},[]);
-  useEffect(()=>{let active=true;queueMicrotask(()=>{if(active)void load()});return()=>{active=false}},[load]);
-  const rows=data[type]||[], targets=catalogs[type].map((row:AnyRow)=>({...row,name:type==='units'?row.code:row.name,active:row.active}));
-  const {ordem,alternar,ordenar}=useOrdenacao(type);
-  const valoresDoMapeamento=(linha:AnyRow)=>[linha.source,linha.target];
-  const remove=(row:AnyRow)=>{if(!confirm(`Excluir a correspondência "${row.source}"?`))return;void run(async()=>{await api(`/api/mappings/${type}/${row.id}?expectedRevision=${row.revision}`,{method:'DELETE'});await load()},'Correspondência excluída.')};
-  if(loadError)return <FalhaDeCarregamento erro={loadError} tentar={()=>void load()}/>;
-  return <div className="space-y-5"><div className="flex flex-wrap items-end justify-between gap-3"><div><h1 className="text-2xl font-semibold">De/Para da importação</h1></div><Button onClick={()=>setEdit({type,active:true})}><Plus/> Nova correspondência</Button></div><div className="flex flex-wrap gap-2">{(['items','models','units'] as const).map(value=><Button key={value} variant={type===value?'default':'outline'} onClick={()=>setType(value)}>{{items:'Itens',models:'Modelos',units:'Unidades'}[value]}</Button>)}</div><Card><CardContent className="px-0 pb-0">{loading?<div className="flex items-center gap-2 p-8 text-sm text-muted-foreground"><LoaderCircle className="size-4 animate-spin"/> Carregando correspondências…</div>:<Table><TableHeader><CabecalhoOrdenavel titulos={['Original','Correspondente']} ordem={ordem} onAlternar={alternar}/></TableHeader><TableBody>{ordenar(rows,valoresDoMapeamento).map((row:AnyRow)=><TableRow key={row.id} className={row.active?'':'opacity-50'}><TableCell><p className="font-medium">{row.source}</p>{normalizeImportText(row.source)!==row.sourceKey&&<p className="text-xs text-muted-foreground">Chave: {row.sourceKey}</p>}</TableCell><TableCell>{row.target}</TableCell><TableCell className="text-right"><Button size="icon-sm" variant="ghost" onClick={()=>setEdit({...row,type,expectedRevision:row.revision})}><Pencil/></Button><Button size="icon-sm" variant="ghost" onClick={()=>remove(row)}><Trash2/></Button></TableCell></TableRow>)}</TableBody></Table>}{!loading&&!rows.length&&<div className="p-10 text-center text-sm text-muted-foreground">{type==='units'?'Nenhuma correspondência cadastrada. As unidades ativas escritas com a nomenclatura correta já são reconhecidas direto. Cadastre uma correspondência apenas para abreviações, variações de grafia ou nomes alternativos.':'Nenhuma correspondência cadastrada. A importação será recusada até que os valores da planilha tenham De/Para.'}</div>}</CardContent></Card>{edit&&<MappingDialog value={edit} targets={targets} onClose={()=>setEdit(null)} onSave={(body:AnyRow)=>run(async()=>{const path=body.id?`/api/mappings/${body.type}/${body.id}`:`/api/mappings/${body.type}`;await api(path,{method:body.id?'PUT':'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});setEdit(null);await load()},'Correspondência salva.')}/>}</div>;
-}
-
-function MappingDialog({value,targets,onClose,onSave}:JsonData){const [form,setForm]=useState<AnyRow>({...value});return <Dialog open onOpenChange={(open)=>!open&&onClose()}><DialogContent><DialogHeader><DialogTitle>{form.id?'Editar':'Nova correspondência'}</DialogTitle></DialogHeader><div className="space-y-4"><Field label={form.type==='locations'?'Original (CIDADE/UF) *':'Original *'}><Input value={form.source||''} onChange={e=>setForm({...form,source:e.target.value})}/></Field><SelectField label="Correspondente *" value={form.targetId||''} onChange={(targetId:string)=>setForm({...form,targetId})} rows={targets.filter((row:AnyRow)=>row.active)}/></div><DialogFooter><Button variant="outline" onClick={onClose}>Cancelar</Button><Button disabled={!form.source||!form.targetId} onClick={()=>onSave(form)}><CheckCircle2/> Salvar</Button></DialogFooter></DialogContent></Dialog>}
-
-function CatalogDialog({open,value,busy,onClose,onSave}:JsonData){const [form,setForm]=useState<AnyRow>(value||{});const t=form.type;return <Dialog open={open} onOpenChange={(x)=>!x&&onClose()}><DialogContent><DialogHeader><DialogTitle>{form.id?'Editar':'Novo'} cadastro</DialogTitle><DialogDescription>Os dados ficarão disponíveis para acordos e importações.</DialogDescription></DialogHeader><div className="space-y-4">{t==='suppliers'&&<><Field label="Nome do fornecedor *"><Input value={form.tradeName||''} onChange={e=>setForm({...form,tradeName:e.target.value})}/></Field><Field label="Razão social"><Input value={form.legalName||''} onChange={e=>setForm({...form,legalName:e.target.value})}/></Field><Field label="CNPJ *"><Input value={form.cnpj||''} onChange={e=>setForm({...form,cnpj:e.target.value})}/></Field><Field label="Cidade"><Input value={form.city||''} onChange={e=>setForm({...form,city:e.target.value})}/></Field><Field label="UF"><Input maxLength={2} value={form.state||''} onChange={e=>setForm({...form,state:e.target.value.toUpperCase()})}/></Field></>}{['items','models'].includes(t)&&<Field label="Nome *"><Input value={form.name||''} onChange={e=>setForm({...form,name:e.target.value})}/></Field>}{t==='units'&&<Field label="Unidade *"><Input value={form.code||''} onChange={e=>setForm({...form,code:e.target.value})}/></Field>}{t==='locations'&&<><SelectField label="UF *" value={form.state||''} onChange={(state:string)=>setForm({...form,state})} rows={BRAZILIAN_STATES.map(state=>({id:state,name:state}))}/><Field label="Cidade *"><Input value={form.city||''} onChange={e=>setForm({...form,city:e.target.value})}/></Field></>}</div><DialogFooter><Button variant="outline" onClick={onClose}>Cancelar</Button><Button disabled={busy} onClick={()=>onSave(form)}>{busy?<LoaderCircle className="animate-spin"/>:<CheckCircle2/>} Salvar</Button></DialogFooter></DialogContent></Dialog>}
-function UserDialog({open,onClose,onSave}:JsonData){const [form,setForm]=useState({name:'',email:'',password:'',role:'viewer'});const passwordError=validatePassword(form.password);return <Dialog open={open} onOpenChange={(x)=>!x&&onClose()}><DialogContent><DialogHeader><DialogTitle>Novo usuário autorizado</DialogTitle></DialogHeader><div className="space-y-4"><Field label="Nome *"><Input value={form.name} onChange={e=>setForm({...form,name:e.target.value})}/></Field><Field label="E-mail *"><Input type="email" value={form.email} onChange={e=>setForm({...form,email:e.target.value})}/></Field><Field label="Senha inicial *"><Input type="password" minLength={MIN_PASSWORD_LENGTH} maxLength={200} aria-invalid={!!passwordError} value={form.password} onChange={e=>setForm({...form,password:e.target.value})}/>{passwordError&&<p role="alert" className="mt-1 text-sm text-destructive">{passwordError}</p>}</Field><SelectField label="Perfil" value={form.role} onChange={(v:string)=>setForm({...form,role:v})} rows={[{id:'viewer',name:'Consulta'},{id:'editor',name:'Suprimentos'},{id:'admin',name:'Administrador'}]}/></div><DialogFooter><Button variant="outline" onClick={onClose}>Cancelar</Button><Button disabled={!!passwordError} onClick={()=>!passwordError&&onSave(form)}>Criar usuário</Button></DialogFooter></DialogContent></Dialog>}
-
-function Field({label,children,className=''}:JsonData){return <label className={`block ${className}`}><span className="mb-1.5 block text-sm font-medium">{label}</span>{children}</label>}
-function SelectField({label,value,onChange,rows,labelFn=(x:AnyRow)=>x.name}:JsonData){return <SearchSelect searchable={!label.includes('UF')} label={label} value={value} onChange={onChange} options={rows.map((row:AnyRow)=>({id:row.id,name:labelFn(row)}))}/>}
-function Status({value}:JsonData){const map:AnyRow={active:['Vigente','bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200'],expired:['Expirado','bg-red-50 text-red-700 ring-1 ring-red-200'],suspended:['Suspenso','bg-amber-50 text-amber-700 ring-1 ring-amber-200']};const x=map[value]||[value,'bg-slate-100'];return <Badge className={x[1]}>{x[0]}</Badge>}
-const roleName=(x:string)=>(NOMES_PERFIL as AnyRow)[x]||x;
-function Empty({icon:Icon,title,text}:JsonData){return <Card><CardContent className="grid min-h-72 place-items-center text-center"><div><div className="mx-auto grid size-12 place-items-center rounded-xl bg-muted text-muted-foreground"><Icon/></div><p className="mt-4 font-semibold">{title}</p><p className="mt-1 text-sm text-muted-foreground">{text}</p></div></CardContent></Card>}
