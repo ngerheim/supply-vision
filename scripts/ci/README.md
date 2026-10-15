@@ -30,6 +30,11 @@ Depois confere login/sessao reais, dados ficticios, integridade/chaves estrangei
 migracoes do codigo de destino e limpeza do preparo. Antes do sucesso, a fixture
 remove o marcador/indices da migracao 7 para comprovar sua execucao na nova partida.
 A parada observada e o resumo do atualizador aparecem no log, sem corte por tempo.
+A fixture materializa os links locais da base antes de iniciar a operação, como
+uma instalação já atualizada. Exige uma atualização com cópia (reserva ausente)
+e outra para um commit sucessor, sem mudanças de dependências, com reserva
+reaproveitada tanto para Node quanto para Python. Confere o caminho no stdout
+de cada execução; não injeta reserva nem substitui o preparador/atualizador.
 
 O negativo vem primeiro: um commit apenas no remoto descartavel reprova a criacao
 da configuracao de teste no PREPARAR, antes de copiar dependencias ou compilar.
@@ -37,7 +42,8 @@ Exige health/consumidores continuos, mesmo PID, HEAD e checkout intactos, hashes
 iguais de artefatos/configuracao e dados preservados. Logs, sessoes e heartbeats
 sao estado dinamico esperado e ficam fora da comparacao de arquivos estaveis.
 
-Estimativa inicial com caches npm/pip: 5–8 minutos, a confirmar no runner.
+Duas atualizações completas aumentam o trabalho do cenário; o limite continua
+sendo validado pelo harness no runner, sem usar tempo estimado como aprovação.
 O pai limita o cenario completo a 20 minutos e informa a ultima fase se travar;
 cada atualizador tem limite de 15 minutos. O job tem limite de 25 minutos,
 incluindo setup/diagnosticos. Timeout encerra a arvore de teste e limpa a tarefa

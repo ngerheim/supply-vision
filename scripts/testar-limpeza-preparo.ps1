@@ -96,6 +96,7 @@ throw 'PREPARO_FALHA_COM_PAI_ANTIGO'
  $biblioteca=Join-Path $raiz 'scripts';New-Item -ItemType Directory -Force $biblioteca|Out-Null
  foreach($nome in @('atualizacao-preparo.ps1','limpar-preparo-assincrono.ps1')){Copy-Item (Join-Path $PSScriptRoot $nome) $biblioteca}
  Add-Content (Join-Path $biblioteca 'atualizacao-preparo.ps1') @'
+function Guardar-ReservaDependencias($Raiz,$Preparo){[IO.File]::WriteAllText((Join-Path $Raiz 'worker-reservou'),'ok')}
 function Limpar-PastaPreparo($Raiz,$Preparo){
  [IO.File]::WriteAllText((Join-Path $Raiz 'worker-pronto'),'ok')
  $limite=(Get-Date).AddSeconds(30)
@@ -106,6 +107,7 @@ function Limpar-PastaPreparo($Raiz,$Preparo){
 '@
  $op=Join-Path $raiz 'privado/operacao';New-Item -ItemType Directory -Force $op|Out-Null
  $preparo=Nova-PastaPreparo $raiz;New-Item -ItemType Directory $preparo|Out-Null
+ @{fase='recuperando';preparo=$preparo}|ConvertTo-Json|Set-Content (Join-Path $op 'atualizacao.json')
  $medir=[Diagnostics.Stopwatch]::StartNew()
  Iniciar-LimpezaPreparoSegundoPlano $raiz $preparo $op (Get-Process -Id $PID).Path
  Exigir-Limpeza ($medir.Elapsed.TotalSeconds-lt5-and(Test-Path $preparo)) 'Chamador esperou a limpeza.'
@@ -118,13 +120,16 @@ function Limpar-PastaPreparo($Raiz,$Preparo){
  while(Test-Path (Join-Path $op 'limpeza-preparo.lock')){if((Get-Date)-gt$limite){throw 'Worker nao encerrou'};Start-Sleep -Milliseconds 50}
  Exigir-Limpeza (!(Test-Path $preparo)-and(Get-Content $sentinela)-eq'preservar') 'Worker nao limpou ou alterou producao.'
  Exigir-Limpeza ((Get-Content (Join-Path $op 'limpeza-preparo.json') -Raw|ConvertFrom-Json).resultado-eq'concluida') 'Resultado da limpeza ausente.'
+ Exigir-Limpeza (!(Test-Path (Join-Path $raiz 'worker-reservou'))) 'Worker reservou artefatos de recuperacao.'
  Confirmar-LimpezaAnterior (Join-Path $op 'limpeza-preparo.lock')
  [IO.File]::WriteAllText((Join-Path $raiz 'falhar-worker'),'ok')
  $sobra=Nova-PastaPreparo $raiz;New-Item -ItemType Directory $sobra|Out-Null
+ @{fase='concluido';preparo=$sobra}|ConvertTo-Json|Set-Content (Join-Path $op 'atualizacao.json')
  Iniciar-LimpezaPreparoSegundoPlano $raiz $sobra $op (Get-Process -Id $PID).Path
  $limite=(Get-Date).AddSeconds(15)
  while(Test-Path (Join-Path $op 'limpeza-preparo.lock')){if((Get-Date)-gt$limite){throw 'Worker de falha nao encerrou'};Start-Sleep -Milliseconds 50}
  Exigir-Limpeza ((Test-Path $sobra)-and(Get-Content (Join-Path $op 'limpeza-preparo.json') -Raw|ConvertFrom-Json).resultado-eq'pendente') 'Falha da limpeza nao preservou sobra.'
+ Exigir-Limpeza (Test-Path (Join-Path $raiz 'worker-reservou')) 'Worker nao reservou apos conclusao.'
  Limpar-PastaPreparo $raiz $sobra
  Exigir-Limpeza (!(Test-Path $sobra)) 'Sobra do worker nao pode ser limpa depois.'
  $lock=Join-Path $op 'limpeza-preparo.lock'

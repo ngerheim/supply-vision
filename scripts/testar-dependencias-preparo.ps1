@@ -37,7 +37,7 @@ foreach($amostra in $amostras){
 }
 Write-Host '[OK] Strings duplas ASCII e parser ANSI de copias sem BOM nos quatro scripts.'
 try{
- foreach($caso in @('inalteradas','alteradas','build-falha','portal-falha','alertas-falha','operacional-falha','ci-aprovado','ci-rede','ci-ausente','ci-pendente','ci-falho','ci-timeout','ci-cancelado','ci-skipped','ci-sha','ci-invalido','ci-forcado','ci-forcado-env','fumaca-falha')){
+ foreach($caso in @('inalteradas','alteradas','build-falha','portal-falha','alertas-falha','operacional-falha','ci-aprovado','ci-log-explicito','ci-rede','ci-ausente','ci-pendente','ci-falho','ci-timeout','ci-cancelado','ci-skipped','ci-sha','ci-invalido','ci-forcado','ci-forcado-env','fumaca-falha')){
   $instalacao=Join-Path $base $caso
   $preparo=Nova-PastaPreparo $instalacao
   foreach($dir in @('portal/node_modules','alertas/.venv/Scripts','privado')){New-Item -ItemType Directory -Force (Join-Path $instalacao $dir)|Out-Null}
@@ -116,6 +116,7 @@ function powershell.exe {
  if($Caso-eq'operacional-falha'){$global:LASTEXITCODE=1}
 }
 if($Caso-eq'alteradas'){& (Join-Path $Preparo 'scripts/preparar-atualizacao.ps1') -Instalacao $Instalacao -ReinstalarNode -ReinstalarPython}
+elseif($Caso-eq'ci-log-explicito'){& (Join-Path $Preparo 'scripts/preparar-atualizacao.ps1') -Instalacao $Instalacao -TemposArquivo (Join-Path $Instalacao 'privado/operacao/atualizacao-tempos.log')}
 elseif($Caso-eq'ci-forcado'){& (Join-Path $Preparo 'scripts/preparar-atualizacao.ps1') -Instalacao $Instalacao -ForcarCompleto}
 else{if($Caso-eq'ci-forcado-env'){$env:SV_PREPARO_COMPLETO='1'};& (Join-Path $Preparo 'scripts/preparar-atualizacao.ps1') -Instalacao $Instalacao}
 exit $LASTEXITCODE
@@ -127,13 +128,25 @@ exit $LASTEXITCODE
   $passos=@(Get-Content (Join-Path $preparo 'passos.txt'))
   if(($rc-eq0)-ne($caso-notin@('build-falha','portal-falha','alertas-falha','operacional-falha','fumaca-falha'))){throw "Preparo incorreto em $caso (rc=$rc): $saida"}
   if(($passos-contains'npm-ci')-ne($caso-eq'alteradas')-or($passos-contains'pip')-ne($caso-eq'alteradas')){throw "Decisao de dependencias incorreta: $caso"}
-  $rapido=$caso-in@('ci-aprovado','fumaca-falha')
+  $rapido=$caso-in@('ci-aprovado','ci-log-explicito','fumaca-falha')
   if($rc-eq0-and@($passos|Where-Object {$_-like'operacional:*'}).Count-ne$(if($rapido){2}else{4})){throw 'Removeu verificacao operacional.'}
   if($rapido-and($passos-contains'portal'-or$passos-contains'alertas'-or$passos-notcontains'fumaca')){throw 'Modo rapido nao respeitou suites/fumaca.'}
   if(!$rapido-and$rc-eq0-and($passos-notcontains'portal'-or$passos-notcontains'alertas')){throw 'Fallback nao executou todas as suites.'}
   if($rc-eq0){
    $tempos=Get-Content (Join-Path $preparo 'preparo-tempos.log') -Raw
    foreach($nome in @('Inicializacao isolada','Limpeza de preparos reprovados','Configuracao de teste','Dependencias Node','Materializacao de junctions Node','Dependencias Python','ValidarPythonMock','Consulta CI','Build do Portal','Aprovacao e conferencia')){if($tempos-notlike"*PREPARAR / ${nome}: codigo=0; duracao=*"){throw "Medicao ausente: $nome"}}
+   $destinoTempos=Join-Path $instalacao 'privado/operacao/atualizacao-tempos.log'
+   if($caso-ne'ci-log-explicito'){
+    # Pai legado importa uma vez. O filho nao deve ter escrito diretamente.
+    if(Test-Path $destinoTempos){throw 'Preparador escreveu tempos sem delegacao explicita.'}
+    [void][IO.Directory]::CreateDirectory((Split-Path $destinoTempos -Parent))
+    Get-Content (Join-Path $preparo 'preparo-tempos.log')|Add-Content $destinoTempos
+   }
+   $linhasTempos=@(Get-Content $destinoTempos)
+   foreach($nome in @('Dependencias Node','Dependencias Python','Build do Portal')){
+    if(@($linhasTempos|Where-Object {$_-like("PREPARAR / ${nome}: codigo=*")}).Count-ne1){throw "Tempo duplicado ou ausente: $nome"}
+   }
+   foreach($tipo in @('Node','Python')){if(@($linhasTempos|Where-Object {$_-like("Dependencias ${tipo}: *motivo: *")}).Count-ne1){throw "Caminho de dependencias ausente: $tipo"}}
    if($tempos-notlike"*modo $(if($rapido){'rapido'}else{'completo'})*"){throw 'Modo ausente no log.'}
   }
   if((Test-Path (Join-Path $preparo 'preparo-aprovado'))-ne($rc-eq0)){throw 'Preparo reprovado foi aprovado.'}

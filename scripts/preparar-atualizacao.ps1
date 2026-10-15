@@ -1,11 +1,14 @@
 ﻿# Executado em processo oculto separado, exclusivamente no worktree descartavel.
 [CmdletBinding()]
-param([Parameter(Mandatory=$true)][string]$Instalacao,[switch]$ReinstalarNode,[switch]$ReinstalarPython,[switch]$ForcarCompleto=($env:SV_PREPARO_COMPLETO-eq'1'),[string]$AndamentoArquivo,[string]$TemposArquivo)
+param([Parameter(Mandatory=$true)][string]$Instalacao,[switch]$ReinstalarNode,[switch]$ReinstalarPython,[switch]$IgnorarReserva,[switch]$ForcarCompleto=($env:SV_PREPARO_COMPLETO-eq'1'),[string]$AndamentoArquivo,[string]$TemposArquivo)
 $ErrorActionPreference='Stop'
 $Raiz=(Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 . (Join-Path $PSScriptRoot 'atualizacao-preparo.ps1')
 . (Join-Path $PSScriptRoot 'operacao-logica.ps1')
 Validar-PastaPreparo $Instalacao $Raiz
+# Sem argumento explicito, o pai legado importa preparo-tempos.log ao voltar.
+# Um unico escritor evita duplicar as linhas na primeira atualizacao.
+$publicarTempos=$PSBoundParameters.ContainsKey('TemposArquivo')
 if(!$TemposArquivo){$TemposArquivo=Join-Path (Obter-PastaPrivada $Instalacao) 'operacao/atualizacao-tempos.log'}
 if(!$AndamentoArquivo){$AndamentoArquivo=Join-Path (Obter-PastaPrivada $Instalacao) 'operacao/atualizacao-andamento.json'}
 $script:PassosPreparo=New-Object Collections.ArrayList
@@ -21,8 +24,15 @@ function Concluir-PassoPreparo([string]$Codigo='0') {
  $tempo=([math]::Round(([datetime]::UtcNow-$p.inicio).TotalSeconds,2)).ToString('0.##',[Globalization.CultureInfo]::InvariantCulture)
  $linha="PREPARAR / $($p.nome): codigo=$Codigo; duracao=$tempo s."
  try{Add-Content -LiteralPath (Join-Path $Raiz 'preparo-tempos.log') -Value $linha -Encoding UTF8}catch{}
- if($TemposArquivo){try{Add-Content -LiteralPath $TemposArquivo -Value $linha -Encoding UTF8}catch{}}
+ if($publicarTempos){try{Add-Content -LiteralPath $TemposArquivo -Value $linha -Encoding UTF8}catch{}}
  Write-Host $linha
+}
+function Registrar-CaminhoDependencias([string]$Linha) {
+ Write-Host $Linha
+ try{
+  Add-Content -LiteralPath (Join-Path $Raiz 'preparo-tempos.log') -Value $Linha -Encoding UTF8
+  if($publicarTempos){Add-Content -LiteralPath $TemposArquivo -Value $Linha -Encoding UTF8}
+ }catch{}
 }
 function Executar-Preparo([scriptblock]$Comando,[string]$Falha) {
  $preferencia=$ErrorActionPreference;$codigo=1
@@ -76,11 +86,23 @@ try {
  [IO.File]::WriteAllText($configPortal,($texto+"`nPORTAL_PORTA=$($portasPreparo[0])`nRELATORIOS_PORTA=$($portasPreparo[1])`n"))
  Concluir-PassoPreparo
  $portal=Join-Path $Raiz 'portal';$alertas=Join-Path $Raiz 'alertas'
+ # Metadados capturados antes de TROCAR; falha usa copia/instalacao.
+ $assinaturaAtual=$null;$impedimentoReserva=''
+ try{
+  $origem=Obter-AssinaturaDependencias $Instalacao (Join-Path $Instalacao 'alertas/.venv/Scripts/python.exe')
+  [IO.File]::WriteAllText((Join-Path $Raiz 'dependencias-origem.json'),($origem|ConvertTo-Json -Depth 6))
+  $assinaturaAtual=Obter-AssinaturaDependencias $Raiz 'python.exe'
+ }catch{$impedimentoReserva='metadados/ambiente indisponiveis'}
+ if($IgnorarReserva-or(($ReinstalarNode-or$ReinstalarPython)-and$origem.sha-eq$assinaturaAtual.sha)){$impedimentoReserva='reinstalacao forcada'}
+ $usoReserva=Usar-ReservaDependencias $Instalacao $Raiz $assinaturaAtual $impedimentoReserva
  Iniciar-PassoPreparo 'Dependencias Node'
- if($ReinstalarNode-or!(Copiar-DependenciasPreparo (Join-Path $Instalacao 'portal/node_modules') (Join-Path $portal 'node_modules'))){
+ if($usoReserva.usada){$caminhoNode='reserva reaproveitada'}
+ elseif($ReinstalarNode-or!(Copiar-DependenciasPreparo (Join-Path $Instalacao 'portal/node_modules') (Join-Path $portal 'node_modules'))){
+  $caminhoNode='instalacao - motivo: '+$usoReserva.motivo
   Push-Location $portal
   try{Executar-Preparo {& npm.cmd ci --no-audit --no-fund} 'npm ci falhou no preparo.'}finally{Pop-Location}
- }else{Write-Host 'Node: dependencias reaproveitadas por copia isolada.'}
+ }else{$caminhoNode='copia - motivo: '+$usoReserva.motivo+'; metodo: '+$script:MetodoCopiaDependencias}
+ Registrar-CaminhoDependencias ('Dependencias Node: '+$caminhoNode)
  Concluir-PassoPreparo
  Iniciar-PassoPreparo 'Materializacao de junctions Node'
  # npm cria junctions para pacotes file: (fast-glob/vendor). Materializa antes
@@ -93,10 +115,13 @@ try {
  }
  Concluir-PassoPreparo
  Iniciar-PassoPreparo 'Dependencias Python'
- if($ReinstalarPython-or!(Copiar-DependenciasPreparo (Join-Path $Instalacao 'alertas/.venv') (Join-Path $alertas '.venv'))){
+ if($usoReserva.usada){$caminhoPython='reserva reaproveitada'}
+ elseif($ReinstalarPython-or!(Copiar-DependenciasPreparo (Join-Path $Instalacao 'alertas/.venv') (Join-Path $alertas '.venv'))){
+  $caminhoPython='instalacao - motivo: '+$usoReserva.motivo
   Executar-Preparo {& python.exe -m venv (Join-Path $alertas '.venv')} 'Criacao do venv falhou no preparo.'
   Executar-Preparo {& (Join-Path $alertas '.venv/Scripts/python.exe') -m pip install -r (Join-Path $alertas 'config/requirements.txt') -r (Join-Path $alertas 'config/requirements-dev.txt') --quiet} 'pip install falhou no preparo.'
- }else{Write-Host 'Python: dependencias reaproveitadas por copia isolada.'}
+ }else{$caminhoPython='copia - motivo: '+$usoReserva.motivo+'; metodo: '+$script:MetodoCopiaDependencias}
+ Registrar-CaminhoDependencias ('Dependencias Python: '+$caminhoPython)
  Concluir-PassoPreparo
  Iniciar-PassoPreparo 'Validar-PythonAlertas'
  Validar-PythonAlertas (Join-Path $alertas '.venv/Scripts/python.exe')
@@ -109,7 +134,7 @@ try {
  $modo=if($ci.rapido){'rapido'}else{'completo'}
  $linhaModo=if($ci.rapido){"PREPARAR: modo rapido - $($ci.motivo)"}else{"PREPARAR: modo completo - motivo: $($ci.motivo)"}
  Write-Host $linhaModo
- try{Add-Content (Join-Path $Raiz 'preparo-tempos.log') $linhaModo -Encoding UTF8;if($TemposArquivo){Add-Content $TemposArquivo $linhaModo -Encoding UTF8}}catch{}
+ try{Add-Content (Join-Path $Raiz 'preparo-tempos.log') $linhaModo -Encoding UTF8;if($publicarTempos){Add-Content $TemposArquivo $linhaModo -Encoding UTF8}}catch{}
  Publicar-AndamentoAtualizacao $script:AndamentoPreparo 'PREPARAR / Build do Portal' -Modo $modo
  Push-Location $portal
  try{

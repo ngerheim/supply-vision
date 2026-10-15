@@ -453,6 +453,7 @@ if (-not $JaAtualizado) {
   try{Encerrar-EtapaMedida $script:MedicaoAtualizacao}catch{}
   $argsPreparo=@('-NoProfile','-WindowStyle','Hidden','-ExecutionPolicy','Bypass','-File',(Join-Path $script:PastaPreparo 'scripts/preparar-atualizacao.ps1'),'-Instalacao',$Raiz)
   if($ForcarCompleto){$argsPreparo+='-ForcarCompleto'}
+  if($Reaplicar){$argsPreparo+='-IgnorarReserva'}
   if($script:AndamentoAtualizacao){$argsPreparo+=@('-AndamentoArquivo',$script:AndamentoAtualizacao.arquivo)}
   if($script:MedicaoAtualizacao.arquivo){$argsPreparo+=@('-TemposArquivo',$script:MedicaoAtualizacao.arquivo)}
   if($mexeuNode){$argsPreparo+='-ReinstalarNode'}
@@ -636,6 +637,8 @@ try {
  & $Node --experimental-strip-types (Join-Path $Portal 'scripts/backup.mjs') --pre-atualizacao --somente-rede --snapshot-pre-atualizacao
 } catch {Aviso 'Falha ao replicar backup; copia local e snapshot preservados.'}
 if($LASTEXITCODE-ne0){Aviso 'Backup local e snapshot preservados; replicacao de rede falhou ou excedeu o prazo configurado.'}
+# O worker so reserva anteriores depois deste compromisso final.
+Gravar-ContextoAtualizacao $ContextoArquivo @{anterior=$anterior;remoto=$remoto;fase='concluido';limpeza='pendente'}
 Etapa 'CONCLUIR: delegando limpeza da pasta de preparo'
 if($script:PastaPreparo){
  try{Iniciar-LimpezaPreparoSegundoPlano $Raiz $script:PastaPreparo (Join-Path (Obter-PastaPrivada $Raiz) 'operacao');$script:LimpezaPreparo='segundo-plano'}

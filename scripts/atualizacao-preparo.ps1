@@ -41,9 +41,236 @@ function Copiar-DependenciasPreparo([string]$Origem,[string]$Destino) {
  if((Split-Path $Origem -Leaf)-eq'node_modules'){
   $bases+=([IO.Path]::GetFullPath((Join-Path (Split-Path $Origem -Parent) 'vendor'))+[IO.Path]::DirectorySeparatorChar)
  }
+ $script:MetodoCopiaDependencias='recursiva (links ou robocopy indisponivel)'
+ if((Usar-RobocopyDependencias)-and(Testar-ArvoreFisica $Origem)){
+  Executar-RobocopyDependencias $Origem $Destino
+  if((Testar-ArvoreFisica $Origem)-and(Testar-ArvoreFisica $Destino)){$script:MetodoCopiaDependencias='robocopy /MT:16';return $true}
+  # Um link surgiu durante a copia: apaga apenas a copia isolada e usa
+  # a materializacao conservadora; nunca segue o link pelo robocopy.
+  Remover-ArvorePreparo $Destino
+ }
  Copiar-ArvoreDependencias $Origem $Destino $bases
  return $true
 }
+# Reserva e copia usam apenas arvores fisicas. Qualquer reparse point exige
+# materializacao pelo caminho conservador, inclusive links internos.
+function Inicializar-ArvoreDependencias {
+ if('SupplyVision.ArvoreDependencias' -as [type]){return}
+ Add-Type -TypeDefinition @'
+using System;
+using System.IO;
+using System.Text;
+using System.Collections.Generic;
+using System.Security.Cryptography;
+namespace SupplyVision {
+ public static class ArvoreDependencias {
+  public static void SemLinks(string path) {
+   string full = Path.GetFullPath(path);
+   for(string p = full; !String.IsNullOrEmpty(p); p = Path.GetDirectoryName(p)) {
+    if((File.GetAttributes(p) & FileAttributes.ReparsePoint) != 0) throw new IOException("Reparse point nas dependencias: " + p);
+   }
+   Conferir(full, 0);
+  }
+  static void Conferir(string path, int depth) {
+   if(depth > 64) throw new IOException("Profundidade excessiva nas dependencias.");
+   FileAttributes a = File.GetAttributes(path);
+   if((a & FileAttributes.ReparsePoint) != 0) throw new IOException("Reparse point nas dependencias: " + path);
+   if((a & FileAttributes.Directory) != 0) foreach(string p in Directory.GetFileSystemEntries(path)) Conferir(p, depth + 1);
+  }
+  static string Hex(byte[] bytes) { return BitConverter.ToString(bytes).Replace("-", "").ToLowerInvariant(); }
+  static void Inventariar(string root, string path, StringBuilder entries) {
+   string[] children = Directory.GetFileSystemEntries(path); Array.Sort(children, StringComparer.Ordinal);
+   foreach(string p in children) {
+    string rel = p.Substring(root.Length).Replace('\\', '/');
+    if((File.GetAttributes(p) & FileAttributes.Directory) != 0) { entries.Append("D:").Append(rel).Append('\n'); Inventariar(root, p, entries); }
+    else using(FileStream f = new FileStream(p, FileMode.Open, FileAccess.Read, FileShare.None))
+     using(SHA256 hash = SHA256.Create()) entries.Append("F:").Append(rel).Append(':').Append(f.Length).Append(':').Append(Hex(hash.ComputeHash(f))).Append('\n');
+   }
+  }
+  public static string Inventario(string path) {
+   SemLinks(path); StringBuilder entries = new StringBuilder(); Inventariar(path, path, entries);
+   using(SHA256 hash = SHA256.Create()) return Hex(hash.ComputeHash(Encoding.UTF8.GetBytes(entries.ToString())));
+  }
+  public static string[] Caches(string path) {
+   SemLinks(path); List<string> found = new List<string>(); CachesInterno(path, found); return found.ToArray();
+  }
+  static void CachesInterno(string path, List<string> found) {
+   foreach(string p in Directory.GetDirectories(path)) {
+    string n = Path.GetFileName(p);
+    if(n == ".cache" || n == ".mf" || n == ".wrangler" || n == ".miniflare" || n == "__pycache__") found.Add(p);
+    else CachesInterno(p, found);
+   }
+  }
+ }
+}
+'@
+}
+function Testar-ArvoreFisica([string]$Pasta) {
+ try{Inicializar-ArvoreDependencias;[SupplyVision.ArvoreDependencias]::SemLinks($Pasta);return $true}catch{return $false}
+}
+function Usar-RobocopyDependencias {
+ return $env:OS-eq'Windows_NT'-and!!(Get-Command robocopy.exe -ErrorAction SilentlyContinue)
+}
+function Executar-RobocopyDependencias([string]$Origem,[string]$Destino) {
+ $antes=Get-Variable LASTEXITCODE -Scope Global -ValueOnly -ErrorAction SilentlyContinue
+ try{
+  # Nao segue links que aparecam durante a copia. Conferencia posterior
+  # recusa links copiados ou omitidos; nunca entrega uma arvore parcial.
+  & robocopy.exe $Origem $Destino /E /MT:16 /COPY:DAT /DCOPY:DAT /XJ /SL /SJ /R:1 /W:1 /NFL /NDL /NJH /NJS /NP | Out-Null
+  $codigo=$LASTEXITCODE
+  if($codigo-lt0-or$codigo-ge8){throw "Robocopy de dependencias falhou: codigo=$codigo."}
+ }finally{$global:LASTEXITCODE=$antes}
+}
+function Pasta-ReservaDependencias([string]$Raiz) {
+ return Join-Path (Split-Path ([IO.Path]::GetFullPath($Raiz)) -Parent) ('.'+(Split-Path $Raiz -Leaf)+'-dependencias-reserva')
+}
+function Mesmo-VolumeDependencias([string]$Raiz,[string]$Preparo) {
+ # Exige arvores fisicas tambem nos ancestrais. Montagens/junctions nunca
+ # transformam a comparacao de letra da unidade em uma falsa garantia.
+ foreach($p in @($Raiz,$Preparo)){
+  for($a=[IO.Path]::GetFullPath($p);$a;$a=Split-Path $a -Parent){
+   if((Test-Path -LiteralPath $a)-and((Get-Item -LiteralPath $a -Force).Attributes-band[IO.FileAttributes]::ReparsePoint)){return $false}
+  }
+ }
+ return [IO.Path]::GetPathRoot([IO.Path]::GetFullPath($Raiz))-eq[IO.Path]::GetPathRoot([IO.Path]::GetFullPath($Preparo))
+}
+function Obter-AssinaturaDependencias([string]$Raiz,[string]$Python) {
+ $antes=Get-Variable LASTEXITCODE -Scope Global -ValueOnly -ErrorAction SilentlyContinue
+ try{
+  $sha=(& git -C $Raiz rev-parse HEAD).Trim();if($LASTEXITCODE-or$sha-notmatch'^[0-9a-f]{40}$'){throw 'SHA de origem invalido.'}
+  $arquivos=@('portal/package-lock.json','portal/package.json')+@(Get-ChildItem -LiteralPath (Join-Path $Raiz 'alertas/config') -Filter 'requirements*.txt' -File|Sort-Object Name|ForEach-Object {'alertas/config/'+$_.Name})
+  if($arquivos.Count-lt3){throw 'Requirements ausentes.'}
+  $hashes=[ordered]@{}
+  foreach($rel in $arquivos){
+   $item=Get-Item -LiteralPath (Join-Path $Raiz $rel) -Force
+   if($item.Attributes-band[IO.FileAttributes]::ReparsePoint){throw 'Manifesto de dependencias e link.'}
+   $hashes[$rel]=(Get-FileHash -LiteralPath $item.FullName -Algorithm SHA256).Hash
+  }
+  $node=(& node --version|Out-String).Trim();if($LASTEXITCODE-or$node-notmatch'^v\d+\.\d+\.\d+$'){throw 'Versao Node desconhecida.'}
+  $pythonVersao=(& $Python --version|Out-String).Trim();if($LASTEXITCODE-or$pythonVersao-notmatch'^Python \d+\.\d+\.\d+$'){throw 'Versao Python desconhecida.'}
+  return @{formato=1;sha=$sha;data=[datetime]::UtcNow.ToString('o');node=$node;python=$pythonVersao;hashes=$hashes}
+ }finally{$global:LASTEXITCODE=$antes}
+}
+function Comparar-AssinaturaDependencias($Registro,$Atual) {
+ if($Registro.formato-ne1-or$Registro.sha-notmatch'^[0-9a-f]{40}$'-or!$Registro.data){return 'registro invalido'}
+ try{[void][datetime]::Parse($Registro.data)}catch{return 'data invalida'}
+ if($Registro.node-cne$Atual.node){return 'Node diferente'}
+ if($Registro.python-cne$Atual.python){return 'Python diferente'}
+ foreach($rel in @('portal/package-lock.json','portal/package.json')){if($Registro.hashes.$rel-cne$Atual.hashes[$rel]){return 'lockfile/package diferente'}}
+ $registrados=@($Registro.hashes.PSObject.Properties|Where-Object Name -Like 'alertas/config/requirements*.txt'|Sort-Object Name)
+ $novos=@($Atual.hashes.Keys|Where-Object {$_-like'alertas/config/requirements*.txt'}|Sort-Object)
+ if($registrados.Count-ne$novos.Count){return 'requirements diferentes'}
+ foreach($rel in $novos){if($Registro.hashes.$rel-cne$Atual.hashes[$rel]){return 'requirements diferentes'}}
+ return ''
+}
+function Limpar-CachesReserva([string]$Pasta) {
+ Inicializar-ArvoreDependencias
+ foreach($cache in [SupplyVision.ArvoreDependencias]::Caches($Pasta)){Remover-ArvorePreparo $cache}
+}
+function Descartar-ReservaDependencias([string]$Raiz,[string]$Preparo) {
+ Validar-PastaPreparo $Raiz $Preparo
+ $reserva=Pasta-ReservaDependencias $Raiz
+ if(Test-Path -LiteralPath $reserva){
+  # Mesmo se um handle impedir a renomeacao, nunca reutilizar uma reserva
+  # que ja foi recusada. Nao escreve atraves de junction/ancestral externo.
+  $item=Get-Item -LiteralPath $reserva -Force
+  if($item.PSIsContainer-and(Mesmo-VolumeDependencias $Raiz $Preparo)-and!($item.Attributes-band[IO.FileAttributes]::ReparsePoint)){
+   $marca=Join-Path $reserva 'descartar'
+   if(!(Get-Item -LiteralPath $marca -Force -ErrorAction SilentlyContinue)){
+    # CreateNew nunca sobrescreve/segue um link que apareca como marcador.
+    $m=[IO.File]::Open($marca,[IO.FileMode]::CreateNew,[IO.FileAccess]::Write,[IO.FileShare]::None);$m.Dispose()
+   }
+  }
+  # Quarentena dentro do worktree: worker de limpeza ja existente apaga
+  # depois, com as mesmas barreiras contra links, processos e producao.
+  $descarte=Join-Path $Preparo ('reserva-descartada-'+[guid]::NewGuid().ToString('N'))
+  if($item.PSIsContainer){[IO.Directory]::Move($reserva,$descarte)}else{[IO.File]::Move($reserva,$descarte)}
+ }
+}
+function Reserva-DependenciasEmUso([string]$Pasta) {
+ if($env:OS-ne'Windows_NT'){return $false}
+ # Falha de consulta tambem impede reutilizacao. Handles abertos sao
+ # conferidos separadamente pelo inventario com FileShare.None.
+ foreach($p in @(Get-CimInstance Win32_Process -ErrorAction Stop)){
+  if((Processo-DestePreparo $p $Pasta)-or($p.ExecutablePath-and$p.ExecutablePath.StartsWith($Pasta+[IO.Path]::DirectorySeparatorChar,[StringComparison]::OrdinalIgnoreCase))){return $true}
+ }
+ return $false
+}
+function Usar-ReservaDependencias([string]$Raiz,[string]$Preparo,$Atual,[string]$Impedimento='') {
+ Validar-PastaPreparo $Raiz $Preparo
+ $reserva=Pasta-ReservaDependencias $Raiz;$tomada=Join-Path $Preparo 'reserva-tomada'
+ $motivo='reserva ausente';$h=$null
+ if(!(Test-Path -LiteralPath $reserva)){return @{usada=$false;motivo=$motivo}}
+ try{
+  if($Impedimento){throw $Impedimento}
+  if(Test-Path -LiteralPath (Join-Path $reserva 'descartar')){throw 'reserva pendente de descarte'}
+  if(!(Mesmo-VolumeDependencias $Raiz $Preparo)){throw 'volume diferente ou ancestral com link'}
+  if(!(Testar-ArvoreFisica $reserva)){throw 'reserva com reparse point ou incompleta'}
+  if(Reserva-DependenciasEmUso $reserva){throw 'reserva em uso'}
+  if(!$Atual){throw 'metadados/ambiente indisponiveis'}
+  $h=[IO.File]::Open((Join-Path $reserva 'registro.json'),[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::None)
+  $leitor=New-Object IO.StreamReader($h);$registro=$leitor.ReadToEnd()|ConvertFrom-Json -ErrorAction Stop
+  $motivo=Comparar-AssinaturaDependencias $registro $Atual;if($motivo){throw $motivo}
+  # SHA e proveniencia: deve existir no repositorio e ser ancestral do
+  # destino. Nao se exige SHA igual ao destino (isso impediria atualizar).
+  & git -C $Raiz merge-base --is-ancestor $registro.sha $Atual.sha
+  if($LASTEXITCODE){throw 'SHA de origem nao e ancestral do destino'}
+  foreach($rel in @('portal/node_modules','alertas/.venv')){
+   $p=Join-Path $reserva $rel
+   if(!(Test-Path -LiteralPath $p -PathType Container)){throw 'reserva incompleta'}
+   Limpar-CachesReserva $p
+   if([SupplyVision.ArvoreDependencias]::Inventario($p)-cne$registro.inventarios.$rel){throw 'reserva incompleta, corrompida ou em uso'}
+  }
+  $h.Dispose();$h=$null
+  foreach($rel in @('portal/node_modules','alertas/.venv')){if(Test-Path -LiteralPath (Join-Path $Preparo $rel)){throw 'destino de dependencias ja existe'}}
+  [IO.Directory]::Move($reserva,$tomada)
+  foreach($rel in @('portal/node_modules','alertas/.venv')){
+   $destino=Join-Path $Preparo $rel
+   [void][IO.Directory]::CreateDirectory((Split-Path $destino -Parent))
+   [IO.Directory]::Move((Join-Path $tomada $rel),$destino)
+  }
+  return @{usada=$true;motivo='registro, ambiente e integridade conferidos'}
+ }catch{
+  $motivo=$_.Exception.Message
+  # Falha na segunda renomeacao nao pode deixar uma mistura de caminhos.
+  if(Test-Path -LiteralPath $tomada){
+   foreach($rel in @('portal/node_modules','alertas/.venv')){
+    $destino=Join-Path $Preparo $rel;$origem=Join-Path $tomada $rel
+    if((Test-Path -LiteralPath $destino)-and!(Test-Path -LiteralPath $origem)){[IO.Directory]::Move($destino,$origem)}
+   }
+  }
+ }finally{if($h){$h.Dispose()}}
+ try{Descartar-ReservaDependencias $Raiz $Preparo}catch{Write-Warning ('Reserva pendente de descarte: '+$_.Exception.Message)}
+ return @{usada=$false;motivo=$motivo}
+}
+function Guardar-ReservaDependencias([string]$Raiz,[string]$Preparo) {
+ Validar-PastaPreparo $Raiz $Preparo
+ if(!(Mesmo-VolumeDependencias $Raiz $Preparo)){return $false}
+ $reserva=Pasta-ReservaDependencias $Raiz;$candidata=Join-Path $Preparo 'reserva-nova'
+ # Chamada somente depois de gravar contexto concluido. Antes disso os
+ # anteriores pertencem exclusivamente ao rollback; TROCAR nao muda.
+ $registro=Get-Content -LiteralPath (Join-Path $Preparo 'dependencias-origem.json') -Raw|ConvertFrom-Json -ErrorAction Stop
+ if(Test-Path -LiteralPath $candidata){throw 'Destino de reserva nova ja existe; sem reserva.'}
+ $inventarios=[ordered]@{}
+ foreach($rel in @('portal/node_modules','alertas/.venv')){
+  $p=Join-Path $Preparo ('anteriores/'+$rel)
+  if(!(Testar-ArvoreFisica $p)){throw 'Dependencias anteriores com links ou ausentes; sem reserva.'}
+  Limpar-CachesReserva $p
+  $inventarios[$rel]=[SupplyVision.ArvoreDependencias]::Inventario($p)
+ }
+ Descartar-ReservaDependencias $Raiz $Preparo
+ foreach($rel in @('portal/node_modules','alertas/.venv')){
+  $p=Join-Path $candidata $rel;[void][IO.Directory]::CreateDirectory((Split-Path $p -Parent))
+  [IO.Directory]::Move((Join-Path $Preparo ('anteriores/'+$rel)),$p)
+ }
+ $registro.data=[datetime]::UtcNow.ToString('o')
+ $registro|Add-Member -NotePropertyName inventarios -NotePropertyValue $inventarios -Force
+ [IO.File]::WriteAllText((Join-Path $candidata 'registro.json'),($registro|ConvertTo-Json -Depth 6))
+ # Publicacao atomica: reserva parcial nunca aparece no endereco reutilizavel.
+ [IO.Directory]::Move($candidata,$reserva)
+ return $true
+}
+
 function Trocar-ArtefatosPreparo([string]$Raiz,[string]$Preparo) {
  Validar-PastaPreparo $Raiz $Preparo
  foreach($rel in @('portal/dist','portal/node_modules','alertas/.venv')){

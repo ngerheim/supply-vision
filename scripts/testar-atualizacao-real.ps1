@@ -88,6 +88,14 @@ try{
  Git-H2 -Argumentos @('-C',$remoto,'add','scripts/preparar-configuracao-teste.ps1')
  Git-H2 -Argumentos @('-C',$remoto,'-c','user.name=CI H2','-c','user.email=ci@h2.test','commit','-m','fixture: reprovar PREPARAR H2')
  $negativo=(Git-H2 -Argumentos @('-C',$remoto,'rev-parse','HEAD')).Trim()
+ # Commit sucessor sem mudanca de dependencias, exclusivamente na fixture.
+ Git-H2 -Argumentos @('-C',$remoto,'checkout','--detach',$destino)
+ Git-H2 -Argumentos @('-C',$remoto,'-c','user.name=CI H2','-c','user.email=ci@h2.test','commit','--allow-empty','-m','fixture: atualizar com reserva H2')
+ $destinoReserva=(Git-H2 -Argumentos @('-C',$remoto,'rev-parse','HEAD')).Trim()
+ Add-Content $verificador "`nthrow 'H2_FALHA_PREPARAR_INTENCIONAL'"
+ Git-H2 -Argumentos @('-C',$remoto,'add','scripts/preparar-configuracao-teste.ps1')
+ Git-H2 -Argumentos @('-C',$remoto,'-c','user.name=CI H2','-c','user.email=ci@h2.test','commit','-m','fixture: reprovar depois da reserva H2')
+ $negativoFinal=(Git-H2 -Argumentos @('-C',$remoto,'rev-parse','HEAD')).Trim()
  Git-H2 -Argumentos @('-C',$remoto,'update-ref','refs/heads/main',$negativo)
  Git-H2 -Argumentos @('clone','--no-hardlinks','--branch','main',$remoto,$raiz)
  Git-H2 -Argumentos @('-C',$raiz,'reset','--hard',$base)
@@ -116,6 +124,14 @@ try{
  . (Join-Path $raiz 'scripts/operacao-logica.ps1')
  . (Join-Path $raiz 'scripts/inicializacao-logica.ps1')
  if(@(Get-NetTCPConnection -LocalPort 3000 -State Listen -ErrorAction SilentlyContinue).Count){throw 'Porta 3000 ocupada; recusa consultar outra instalacao.'}
+ # Simula a instalacao que ja passou pelo atualizador atual: junctions
+ # locais materializadas antes de iniciar qualquer processo da base.
+ Fase 'materializacao isolada das dependencias da base'
+ $modulos=Join-Path $raiz 'portal/node_modules'
+ [void](Copiar-DependenciasPreparo $modulos ($modulos+'-isolado'))
+ [IO.Directory]::Move($modulos,($modulos+'-instalado'))
+ [IO.Directory]::Move(($modulos+'-isolado'),$modulos)
+ Remover-ArvorePreparo ($modulos+'-instalado')
  Fase 'supervisor, Portal e consumidores reais na base'
  if(Get-ScheduledTask -TaskName 'Supply Vision' -ErrorAction SilentlyContinue){throw 'Recusa alterar tarefa Supply Vision preexistente.'}
  if(Testar-Elevacao){
@@ -132,19 +148,23 @@ try{
  $snapshot=Join-Path $PastaTeste 'antes.json'
  Node-H2 -Argumentos @($apoio,'snapshot',$raiz,$snapshot)
  $pidBase=(Get-Content (Join-Path $privado 'operacao/supervisor.pid.json') -Raw|ConvertFrom-Json).pid
- foreach($caso in @('negativo','sucesso','negativo-final')){
+ foreach($caso in @('negativo','sucesso','sucesso-reserva','negativo-final')){
   Fase "atualizador completo: $caso"
   if($caso-eq'sucesso'){
    Git-H2 -Argumentos @('-C',$remoto,'update-ref','refs/heads/main',$destino)
    Node-H2 -Argumentos @($apoio,'pendencia',$raiz)
+  }elseif($caso-eq'sucesso-reserva'){
+   if(!(Test-Path -LiteralPath (Join-Path (Pasta-ReservaDependencias $raiz) 'registro.json'))){throw 'Primeira atualizacao nao publicou reserva.'}
+   Git-H2 -Argumentos @('-C',$remoto,'update-ref','refs/heads/main',$destinoReserva)
+   Node-H2 -Argumentos @($apoio,'snapshot',$raiz,$snapshot)
   }elseif($caso-eq'negativo-final'){
-   Git-H2 -Argumentos @('-C',$remoto,'update-ref','refs/heads/main',$negativo)
+   Git-H2 -Argumentos @('-C',$remoto,'update-ref','refs/heads/main',$negativoFinal)
    Node-H2 -Argumentos @($apoio,'snapshot',$raiz,$snapshot)
    $pidBase=(Get-Content (Join-Path $privado 'operacao/supervisor.pid.json') -Raw|ConvertFrom-Json).pid
   }
   $logs=Join-Path $PastaTeste $caso;New-Item -ItemType Directory $logs|Out-Null
   Obter-PidsConsumidoresH2|ConvertTo-Json|Set-Content (Join-Path $logs 'consumidores-antes.json') -Encoding UTF8
-  $modoMonitor=if($caso-eq'sucesso'){'sucesso'}else{'negativo'}
+  $modoMonitor=if($caso-like'sucesso*'){'sucesso'}else{'negativo'}
   $monitor=Start-Process node.exe -ArgumentList (@($apoio,'monitor',$raiz,$logs,$modoMonitor)|ForEach-Object{Proteger-ArgumentoAtualizacao $_}) -PassThru -WindowStyle Hidden -RedirectStandardOutput (Join-Path $logs 'monitor.log') -RedirectStandardError (Join-Path $logs 'monitor-erro.log')
   $processos+=$monitor
   if(!(Esperar-CondicaoTeste {Test-Path (Join-Path $logs 'monitor-pronto')} 15)){throw 'Monitor independente nao iniciou.'}
@@ -161,8 +181,8 @@ try{
   $codigo=$atualizador.ExitCode;$saida=Get-Content (Join-Path $logs 'atualizador.log') -Raw
   if(($null-ne$monitor.ExitCode-and$monitor.ExitCode-ne0)-or!(Test-Path (Join-Path $logs 'monitor-aprovado'))){throw "Monitor reprovou $caso."}
   $head=(Git-H2 -Argumentos @('-C',$raiz,'rev-parse','HEAD')).Trim()
-  if($caso-ne'sucesso'){
-   $headEsperado=if($caso-eq'negativo'){$base}else{$destino}
+  if($caso-notlike'sucesso*'){
+   $headEsperado=if($caso-eq'negativo'){$base}else{$destinoReserva}
    if($codigo-eq0-or$saida-notmatch'H2_FALHA_PREPARAR_INTENCIONAL'-or$head-ne$headEsperado){throw 'Falha PREPARAR nao confirmada, ou codigo alterado.'}
    if((Get-Content (Join-Path $privado 'operacao/supervisor.pid.json') -Raw|ConvertFrom-Json).pid-ne$pidBase){throw 'Supervisor original foi substituido no negativo.'}
    $pidsAntes=Get-Content (Join-Path $logs 'consumidores-antes.json') -Raw|ConvertFrom-Json
@@ -173,7 +193,10 @@ try{
    if($contexto.fase-ne'cancelado-preparo'-or$contexto.limpeza-ne'concluida'-or(Test-Path $contexto.preparo)){throw 'Negativo nao registrou cancelamento e limpeza do preparo.'}
    Node-H2 -Argumentos @($apoio,'negativo',$raiz,$snapshot)
   }else{
-   if(($null-ne$codigo-and$codigo-ne0)-or$head-ne$destino){throw 'Atualizacao nao chegou ao commit da PR.'}
+   $headEsperado=if($caso-eq'sucesso'){$destino}else{$destinoReserva}
+   if(($null-ne$codigo-and$codigo-ne0)-or$head-ne$headEsperado){throw 'Atualizacao nao chegou ao commit esperado.'}
+   $caminho=if($caso-eq'sucesso'){'copia - motivo: reserva ausente'}else{'reserva reaproveitada'}
+   foreach($tipo in @('Node','Python')){if($saida-notlike("*Dependencias ${tipo}: $caminho*")){throw "H2 nao exercitou dependencias ${tipo}: $caminho"}}
    $contexto=Get-Content (Join-Path $privado 'operacao/atualizacao.json') -Raw|ConvertFrom-Json
    if(!(Esperar-CondicaoTeste {!(Test-Path (Join-Path $privado 'operacao/limpeza-preparo.lock'))} 120)){throw 'Limpeza em segundo plano nao encerrou na fixture.'}
    if($contexto.fase-ne'concluido'-or(Test-Path $contexto.preparo)){throw 'Contexto nao concluiu ou preparo permaneceu.'}
