@@ -125,7 +125,9 @@ def test_quantidade_nao_positiva_vai_para_quarentena(rodar, quantidade):
 
 
 def test_alias_modelo_normalizado_antes_do_de_para(rodar):
-    rodar.MODELOS = {"APELIDO": "M"}
+    import regras_comparacao
+
+    regras_comparacao.MODELOS = {"APELIDO": "M"}
     compra = base(preco=10)
     compra["Modelo"] = " apelido "
     assert rodar.processar(compra, acordo([10])).loc[0, "Status"] == "CONFORME"

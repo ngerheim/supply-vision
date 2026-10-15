@@ -41,7 +41,11 @@
 | `portal/scripts/processar-emails.mjs` | Filas de chamados e relatorio diario |
 | `portal/scripts/processar-relatorios.mjs` | Pedidos Python, arquivos e redacao de logs |
 | `alertas/processo/pipeline.py` | Orquestracao diaria e entrega |
-| `alertas/processo/rodar.py` | Comparacao, qualidade e planilhas |
+| `alertas/processo/rodar.py` | Entrada diaria e API de compatibilidade da comparacao |
+| `alertas/processo/leitura_dados.py` | Leitura e normalizacao de Qlik e Portal |
+| `alertas/processo/contrato_comparacao.py`, `regras_comparacao.py` | Estados, motivos e classificacao das compras |
+| `alertas/processo/vigencia_acordos.py`, `qualidade_acordos.py` | Vigencia, parametros e pendencias dos acordos |
+| `alertas/processo/resumo_comparacao.py`, `planilhas_comparacao.py` | Indicadores, saida estruturada e planilhas |
 | `alertas/panorama/executar.py` | Recorte historico sem e-mail |
 | `alertas/processo/contrato_base.py` | Contrato da extracao Qlik |
 
