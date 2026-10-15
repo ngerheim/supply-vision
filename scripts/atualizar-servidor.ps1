@@ -167,7 +167,7 @@ Etapa 'Conferindo ambiente de atualizacao'
 $logicaInicializacao=Join-Path $PSScriptRoot 'inicializacao-logica.ps1'
 if(Test-Path $logicaInicializacao){. $logicaInicializacao;$script:TarefaSemLogin=!!(Obter-TarefaSupplyVision $Raiz)}
 if($script:TarefaSemLogin-and!$Simular-and!(Testar-Elevacao)){throw 'Atualizar a operacao com a conta da tarefa exige executar como administrador.'}
-if(!$Simular-and(Test-Path $logicaInicializacao)){Instalar-ComandoSv $Raiz}
+if(!$Simular-and(Test-Path $logicaInicializacao)){Instalar-ComandoSupv $Raiz}
 $Node = Localizar-NodeMaquina
 # Scripts npm tambem resolvem node pelo PATH; a maquina tem prioridade.
 if([IO.Path]::IsPathRooted($Node)){$env:Path=(Split-Path $Node)+';'+$env:Path}

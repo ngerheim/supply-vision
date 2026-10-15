@@ -78,18 +78,25 @@ namespace SupplyVision {
    if((a & FileAttributes.Directory) != 0) foreach(string p in Directory.GetFileSystemEntries(path)) Conferir(p, depth + 1);
   }
   static string Hex(byte[] bytes) { return BitConverter.ToString(bytes).Replace("-", "").ToLowerInvariant(); }
-  static void Inventariar(string root, string path, StringBuilder entries) {
+  static void Inventariar(string root, string path, StringBuilder entries, ref long files, ref long dirs) {
    string[] children = Directory.GetFileSystemEntries(path); Array.Sort(children, StringComparer.Ordinal);
    foreach(string p in children) {
     string rel = p.Substring(root.Length).Replace('\\', '/');
-    if((File.GetAttributes(p) & FileAttributes.Directory) != 0) { entries.Append("D:").Append(rel).Append('\n'); Inventariar(root, p, entries); }
-    else using(FileStream f = new FileStream(p, FileMode.Open, FileAccess.Read, FileShare.None))
-     using(SHA256 hash = SHA256.Create()) entries.Append("F:").Append(rel).Append(':').Append(f.Length).Append(':').Append(Hex(hash.ComputeHash(f))).Append('\n');
+    FileAttributes a = File.GetAttributes(p);
+    if((a & FileAttributes.ReparsePoint) != 0) throw new IOException("Reparse point nas dependencias: " + p);
+    if((a & FileAttributes.Directory) != 0) {
+     dirs++; entries.Append("D:").Append(rel.Length).Append(':').Append(rel).Append('\n'); Inventariar(root, p, entries, ref files, ref dirs);
+    } else using(FileStream f = new FileStream(p, FileMode.Open, FileAccess.Read, FileShare.None)) {
+     // Abre somente para conferir uso exclusivo e tamanho; nunca le conteudo.
+     files++; entries.Append("F:").Append(rel.Length).Append(':').Append(rel).Append(':').Append(f.Length).Append(':').Append(File.GetLastWriteTimeUtc(p).Ticks).Append('\n');
+    }
    }
   }
   public static string Inventario(string path) {
-   SemLinks(path); StringBuilder entries = new StringBuilder(); Inventariar(path, path, entries);
-   using(SHA256 hash = SHA256.Create()) return Hex(hash.ComputeHash(Encoding.UTF8.GetBytes(entries.ToString())));
+   SemLinks(path); StringBuilder entries = new StringBuilder(); long files = 0, dirs = 0;
+   Inventariar(Path.GetFullPath(path), path, entries, ref files, ref dirs);
+   // SHA256 apenas do texto dos metadados, nao do conteudo dos arquivos.
+   using(SHA256 hash = SHA256.Create()) return "metadados-v2;arquivos=" + files + ";pastas=" + dirs + ";assinatura=" + Hex(hash.ComputeHash(Encoding.UTF8.GetBytes(entries.ToString())));
   }
   public static string[] Caches(string path) {
    SemLinks(path); List<string> found = new List<string>(); CachesInterno(path, found); return found.ToArray();
@@ -196,40 +203,62 @@ function Reserva-DependenciasEmUso([string]$Pasta) {
  }
  return $false
 }
+# Mede tambem consultas/limpeza da reserva, antes de Dependencias Node/Python.
+# O worker de limpeza reutiliza a mesma logica sem depender do preparador.
+function Executar-PassoReserva([string]$Nome,[scriptblock]$Codigo) {
+ $medir=!!(Get-Command Iniciar-PassoPreparo -ErrorAction SilentlyContinue)
+ if($medir){Iniciar-PassoPreparo $Nome}
+ $resultado='falhou'
+ try{& $Codigo;$resultado='0'}finally{if($medir){Concluir-PassoPreparo $resultado}}
+}
 function Usar-ReservaDependencias([string]$Raiz,[string]$Preparo,$Atual,[string]$Impedimento='') {
  Validar-PastaPreparo $Raiz $Preparo
  $reserva=Pasta-ReservaDependencias $Raiz;$tomada=Join-Path $Preparo 'reserva-tomada'
  $motivo='reserva ausente';$h=$null
  if(!(Test-Path -LiteralPath $reserva)){return @{usada=$false;motivo=$motivo}}
  try{
-  if($Impedimento){throw $Impedimento}
-  if(Test-Path -LiteralPath (Join-Path $reserva 'descartar')){throw 'reserva pendente de descarte'}
-  if(!(Mesmo-VolumeDependencias $Raiz $Preparo)){throw 'volume diferente ou ancestral com link'}
-  if(!(Testar-ArvoreFisica $reserva)){throw 'reserva com reparse point ou incompleta'}
-  if(Reserva-DependenciasEmUso $reserva){throw 'reserva em uso'}
-  if(!$Atual){throw 'metadados/ambiente indisponiveis'}
-  $h=[IO.File]::Open((Join-Path $reserva 'registro.json'),[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::None)
-  $leitor=New-Object IO.StreamReader($h);$registro=$leitor.ReadToEnd()|ConvertFrom-Json -ErrorAction Stop
-  $motivo=Comparar-AssinaturaDependencias $registro $Atual;if($motivo){throw $motivo}
-  # SHA e proveniencia: deve existir no repositorio e ser ancestral do
-  # destino. Nao se exige SHA igual ao destino (isso impediria atualizar).
-  & git -C $Raiz merge-base --is-ancestor $registro.sha $Atual.sha
-  if($LASTEXITCODE){throw 'SHA de origem nao e ancestral do destino'}
+  $medir=!!(Get-Command Iniciar-PassoPreparo -ErrorAction SilentlyContinue)
+  if($medir){Iniciar-PassoPreparo 'Conferencia geral da reserva'}
+  $codigoConferencia='falhou'
+  try{
+   if($Impedimento){throw $Impedimento}
+   if(Test-Path -LiteralPath (Join-Path $reserva 'descartar')){throw 'reserva pendente de descarte'}
+   if(!(Mesmo-VolumeDependencias $Raiz $Preparo)){throw 'volume diferente ou ancestral com link'}
+   if(!(Testar-ArvoreFisica $reserva)){throw 'reserva com reparse point ou incompleta'}
+   if(Reserva-DependenciasEmUso $reserva){throw 'reserva em uso'}
+   if(!$Atual){throw 'metadados/ambiente indisponiveis'}
+   $h=[IO.File]::Open((Join-Path $reserva 'registro.json'),[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::None)
+   $leitor=New-Object IO.StreamReader($h);$registro=$leitor.ReadToEnd()|ConvertFrom-Json -ErrorAction Stop
+   $motivo=Comparar-AssinaturaDependencias $registro $Atual;if($motivo){throw $motivo}
+   # SHA e proveniencia: deve existir no repositorio e ser ancestral do
+   # destino. Nao se exige SHA igual ao destino (isso impediria atualizar).
+   & git -C $Raiz merge-base --is-ancestor $registro.sha $Atual.sha
+   if($LASTEXITCODE){throw 'SHA de origem nao e ancestral do destino'}
+   $codigoConferencia='0'
+  }finally{if($medir){Concluir-PassoPreparo $codigoConferencia}}
   foreach($rel in @('portal/node_modules','alertas/.venv')){
    $p=Join-Path $reserva $rel
-   if(!(Test-Path -LiteralPath $p -PathType Container)){throw 'reserva incompleta'}
-   Limpar-CachesReserva $p
-   if([SupplyVision.ArvoreDependencias]::Inventario($p)-cne$registro.inventarios.$rel){throw 'reserva incompleta, corrompida ou em uso'}
+   $tipo=if($rel-eq'portal/node_modules'){'Node'}else{'Python'}
+   Executar-PassoReserva ("Conferencia da reserva $tipo") {
+    if(!(Test-Path -LiteralPath $p -PathType Container)){throw 'reserva incompleta'}
+    Limpar-CachesReserva $p
+    if([SupplyVision.ArvoreDependencias]::Inventario($p)-cne$registro.inventarios.$rel){throw 'reserva incompleta, corrompida ou em uso'}
+   }
   }
-  $h.Dispose();$h=$null
-  foreach($rel in @('portal/node_modules','alertas/.venv')){if(Test-Path -LiteralPath (Join-Path $Preparo $rel)){throw 'destino de dependencias ja existe'}}
-  [IO.Directory]::Move($reserva,$tomada)
-  foreach($rel in @('portal/node_modules','alertas/.venv')){
-   $destino=Join-Path $Preparo $rel
-   [void][IO.Directory]::CreateDirectory((Split-Path $destino -Parent))
-   [IO.Directory]::Move((Join-Path $tomada $rel),$destino)
-  }
-  return @{usada=$true;motivo='registro, ambiente e integridade conferidos'}
+  if($medir){Iniciar-PassoPreparo 'Consumo da reserva'}
+  $codigoConsumo='falhou'
+  try{
+   $h.Dispose();$h=$null
+   foreach($rel in @('portal/node_modules','alertas/.venv')){if(Test-Path -LiteralPath (Join-Path $Preparo $rel)){throw 'destino de dependencias ja existe'}}
+   [IO.Directory]::Move($reserva,$tomada)
+   foreach($rel in @('portal/node_modules','alertas/.venv')){
+    $destino=Join-Path $Preparo $rel
+    [void][IO.Directory]::CreateDirectory((Split-Path $destino -Parent))
+    [IO.Directory]::Move((Join-Path $tomada $rel),$destino)
+   }
+   $codigoConsumo='0'
+   return @{usada=$true;motivo='registro, ambiente e integridade conferidos'}
+  }finally{if($medir){Concluir-PassoPreparo $codigoConsumo}}
  }catch{
   $motivo=$_.Exception.Message
   # Falha na segunda renomeacao nao pode deixar uma mistura de caminhos.
@@ -240,7 +269,7 @@ function Usar-ReservaDependencias([string]$Raiz,[string]$Preparo,$Atual,[string]
    }
   }
  }finally{if($h){$h.Dispose()}}
- try{Descartar-ReservaDependencias $Raiz $Preparo}catch{Write-Warning ('Reserva pendente de descarte: '+$_.Exception.Message)}
+ try{Executar-PassoReserva 'Descarte da reserva' {Descartar-ReservaDependencias $Raiz $Preparo}}catch{Write-Warning ('Reserva pendente de descarte: '+$_.Exception.Message)}
  return @{usada=$false;motivo=$motivo}
 }
 function Guardar-ReservaDependencias([string]$Raiz,[string]$Preparo) {
@@ -254,9 +283,12 @@ function Guardar-ReservaDependencias([string]$Raiz,[string]$Preparo) {
  $inventarios=[ordered]@{}
  foreach($rel in @('portal/node_modules','alertas/.venv')){
   $p=Join-Path $Preparo ('anteriores/'+$rel)
-  if(!(Testar-ArvoreFisica $p)){throw 'Dependencias anteriores com links ou ausentes; sem reserva.'}
-  Limpar-CachesReserva $p
-  $inventarios[$rel]=[SupplyVision.ArvoreDependencias]::Inventario($p)
+  $tipo=if($rel-eq'portal/node_modules'){'Node'}else{'Python'}
+  $inventarios[$rel]=Executar-PassoReserva ("Inventario da reserva $tipo") {
+   if(!(Testar-ArvoreFisica $p)){throw 'Dependencias anteriores com links ou ausentes; sem reserva.'}
+   Limpar-CachesReserva $p
+   [SupplyVision.ArvoreDependencias]::Inventario($p)
+  }
  }
  Descartar-ReservaDependencias $Raiz $Preparo
  foreach($rel in @('portal/node_modules','alertas/.venv')){
@@ -550,20 +582,23 @@ function Consultar-CIPreparo([string]$Sha,[switch]$ForcarCompleto) {
   }
   if($checks.Count-ne$total){return $completo}
   foreach($c in $checks){
-   if(!$c.name-or$c.head_sha-cne$Sha-or$c.status-cne'completed'){$completo.motivo='check ausente, pendente ou SHA inesperado';return $completo}
-   if($c.conclusion-cne'success'-and!($c.name-ceq'Atualizacao real'-and$c.conclusion-ceq'skipped')){$completo.motivo=('check nao aprovado: '+$c.name);return $completo}
+   if(!$c.name){$completo.motivo='check sem nome na resposta da API';return $completo}
+   if($c.head_sha-cne$Sha){$completo.motivo=("SHA inesperado no check: $($c.name) ($($c.status)/$($c.conclusion))");return $completo}
+   if($c.status-cne'completed'){$completo.motivo=("check pendente: $($c.name) ($($c.status))");return $completo}
+   if($c.conclusion-cne'success'-and!($c.name-ceq'Atualizacao real'-and$c.conclusion-ceq'skipped')){$completo.motivo=("check nao aprovado: $($c.name) ($($c.status)/$($c.conclusion))");return $completo}
   }
   foreach($nome in $obrigatorios){
    $encontrados=@($checks|Where-Object {$_.name-ceq$nome-and$_.app.slug-ceq'github-actions'-and$_.app.id-eq15368})
-   if($encontrados.Count-ne1){$completo.motivo=('job obrigatorio ausente ou ambiguo: '+$nome);return $completo}
+   if(!$encontrados.Count){$completo.motivo=('check obrigatorio ausente: '+$nome);return $completo}
+   if($encontrados.Count-ne1){$completo.motivo=('check obrigatorio ambiguo: '+$nome);return $completo}
   }
   return @{rapido=$true;sha=$Sha;motivo="CI aprovado para $Sha"}
  }catch{$completo.motivo='falha ao consultar API publica do GitHub';return $completo}
 }
 function Plano-AndamentoAtualizacao([bool]$Rapido=$false) {
- $preparo=@('Inicializacao isolada','Limpeza de preparos reprovados','Configuracao de teste','Dependencias Node','Materializacao de junctions Node','Dependencias Python','Validar-PythonAlertas','Consulta CI','Build do Portal')
+ $preparo=@('Inicializacao isolada','Limpeza de preparos reprovados','Configuracao de teste','Metadados das dependencias','Conferencia geral da reserva','Conferencia da reserva Node','Conferencia da reserva Python','Consumo da reserva','Descarte da reserva','Dependencias Node','Materializacao de junctions Node','Dependencias Python','Validar-PythonAlertas','Consulta CI','Build do Portal')
  if(!$Rapido){$preparo+=@('Testes do Portal','Testes dos Alertas')}
- $preparo+=@('Teste operacional: validar-operacao.ps1','Teste operacional: testar-operacao.ps1')
+ $preparo+=@('Configuracao dos testes operacionais','Teste operacional: validar-operacao.ps1','Teste operacional: testar-operacao.ps1')
  if($Rapido){$preparo+='Fumaca do Portal compilado'}else{$preparo+=@('Teste operacional: testar-supervisor-isolado.ps1','Teste operacional: testar-persistencia-alertas.ps1')}
  return @('Conferindo ambiente de atualizacao','Limpeza de preparos antigos','Conferindo o repositorio','Buscando novidades','PREPARAR: versao nova com a operacao NO AR','PREPARAR / Criacao do worktree')+@($preparo|ForEach-Object {'PREPARAR / '+$_})+@('PREPARAR / Aprovacao e conferencia','TROCAR: parando a operacao','Backup do banco antes de trocar a versao','Aplicando a nova versao','Trazendo artefatos prontos por renomeacao no mesmo volume','Seguindo com o script da nova versao','Conferindo a configuracao privada','Conferindo configuracao da instalacao antes da partida','Religando a operacao','Conferindo interface e consumidores da operacao','CONCLUIR: backup de rede com a operacao NO AR','CONCLUIR: delegando limpeza da pasta de preparo')
 }
