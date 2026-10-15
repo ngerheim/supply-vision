@@ -161,7 +161,7 @@ $atualizar.Add_Click({
   param($r)
   if($r.elevar){$atualizar.Enabled=$true;[Windows.Forms.MessageBox]::Show('Atualizar uma operação com a conta da tarefa exige elevação. A central será reaberta como administrador; clique Atualizar sistema nela.','Elevação necessária','OK','Information')|Out-Null;Reabrir-CentralElevada;return}
   if($r.erro){$atualizar.Enabled=$true;[Windows.Forms.MessageBox]::Show($r.mensagem,'Não foi possível atualizar','OK','Error')|Out-Null;return}
-  $script:andamentoCentral=$null;$andamentoTexto.Text='Iniciando atualização...';$andamentoTexto.Visible=$true;$andamentoBarra.Visible=$true;$andamentoBarra.Value=0;$status.Visible=$false;$script:proximoAndamento=[datetime]::MinValue
+  $script:andamentoCentral=$null;$andamentoTexto.Text='Iniciando atualizacao...';$andamentoTexto.Visible=$true;$andamentoBarra.Visible=$true;$andamentoBarra.Value=0;$status.Visible=$false;$script:proximoAndamento=[datetime]::MinValue
   $script:processoAtualizacao=$r.processo;$script:saidaAtualizacao=$r.saida;$atualizar.Text='Atualizando...'
  }){$atualizar.Enabled=$false}
 })
