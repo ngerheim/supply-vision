@@ -16,7 +16,7 @@ import test from 'node:test';
 // nenhum. Agora quebra, que é o comportamento desejado.
 import {
   CORPO_MAX_JSON, CORPO_MAX_LOGIN, CORPO_MAX_UPLOAD, EntradaInvalida,
-  LIMITES_CAMPO, LIMITE_LISTA, exigeTexto,
+  LIMITES_CAMPO, LIMITE_LISTA, exigeTexto, chaveIdempotencia,
 } from '../lib/limites-entrada.ts';
 
 const cabe = (texto: string, maximo: number) => {
@@ -96,3 +96,10 @@ void test('mensagem de erro diz qual campo e qual limite', () => {
   }
 });
 
+
+void test('chave de idempotencia ausente, valida e fronteiras seguem a validacao real', () => {
+  const pedido = (chave?: string) => new Request('http://localhost', { headers: chave === undefined ? {} : { 'idempotency-key': chave } });
+  assert.equal(chaveIdempotencia(pedido()), null);
+  for (const chave of ['a'.repeat(16), 'Z_9-'.repeat(25)]) assert.equal(chaveIdempotencia(pedido(chave)), chave);
+  for (const chave of ['', 'a'.repeat(15), 'a'.repeat(101), 'tentativa.invalida']) assert.throws(() => chaveIdempotencia(pedido(chave)), EntradaInvalida);
+});

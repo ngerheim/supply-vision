@@ -1,6 +1,16 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { parseCookies } from '../lib/cookies.ts';
+import { registerHooks } from 'node:module';
+// O parser real esta no modulo Workers; estes testes nao precisam iniciar
+// um Worker nem abrir banco. Os hooks sao removidos assim que o modulo carrega.
+const hooks = registerHooks({
+  resolve(specifier, context, nextResolve) {
+    if (specifier === 'cloudflare:workers') return { url: 'data:text/javascript,export const env = {}', shortCircuit: true };
+    if (specifier === '@/lib/domain') return { url: new URL('../lib/domain.ts', import.meta.url).href, shortCircuit: true };
+    return nextResolve(specifier, context);
+  },
+});
+const { parseCookies } = await import('../lib/database.ts').finally(() => hooks.deregister());
 
 void test('cookie inválido não impede recuperar a sessão válida', () => {
   const request = new Request('http://localhost', { headers: { cookie: 'outro=%; %ZZ=x; acordos_session=abc; incompleto' } });

@@ -20,7 +20,7 @@ import { dataDeNegocio } from '@/lib/data-negocio';
 import { intervaloDatasNegocio } from '@/lib/periodo-auditoria';
 import { revisaoConfere } from '@/lib/revisoes-sql';
 import { SITUACAO_EFETIVA_SQL } from '@/lib/situacao-acordos';
-import { chaveIdempotencia } from '@/lib/idempotencia';
+import { chaveIdempotencia } from '@/lib/limites-entrada';
 import { NextRequest, NextResponse } from 'next/server';
 import * as XLSX from 'xlsx';
 import { lerPlanilha } from '@/lib/planilha';

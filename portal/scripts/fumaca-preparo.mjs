@@ -2,11 +2,22 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import http from 'node:http';
-import './ambiente-fumaca.mjs';
+import os from 'node:os';
+import { syncBuiltinESMExports } from 'node:module';
 import { randomBytes } from 'node:crypto';
-import { criarServidorSqlite } from './sqlite-local.mjs';
+
 
 const raiz = fs.realpathSync(process.env.SV_PREPARO_RAIZ || '');
+// Wrangler consulta os.homedir() mesmo sem telemetria; o perfil descartavel
+// precisa estar instalado antes de carregar Wrangler ou qualquer dependencia dele.
+if (fs.realpathSync(path.resolve(import.meta.dirname, '../..')) !== raiz || !/^\..+-preparo-[0-9a-f]{32}$/.test(path.basename(raiz))) throw new Error('Perfil da fumaca fora do preparo');
+const perfil = path.join(raiz, '.cache/perfil-fumaca');
+fs.mkdirSync(perfil, { recursive: true });
+os.homedir = () => perfil;
+process.env.APPDATA = path.join(perfil, 'AppData/Roaming');
+process.env.LOCALAPPDATA = path.join(perfil, 'AppData/Local');
+syncBuiltinESMExports();
+const { criarServidorSqlite } = await import('./sqlite-local.mjs');
 const projeto = fs.realpathSync(path.resolve(import.meta.dirname, '..'));
 const porta = Number(process.argv[2]), relatorios = Number(process.argv[3]);
 if (path.dirname(projeto) !== raiz || !path.basename(raiz).match(/^\..+-preparo-[0-9a-f]{32}$/)) throw new Error('Fumaca exige worktree de preparo');

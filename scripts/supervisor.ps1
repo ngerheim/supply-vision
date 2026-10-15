@@ -35,7 +35,6 @@ function Gravar-Tolerante([string]$caminho,[string]$texto){
  }
  return $false
 }
-function Vivo([int]$id){return $null-ne(Get-Process -Id $id -ErrorAction SilentlyContinue)}
 if(Test-Path $PidFile){
  try{$ant=Get-Content $PidFile -Raw|ConvertFrom-Json;$proc=Get-Process -Id ([int]$ant.pid) -ErrorAction Stop;$inicio=[datetime]::Parse($ant.inicio).ToUniversalTime();if($proc.Path-eq(Get-Process -Id $PID).Path-and[Math]::Abs(($proc.StartTime.ToUniversalTime()-$inicio).TotalSeconds)-le2){Write-Host 'A operacao ja esta ativa.';exit 0}}catch{}
 }

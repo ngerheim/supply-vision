@@ -1,6 +1,5 @@
 import { revisarPedidosInterrompidos } from './pedidos-interrompidos.mjs';
 import { travarRestauracao } from './trava-restauracao.mjs';
-import { redigirLog } from './redigir-log.mjs';
 import { validacaoAtiva } from './operacao-validacao.mjs';
 // Ponte local: o Worker só enfileira pedidos; este processo executa Python.
 import fs from 'node:fs';
@@ -13,6 +12,16 @@ import { abrirBancoLocal } from './banco-local.mjs';
 import { privado, lerConfigBruta } from './configuracao.mjs';
 import { validarPedidoRelatorio } from '../lib/relatorios.ts';
 import { VALIDADE_HISTORICO_MS, arquivoHistoricoExpirado } from '../lib/retencao-relatorios.ts';
+
+export function redigirLog(texto, segredos = []) {
+  let seguro = String(texto);
+  for (const segredo of [...new Set(segredos)].filter(Boolean).sort((a, b) => b.length - a.length))
+    seguro = seguro.replaceAll(segredo, '[credencial removida]');
+  return seguro
+    .replace(/(authorization\s*[:=]\s*(?:bearer|basic)\s+)[^\s"']+/gi, '$1[credencial removida]')
+    .replace(/(["']?(?:[a-z_]*password|senha|api[_-]?key|[a-z_]*token|secret)["']?\s*[:=]\s*)[^\r\n,}]+/gi, '$1[credencial removida]')
+    .replace(/(https?:\/\/)[^\s/@:]+:[^\s/@]+@/gi, '$1[credencial removida]@');
+}
 
 const produto = path.resolve(import.meta.dirname, '../..');
 let filhoAtivo = null;
