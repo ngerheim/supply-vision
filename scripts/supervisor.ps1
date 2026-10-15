@@ -58,6 +58,7 @@ $processos=@{}
 function Iniciar-Processo([string]$nome,[string]$exe,[string[]]$argumentos,[string]$pasta){
  if($processos[$nome]-and!$processos[$nome].HasExited){return};$saida=Join-Path $Operacao "$nome-saida.log";$erro=Join-Path $Operacao "$nome-erro.log"
  $processos[$nome]=Start-Process $exe -ArgumentList $argumentos -WorkingDirectory $pasta -WindowStyle Hidden -PassThru -RedirectStandardOutput $saida -RedirectStandardError $erro;Log "$nome iniciado (PID $($processos[$nome].Id))."
+ if($nome-eq'portal'){$script:inicioPartidaPortal=Get-Date;$script:portalJaPronto=$false;$script:aguardandoPortal=$false}
 }
 function Encerrar($p){
  if(!$p){return}
@@ -84,6 +85,7 @@ $alerta=$null;$alertaChave='';$alertaHora='';$alertaRunId='';$backup=$null;$back
 $expurgo=$null
 $verificacaoSaude=$null;$inicioSaude=$null
 $inicioPortal=Get-Date;$ultimoReinicio=Get-Date
+$portalJaPronto=$false;$aguardandoPortal=$false
 $portalPronto=$false;$falhasSaude=0;$PortalUrl='http://127.0.0.1:3000'
 # O trace store local do miniflare cresce sem limite (5,5 MB para 14,5 MB em
 # tres dias de operacao) e NAO e controlado por "observability" no
@@ -120,7 +122,12 @@ try{
   $saudavel=$resultadoHealth.saudavel
   # Uma falha isolada do health (ex.: banco momentaneamente ocupado) nao e
   # queda: so duas seguidas (~15 s) declaram o portal fora do ar.
-  if($saudavel){$falhasSaude=0}else{$falhasSaude++;Log (Formatar-FalhaHealth $resultadoHealth $falhasSaude)}
+  if($saudavel){$falhasSaude=0;$portalJaPronto=$true}else{
+   $falhasSaude++
+   if(!$portalPronto-and!$portalJaPronto-and((Get-Date)-$inicioPartidaPortal).TotalMinutes-lt3){
+    if(!$aguardandoPortal){Log 'aguardando o Portal subir';$aguardandoPortal=$true}
+   }else{Log (Formatar-FalhaHealth $resultadoHealth $falhasSaude)}
+  }
   # Reinicia apenas o portal apos falhas persistentes e janela de inicializacao.
   # Nao interrompe Qlik/SMTP com resultado incerto para recuperar a interface.
   if(!$saudavel-and$falhasSaude-ge8-and((Get-Date)-$inicioPortal).TotalMinutes-ge3-and((Get-Date)-$ultimoReinicio).TotalMinutes-ge3){
@@ -148,9 +155,12 @@ try{
   $hoje=(Get-Date).ToString('yyyy-MM-dd');if($disco-eq'baixo'-and$estado['aviso-disco']-ne$hoje){Log "ALERTA: apenas $livreGb GB livres no disco.";Avisar-Administrador $avisosAdmin 'disco-baixo';$estado['aviso-disco']=$hoje;Salvar-Estado}
   @{atualizado=(Get-Date).ToString('o');ensaio=$ensaio;portal=!!($processos['portal']-and!$processos['portal'].HasExited);emails=!!($processos['emails']-and!$processos['emails'].HasExited);relatorios=!!($processos['relatorios']-and!$processos['relatorios'].HasExited);alertas=if($alerta){'executando'}elseif($manutencao){'pausados'}else{'aguardando'};backup=if($backup){'executando'}elseif($manutencao){'pausado'}else{'aguardando'};limpeza=if($limpeza){'executando'}elseif($manutencao){'pausada'}else{'aguardando'};manutencao=$manutencao;espacoLivreGb=$livreGb;disco=$disco}|ConvertTo-Json -Compress|ForEach-Object{if(!(Gravar-Tolerante $StatusFile $_)){Log-Limitado 'status' 'AVISO: status.json em uso por outro processo; supv status pode mostrar a situacao com atraso.' 60}}
   }catch{Log-Limitado ("volta:"+$_.Exception.Message) "ERRO na volta do supervisor (a operacao segue): $($_.Exception.Message) | Origem: $($_.ScriptStackTrace -replace '\s*\r?\n\s*',' | ')" 10}
-  # Dorme em fatias de 1s para enxergar o pedido de parada logo, em vez de
-  # deixar quem pediu esperando ate 15s sem sinal de vida.
-  for($i=0;$i-lt15-and!(Test-Path $PararFile);$i++){Start-Sleep 1;Atualizar-AvisosAdmin $avisosAdmin}
+  # Observa parada a cada 100 ms; conserva o ciclo de health de 15 s e
+  # a atualizacao dos avisos a cada segundo.
+  for($i=0;$i-lt15-and!(Test-Path $PararFile);$i++){
+   for($fatia=0;$fatia-lt10-and!(Test-Path $PararFile);$fatia++){Start-Sleep -Milliseconds 100}
+   Atualizar-AvisosAdmin $avisosAdmin
+  }
  }
 }catch{$codigoSupervisor=1;Log "ERRO FATAL: $($_.Exception.Message)";Log "Origem: $($_.ScriptStackTrace -replace '\s*\r?\n\s*',' | ')"}finally{
  if($clienteHealth){$clienteHealth.cliente.Dispose()}

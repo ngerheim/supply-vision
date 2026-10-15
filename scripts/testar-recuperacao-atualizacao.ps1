@@ -14,6 +14,8 @@ try {
     $fonte=Get-Content (Join-Path $raizReal 'scripts/atualizar-servidor.ps1') -Raw -Encoding UTF8
     # Injeta somente o executavel Python; o fluxo do atualizador e preservado.
     $fonte=$fonte.Replace("`$Python = Join-Path `$Alertas '.venv\Scripts\python.exe'", "`$Python = 'pythonmock'")
+    # Mantem a espera real por condicao; fixture negativa usa prazo de 1 s.
+    $fonte=$fonte.Replace('$noAr = Esperar-PortalAtualizado $url', '$noAr = Esperar-PortalAtualizado $url 1')
     [IO.File]::WriteAllText((Join-Path $raiz 'scripts/atualizar-servidor.ps1'),$fonte,(New-Object Text.UTF8Encoding($true)))
     foreach($arq in @('portal/portal.env.example','compartilhado/smtp.env.example','compartilhado/operacao.env.example')) { Set-Content (Join-Path $raiz $arq) '' }
     foreach($arq in @('privado/comum/smtp.env','privado/comum/operacao.env')) { Set-Content (Join-Path $raiz $arq) '' }

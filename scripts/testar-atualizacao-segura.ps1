@@ -4,7 +4,7 @@ $ErrorActionPreference = 'Stop'
 function Executar-PowerShellOculto($Argumentos){ & powershell.exe @Argumentos }
 $source = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'atualizar-servidor.ps1') -Raw
 $start = $source.IndexOf("Etapa 'Conferindo o repositorio'")
-$end = $source.IndexOf('$mudou = git diff')
+$end = $source.IndexOf('$mudou = @(& git')
 if ($start -lt 0 -or $end -le $start) { throw 'Bloco de conferencia nao encontrado.' }
 $conferencia = [scriptblock]::Create($source.Substring($start, $end - $start))
 function Validar-PythonAlertas([string]$Executavel) {}
@@ -40,10 +40,10 @@ if ($argumentos -notcontains '-Reaplicar' -or $argumentos -notcontains '-JaAtual
 $normal=Argumentos-ReexecucaoAtualizador 'atualizador.ps1' ('1'*40) $false
 if ($normal -contains '-Reaplicar') { throw 'Atualizacao normal virou reparo.' }
 # Executa o bloco real que decide quais dependências reinstalar no filho.
-$inicioDependencias=$source.IndexOf('$mudou = git diff')
+$inicioDependencias=$source.IndexOf('$mudou = @(& git')
 $fimDependencias=$source.IndexOf('if ($Simular)')
 $decidir=[scriptblock]::Create($source.Substring($inicioDependencias,$fimDependencias-$inicioDependencias))
-function git { $global:LASTEXITCODE=0; if($args[0] -ne 'diff'){throw "Comando inesperado: $args"} }
+function git { $global:LASTEXITCODE=0; if($args -notcontains 'diff'){throw "Comando inesperado: $args"} }
 $Reaplicar=$argumentos -contains '-Reaplicar'
 . $decidir
 if (!$mexeuNode -or !$mexeuPython) { throw 'Reparo sem diff dispensou dependencias.' }

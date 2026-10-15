@@ -24,6 +24,63 @@ $ErrorActionPreference = 'Stop'
 $Raiz = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 . (Join-Path $PSScriptRoot 'operacao-logica.ps1')
 . (Join-Path $PSScriptRoot 'atualizacao-preparo.ps1')
+# Allowlist positiva. Referencias operacionais nos dois commits vetam a dispensa;
+# nomes completos em strings/comentarios tambem sao tratados como duvida.
+function Testar-CaminhoSemParada([string]$Caminho) {
+ if(!$Caminho-or$Caminho-match '[\\\x00-\x1f"*?:]' -or $Caminho-match '(^|/)\.\.?(/|$)' -or $Caminho.StartsWith('/')){return $false}
+ return $Caminho-cmatch '(\.md$|^\.github/.+|^portal/tests/.+|^alertas/tests/.+|^testes/.+|^scripts/testar-[^/]+\.ps1$|^scripts/ci/.+)'
+}
+function Testar-AtualizacaoSemParada([string]$Raiz,[string[]]$Arquivos,[string]$Anterior,[string]$Remoto) {
+ $OutputEncoding=New-Object Text.UTF8Encoding($false)
+ if(!$Arquivos.Count){return $false}
+ foreach($arquivo in $Arquivos){if(!(Testar-CaminhoSemParada $arquivo)){return $false}}
+ try {
+  foreach($ref in @($Anterior,$Remoto)){
+   $arvore=@(& git -C $Raiz -c core.quotepath=false ls-tree -r $ref)
+   if($LASTEXITCODE-or!$arvore.Count){return $false}
+   $operacionais=@()
+   foreach($linha in $arvore){
+    if($linha-notmatch '^([0-9]{6}) blob [0-9a-f]{40}\t(.+)$'){return $false}
+    $modo=$Matches[1];$nome=$Matches[2]
+    if($Arquivos-ccontains$nome-and$modo-notin@('100644','100755')){return $false}
+    if(!(Testar-CaminhoSemParada $nome)){$operacionais+=$nome}
+   }
+   if(!$operacionais.Count){return $false}
+   # Basename tambem cobre imports relativos, Join-Path e chamadas por nome.
+   # Lotes pequenos evitam o limite de argumentos do Windows. So le blobs Git.
+   foreach($arquivo in $Arquivos){
+    $baseNome=($arquivo-split'/')[-1]
+    $nome=[regex]::Escape($baseNome)
+    # Referencias de diagnostico como AGENTS.md#secao ou AGENTS.md, nao
+    # sao nomes de arquivo abertos/importados. Exige fim do token/caminho.
+    $padrao='(^|[^[:alnum:]_.-])'+$nome+'($|["''/[:space:]])'
+    # Imports TS sem extensao e imports Python por nome de modulo.
+    if($baseNome-cmatch '\.(ts|tsx|js|jsx|mjs|cjs|py|ps1)$'){
+     $modulo=[regex]::Escape([IO.Path]::GetFileNameWithoutExtension($baseNome))
+     $padrao+='|(^|[^[:alnum:]_])'+$modulo+'($|[^[:alnum:]_])'
+    }
+    for($i=0;$i-lt$operacionais.Count;$i+=40){
+     $lote=@($operacionais|Select-Object -Skip $i -First 40|ForEach-Object {':(literal)'+$_})
+     # Stdin preserva as aspas do padrao tambem no parser nativo do PS 5.1.
+     $padrao | & git -C $Raiz grep -q -i -E -f - $ref -- @lote
+     if($LASTEXITCODE-ne1){return $false} # match OU erro => fluxo normal
+    }
+   }
+  }
+  return $true
+ }catch{return $false}
+}
+function Esperar-PortalAtualizado([string]$Url,[ValidateRange(1,3600)][int]$PrazoSegundos=120) {
+ $prazo=[Diagnostics.Stopwatch]::StartNew()
+ do {
+  try{if((Invoke-RestMethod "$Url/api/health" -TimeoutSec 3).status-eq'ok'){return $true}}catch{}
+  $restante=$PrazoSegundos*1000-$prazo.Elapsed.TotalMilliseconds
+  if($restante-le0){return $false}
+  Start-Sleep -Milliseconds ([int][math]::Min(500,[math]::Ceiling($restante)))
+ }while($prazo.Elapsed.TotalSeconds-lt$PrazoSegundos)
+ return $false
+}
+
 # Medicao sem dados de configuracao; falha ao registrar nunca muda a atualizacao.
 # Entrada direta/supv/filho inicializam aqui. Blocos isolados podem nao ter
 # contexto nem helpers; a parada tem fallback UTC e a instrumentacao e opcional.
@@ -423,7 +480,21 @@ if ($Reaplicar -and $remoto -eq $anterior) {
 # fazia a recuperacao "reverter" para a propria versao nova.
 if($JaAtualizado){Validar-PythonAlertas $Python}
 
-$mudou = git diff --name-only "$anterior..$remoto"
+# Sem deteccao de rename: avalia origem E destino como delete/add.
+$mudou = @(& git -c core.quotepath=false diff --no-renames --name-only "$anterior..$remoto")
+if($LASTEXITCODE){throw 'Nao foi possivel identificar os arquivos alterados.'}
+$semParada=!$JaAtualizado-and!$Reaplicar-and!$ForcarCompleto-and(Testar-AtualizacaoSemParada $Raiz $mudou $anterior $remoto)
+if($semParada){
+ Write-Host 'Modo: sem parada (so testes/CI/documentacao mudaram)'
+ if(!$Simular){
+  git merge --ff-only $remoto --quiet
+  if($LASTEXITCODE){throw 'Falha ao aplicar a atualizacao sem parada.'}
+  Gravar-ContextoAtualizacao $ContextoArquivo @{anterior=$anterior;remoto=$remoto;fase='concluido';modo='sem-parada'}
+  if($script:AndamentoAtualizacao){$script:AndamentoAtualizacao.modo='sem-parada';$script:AndamentoAtualizacao.motivoModo='so testes/CI/documentacao mudaram'}
+  $script:ResultadoAtualizacao='concluido' # O finally publica a conclusao uma unica vez.
+  exit 0
+ }
+}
 $mexeuNode = $mudou | Where-Object { $_ -eq 'portal/package-lock.json' -or $_ -eq 'portal/package.json' }
 $mexeuPython = $mudou | Where-Object { $_ -like 'alertas/config/requirements*' }
 # No modo de reparo o antes e o depois sao o mesmo commit, entao a lista de
@@ -621,11 +692,8 @@ try {
   if ($linha) { $url = ($linha -split '=', 2)[1].Trim() }
 } catch { }
 
-$noAr = $false
-for ($i = 0; $i -lt 60; $i++) {
-  Start-Sleep 2
-  try { if ((Invoke-RestMethod "$url/api/health" -TimeoutSec 3).status -eq 'ok') { $noAr = $true; break } } catch { }
-}
+# Mesmo prazo nominal de 60 x 2 s, agora medido pelo tempo decorrido.
+$noAr = Esperar-PortalAtualizado $url
 if (-not $noAr) { Reverter 'O Portal nao respondeu depois da atualizacao.' }
 Etapa 'Conferindo interface e consumidores da operacao'
 & $Node (Join-Path $Portal 'scripts/saude-operacao.mjs') $url

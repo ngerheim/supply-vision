@@ -81,7 +81,17 @@ try{
   $reserva=Pasta-ReservaDependencias $r;$registro=Join-Path $reserva 'registro.json'
   $j=Get-Content $registro -Raw|ConvertFrom-Json
   foreach($rel in @('portal/node_modules','alertas/.venv')){Exigir ($j.inventarios.$rel-match'^metadados-v2;arquivos=1;pastas=1;assinatura=[a-f0-9]{64}$') 'Inventario nao registra contagens e assinatura dos metadados.'}
-  $a=$assinatura.Clone();$a.hashes=@{};foreach($chave in $assinatura.hashes.Keys){$a.hashes[$chave]=$assinatura.hashes[$chave]}
+  $a=$assinatura.Clone()
+  if($caso-in@('valida','troca-falha')){
+   # HEAD avanca sem trocar artefatos/reserva; a proxima normal ainda pode
+   # consumir a reserva ancestral e restaurar as dependencias ativas se falhar.
+   [IO.File]::WriteAllText((Join-Path $r 'README.md'),$caso)
+   & git -C $r add README.md
+   & git -C $r -c user.name=Fixture -c user.email=fixture@example.invalid commit -qm docs
+   $a.sha=(& git -C $r rev-parse HEAD).Trim()
+   Exigir ($a.sha-ne$j.sha) 'Fixture nao avancou HEAD depois de guardar a reserva.'
+  }
+  $a.hashes=@{};foreach($chave in $assinatura.hashes.Keys){$a.hashes[$chave]=$assinatura.hashes[$chave]}
   switch($caso){
    'lockfile' {$a.hashes['portal/package-lock.json']='diferente'}
    'requirements' {$a.hashes['alertas/config/requirements-dev.txt']='diferente'}
