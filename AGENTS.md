@@ -159,10 +159,14 @@
   ao SQLite; termino abrupto nao garante finally do JavaScript.
 - Health tem prazo local alem do cancelamento do HttpClient; agendamento do
   ThreadPool nao pode transformar uma espera cancelada em espera indefinida.
+  Antes do primeiro health da partida, registra uma espera unica por ate 3 minutos.
 - Agenda por dia sobrepoe agenda geral; valor diario vazio significa nao executar.
   Preservar slots e marcadores de entrega ao modificar inicializacao ou agenda.
 - Atualizacao: PREPARAR valida worktree/configuracao/dependencias/build/testes com
   operacao no ar; TROCAR e a janela de parada; CONCLUIR valida a nova operacao.
+  Allowlist sem referencias operacionais nos dois commits permite fast-forward sem
+  parada/preparo, salvo reparo/completo; contexto e status registram sem-parada.
+  Health apos religar consulta imediatamente e a cada 500 ms por ate 120 s.
 - Nao copiar dados reais para o preparo nem desativar suas guardas para fazer testes.
   Portas sao reservadas pelo SO; configuracao, perfil Wrangler e caches sao descartaveis.
 - `isolamento-preparo.mjs` barra I/O fora da raiz fisica e conexoes alheias a fixture;

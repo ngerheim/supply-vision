@@ -253,6 +253,8 @@ function Mostrar-StatusSupv {
  Escrever-Supv ('Ensaio: '+(@([string]$d.ensaio,$d.avisoBackup|Where-Object {$_})-join' | '))
  $p=Consultar-AtualizacaoAdministrada $script:supvRaiz $script:supvPrivado
  Escrever-Supv ('Atualizacao: '+$(if($p){'em andamento'}else{'sem processo ativo'}))
+ $ultima=Ler-EstadoOperacao (Join-Path $script:supvPrivado 'operacao/atualizacao.json')
+ if($ultima.fase-eq'concluido'-and$ultima.modo-eq'sem-parada'){Escrever-Supv 'Ultima atualizacao: sem parada (so testes/CI/documentacao mudaram)'}
  $andamento=Consultar-AndamentoAdministrado $script:supvPrivado
  if($andamento){Mostrar-ProgressoSupv $andamento}
  Escrever-Supv ('Limpeza de preparo em segundo plano: '+(Consultar-LimpezaAdministrada $script:supvPrivado))

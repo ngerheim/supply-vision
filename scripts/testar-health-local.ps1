@@ -61,10 +61,13 @@ const server=http.createServer((req,res)=>{
  if(!$recusou){throw 'Health nao local foi aceito.'}
  # Executa os blocos REAIS de contagem/notificacao do supervisor.
  $s=Get-Content (Join-Path $PSScriptRoot 'supervisor.ps1') -Raw -Encoding UTF8
- $contador=[regex]::Match($s,'(?m)^  if\(\$saudavel\)\{\$falhasSaude=0\}.*$').Value
+ $inicioContador=$s.IndexOf('  if($saudavel){$falhasSaude=0')
+ $fimContador=$s.IndexOf('  # Reinicia apenas', $inicioContador)
+ $contador=$s.Substring($inicioContador,$fimContador-$inicioContador)
  $inicio=$s.IndexOf('  if($saudavel-and!$portalPronto)');$fim=$s.IndexOf('  if($alerta-and', $inicio)
  if(!$contador-or$inicio-lt0-or$fim-lt0){throw 'Blocos de saude nao encontrados.'}
  $bloco=[scriptblock]::Create($contador+"`n"+$s.Substring($inicio,$fim-$inicio))
+ $inicioPartidaPortal=Get-Date;$portalJaPronto=$true;$aguardandoPortal=$false
  $falhasSaude=0;$portalPronto=$true;$PortalUrl='http://portal.example.com';$avisosAdmin=@{};$script:avisos=0;$script:logs=@()
  function Log {param($m);$script:logs+= $m}
  function Notificar {return $false}
@@ -72,6 +75,39 @@ const server=http.createServer((req,res)=>{
  foreach($v in @($false,$true,$false,$false)){$saudavel=$v;$resultadoHealth=@{motivo='timeout';duracaoMs=200;http=0};. $bloco}
  if($falhasSaude-ne2-or$portalPronto-or$script:avisos-ne1){throw 'Duas falhas seguidas nao acionaram o aviso unico.'}
  if(@($script:logs|Where-Object {$_-like'Health falhou:*'}).Count-ne3){throw 'Nem toda falha foi registrada.'}
+ # Partida: conta todas as falhas para preservar o reinicio; uma unica linha.
+ $portalPronto=$false;$portalJaPronto=$false;$aguardandoPortal=$false;$falhasSaude=0;$script:logs=@();$script:avisos=0
+ foreach($v in @($false,$false,$false)){$saudavel=$v;. $bloco}
+ if($falhasSaude-ne3-or$script:logs.Count-ne1-or$script:logs[0]-cne'aguardando o Portal subir'-or$script:avisos){throw 'Partida gerou ruido/aviso ou perdeu contagem.'}
+ $inicioPartidaPortal=(Get-Date).AddMinutes(-3);$saudavel=$false;. $bloco
+ if($script:logs[-1]-notlike'Health falhou:*'-or$falhasSaude-ne4){throw 'Estouro da janela nao registrou erro.'}
+ $saudavel=$true;. $bloco
+ if(!$portalPronto-or!$portalJaPronto){throw 'Primeiro health nao marcou prontidao.'}
+ $inicioPartidaPortal=Get-Date
+ foreach($v in @($false,$false,$false)){$saudavel=$v;. $bloco}
+ if(@($script:logs|Where-Object {$_-like'Health falhou:*'}).Count-ne4-or$script:avisos-ne1){throw 'Queda depois de pronto foi silenciada ou aviso mudou.'}
+ # Nova partida real reinicia apenas a guarda de log, sem alterar cooldown.
+ $ast=[Management.Automation.Language.Parser]::ParseInput($s,[ref]$null,[ref]$null)
+ $iniciar=$ast.Find({param($n) $n-is[Management.Automation.Language.FunctionDefinitionAst]-and$n.Name-eq'Iniciar-Processo'},$true).Extent.Text
+ . ([scriptblock]::Create($iniciar))
+ function Start-Process {return [pscustomobject]@{Id=123;HasExited=$false}}
+ $processos=@{};$Operacao=$pasta;$inicioPortal=(Get-Date).AddMinutes(-5);$ultimoReinicio=$inicioPortal
+ Iniciar-Processo 'portal' 'ficticio' @() $pasta
+ if($portalJaPronto-or$aguardandoPortal-or$inicioPortal-ne$ultimoReinicio){throw 'Partida nao reiniciou guarda ou mudou cooldown.'}
+ $script:logs=@();$saudavel=$false;. $bloco
+ if($script:logs[0]-cne'aguardando o Portal subir'){throw 'Nova partida nao recebeu janela silenciosa.'}
+ Remove-Item Function:Start-Process
+ # A espera real do supervisor deixa a parada interromper a primeira fatia.
+ $inicioEspera=$s.IndexOf('  for($i=0;$i-lt15-and!(Test-Path $PararFile);$i++)')
+ $fimEspera=$s.IndexOf("`n }",$inicioEspera)
+ $espera=[scriptblock]::Create($s.Substring($inicioEspera,$fimEspera-$inicioEspera))
+ $PararFile=Join-Path $pasta 'parar.sinal';$script:fatias=0;$script:pulsos=0
+ function Start-Sleep {param($Milliseconds);if($Milliseconds-ne100){throw 'Fatia de parada inesperada.'};$script:fatias++;[IO.File]::WriteAllText($PararFile,'fixture')}
+ function Atualizar-AvisosAdmin {$script:pulsos++}
+ . $espera
+ if($script:fatias-ne1-or$script:pulsos-ne1){throw 'Parada nao interrompeu espera do supervisor.'}
+ Remove-Item $PararFile,Function:Start-Sleep,Function:Atualizar-AvisosAdmin
+ Write-Host 'OK health: partida silenciosa unica, prazo, nova partida, queda e parada em 100 ms'
  # Timer de HttpClient que nao conclui/cancela nao pode prender o supervisor.
  $pendente=New-Object 'System.Threading.Tasks.TaskCompletionSource[System.Net.Http.HttpResponseMessage]'
  $falso=New-Object PSObject -Property @{pedido=$pendente.Task;cancelou=$false}

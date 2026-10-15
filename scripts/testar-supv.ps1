@@ -287,6 +287,12 @@ try{
  Exigir-Supv ($antes-ceq$depois) 'status somente leitura, sem diagnostico nem limpeza de arquivos'
  Exigir-Supv ($texto-notmatch'(?m)^(Inicializacao|Ensaio):.*\|\s*$') 'status sem separador final em Inicializacao/Ensaio'
  Exigir-Supv ($texto-like'*Operacao: parada*'-and$texto-like'*Reserva de dependencias: ausente*'-and$texto-like'*Health rede: ok*') 'status apresenta operacao, health e reserva'
+ Gravar-EstadoOperacao (Join-Path $op 'atualizacao.json') @{fase='concluido';modo='sem-parada';anterior=('1'*40);remoto=('2'*40)}
+ $texto=Capturar-Supv {Mostrar-StatusSupv}
+ Exigir-Supv ($texto-like'*Ultima atualizacao: sem parada*') 'status mostra a ultima atualizacao sem parada'
+ Gravar-EstadoOperacao (Join-Path $op 'atualizacao.json') @{fase='concluido';anterior=('2'*40);remoto=('3'*40)}
+ $texto=Capturar-Supv {Mostrar-StatusSupv}
+ Exigir-Supv ($texto-notlike'*Ultima atualizacao: sem parada*') 'atualizacao normal posterior substitui modo sem parada'
  $texto=Capturar-Supv {Executar-ComandoSupv (Ler-ComandoSupv @('logs','supervisor','-n','80'))}
  Exigir-Supv ($texto-notmatch'segredo-ficticio|pessoa@example.com|abc123|SELECT'-and$texto-like'*conteudo omitido*') 'logs usam mesmo mascaramento da homologacao'
  $texto=Capturar-Supv {Executar-ComandoSupv (Ler-ComandoSupv @('saude','--desde','2026-10-15 00:00'))}

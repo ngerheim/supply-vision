@@ -127,3 +127,5 @@ exit $LASTEXITCODE
 }finally{$env:SUPPLY_VISION_PRIVADO=$privadoAntes;if(Test-Path $base){Remove-Item $base -Recurse -Force}}
 
 $global:LASTEXITCODE=0
+
+& (Join-Path $PSScriptRoot 'testar-atualizacao-sem-parada.ps1')
