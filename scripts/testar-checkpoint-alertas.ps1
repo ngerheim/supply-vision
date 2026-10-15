@@ -62,3 +62,52 @@ try{
  }
  Write-Host 'PASSOU: 51 cenarios UTC; corte prematuro reproduzido, persistencia antes da saude e controle negativo verificados.'
 }finally{Remove-Item -LiteralPath $pasta -Recurse -Force}
+
+# Exercita os catch/finally REAIS do teste de persistencia. So o corpo do
+# cenario e simulado: nao precisa de CIM, cmd.exe ou supervisor no host local.
+$fontePersistencia=[IO.File]::ReadAllText((Join-Path $PSScriptRoot 'testar-persistencia-alertas.ps1'))
+$astPersistencia=[Management.Automation.Language.Parser]::ParseInput($fontePersistencia,[ref]$null,[ref]$null)
+$diagnostico=$astPersistencia.Find({param($n) $n-is[Management.Automation.Language.FunctionDefinitionAst]-and$n.Name-eq'Mostrar-FalhaPersistencia'},$true).Extent.Text
+$cenario=@($astPersistencia.EndBlock.Statements|Where-Object {$_-is[Management.Automation.Language.TryStatementAst]})
+if($cenario.Count-ne1){throw 'Try principal da persistencia nao encontrado de forma unica.'}
+$cenario=$cenario[0]
+$pastaDiag=Join-Path ([IO.Path]::GetTempPath()) ('sv-persistencia-diag-'+[guid]::NewGuid().ToString('N'))
+$hostDiag=(Get-Process -Id $PID).Path
+. (Join-Path $PSScriptRoot 'atualizacao-preparo.ps1')
+try{
+ New-Item -ItemType Directory $pastaDiag|Out-Null
+ foreach($caso in @('sucesso','validacao-falha','limpeza-falha','ambas-falhas')){
+  $fixture=Join-Path $pastaDiag $caso
+  New-Item -ItemType Directory -Force (Join-Path $fixture 'alertas/.venv'),(Join-Path $fixture 'privado/operacao')|Out-Null
+  [IO.File]::WriteAllText((Join-Path $fixture 'privado/operacao/supervisor.log'),'SUPERVISOR_FICTICIO')
+  [IO.File]::WriteAllText((Join-Path $fixture 'supervisor-erro.log'),'STDERR_FICTICIO')
+  $corpo=if($caso-in@('validacao-falha','ambas-falhas')){"{throw 'VALIDACAO_FICTICIA_REPROVADA'}"}else{"{Write-Host 'VALIDACAO_FICTICIA_APROVADA'}"}
+  $textoCenario=$cenario.Extent.Text.Replace($cenario.Body.Extent.Text,$corpo)
+  $runner=@'
+param($TempFixture,$Caso)
+$ErrorActionPreference='Stop'
+$temp=$TempFixture;$Slot='11:00';$AgoraSimulado='2026-10-13T11:00:01Z'
+$proc=$null;$pathAnterior=$env:Path;$privadoAnterior=$env:SUPPLY_VISION_PRIVADO
+$fasePersistencia='conferir estado em disco e slot devido'
+function cmd.exe {
+ # ErrorRecord nativo suprimido e terminante no PS5.1, sem programa Windows real.
+ if($Caso-in@('limpeza-falha','ambas-falhas')){Write-Error 'JUNCAO_FICTICIA_EM_USO'}
+ $global:LASTEXITCODE=0
+}
+'@
+  $runner+="`n"+$diagnostico+"`ntry{`n"+$textoCenario+"`nexit 0}catch{exit 1}"
+  $arquivo=Join-Path $pastaDiag ($caso+'.ps1')
+  [IO.File]::WriteAllText($arquivo,$runner,(New-Object Text.UTF8Encoding($true)))
+  $saida=@(Executar-PowerShellOculto @('-NoProfile','-File',$arquivo,$fixture,$caso) $hostDiag)-join"`n"
+  $codigo=$LASTEXITCODE
+  if(($codigo-eq0)-ne($caso-eq'sucesso')){throw "Resultado incorreto no diagnostico: $caso"}
+  if($caso-in@('validacao-falha','ambas-falhas')){
+   if($saida-notlike'*FALHA persistencia: slot=11:00*VALIDACAO_FICTICIA_REPROVADA*'-or$saida-notlike'*SUPERVISOR_FICTICIO*'-or$saida-notlike'*STDERR_FICTICIO*'){throw 'Falha de validacao saiu sem motivo/logs antes de limpar.'}
+  }
+  if($caso-in@('limpeza-falha','ambas-falhas')){
+   if($saida-notlike'*fase=limpeza da fixture*JUNCAO_FICTICIA_EM_USO*'){throw 'Excecao suprimida da limpeza saiu sem motivo.'}
+  }
+  Write-Host "[OK] Diagnostico da persistencia: $caso; codigo=$codigo."
+ }
+}finally{if(Test-Path $pastaDiag){Remove-Item -LiteralPath $pastaDiag -Recurse -Force}}
+$global:LASTEXITCODE=0

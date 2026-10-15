@@ -12,6 +12,15 @@ $temp = Join-Path $env:TEMP ('supply-vision-persistencia-' + [guid]::NewGuid().T
 $proc = $null
 $pathAnterior = $env:Path
 $privadoAnterior = $env:SUPPLY_VISION_PRIVADO
+$fasePersistencia='preparar fixture'
+function Mostrar-FalhaPersistencia($Falha,[string]$Fase) {
+ Write-Host "FALHA persistencia: slot=$Slot; agora=$AgoraSimulado; fase=$Fase; motivo=$($Falha.Exception.Message)"
+ if($Falha.InvocationInfo){Write-Host $Falha.InvocationInfo.PositionMessage}
+ foreach($rel in @('privado/operacao/supervisor.log','supervisor-saida.log','supervisor-erro.log')){
+  $arquivo=Join-Path $temp $rel
+  try{if(Test-Path -LiteralPath $arquivo){Write-Host "Diagnostico ${rel}:";Get-Content -LiteralPath $arquivo -Tail 30 -Encoding UTF8 -ErrorAction Stop|Write-Host}}catch{Write-Host "Diagnostico indisponivel: $($_.Exception.Message)"}
+ }
+}
 function Encerrar-ArvoreTeste($Processo) {
   if (!$Processo -or $Processo.HasExited) { return }
   # taskkill /T pode exigir elevacao em algumas instalacoes do Windows. Para o
@@ -51,6 +60,7 @@ function Get-Date {
   [IO.File]::WriteAllText($arquivoSupervisor,$fonte,(New-Object Text.UTF8Encoding($true)))
 
 
+  $fasePersistencia='preparar Python e configuracao ficticia'
   # Python real, via juncao para o .venv do projeto (nao copia os 142 MB).
   & cmd.exe /c mklink /J "$temp\alertas\.venv" "$raizReal\alertas\.venv" | Out-Null
   if (-not (Test-Path "$temp\alertas\.venv\Scripts\python.exe")) { throw 'Nao foi possivel preparar o Python de teste.' }
@@ -93,11 +103,14 @@ time.sleep(30)
 
   $env:SUPPLY_VISION_PRIVADO = Join-Path $temp 'privado'
   $env:Path = "$temp\bin;$pathAnterior"
-  $proc = Start-Process powershell.exe -PassThru -WindowStyle Hidden -ArgumentList @(
+  $fasePersistencia='iniciar supervisor'
+  Write-Host "Persistencia: inicio; slot=$Slot; agora=$AgoraSimulado; fixture=$temp"
+  $proc = Start-Process powershell.exe -PassThru -WindowStyle Hidden -RedirectStandardOutput (Join-Path $temp 'supervisor-saida.log') -RedirectStandardError (Join-Path $temp 'supervisor-erro.log') -ArgumentList @(
     '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "$temp\scripts\supervisor.ps1")
 
   # O log de conclusao antecede o flush. Sincroniza com a entrada REAL da
   # saude, que registra o estado visto antes de qualquer trabalho demorado.
+  $fasePersistencia='aguardar saude e persistencia'
   $prazo=[Diagnostics.Stopwatch]::StartNew()
   while(!(Test-Path -LiteralPath $marcadorSaude)-and$prazo.Elapsed.TotalSeconds-lt60){
     if($proc.HasExited){throw 'Supervisor encerrou antes da verificacao simulada.'}
@@ -110,8 +123,10 @@ time.sleep(30)
   $observado=Get-Content -LiteralPath $marcadorSaude -Raw|ConvertFrom-Json
   if($observado.chave-ne$chaveAlertas-or!$observado.persistido){throw "REGRESSAO: saude iniciou sem persistencia de '$chaveAlertas'."}
   # Agora a saude esta no sleep 30. Interrompe sem finally, como o incidente.
+  $fasePersistencia='interromper arvore do supervisor'
   Encerrar-ArvoreTeste $proc
 
+  $fasePersistencia='conferir estado em disco e slot devido'
   # O marcador precisa ja estar em disco.
   $estado = Get-Content "$temp\privado\operacao\estado.json" -Raw | ConvertFrom-Json
   if (-not $estado.$chaveAlertas) {
@@ -126,10 +141,20 @@ time.sleep(30)
   if ($devido) { throw "REGRESSAO: o slot '$($devido.chave)' ainda consta pendente apos a conclusao." }
 
   Write-Host "Persistencia dos alertas: $AgoraSimulado / $Slot; marcador observado pela saude e preservado apos interrupcao." -ForegroundColor Green
+} catch {
+  Mostrar-FalhaPersistencia $_ $fasePersistencia
+  throw
 } finally {
   $env:Path = $pathAnterior
   $env:SUPPLY_VISION_PRIVADO = $privadoAnterior
-  if ($proc -and !$proc.HasExited) { Encerrar-ArvoreTeste $proc }
-  if (Test-Path "$temp\alertas\.venv") { & cmd.exe /c rmdir "$temp\alertas\.venv" 2>$null | Out-Null }
-  if (Test-Path $temp) { Remove-Item $temp -Recurse -Force -ErrorAction SilentlyContinue }
+  try{
+    if ($proc -and !$proc.HasExited) { Encerrar-ArvoreTeste $proc }
+    # Conserva a limpeza original; o catch externo torna visivel inclusive
+    # a excecao de stderr que 2>$null escondia no Windows PowerShell 5.1.
+    if (Test-Path "$temp\alertas\.venv") { & cmd.exe /c rmdir "$temp\alertas\.venv" 2>$null | Out-Null }
+    if (Test-Path $temp) { Remove-Item $temp -Recurse -Force -ErrorAction SilentlyContinue }
+  }catch{
+    Mostrar-FalhaPersistencia $_ 'limpeza da fixture'
+    throw
+  }
 }

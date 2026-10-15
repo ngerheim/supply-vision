@@ -107,7 +107,7 @@ try {
  $ci=Consultar-CIPreparo $sha -ForcarCompleto:$ForcarCompleto
  Concluir-PassoPreparo
  $modo=if($ci.rapido){'rapido'}else{'completo'}
- $linhaModo=if($ci.rapido){"PREPARAR: modo rapido — $($ci.motivo)"}else{"PREPARAR: modo completo — motivo: $($ci.motivo)"}
+ $linhaModo=if($ci.rapido){"PREPARAR: modo rapido - $($ci.motivo)"}else{"PREPARAR: modo completo - motivo: $($ci.motivo)"}
  Write-Host $linhaModo
  try{Add-Content (Join-Path $Raiz 'preparo-tempos.log') $linhaModo -Encoding UTF8;if($TemposArquivo){Add-Content $TemposArquivo $linhaModo -Encoding UTF8}}catch{}
  Publicar-AndamentoAtualizacao $script:AndamentoPreparo 'PREPARAR / Build do Portal' -Modo $modo

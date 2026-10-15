@@ -5,6 +5,37 @@ $fonteRaiz=(Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $base=Join-Path ([IO.Path]::GetTempPath()) ('sv-deps-'+[guid]::NewGuid().ToString('N'))
 $hostTeste=(Get-Process -Id $PID).Path
 $privadoAntes=$env:SUPPLY_VISION_PRIVADO
+# O teste regrava o preparador sem BOM. PS5.1 entao interpreta UTF8 como ANSI.
+# Nao depender do BOM: aspas duplas e here-strings interpoladas devem ser ASCII.
+function Exigir-StringsDuplasAscii([string]$Codigo,[string]$Nome) {
+ $tokens=$null;$erros=$null
+ [void][Management.Automation.Language.Parser]::ParseInput($Codigo,[ref]$tokens,[ref]$erros)
+ if($erros.Count){throw "Sintaxe invalida em ${Nome}: $($erros[0].Message)"}
+ foreach($token in $tokens){
+  if($token.Kind-in@('StringExpandable','HereStringExpandable')-and$token.Extent.Text-match'[^\x00-\x7F]'){
+   throw "String com aspas duplas nao ASCII em ${Nome}: linha $($token.Extent.StartLineNumber)."
+  }
+ }
+}
+foreach($nome in @('preparar-atualizacao.ps1','atualizacao-preparo.ps1','atualizar-servidor.ps1','limpar-preparo-assincrono.ps1')){
+ $codigoAscii=[IO.File]::ReadAllText((Join-Path $PSScriptRoot $nome))
+ Exigir-StringsDuplasAscii $codigoAscii $nome
+ # Simula a leitura ANSI do PS5.1 de uma copia UTF8 sem BOM, tambem no PS7.
+ $ansi=[Text.Encoding]::GetEncoding(1252).GetString([Text.Encoding]::UTF8.GetBytes($codigoAscii))
+ $errosAnsi=$null
+ [void][Management.Automation.Language.Parser]::ParseInput($ansi,[ref]$null,[ref]$errosAnsi)
+ if($errosAnsi.Count){throw "Copia sem BOM nao passa no parser ANSI: $nome"}
+}
+# Controle negativo: o mesmo travessao que quebrava a copia sem BOM.
+$amostras=@()
+$amostras+=('Write-Output "modo '+[char]0x2014+' $($motivo)"')
+$amostras+=('@"'+"`n"+'modo '+[char]0x2014+"`n"+'"@')
+foreach($amostra in $amostras){
+ $recusou=$false
+ try{Exigir-StringsDuplasAscii $amostra 'controle-negativo'}catch{$recusou=$_.Exception.Message-like'*nao ASCII*'}
+ if(!$recusou){throw 'Guarda nao detectou string interpolada nao ASCII.'}
+}
+Write-Host '[OK] Strings duplas ASCII e parser ANSI de copias sem BOM nos quatro scripts.'
 try{
  foreach($caso in @('inalteradas','alteradas','build-falha','portal-falha','alertas-falha','operacional-falha','ci-aprovado','ci-rede','ci-ausente','ci-pendente','ci-falho','ci-timeout','ci-cancelado','ci-skipped','ci-sha','ci-invalido','ci-forcado','ci-forcado-env','fumaca-falha')){
   $instalacao=Join-Path $base $caso
@@ -19,6 +50,7 @@ try{
   $codigo=[IO.File]::ReadAllText((Join-Path $PSScriptRoot 'preparar-atualizacao.ps1'))
   $codigo=$codigo.Replace('Validar-PythonAlertas','ValidarPythonMock')
   $codigo=$codigo.Replace("& (Join-Path `$alertas '.venv/Scripts/python.exe')",'& pythonmock')
+  # A sobrecarga sem encoding escreve UTF8 SEM BOM, inclusive no .NET do PS5.1.
   [IO.File]::WriteAllText((Join-Path $preparo 'scripts/preparar-atualizacao.ps1'),$codigo)
   Copy-Item (Join-Path $fonteRaiz 'portal/portal.env.example') (Join-Path $preparo 'portal')
   Copy-Item (Join-Path $fonteRaiz 'compartilhado/*.env.example') (Join-Path $preparo 'compartilhado')
