@@ -580,36 +580,81 @@ function Executar-PowerShellOculto([string[]]$Argumentos,[string]$Executavel='po
 }
 
 # A API publica e apenas uma otimizacao: qualquer ambiguidade usa todas as suites.
+function Consultar-APICIPreparo([string]$Caminho) {
+ # Sem Authorization, sem token e sem ferramentas autenticadas do GitHub.
+ Invoke-RestMethod -Uri ("https://api.github.com/repos/ngerheim/supply-vision/"+$Caminho) -Headers @{Accept='application/vnd.github+json';'User-Agent'='Supply-Vision-Preparo';'X-GitHub-Api-Version'='2022-11-28'} -TimeoutSec 8 -ErrorAction Stop
+}
+function Obter-ChecksCIPreparo([string]$Sha) {
+ $checks=@();$total=-1
+ for($pagina=1;$pagina-le5;$pagina++){
+  $j=Consultar-APICIPreparo "commits/$Sha/check-runs?per_page=100&filter=latest&page=$pagina"
+  if($null-eq$j.total_count-or($j.total_count-isnot[int]-and$j.total_count-isnot[long])-or$j.total_count-le0-or$j.total_count-gt500-or$null-eq$j.check_runs){throw 'resposta inesperada da API de checks'}
+  if($total-ge0-and$total-ne$j.total_count){throw 'total de checks mudou durante a consulta'};$total=$j.total_count
+  $checks+=@($j.check_runs)
+  if($checks.Count-ge$total){break}
+  if(@($j.check_runs).Count-ne100){throw 'pagina de checks incompleta'}
+ }
+ if($checks.Count-ne$total){throw 'conjunto de checks incompleto'}
+ foreach($c in $checks){
+  if(!$c.name-or!$c.app.slug-or!$c.app.id){throw 'check sem nome ou identidade na resposta da API'}
+  if($c.head_sha-cne$Sha){throw "SHA inesperado no check: $($c.name) ($($c.status)/$($c.conclusion))"}
+  if($c.status-cnotin@('completed','queued','in_progress','pending','waiting','requested')){throw "estado inesperado no check: $($c.name)"}
+ }
+ return $checks
+}
 function Consultar-CIPreparo([string]$Sha,[switch]$ForcarCompleto) {
  $completo=@{rapido=$false;sha=$Sha;motivo='resposta inesperada da API'}
  if($ForcarCompleto){$completo.motivo='preparo completo forcado';return $completo}
  if($Sha-notmatch'^[0-9a-f]{40}$'){$completo.motivo='SHA invalido';return $completo}
  $obrigatorios=@('Portal','Portal - instalacao nova e autenticacao real','PowerShell','Alertas','Atualizacao real','Node 22.13 - partida e operacao (ubuntu-latest)','Node 22.13 - partida e operacao (windows-latest)')
+ $contexto='CI da main'
  try{
-  $checks=@();$total=-1
-  for($pagina=1;$pagina-le5;$pagina++){
-   # Sem Authorization, sem token e sem ferramentas autenticadas do GitHub.
-   $j=Invoke-RestMethod -Uri "https://api.github.com/repos/ngerheim/supply-vision/commits/$Sha/check-runs?per_page=100&filter=latest&page=$pagina" -Headers @{Accept='application/vnd.github+json';'User-Agent'='Supply-Vision-Preparo';'X-GitHub-Api-Version'='2022-11-28'} -TimeoutSec 8 -ErrorAction Stop
-   if($null-eq$j.total_count-or($j.total_count-isnot[int]-and$j.total_count-isnot[long])-or$j.total_count-le0-or$j.total_count-gt500-or$null-eq$j.check_runs){return $completo}
-   if($total-ge0-and$total-ne$j.total_count){return $completo};$total=$j.total_count
-   $checks+=@($j.check_runs)
-   if($checks.Count-ge$total){break}
-   if(@($j.check_runs).Count-ne100){return $completo}
-  }
-  if($checks.Count-ne$total){return $completo}
+  $checks=@(Obter-ChecksCIPreparo $Sha)
+  # Inspeciona todas as conclusoes ANTES de considerar pendencias: uma falha
+  # ou cancelamento nunca pode ser escondido pela ordem dos checks na API.
   foreach($c in $checks){
-   if(!$c.name){$completo.motivo='check sem nome na resposta da API';return $completo}
-   if($c.head_sha-cne$Sha){$completo.motivo=("SHA inesperado no check: $($c.name) ($($c.status)/$($c.conclusion))");return $completo}
-   if($c.status-cne'completed'){$completo.motivo=("check pendente: $($c.name) ($($c.status))");return $completo}
-   if($c.conclusion-cne'success'-and!($c.name-ceq'Atualizacao real'-and$c.conclusion-ceq'skipped')){$completo.motivo=("check nao aprovado: $($c.name) ($($c.status)/$($c.conclusion))");return $completo}
+   if(($c.conclusion-and$c.conclusion-cne'success'-and!($c.name-ceq'Atualizacao real'-and$c.conclusion-ceq'skipped'))-or($c.status-ceq'completed'-and!$c.conclusion)){
+    $completo.motivo="check nao aprovado: $($c.name) ($($c.status)/$($c.conclusion))";return $completo
+   }
   }
   foreach($nome in $obrigatorios){
    $encontrados=@($checks|Where-Object {$_.name-ceq$nome-and$_.app.slug-ceq'github-actions'-and$_.app.id-eq15368})
    if(!$encontrados.Count){$completo.motivo=('check obrigatorio ausente: '+$nome);return $completo}
    if($encontrados.Count-ne1){$completo.motivo=('check obrigatorio ambiguo: '+$nome);return $completo}
   }
-  return @{rapido=$true;sha=$Sha;motivo="CI aprovado para $Sha"}
- }catch{$completo.motivo='falha ao consultar API publica do GitHub';return $completo}
+  $pendentes=@($checks|Where-Object {$_.status-cne'completed'})
+  if(!$pendentes.Count){return @{rapido=$true;sha=$Sha;motivo="CI da main verde ($($Sha.Substring(0,7)))"}}
+  $c=$pendentes[0];$contexto="CI da main pendente; check pendente: $($c.name) ($($c.status))"
+  # O endpoint pode associar outras PRs ao commit. Exige uma unica PR mesclada
+  # para main deste repositorio cujo commit final do merge seja o alvo exato.
+  $prs=@()
+  for($pagina=1;$pagina-le5;$pagina++){
+   $resposta=Consultar-APICIPreparo "commits/$Sha/pulls?per_page=100&page=$pagina"
+   $lote=@($resposta)
+   $prs+=@($lote|Where-Object {$_.merged_at-and$_.state-ceq'closed'-and$_.merge_commit_sha-ceq$Sha-and$_.base.ref-ceq'main'-and$_.base.repo.full_name-ceq'ngerheim/supply-vision'})
+   if($lote.Count-lt100){break}
+   if($pagina-eq5){throw 'lista de PRs incompleta'}
+  }
+  if($prs.Count-ne1){throw 'PR de origem mesclada nao encontrada ou ambigua'}
+  $pr=$prs[0];$head=[string]$pr.head.sha
+  if($head-cnotmatch'^[0-9a-f]{40}$'-or!$pr.number){throw 'head SHA ou numero da PR invalido'}
+  $contexto+="; PR #$($pr.number)"
+  $main=Consultar-APICIPreparo "commits/$Sha"
+  $origem=Consultar-APICIPreparo "commits/$head"
+  if($main.sha-cne$Sha-or$origem.sha-cne$head-or$main.commit.tree.sha-cnotmatch'^[0-9a-f]{40}$'-or$origem.commit.tree.sha-cnotmatch'^[0-9a-f]{40}$'){throw 'resposta inesperada da API de commits'}
+  if($main.commit.tree.sha-cne$origem.commit.tree.sha){throw "arvore diferente da PR #$($pr.number)"}
+  $checksPR=@(Obter-ChecksCIPreparo $head)
+  foreach($c in $checksPR){
+   $skipMain=@($checks|Where-Object {$_.name-ceq$c.name-and$_.app.id-eq$c.app.id-and$_.app.slug-ceq$c.app.slug-and$_.status-ceq'completed'-and$_.conclusion-ceq'skipped'})
+   if($c.status-cne'completed'-or($c.conclusion-cne'success'-and!($c.name-ceq'Atualizacao real'-and$c.conclusion-ceq'skipped'-and$skipMain.Count-eq1))){throw "check da PR nao aprovado: $($c.name) ($($c.status)/$($c.conclusion))"}
+  }
+  # Compara tambem checks extras observados na main, sem afrouxar jobs push-only.
+  foreach($c in $checks){
+   $cobertura=@($checksPR|Where-Object {$_.name-ceq$c.name-and$_.app.id-eq$c.app.id-and$_.app.slug-ceq$c.app.slug})
+   if($cobertura.Count-ne1){throw "check da main sem cobertura unica na PR (bloqueia): $($c.name)"}
+  }
+  return @{rapido=$true;sha=$Sha;motivo="CI da PR #$($pr.number) ($($head.Substring(0,7))) verde, conteudo identico ao da main ($($Sha.Substring(0,7)))"}
+ }catch{$completo.motivo=$contexto+': falha ao consultar ou validar API publica do GitHub: '+$_.Exception.Message;return $completo}
 }
 function Plano-AndamentoAtualizacao([bool]$Rapido=$false) {
  $preparo=@('Inicializacao isolada','Limpeza de preparos reprovados','Configuracao de teste','Metadados das dependencias','Conferencia geral da reserva','Conferencia da reserva Node','Conferencia da reserva Python','Consumo da reserva','Descarte da reserva','Dependencias Node','Materializacao de junctions Node','Dependencias Python','Validar-PythonAlertas','Consulta CI','Build do Portal')

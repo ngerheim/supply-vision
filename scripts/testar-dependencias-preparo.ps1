@@ -37,7 +37,7 @@ foreach($amostra in $amostras){
 }
 Write-Host '[OK] Strings duplas ASCII e parser ANSI de copias sem BOM nos scripts operacionais e na CLI.'
 try{
- foreach($caso in @('inalteradas','alteradas','build-falha','portal-falha','alertas-falha','operacional-falha','ci-aprovado','ci-log-explicito','ci-rede','ci-ausente','ci-pendente','ci-falho','ci-timeout','ci-cancelado','ci-skipped','ci-sha','ci-invalido','ci-forcado','ci-forcado-env','fumaca-falha')){
+ foreach($caso in @('inalteradas','alteradas','build-falha','portal-falha','alertas-falha','operacional-falha','ci-aprovado','ci-log-explicito','ci-pr-verde','ci-pr-arvore','ci-pr-falho','ci-pr-pendente','ci-pr-ausente','ci-pr-erro','ci-pr-skipped','ci-pr-skipped-real','ci-pr-push-only','ci-pr-sem-check','ci-pr-app','ci-pr-ambigua','ci-pr-main-falho','ci-pr-main-cancelado','ci-pr-queued','ci-pr-tree-api','ci-pr-sha','ci-pr-paginacao','ci-rede','ci-ausente','ci-pendente','ci-falho','ci-timeout','ci-cancelado','ci-skipped','ci-sha','ci-invalido','ci-forcado','ci-forcado-env','fumaca-falha')){
   $instalacao=Join-Path $base $caso
   $preparo=Nova-PastaPreparo $instalacao
   foreach($dir in @('portal/node_modules','alertas/.venv/Scripts','privado')){New-Item -ItemType Directory -Force (Join-Path $instalacao $dir)|Out-Null}
@@ -75,10 +75,54 @@ function Conferir-Isolamento {
 }
 function Invoke-RestMethod {
  param($Uri,$Headers,$TimeoutSec,$ErrorAction)
- if($Headers.ContainsKey('Authorization')-or$Uri-notlike'*commits/*/check-runs?*'-or$TimeoutSec-gt8){throw 'Consulta CI insegura'}
+ if($Headers.ContainsKey('Authorization')-or$Uri-notlike'https://api.github.com/repos/ngerheim/supply-vision/commits/*'-or$TimeoutSec-gt8){throw 'Consulta CI insegura'}
  if($Caso-eq'ci-rede'){throw 'rede ficticia indisponivel'}
+ $mainSha='2'*40;$prSha='3'*40
+ if($Uri-like'*/pulls?*'){
+  Registrar 'api-pr'
+  if($Caso-eq'ci-pr-erro'){throw 'rate limit simulado HTTP 403'}
+  if($Caso-in@('ci-pr-ausente','ci-pendente')){return @()}
+  $pr=@{number=123;merged_at='2026-10-15T12:00:00Z';state='closed';merge_commit_sha=$mainSha;head=@{sha=$prSha};base=@{ref='main';repo=@{full_name='ngerheim/supply-vision'}}}
+  if($Caso-eq'ci-pr-ambigua'){return @($pr,$pr)}
+  # REST entrega listas como um unico objeto de pipeline.
+  return ,@($pr)
+ }
+ if($Uri-notlike'*/check-runs?*'){
+  if($Caso-eq'ci-pr-tree-api'){throw 'rede simulada na consulta de arvore'}
+  $sha=($Uri-split'/')[-1];$tree='a'*40
+  if($Caso-eq'ci-pr-arvore'-and$sha-ceq$prSha){$tree='b'*40}
+  return @{sha=$sha;commit=@{tree=@{sha=$tree}}}
+ }
+
  $nomes=@('Portal','Portal - instalacao nova e autenticacao real','PowerShell','Alertas','Atualizacao real','Node 22.13 - partida e operacao (ubuntu-latest)','Node 22.13 - partida e operacao (windows-latest)')
  $checks=@(foreach($nome in $nomes){[pscustomobject]@{name=$nome;head_sha=('2'*40);status='completed';conclusion=$(if($nome-eq'Atualizacao real'){'skipped'}else{'success'});app=@{slug='github-actions';id=15368}}})
+ if($Caso-like'ci-pr-*'){
+  $naPR=$Uri-like("*/commits/$prSha/check-runs?*")
+  if($naPR){
+   foreach($c in $checks){$c.head_sha=$prSha;$c.conclusion='success'}
+   if($Caso-eq'ci-pr-falho'){$checks[0].conclusion='failure'}
+   if($Caso-eq'ci-pr-pendente'){$checks[0].status='in_progress';$checks[0].conclusion=$null}
+   if($Caso-eq'ci-pr-skipped'){$checks[0].conclusion='skipped'}
+   if($Caso-eq'ci-pr-skipped-real'){$checks[4].conclusion='skipped'}
+   if($Caso-eq'ci-pr-sem-check'){$checks=@($checks|Where-Object name -ne 'PowerShell')}
+   if($Caso-eq'ci-pr-app'){$checks[0].app=@{slug='outro';id=9}}
+   if($Caso-eq'ci-pr-sha'){$checks[0].head_sha=$mainSha}
+   # Check exclusivo da PR tambem precisa estar verde.
+   $checks+=@([pscustomobject]@{name='Revisao de dependencias';head_sha=$prSha;status='completed';conclusion='success';app=@{slug='github-actions';id=15368}})
+  }else{
+   $checks[0].status=$(if($Caso-eq'ci-pr-queued'){'queued'}else{'in_progress'});$checks[0].conclusion=$null
+   if($Caso-eq'ci-pr-main-falho'){$checks[3].conclusion='failure'}
+   if($Caso-eq'ci-pr-main-cancelado'){$checks[3].conclusion='cancelled'}
+   if($Caso-eq'ci-pr-push-only'){$checks+=@([pscustomobject]@{name='Somente push main';head_sha=$mainSha;status='queued';conclusion=$null;app=@{slug='github-actions';id=15368}})}
+  }
+  if($Caso-eq'ci-pr-paginacao'){
+   $sha=$(if($naPR){$prSha}else{$mainSha})
+   $extras=@(foreach($n in 1..96){[pscustomobject]@{name="Extra $n";head_sha=$sha;status='completed';conclusion='success';app=@{slug='github-actions';id=15368}}})
+   $checks+=$extras;$total=$checks.Count
+   $checks=if($Uri-like'*page=2'){@($checks|Select-Object -Skip 100)}else{@($checks|Select-Object -First 100)}
+   return (@{total_count=$total;check_runs=$checks}|ConvertTo-Json -Depth 5|ConvertFrom-Json)
+  }
+ }
  if($Caso-eq'ci-ausente'){$checks=@($checks|Where-Object name -ne 'PowerShell')}
  if($Caso-eq'ci-pendente'){$checks[3].status='in_progress'}
  if($Caso-eq'ci-falho'){$checks[0].conclusion='failure'}
@@ -128,10 +172,11 @@ exit $LASTEXITCODE
   $passos=@(Get-Content (Join-Path $preparo 'passos.txt'))
   if(($rc-eq0)-ne($caso-notin@('build-falha','portal-falha','alertas-falha','operacional-falha','fumaca-falha'))){throw "Preparo incorreto em $caso (rc=$rc): $saida"}
   if(($passos-contains'npm-ci')-ne($caso-eq'alteradas')-or($passos-contains'pip')-ne($caso-eq'alteradas')){throw "Decisao de dependencias incorreta: $caso"}
-  $rapido=$caso-in@('ci-aprovado','ci-log-explicito','fumaca-falha')
+  $rapido=$caso-in@('ci-aprovado','ci-log-explicito','fumaca-falha','ci-pr-verde','ci-pr-queued','ci-pr-skipped-real','ci-pr-paginacao')
   if($rc-eq0-and@($passos|Where-Object {$_-like'operacional:*'}).Count-ne$(if($rapido){2}else{4})){throw 'Removeu verificacao operacional.'}
   if($rapido-and($passos-contains'portal'-or$passos-contains'alertas'-or$passos-notcontains'fumaca')){throw 'Modo rapido nao respeitou suites/fumaca.'}
   if(!$rapido-and$rc-eq0-and($passos-notcontains'portal'-or$passos-notcontains'alertas')){throw 'Fallback nao executou todas as suites.'}
+  if($caso-in@('ci-aprovado','ci-falho','ci-cancelado','ci-pr-main-falho','ci-pr-main-cancelado','ci-forcado')-and$passos-contains'api-pr'){throw 'Consultou PR sem autorizacao pelo estado da main.'}
   if($rc-eq0){
    $tempos=Get-Content (Join-Path $preparo 'preparo-tempos.log') -Raw
    foreach($nome in @('Inicializacao isolada','Limpeza de preparos reprovados','Configuracao de teste','Dependencias Node','Materializacao de junctions Node','Dependencias Python','ValidarPythonMock','Consulta CI','Build do Portal','Aprovacao e conferencia')){if($tempos-notlike"*PREPARAR / ${nome}: codigo=0; duracao=*"){throw "Medicao ausente: $nome"}}
@@ -149,6 +194,22 @@ exit $LASTEXITCODE
    foreach($tipo in @('Node','Python')){if(@($linhasTempos|Where-Object {$_-like("Dependencias ${tipo}: *motivo: *")}).Count-ne1){throw "Caminho de dependencias ausente: $tipo"}}
    if($tempos-notlike"*modo $(if($rapido){'rapido'}else{'completo'})*"){throw 'Modo ausente no log.'}
    $motivoEsperado=switch($caso){
+    'ci-pr-verde' {'CI da PR #123 (3333333) verde, conteudo identico ao da main (2222222)'}
+    'ci-pr-queued' {'CI da PR #123 (3333333) verde, conteudo identico ao da main (2222222)'}
+    'ci-pr-arvore' {'arvore diferente da PR #123'}
+    'ci-pr-falho' {'check da PR nao aprovado: Portal (completed/failure)'}
+    'ci-pr-pendente' {'check da PR nao aprovado: Portal (in_progress/)'}
+    'ci-pr-ausente' {'PR de origem mesclada nao encontrada ou ambigua'}
+    'ci-pr-erro' {'rate limit simulado HTTP 403'}
+    'ci-pr-skipped' {'check da PR nao aprovado: Portal (completed/skipped)'}
+    'ci-pr-push-only' {'check da main sem cobertura unica na PR (bloqueia): Somente push main'}
+    'ci-pr-sem-check' {'check da main sem cobertura unica na PR (bloqueia): PowerShell'}
+    'ci-pr-app' {'check da main sem cobertura unica na PR (bloqueia): Portal'}
+    'ci-pr-ambigua' {'PR de origem mesclada nao encontrada ou ambigua'}
+    'ci-pr-main-falho' {'check nao aprovado: Alertas (completed/failure)'}
+    'ci-pr-main-cancelado' {'check nao aprovado: Alertas (completed/cancelled)'}
+    'ci-pr-tree-api' {'rede simulada na consulta de arvore'}
+    'ci-pr-sha' {'SHA inesperado no check: Portal (completed/success)'}
     'ci-pendente' {'check pendente: Alertas (in_progress)'}
     'ci-ausente' {'check obrigatorio ausente: PowerShell'}
     'ci-falho' {'check nao aprovado: Portal (completed/failure)'}
@@ -157,7 +218,7 @@ exit $LASTEXITCODE
     'ci-skipped' {'check nao aprovado: Portal (completed/skipped)'}
     'ci-sha' {'SHA inesperado no check: Portal (completed/success)'}
    }
-   if($motivoEsperado-and!$tempos.Contains($motivoEsperado)){throw "Motivo do modo completo sem check/estado: $caso"}
+   if($motivoEsperado-and(!$tempos.Contains($motivoEsperado)-or!($saida-join"`n").Contains($motivoEsperado)-or!($linhasTempos-join"`n").Contains($motivoEsperado))){throw "Motivo do modo completo sem check/estado: $caso"}
 
   }
   if((Test-Path (Join-Path $preparo 'preparo-aprovado'))-ne($rc-eq0)){throw 'Preparo reprovado foi aprovado.'}
