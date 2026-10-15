@@ -34,8 +34,10 @@
 | `portal/app/api/[...path]/route.ts` | API, autorizacao e operacoes de negocio |
 | `portal/lib/database.ts` | Schema, migracoes, sessoes e cookies |
 | `portal/lib/domain.ts`, `importacao.ts` | Validacao, normalizacao e publicacao |
-| `portal/components/portal-app.tsx` | Estado da interface e permissoes visuais |
-| `portal/components/imports.tsx`, `reports.tsx` | Importacao assistida e relatorios |
+| `portal/components/portal-app.tsx` | Estado da interface, permissoes visuais e salvar/atualizar |
+| `portal/components/portal-*.tsx` | Telas por assunto, navegacao e apresentacao compartilhada |
+| `portal/components/imports.tsx`, `import-*.tsx` | Envio, previa, correspondencias, resumo, erros e historico de importacao |
+| `portal/components/reports.tsx` | Relatorios |
 | `portal/scripts/iniciar-portal.mjs` | Configuracao e partida do runtime |
 | `portal/scripts/runtime-local.mjs` | Wrangler, proxy e encerramento da arvore |
 | `portal/scripts/processar-emails.mjs` | Filas de chamados e relatorio diario |
