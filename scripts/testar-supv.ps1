@@ -1,11 +1,13 @@
 ﻿# Uma instalacao ficticia; sem tarefa, firewall ou dados reais.
-param([ValidateSet('suite','teste','cliente','sinal')][string]$Modo='suite',[string]$Pasta,[int]$Cliente)
+param([Alias('Modo')][ValidateSet('suite','teste','cliente','sinal')][string]$ModoConsole='suite',[Alias('Pasta')][string]$PastaConsole,[Alias('Cliente')][int]$IdClienteConsole)
 $ErrorActionPreference='Stop'
 $origem=$PSScriptRoot
 . (Join-Path $origem 'supv.ps1')
+# O escopo filho impede que tipos/variaveis do console contaminem a suite.
+& {
 # Console real descartavel; subprocessos voltam a este arquivo nos modos abaixo.
 function Testar-ConsoleSupv {
- param([ValidateSet('teste','cliente','sinal')][string]$Modo='teste',[string]$Pasta,[int]$Cliente)
+ param([ValidateSet('teste','cliente','sinal')][string]$Modo='teste',[string]$Pasta,[Alias('Cliente')][int]$IdClienteConsole)
 if($env:OS-ne'Windows_NT'){Write-Host 'PULADO: console nativo e Ctrl+C exigem Windows.';return}
 Inicializar-TipoConsoleSupv
 Add-Type -TypeDefinition @'
@@ -45,11 +47,11 @@ if($Modo-eq'cliente'){
 }
 if($Modo-eq'sinal'){
  [void][SupvConsoleTeste]::FreeConsole()
- if(![SupvConsoleTeste]::AttachConsole($Cliente)){throw 'AttachConsole falhou.'}
+ if(![SupvConsoleTeste]::AttachConsole($IdClienteConsole)){throw 'AttachConsole falhou.'}
  [void][SupvConsoleTeste]::SetConsoleCtrlHandler([IntPtr]::Zero,$true)
  $h=[SupvConsoleTeste]::Input()
  if(![SupvConsoleTeste]::GenerateConsoleCtrlEvent(0,0)){throw 'CTRL_C_EVENT falhou.'}
- $p=Get-Process -Id $Cliente -ErrorAction SilentlyContinue
+ $p=Get-Process -Id $IdClienteConsole -ErrorAction SilentlyContinue
  if($p-and!$p.WaitForExit(5000)){throw 'Ctrl+C nao encerrou cliente.'}
  [uint32]$atual=0
  if(![SupplyVision.ConsoleAcompanhamento]::GetConsoleMode($h,[ref]$atual)){throw 'Leitura apos Ctrl+C falhou.'}
@@ -76,8 +78,10 @@ try{
  Remove-Item -LiteralPath $base -Recurse -Force -ErrorAction SilentlyContinue
 }
 }
-if($Modo-ne'suite'){Testar-ConsoleSupv -Modo $Modo -Pasta $Pasta -Cliente $Cliente;return}
+if($ModoConsole-ne'suite'){Testar-ConsoleSupv -Modo $ModoConsole -Pasta $PastaConsole -IdClienteConsole $IdClienteConsole;return}
 Testar-ConsoleSupv
+}
+if($ModoConsole-ne'suite'){return}
 $base=Join-Path ([IO.Path]::GetTempPath()) ('supv-cli-'+[guid]::NewGuid().ToString('N'))
 $anterior=$env:SUPPLY_VISION_PRIVADO
 $hostTeste=(Get-Process -Id $PID).Path
@@ -436,7 +440,7 @@ exit 0
  $h=[IO.File]::Open($limpeza,[IO.FileMode]::CreateNew,[IO.FileAccess]::Write,[IO.FileShare]::None)
  try{Recusar-Supv {Iniciar-AtualizacaoAdministrada $script:supvRaiz $script:supvPrivado} '*Limpeza de preparo*'}finally{$h.Dispose();Remove-Item $limpeza}
  # Abandona um cliente real durante a atualizacao; nao chama Stop no worker.
- $cliente=Join-Path $base 'cliente.ps1'
+ $scriptCliente=Join-Path $base 'cliente.ps1'
  $codigoCliente=@'
 param($Raiz,$Privado)
 $env:SUPPLY_VISION_PRIVADO=$Privado
@@ -453,8 +457,8 @@ function Start-Process {param($FilePath,$ArgumentList,$WindowStyle,[switch]$Pass
 }
 $r=Iniciar-
 '@)}
- Set-Content $cliente $codigoCliente -Encoding UTF8
- $argsCliente='-NoProfile -File "'+$cliente+'" "'+$script:supvRaiz+'" "'+$script:supvPrivado+'"'
+ Set-Content $scriptCliente $codigoCliente -Encoding UTF8
+ $argsCliente='-NoProfile -File "'+$scriptCliente+'" "'+$script:supvRaiz+'" "'+$script:supvPrivado+'"'
  $inicioCliente=@{FilePath=$hostTeste;ArgumentList=$argsCliente;PassThru=$true;RedirectStandardOutput=(Join-Path $base 'cliente-saida.log');RedirectStandardError=(Join-Path $base 'cliente-erro.log')}
  if($env:OS-eq'Windows_NT'){$inicioCliente.WindowStyle='Hidden'}
  $pai=Microsoft.PowerShell.Management\Start-Process @inicioCliente;[void]$pai.Handle;[void]$processos.Add($pai)
