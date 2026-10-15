@@ -18,8 +18,10 @@ function Item-Homologacao([string]$Nome,[scriptblock]$Conferir,[switch]$Classifi
 }
 $linhas.Add('Supply Vision — verificacao somente leitura — '+(Get-Date -Format 'yyyy-MM-dd HH:mm:ss'))
 Item-Homologacao 'Commit e alteracoes locais' {
- $commit=& git -C $Raiz rev-parse HEAD;if($LASTEXITCODE){throw 'git'}
- $mudancas=@(& git -C $Raiz status --porcelain);if($LASTEXITCODE){throw 'git'}
+ $r=Executar-NativoOperacao 'git' @('-C',$Raiz,'rev-parse','HEAD');if($r.codigo-ne0){throw 'git'}
+ $commit=$r.stdout-join''
+ $r=Executar-NativoOperacao 'git' @('-C',$Raiz,'status','--porcelain');if($r.codigo-ne0){throw 'git'}
+ $mudancas=@($r.stdout)
  "$commit; $($mudancas.Count) alteracoes locais (nomes omitidos)"
 }
 foreach($nome in @('status','estado')){
@@ -40,8 +42,8 @@ Item-Homologacao 'Permissao da conta da tarefa' {$t=Obter-TarefaSupplyVision $Ra
 Item-Homologacao 'Modo ensaio' {$op=Ler-ConfigOperacao (Join-Path $privado 'comum\operacao.env');if($op['MODO_ENSAIO']-eq'1'){'ATIVO — nenhum email ou backup em rede'}else{'desligado'}}
 Item-Homologacao 'Parametros dos alertas' {
  $python=Join-Path $Raiz 'alertas\.venv\Scripts\python.exe'
- $saida=& $python -B -X utf8 (Join-Path $Raiz 'alertas\processo\validar_parametros.py') 2>&1
- if($LASTEXITCODE){throw 'parametros'};'carregados e validados (sem exibir conteudo)'
+ $r=Executar-NativoOperacao $python @('-B','-X','utf8',(Join-Path $Raiz 'alertas/processo/validar_parametros.py'))
+ if($r.codigo-ne0){throw 'parametros'};'carregados e validados (sem exibir conteudo)'
 }
 Item-Homologacao 'Backups locais' {
  $op=Ler-ConfigOperacao (Join-Path $privado 'comum\operacao.env')
@@ -53,8 +55,9 @@ foreach($p in @($cfg['BACKUP_NETWORK_DIR'])){
 }
 Item-Homologacao 'Ultimas entregas' {
  $node=Localizar-NodeMaquina
- $saida=& $node (Join-Path $Raiz 'portal/scripts/ultimas-entregas.mjs') --privado $privado
- if($LASTEXITCODE){throw 'Consulta de entregas indisponivel.'}
+ $r=Executar-NativoOperacao $node @((Join-Path $Raiz 'portal/scripts/ultimas-entregas.mjs'),'--privado',$privado)
+ $saida=$r.stdout
+ if($r.codigo-ne0){throw 'Consulta de entregas indisponivel.'}
  $j=($saida-join"`n")|ConvertFrom-Json
  $resumo=@()
  foreach($tipo in @('alertas','relatorios')){

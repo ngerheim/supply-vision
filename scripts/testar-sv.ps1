@@ -1,4 +1,4 @@
-# Uma instalacao ficticia; sem tarefa, firewall, clipboard ou dados reais.
+﻿# Uma instalacao ficticia; sem tarefa, firewall, clipboard ou dados reais.
 $ErrorActionPreference='Stop'
 $origem=$PSScriptRoot
 . (Join-Path $origem 'sv.ps1')
@@ -38,6 +38,27 @@ try{
   'SELECT * FROM banco') -Encoding UTF8
  Set-Content (Join-Path $op 'portal-saida.log') @('GET /teste 500 Internal Server Error','HTTP/1.1 503','D1_ERROR: teste','[portal] D1 interno na leitura; nova tentativa unica em 100 ms.') -Encoding UTF8
  $script:svSegredos=Obter-SegredosHomologacao $script:svPrivado
+ # ErrorRecord sob Stop reproduz o risco do PS5.1 tambem no pwsh/Linux.
+ function Nativo-ErroTeste {Write-Error 'stderr ficticio';$global:LASTEXITCODE=$script:codigoNativoTeste}
+ foreach($valor in @(0,9)){
+  $script:codigoNativoTeste=$valor;$global:LASTEXITCODE=42
+  $r=Executar-NativoOperacao 'Nativo-ErroTeste'
+  Exigir-Sv ($r.codigo-eq$valor-and($r.saida-join' ')-like'*stderr ficticio*') "stderr ErrorRecord preserva codigo $valor"
+  Exigir-Sv ($ErrorActionPreference-eq'Stop'-and$LASTEXITCODE-eq42) 'captura restaura preferencia e codigo do chamador'
+ }
+ Remove-Item Function:Nativo-ErroTeste
+ $nativo=Join-Path $base 'nativo-stderr.ps1'
+ Set-Content $nativo 'param([int]$Codigo) [Console]::Error.WriteLine("stderr ficticio");Write-Output "stdout ficticio";exit $Codigo' -Encoding UTF8
+ foreach($valor in @(0,9)){
+  $r=Executar-NativoOperacao $hostTeste @('-NoProfile','-File',$nativo,'-Codigo',[string]$valor)
+  Exigir-Sv ($r.codigo-eq$valor-and($r.saida-join' ')-like'*stderr ficticio*'-and($r.stdout-join' ')-eq'stdout ficticio') "processo real: stdout, stderr e codigo $valor"
+ }
+ function git {Write-Error 'Git ficticio falhou';$global:LASTEXITCODE=9}
+ try{Exigir-Sv ((Obter-VersaoAdministrada $script:svRaiz)-eq'versao indisponivel') 'git falhando nao interrompe consulta de versao'}finally{Remove-Item Function:git}
+ $r=Executar-NativoOperacao $hostTeste @('-NoProfile','-File',(Join-Path $script:svRaiz 'scripts/sv.ps1'),'status')
+ $statusSemGit=$r.saida-join"`n"
+ Exigir-Sv ($r.codigo-eq0-and$statusSemGit-like'*Versao: versao indisponivel*'-and$statusSemGit-notmatch'fatal:|NativeCommandError') 'sv status sem .git retorna 0 e versao indisponivel sem stderr'
+
  $pathFicticio=Acrescentar-ComandoSvAoPath $script:svRaiz 'primeiro;segundo'
  Exigir-Sv ($pathFicticio-eq('primeiro;segundo;'+$script:svRaiz)) 'PATH preserva entradas existentes'
  Exigir-Sv ((Acrescentar-ComandoSvAoPath $script:svRaiz $pathFicticio)-ceq$pathFicticio) 'PATH idempotente'
@@ -56,7 +77,8 @@ try{
   $c=Ler-ComandoSv $caso;Recusar-Sv {Executar-ComandoSv $c} '*'
  }
  foreach($caso in @(@('help'),@('inexistente'),@('atualizar','--erro'))){
-  $texto=(& $hostTeste -NoProfile -File (Join-Path $origem 'sv.ps1') @caso 2>&1)-join"`n";$codigo=$LASTEXITCODE
+  $r=Executar-NativoOperacao $hostTeste (@('-NoProfile','-File',(Join-Path $origem 'sv.ps1'))+$caso)
+  $texto=$r.saida-join"`n";$codigo=$r.codigo
   Exigir-Sv (($caso[0]-eq'help'-and$codigo-eq0)-or($caso[0]-ne'help'-and$codigo-ne0)) "codigo real do processo: $($caso-join' ')"
   Exigir-Sv ($texto-notmatch'[^\x00-\x7F]') 'saida de processo ASCII'
  }
@@ -111,10 +133,11 @@ try{
  $fixtureInit=Join-Path $script:svRaiz 'scripts/inicializacao-logica.ps1'
  Add-Content $fixtureInit 'function Localizar-NodeMaquina {throw "node indisponivel na fixture"}'
  Add-Content $fixtureInit 'function Testar-Elevacao {return $false}'
- $adminTexto=(& $hostTeste -NoProfile -File (Join-Path $script:svRaiz 'scripts/sv.ps1') modo login 2>&1)-join"`n"
- Exigir-Sv ($LASTEXITCODE-ne0-and$adminTexto-like'*abra o terminal como administrador*') 'processo real retorna falha e mensagem de administrador'
- $saida=& $hostTeste -NoProfile -File (Join-Path $script:svRaiz 'scripts/homologar.ps1') -Destino $relatorio 2>&1
- Exigir-Sv (Test-Path -LiteralPath $relatorio) 'homologar mantem arquivo txt'
+ $r=Executar-NativoOperacao $hostTeste @('-NoProfile','-File',(Join-Path $script:svRaiz 'scripts/sv.ps1'),'modo','login')
+ $adminTexto=$r.saida-join"`n"
+ Exigir-Sv ($r.codigo-ne0-and$adminTexto-like'*abra o terminal como administrador*') 'processo real retorna falha e mensagem de administrador'
+ $r=Executar-NativoOperacao $hostTeste @('-NoProfile','-File',(Join-Path $script:svRaiz 'scripts/homologar.ps1'),'-Destino',$relatorio)
+ Exigir-Sv ($r.codigo-eq0-and(Test-Path -LiteralPath $relatorio)) 'homologar mantem arquivo txt'
  $texto=[IO.File]::ReadAllText($relatorio)
  Exigir-Sv ($texto-notmatch'segredo-ficticio|pessoa@example.com|abc123|SELECT') 'relatorio real continua mascarado apos extracao'
  # CLI homologar imprime e copia o mesmo relatorio, sem clipboard real.
@@ -215,8 +238,8 @@ if(![SvCtrlC]::GenerateConsoleCtrlEvent(0,0)){exit 2}
 Start-Sleep -Milliseconds 300
 exit 0
 '@ -Encoding UTF8
-  & $hostTeste -NoProfile -File $sinal -Cliente $pai.Id
-  Exigir-Sv ($LASTEXITCODE-eq0-and(Esperar-Sv {$pai.HasExited} 5)) 'Ctrl+C encerra somente cliente'
+  $rSinal=Executar-NativoOperacao $hostTeste @('-NoProfile','-File',$sinal,'-Cliente',[string]$pai.Id)
+  Exigir-Sv ($rSinal.codigo-eq0-and(Esperar-Sv {$pai.HasExited} 5)) 'Ctrl+C encerra somente cliente'
  }else{
   Stop-Process -Id $pai.Id -Force
   Write-Host 'PULADO: CTRL_C_EVENT exige Windows; fechamento do cliente real testado no Linux.'

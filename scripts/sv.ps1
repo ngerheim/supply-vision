@@ -1,4 +1,4 @@
-# CLI Supply Vision, Windows PowerShell 5.1. Toda saida passa pelo filtro ASCII.
+﻿# CLI Supply Vision, Windows PowerShell 5.1. Toda saida passa pelo filtro ASCII.
 # Sem param(): -n, --help e opcoes desconhecidas chegam intactos ao parser.
 $svArgumentos=@($args)
 $ErrorActionPreference='Stop'
@@ -209,8 +209,8 @@ function Executar-ComandoSv($c){
   'homologar' {
    $destino=$o['--destino']
    if(!$destino){$destino=Join-Path ([Environment]::GetFolderPath('Desktop')) ('Supply-Vision-homologacao-'+(Get-Date -Format 'yyyyMMdd-HHmmss')+'.txt')}
-   & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'homologar.ps1') -Destino $destino 2>&1|ForEach-Object {Escrever-Sv ([string]$_)}
-   if($LASTEXITCODE){throw 'Falha ao gerar relatorio de homologacao.'}
+   $r=Executar-NativoOperacao 'powershell.exe' @('-NoProfile','-ExecutionPolicy','Bypass','-File',(Join-Path $PSScriptRoot 'homologar.ps1'),'-Destino',$destino) -AoReceber {param($linha) Escrever-Sv $linha}
+   if($r.codigo-ne0){throw 'Falha ao gerar relatorio de homologacao.'}
    $texto=Get-Content -LiteralPath $destino -Raw -Encoding UTF8
    Escrever-Sv $texto
    if($o['--copiar']){Set-Clipboard -Value $texto;Escrever-Sv 'Relatorio copiado para a area de transferencia.'}
@@ -249,8 +249,8 @@ function Executar-ComandoSv($c){
   }
   'firewall' {
    if($p[0]-ne'restringir'){throw 'Use sv firewall restringir.'};Exigir-AdministradorSv
-   & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $script:svRaiz 'portal/scripts/restringir-firewall.ps1') 2>&1|ForEach-Object {Escrever-Sv ([string]$_)}
-   if($LASTEXITCODE){throw 'Restricao de firewall nao concluida.'};return 0
+   $r=Executar-NativoOperacao 'powershell.exe' @('-NoProfile','-ExecutionPolicy','Bypass','-File',(Join-Path $script:svRaiz 'portal/scripts/restringir-firewall.ps1')) -AoReceber {param($linha) Escrever-Sv $linha}
+   if($r.codigo-ne0){throw 'Restricao de firewall nao concluida.'};return 0
   }
   'migrar' {
    if(!$o['--destino']-or$o['--modo']-notin@('ensaio','definitiva')){throw 'Use sv migrar --destino <pasta> --modo <ensaio|definitiva>.'}
