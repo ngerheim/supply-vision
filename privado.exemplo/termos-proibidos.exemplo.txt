@@ -1,0 +1,6 @@
+# Modelo de privado/termos-proibidos.txt; nunca versionar a lista real.
+# UTF-8, um termo literal por linha, sem distinguir maiusculas.
+# Linhas vazias e comentarios iniciados por # sao ignorados.
+# Opcional: arquivo ausente usa somente regras genericas, inclusive no CI.
+projeto-ficticio-alfa
+identificador-ficticio-beta
