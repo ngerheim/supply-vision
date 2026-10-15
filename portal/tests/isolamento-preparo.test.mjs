@@ -39,3 +39,29 @@ void test('preload bloqueia arquivos, SQLite, PID/trava e qualquer porta alheia 
     for(const nome of fs.readdirSync(sentinela))assert.equal(fs.readFileSync(path.join(sentinela,nome),'utf8'),'preservar');
   } finally { fs.rmSync(pasta,{recursive:true,force:true}); }
 });
+
+void test('fumaca instala perfil descartavel antes de carregar dependencias', () => {
+  const pasta = fs.mkdtempSync(path.join(os.tmpdir(), 'sv-perfil-fumaca-'));
+  const raiz = path.join(pasta, `.fixture-preparo-${randomBytes(16).toString('hex')}`);
+  const scripts = path.join(raiz, 'portal/scripts');
+  fs.mkdirSync(scripts, { recursive: true });
+  const modulo = path.join(scripts, 'fumaca-preparo.mjs');
+  fs.copyFileSync(new URL('../scripts/fumaca-preparo.mjs', import.meta.url), modulo);
+  // A primeira dependencia observa o perfil antes que o Worker seja carregado.
+  fs.writeFileSync(path.join(scripts, 'sqlite-local.mjs'), `
+    import assert from 'node:assert/strict';import os from 'node:os';import path from 'node:path';
+    const perfil=path.join(process.env.SV_PREPARO_RAIZ,'.cache/perfil-fumaca');
+    assert.equal(os.homedir(),perfil);
+    assert.equal(process.env.APPDATA,path.join(perfil,'AppData/Roaming'));
+    assert.equal(process.env.LOCALAPPDATA,path.join(perfil,'AppData/Local'));
+    throw new Error('perfil-ficticio-conferido');
+  `);
+  try {
+    const resultado = spawnSync(process.execPath, [modulo], { encoding: 'utf8', timeout: 10000,
+      env: { ...process.env, NODE_OPTIONS: '', SV_PREPARO_RAIZ: raiz } });
+    assert.notEqual(resultado.status, 0);
+    assert.match(resultado.stderr, /perfil-ficticio-conferido/);
+    assert.doesNotMatch(resultado.stderr, /AssertionError/);
+    assert.equal(fs.existsSync(path.join(raiz, '.cache/perfil-fumaca')), true);
+  } finally { fs.rmSync(pasta, { recursive: true, force: true }); }
+});

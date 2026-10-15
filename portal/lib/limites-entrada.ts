@@ -1,5 +1,3 @@
-// Limites de entrada, em um lugar só.
-//
 // Estavam declarados dentro da rota e COPIADOS à mão nos testes. Isso deixava
 // o teste passar mesmo se o limite real mudasse — a cópia continuava batendo
 // consigo mesma. Agora a rota e os testes importam daqui, então mexer no valor
@@ -47,3 +45,10 @@ export function exigeTexto(value: unknown, maximo: number, campo: string) {
   return texto;
 }
 
+
+export function chaveIdempotencia(request: Request): string | null {
+  const chave = request.headers.get('idempotency-key');
+  if (chave === null) return null;
+  if (!/^[A-Za-z0-9_-]{16,100}$/.test(chave)) throw new EntradaInvalida('Identificador da tentativa inválido.');
+  return chave;
+}
