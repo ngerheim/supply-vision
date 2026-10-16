@@ -169,6 +169,10 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
  $cfg=Join-Path $privado 'portal/configuracao/portal.env'
  $texto=[IO.File]::ReadAllText($cfg)
  foreach($par in @(@('PORTAL_URL','http://127.0.0.1:3000'),@('INITIAL_ADMIN_PASSWORD','senha-ficticia-h2-12345'),@('BACKUP_EMAIL_TO','backup@h2.test'),@('BACKUP_NETWORK_DIR',''))){$texto=[regex]::Replace($texto,('(?m)^'+$par[0]+'=.*$'),($par[0]+'='+$par[1]))}
+ # A tarefa agendada nao herda variaveis da sessao.
+ if($texto-match'(?m)^PORTAL_CRIAR_BANCO='){
+  $texto=[regex]::Replace($texto,'(?m)^PORTAL_CRIAR_BANCO=.*$','PORTAL_CRIAR_BANCO=1')
+ }else{$texto=$texto.TrimEnd([char[]]"`r`n")+"`nPORTAL_CRIAR_BANCO=1`n"}
  [IO.File]::WriteAllText($cfg,$texto)
  New-Item -ItemType Directory -Force (Join-Path $privado 'operacao')|Out-Null
  $estado=@{}

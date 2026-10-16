@@ -358,6 +358,7 @@ jobs:
             ${{ runner.temp }}/sv-h2-*/instalacao/privado/operacao/atualizacao-tempos.log
             ${{ runner.temp }}/sv-h2-*/instalacao/privado/operacao/atualizacao.json
             ${{ runner.temp }}/sv-h2-*/instalacao/privado/operacao/supervisor.log
+            ${{ runner.temp }}/sv-h2-*/instalacao/privado/operacao/portal-*.log
             ${{ runner.temp }}/sv-h2-*/instalacao/privado/operacao/emails-*.log
             ${{ runner.temp }}/sv-h2-*/instalacao/privado/operacao/relatorios-*.log
 
