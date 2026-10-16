@@ -157,6 +157,54 @@ try{
    Exigir-Supv ((Consultar-AndamentoAdministrado $privadoTeste).motivoModo-eq$motivo) "etapas seguintes preservam motivo $modoTeste"
   }
  }
+ # Retomada usa o mesmo publicador do atualizador e preserva tempos/estimativa.
+ & {
+  $privadoTeste=Join-Path $base 'retomada-ficticia'
+  $arquivo=Join-Path $privadoTeste 'operacao/atualizacao-andamento.json'
+  $a=Novo-AndamentoAtualizacao $arquivo '' ([datetime]::UtcNow.AddSeconds(-180))
+  foreach($nome in $a.plano){$a.duracoes[$nome]=5}
+  Publicar-AndamentoAtualizacao $a 'Seguindo com o script da nova versao' -Modo 'rapido'
+  $antes=Consultar-AndamentoAdministrado $privadoTeste
+  $script:AndamentoAtualizacao=Ler-AndamentoAtualizacao $arquivo
+  $inicioEtapa=$script:AndamentoAtualizacao.inicioEtapa
+  $ast=[Management.Automation.Language.Parser]::ParseFile((Join-Path $origem 'atualizar-servidor.ps1'),[ref]$null,[ref]$null)
+  $funcao=$ast.Find({param($n) $n-is[Management.Automation.Language.FunctionDefinitionAst]-and$n.Name-eq'Etapa'},$true)
+  . ([scriptblock]::Create($funcao.Extent.Text))
+  function Inicializar-MedicaoAtualizacao {}
+  function Iniciar-EtapaMedida {}
+  $JaAtualizado=$true;$Simular=$false
+  Etapa 'Conferindo ambiente de atualizacao'
+  Etapa 'Conferindo o repositorio'
+  $depois=Consultar-AndamentoAdministrado $privadoTeste
+  Exigir-Supv ($depois.numero-eq$antes.numero-and$depois.restanteSegundos-le$antes.restanteSegundos-and$depois.inicioGeral-eq$antes.inicioGeral-and$script:AndamentoAtualizacao.inicioEtapa-eq$inicioEtapa) 'filho preserva numero, inicio e estimativa do pai'
+  Etapa 'Conferindo a configuracao privada'
+  Exigir-Supv ((Consultar-AndamentoAdministrado $privadoTeste).numero-eq$antes.numero+1) 'filho continua na proxima etapa'
+  $a=Novo-AndamentoAtualizacao $arquivo ''
+  Publicar-AndamentoAtualizacao $a 'PREPARAR / Build do Portal'
+  $a.erro='Falha ficticia unica'
+  Publicar-AndamentoAtualizacao $a 'PREPARAR reprovado' 'falhou'
+  $reprovado=Get-Content $arquivo -Raw
+  $a=Ler-AndamentoAtualizacao $arquivo
+  Publicar-AndamentoAtualizacao $a 'PREPARAR / Aprovacao e conferencia'
+  Publicar-AndamentoAtualizacao $a 'Atualizacao falhou' 'falhou'
+  Exigir-Supv ((Get-Content $arquivo -Raw)-ceq$reprovado) 'reprovacao permanece terminal com numero, erro e fim fixos'
+  function Executar-AcaoAdministrada {return @{ok=$false;mensagem='Falha ficticia unica repetida';andamento=@{erro='Falha ficticia unica';totalSegundos=180}}}
+  $texto=Capturar-Supv {Mostrar-ProgressoSupv (Consultar-AndamentoAdministrado $privadoTeste);[void](Mostrar-ResultadoSupv 1)}
+  Exigir-Supv (([regex]::Matches($texto,'Falha ficticia unica')).Count-eq1) 'causa aparece uma vez entre andamento e resultado'
+ }
+ # Retencao numerica nao vira segredo por conter EMAIL na chave.
+ & {
+  $privadoTeste=Join-Path $base 'mascara-ficticia'
+  New-Item -ItemType Directory -Force $privadoTeste|Out-Null
+  $envTeste=Join-Path $privadoTeste 'operacao.env'
+  Set-Content $envTeste 'EXPURGO_EMAILS_DIAS=180' -Encoding UTF8
+  $segredos=Obter-SegredosHomologacao $privadoTeste
+  Exigir-Supv ((Mascarar-Homologacao 'total 180 s' $segredos)-eq'total 180 s') 'dias de retencao nao mascaram duracao'
+  Add-Content $envTeste "SMTP_PASSWORD=180`nPORTAL_API_TOKEN=segredo-ficticio`nEMAIL_FROM=pessoa@example.com" -Encoding UTF8
+  $segredos=Obter-SegredosHomologacao $privadoTeste
+  $texto=Mascarar-Homologacao '180 segredo-ficticio pessoa@example.com Bearer abc123' $segredos
+  Exigir-Supv ($texto-notmatch'180|segredo-ficticio|pessoa@example.com|abc123') 'segredos reais inclusive numericos continuam mascarados'
+ }
  # Consultas identicas nao imprimem de novo; segundos e modo ainda atualizam.
  & {
   $a=@{numero=1;total=37;nome='Conferindo ambiente de atualizacao';modo='a definir';motivoModo='';estado='andamento';etapaSegundos=0;totalSegundos=0;restanteSegundos=$null}
