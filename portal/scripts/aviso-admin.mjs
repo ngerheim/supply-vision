@@ -7,16 +7,16 @@ import { criarTransportador, lerConfigSmtp, privado } from './configuracao.mjs';
 import { modoEnsaio } from './modo-ensaio.mjs';
 
 export const EVENTOS_ADMIN = Object.freeze({
-  'orfaos-falharam': { nome: 'Limpeza de processos órfãos incompleta', ocorrido: 'A partida não conseguiu verificar ou encerrar todos os processos órfãos.', acao: 'Confira se a conta da tarefa é administradora local e use supv parar em um terminal elevado.', secao: 'Diagnostico e recuperacao', ancora: 'diagnostico-e-recuperacao' },
-  'tarefa-falhou': { nome: 'Tarefa principal falhou ao iniciar', ocorrido: 'A vigilância encontrou falha na partida da tarefa principal.', acao: 'Confira a conta e reconfigure a senha da tarefa pelo supv.', secao: 'Diagnostico e recuperacao', ancora: 'diagnostico-e-recuperacao' },
-  'vigilancia-health': { nome: 'Vigilância: Portal indisponível', ocorrido: 'A verificação diária não recebeu uma resposta saudável do Portal.', acao: 'Use supv status e supv logs supervisor.', secao: 'Diagnostico e recuperacao', ancora: 'diagnostico-e-recuperacao' },
-  'portal-parou': { nome: 'Portal parou de responder', ocorrido: 'O Portal deixou de responder após duas verificações seguidas.', acao: 'Use supv status, teste o acesso local e consulte portal-erro.log e supervisor.log.', secao: 'Diagnostico e recuperacao', ancora: 'diagnostico-e-recuperacao' },
-  'portal-reiniciado': { nome: 'Portal reiniciado automaticamente', ocorrido: 'O supervisor iniciou a recuperação automática do Portal após falhas persistentes.', acao: 'Confira se o Portal voltou a responder. Se os reinícios continuarem, pare a operação e preserve os logs.', secao: 'Diagnostico e recuperacao', ancora: 'diagnostico-e-recuperacao' },
-  'backup-falhou': { nome: 'Backup falhou', ocorrido: 'A rotina de backup terminou com falha.', acao: 'Confira supervisor.log, o último backup e o acesso à pasta de rede. Não sobrescreva o banco atual.', secao: 'Backup e restauracao', ancora: 'backup-e-restauracao' },
-  'alertas-falharam': { nome: 'Alertas falharam', ocorrido: 'A execução dos Alertas terminou com falha.', acao: 'Confira supervisor.log e o último pipeline_*.log. Valide a configuração e a conectividade antes de tentar novamente.', secao: 'Alertas e entregas', ancora: 'alertas-e-entregas' },
-  'alertas-revisao': { nome: 'Alertas exigem revisão de entrega', ocorrido: 'A execução dos Alertas indicou entrega parcial ou incerta.', acao: 'Confira a entrega com os destinatários e os registros em privado/alertas/estado-envios. Não reenvie antes de conferir.', secao: 'Alertas e entregas', ancora: 'alertas-e-entregas' },
-  'disco-baixo': { nome: 'Espaço em disco baixo', ocorrido: 'O espaço livre ficou abaixo do limite ESPACO_MINIMO_GB.', acao: 'Confira o espaço livre com supv status e a limpeza diária. Consulte supv help para a faxina com a operação parada.', secao: 'Diagnostico e recuperacao', ancora: 'diagnostico-e-recuperacao' },
-  'supervisor-iniciado': { nome: 'Supervisor iniciado', ocorrido: 'O supervisor iniciou a operação nesta máquina.', acao: 'Use supv status para conferir se os módulos estão ativos. Se a partida foi inesperada, consulte supervisor.log e verifique o reinício da máquina.', secao: 'Supervisor e atualizacao', ancora: 'supervisor-e-atualizacao' },
+  'orfaos-falharam': { nome: 'Limpeza de processos órfãos incompleta', ocorrido: 'A partida não conseguiu verificar ou encerrar todos os processos órfãos.', acao: 'Confira se a conta da tarefa é administradora local e use supv parar em um terminal elevado.' },
+  'tarefa-falhou': { nome: 'Tarefa principal falhou ao iniciar', ocorrido: 'A vigilância encontrou falha na partida da tarefa principal.', acao: 'Confira a conta e reconfigure a senha da tarefa pelo supv.' },
+  'vigilancia-health': { nome: 'Vigilância: Portal indisponível', ocorrido: 'A verificação diária não recebeu uma resposta saudável do Portal.', acao: 'Use supv status e supv logs supervisor.' },
+  'portal-parou': { nome: 'Portal parou de responder', ocorrido: 'O Portal deixou de responder após duas verificações seguidas.', acao: 'Use supv status, teste o acesso local e consulte portal-erro.log e supervisor.log.' },
+  'portal-reiniciado': { nome: 'Portal reiniciado automaticamente', ocorrido: 'O supervisor iniciou a recuperação automática do Portal após falhas persistentes.', acao: 'Confira se o Portal voltou a responder. Se os reinícios continuarem, pare a operação e preserve os logs.' },
+  'backup-falhou': { nome: 'Backup falhou', ocorrido: 'A rotina de backup terminou com falha.', acao: 'Confira supervisor.log, o último backup e o acesso à pasta de rede. Não sobrescreva o banco atual.' },
+  'alertas-falharam': { nome: 'Alertas falharam', ocorrido: 'A execução dos Alertas terminou com falha.', acao: 'Confira supervisor.log e o último pipeline_*.log. Valide a configuração e a conectividade antes de tentar novamente.' },
+  'alertas-revisao': { nome: 'Alertas exigem revisão de entrega', ocorrido: 'A execução dos Alertas indicou entrega parcial ou incerta.', acao: 'Confira a entrega com os destinatários e os registros em privado/alertas/estado-envios. Não reenvie antes de conferir.' },
+  'disco-baixo': { nome: 'Espaço em disco baixo', ocorrido: 'O espaço livre ficou abaixo do limite ESPACO_MINIMO_GB.', acao: 'Confira o espaço livre com supv status e a limpeza diária. Consulte supv help para a faxina com a operação parada.' },
+  'supervisor-iniciado': { nome: 'Supervisor iniciado', ocorrido: 'O supervisor iniciou a operação nesta máquina.', acao: 'Use supv status para conferir se os módulos estão ativos. Se a partida foi inesperada, consulte supervisor.log e verifique o reinício da máquina.' },
 });
 
 export function destinatariosAdmin(valor = '') {
@@ -55,7 +55,7 @@ export function montarAviso(evento, agora = new Date(), maquina = os.hostname())
   const data = new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Sao_Paulo', dateStyle: 'short', timeStyle: 'long' }).format(agora);
   return {
     subject: `[Supply Vision] ${dados.nome} — ${maquina}`,
-    text: `Data/hora: ${data} (America/Sao_Paulo)\nMáquina: ${maquina}\n\n${dados.ocorrido}\n\nO que fazer: ${dados.acao}\n\nUse supv help para os comandos. Consulte AGENTS.md, seção "${dados.secao}".\nhttps://github.com/ngerheim/supply-vision/blob/main/AGENTS.md#${dados.ancora}\n`,
+    text: `Data/hora: ${data} (America/Sao_Paulo)\nMáquina: ${maquina}\n\n${dados.ocorrido}\n\nO que fazer: ${dados.acao}\n\nUse supv help para os comandos.\n`,
   };
 }
 

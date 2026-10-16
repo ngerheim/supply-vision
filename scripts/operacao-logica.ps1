@@ -131,7 +131,7 @@ function Obter-SituacaoBackupLocal([string]$Pasta,[hashtable]$Config,[datetime]$
   $horarios=[string](Obter-HorariosDoDia $Config 'BACKUP_HORARIOS' $dia)
   foreach($h in @($horarios.Split(',')|ForEach-Object {$_.Trim()}|Where-Object {$_})){
    $alvo=[datetime]::ParseExact(($dia.ToString('yyyy-MM-dd')+' '+$h),'yyyy-MM-dd HH:mm',[Globalization.CultureInfo]::InvariantCulture)
-   if($alvo-ge$Inicio-and$alvo-lt$Agora){return @{nivel='erro';mensagem='backup local agendado vencido sem arquivo; consulte AGENTS.md#diagnostico-e-recuperacao.'}}
+   if($alvo-ge$Inicio-and$alvo-lt$Agora){return @{nivel='erro';mensagem='backup local agendado vencido sem arquivo; confira supv logs supervisor e execute supv backup testar; consulte supv help.'}}
   }
  }
  return @{nivel='aviso';mensagem='nenhum backup local ainda; o primeiro ocorre no próximo horário agendado'}
