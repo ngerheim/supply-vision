@@ -28,7 +28,7 @@ try{
  foreach($normal in @('portal/lib/domain.ts','scripts/supervisor.ps1','portal/tests-fora/fixture.ts','scripts/testar-novo.ps1/outro','../README.md','/README.md','DOC.MD','"README.md"')){
   Exigir-SemParada (!(Testar-CaminhoSemParada $normal)) "Caminho fora da lista aceito: $normal"
  }
- foreach($caso in @('docs','misto','importado','importado-anterior','import-ts','import-python','dot-source','renomeado-fora','renomeado-dentro','vazio','teste','ci','reaplicar','completo','simular','merge-falha','consulta-falha','link')){
+ foreach($caso in @('docs','misto','importado','importado-anterior','importado-novo','import-ts','import-python','dot-source','renomeado-fora','renomeado-dentro','vazio','teste','ci','reaplicar','completo','simular','merge-falha','consulta-falha','grep-sem-match','grep-erro','grep-padrao-corrompido','link')){
   $semente=Join-Path $base ($caso+'-origem');$raiz=Join-Path $base ($caso+' instalacao')
   New-Item -ItemType Directory -Force (Join-Path $semente 'scripts'),(Join-Path $semente 'portal/lib')|Out-Null
   foreach($nome in @('atualizar-servidor','operacao-logica','atualizacao-preparo')){Copy-Item (Join-Path $PSScriptRoot ($nome+'.ps1')) (Join-Path $semente 'scripts')}
@@ -57,6 +57,7 @@ function Publicar-AndamentoAtualizacao($Andamento,$Nome,$Estado='andamento'){
   [void](Git-Fixture $raiz @('config','--local','core.autocrlf','false'))
   [void](Git-Fixture $raiz @('config','--local','core.safecrlf','false'))
   switch($caso){
+   'importado-novo' {[IO.File]::WriteAllText((Join-Path $semente 'portal/lib/fixture.mjs'),"import texto from '../../README.md';")}
    'misto' {[IO.File]::WriteAllText((Join-Path $semente 'portal/lib/fixture.mjs'),'export const fixture=2;')}
    'renomeado-fora' {[void](Git-Fixture $semente @('mv','README.md','portal/lib/fixture.txt'))}
    'renomeado-dentro' {[void](Git-Fixture $semente @('mv','portal/lib/fixture.mjs','fixture.md'))}
@@ -78,9 +79,18 @@ function Publicar-AndamentoAtualizacao($Andamento,$Nome,$Estado='andamento'){
    [void](Git-Fixture $semente @('add','.'))
    [void](Git-Fixture $semente @('-c','user.name=Fixture','-c','user.email=fixture@example.invalid','commit','-qm','remover import'))
    $remoto=@(Git-Fixture $semente @('rev-parse','HEAD'))[0]
-   Exigir-SemParada (!(Testar-AtualizacaoSemParada $semente @('README.md') $anterior $remoto)) 'Ignorou dependencia do commit anterior.'
   }
-  $normal=$caso-in@('misto','importado','importado-anterior','import-ts','import-python','dot-source','renomeado-fora','renomeado-dentro','vazio','reaplicar','completo','consulta-falha','link')
+  if($caso-in@('importado-anterior','importado-novo')){
+   $antes=Git-Fixture $semente @('show',($anterior+':portal/lib/fixture.mjs'))
+   $depois=Git-Fixture $semente @('show',($remoto+':portal/lib/fixture.mjs'))
+   Exigir-SemParada ((($antes-join' ')-like'*README.md*')-eq($caso-eq'importado-anterior')) 'Import anterior da fixture incorreto.'
+   Exigir-SemParada ((($depois-join' ')-like'*README.md*')-eq($caso-eq'importado-novo')) 'Import novo da fixture incorreto.'
+   # Isola a elegibilidade de README: o diff real tambem contem o consumidor.
+   Exigir-SemParada ((Testar-AtualizacaoSemParada $semente @('README.md') $anterior $anterior)-eq($caso-eq'importado-novo')) 'Deteccao isolada do commit anterior incorreta.'
+   Exigir-SemParada ((Testar-AtualizacaoSemParada $semente @('README.md') $remoto $remoto)-eq($caso-eq'importado-anterior')) 'Deteccao isolada do commit novo incorreta.'
+   Exigir-SemParada (!(Testar-AtualizacaoSemParada $semente @('README.md') $anterior $remoto)) 'Ignorou dependencia em um dos commits.'
+  }
+  $normal=$caso-in@('misto','importado','importado-anterior','importado-novo','import-ts','import-python','dot-source','renomeado-fora','renomeado-dentro','vazio','reaplicar','completo','consulta-falha','grep-sem-match','grep-erro','grep-padrao-corrompido','link')
   $esperado=!$normal-and$caso-notin@('simular','merge-falha')
   $env:SUPPLY_VISION_PRIVADO=Join-Path $base ($caso+' estado ficticio')
   $runner=@'
@@ -95,7 +105,20 @@ $gitReal=@(Get-Command git -CommandType Application)[0].Source
 function git {
  if($Caso-eq'merge-falha'-and$args[0]-eq'merge'){$global:LASTEXITCODE=1;return}
  if($Caso-eq'consulta-falha'-and$args-contains'ls-tree'){$global:LASTEXITCODE=2;return}
- if($args-contains'grep'){$input | & $gitReal @args}else{& $gitReal @args}
+ if($args-contains'grep'){
+  $pos=[array]::IndexOf($args,'-f');$arquivoPadrao=$args[$pos+1]
+  if($pos-lt0-or$arquivoPadrao-eq'-'){throw 'Grep ainda depende de stdin.'}
+  $bytes=[IO.File]::ReadAllBytes($arquivoPadrao)
+  if(!$bytes.Length-or($bytes.Length-ge3-and$bytes[0]-eq239-and$bytes[1]-eq187-and$bytes[2]-eq191)-or$bytes-contains13-or$bytes-contains10){throw 'Padrao com BOM/quebra de linha.'}
+  $fim=[array]::IndexOf($args,'--')
+  if($fim-lt1-or$args[$fim-1]-cnotmatch'^[0-9a-f]{40}$'){throw 'Revisao nao chegou ao Git como SHA completo.'}
+  foreach($caminho in $args[($fim+1)..($args.Count-1)]){if(!$caminho.StartsWith(':(literal)')){throw 'Pathspec sem protecao literal.'}}
+  Add-Content (Join-Path $env:SUPPLY_VISION_PRIVADO 'padroes-consultados.txt') $arquivoPadrao
+  if($Caso-eq'grep-sem-match'){$global:LASTEXITCODE=1;return}
+  if($Caso-eq'grep-erro'){$global:LASTEXITCODE=128;return}
+  if($Caso-eq'grep-padrao-corrompido'){[IO.File]::WriteAllText($arquivoPadrao,'SV_TERMO_DE_CONTROLE_INEXISTENTE_165',(New-Object Text.UTF8Encoding($false)))}
+ }
+ & $gitReal @args
 }
 $opcoes=@{}
 if($Caso-eq'simular'){$opcoes.Simular=$true}
@@ -109,6 +132,8 @@ exit $LASTEXITCODE
   Exigir-SemParada (($rc-eq0)-eq($esperado-or$caso-eq'simular')) "Resultado incorreto: $caso rc=$rc; $saida"
   if($normal){Exigir-SemParada (($saida-join' ')-like'*FLUXO NORMAL*') "Nao entrou no fluxo normal: $caso; $saida"}
   Exigir-SemParada (($saida-join' ')-notmatch'PARADA PROIBIDA|NODE PROIBIDO|BUILD PROIBIDO|SERVICO PROIBIDO|FILHO PROIBIDO') "Tocou operacao em $caso"
+  $registroPadroes=Join-Path $env:SUPPLY_VISION_PRIVADO 'padroes-consultados.txt'
+  if(Test-Path $registroPadroes){foreach($arquivoPadrao in @(Get-Content $registroPadroes)){Exigir-SemParada (!(Test-Path $arquivoPadrao)) 'Padrao temporario nao foi removido no finally.'}}
   $head=@(Git-Fixture $raiz @('rev-parse','HEAD'))[0]
   Exigir-SemParada ($head-eq$(if($esperado){$remoto}else{$anterior})) "HEAD inesperado: $caso"
   $contexto=Join-Path $env:SUPPLY_VISION_PRIVADO 'operacao/atualizacao.json'

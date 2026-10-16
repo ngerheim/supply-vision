@@ -31,10 +31,13 @@ function Testar-CaminhoSemParada([string]$Caminho) {
  return $Caminho-cmatch '(\.md$|^\.github/.+|^portal/tests/.+|^alertas/tests/.+|^testes/.+|^scripts/testar-[^/]+\.ps1$|^scripts/ci/.+)'
 }
 function Testar-AtualizacaoSemParada([string]$Raiz,[string[]]$Arquivos,[string]$Anterior,[string]$Remoto) {
- $OutputEncoding=New-Object Text.UTF8Encoding($false)
+ $arquivoPadrao=$null
+ if($Anterior-cnotmatch'^[0-9a-f]{40}$'-or$Remoto-cnotmatch'^[0-9a-f]{40}$'){return $false}
  if(!$Arquivos.Count){return $false}
  foreach($arquivo in $Arquivos){if(!(Testar-CaminhoSemParada $arquivo)){return $false}}
  try {
+  $arquivoPadrao=[IO.Path]::GetTempFileName()
+  $utf8SemBom=New-Object Text.UTF8Encoding($false)
   foreach($ref in @($Anterior,$Remoto)){
    $arvore=@(& git -C $Raiz -c core.quotepath=false ls-tree -r $ref)
    if($LASTEXITCODE-or!$arvore.Count){return $false}
@@ -46,6 +49,12 @@ function Testar-AtualizacaoSemParada([string]$Raiz,[string[]]$Arquivos,[string]$
     if(!(Testar-CaminhoSemParada $nome)){$operacionais+=$nome}
    }
    if(!$operacionais.Count){return $false}
+   # Controle positivo por revisao: verifica padrao, SHA e pathspec no Git real.
+   # O atualizador precisa conter esta variavel, inclusive nas versoes anteriores.
+   [IO.File]::WriteAllText($arquivoPadrao,'\$ErrorActionPreference',$utf8SemBom)
+   $argsGrep=@('-C',$Raiz,'grep','-q','-i','-E','-f',$arquivoPadrao,$ref,'--',':(literal)scripts/atualizar-servidor.ps1')
+   & git @argsGrep
+   if($LASTEXITCODE-ne0){return $false}
    # Basename tambem cobre imports relativos, Join-Path e chamadas por nome.
    # Lotes pequenos evitam o limite de argumentos do Windows. So le blobs Git.
    foreach($arquivo in $Arquivos){
@@ -59,16 +68,20 @@ function Testar-AtualizacaoSemParada([string]$Raiz,[string[]]$Arquivos,[string]$
      $modulo=[regex]::Escape([IO.Path]::GetFileNameWithoutExtension($baseNome))
      $padrao+='|(^|[^[:alnum:]_])'+$modulo+'($|[^[:alnum:]_])'
     }
+    # Sem pipe nativo: PS 5.1 nao pode recodificar ou prefixar o padrao.
+    [IO.File]::WriteAllText($arquivoPadrao,$padrao,$utf8SemBom)
     for($i=0;$i-lt$operacionais.Count;$i+=40){
      $lote=@($operacionais|Select-Object -Skip $i -First 40|ForEach-Object {':(literal)'+$_})
-     # Stdin preserva as aspas do padrao tambem no parser nativo do PS 5.1.
-     $padrao | & git -C $Raiz grep -q -i -E -f - $ref -- @lote
+     $argsGrep=@('-C',$Raiz,'grep','-q','-i','-E','-f',$arquivoPadrao,$ref,'--')+$lote
+     & git @argsGrep
      if($LASTEXITCODE-ne1){return $false} # match OU erro => fluxo normal
     }
    }
   }
   return $true
- }catch{return $false}
+ }catch{return $false}finally{
+  if($arquivoPadrao){Remove-Item -LiteralPath $arquivoPadrao -Force -ErrorAction SilentlyContinue}
+ }
 }
 function Esperar-PortalAtualizado([string]$Url,[ValidateRange(1,3600)][int]$PrazoSegundos=120) {
  $prazo=[Diagnostics.Stopwatch]::StartNew()
