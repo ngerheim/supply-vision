@@ -63,11 +63,33 @@ try{
  # Reserva real em disco: publica anteriores somente apos conclusao, depois
  # consome de uma vez. Falhas nunca movem dependencias da instalacao ativa.
  $r=Join-Path $base 'reserva';New-Item -ItemType Directory -Force (Join-Path $r 'portal'),(Join-Path $r 'alertas/config')|Out-Null
- foreach($rel in @('portal/package-lock.json','portal/package.json','alertas/config/requirements.txt','alertas/config/requirements-dev.txt')){[IO.File]::WriteAllText((Join-Path $r $rel),'fixture')}
+ foreach($rel in @('alertas/config/requirements.txt','alertas/config/requirements-dev.txt')){[IO.File]::WriteAllText((Join-Path $r $rel),'fixture')}
+ # Manifestos validos: o hash distingue metadados da raiz de pacotes resolvidos.
+ [IO.File]::WriteAllText((Join-Path $r 'portal/package.json'),'{"engines":{"node":">=22.13.0"},"dependencies":{"ficticio":"1"}}')
+ [IO.File]::WriteAllText((Join-Path $r 'portal/package-lock.json'),'{"lockfileVersion":3,"packages":{"":{"engines":{"node":">=22.13.0"}},"node_modules/ficticio":{"version":"1","engines":{"node":">=20"}}}}')
  & git -C $r init -q
  & git -C $r add .
  & git -C $r -c user.name=Fixture -c user.email=fixture@example.invalid commit -qm fixture
  $assinatura=Obter-AssinaturaDependencias $r 'python'
+ # O mesmo salto de engines da A1 nao deve invalidar a copia/reserva.
+ foreach($rel in @('portal/package.json','portal/package-lock.json')){
+  $f=Join-Path $r $rel;[IO.File]::WriteAllText($f,([IO.File]::ReadAllText($f).Replace('>=22.13.0','24.20.0')))
+ }
+ $soEngines=Obter-AssinaturaDependencias $r 'python'
+ Exigir (Testar-DependenciasNodeIguais $assinatura $soEngines) 'engines.node da raiz alterou dependencias.'
+ $registroEngines=$assinatura|ConvertTo-Json -Depth 6|ConvertFrom-Json
+ Exigir (!(Comparar-AssinaturaDependencias $registroEngines $soEngines)) 'Reserva foi invalidada somente por engines.node.'
+ $arquivoLock=Join-Path $r 'portal/package-lock.json';$lockOriginal=[IO.File]::ReadAllText($arquivoLock)
+ foreach($par in @(@('>=20','>=24'),@('"version":"1"','"version":"2"'))){
+  [IO.File]::WriteAllText($arquivoLock,$lockOriginal.Replace($par[0],$par[1]))
+  $pacoteMudou=Obter-AssinaturaDependencias $r 'python'
+  Exigir (!(Testar-DependenciasNodeIguais $assinatura $pacoteMudou)) 'Mudanca de pacote/engines transitivo passou como metadado da raiz.'
+  Exigir ((Comparar-AssinaturaDependencias $registroEngines $pacoteMudou)-eq'lockfile/package diferente') 'Reserva aceitou pacote resolvido diferente.'
+ }
+ [IO.File]::WriteAllText($arquivoLock,$lockOriginal)
+ $nodeMudou=$soEngines.Clone();$nodeMudou.node='v0.0.1'
+ Exigir (!(Testar-DependenciasNodeIguais $assinatura $nodeMudou)) 'Versao efetiva do Node ignorada.'
+ Write-Host '[OK] Assinatura: engines da raiz preserva copia/reserva; pacote, engines transitivo e Node real invalidam.'
  foreach($caso in @('valida','troca-falha','lockfile','requirements','node','python','ausente','arquivo','marcador-link','incompleta','corrompida','removido','tamanho','data','pasta-removida','inventario-legado','formato-antigo','sem-registro','link-raiz','link-externo','link-interno','em-uso','sha','registro','reinstalar','volume','falha-movimento')){
   $p=Nova-PastaPreparo $r;New-Item -ItemType Directory -Force $p|Out-Null
   foreach($rel in @('portal/node_modules','alertas/.venv')){

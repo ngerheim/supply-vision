@@ -95,6 +95,10 @@ try {
   [IO.File]::WriteAllText((Join-Path $Raiz 'dependencias-origem.json'),($origem|ConvertTo-Json -Depth 6))
   $assinaturaAtual=Obter-AssinaturaDependencias $Raiz 'python.exe'
  }catch{$impedimentoReserva='metadados/ambiente indisponiveis'}
+ # O pai legado marca qualquer edicao de package/lock como reinstalacao.
+ # Reavalia com os manifestos efetivos, inclusive no salto a partir desse pai.
+ # Reaplicar/IgnorarReserva e reinstalacao no mesmo SHA continuam forcados.
+ if(!$IgnorarReserva-and$origem-and$assinaturaAtual-and$origem.sha-ne$assinaturaAtual.sha-and(Testar-DependenciasNodeIguais $origem $assinaturaAtual)){$ReinstalarNode=$false}
  if($IgnorarReserva-or(($ReinstalarNode-or$ReinstalarPython)-and$origem.sha-eq$assinaturaAtual.sha)){$impedimentoReserva='reinstalacao forcada'}
  Concluir-PassoPreparo
  $usoReserva=Usar-ReservaDependencias $Instalacao $Raiz $assinaturaAtual $impedimentoReserva

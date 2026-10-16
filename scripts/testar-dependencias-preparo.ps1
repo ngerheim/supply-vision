@@ -37,7 +37,7 @@ foreach($amostra in $amostras){
 }
 Write-Host '[OK] Strings duplas ASCII e parser ANSI de copias sem BOM nos scripts operacionais e na CLI.'
 try{
- foreach($caso in @('inalteradas','alteradas','build-falha','portal-falha','alertas-falha','operacional-falha','ci-espera-verde','ci-espera-vermelho','ci-espera-api','ci-espera-cancelada','ci-aprovado','ci-log-explicito','ci-pr-verde','ci-pr-arvore','ci-pr-falho','ci-pr-pendente','ci-pr-ausente','ci-pr-erro','ci-pr-skipped','ci-pr-skipped-real','ci-pr-push-only','ci-pr-sem-check','ci-pr-app','ci-pr-ambigua','ci-pr-main-falho','ci-pr-main-cancelado','ci-pr-queued','ci-pr-tree-api','ci-pr-sha','ci-pr-paginacao','ci-rede','ci-ausente','ci-pendente','ci-falho','ci-timeout','ci-cancelado','ci-skipped','ci-sha','ci-invalido','ci-forcado','ci-forcado-env','fumaca-falha')){
+ foreach($caso in @('inalteradas','alteradas','metadata-engines','metadata-pacote','metadata-reaplicar','metadata-mesmo-sha','build-falha','portal-falha','alertas-falha','operacional-falha','ci-espera-verde','ci-espera-vermelho','ci-espera-api','ci-espera-cancelada','ci-aprovado','ci-log-explicito','ci-pr-verde','ci-pr-arvore','ci-pr-falho','ci-pr-pendente','ci-pr-ausente','ci-pr-erro','ci-pr-skipped','ci-pr-skipped-real','ci-pr-push-only','ci-pr-sem-check','ci-pr-app','ci-pr-ambigua','ci-pr-main-falho','ci-pr-main-cancelado','ci-pr-queued','ci-pr-tree-api','ci-pr-sha','ci-pr-paginacao','ci-rede','ci-ausente','ci-pendente','ci-falho','ci-timeout','ci-cancelado','ci-skipped','ci-sha','ci-invalido','ci-forcado','ci-forcado-env','fumaca-falha')){
   $instalacao=Join-Path $base $caso
   $preparo=Nova-PastaPreparo $instalacao
   foreach($dir in @('portal/node_modules','alertas/.venv/Scripts','privado')){New-Item -ItemType Directory -Force (Join-Path $instalacao $dir)|Out-Null}
@@ -47,6 +47,18 @@ try{
   # Preserva evidencias destas suites de decisoes; a remocao REAL e testada
   # em testar-limpeza-preparo.ps1, inclusive com pai de versao anterior.
   Add-Content (Join-Path $preparo 'scripts/atualizacao-preparo.ps1') 'function Limpar-PastaPreparo($Raiz,$Preparo){[IO.File]::WriteAllText((Join-Path $Preparo "limpeza-solicitada"),"ok")}'
+  if($caso-like'metadata-*'){
+   # O pai anterior passa ReinstalarNode por qualquer edicao dos manifestos.
+   # A assinatura efetiva e exercitada com arquivos reais na suite rapida.
+   Add-Content (Join-Path $preparo 'scripts/atualizacao-preparo.ps1') @'
+function Obter-AssinaturaDependencias($Raiz,$Python){
+ $destino=$Raiz-eq$Preparo
+ $sha=if($destino-or$Caso-eq'metadata-mesmo-sha'){'2'*40}else{'1'*40}
+ $hash=if($destino-and$Caso-eq'metadata-pacote'){'b'*64}else{'a'*64}
+ return @{sha=$sha;node='v24.20.0';hashes=@{'portal/package.json'=('node-v1:'+$hash);'portal/package-lock.json'=('node-v1:'+$hash)}}
+}
+'@
+  }
   $codigo=[IO.File]::ReadAllText((Join-Path $PSScriptRoot 'preparar-atualizacao.ps1'))
   $codigo=$codigo.Replace('Validar-PythonAlertas','ValidarPythonMock')
   $codigo=$codigo.Replace('Consultar-CIPreparo $sha -ForcarCompleto:$ForcarCompleto','Consultar-CIPreparo $sha -ForcarCompleto:$ForcarCompleto -Agora {$global:ciAgora} -Pausa {param($Ms) $global:ciAgora=$global:ciAgora.AddMilliseconds($Ms);if($Caso-eq''ci-espera-cancelada''){Solicitar-CancelamentoEsperaCI $script:AndamentoPreparo.arquivo}}')
@@ -175,6 +187,7 @@ function powershell.exe {
  if($Caso-eq'operacional-falha'){$global:LASTEXITCODE=1}
 }
 if($Caso-eq'alteradas'){& (Join-Path $Preparo 'scripts/preparar-atualizacao.ps1') -Instalacao $Instalacao -ReinstalarNode -ReinstalarPython}
+elseif($Caso-like'metadata-*'){& (Join-Path $Preparo 'scripts/preparar-atualizacao.ps1') -Instalacao $Instalacao -ReinstalarNode -IgnorarReserva:($Caso-eq'metadata-reaplicar')}
 elseif($Caso-eq'ci-log-explicito'){& (Join-Path $Preparo 'scripts/preparar-atualizacao.ps1') -Instalacao $Instalacao -TemposArquivo (Join-Path $Instalacao 'privado/operacao/atualizacao-tempos.log')}
 elseif($Caso-eq'ci-forcado'){& (Join-Path $Preparo 'scripts/preparar-atualizacao.ps1') -Instalacao $Instalacao -ForcarCompleto}
 else{if($Caso-eq'ci-forcado-env'){$env:SV_PREPARO_COMPLETO='1'};& (Join-Path $Preparo 'scripts/preparar-atualizacao.ps1') -Instalacao $Instalacao}
@@ -188,7 +201,8 @@ exit $LASTEXITCODE
   $passos=@(Get-Content (Join-Path $preparo 'passos.txt'))
   if($caso-eq'ci-pendente'-and$passos-notcontains'tempo-ci:1800'){throw 'Espera nao respeitou o prazo total de 30 min.'}
   if(($rc-eq0)-ne($caso-notin@('build-falha','portal-falha','alertas-falha','operacional-falha','fumaca-falha','ci-falho','ci-timeout','ci-cancelado','ci-pr-main-falho','ci-pr-main-cancelado','ci-espera-vermelho','ci-espera-cancelada'))){throw "Preparo incorreto em $caso (rc=$rc): $saida"}
-  if(($passos-contains'npm-ci')-ne($caso-eq'alteradas')-or($passos-contains'pip')-ne($caso-eq'alteradas')){throw "Decisao de dependencias incorreta: $caso"}
+  if(($passos-contains'npm-ci')-ne($caso-in@('alteradas','metadata-pacote','metadata-reaplicar','metadata-mesmo-sha'))-or($passos-contains'pip')-ne($caso-eq'alteradas')){throw "Decisao de dependencias incorreta: $caso"}
+  if($caso-eq'metadata-engines'-and($saida-join' ')-notlike'*Dependencias Node: copia - motivo: reserva ausente*'){throw 'Pai legado nao reutilizou copia apos mudanca somente em engines.'}
   $rapido=$caso-in@('ci-espera-verde','ci-aprovado','ci-log-explicito','fumaca-falha','ci-pr-verde','ci-pr-queued','ci-pr-skipped-real','ci-pr-paginacao')
   if($rc-eq0-and@($passos|Where-Object {$_-like'operacional:*'}).Count-ne$(if($rapido){2}else{4})){throw 'Removeu verificacao operacional.'}
   if($rapido-and($passos-contains'portal'-or$passos-contains'alertas'-or$passos-notcontains'fumaca')){throw 'Modo rapido nao respeitou suites/fumaca.'}
