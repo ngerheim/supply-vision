@@ -1,24 +1,16 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import test from 'node:test';
 import { executarBackup } from '../scripts/backup.mjs';
-void test('pre-atualizacao continua somente se copia local validada e rede falhar', async () => {
-  const passos = [];
-  const opcoes = { ensaio: false, preAtualizacao: true, copiar: () => passos.push('local'), rede: () => { passos.push('rede'); throw new Error('rede'); }, email: () => assert.fail('nao envia banco apos falha de rede'), registrar: () => passos.push('aviso') };
-  assert.equal(await executarBackup(opcoes), 3);
-  assert.deepEqual(passos, ['local', 'rede', 'aviso']);
-  await assert.rejects(executarBackup({ ...opcoes, copiar: () => { throw new Error('local'); } }), /local/);
-  await assert.rejects(executarBackup({ ...opcoes, preAtualizacao: false }), /rede/);
-});
-void test('ensaio continua sem rede; SMTP sem redundancia ainda bloqueia', async () => {
-  assert.equal(await executarBackup({ ensaio: true, copiar() {}, rede: () => assert.fail(), email: () => assert.fail() }), 0);
-  await assert.rejects(executarBackup({ ensaio: false, preAtualizacao: true, copiar() {}, rede: () => null, email: () => { throw new Error('smtp'); } }), /smtp/);
-});
 
-void test('fases separam copia local e rede sem repetir snapshot ou enviar durante parada', async () => {
-  const passos = [];
-  const opcoes = { ensaio: false, copiar: () => passos.push('local'), rede: () => { passos.push('rede'); return {}; }, email: () => passos.push('email') };
-  assert.equal(await executarBackup({ ...opcoes, somenteLocal: true }), 0);
-  assert.deepEqual(passos, ['local']);
-  assert.equal(await executarBackup({ ...opcoes, somenteRede: true }), 0);
-  assert.deepEqual(passos, ['local', 'rede', 'email']);
+void test('snapshot local de atualizacao nao consulta senha, rede ou SMTP', async () => {
+  let copias = 0;
+  assert.equal(await executarBackup({ somenteLocal: true, config: {}, copiar: () => copias++, senha: () => assert.fail(), rede: () => assert.fail(), email: () => assert.fail() }), 0);
+  assert.equal(copias, 1);
+  await assert.rejects(executarBackup({ somenteLocal: true, config: {}, copiar: () => { throw new Error('falha local'); } }), /falha local/);
+});
+void test('CONCLUIR nao envia snapshot velho; rollback escolhe exclusivamente pre-atualizacao', () => {
+  const codigo = fs.readFileSync(new URL('../../scripts/atualizar-servidor.ps1', import.meta.url), 'utf8');
+  assert.doesNotMatch(codigo, /--somente-rede|--snapshot-pre-atualizacao|Copy-Item[^\n]*portal-atual/);
+  assert.match(codigo, /restaurar-backup\.mjs[^\n]*--pre-atualizacao/);
 });

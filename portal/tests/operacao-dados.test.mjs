@@ -50,8 +50,11 @@ void test('backup antes do primeiro expurgo e trava compartilhada; falha nao exc
   let db=new DatabaseSync(arquivo);assert.equal(db.prepare('SELECT COUNT(*) n FROM email_notifications').get().n,6);db.close();
   const lock=new DatabaseSync(path.join(pasta,'backup.lock.sqlite'));lock.exec('BEGIN EXCLUSIVE');
   await assert.rejects(executarExpurgo({...opcoes,backup(){assert.fail('nao ultrapassa trava');}}));lock.close();
-  await executarExpurgo({...opcoes,backup(origem){fs.copyFileSync(origem,path.join(pasta,'portal-atual.sqlite'));}});
-  db=new DatabaseSync(path.join(pasta,'pre-expurgo.sqlite'));assert.equal(db.prepare('SELECT COUNT(*) n FROM email_notifications').get().n,6);db.close();
+  let confirmou=false;
+  await executarExpurgo({...opcoes,async backup(origem){const copia=new DatabaseSync(origem);assert.equal(copia.prepare('SELECT COUNT(*) n FROM email_notifications').get().n,6);copia.close();confirmou=true;}});
+  assert.equal(confirmou,true);
+  assert.equal(fs.existsSync(path.join(pasta,'pre-expurgo.sqlite')),false);
+  db=new DatabaseSync(arquivo);assert.ok(db.prepare('SELECT COUNT(*) n FROM email_notifications').get().n<6);db.close();
 });
 void test('contador migra existentes uma vez e reserva numeros sem varrer chamados', () => {
   const db=new DatabaseSync(':memory:');

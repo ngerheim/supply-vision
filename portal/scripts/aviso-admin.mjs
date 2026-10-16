@@ -63,7 +63,7 @@ export async function enviarAvisoAdmin(evento, {
   destinatarios = process.env.ADMIN_ALERTA_EMAIL || '', ensaio = modoEnsaio(),
   arquivo = path.join(privado, 'operacao', 'avisos-admin.sqlite'), agora = new Date(),
   lerSmtp = lerConfigSmtp, criarTransporte = criarTransportador, limiteMs = 55_000,
-  registrar = console.log,
+  registrar = console.log, detalhe = '',
 } = {}) {
   const para = destinatariosAdmin(destinatarios);
   if (!para.length) return 'desligado';
@@ -76,6 +76,7 @@ export async function enviarAvisoAdmin(evento, {
     const config = lerSmtp();
     transporte = criarTransporte(config);
     const mensagem = montarAviso(evento, agora);
+    if (detalhe) mensagem.text += `\nDetalhe: ${detalhe}\n`;
     await Promise.race([
       transporte.sendMail({ ...mensagem, from: { name: config.EMAIL_FROM_NAME, address: config.SMTP_USER }, to: para }),
       new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('Tempo limite.')), Math.min(limiteMs, 55_000)); }),

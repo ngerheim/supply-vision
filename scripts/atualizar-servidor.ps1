@@ -252,7 +252,6 @@ $Portal = Join-Path $Raiz 'portal'
 $Alertas = Join-Path $Raiz 'alertas'
 $Python = Join-Path $Alertas '.venv\Scripts\python.exe'
 $PastaBackupPortal = Join-Path (Obter-PastaPrivada $Raiz) 'portal\backups'
-$BackupAntesAtualizacaoOrigem = Join-Path $PastaBackupPortal 'portal-atual.sqlite'
 $BackupAntesAtualizacao = Join-Path $PastaBackupPortal 'pre-atualizacao.sqlite'
 # Chamada direta e supv seguem o mesmo modo do supervisor, inclusive backup.
 $configModo=Join-Path (Obter-PastaPrivada $Raiz) 'comum/operacao.env'
@@ -356,9 +355,9 @@ function Reverter([string]$motivo) {
     $restaurou = $false
     try {
       if (-not (Test-Path -LiteralPath $BackupAntesAtualizacao)) { throw "copia de antes da atualizacao nao encontrada: $BackupAntesAtualizacao" }
-      Copy-Item -LiteralPath $BackupAntesAtualizacao -Destination $BackupAntesAtualizacaoOrigem -Force
-      & $Node --experimental-strip-types (Join-Path $Portal 'scripts\restaurar-backup.mjs') --sim
-      if ($LASTEXITCODE -ne 0) { throw "restaurar-backup.mjs terminou com codigo $LASTEXITCODE" }
+      $restauro=Executar-NativoOperacao $Node @('--experimental-strip-types',(Join-Path $Portal 'scripts\restaurar-backup.mjs'),'--sim','--pre-atualizacao')
+      $restauro.saida|ForEach-Object {Write-Host $_}
+      if ($restauro.codigo -ne 0) { throw "restaurar-backup.mjs terminou com codigo $($restauro.codigo)" }
       $restaurou = $true
     } catch {
       Write-Host "!! FALHOU A RESTAURACAO DO BANCO: $($_.Exception.Message)" -ForegroundColor Red
@@ -546,14 +545,10 @@ if (-not $JaAtualizado) {
   Ok 'operacao parada'
 
   Etapa 'Backup do banco antes de trocar a versao'
-  & $Node --experimental-strip-types (Join-Path $Portal 'scripts\backup.mjs') --pre-atualizacao --somente-local
-  if ($LASTEXITCODE -eq 3) { Aviso 'Backup local validado; rede falhou ou excedeu o prazo. Atualizacao continua; a operacao sera retomada ao terminar.' }
-  elseif ($LASTEXITCODE -ne 0) { throw 'O backup falhou. Atualizacao cancelada — nao se troca versao sem copia do banco.' }
+  $snapshot=Executar-NativoOperacao $Node @('--experimental-strip-types',(Join-Path $Portal 'scripts\backup.mjs'),'--pre-atualizacao','--somente-local')
+  $snapshot.saida|ForEach-Object {Write-Host $_}
+  if ($snapshot.codigo -ne 0) { throw 'O backup falhou. Atualizacao cancelada — nao se troca versao sem copia do banco.' }
   Ok 'backup concluido'
-  # portal-atual.sqlite e reescrito por todo backup, inclusive o diario do
-  # supervisor quando a versao nova sobe. Uma copia fixa guarda o estado de
-  # antes da troca para o Reverter, mesmo que outro backup rode no meio.
-  Copy-Item -LiteralPath $BackupAntesAtualizacaoOrigem -Destination $BackupAntesAtualizacao -Force
   Ok "copia de antes da atualizacao: $BackupAntesAtualizacao"
 }
 
@@ -637,11 +632,7 @@ if ($LASTEXITCODE -ne 0) { Reverter 'Interface ou consumidores obrigatorios nao 
 if ($LASTEXITCODE -ne 0) { Reverter 'Falha ao liberar a operacao validada.' }
 try{Inicializar-MedicaoAtualizacao;$script:MedicaoAtualizacao.health=Obter-HoraMedicaoAtualizacao $script:MedicaoAtualizacao}catch{}
 Ok "Portal e consumidores no ar em $url"
-Etapa 'CONCLUIR: backup de rede com a operacao NO AR'
-try {
- & $Node --experimental-strip-types (Join-Path $Portal 'scripts/backup.mjs') --pre-atualizacao --somente-rede --snapshot-pre-atualizacao
-} catch {Aviso 'Falha ao replicar backup; copia local e snapshot preservados.'}
-if($LASTEXITCODE-ne0){Aviso 'Backup local e snapshot preservados; replicacao de rede falhou ou excedeu o prazo configurado.'}
+# O snapshot pre-atualizacao e exclusivo do rollback; nao replica na rede.
 # O worker so reserva anteriores depois deste compromisso final.
 Gravar-ContextoAtualizacao $ContextoArquivo @{anterior=$anterior;remoto=$remoto;fase='concluido';limpeza='pendente'}
 Etapa 'CONCLUIR: delegando limpeza da pasta de preparo'

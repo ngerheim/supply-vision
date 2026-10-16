@@ -23,7 +23,8 @@ $op=Join-Path $privado 'comum\operacao.env';try{$cfg=Ler-ConfigOperacao $op;Vali
 if($cfg){$minimo=0.0;if(![double]::TryParse($cfg['ESPACO_MINIMO_GB'],[Globalization.NumberStyles]::Number,[Globalization.CultureInfo]::InvariantCulture,[ref]$minimo)-or$minimo-lt1){Falha 'ESPACO_MINIMO_GB deve ser um numero maior ou igual a 1.'}}
 Ler-Chaves (Join-Path $privado 'comum\smtp.env') @('SMTP_HOST','SMTP_PORT','SMTP_USER','SMTP_PASSWORD','EMAIL_FROM_NAME')|Out-Null
 $portalEnv=Join-Path $privado 'portal\configuracao\portal.env'
-$cfgPortal=Ler-Chaves $portalEnv @('PORTAL_URL','PORTAL_API_TOKEN','BACKUP_EMAIL_TO')
+$cfgPortal=Ler-Chaves $portalEnv @('PORTAL_URL','PORTAL_API_TOKEN')
+if(!$cfgPortal['BACKUP_EMAIL_TO']-and!$cfg['ADMIN_ALERTA_EMAIL']){Falha 'Configure BACKUP_EMAIL_TO ou ADMIN_ALERTA_EMAIL para alertas de backup.'}
 if($SemLogin-or$env:SUPPLY_VISION_SEM_LOGIN-eq'1'-or(Obter-TarefaSupplyVision $Raiz)){try{Validar-BackupSemLogin 'computador' $cfgPortal['BACKUP_NETWORK_DIR']}catch{Falha $_.Exception.Message}}
 
 # Chave repetida: cada leitor escolhe uma ocorrencia diferente. O build do

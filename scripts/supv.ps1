@@ -64,7 +64,7 @@ function Ajuda-Supv([string]$Comando){
   saude='supv saude [--desde "yyyy-MM-dd HH:mm"] | Padrao: ultimas 24 h. Falhas por motivo, partida e reinicios; Portal desde o ultimo reinicio.'
   logs='supv logs <supervisor|portal|atualizacao|emails|relatorios> [-n 80] [--bruto] | Atualizacao sem progresso git e diagnosticos de build; --bruto mostra todas as linhas. Dados sensiveis continuam mascarados. Ex.: supv logs portal -n 120'
   config='supv config validar | Executa validar-operacao.ps1.'
-  backup='supv backup testar | supv backup restaurar [--anterior] [--sim] | Restaurar para a operacao e exige RESTAURAR, ou --sim para automacao.'
+  backup='supv backup senha | supv backup testar | supv backup restaurar [--data AAAA-MM-DD_HHMM] [--configuracao] [--sim] | Lista a rede; padrao mais recente. Restaurar para a operacao e exige RESTAURAR, ou --sim.'
   modo='supv modo <desligado|computador> | Exige operacao parada e terminal como administrador. Ex.: supv modo computador'
   manutencao='supv manutencao <on|off> | Pausa ou libera rotinas automaticas. Ex.: supv manutencao on'
   firewall='supv firewall restringir | Restringe acesso de rede pelo script atual, com teste interativo. Exige administrador.'
@@ -82,7 +82,7 @@ function Ler-ComandoSupv([object[]]$Argumentos){
   'homologar' {@('--copiar','--destino')}
   'saude' {@('--desde')}
   'logs' {@('-n','--bruto')}
-  'backup' {@('--anterior','--sim')}
+  'backup' {@('--anterior','--sim','--data','--configuracao')}
   default {@()}
  }
  for($i=1;$i-lt$Argumentos.Count;$i++){
@@ -91,7 +91,7 @@ function Ler-ComandoSupv([object[]]$Argumentos){
   if($arg.StartsWith('-')){
    if($arg-notin$permitidas){throw "Opcao desconhecida para ${comando}: $arg. Use supv $comando --help."}
    if($opcoes.ContainsKey($arg)){throw "Opcao repetida: $arg"}
-   if($arg-in@('--destino','--desde','--modo','-n')){
+   if($arg-in@('--destino','--desde','--modo','--data','-n')){
     $i++;if($i-ge$Argumentos.Count-or([string]$Argumentos[$i]).StartsWith('-')){throw "Falta valor para $arg"}
     $opcoes[$arg]=[string]$Argumentos[$i]
    }else{$opcoes[$arg]=$true}
@@ -369,12 +369,16 @@ function Executar-ComandoSupv($c){
   }
   'config' {if($p[0]-ne'validar'){throw 'Use supv config validar.'};[void](Executar-AcaoSupv 'validar');return 0}
   'backup' {
+   if($p[0]-eq'senha'){if($o.Count){throw 'backup senha nao aceita opcoes.'};& (Join-Path $script:supvRaiz 'scripts/backup-senha.ps1');return 0}
    if($p[0]-eq'testar'){if($o.Count){throw 'Opcoes de restauracao nao se aplicam a backup testar.'};[void](Executar-AcaoSupv 'testar-backup');return 0}
-   if($p[0]-ne'restaurar'){throw 'Use supv backup testar ou supv backup restaurar.'}
+   if($p[0]-ne'restaurar'){throw 'Use supv backup senha, testar ou restaurar.'}
+   if($o['--data']-and$o['--data']-notmatch'^\d{4}-\d{2}-\d{2}_\d{4}$'){throw 'Use --data AAAA-MM-DD_HHMM.'}
+   if($o['--data']-and$o['--anterior']){throw 'Escolha --data ou --anterior.'}
    if(Obter-TarefaSupplyVision $script:supvRaiz){Exigir-AdministradorSupv}
    Escrever-Supv 'A operacao sera parada e o banco atual sera substituido pelo backup.'
    if(!$o['--sim']-and(Read-Host 'Digite RESTAURAR para confirmar')-cne'RESTAURAR'){throw 'Restauracao cancelada.'}
-   [void](Executar-AcaoSupv 'restaurar' @{anterior=[bool]$o['--anterior']});return 0
+   [void](Executar-AcaoSupv 'listar-backups')
+   [void](Executar-AcaoSupv 'restaurar' @{anterior=[bool]$o['--anterior'];data=$o['--data'];configuracao=[bool]$o['--configuracao']});return 0
   }
   'modo' {
    if($p[0]-notin@('desligado','computador')){throw 'Modo invalido: use desligado ou computador.'}

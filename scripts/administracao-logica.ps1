@@ -56,6 +56,10 @@ function Executar-AcaoAdministrada([string]$Raiz,[string]$Privado,[string]$Tipo,
    $saida=$r.saida
    if($r.codigo-ne0){throw ($saida-join"`n")};return @{ok=$true;mensagem='Configuracao aprovada.'}
   }
+  'listar-backups' {
+   $r=Executar-NativoOperacao (Localizar-NodeMaquina) @((Join-Path $Raiz 'portal/scripts/restaurar-backup.mjs'),'--listar')
+   if($r.codigo-ne0){throw ($r.saida-join"`n")};return @{ok=$true;mensagem=($r.saida-join"`n")}
+  }
   'testar-backup' {
    $r=Executar-NativoOperacao (Localizar-NodeMaquina) @('--experimental-strip-types',(Join-Path $Raiz 'portal/scripts/testar-restauracao.mjs'))
    $saida=$r.saida
@@ -63,7 +67,7 @@ function Executar-AcaoAdministrada([string]$Raiz,[string]$Privado,[string]$Tipo,
   }
   'restaurar' {
    if(!(Parar-Operacao $Raiz)){throw 'A operacao nao encerrou. Restauracao cancelada para nao mexer no banco com o portal no ar.'}
-   $argumentos=@((Join-Path $Raiz 'portal/scripts/restaurar-backup.mjs'),'--sim');if($Dados.anterior){$argumentos+='--anterior'}
+   $argumentos=@((Join-Path $Raiz 'portal/scripts/restaurar-backup.mjs'),'--sim');if($Dados.anterior){$argumentos+='--anterior'};if($Dados.data){$argumentos+=@('--data',[string]$Dados.data)};if($Dados.configuracao){$argumentos+='--configuracao'}
    $r=Executar-NativoOperacao (Localizar-NodeMaquina) (@('--experimental-strip-types')+$argumentos)
    $saida=$r.saida
    if($r.codigo-ne0){throw ($saida-join"`n")};return @{ok=$true;mensagem=(($saida-join"`n")+"`n`nInicie a operacao para voltar ao ar.")}
