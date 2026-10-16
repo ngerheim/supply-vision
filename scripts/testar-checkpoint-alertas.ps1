@@ -84,28 +84,36 @@ try{
   $corpo=if($caso-in@('validacao-falha','ambas-falhas')){"{throw 'VALIDACAO_FICTICIA_REPROVADA'}"}else{"{Write-Host 'VALIDACAO_FICTICIA_APROVADA'}"}
   $textoCenario=$cenario.Extent.Text.Replace($cenario.Body.Extent.Text,$corpo)
   $runner=@'
-param($TempFixture,$Caso)
+param($TempFixture,$Caso,$ArquivoOperacao)
 $ErrorActionPreference='Stop'
+# O trecho extraido nao inclui os dot-sources do teste original. Carrega o
+# auxiliar real para cobrir captura de stderr e codigo nativo na limpeza.
+. $ArquivoOperacao
 $temp=$TempFixture;$Slot='11:00';$AgoraSimulado='2026-10-13T11:00:01Z'
 $proc=$null;$pathAnterior=$env:Path;$privadoAnterior=$env:SUPPLY_VISION_PRIVADO
 $fasePersistencia='conferir estado em disco e slot devido'
 function cmd.exe {
- # ErrorRecord nativo suprimido e terminante no PS5.1, sem programa Windows real.
- if($Caso-in@('limpeza-falha','ambas-falhas')){Write-Error 'JUNCAO_FICTICIA_EM_USO'}
- $global:LASTEXITCODE=0
+ # O auxiliar real captura o ErrorRecord e confere o codigo como faria com
+ # cmd.exe. A funcao nao encerra o runner nem executa rmdir no host local.
+ if($Caso-in@('limpeza-falha','ambas-falhas')){
+  Write-Error 'JUNCAO_FICTICIA_EM_USO'
+  $global:LASTEXITCODE=5
+ }else{$global:LASTEXITCODE=0}
 }
 '@
+  # Extrai apenas o try principal: o exit 0 do arquivo original fica fora.
+  # O runner decide seu proprio codigo depois dos catch/finally reais.
   $runner+="`n"+$diagnostico+"`ntry{`n"+$textoCenario+"`nexit 0}catch{exit 1}"
   $arquivo=Join-Path $pastaDiag ($caso+'.ps1')
   [IO.File]::WriteAllText($arquivo,$runner,(New-Object Text.UTF8Encoding($true)))
-  $saida=@(Executar-PowerShellOculto @('-NoProfile','-File',$arquivo,$fixture,$caso) $hostDiag)-join"`n"
+  $saida=@(Executar-PowerShellOculto @('-NoProfile','-File',$arquivo,$fixture,$caso,(Join-Path $PSScriptRoot 'operacao-logica.ps1')) $hostDiag)-join"`n"
   $codigo=$LASTEXITCODE
-  if(($codigo-eq0)-ne($caso-eq'sucesso')){throw "Resultado incorreto no diagnostico: $caso"}
+  if(($codigo-eq0)-ne($caso-eq'sucesso')){throw "Resultado incorreto no diagnostico: $caso; codigo=$codigo; saida=$saida"}
   if($caso-in@('validacao-falha','ambas-falhas')){
    if($saida-notlike'*FALHA persistencia: slot=11:00*VALIDACAO_FICTICIA_REPROVADA*'-or$saida-notlike'*SUPERVISOR_FICTICIO*'-or$saida-notlike'*STDERR_FICTICIO*'){throw 'Falha de validacao saiu sem motivo/logs antes de limpar.'}
   }
   if($caso-in@('limpeza-falha','ambas-falhas')){
-   if($saida-notlike'*fase=limpeza da fixture*JUNCAO_FICTICIA_EM_USO*'){throw 'Excecao suprimida da limpeza saiu sem motivo.'}
+   if($saida-notlike'*fase=limpeza da fixture*codigo=5*JUNCAO_FICTICIA_EM_USO*'){throw 'Falha nativa da limpeza saiu sem codigo/motivo.'}
   }
   Write-Host "[OK] Diagnostico da persistencia: $caso; codigo=$codigo."
  }

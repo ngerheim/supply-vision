@@ -2,6 +2,7 @@
 [CmdletBinding()]
 param([string]$BaseRef='origin/main',[string]$DestinoRef='HEAD',
  [ValidateRange(60,1800)][int]$LimiteSegundos=1200,
+ [ValidateSet('todos','atualizacao','reversao')][string]$Grupo='todos',
  [switch]$ExecutarCenario,[string]$PastaTeste)
 $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'espera-testes.ps1')
@@ -14,7 +15,7 @@ if(!$ExecutarCenario){
  New-Item -ItemType Directory $PastaTeste|Out-Null
  $fase=Join-Path $PastaTeste 'fase.txt';$filho=$null
  try{
-  $argumentos=@('-NoProfile','-ExecutionPolicy','Bypass','-File',$PSCommandPath,'-ExecutarCenario','-PastaTeste',$PastaTeste,'-BaseRef',$BaseRef,'-DestinoRef',$DestinoRef)
+  $argumentos=@('-NoProfile','-ExecutionPolicy','Bypass','-File',$PSCommandPath,'-ExecutarCenario','-PastaTeste',$PastaTeste,'-BaseRef',$BaseRef,'-DestinoRef',$DestinoRef,'-Grupo',$Grupo)
   $filho=Start-Process powershell.exe -ArgumentList (@($argumentos|ForEach-Object {Proteger-ArgumentoAtualizacao $_})-join' ') -PassThru -WindowStyle Hidden -RedirectStandardOutput (Join-Path $PastaTeste 'cenario.log') -RedirectStandardError (Join-Path $PastaTeste 'cenario-erro.log')
   [void]$filho.Handle
   if(!(Esperar-ProcessoTeste $filho $LimiteSegundos $fase)){
@@ -154,7 +155,11 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
  $destinoReversao=(Git-H2 -Argumentos @('-C',$remoto,'rev-parse','HEAD')).Trim()
  Git-H2 -Argumentos @('-C',$remoto,'update-ref','refs/heads/main',$negativo)
  Git-H2 -Argumentos @('clone','--no-hardlinks','--branch','main',$remoto,$raiz)
- Git-H2 -Argumentos @('-C',$raiz,'reset','--hard',$base)
+ # Reversao tem instalacao propria no codigo da PR. Uma troca real entre
+ # commits de mesma arvore publica a reserva; nunca fabricamos artefatos.
+ # O salto merge-base -> PR e suas migracoes continuam no grupo atualizacao.
+ $baseInstalacao=if($Grupo-eq'reversao'){$destinoAquecerReserva}else{$base}
+ Git-H2 -Argumentos @('-C',$raiz,'reset','--hard',$baseInstalacao)
  $env:SUPPLY_VISION_PRIVADO=$privado;$env:MODO_ENSAIO='1';$env:PORTAL_CRIAR_BANCO='1'
  Fase 'configuracao ficticia e dependencias da base'
  & (Join-Path $raiz 'scripts/preparar-configuracao-teste.ps1') -Destino $privado
@@ -164,6 +169,10 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
  $cfg=Join-Path $privado 'portal/configuracao/portal.env'
  $texto=[IO.File]::ReadAllText($cfg)
  foreach($par in @(@('PORTAL_URL','http://127.0.0.1:3000'),@('INITIAL_ADMIN_PASSWORD','senha-ficticia-h2-12345'),@('BACKUP_EMAIL_TO','backup@h2.test'),@('BACKUP_NETWORK_DIR',''))){$texto=[regex]::Replace($texto,('(?m)^'+$par[0]+'=.*$'),($par[0]+'='+$par[1]))}
+ # A tarefa agendada nao herda variaveis da sessao.
+ if($texto-match'(?m)^PORTAL_CRIAR_BANCO='){
+  $texto=[regex]::Replace($texto,'(?m)^PORTAL_CRIAR_BANCO=.*$','PORTAL_CRIAR_BANCO=1')
+ }else{$texto=$texto.TrimEnd([char[]]"`r`n")+"`nPORTAL_CRIAR_BANCO=1`n"}
  [IO.File]::WriteAllText($cfg,$texto)
  New-Item -ItemType Directory -Force (Join-Path $privado 'operacao')|Out-Null
  $estado=@{}
@@ -224,7 +233,11 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
  $primeiraExpectativa=Obter-ExpectativaDependenciasH2 $raiz $remoto $destino
  $casos=@('negativo','sucesso')
  if($primeiraExpectativa.Node.caminho-like'instalacao*'-or$primeiraExpectativa.Python.caminho-like'instalacao*'){$casos+='sucesso-aquecer-reserva'}
- $casos+=@('sucesso-reserva','reversao','sucesso-apos-reversao','negativo-final')
+ $casos+='sucesso-reserva'
+ if($Grupo-ne'atualizacao'){$casos+=@('reversao','sucesso-apos-reversao')}
+ $casos+='negativo-final'
+ if($Grupo-eq'reversao'){$casos=@('sucesso-preparar-reversao','reversao','sucesso-apos-reversao')}
+ Write-Host "Grupo=$Grupo; instalacao=$baseInstalacao; casos=$($casos -join ', ')"
  foreach($caso in $casos){
   Fase "atualizador completo: $caso"
   if($caso-eq'reversao'){
@@ -261,6 +274,9 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
   if($caso-eq'sucesso'){
    Git-H2 -Argumentos @('-C',$remoto,'update-ref','refs/heads/main',$destino)
    Node-H2 -Argumentos @($apoio,'pendencia',$raiz)
+  }elseif($caso-eq'sucesso-preparar-reversao'){
+   Git-H2 -Argumentos @('-C',$remoto,'update-ref','refs/heads/main',$destinoReserva)
+   Node-H2 -Argumentos @($apoio,'pendencia',$raiz)
   }elseif($caso-eq'sucesso-aquecer-reserva'){
    Git-H2 -Argumentos @('-C',$remoto,'update-ref','refs/heads/main',$destinoAquecerReserva)
    Node-H2 -Argumentos @($apoio,'snapshot',$raiz,$snapshot)
@@ -278,7 +294,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
    $pidBase=(Get-Content (Join-Path $privado 'operacao/supervisor.pid.json') -Raw|ConvertFrom-Json).pid
   }
   if($caso-like'sucesso*'){
-   $alvo=if($caso-eq'sucesso'){$destino}elseif($caso-eq'sucesso-aquecer-reserva'){$destinoAquecerReserva}elseif($caso-eq'sucesso-reserva'){$destinoReserva}else{$destinoAposReversao}
+   $alvo=if($caso-eq'sucesso'){$destino}elseif($caso-eq'sucesso-aquecer-reserva'){$destinoAquecerReserva}elseif($caso-in@('sucesso-reserva','sucesso-preparar-reversao')){$destinoReserva}else{$destinoAposReversao}
    $expectativa=Obter-ExpectativaDependenciasH2 $raiz $remoto $alvo
    if($caso-eq'sucesso-reserva'){
     foreach($tipo in @('Node','Python')){if($expectativa[$tipo].caminho-ne'reserva reaproveitada'){throw "H2 reserva ${tipo}: esperado=[reserva reaproveitada]; obtido=[$($expectativa[$tipo].caminho)]; motivo=$($expectativa[$tipo].motivo)"}}
@@ -306,7 +322,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
   if(($null-ne$monitor.ExitCode-and$monitor.ExitCode-ne0)-or!(Test-Path (Join-Path $logs 'monitor-aprovado'))){throw "Monitor reprovou $caso."}
   $head=(Git-H2 -Argumentos @('-C',$raiz,'rev-parse','HEAD')).Trim()
   if($caso-notlike'sucesso*'){
-   $headEsperado=if($caso-eq'negativo'){$base}else{$destinoAposReversao}
+   $headEsperado=if($caso-eq'negativo'){$base}elseif($Grupo-eq'atualizacao'){$destinoReserva}else{$destinoAposReversao}
    if($codigo-eq0-or$saida-notmatch'H2_FALHA_PREPARAR_INTENCIONAL'-or$head-ne$headEsperado){throw 'Falha PREPARAR nao confirmada, ou codigo alterado.'}
    if((Get-Content (Join-Path $privado 'operacao/supervisor.pid.json') -Raw|ConvertFrom-Json).pid-ne$pidBase){throw 'Supervisor original foi substituido no negativo.'}
    $pidsAntes=Get-Content (Join-Path $logs 'consumidores-antes.json') -Raw|ConvertFrom-Json
@@ -345,3 +361,4 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
  if($contaCriada){Remove-LocalUser -Name $usuarioH2;Remove-Item -LiteralPath (Join-Path $PastaTeste 'conta-criada')}
  $env:SUPPLY_VISION_PRIVADO=$privadoAntes
 }
+

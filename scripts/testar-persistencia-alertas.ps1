@@ -4,6 +4,7 @@
 param([string]$AgoraSimulado='2026-10-13T14:00:01Z',[ValidatePattern('^\d{2}:\d{2}$')][string]$Slot='14:00')
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'espera-testes.ps1')
+. (Join-Path $PSScriptRoot 'operacao-logica.ps1')
 $agoraFixo=[datetimeoffset]::Parse($AgoraSimulado,[Globalization.CultureInfo]::InvariantCulture).UtcDateTime
 $alvo=[datetime]::ParseExact(($agoraFixo.ToString('yyyy-MM-dd')+' '+$Slot),'yyyy-MM-dd HH:mm',[Globalization.CultureInfo]::InvariantCulture)
 if($agoraFixo-lt$alvo){throw 'O slot de teste deve estar devido no relogio simulado.'}
@@ -63,6 +64,7 @@ function Get-Date {
   $fasePersistencia='preparar Python e configuracao ficticia'
   # Python real, via juncao para o .venv do projeto (nao copia os 142 MB).
   & cmd.exe /c mklink /J "$temp\alertas\.venv" "$raizReal\alertas\.venv" | Out-Null
+  if ($LASTEXITCODE) { throw "mklink da fixture falhou: codigo=$LASTEXITCODE; slot=$Slot" }
   if (-not (Test-Path "$temp\alertas\.venv\Scripts\python.exe")) { throw 'Nao foi possivel preparar o Python de teste.' }
 
  [IO.File]::WriteAllText("$temp\portal\scripts\processar-relatorios.mjs", "import fs from 'node:fs';setInterval(()=>{if(fs.existsSync('../privado/operacao/parar.sinal'))process.exit(0)},500);")
@@ -149,12 +151,19 @@ time.sleep(30)
   $env:SUPPLY_VISION_PRIVADO = $privadoAnterior
   try{
     if ($proc -and !$proc.HasExited) { Encerrar-ArvoreTeste $proc }
-    # Conserva a limpeza original; o catch externo torna visivel inclusive
-    # a excecao de stderr que 2>$null escondia no Windows PowerShell 5.1.
-    if (Test-Path "$temp\alertas\.venv") { & cmd.exe /c rmdir "$temp\alertas\.venv" 2>$null | Out-Null }
-    if (Test-Path $temp) { Remove-Item $temp -Recurse -Force -ErrorAction SilentlyContinue }
+    # rmdir remove so a juncao, sem percorrer o venv compartilhado. Codigo
+    # nao zero precisa de motivo; nao pode vazar como falha muda do -File.
+    if (Test-Path "$temp\alertas\.venv") {
+      $limpeza=Executar-NativoOperacao 'cmd.exe' @('/d','/c','rmdir',('"'+"$temp\alertas\.venv"+'"'))
+      if($limpeza.codigo-ne0){throw "rmdir da juncao falhou: codigo=$($limpeza.codigo); saida=$($limpeza.saida -join ' | ')"}
+    }
+    if (Test-Path $temp) { Remove-Item $temp -Recurse -Force -ErrorAction Stop }
   }catch{
     Mostrar-FalhaPersistencia $_ 'limpeza da fixture'
     throw
   }
 }
+
+# Todas as chamadas nativas relevantes foram conferidas acima.
+# -File nao deve herdar LASTEXITCODE de um comando auxiliar da fixture.
+exit 0
