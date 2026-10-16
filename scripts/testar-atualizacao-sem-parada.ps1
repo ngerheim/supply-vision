@@ -1,6 +1,7 @@
 ﻿# Git real em repositorios ficticios. Os sentinelas impedem preparo/servicos reais.
 $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'atualizacao-preparo.ps1')
+. (Join-Path $PSScriptRoot 'operacao-logica.ps1')
 $fonteRaiz=(Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $fonte=[IO.File]::ReadAllText((Join-Path $PSScriptRoot 'atualizar-servidor.ps1'))
 $ast=[Management.Automation.Language.Parser]::ParseInput($fonte,[ref]$null,[ref]$null)
@@ -10,12 +11,9 @@ foreach($nome in @('Testar-CaminhoSemParada','Testar-AtualizacaoSemParada','Espe
 }
 function Exigir-SemParada($Ok,[string]$Mensagem){if(!$Ok){throw $Mensagem}}
 function Git-Fixture([string]$Pasta,[string[]]$Argumentos){
- $preferencia=$ErrorActionPreference
- $ErrorActionPreference='Continue'
- try{$saida=@(& git -C $Pasta @Argumentos 2>&1);$codigo=$LASTEXITCODE}
- finally{$ErrorActionPreference=$preferencia}
- if($codigo){throw ('Git fixture falhou: '+($saida-join' '))}
- return $saida
+ $r=Executar-NativoOperacao 'git' (@('-C',$Pasta)+$Argumentos)
+ if($r.codigo){throw ('Git fixture falhou: '+($r.saida-join' '))}
+ return $r.saida
 }
 $base=Join-Path ([IO.Path]::GetTempPath()) ('sv-sem-parada-'+[guid]::NewGuid().ToString('N'))
 $hostTeste=(Get-Process -Id $PID).Path

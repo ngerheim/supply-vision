@@ -34,8 +34,8 @@ function Comando([string]$nome,[string]$pacote,[string]$descricao){
   $w=Get-Command winget.exe -ErrorAction SilentlyContinue
   if(!$w){throw "$descricao ausente e winget indisponivel. Instale-o e execute novamente."}
   Etapa "Instalando $descricao"
-  $saidaWinget=@(& $w.Source install --id $pacote --exact --accept-package-agreements --accept-source-agreements 2>&1)
-  $codigoWinget=$LASTEXITCODE
+  $resultadoWinget=Executar-NativoOperacao $w.Source @('install','--id',$pacote,'--exact','--accept-package-agreements','--accept-source-agreements')
+  $saidaWinget=$resultadoWinget.saida;$codigoWinget=$resultadoWinget.codigo
   $saidaWinget|ForEach-Object{Write-Host $_}
   if($codigoWinget){throw "Falha ao instalar $descricao (codigo $codigoWinget)."}
   $env:Path=[Environment]::GetEnvironmentVariable('Path','Machine')+';'+[Environment]::GetEnvironmentVariable('Path','User')
@@ -44,7 +44,9 @@ function Comando([string]$nome,[string]$pacote,[string]$descricao){
   return $c
 }
 function Versao([string]$exe,[version]$min,[string]$nome){
-  $t=(& $exe --version 2>&1|Select-Object -First 1)
+  $resultadoVersao=Executar-NativoOperacao $exe @('--version')
+  $t=$resultadoVersao.saida|Select-Object -First 1
+  if($resultadoVersao.codigo){throw "Nao foi possivel consultar a versao de $nome em: $t"}
   if($t -notmatch '(\d+)\.(\d+)\.(\d+)'){throw "Nao foi possivel identificar a versao de $nome em: $t"}
   $v=[version]"$($Matches[1]).$($Matches[2]).$($Matches[3])"
   if($v-lt$min){throw "$nome $v encontrado; necessario $min ou superior."}; Write-Host "$nome $v OK"

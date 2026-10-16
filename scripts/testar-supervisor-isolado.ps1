@@ -1,14 +1,16 @@
-﻿param([switch]$SemLogin, [switch]$Ensaio, [ValidateSet('', 'falha', 'lento')][string]$AvisoAdminTeste='', [int]$AtrasoSegundaInstanciaSegundos=0, [switch]$PortalReal, [switch]$ExecutarCenario, [ValidateRange(1,600)][int]$LimiteSegundos=300, [string]$ArquivoFase='')
+﻿param([switch]$SemLogin, [switch]$Ensaio, [ValidateSet('', 'falha', 'lento')][string]$AvisoAdminTeste='', [int]$AtrasoSegundaInstanciaSegundos=0, [switch]$PortalReal, [switch]$ExecutarCenario, [ValidateRange(1,600)][int]$LimiteSegundos=300, [string]$ArquivoFase='', [string]$DiagnosticoDestino='')
 $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'espera-testes.ps1')
 # Pai externo limita inclusive venv, chamadas nativas e finally do cenario.
 if(!$ExecutarCenario){
  $logs=Join-Path ([IO.Path]::GetTempPath()) ('sv-supervisor-prazo-'+[guid]::NewGuid().ToString('N'))
  New-Item -ItemType Directory $logs|Out-Null
+ if(!$DiagnosticoDestino){$DiagnosticoDestino=$logs}
  $fase=Join-Path $logs 'fase.txt';$saida=Join-Path $logs 'saida.log';$erro=Join-Path $logs 'erro.log'
  $argsFilho=@('-NoProfile','-ExecutionPolicy','Bypass','-File',('"'+$PSCommandPath+'"'),'-ExecutarCenario','-ArquivoFase',('"'+$fase+'"'),'-AtrasoSegundaInstanciaSegundos',"$AtrasoSegundaInstanciaSegundos")
  if($SemLogin){$argsFilho+='-SemLogin'};if($Ensaio){$argsFilho+='-Ensaio'}
  if($PortalReal){$argsFilho+='-PortalReal'}
+ $argsFilho+=@('-DiagnosticoDestino',('"'+$DiagnosticoDestino+'"'))
  if($AvisoAdminTeste){$argsFilho+=@('-AvisoAdminTeste',$AvisoAdminTeste)}
  $filho=$null
  try{
@@ -139,7 +141,7 @@ if($Atraso){Start-Sleep -Seconds $Atraso} # Simula VM lenta, somente no teste.
  # saude contra um host inexistente sozinha ja consome quase 3 segundos.
  Registrar-FaseSupervisorTeste 'status-inicial'
  $statusPath="$temp\privado\operacao\status.json";$apareceu=$false
- $apareceu=Esperar-CondicaoTeste {try{$j=Get-Content $statusPath -Raw|ConvertFrom-Json;[bool]($j.portal-and$j.emails-and$j.relatorios)}catch{$false}} -Segundos 60
+ $apareceu=Esperar-CondicaoTeste {if($PortalReal){Confirmar-PortalFixtureVivo $temp};try{$j=Get-Content $statusPath -Raw|ConvertFrom-Json;[bool]($j.portal-and$j.emails-and$j.relatorios)}catch{$false}} -Segundos 60
  if(!$apareceu){throw 'Supervisor nao gravou status.json dentro do prazo.'}
  $status=Get-Content $statusPath -Raw|ConvertFrom-Json;if(!$status.portal-or!$status.emails-or!$status.relatorios){throw 'Supervisor nao iniciou os processos simulados.'}
  if($PortalReal){
@@ -216,6 +218,6 @@ if($Atraso){Start-Sleep -Seconds $Atraso} # Simula VM lenta, somente no teste.
   Write-Host "[OK] Supervisor real SQLite: banco/WAL/SHM liberados, worker.env removido e porta fechada."
  }
  Write-Host 'Supervisor isolado: concorrencia, estado, arquivo em uso e encerramento aprovados.' -ForegroundColor Green
-}catch{Write-Host ('FALHA DO CENARIO: '+$_.Exception.Message);if($instancias){Write-Host (Formatar-DiagnosticoTravaTeste $instancias)};throw}finally{$env:Path=$pathAnterior;$env:SUPPLY_VISION_PRIVADO=$privadoAnterior;$env:MODO_ENSAIO=$ensaioAnterior;$env:ADMIN_ALERTA_EMAIL=$adminAnterior;foreach($p in $processos){if($p-and!$p.HasExited){try{Encerrar-ArvoreTeste $p}catch{}}};if(Test-Path $temp){Remover-DiretorioTemporario $temp}}
+}catch{Write-Host ('FALHA DO CENARIO: '+$_.Exception.Message);if($PortalReal){Mostrar-DiagnosticoPortalTeste $temp $DiagnosticoDestino};if($instancias){Write-Host (Formatar-DiagnosticoTravaTeste $instancias)};throw}finally{$env:Path=$pathAnterior;$env:SUPPLY_VISION_PRIVADO=$privadoAnterior;$env:MODO_ENSAIO=$ensaioAnterior;$env:ADMIN_ALERTA_EMAIL=$adminAnterior;foreach($p in $processos){if($p-and!$p.HasExited){try{Encerrar-ArvoreTeste $p}catch{}}};if(Test-Path $temp){Remover-DiretorioTemporario $temp}}
 
 Registrar-FaseSupervisorTeste 'concluido'

@@ -1,6 +1,7 @@
 ﻿# Executa o script inteiro em raiz descartavel; Git, processos, banco e rede
 # sao simulados. Nenhum checkout/servico real participa deste ensaio de fases.
 $ErrorActionPreference='Stop'
+. (Join-Path $PSScriptRoot 'operacao-logica.ps1')
 $raizReal=(Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $pasta=Join-Path ([IO.Path]::GetTempPath()) ('sv-recuperacao-'+[guid]::NewGuid().ToString('N'))
 $privadoAnterior=$env:SUPPLY_VISION_PRIVADO
@@ -91,8 +92,8 @@ else { & (Join-Path $Raiz 'scripts/atualizar-servidor.ps1') -JaAtualizado -Versa
 exit $LASTEXITCODE
 '@
     [IO.File]::WriteAllText((Join-Path $raiz 'runner.ps1'),$runner)
-    $preferencia=$ErrorActionPreference;$ErrorActionPreference='Continue'
-    try { $saida=@(& powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $raiz 'runner.ps1') $caso $raiz 2>&1);$rc=$LASTEXITCODE } finally { $ErrorActionPreference=$preferencia }
+    $resultadoRunner=Executar-NativoOperacao 'powershell.exe' @('-NoProfile','-ExecutionPolicy','Bypass','-File',(Join-Path $raiz 'runner.ps1'),$caso,$raiz)
+    $saida=$resultadoRunner.saida;$rc=$resultadoRunner.codigo
     if($rc -eq 0) { throw "Falha $caso foi declarada sucesso: $saida" }
     $resets=@(Get-Content (Join-Path $raiz 'reset.log') -ErrorAction SilentlyContinue)
     if($resets.Count -ne $(if($caso -eq 'restauracao'){0}else{1})) { throw "Caso $caso nao reverteu exatamente uma vez: $saida" }

@@ -494,6 +494,7 @@ function Remover-ArvorePreparo([string]$Preparo) {
 }
 function Limpar-PastaPreparo([string]$Raiz,[string]$Preparo) {
  if(!$Preparo){return}
+ if(!(Get-Command Executar-NativoOperacao -ErrorAction SilentlyContinue)){. (Join-Path $PSScriptRoot 'operacao-logica.ps1')}
  Validar-PastaPreparo $Raiz $Preparo
  $codigoAntes=$global:LASTEXITCODE;$preferencia=$ErrorActionPreference;$ultimo='';$processosEncerrados=$false
  try{
@@ -506,10 +507,9 @@ function Limpar-PastaPreparo([string]$Raiz,[string]$Preparo) {
      Remover-ArvorePreparo $Preparo
     }
     if(Test-Path -LiteralPath $Preparo){throw 'Pasta permaneceu apos remocao.'}
-    $ErrorActionPreference='Continue'
-    $saida=@(& git -C $Raiz worktree remove --force $Preparo 2>&1)
-    $saida=@(& git -C $Raiz worktree prune --expire now 2>&1);$codigo=$LASTEXITCODE
-    $ErrorActionPreference=$preferencia
+    [void](Executar-NativoOperacao 'git' @('-C',$Raiz,'worktree','remove','--force',$Preparo))
+    $resultadoPrune=Executar-NativoOperacao 'git' @('-C',$Raiz,'worktree','prune','--expire','now')
+    $saida=$resultadoPrune.saida;$codigo=$resultadoPrune.codigo
     if($codigo){throw "Git nao limpou o registro: $saida"}
     return
    }catch{$ultimo=$_.Exception.Message}

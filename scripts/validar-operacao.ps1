@@ -62,12 +62,8 @@ $python = Join-Path $Raiz 'alertas\.venv\Scripts\python.exe'
 if (Test-Path -LiteralPath $python -PathType Leaf) {
  try {
   Validar-PythonAlertas $python
-  $preferencia = $ErrorActionPreference
-  try {
-   $ErrorActionPreference = 'Continue'
-   $saida = (& $python -X utf8 (Join-Path $Raiz 'alertas\processo\validar_parametros.py') 2>&1 | Out-String).Trim()
-   $codigo = $LASTEXITCODE
-  } finally { $ErrorActionPreference = $preferencia }
+  $resultadoParametros=Executar-NativoOperacao $python @('-X','utf8',(Join-Path $Raiz 'alertas\processo\validar_parametros.py'))
+  $saida=($resultadoParametros.saida|Out-String).Trim();$codigo=$resultadoParametros.codigo
   if ($codigo -ne 0) { Falha "Parametros dos Alertas invalidos: $saida" }
  } catch { Falha $_.Exception.Message }
 }

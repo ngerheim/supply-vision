@@ -42,6 +42,12 @@ jobs:
             foreach ($e in $erros) { Write-Host "::error file=$($_.FullName),line=$($e.Extent.StartLineNumber)::$($e.Message)"; $falhas++ }
           }
           if ($falhas) { exit 1 }
+      - name: Impedir capturas nativas fora do auxiliar PS5.1
+        shell: powershell
+        run: ./scripts/ci/testar-chamadas-nativas.ps1
+      - name: Conferir diagnostico e manifesto da fixture do Portal
+        shell: powershell
+        run: ./scripts/ci/testar-diagnostico-portal.ps1
       - name: Cache PSScriptAnalyzer 1.25.0
         uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
         with:
@@ -215,8 +221,20 @@ jobs:
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           & powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./scripts/testar-reparo-configuracao.ps1
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
-          & powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./scripts/testar-supervisor-isolado.ps1 -SemLogin -AvisoAdminTeste falha -PortalReal
+          & powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./scripts/testar-supervisor-isolado.ps1 -SemLogin -AvisoAdminTeste falha -PortalReal -DiagnosticoDestino (Join-Path $env:RUNNER_TEMP 'sv-supervisor-evidencias')
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
+
+      - name: Guardar logs ficticios da partida do Portal em falha
+        if: failure()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: portal-supervisor-partida
+          retention-days: 7
+          if-no-files-found: ignore
+          path: |
+            ${{ runner.temp }}/sv-supervisor-evidencias/*/portal-saida.log
+            ${{ runner.temp }}/sv-supervisor-evidencias/*/portal-erro.log
+            ${{ runner.temp }}/sv-supervisor-evidencias/*/supervisor.log
 
       - name: Validar operacao e persistencia dos alertas
         shell: powershell
