@@ -60,7 +60,7 @@ function Testar-AtualizacaoSemParada([string]$Raiz,[string[]]$Arquivos,[string]$
    foreach($arquivo in $Arquivos){
     $baseNome=($arquivo-split'/')[-1]
     $nome=[regex]::Escape($baseNome)
-    # Referencias de diagnostico como AGENTS.md#secao ou AGENTS.md, nao
+    # Referencias textuais com ancora ou pontuacao nao
     # sao nomes de arquivo abertos/importados. Exige fim do token/caminho.
     $padrao='(^|[^[:alnum:]_.-])'+$nome+'($|["''/[:space:]])'
     # Imports TS sem extensao e imports Python por nome de modulo.
@@ -362,7 +362,7 @@ function Reverter([string]$motivo) {
       Write-Host '!! ============================================================' -ForegroundColor Red
       Write-Host '!! O BANCO NAO FOI RESTAURADO. A operacao permanece PARADA.' -ForegroundColor Red
       Write-Host "!! Copia de antes da atualizacao: $BackupAntesAtualizacao" -ForegroundColor Red
-      Write-Host '!! Siga AGENTS.md#diagnostico-e-recuperacao (restauracao do banco) antes de religar.' -ForegroundColor Red
+      Write-Host '!! Mantenha a operacao parada, confira a copia anterior e restaure o banco antes de religar; consulte supv help.' -ForegroundColor Red
       Write-Host '!! ============================================================' -ForegroundColor Red
       throw 'Banco nao restaurado; troca de codigo cancelada. Operacao permanece parada.'
     }
@@ -586,7 +586,7 @@ if (-not $JaAtualizado) {
   if ($rcFilho -ne 0) {
     $contexto = Ler-EstadoOperacao $ContextoArquivo
     if ($contexto.fase -in @('revertido','recuperando')) {
-      if ($contexto.fase -eq 'recuperando') { Aviso 'A recuperacao do filho nao concluiu. Operacao permanece parada; confira AGENTS.md#diagnostico-e-recuperacao.' }
+      if ($contexto.fase -eq 'recuperando') { Aviso 'A recuperacao do filho nao concluiu. Operacao permanece parada; confira supv logs atualizacao e a copia anterior antes de recuperar; consulte supv help.' }
       exit $rcFilho
     }
     $NovaVersaoIniciada = $contexto.fase -eq 'iniciada'
@@ -664,7 +664,7 @@ exit 0
       catch { $NovaVersaoIniciada = $true }
     }
     try { Reverter $falha.Exception.Message }
-    catch { Write-Host "RECUPERACAO FALHOU: $($_.Exception.Message). Nao religue antes de conferir AGENTS.md#diagnostico-e-recuperacao." -ForegroundColor Red }
+    catch { Write-Host "RECUPERACAO FALHOU: $($_.Exception.Message). Mantenha a operacao parada e confira supv logs atualizacao e a copia anterior; consulte supv help." -ForegroundColor Red }
   } elseif (!$CodigoTrocado -and !$Recuperando -and $script:ParadaSolicitada) {
     # Inclui a parada incompleta: reabilita antes de tentar retomar.
     try { Recuperar-OperacaoAntesDaTroca $Raiz $script:TarefaSemLogin $OperacaoEstavaAtiva }
