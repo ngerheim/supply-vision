@@ -98,16 +98,12 @@ function Esperar-Supv([scriptblock]$Codigo,[int]$Segundos=25){
  return $false
 }
 try{
- $script:supvRaiz=Join-Path $base 'instalacao com espacos';$script:supvPrivado=Join-Path $base 'privado';$script:supvStartup=Join-Path $base 'inicio.cmd'
+ $script:supvRaiz=Join-Path $base 'instalacao com espacos';$script:supvPrivado=Join-Path $base 'privado'
  $env:SUPPLY_VISION_PRIVADO=$script:supvPrivado
  foreach($p in @('scripts','portal/scripts')){[void][IO.Directory]::CreateDirectory((Join-Path $script:supvRaiz $p))}
  foreach($p in @('comum','operacao','portal/configuracao','portal/logs')){[void][IO.Directory]::CreateDirectory((Join-Path $script:supvPrivado $p))}
- foreach($nome in @('supv','administracao-logica','diagnostico-logica','operacao-logica','inicializacao-logica','migracao-logica','atualizacao-preparo','atualizar-operacao','homologar')){Copy-Item (Join-Path $origem ($nome+'.ps1')) (Join-Path $script:supvRaiz 'scripts')}
+ foreach($nome in @('supv','administracao-logica','diagnostico-logica','operacao-logica','inicializacao-logica','atualizacao-preparo','atualizar-operacao','homologar')){Copy-Item (Join-Path $origem ($nome+'.ps1')) (Join-Path $script:supvRaiz 'scripts')}
  Copy-Item (Join-Path $origem '../supv.cmd') (Join-Path $script:supvRaiz 'supv.cmd')
- Set-Content (Join-Path $script:supvRaiz 'sv.cmd') 'legado' -Encoding ASCII
- Remover-ComandoSvLegado $script:supvRaiz
- Remover-ComandoSvLegado $script:supvRaiz
- Exigir-Supv (!(Test-Path (Join-Path $script:supvRaiz 'sv.cmd'))-and(Test-Path (Join-Path $script:supvRaiz 'supv.cmd'))) 'remove sv.cmd legado sem remover supv.cmd; idempotente'
  if($env:OS-eq'Windows_NT'){
   $invocar=Join-Path $base 'invocar-supv.ps1'
   Set-Content $invocar 'param($Raiz) $env:Path=$Raiz+";"+$env:Path;supv help;exit $LASTEXITCODE' -Encoding ASCII
@@ -187,37 +183,6 @@ try{
   $texto=Capturar-Supv {Mostrar-ProgressoSupv $a $exibicao;Mostrar-ProgressoSupv $a $exibicao}
   Exigir-Supv (@($texto-split"`n"|Where-Object {$_-eq'Modo completo: preparo completo forcado por fixture'}).Count-eq1) 'motivo completo aparece exatamente uma vez'
  }
- # Comparacao exata de alvos: nao apaga arquivos existentes nem outra instalacao.
- $alvoLegado=Join-Path $script:supvRaiz ('Supply Vision'+'.bat')
- Exigir-Supv (Testar-AlvoAtalhoAposentado $script:supvRaiz $alvoLegado '') 'atalho aponta exatamente para alvo removido'
- Exigir-Supv (Testar-AlvoAtalhoAposentado $script:supvRaiz 'powershell.exe' ('-NoProfile -File "'+(Join-Path $script:supvRaiz ('scripts/central'+'.ps1'))+'"')) 'atalho PowerShell aponta para script removido'
- Exigir-Supv (!(Testar-AlvoAtalhoAposentado $script:supvRaiz (Join-Path $base ('Supply Vision'+'.bat')) '')) 'preserva outra instalacao'
- Exigir-Supv (!(Testar-AlvoAtalhoAposentado $script:supvRaiz 'powershell.exe' ('-File "'+(Join-Path $script:supvRaiz 'scripts/homologar.ps1')+'"'))) 'preserva alvo mantido'
- Set-Content $alvoLegado 'existente'
- Exigir-Supv (!(Testar-AlvoAtalhoAposentado $script:supvRaiz $alvoLegado '')) 'preserva alvo existente'
- Remove-Item $alvoLegado
- if($env:OS-eq'Windows_NT'){
-  $desktopTeste=Join-Path $base 'desktop';[void][IO.Directory]::CreateDirectory($desktopTeste)
-  $inicioTeste=Join-Path $base 'startup';[void][IO.Directory]::CreateDirectory($inicioTeste)
-  $ws=New-Object -ComObject WScript.Shell
-  try{
-   foreach($nomeAtalho in @('Supply Vision','Supply Vision outra','Outro')){
-    $atalho=$ws.CreateShortcut((Join-Path $desktopTeste ($nomeAtalho+'.lnk')))
-    $atalho.TargetPath=if($nomeAtalho-eq'Supply Vision outra'){Join-Path $base ('Supply Vision'+'.bat')}else{$alvoLegado}
-    $atalho.Save();[void][Runtime.InteropServices.Marshal]::FinalReleaseComObject($atalho)
-   }
-  }finally{[void][Runtime.InteropServices.Marshal]::FinalReleaseComObject($ws)}
-  $entradaTeste=Join-Path $inicioTeste 'Supply Vision.cmd'
-  [IO.File]::WriteAllText($entradaTeste,("@echo off`r`nstart `"`" `"$(Join-Path $script:supvRaiz ('INICIAR'+'.bat'))`"`r`n"))
-  Atualizar-EntradasLegadas $script:supvRaiz @($desktopTeste) $inicioTeste
-  Atualizar-EntradasLegadas $script:supvRaiz @($desktopTeste) $inicioTeste
-  Exigir-Supv (!(Test-Path (Join-Path $desktopTeste 'Supply Vision.lnk'))-and(Test-Path (Join-Path $desktopTeste 'Supply Vision outra.lnk'))-and(Test-Path (Join-Path $desktopTeste 'Outro.lnk'))) 'limpeza real idempotente preserva outros atalhos'
-  Exigir-Supv ([IO.File]::ReadAllText($entradaTeste)-eq(Montar-InicializacaoLogin $script:supvRaiz)) 'entrada de login migrada para supv'
-  [IO.File]::WriteAllText($entradaTeste,'customizado')
-  Atualizar-EntradasLegadas $script:supvRaiz @($desktopTeste) $inicioTeste
-  Exigir-Supv ([IO.File]::ReadAllText($entradaTeste)-eq'customizado') 'entrada de login customizada preservada'
- }
-
  $op=Join-Path $script:supvPrivado 'operacao'
  Set-Content (Join-Path $script:supvPrivado 'comum/operacao.env') 'MODO_ENSAIO=0' -Encoding UTF8
  Set-Content (Join-Path $script:supvPrivado 'portal/configuracao/portal.env') "PORTAL_PORTA=31415`nPORTAL_API_TOKEN=segredo-ficticio`nBACKUP_EMAIL_TO=pessoa@example.com" -Encoding UTF8
@@ -259,7 +224,7 @@ try{
  Exigir-Supv ((Acrescentar-ComandoSupvAoPath $script:supvRaiz $pathFicticio)-ceq$pathFicticio) 'PATH idempotente'
  Exigir-Supv ((Acrescentar-ComandoSupvAoPath $script:supvRaiz ('"'+$script:supvRaiz.ToUpperInvariant()+'\"'))-eq('"'+$script:supvRaiz.ToUpperInvariant()+'\"')) 'PATH reconhece caixa, aspas e barra final'
 
- foreach($nome in @('status','iniciar','parar','atualizar','acompanhar','homologar','saude','logs','config','backup','modo','manutencao','firewall','migrar')){
+ foreach($nome in @('status','iniciar','parar','atualizar','acompanhar','homologar','saude','logs','config','backup','modo','manutencao','firewall')){
   $c=Ler-ComandoSupv @($nome,'--help');$texto=Capturar-Supv {Executar-ComandoSupv $c}
   Exigir-Supv ($texto-like"*supv $nome*"-and$texto-notmatch'[^\x00-\x7F]') "help e ASCII: $nome"
  }
@@ -343,7 +308,6 @@ try{
  function Parar-Operacao {$script:chamadas+='parar';return $script:paradaOk}
  function Localizar-NodeMaquina {return 'node-ficticio'}
  function node-ficticio {$script:chamadas+=('node '+($args-join' '));$global:LASTEXITCODE=0;return 'backup aprovado'}
- function Preparar-Migracao {$script:chamadas+='migrar'}
  function Definir-ModoInicializacao {$script:chamadas+='modo'}
  function Testar-SupervisorEncerrado {return $false}
  Exigir-Supv ((Executar-ComandoSupv (Ler-ComandoSupv @('iniciar')))-eq0) 'iniciar aguarda supervisor e health'
@@ -356,14 +320,21 @@ try{
  [void](Executar-ComandoSupv (Ler-ComandoSupv @('backup','restaurar','--anterior')))
  [void](Executar-ComandoSupv (Ler-ComandoSupv @('backup','restaurar','--sim')))
  Exigir-Supv (@($script:chamadas|Where-Object {$_-like'node *--anterior*'}).Count-eq1) 'restauracao anterior e --sim delegam ao comportamento atual'
- foreach($caso in @(@('modo','login'),@('firewall','restringir'),@('migrar','--destino',$base,'--modo','ensaio'))){Recusar-Supv {Executar-ComandoSupv (Ler-ComandoSupv $caso)} '*abra o terminal como administrador*'}
+ foreach($caso in @(@('modo','desligado'),@('firewall','restringir'))){Recusar-Supv {Executar-ComandoSupv (Ler-ComandoSupv $caso)} '*abra o terminal como administrador*'}
  $script:elevado=$true;$script:resposta='nao'
- Recusar-Supv {Executar-ComandoSupv (Ler-ComandoSupv @('migrar','--destino',$base,'--modo','definitiva'))} '*cancelada*'
- $script:resposta='MIGRAR';[void](Executar-ComandoSupv (Ler-ComandoSupv @('migrar','--destino',$base,'--modo','definitiva')))
- Exigir-Supv ($script:chamadas-contains'migrar') 'MIGRAR confirma a migracao definitiva'
- Recusar-Supv {Executar-ComandoSupv (Ler-ComandoSupv @('modo','login'))} '*Pare a operacao*'
+ Recusar-Supv {Executar-ComandoSupv (Ler-ComandoSupv @('modo','login'))} '*Modo invalido*'
+ Recusar-Supv {Executar-ComandoSupv (Ler-ComandoSupv @('modo','desligado'))} '*Pare a operacao*'
  function Testar-SupervisorEncerrado {return $true}
- [void](Executar-ComandoSupv (Ler-ComandoSupv @('modo','login')))
+ [void](Executar-ComandoSupv (Ler-ComandoSupv @('modo','desligado')))
+ $script:credencialPedida=$false
+ function Get-Credential {
+  $script:credencialPedida=$true;$senha=New-Object Security.SecureString
+  foreach($caractere in 'ficticia'.ToCharArray()){$senha.AppendChar($caractere)}
+  return [pscredential]::new('DOMINIO\ficticio',$senha)
+ }
+ function Definir-ModoInicializacao {param($Raiz,$Privado,$Modo,$Credencial);if($Modo-eq'computador'-and!$Credencial){throw 'Conta ausente.'};$script:chamadas+='modo'}
+ [void](Executar-ComandoSupv (Ler-ComandoSupv @('modo','computador')))
+ Exigir-Supv $script:credencialPedida 'modo computador solicita a conta do dono'
  [void](Executar-ComandoSupv (Ler-ComandoSupv @('manutencao','on')))
  Exigir-Supv (Test-Path (Join-Path $op 'manutencao.sinal')) 'manutencao on'
  [void](Executar-ComandoSupv (Ler-ComandoSupv @('manutencao','off')))
@@ -373,7 +344,7 @@ try{
  $fixtureInit=Join-Path $script:supvRaiz 'scripts/inicializacao-logica.ps1'
  Add-Content $fixtureInit 'function Localizar-NodeMaquina {throw "node indisponivel na fixture"}'
  Add-Content $fixtureInit 'function Testar-Elevacao {return $false}'
- $r=Executar-NativoOperacao $hostTeste @('-NoProfile','-File',(Join-Path $script:supvRaiz 'scripts/supv.ps1'),'modo','login')
+ $r=Executar-NativoOperacao $hostTeste @('-NoProfile','-File',(Join-Path $script:supvRaiz 'scripts/supv.ps1'),'modo','desligado')
  $adminTexto=$r.saida-join"`n"
  Exigir-Supv ($r.codigo-ne0-and$adminTexto-like'*abra o terminal como administrador*') 'processo real retorna falha e mensagem de administrador'
  $r=Executar-NativoOperacao $hostTeste @('-NoProfile','-File',(Join-Path $script:supvRaiz 'scripts/homologar.ps1'),'-Destino',$relatorio)

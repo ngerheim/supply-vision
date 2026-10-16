@@ -64,18 +64,6 @@ if ($portalNoAr) {
   Remover $obs 'rastreamento do wrangler (recriado na proxima subida)'
 }
 
-Write-Host "`n-- Residuos da migracao (ja concluida) --" -ForegroundColor Yellow
-foreach ($n in @('ensaio-migracao', 'relatorio-ensaio-migracao.json', 'ensaio-portal-saida.log', 'ensaio-portal-erro.log', 'desabilitar-antigas.ps1', 'desabilitar-antigas-resultado.txt')) {
-  Remover (Join-Path $Privado "operacao\$n") 'residuo do ensaio de migracao'
-}
-
-Write-Host "`n-- Estruturas aposentadas --" -ForegroundColor Yellow
-Remover (Join-Path $Privado 'instalacao') 'pasta criada e nunca usada'
-Remover (Join-Path $Privado 'alertas\logs\archive') 'archive aposentado pela nova retencao'
-Remover (Join-Path $Privado 'alertas\relatorios\diarios\pendencias') 'relatorio de pendencias removido do pipeline'
-Remover (Join-Path $Privado 'portal\dados-origem') 'pasta de massa de teste aposentada'
-Remover (Join-Path $Privado 'alertas\recortes') 'eixo antigo, hoje em relatorios\historicos'
-
 Write-Host "`n-- Pastas vazias remanescentes --" -ForegroundColor Yellow
 # privado\ fica de fora: as pastas de saida sao estruturais e nascem vazias.
 # Apaga-las faria a faxina desfazer o que o instalador acabou de criar.

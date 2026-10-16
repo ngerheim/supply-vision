@@ -1,4 +1,4 @@
-﻿# Fixture exclusiva do CI: usuario comum, TEMP 8.3 e integracao SYSTEM.
+﻿# Fixture exclusiva do CI: conta de usuario e TEMP 8.3 (nomes de perfil com ponto).
 $ErrorActionPreference='Stop'
 if($env:SV_TESTES_INTEGRACAO_WINDOWS-ne'1'){Write-Host 'SKIPPED: cenario Windows 8.3 exige SV_TESTES_INTEGRACAO_WINDOWS=1 no CI.';return}
 $raiz=(Resolve-Path (Join-Path $PSScriptRoot '..')).Path
@@ -81,13 +81,6 @@ exit /b %SV_RESULTADO_NPM%
  if($gitAntes-ne(& git -C $raiz status --porcelain --untracked-files=all|Out-String)){throw 'npm.cmd test escreveu no checkout.'}
  Write-Host 'npm.cmd test sem elevacao: nenhuma tarefa, regra de firewall ou escrita no checkout.'
 
- # A mesma raiz curta agora exercita a copia e a migracao privilegiada.
- $env:SV_TESTES_INTEGRACAO_WINDOWS=$chaveAnterior
- Push-Location (Join-Path $raiz 'portal')
- try{
-  & node --test --experimental-strip-types tests/migracao-windows.test.mjs
-  if($LASTEXITCODE){throw 'Migracao SYSTEM com TEMP/TMP 8.3 falhou.'}
- }finally{Pop-Location}
 }finally{
  $env:TEMP=$tempAnterior;$env:TMP=$tmpAnterior;$env:npm_config_cache=$cacheAnterior
  $env:SV_TESTES_INTEGRACAO_WINDOWS=$chaveAnterior

@@ -5,10 +5,10 @@ function Get-LocalGroup {if($global:criados){return @{SID=@{Value='S-1-5-21-100-
 function New-LocalGroup {$global:criados++;return @{SID=@{Value='S-1-5-21-100-100-100-999'}}}
 function Get-LocalGroupMember {param($SID,$Group);if($SID){return @(@{SID=@{Value='S-1-5-21-100-100-100-1001'}})};return @($global:membros|ForEach-Object {@{SID=@{Value=$_}}})}
 function Add-LocalGroupMember {param($Group,$Member);$global:adicionados+=$Member;$global:membros+=$Member}
-$um=Preparar-GrupoOperadores
-$dois=Preparar-GrupoOperadores
-if($um-ne$dois-or$global:criados-ne1-or$global:adicionados.Count-ne1){throw 'Grupo deve ser fixo e aditivo'}
-if(!(Testar-ContaAdministradora 'SYSTEM')){throw 'SYSTEM deve ser aceito'}
+$um=Preparar-GrupoOperadores 'S-1-5-21-100-100-100-2001'
+$dois=Preparar-GrupoOperadores 'S-1-5-21-100-100-100-2001'
+if($um-ne$dois-or$global:criados-ne1-or$global:adicionados.Count-ne2){throw 'Grupo deve ser fixo e aditivo'}
+if(Testar-ContaAdministradora 'SYSTEM'){throw 'SYSTEM nao e conta do dono'}
 # SIDs ficticios exercitam a associacao direta e por grupo de dominio, sem AD.
 if(!(Testar-ContaAdministradora 'S-1-5-21-100-100-100-1001')){throw 'Administrador direto deve ser aceito'}
 function Obter-GruposAutorizadosConta {return @('S-1-5-21-100-100-100-1001')}

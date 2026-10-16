@@ -197,24 +197,6 @@ function Gravar-EstadoOperacao([string]$Caminho, [hashtable]$Estado) {
   } finally { if (Test-Path -LiteralPath $temporario) { Remove-Item -LiteralPath $temporario -Force } }
 }
 
-function Atualizar-AgendaAlertasLegada([string]$Caminho) {
-  # privado/ nao viaja pelo Git. Migra somente os valores padrao conhecidos,
-  # sem sobrescrever uma agenda que o operador tenha personalizado.
-  $linhas = @(Get-Content -LiteralPath $Caminho)
-  $mudou = $false
-  for ($i = 0; $i -lt $linhas.Count; $i++) {
-    if ($linhas[$i] -eq 'ALERTAS_HORARIOS=08:00,12:00,17:00') {
-      $linhas[$i] = 'ALERTAS_HORARIOS=08:00,11:00,14:00,17:00'
-      $mudou = $true
-    } elseif ($linhas[$i] -eq 'ALERTAS_HORARIOS_SEX=08:00,12:00,16:00') {
-      $linhas[$i] = 'ALERTAS_HORARIOS_SEX=08:00,11:00,14:00'
-      $mudou = $true
-    }
-  }
-  if ($mudou) { $linhas | Set-Content -LiteralPath $Caminho -Encoding UTF8 }
-  return $mudou
-}
-
 function Obter-AvisoBackup([string]$Privado) {
   $arquivo = Join-Path $Privado 'portal\configuracao\portal.env'
   try {
@@ -238,9 +220,6 @@ function Testar-SupervisorEncerrado([string]$Privado) {
   } catch { return $false }
 }
 
-function Exigir-InstalacaoNaoMigrada([string]$Privado) {
- if(Test-Path -LiteralPath (Join-Path $Privado 'operacao\migrada.sinal')){throw 'Esta instalação foi migrada para outro servidor'}
-}
 
 function Processo-OrfaoDestaInstalacao($Processo,[string]$Raiz){
  if($Processo.Name-notin@('node.exe','workerd.exe')){return $false}

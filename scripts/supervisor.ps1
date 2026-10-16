@@ -9,10 +9,8 @@ if($PastaPrivada){$env:SUPPLY_VISION_PRIVADO=$PastaPrivada}
 if($SemLogin){$env:SUPPLY_VISION_SEM_LOGIN='1';$NodeExecutavel=Localizar-NodeMaquina $NodeExecutavel;$env:Path=(Split-Path $NodeExecutavel)+';'+[Environment]::GetEnvironmentVariable('Path','Machine')}
 $Raiz=(Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $Privado=Obter-PastaPrivada $Raiz;$Portal=Join-Path $Raiz 'portal';$Alertas=Join-Path $Raiz 'alertas'
-Exigir-InstalacaoNaoMigrada $Privado
 $Operacao=Join-Path $Privado 'operacao';New-Item -ItemType Directory -Force $Operacao|Out-Null
 $ConfigOperacao=Join-Path $Privado 'comum\operacao.env'
-[void](Atualizar-AgendaAlertasLegada $ConfigOperacao)
 try { & (Join-Path $PSScriptRoot 'validar-operacao.ps1') -Raiz $Raiz }
 catch { Add-Content (Join-Path $Operacao 'supervisor.log') "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')  ERRO DE CONFIGURACAO: $($_.Exception.Message)"; throw }
 $LockFile=Join-Path $Operacao 'supervisor.lock'

@@ -1,6 +1,6 @@
 ﻿$ErrorActionPreference='Stop'
 $raizReal=(Resolve-Path (Join-Path $PSScriptRoot '..')).Path
-. (Join-Path $PSScriptRoot 'migrar.ps1') -Biblioteca
+. (Join-Path $PSScriptRoot 'instalacao-requisitos.ps1')
 . (Join-Path $PSScriptRoot 'operacao-logica.ps1')
 $pasta=Join-Path ([IO.Path]::GetTempPath()) ('sv-correcoes-'+[guid]::NewGuid().ToString('N'))
 $privadoAnterior=$env:SUPPLY_VISION_PRIVADO;$tempAnterior=$env:TEMP
@@ -42,27 +42,6 @@ try{
  Exigir-Correcao (!$script:mensagemAv.Contains('BITDEFENDER detectado')) 'sem antivirus nao mostra aviso indevido'
  Remove-Item Function:\Write-Host
 
- # Tarefa de teste de rede: credencial somente na API; resultado e limpeza simulados.
- function Preparar-PastaTesteRede {}
- function New-ScheduledTaskAction {param($Execute,$Argument);return @{Arguments=$Argument}}
- function New-ScheduledTaskSettingsSet {param($ExecutionTimeLimit);return @{}}
- $script:redeOk=$false;$script:conta='';$script:senhaViu=$false;$script:removeu=0
- # O mock reproduz a assinatura da API Windows; nenhuma senha real e utilizada.
- function Register-ScheduledTask {
-  [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingUsernameAndPasswordParams','',Justification='Mock da API Register-ScheduledTask com credencial ficticia.')]
-  param($TaskName,$Action,$Settings,$User,$Password,$RunLevel)
-  $script:acao=$Action;$script:conta=$User;$script:senhaViu=!!$Password
- }
- function Start-ScheduledTask {param($TaskName);$arq=($script:acao.Arguments-split'"')[1];$fonte=Get-Content $arq -Raw;[void]($fonte-match "Set-Content '([^']+)' 'OK'");Set-Content $Matches[1] $(if($script:redeOk){'OK'}else{'FALHA'})}
- function Stop-ScheduledTask {}
- function Unregister-ScheduledTask {$script:removeu++}
- $redeFicticia=$pasta
- function Testar-UncMigracao {return $true} # Adaptador de caminho ficticio; regex UNC e testada em testar-migracao.ps1.
- Exigir-Correcao (!(Testar-RedeDaContaTarefa $redeFicticia)) 'rede SYSTEM sem permissao reprova'
- $senha=New-Object Security.SecureString;foreach($c in 'Ficticio123!'.ToCharArray()){$senha.AppendChar($c)}
- $cred=[pscredential]::new('DOMINIO\ficticio',$senha);$script:redeOk=$true
- Exigir-Correcao (Testar-RedeContaMigracao $redeFicticia $cred) 'conta personalizada aprovada antes de ativar tarefa'
- Exigir-Correcao ($script:conta-eq$cred.UserName-and$script:senhaViu-and$script:removeu-eq2) 'credencial entregue somente a API e tarefas temporarias removidas'
  # Seleciona somente processos com caminhos desta instalacao; evita prefixos semelhantes.
  $root='C:\Supply Vision'
  foreach($cmd in @('node "C:\Supply Vision\portal\scripts\processar-relatorios.mjs"','node npm-cli.js --prefix "C:\Supply Vision\portal" run email:watch','"C:\Supply Vision\portal\node_modules\workerd\bin\workerd.exe"')){
@@ -100,18 +79,6 @@ try{
   $texto=Get-Content $rel -Raw -Encoding UTF8
   Exigir-Correcao ($texto.Contains('✅ status.json')-and$texto.Contains('✅ estado.json')) "homologacao JSON reais BOM=$bom"
  }
- # Politica somente no processo e pausa/log antes de relancar erro.
- $migrar=Get-Content (Join-Path $PSScriptRoot 'migrar.ps1') -Raw -Encoding UTF8
- Exigir-Correcao ($migrar.Contains('Set-ExecutionPolicy -Scope Process')-and$migrar.Contains("Read-Host 'A janela permanece aberta")-and$migrar.Contains('migracao-erro.log')) 'politica Process e erro com pausa/log'
-
- # Erro de pre-voo real: mensagem/log antes da pausa; nenhuma politica persistente.
- $script:pausou=$false;$script:politica=''
- function Set-ExecutionPolicy {param($Scope,$ExecutionPolicy,[switch]$Force);$script:politica="$Scope/$ExecutionPolicy"}
- function Read-Host {param($Prompt);$script:pausou=$Prompt.Contains('janela permanece aberta');return ''}
- $codigo=$migrar.Replace('$admin=([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)','$admin=$true')
- $destinoFalha=Join-Path $pasta 'instalacao-falha';$falhou=$false
- try{& ([scriptblock]::Create($codigo)) -Destino $destinoFalha -Zip (Join-Path $pasta 'inexistente.zip')}catch{$falhou=$true}
- Exigir-Correcao ($falhou-and$script:pausou-and$script:politica-eq'Process/Bypass'-and(Test-Path ($destinoFalha+'.migracao-erro.log'))) 'falha real de prevoo grava log e espera usuario'
  $manual=Get-Content (Join-Path $raizReal 'AGENTS.md') -Raw -Encoding UTF8
  Exigir-Correcao ($manual.Contains('Bitdefender')-and$manual.Contains('controle avançado de ameaças')-and$manual.Contains('unable to unlink')-and$manual-match 'reinici') 'contrato de diagnostico antivirus no mapa IA'
  $inicializacao=Get-Content (Join-Path $PSScriptRoot 'inicializacao-logica.ps1') -Raw -Encoding UTF8
