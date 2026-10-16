@@ -42,8 +42,8 @@ export async function verificarSaude(base) {
   const respostaLogin = await login.json();
   if (login.status !== 401 || !respostaLogin.error) throw new Error('Login indisponivel ou resposta invalida.');
   const config = lerConfigBruta();
-  const aviso = !config.BACKUP_NETWORK_DIR?.trim() || config.BACKUP_ANEXAR_BANCO === 'true'
-    ? '; AVISO: o backup envia o banco completo por e-mail' : '';
+  const aviso = !config.BACKUP_NETWORK_DIR?.trim()
+    ? '; AVISO: BACKUP_NETWORK_DIR ausente; backup indisponivel' : '';
   return `${urls.length} arquivos CSS/JavaScript e API saudaveis${aviso}`;
 }
 

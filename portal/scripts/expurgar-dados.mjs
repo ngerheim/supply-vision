@@ -1,10 +1,9 @@
-import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
 import { privado, portalPrivado, lerArquivo } from './configuracao.mjs';
 import { localizarBanco } from './banco-local.mjs';
-import { criarCopiaIntegra } from './backup.mjs';
+import { executarBackup } from './backup.mjs';
 import { comBackupExclusivo } from './backup-exclusivo.mjs';
 
 export function configurarExpurgo(config) {
@@ -31,14 +30,12 @@ export function expurgar(db, config, agora = new Date()) {
     return resultados;
   } catch (erro) { db.exec('ROLLBACK'); throw erro; }
 }
-export async function executarExpurgo({ config, arquivo, pasta, agora = new Date(), backup = criarCopiaIntegra } = {}) {
+export async function executarExpurgo({ config, arquivo, pasta, agora = new Date(), backup = async () => { if (await executarBackup() !== 0) throw new Error('Expurgo bloqueado: backup de rede nao confirmado.'); } } = {}) {
   const regras = configurarExpurgo(config);
   if (!regras.ativo || ![regras.emails, regras.relatorios, regras.importacoes].some(Boolean)) return {};
   return comBackupExclusivo(pasta, async () => {
-    // O backup e feito/validado antes de cada expurgo; o primeiro fica reservado.
-    backup(arquivo);
-    const primeiro = path.join(pasta, 'pre-expurgo.sqlite');
-    if (!fs.existsSync(primeiro)) fs.copyFileSync(path.join(pasta, 'portal-atual.sqlite'), primeiro);
+    // Sem historico local: o expurgo exige backup de rede confirmado antes de apagar.
+    await backup(arquivo);
     const db = new DatabaseSync(arquivo);
     try { db.exec('PRAGMA busy_timeout=5000; PRAGMA foreign_keys=ON'); return expurgar(db, regras, agora); }
     finally { db.close(); }

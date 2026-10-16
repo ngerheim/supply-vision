@@ -1,59 +1,66 @@
-import { destinoBanco } from '../scripts/banco-local.mjs';
-import { criarTemporarioTeste } from './apoio/ambiente.mjs';
 import assert from 'node:assert/strict';
-import test from 'node:test';
 import fs from 'node:fs';
 import path from 'node:path';
-import { spawnSync } from 'node:child_process';
-import { DatabaseSync } from 'node:sqlite';
-import { reservarPortaLoopback } from '../scripts/porta-teste.mjs';
+import test from 'node:test';
+import { executarBackup, enviarEmergencia } from '../scripts/backup.mjs';
+import { localizar7zip, lerSenhaBackup, executar7z } from '../scripts/backup-7z.mjs';
+import { criarTemporarioTeste } from './apoio/ambiente.mjs';
 
-for (const rede of [true, false]) void test(`backup sem SMTP ${rede ? 'replica na rede' : 'não declara redundância'}`, async (t) => {
-  const dir=criarTemporarioTeste('backup-sem-smtp-');
-  t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
-  const arquivo=destinoBanco('a.sqlite',path.join(dir,'portal'));
-  fs.mkdirSync(path.dirname(arquivo),{recursive:true});
-  const db=new DatabaseSync(arquivo);
-  db.exec("CREATE TABLE teste(valor TEXT); INSERT INTO teste VALUES('original')");db.close();
-  const pastaRede=path.join(dir,'rede'), config=path.join(dir,'portal/configuracao');
-  fs.mkdirSync(config,{recursive:true});
-  fs.writeFileSync(path.join(config,'portal.env'),`PORTAL_PORTA=${await reservarPortaLoopback()}\nRELATORIOS_PORTA=${await reservarPortaLoopback()}\n`+(rede?`BACKUP_NETWORK_DIR=${pastaRede}\n`:''));
-  const resultado=spawnSync(process.execPath,['--experimental-strip-types','scripts/backup.mjs'],{
-    cwd:path.resolve(import.meta.dirname,'..'),env:{...process.env,MODO_ENSAIO:'0',SUPPLY_VISION_PRIVADO:dir},encoding:'utf8',
-  });
-  assert.equal(resultado.status,rede?0:1,resultado.stderr);
-  assert.ok(fs.existsSync(path.join(dir,'portal/backups/portal-atual.sqlite')));
-  if(rede){
-    assert.match(resultado.stderr,/comprovante não enviado/);
-    const copia=new DatabaseSync(path.join(pastaRede,'portal-atual.sqlite'),{readOnly:true});
-    try { assert.equal(copia.prepare('SELECT valor FROM teste').get().valor,'original'); }
-    finally { copia.close(); }
-    assert.equal(fs.readdirSync(path.join(pastaRede,'historico')).length,1);
+void test('senha ausente, 7-Zip ausente ou antigo falham com alerta e sem expor segredo', async t => {
+  const dir = criarTemporarioTeste('sv-sem-senha-'); t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  assert.throws(() => lerSenhaBackup({ raiz: dir }), /supv backup senha/);
+  assert.throws(() => localizar7zip({}, () => { throw new Error('segredo'); }), /7-Zip ausente/);
+  assert.throws(() => localizar7zip({}, () => '7-Zip 23.01 (x64)'), /minima 24.09/);
+  assert.equal(localizar7zip({ BACKUP_7ZIP_MIN_VERSION: '26.04' }, () => '7-Zip 26.04 (x64)'), 'C:\\Program Files\\7-Zip\\7z.exe');
+  assert.throws(() => executar7z('inexistente', 'segredo', ['t', 'arquivo']), e => !String(e).includes('segredo') && !e.cause);
+  for (const senha of [() => lerSenhaBackup({ raiz: dir }), () => { throw new Error('segredo'); }]) {
+    const logs = []; let alertas = 0;
+    const codigo = await executarBackup({ ensaio: false, config: {}, senha, avisar: async () => alertas++, registrar: m => logs.push(m) });
+    assert.equal(codigo, 1); assert.equal(alertas, 1); assert.doesNotMatch(logs.join('\n'), /segredo/);
   }
 });
-
-void test('CONCLUIR replica snapshot anterior mesmo se backup diario substituir portal-atual', async (t) => {
-  const dir = criarTemporarioTeste('backup-snapshot-h1-');
-  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
-  const backups = path.join(dir, 'portal/backups');
-  const config = path.join(dir, 'portal/configuracao');
-  const rede = path.join(dir, 'rede');
-  fs.mkdirSync(backups, { recursive: true });
-  fs.mkdirSync(config, { recursive: true });
-  fs.writeFileSync(path.join(config, 'portal.env'), `PORTAL_PORTA=${await reservarPortaLoopback()}\nRELATORIOS_PORTA=${await reservarPortaLoopback()}\nBACKUP_NETWORK_DIR=${rede}\n`);
-  for (const [nome, versao] of [['pre-atualizacao', 'anterior'], ['portal-atual', 'diario-novo']]) {
-    const db = new DatabaseSync(path.join(backups, `${nome}.sqlite`));
-    try { db.exec('CREATE TABLE teste(valor TEXT)'); db.prepare('INSERT INTO teste VALUES(?)').run(versao); }
-    finally { db.close(); }
+void test('backup na rede nao exige SMTP e nunca envia comprovante nem respeita chave legada', async () => {
+  assert.equal(await executarBackup({ ensaio: false, config: { BACKUP_NETWORK_DIR: 'ficticio', BACKUP_ANEXAR_BANCO: 'true' },
+    senha: () => 'ficticia', zip: () => 'ficticio', preparar() {}, compactar() {},
+    retentar: rede => rede(1000), rede: async () => 'confirmado', email: () => assert.fail(), avisar: () => assert.fail(),
+  }), 0);
+});
+void test('emergencia usa mesmo arquivo e destinatario admin; acima do limite envia so alerta; SMTP falha sanitizado', async t => {
+  const dir = criarTemporarioTeste('sv-email-backup-'); t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const arquivo = path.join(dir, 'supply-vision-2026-10-16_1330.7z'); fs.writeFileSync(arquivo, 'pacote criptografado');
+  for (const mb of ['15', '0.000001']) {
+    let mensagem, fechou = false;
+    await enviarEmergencia({ ADMIN_ALERTA_EMAIL: 'ficticio@example.com', BACKUP_EMAIL_MAX_MB: mb }, arquivo, {
+      criarTransporte: () => ({ sendMail: async m => { mensagem = m; }, close: () => { fechou = true; } }), registrar() {},
+    });
+    assert.equal(mensagem.to, 'ficticio@example.com'); assert.match(mensagem.text, /rede falhou/);
+    assert.equal(mensagem.attachments.length, mb === '15' ? 1 : 0);
+    if (mensagem.attachments.length) assert.equal(mensagem.attachments[0].path, arquivo);
+    assert.ok(fechou);
   }
-  const resultado = spawnSync(process.execPath, [
-    '--experimental-strip-types', 'scripts/backup.mjs', '--pre-atualizacao', '--somente-rede', '--snapshot-pre-atualizacao',
-  ], { cwd: path.resolve(import.meta.dirname, '..'), env: { ...process.env, MODO_ENSAIO: '0', SUPPLY_VISION_PRIVADO: dir }, encoding: 'utf8' });
-  assert.equal(resultado.status, 0, resultado.stderr);
-  const copia = new DatabaseSync(path.join(rede, 'portal-atual.sqlite'), { readOnly: true });
-  try { assert.equal(copia.prepare('SELECT valor FROM teste').get().valor, 'anterior'); }
-  finally { copia.close(); }
-  const atual = new DatabaseSync(path.join(backups, 'portal-atual.sqlite'), { readOnly: true });
-  try { assert.equal(atual.prepare('SELECT valor FROM teste').get().valor, 'diario-novo'); }
-  finally { atual.close(); }
+  await assert.rejects(enviarEmergencia({ BACKUP_EMAIL_TO: 'ficticio@example.com' }, arquivo, {
+    criarTransporte: () => ({ sendMail: async () => { throw new Error('segredo SMTP'); }, close() {} }),
+  }), e => /emergencia falhou/.test(e.message) && !e.message.includes('segredo'));
+});
+void test('DPAPI indecifravel nunca propaga saida nativa, e falha de versao chega ao alerta', async t => {
+  const dir = criarTemporarioTeste('sv-dpapi-'); t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  fs.mkdirSync(path.join(dir, 'comum')); fs.writeFileSync(path.join(dir, 'comum/backup-senha.dpapi'), 'cipher-ficticio');
+  assert.throws(() => lerSenhaBackup({ raiz: dir, executar() { throw new Error('senha-ficticia-que-nao-pode-vazar'); } }), e => !e.message.includes('senha-ficticia-que-nao-pode-vazar') && !e.cause);
+  let detalhe;
+  assert.equal(await executarBackup({ ensaio: false, config: {}, senha: () => 'ficticia', zip: () => localizar7zip({}, () => '7-Zip 23.01'),
+    avisar: async (evento, opcoes) => { detalhe = opcoes.detalhe; }, registrar() {}, preparar() { assert.fail(); },
+  }), 1);
+  assert.match(detalhe, /minima 24.09/);
+});
+void test('Windows: senha gravada duas vezes sem eco e decifrada com DPAPI da conta atual', { skip: process.platform !== 'win32' }, async t => {
+  const { execFileSync } = await import('node:child_process');
+  const dir = criarTemporarioTeste('sv-senha-windows-'); t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const script = path.resolve(import.meta.dirname, '../../scripts/backup-senha.ps1');
+  const codigo = "function Read-Host { ConvertTo-SecureString $env:SV_SENHA_FIXTURE -AsPlainText -Force }; & $env:SV_SCRIPT_FIXTURE";
+  const senha = 'Ficticia ç !"123';
+  const saida = execFileSync('powershell.exe', ['-NoProfile', '-Command', codigo], { encoding: 'utf8', env: { ...process.env,
+    SUPPLY_VISION_PRIVADO: dir, SV_SENHA_FIXTURE: senha, SV_SCRIPT_FIXTURE: script }, stdio: ['ignore', 'pipe', 'pipe'] });
+  assert.ok(!saida.includes(senha));
+  assert.ok(!fs.readFileSync(path.join(dir, 'comum/backup-senha.dpapi'), 'utf8').includes(senha));
+  assert.equal(lerSenhaBackup({ raiz: dir }), senha);
 });

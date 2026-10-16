@@ -1,67 +1,39 @@
-// Historico de 7 dias do backup do banco.
-//
-// O backup mantinha so a copia mais recente, sobrescrita a cada horario: um
-// acordo apagado por engano as 10h sumia tambem do backup das 11h, e nao havia
-// ponto anterior ao erro para onde voltar. Agora a copia de cada dia fica em
-// historico/portal-AAAA-MM-DD.sqlite -- a ultima daquele dia, porque cada
-// backup regrava o arquivo do dia. Preserva no mínimo sete cópias diárias,
-// mesmo depois de uma pausa, além de todas as cópias dentro da janela.
-//
-// So toca arquivos com esse padrao de nome, na pasta historico/; qualquer
-// outro arquivo ali fica como esta.
 import fs from 'node:fs';
 import path from 'node:path';
 
-export const DIAS_RETENCAO = 7;
-const PADRAO = /^portal-(\d{4}-\d{2}-\d{2})\.sqlite$/;
-
-// Data local da maquina, que e a do expediente.
-export function nomeDoDia(data = new Date()) {
-  const dois = (n) => String(n).padStart(2, '0');
-  return `${data.getFullYear()}-${dois(data.getMonth() + 1)}-${dois(data.getDate())}`;
+export const DIAS_RETENCAO = 14;
+export const PADRAO_BACKUP = /^supply-vision-(\d{4}-\d{2}-\d{2}_\d{4})\.7z$/;
+export function nomeBackup(data = new Date()) {
+  const dois = n => String(n).padStart(2, '0');
+  return `supply-vision-${data.getFullYear()}-${dois(data.getMonth() + 1)}-${dois(data.getDate())}_${dois(data.getHours())}${dois(data.getMinutes())}.7z`;
 }
-
-export function pastaHistorico(pastaBase) {
-  return path.join(pastaBase, 'historico');
+export function listarHistorico(pasta) {
+  return fs.readdirSync(pasta).filter(nome => PADRAO_BACKUP.test(nome))
+    .filter(nome => fs.lstatSync(path.join(pasta, nome)).isFile())
+    .sort().reverse().map(nome => ({ arquivo: path.join(pasta, nome), data: PADRAO_BACKUP.exec(nome)[1] }));
 }
-
-// Copia a origem para o arquivo do dia (via temporario + rename, para nunca
-// deixar um arquivo do dia pela metade) e apaga o que passou da janela. O
-// rename substitui o arquivo do dia de uma vez, inclusive no Windows; apagar
-// antes abria um instante em que o dia ficava sem copia.
-export function guardarNoHistorico(pastaBase, origem, agora = new Date(), dias = DIAS_RETENCAO) {
-  const pasta = pastaHistorico(pastaBase);
-  fs.mkdirSync(pasta, { recursive: true });
-  const destino = path.join(pasta, `portal-${nomeDoDia(agora)}.sqlite`);
-  const temporario = `${destino}.tmp`;
-  fs.rmSync(temporario, { force: true });
-  fs.copyFileSync(origem, temporario);
-  fs.renameSync(temporario, destino);
-  const apagados = podarHistorico(pastaBase, agora, dias);
-  return { destino, apagados };
-}
-
-export function podarHistorico(pastaBase, agora = new Date(), dias = DIAS_RETENCAO) {
-  if (!Number.isInteger(dias) || dias < 1) throw new Error('Retenção deve ser um número inteiro positivo.');
-  const limite = new Date(agora.getFullYear(), agora.getMonth(), agora.getDate() - (dias - 1));
-  const corte = nomeDoDia(limite);
+export function podarHistorico(pasta, agora = new Date(), dias = DIAS_RETENCAO) {
+  if (!Number.isInteger(dias) || dias < 1) throw new Error('Retencao deve ser inteiro positivo.');
+  const corte = nomeBackup(new Date(agora.getTime() - dias * 86400_000));
   const apagados = [];
-  for (const [indice, { arquivo, dia }] of listarHistorico(pastaBase).entries()) {
-    if (dia < corte && indice >= dias) {
-      fs.rmSync(arquivo, { force: true });
-      apagados.push(path.basename(arquivo));
-    }
+  for (const { arquivo } of listarHistorico(pasta)) {
+    if (path.basename(arquivo) < corte) { fs.unlinkSync(arquivo); apagados.push(path.basename(arquivo)); }
   }
   return apagados;
 }
 
-// Do mais recente para o mais antigo.
-export function listarHistorico(pastaBase) {
-  const pasta = pastaHistorico(pastaBase);
-  if (!fs.existsSync(pasta)) return [];
-  return fs.readdirSync(pasta)
-    .map((nome) => ({ nome, dia: PADRAO.exec(nome)?.[1] }))
-    .filter((item) => item.dia)
-    .sort((a, b) => b.dia.localeCompare(a.dia))
-    .map(({ nome, dia }) => ({ arquivo: path.join(pasta, nome), dia }));
+// Migracao: limpar apenas o legado conhecido APOS confirmar um pacote na rede.
+export function removerHistoricoLocal(pasta) {
+  if (!fs.existsSync(pasta)) return;
+  for (const nome of ['portal-atual.sqlite', 'portal-atual.anterior.sqlite', 'portal-atual.tmp.sqlite', 'pre-expurgo.sqlite']) {
+    const arquivo = path.join(pasta, nome);
+    if (fs.existsSync(arquivo) && fs.lstatSync(arquivo).isFile()) fs.unlinkSync(arquivo);
+  }
+  const historico = path.join(pasta, 'historico');
+  if (!fs.existsSync(historico) || fs.lstatSync(historico).isSymbolicLink() || !fs.lstatSync(historico).isDirectory()) return;
+  for (const nome of fs.readdirSync(historico)) {
+    const arquivo = path.join(historico, nome);
+    if (/^portal-\d{4}-\d{2}-\d{2}\.sqlite$/.test(nome) && fs.lstatSync(arquivo).isFile()) fs.unlinkSync(arquivo);
+  }
+  if (!fs.readdirSync(historico).length) fs.rmdirSync(historico);
 }
