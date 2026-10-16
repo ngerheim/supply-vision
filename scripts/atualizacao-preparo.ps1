@@ -154,6 +154,41 @@ function Mesmo-VolumeDependencias([string]$Raiz,[string]$Preparo) {
  }
  return [IO.Path]::GetPathRoot([IO.Path]::GetFullPath($Raiz))-eq[IO.Path]::GetPathRoot([IO.Path]::GetFullPath($Preparo))
 }
+# engines.node da raiz e requisito de partida, nao altera node_modules. O Node
+# efetivamente executado continua na assinatura; engines dos pacotes permanecem.
+function Hash-ManifestoNodeDependencias([string]$Arquivo) {
+ if(!(Get-Command Executar-NativoOperacao -ErrorAction SilentlyContinue)){. (Join-Path $PSScriptRoot 'operacao-logica.ps1')}
+ # Node le tambem a chave vazia packages[''] do lockfile, incompativel com
+ # ConvertFrom-Json do PS5.1. Sem dependencias nem leitor da versao do Portal.
+ $codigo=@'
+const fs = require('node:fs'), path = require('node:path'), crypto = require('node:crypto');
+const arquivo = process.argv[1];
+const manifesto = JSON.parse(fs.readFileSync(arquivo, 'utf8').replace(/^\uFEFF/, ''));
+const raiz = path.basename(arquivo) === 'package-lock.json' ? manifesto.packages?.[''] : manifesto;
+if (raiz?.engines && Object.hasOwn(raiz.engines, 'node')) {
+ delete raiz.engines.node;
+ if (!Object.keys(raiz.engines).length) delete raiz.engines;
+}
+function ordenar(valor) {
+ if (Array.isArray(valor)) return valor.map(ordenar);
+ if (valor && typeof valor === 'object') return Object.fromEntries(Object.keys(valor).sort().map(k => [k, ordenar(valor[k])]));
+ return valor;
+}
+console.log(crypto.createHash('sha256').update(JSON.stringify(ordenar(manifesto))).digest('hex'));
+'@
+ $r=Executar-NativoOperacao 'node' @('-e',$codigo,$Arquivo)
+ if($r.codigo-or$r.stdout.Count-ne1-or$r.stdout[0]-cnotmatch'^[a-f0-9]{64}$'){throw 'Nao foi possivel assinar manifesto Node.'}
+ # Prefixo distingue hashes legados; reservas antigas sao recusadas com seguranca.
+ return 'node-v1:'+$r.stdout[0]
+}
+function Testar-DependenciasNodeIguais($Origem,$Destino) {
+ if(!$Origem-or!$Destino-or$Origem.node-cne$Destino.node){return $false}
+ foreach($rel in @('portal/package-lock.json','portal/package.json')){
+  $a=$Origem.hashes.$rel;$b=$Destino.hashes.$rel
+  if($a-cnotmatch'^node-v1:[a-f0-9]{64}$'-or$a-cne$b){return $false}
+ }
+ return $true
+}
 function Obter-AssinaturaDependencias([string]$Raiz,[string]$Python) {
  $antes=Get-Variable LASTEXITCODE -Scope Global -ValueOnly -ErrorAction SilentlyContinue
  try{
@@ -164,7 +199,7 @@ function Obter-AssinaturaDependencias([string]$Raiz,[string]$Python) {
   foreach($rel in $arquivos){
    $item=Get-Item -LiteralPath (Join-Path $Raiz $rel) -Force
    if($item.Attributes-band[IO.FileAttributes]::ReparsePoint){throw 'Manifesto de dependencias e link.'}
-   $hashes[$rel]=(Get-FileHash -LiteralPath $item.FullName -Algorithm SHA256).Hash
+   $hashes[$rel]=if($rel-like'portal/package*.json'){Hash-ManifestoNodeDependencias $item.FullName}else{(Get-FileHash -LiteralPath $item.FullName -Algorithm SHA256).Hash}
   }
   $node=(& node --version|Out-String).Trim();if($LASTEXITCODE-or$node-notmatch'^v\d+\.\d+\.\d+$'){throw 'Versao Node desconhecida.'}
   $pythonVersao=(& $Python --version|Out-String).Trim();if($LASTEXITCODE-or$pythonVersao-notmatch'^Python \d+\.\d+\.\d+$'){throw 'Versao Python desconhecida.'}
