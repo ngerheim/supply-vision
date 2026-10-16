@@ -126,21 +126,26 @@ function Mostrar-ProgressoSupv($a,$Exibicao=$null){
   $texto="Etapa $($a.numero) de $($a.total): $($a.nome) | etapa $($a.etapaSegundos) s | total $($a.totalSegundos) s | restante estimado: $restante | modo $modo"
   if($a.esperaCI.mensagem-and$a.estado-eq'andamento'){$texto=[string]$a.esperaCI.mensagem}
   $terminal=$a.estado-in@('concluido','falhou')
+  if($terminal-and$a.erro){$texto+=' | '+(([string]$a.erro-replace'\s+',' ').Trim())}
  }
  if($null-ne$Exibicao){
   # A conclusao fica fixa enquanto o worker termina; os demais textos mudam
   # somente com o andamento visivel, sem repetir a cada consulta do processo.
   if(($terminal-and$Exibicao.terminalMostrado)-or$texto-eq$Exibicao.ultimaLinha){return}
   $Exibicao.ultimaLinha=$texto
-  if($terminal){$Exibicao.terminalMostrado=$true}
+  if($terminal){
+   $Exibicao.terminalMostrado=$true
+   if($a.erro){$Exibicao.erroMostrado=(([string]$a.erro-replace'\s+',' ').Trim())}
+  }
  }
  Escrever-Supv $texto
 }
-function Mostrar-ResultadoSupv($Codigo=$null){
+function Mostrar-ResultadoSupv($Codigo=$null,$Exibicao=$null){
  $r=Executar-AcaoAdministrada $script:supvRaiz $script:supvPrivado 'fim-atualizacao' @{codigo=$Codigo;saida='atualizacao-processo-saida.log'}
  # O andamento guarda a causa canonica; stderr e ultimas etapas podem repeti-la.
  if(!$r.ok-and$r.andamento.erro){
-  Escrever-Supv ('ERRO: '+(([string]$r.andamento.erro-replace'\s+',' ').Trim()))
+  $erro=(([string]$r.andamento.erro-replace'\s+',' ').Trim())
+  if($null-eq$Exibicao-or$Exibicao.erroMostrado-cne$erro){Escrever-Supv ('ERRO: '+$erro)}
   Escrever-Supv ("Tempo total: $($r.andamento.totalSegundos) s.")
  }else{Escrever-Supv $r.mensagem}
  return [bool]$r.ok
@@ -225,7 +230,7 @@ function Acompanhar-AtualizacaoSupv($Processo=$null){
   if(Test-Path -LiteralPath $arquivo){$codigo=(Get-Content -LiteralPath $arquivo -Raw -Encoding UTF8|ConvertFrom-Json).codigo}
  }
  $concluido=$true
- return Mostrar-ResultadoSupv $codigo
+ return Mostrar-ResultadoSupv $codigo $exibicao
  }finally{
   if(!$concluido){Solicitar-CancelamentoEsperaCI (Join-Path $script:supvPrivado 'operacao/atualizacao-andamento.json')}
   if($console){$console.Dispose()}
