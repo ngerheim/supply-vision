@@ -1,12 +1,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import process from 'node:process';
 import nodemailer from 'nodemailer';
 
 const portal = path.resolve(import.meta.dirname, '..');
-const produto = path.resolve(portal, '..');
-export const privado = path.resolve(process.env.SUPPLY_VISION_PRIVADO || path.join(produto, 'privado'));
-export const portalPrivado = path.join(privado, 'portal');
+import { privado, portalPrivado } from './caminhos.mjs';
+export { privado, portalPrivado } from './caminhos.mjs';
 
 // Contrato: testes/fixtures/configuracao-env.json; linhas malformadas sao erro.
 export function lerArquivo(arquivo, { obrigatorio = false } = {}) {

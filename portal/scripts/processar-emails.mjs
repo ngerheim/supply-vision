@@ -69,7 +69,7 @@ function marcarNaoConfirmado(db, tabela, item) {
     .run(MENSAGEM_NAO_CONFIRMADO, agora, item.id, item.attempts, item.locked_at);
 }
 
-const abrirBanco = () => abrirBancoLocal('email_notifications', bancoInformado);
+export const abrirBanco = () => abrirBancoLocal('email_notifications', bancoInformado);
 
 function temTrabalho(db, tabela, agoraIso, travaVencida) {
   return !!db.prepare(`SELECT 1 FROM ${tabela} WHERE (status='processing' AND (locked_at<? OR locked_at IS NULL)) OR (status='pending' AND (attempts>=? OR next_attempt_at<=?)) LIMIT 1`)

@@ -5,16 +5,16 @@ import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { Worker } from 'node:worker_threads';
 import test from 'node:test';
-import { arquivoSqliteLocal } from '../scripts/sqlite-local.mjs';
+import { diretorioBanco, localizarBanco } from '../scripts/banco-local.mjs';
 import { bancoSqliteLocal } from '../lib/sqlite-local.ts';
 
 async function fixture(t: test.TestContext) {
   const pasta = fs.mkdtempSync(path.join(os.tmpdir(), 'portal-teste-sqlite-local-'));
-  const dir = path.join(pasta, 'v3/d1/miniflare-D1DatabaseObject');fs.mkdirSync(dir,{recursive:true});
+  const dir = diretorioBanco(pasta);fs.mkdirSync(dir,{recursive:true});
   const arquivo = path.join(dir, 'fixture.sqlite');
   const seed = new DatabaseSync(arquivo);
   seed.exec('PRAGMA journal_mode=WAL; CREATE TABLE dados (id INTEGER PRIMARY KEY, valor TEXT); CREATE TABLE travas(chave TEXT PRIMARY KEY,dono TEXT)');seed.close();
-  const db = bancoSqliteLocal({ persistencia: pasta });
+  const db = bancoSqliteLocal({ pastaPrivada: pasta });
   t.after(() => { db.fechar();fs.rmSync(pasta, {recursive:true,force:true}); });
   return { pasta, arquivo, db };
 }
@@ -61,11 +61,11 @@ void test('blob e primeira coluna preservam contrato esperado pela API', async t
 void test('arquivo persistido e unico; identidade original e recusa de ambiguidade', t => {
   const pasta=fs.mkdtempSync(path.join(os.tmpdir(),'portal-teste-identidade-'));
   t.after(()=>fs.rmSync(pasta,{recursive:true,force:true}));
-  assert.equal(arquivoSqliteLocal(pasta),null);
-  const dir=path.join(pasta,'v3/d1/miniflare-D1DatabaseObject');fs.mkdirSync(dir,{recursive:true});
+  assert.equal(localizarBanco(null,pasta),null);
+  const dir=diretorioBanco(pasta);fs.mkdirSync(dir,{recursive:true});
   fs.writeFileSync(path.join(dir,'metadata.sqlite'),'');fs.writeFileSync(path.join(dir,'fixture.sqlite'),'');
-  assert.equal(arquivoSqliteLocal(pasta),path.join(dir,'fixture.sqlite'));
-  fs.writeFileSync(path.join(dir,'outra.sqlite'),'');assert.throws(()=>arquivoSqliteLocal(pasta),/ambiguo/);
+  assert.equal(localizarBanco(null,pasta),path.join(dir,'fixture.sqlite'));
+  fs.writeFileSync(path.join(dir,'outra.sqlite'),'');assert.throws(()=>localizarBanco(null,pasta),/ambiguo/);
 });
 
 void test('batch de escrita aguarda reserva externa sem reenviar ou confirmar parcialmente', async t => {
@@ -86,7 +86,7 @@ void test('restauracao em DELETE volta a WAL e conexao ativa bloqueia restauraca
   const {pasta,arquivo,db} = await fixture(t);
   db.fechar();
   const seed = new DatabaseSync(arquivo);seed.exec('PRAGMA journal_mode=DELETE');seed.close();
-  const reaberto=bancoSqliteLocal({persistencia:pasta,pastaRestauracao:pasta});
+  const reaberto=bancoSqliteLocal({pastaPrivada:pasta,pastaRestauracao:pasta});
   try {
     assert.throws(()=>travarRestauracao(true,pasta),/ao mesmo tempo/);
     const leitura=new DatabaseSync(arquivo,{readOnly:true});
@@ -99,14 +99,14 @@ void test('restauracao em DELETE volta a WAL e conexao ativa bloqueia restauraca
 void test('arquivo existente mantem caminho, inode e dados; criacao explicita usa nome fixo', async t => {
   const pasta=fs.mkdtempSync(path.join(os.tmpdir(),'sv-identidade-'));
   t.after(()=>fs.rmSync(pasta,{recursive:true,force:true}));
-  assert.throws(()=>bancoSqliteLocal({persistencia:pasta}),/nao inicializado/);
-  const novo=bancoSqliteLocal({persistencia:pasta,criar:true});
+  assert.throws(()=>bancoSqliteLocal({pastaPrivada:pasta}),/nao inicializado/);
+  const novo=bancoSqliteLocal({pastaPrivada:pasta,criar:true});
   const arquivo=novo.arquivo!;
   assert.equal(path.basename(arquivo),'portal.sqlite');
   await novo.exec("CREATE TABLE prova(valor TEXT);INSERT INTO prova VALUES('preservado')");novo.fechar();
   const legado=path.join(path.dirname(arquivo),'hash-legado.sqlite');fs.renameSync(arquivo,legado);
   const antes=fs.statSync(legado).ino;
-  const aberto=bancoSqliteLocal({persistencia:pasta});
+  const aberto=bancoSqliteLocal({pastaPrivada:pasta});
   try {
     assert.equal(aberto.arquivo,legado);assert.equal(fs.statSync(legado).ino,antes);
     assert.equal(await aberto.prepare('SELECT valor FROM prova').first('valor'),'preservado');

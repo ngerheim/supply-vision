@@ -15,7 +15,7 @@ for (const motivo of ['explicito', 'sinal', 'pai']) {
     const projeto=fs.mkdtempSync(path.join(os.tmpdir(),'sv-node-parada-'));
     fs.mkdirSync(path.join(projeto,'server'),{recursive:true});fs.mkdirSync(path.join(projeto,'client'));
     fs.writeFileSync(path.join(projeto,'server/index.js'), `export default {fetch(){return new Response('fixture')}}`);
-    const banco=bancoSqliteLocal({persistencia:path.join(projeto,'state'),criar:true});
+    const banco=bancoSqliteLocal({pastaPrivada:path.join(projeto,'state'),criar:true});
     await banco.exec("CREATE TABLE prova(valor TEXT);INSERT INTO prova VALUES('preservado')");
     globalThis[Symbol.for('supply-vision:banco')]=banco;
     const port=await reservarPortaLoopback(),pararArquivo=path.join(projeto,'parar');

@@ -165,6 +165,12 @@ jobs:
       - run: npm run typecheck
       - run: npm run lint
       - run: npm run build
+        env:
+          PORTAL_API_TOKEN: token-ficticio-build-proibido-170
+      - name: Conferir credencial ausente do build
+        working-directory: .
+        shell: pwsh
+        run: ./scripts/testar-credencial-portal.ps1 -ExigirBuild
       # O instalador ja cobrava isto na maquina; o CI nao. Vulnerabilidade
       # precisa aparecer no PR, nao na instalacao. A auditoria e completa de
       # Runtime e ferramentas sao auditados juntos.

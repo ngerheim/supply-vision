@@ -51,22 +51,17 @@ try {
     Get-ChildItem -LiteralPath $entregasOrigem -Filter '*.json' -File | Copy-Item -Destination (Join-Path $temp 'alertas\estado-envios')
   }
 
-  # O banco: um unico arquivo .sqlite dentro do diretorio do D1.
-  $d1 = Join-Path $Privado 'portal\banco\estado\state\v3\d1\miniflare-D1DatabaseObject'
-  # O nome do arquivo do D1 e derivado do binding pelo miniflare e precisa ser
-  # preservado, mesmo quando o CONTEUDO vem do backup. Gravar com outro nome
-  # faria o miniflare ignorar o banco e criar um vazio ao lado.
-  $nomeD1 = @(Get-ChildItem $d1 -Filter '*.sqlite' -File | Where-Object { $_.Name -ne 'metadata.sqlite' })
-  if ($nomeD1.Count -ne 1) { throw "Esperado exatamente 1 banco em $d1, encontrados $($nomeD1.Count)." }
-  & node (Join-Path $Raiz 'portal\scripts\snapshot-banco.mjs') $nomeD1[0].FullName (Join-Path $temp 'banco\portal.sqlite')
-  if ($LASTEXITCODE -ne 0) { throw 'Falha ao gerar snapshot consistente. Semente cancelada.' }
+  # A semente preserva o nome devolvido pelo mesmo localizador do Portal.
+  $arquivoBanco = Localizar-BancoPortal $Raiz $Privado -Obrigatorio
+  $snapshot=Executar-NativoOperacao 'node' @((Join-Path $Raiz 'portal/scripts/snapshot-banco.mjs'),$arquivoBanco,(Join-Path $temp 'banco/portal.sqlite'))
+  if ($snapshot.codigo) { throw 'Falha ao gerar snapshot consistente. Semente cancelada.' }
   $sha = (Get-FileHash (Join-Path $temp 'banco\portal.sqlite') -Algorithm SHA256).Hash
 
   @{
     estadoPersistente = $true
     gerado = (Get-Date).ToString('o')
     origem = [Environment]::MachineName
-    banco = @{ arquivo = $nomeD1[0].Name; sha256 = $sha; deBackup = $false; snapshotConsistente = $true }
+    banco = @{ arquivo = [IO.Path]::GetFileName($arquivoBanco); sha256 = $sha; deBackup = $false; snapshotConsistente = $true }
     versao = (git -C $Raiz rev-parse HEAD).Trim()
     revisar = @(
       'privado\portal\configuracao\portal.env -> PORTAL_URL (IP desta maquina)',

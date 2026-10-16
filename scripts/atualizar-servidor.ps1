@@ -599,7 +599,7 @@ Etapa 'Conferindo a configuracao privada'
 Reparar-ConfiguracaoPrivada
 
 # O Portal e os Alertas compartilham uma credencial local. Ela precisa existir
-# antes do build, porque o endpoint interno a incorpora no servidor.
+# antes da partida, porque a rota interna a le em tempo de execucao.
 if (Garantir-CredencialPortal (Join-Path (Obter-PastaPrivada $Raiz) 'portal/configuracao/portal.env')) { Ok 'credencial interna do Portal criada ou reparada' }
 
 Ok 'Build e verificacoes exigidas pelo modo do PREPARAR aprovados; artefatos ja instalados.'

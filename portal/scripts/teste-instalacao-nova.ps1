@@ -128,7 +128,7 @@ Verifica 'Pagina completa entrega CSS e JavaScript validos' {
 Write-Host ''
 
 # Email reservado somente na base descartavel; hash/iteracoes reais preservados.
-$bancoFixture=(Get-ChildItem -LiteralPath $temp -Recurse -Filter '*.sqlite'|Where-Object {$_.Name-ne'metadata.sqlite'}|Select-Object -First 1).FullName
+$bancoFixture=Localizar-BancoPortal (Split-Path $projeto) $temp -Obrigatorio
 $prepararAdmin=@'
 const fs=require('node:fs'),path=require('node:path'),{DatabaseSync}=require('node:sqlite');
 const raiz=fs.realpathSync.native(process.argv[2]),arquivo=fs.realpathSync.native(process.argv[3]);
@@ -237,8 +237,7 @@ Verifica 'Cancelamento avisa solicitante e responsavel' {
 }
 
 # Daqui em diante, confere o que foi realmente GRAVADO no banco novo.
-$arquivoBanco = (Get-ChildItem -Path $temp -Recurse -Filter '*.sqlite' |
-  Where-Object { $_.Name -ne 'metadata.sqlite' } | Select-Object -First 1).FullName
+$arquivoBanco = Localizar-BancoPortal (Split-Path $projeto) $temp -Obrigatorio
 
 Verifica 'Banco descartavel foi criado' {
   if ($arquivoBanco) { $true } else { 'nenhum .sqlite encontrado na pasta temporaria' }

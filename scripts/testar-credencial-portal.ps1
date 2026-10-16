@@ -1,4 +1,5 @@
-﻿# Confere as duas guardas da credencial interna do Portal, usando as funcoes
+﻿param([switch]$ExigirBuild)
+# Confere as duas guardas da credencial interna do Portal, usando as funcoes
 # reais do validar-operacao.ps1 num diretorio de mentira.
 $ErrorActionPreference = 'Stop'
 $fonte = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'validar-operacao.ps1') -Raw
@@ -35,23 +36,29 @@ try {
   Remove-Item -LiteralPath $temp -Recurse -Force -ErrorAction SilentlyContinue
 }
 
-# A credencial e entregue ao Worker em tempo de execucao, a partir do mesmo
-# portal.env que os Alertas leem. Se ela sair da lista de variaveis, a rota
-# interna passa a responder 401 para os Alertas. E ela nunca volta a ser
-# embutida na compilacao, que a deixava em texto puro em dist/server.
-$iniciar = Get-Content -LiteralPath (Join-Path $PSScriptRoot '..\portal\scripts\iniciar-portal.mjs') -Raw
-if ($iniciar -notmatch "PORTAL_API_TOKEN") {
-  throw 'O Portal nao recebe mais o PORTAL_API_TOKEN do ambiente.'
+# A rota importa a configuracao do servidor, que resolve o token na partida.
+$configuracao = Get-Content -LiteralPath (Join-Path $PSScriptRoot '../portal/scripts/configuracao-servidor.mjs') -Raw
+$iniciar = Get-Content -LiteralPath (Join-Path $PSScriptRoot '../portal/scripts/iniciar-portal.mjs') -Raw
+$rota = Get-Content -LiteralPath (Join-Path $PSScriptRoot '../portal/app/api/[...path]/route.ts') -Raw
+if ($configuracao -notmatch "'PORTAL_API_TOKEN'" -or $configuracao -notmatch 'process.env' -or $iniciar -notmatch 'configuracaoServidor\(config\)') {
+  throw 'O servidor nao resolve a credencial em tempo de execucao.'
 }
-$rota = Get-Content -LiteralPath (Join-Path $PSScriptRoot '..\portal\app\api\[...path]\route.ts') -Raw
-if ($rota -notmatch 'env as unknown as \{ PORTAL_API_TOKEN') {
-  throw 'A rota interna nao le mais a credencial do ambiente.'
+if ($rota -notmatch 'configuracao-servidor.mjs' -or $rota -notmatch 'PORTAL_API_TOKEN' -or $rota -match '__PORTAL_API_TOKEN__') {
+  throw 'A rota interna deixou de usar a configuracao do servidor.'
 }
-if ($rota -match '__PORTAL_API_TOKEN__') {
-  throw 'A credencial voltou a ser embutida na compilacao.'
-}
-Write-Host '[OK] credencial entregue e lida em tempo de execucao'
-Write-Host 'Credencial do Portal: 4 conferencias aprovadas.' -ForegroundColor Green
+Write-Host '[OK] credencial resolvida e lida em tempo de execucao'
+$dist=Join-Path $PSScriptRoot '../portal/dist'
+if (Test-Path -LiteralPath $dist) {
+  # O build do CI recebe esta sentinela; nenhuma parte de dist pode conte-la.
+  $sentinela='token-ficticio-build-proibido-170'
+  $arquivos=@(Get-ChildItem -LiteralPath $dist -Recurse -File)
+  if(!$arquivos.Count){throw 'Build vazio; nao foi possivel conferir a credencial.'}
+  foreach($arquivo in $arquivos){
+    if([Text.Encoding]::UTF8.GetString([IO.File]::ReadAllBytes($arquivo.FullName)).Contains($sentinela)){throw 'Credencial de build encontrada em dist.'}
+  }
+  Write-Host "[OK] sentinela ausente dos $($arquivos.Count) arquivos de dist"
+}elseif($ExigirBuild){throw 'Build obrigatorio ausente para conferir a credencial.'}
+else{Write-Host 'PULADO: varredura dist exige build; o job Portal a executa depois de compilar com a sentinela.'}
 
 . (Join-Path $PSScriptRoot 'operacao-logica.ps1')
 $temp=Join-Path ([IO.Path]::GetTempPath()) ('sv-token-'+[guid]::NewGuid().ToString('N'))

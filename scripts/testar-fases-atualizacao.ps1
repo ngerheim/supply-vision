@@ -35,6 +35,15 @@ try{
   [IO.File]::WriteAllText((Join-Path $raiz 'scripts/atualizar-servidor.ps1'),$fonte)
   foreach($arquivo in @('portal/portal.env.example','compartilhado/smtp.env.example','compartilhado/operacao.env.example','privado/comum/smtp.env','privado/comum/operacao.env')){[IO.File]::WriteAllText((Join-Path $raiz $arquivo),'')}
   [IO.File]::WriteAllText((Join-Path $raiz 'privado/portal/configuracao/portal.env'),('PORTAL_API_TOKEN='+('a'*64)))
+  $configsAntes=@{}
+  if($caso-in@('ci-reprovado','preparo-falha','preparo-limpeza-falha')){
+   foreach($tipo in @('smtp','operacao')){
+    # Defaults faltantes tornariam observavel qualquer reparo antes de TROCAR.
+    [IO.File]::WriteAllText((Join-Path $raiz "compartilhado/$tipo.env.example"),'CHAVE_NOVA=padrao')
+    $arquivoConfig=Join-Path $raiz "privado/comum/$tipo.env"
+    $configsAntes[$arquivoConfig]=(Get-FileHash $arquivoConfig -Algorithm SHA256).Hash
+   }
+  }
   foreach($rel in @('portal/dist','portal/node_modules','alertas/.venv')){[IO.File]::WriteAllText((Join-Path $raiz "$rel/versao"),'anterior')}
   if($caso-eq'ensaio'){[IO.File]::WriteAllText((Join-Path $raiz 'privado/comum/operacao.env'),'MODO_ENSAIO=1')}
   [IO.File]::WriteAllText((Join-Path $raiz 'privado/banco-ficticio'),'banco-anterior')
@@ -112,6 +121,9 @@ exit $LASTEXITCODE
   }
   if($caso-in@('ci-reprovado','preparo-falha','preparo-limpeza-falha')){
    if($passos-contains'backup-local'-or$passos-contains'commit-novo'-or(Test-Path (Join-Path $raiz 'privado/operacao/parar.sinal'))){throw 'Preparo reprovado parou/alterou a instalacao.'}
+   foreach($arquivoConfig in $configsAntes.Keys){
+    if((Get-FileHash $arquivoConfig -Algorithm SHA256).Hash-ne$configsAntes[$arquivoConfig]){throw 'PREPARAR alterou bytes da configuracao da instalacao.'}
+   }
    $contexto=Get-Content (Join-Path $raiz 'privado/operacao/atualizacao.json') -Raw|ConvertFrom-Json
    $limpeza=if($caso-ne'preparo-limpeza-falha'){'concluida'}else{'pendente'}
    if($contexto.fase-ne'cancelado-preparo'-or$contexto.limpeza-ne$limpeza-or((Test-Path $contexto.preparo)-ne($limpeza-eq'pendente'))){throw 'Cancelamento/limpeza do PREPARAR nao registrados.'}

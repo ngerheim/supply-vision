@@ -196,7 +196,8 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
    $contextoReversao=Get-Content (Join-Path $privado 'operacao/atualizacao.json') -Raw|ConvertFrom-Json
    if($reversao.ExitCode-eq0-or$saidaReversao-notmatch'H2_FALHA_CONCLUIR_INTENCIONAL'-or$contextoReversao.fase-ne'revertido'){throw 'Reversao real nao confirmada.'}
    if((Git-H2 -Argumentos @('-C',$raiz,'rev-parse','HEAD')).Trim()-ne$base){throw 'Codigo anterior nao restaurado.'}
-   Node-H2 -Argumentos @($apoio,'negativo',$raiz,$snapshot)
+   foreach($nomeLog in @('atualizador.log','atualizador-erro.log')){Get-Content (Join-Path $logs $nomeLog)|Write-Host}
+   Node-H2 -Argumentos @($apoio,'reversao',$raiz,$snapshot)
    Node-H2 -Argumentos @((Join-Path $raiz 'portal/scripts/saude-operacao.mjs'),'http://127.0.0.1:3000')
    Login-H2
    Write-Host '[OK] Reversao real: codigo, dependencias, build e banco anteriores restaurados; Portal anterior atende login.'

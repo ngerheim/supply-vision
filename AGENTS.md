@@ -92,7 +92,8 @@
 
 - Interface e API rodam no Node 24.20, via `vinext/server/prod-server`.
   `lib/sqlite-local.ts` usa `scripts/sqlite-local.mjs` no mesmo processo.
-- `arquivoSqliteLocal()` e compartilhado com consumidores/backup; preserva o
+- `portal/scripts/banco-local.mjs` concentra `localizarBanco()`, descoberta e destino
+  da semente; Portal, consumidores, PowerShell e testes usam esse unico criterio; preserva o
   caminho e o nome legado, recusando bases ambiguas. Nunca cria base na operacao.
   Fixtures de CI autorizam criacao explicita (`PORTAL_CRIAR_BANCO=1` e ensaio/CI)
   no mesmo diretorio, com nome fixo `portal.sqlite`.

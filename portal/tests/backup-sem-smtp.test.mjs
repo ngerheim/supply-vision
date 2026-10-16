@@ -1,3 +1,4 @@
+import { destinoBanco } from '../scripts/banco-local.mjs';
 import { criarTemporarioTeste } from './apoio/ambiente.mjs';
 import assert from 'node:assert/strict';
 import test from 'node:test';
@@ -9,7 +10,7 @@ import { DatabaseSync } from 'node:sqlite';
 for (const rede of [true, false]) void test(`backup sem SMTP ${rede ? 'replica na rede' : 'não declara redundância'}`, (t) => {
   const dir=criarTemporarioTeste('backup-sem-smtp-');
   t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
-  const arquivo=path.join(dir,'portal/banco/estado/state/v3/d1/miniflare-D1DatabaseObject/a.sqlite');
+  const arquivo=destinoBanco('a.sqlite',path.join(dir,'portal'));
   fs.mkdirSync(path.dirname(arquivo),{recursive:true});
   const db=new DatabaseSync(arquivo);
   db.exec("CREATE TABLE teste(valor TEXT); INSERT INTO teste VALUES('original')");db.close();
