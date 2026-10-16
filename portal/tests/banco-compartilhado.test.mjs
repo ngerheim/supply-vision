@@ -32,7 +32,8 @@ void test('Portal, consumidores, backup, expurgo, restauracao e semente comparti
   t.after(async()=>{try{await parar();}finally{if(filho?.exitCode===null)filho.kill();fs.rmSync(raiz,{recursive:true,force:true});}});
   async function iniciar(token){
     fs.rmSync(path.join(raiz,'operacao/parar.sinal'),{force:true});
-    fs.writeFileSync(path.join(pastaPortal,'configuracao/portal.env'),`PORTAL_URL=${url}\nPORTAL_API_TOKEN=${token}\n`);
+    // A restauracao CLI le as portas do arquivo, sem sobrepor process.env.
+    fs.writeFileSync(path.join(pastaPortal,'configuracao/portal.env'),`PORTAL_URL=${url}\nPORTAL_PORTA=${port}\nRELATORIOS_PORTA=${relatorios}\nPORTAL_API_TOKEN=${token}\n`);
     filho=spawn(process.execPath,['scripts/iniciar-portal.mjs','local'],{cwd:portal,env,stdio:['ignore','pipe','pipe']});
     filho.stdout.on('data',d=>log+=d);filho.stderr.on('data',d=>log+=d);
     for(let n=0;n<100;n++){

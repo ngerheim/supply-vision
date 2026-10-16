@@ -194,7 +194,15 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
    if(!(Esperar-ProcessoTeste $reversao 900)){throw 'Reversao excedeu 900 s.'}
    $saidaReversao=(Get-Content (Join-Path $logs 'atualizador.log') -Raw)+(Get-Content (Join-Path $logs 'atualizador-erro.log') -Raw)
    $contextoReversao=Get-Content (Join-Path $privado 'operacao/atualizacao.json') -Raw|ConvertFrom-Json
-   if($reversao.ExitCode-eq0-or$saidaReversao-notmatch'H2_FALHA_CONCLUIR_INTENCIONAL'-or$contextoReversao.fase-ne'revertido'){throw 'Reversao real nao confirmada.'}
+   $marcadorReversao=$saidaReversao-match'H2_FALHA_CONCLUIR_INTENCIONAL'
+   if($reversao.ExitCode-eq0-or!$marcadorReversao-or$contextoReversao.fase-ne'revertido'){
+    Write-Host "Reversao: ExitCode=$($reversao.ExitCode); marcador=$marcadorReversao; fase=$($contextoReversao.fase)"
+    foreach($nomeLog in @('atualizador.log','atualizador-erro.log')){
+     Write-Host "Fim de $($nomeLog):"
+     Get-Content -LiteralPath (Join-Path $logs $nomeLog) -Tail 80|Write-Host
+    }
+    throw 'Reversao real nao confirmada.'
+   }
    if((Git-H2 -Argumentos @('-C',$raiz,'rev-parse','HEAD')).Trim()-ne$base){throw 'Codigo anterior nao restaurado.'}
    foreach($nomeLog in @('atualizador.log','atualizador-erro.log')){Get-Content (Join-Path $logs $nomeLog)|Write-Host}
    Node-H2 -Argumentos @($apoio,'reversao',$raiz,$snapshot)
