@@ -78,6 +78,11 @@ void test('novas faixas privadas, DNS, usuario, UNC e Power BI; exemplos exatos 
   assert.equal(contemInfra('portal.empresa.local portal.local teste.local'),false);
   assert.equal(contemInfra('x.localeCompare(y) 10.000 km 10.0.13'),false);
 });
+void test('extensao de addon Node nao e conta; nome ficticio continua detectado', () => {
+  assert.equal(contemInfra('engines.node'), false);
+  assert.equal(contemInfra('fix: preservar dependencias ao mudar somente engines.node'), false);
+  assert.equal(contemInfra('pessoa.ficticia'), true);
+});
 void test('commit intermediario removido do checkout ainda e detectado; base excluida', () => {
   comRepositorio((raiz, gravar) => {
     const git = args => execFileSync('git', ['-c','user.name=Teste','-c','user.email=teste@example.com',...args], {cwd:raiz,encoding:'utf8'}).trim();

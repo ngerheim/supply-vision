@@ -18,7 +18,7 @@ const unc = /(?:^|[\s="'`])\\{2,4}([a-z0-9._-]+)\\{1,4}([a-z0-9_$.-]+)/gi;
 const maquina = /\b[a-z]{2}-\d{4}\b/i;
 // Delimitadores evitam confundir chamadas/propriedades JS com uma conta literal.
 const conta = /(?:^|[\s="'`\\])([a-z][a-z0-9_-]+\.[a-z][a-z0-9_-]+)(?=$|[\s"'`,;\\])/gi;
-const extensoes = new Set(['md', 'mjs', 'cjs', 'js', 'ts', 'tsx', 'py', 'ps1', 'bat', 'cmd', 'json', 'jsonl', 'env', 'example', 'txt', 'csv', 'sqlite', 'db', 'log', 'yml', 'yaml', 'toml', 'tgz', 'zip', 'png', 'svg', 'html', 'css', 'exe', 'dll', 'ini', 'xml', 'config', 'sample', 'lock', 'lockb', 'sinal', 'dev', 'com', 'org', 'net', 'io', 'br', 'pkl', 'parquet', 'xlsx', 'eml', 'commit', 'bak', 'backup', 'source', 'pid', 'psd1', 'jsonc', 'tsbuildinfo', 'mts', 'cts']);
+const extensoes = new Set(['md', 'mjs', 'cjs', 'js', 'ts', 'tsx', 'py', 'ps1', 'bat', 'cmd', 'json', 'jsonl', 'env', 'example', 'txt', 'csv', 'sqlite', 'db', 'log', 'yml', 'yaml', 'toml', 'tgz', 'zip', 'png', 'svg', 'html', 'css', 'exe', 'dll', 'node', 'ini', 'xml', 'config', 'sample', 'lock', 'lockb', 'sinal', 'dev', 'com', 'org', 'net', 'io', 'br', 'pkl', 'parquet', 'xlsx', 'eml', 'commit', 'bak', 'backup', 'source', 'pid', 'psd1', 'jsonc', 'tsbuildinfo', 'mts', 'cts']);
 export function arquivoFicticio(nome) {
   // So os caminhos versionados de teste/exemplo: um arquivo arbitrario nao pode
   // se declarar fixture pelo conteudo ou desativar as outras guardas.
