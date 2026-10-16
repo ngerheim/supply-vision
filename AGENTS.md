@@ -34,7 +34,8 @@
 | `portal/app/api/[...path]/route.ts` | API, autorizacao e operacoes de negocio |
 | `portal/lib/database.ts` | Schema, migracoes, sessoes e cookies |
 | `portal/lib/domain.ts`, `importacao.ts` | Validacao, normalizacao e publicacao |
-| `portal/components/portal-app.tsx` | Estado da interface, permissoes visuais e salvar/atualizar |
+| `portal/components/portal-app.tsx` | Estado da interface e permissoes visuais |
+| `portal/lib/atualizacao-periodica.ts` | Consultas automaticas, debounce e salvar/atualizar |
 | `portal/components/portal-*.tsx` | Telas por assunto, navegacao e apresentacao compartilhada |
 | `portal/components/imports.tsx`, `import-*.tsx` | Envio, previa, correspondencias, resumo, erros e historico de importacao |
 | `portal/components/reports.tsx` | Relatorios |
