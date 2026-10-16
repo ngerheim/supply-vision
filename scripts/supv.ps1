@@ -126,7 +126,6 @@ function Mostrar-ProgressoSupv($a,$Exibicao=$null){
   $texto="Etapa $($a.numero) de $($a.total): $($a.nome) | etapa $($a.etapaSegundos) s | total $($a.totalSegundos) s | restante estimado: $restante | modo $modo"
   if($a.esperaCI.mensagem-and$a.estado-eq'andamento'){$texto=[string]$a.esperaCI.mensagem}
   $terminal=$a.estado-in@('concluido','falhou')
-  if($terminal-and$a.erro){$texto+=' | '+(([string]$a.erro-replace'\s+',' ').Trim())}
  }
  if($null-ne$Exibicao){
   # A conclusao fica fixa enquanto o worker termina; os demais textos mudam
@@ -139,7 +138,11 @@ function Mostrar-ProgressoSupv($a,$Exibicao=$null){
 }
 function Mostrar-ResultadoSupv($Codigo=$null){
  $r=Executar-AcaoAdministrada $script:supvRaiz $script:supvPrivado 'fim-atualizacao' @{codigo=$Codigo;saida='atualizacao-processo-saida.log'}
- Escrever-Supv $r.mensagem
+ # O andamento guarda a causa canonica; stderr e ultimas etapas podem repeti-la.
+ if(!$r.ok-and$r.andamento.erro){
+  Escrever-Supv ('ERRO: '+(([string]$r.andamento.erro-replace'\s+',' ').Trim()))
+  Escrever-Supv ("Tempo total: $($r.andamento.totalSegundos) s.")
+ }else{Escrever-Supv $r.mensagem}
  return [bool]$r.ok
 }
 function Inicializar-TipoConsoleSupv {

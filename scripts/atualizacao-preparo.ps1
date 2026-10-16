@@ -783,6 +783,8 @@ function Publicar-AndamentoAtualizacao($Andamento,[string]$Nome,[string]$Estado=
  $temporario=$null
  try{
   if(!$Andamento-or!$Andamento.arquivo){return}
+  # Um resultado terminal nao pode voltar a avancar durante limpeza ou retomada.
+  if($Andamento.estado-ne'andamento'){return}
   if($Modo){$Andamento.modo=$Modo;$Andamento.plano=@(Plano-AndamentoAtualizacao ($Modo-eq'rapido'));$Andamento.total=$Andamento.plano.Count}
   if($MotivoModo){$Andamento.motivoModo=$MotivoModo}
   if($Nome-ne$Andamento.nome){$Andamento.inicioEtapa=[datetime]::UtcNow.ToString('o')}
