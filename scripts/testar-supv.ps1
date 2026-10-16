@@ -181,16 +181,29 @@ try{
   Exigir-Supv ((Consultar-AndamentoAdministrado $privadoTeste).numero-eq$antes.numero+1) 'filho continua na proxima etapa'
   $a=Novo-AndamentoAtualizacao $arquivo ''
   Publicar-AndamentoAtualizacao $a 'PREPARAR / Build do Portal'
-  $a.erro='Falha ficticia unica'
+  $a.erro='Falha ficticia unica: Portal (failure). Saidas: re-run no GitHub, PR de correcao, ou supv atualizar --completo.'
   Publicar-AndamentoAtualizacao $a 'PREPARAR reprovado' 'falhou'
   $reprovado=Get-Content $arquivo -Raw
   $a=Ler-AndamentoAtualizacao $arquivo
   Publicar-AndamentoAtualizacao $a 'PREPARAR / Aprovacao e conferencia'
   Publicar-AndamentoAtualizacao $a 'Atualizacao falhou' 'falhou'
   Exigir-Supv ((Get-Content $arquivo -Raw)-ceq$reprovado) 'reprovacao permanece terminal com numero, erro e fim fixos'
-  function Executar-AcaoAdministrada {return @{ok=$false;mensagem='Falha ficticia unica repetida';andamento=@{erro='Falha ficticia unica';totalSegundos=180}}}
-  $texto=Capturar-Supv {Mostrar-ProgressoSupv (Consultar-AndamentoAdministrado $privadoTeste);[void](Mostrar-ResultadoSupv 1)}
-  Exigir-Supv (([regex]::Matches($texto,'Falha ficticia unica')).Count-eq1) 'causa aparece uma vez entre andamento e resultado'
+  $falha=Consultar-AndamentoAdministrado $privadoTeste
+  Set-Content (Join-Path $script:supvPrivado 'operacao/atualizacao-processo-saida.log') 'Falha ficticia unica' -Encoding UTF8
+  function Consultar-AndamentoAdministrado {return $falha}
+  function Consultar-AtualizacaoAdministrada {return $null}
+  function Obter-TarefaSupplyVision {return $null}
+  function Executar-AcaoAdministrada {return @{ok=$false;mensagem=($falha.erro+"`n"+$falha.erro);andamento=$falha}}
+  $processo=[pscustomobject]@{HasExited=$true;ExitCode=1}
+  foreach($metodo in @('WaitForExit','Refresh','Dispose')){$processo|Add-Member ScriptMethod $metodo {}}
+  function Executar-AcaoSupv {return @{processo=$processo}}
+  $texto=Capturar-Supv {[void](Executar-ComandoSupv (Ler-ComandoSupv @('acompanhar')))}
+  Exigir-Supv ($texto.Contains($falha.erro)-and$texto-like'*Etapa *PREPARAR reprovado*Portal (failure)*supv atualizar --completo*') 'acompanhar apos falha conserva check e alternativas no progresso'
+  Exigir-Supv (([regex]::Matches($texto,'Falha ficticia unica')).Count-eq1) 'acompanhar nao repete a causa no resultado'
+  $texto=Capturar-Supv {[void](Executar-ComandoSupv (Ler-ComandoSupv @('atualizar')))}
+  Exigir-Supv ($texto.Contains($falha.erro)-and([regex]::Matches($texto,'Falha ficticia unica')).Count-eq1) 'atualizar mostra causa e alternativas uma unica vez'
+  $texto=Capturar-Supv {[void](Mostrar-ResultadoSupv 1 @{})}
+  Exigir-Supv ($texto.Contains($falha.erro)) 'resultado mostra erro quando o ultimo progresso nao o exibiu'
  }
  # Retencao numerica nao vira segredo por conter EMAIL na chave.
  & {
