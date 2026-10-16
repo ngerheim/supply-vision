@@ -1,63 +1,28 @@
-import { criarTemporarioTeste } from './apoio/ambiente.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
-
-import { guardarNoHistorico, listarHistorico, nomeDoDia, podarHistorico } from '../scripts/retencao-backup.mjs';
-
-function pastaTemporaria() {
-  return criarTemporarioTeste('retencao-');
-}
-function dia(texto) {
-  const [a, m, d] = texto.split('-').map(Number);
-  return new Date(a, m - 1, d, 14, 30);
-}
-
-void test('guarda a copia do dia e regrava no mesmo dia', () => {
-  const base = pastaTemporaria(), origem = path.join(base, 'portal-atual.sqlite');
-  fs.writeFileSync(origem, 'manha');
-  guardarNoHistorico(base, origem, dia('2026-09-22'));
-  fs.writeFileSync(origem, 'tarde');
-  const { destino } = guardarNoHistorico(base, origem, dia('2026-09-22'));
-  assert.equal(path.basename(destino), 'portal-2026-09-22.sqlite');
-  assert.equal(fs.readFileSync(destino, 'utf8'), 'tarde');
-  assert.deepEqual(listarHistorico(base).map((item) => item.dia), ['2026-09-22']);
-  assert.ok(!fs.readdirSync(path.join(base, 'historico')).some((nome) => nome.endsWith('.tmp')));
+import { criarTemporarioTeste } from './apoio/ambiente.mjs';
+import { nomeBackup, listarHistorico, podarHistorico, DIAS_RETENCAO } from '../scripts/retencao-backup.mjs';
+void test('retencao de 14 dias por horario remove somente arquivos regulares do proprio padrao', t => {
+  const dir = criarTemporarioTeste('sv-retencao-'); t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const agora = new Date(2026, 9, 16, 13, 30);
+  const corte = new Date(agora.getTime() - DIAS_RETENCAO * 86400_000);
+  for (const data of [agora, corte, new Date(corte.getTime() - 60000)]) fs.writeFileSync(path.join(dir, nomeBackup(data)), 'ficticio');
+  const alheios = ['portal-atual.sqlite', 'outro.7z', 'supply-vision-2026-01-01_1330.7z.tmp'];
+  for (const nome of alheios) fs.writeFileSync(path.join(dir, nome), 'preservar');
+  fs.mkdirSync(path.join(dir, 'supply-vision-2026-01-01_0000.7z'));
+  assert.equal(podarHistorico(dir, agora).length, 1);
+  assert.deepEqual(listarHistorico(dir).map(x => path.basename(x.arquivo)), [nomeBackup(agora), nomeBackup(corte)]);
+  for (const nome of alheios) assert.equal(fs.readFileSync(path.join(dir, nome), 'utf8'), 'preservar');
+  assert.throws(() => podarHistorico(dir, agora, 0), /positivo/);
 });
-
-void test('mantem 7 dias, incluindo hoje, atravessando a virada do mes', () => {
-  const base = pastaTemporaria(), origem = path.join(base, 'portal-atual.sqlite');
-  fs.writeFileSync(origem, 'x');
-  for (let n = 0; n < 12; n++) guardarNoHistorico(base, origem, new Date(2026, 8, 25 + n, 9));
-  // 25/09 + 11 dias = 06/10; ficam de 30/09 a 06/10.
-  assert.deepEqual(listarHistorico(base).map((item) => item.dia), [
-    '2026-10-06', '2026-10-05', '2026-10-04', '2026-10-03', '2026-10-02', '2026-10-01', '2026-09-30',
-  ]);
-});
-
-void test('nao toca em arquivos fora do padrao', () => {
-  const base = pastaTemporaria(), pasta = path.join(base, 'historico');
-  fs.mkdirSync(pasta);
-  for (const nome of ['portal-2020-01-01.sqlite', 'pre-restauracao-2020.sqlite', 'anotacoes.txt', 'portal-2020-01-01.sqlite.bak'])
-    fs.writeFileSync(path.join(pasta, nome), 'x');
-  assert.deepEqual(podarHistorico(base, dia('2026-09-22')), []);
-  assert.deepEqual(fs.readdirSync(pasta).sort(), ['anotacoes.txt', 'portal-2020-01-01.sqlite', 'portal-2020-01-01.sqlite.bak', 'pre-restauracao-2020.sqlite']);
-});
-
-void test('retomar após pausa preserva os pontos anteriores à retomada', () => {
-  const base = pastaTemporaria(), origem = path.join(base, 'portal-atual.sqlite');
-  fs.writeFileSync(origem, 'antes');
-  for (let n = 1; n <= 7; n++) guardarNoHistorico(base, origem, new Date(2026, 8, n, 9));
-  fs.writeFileSync(origem, 'depois');
-  guardarNoHistorico(base, origem, dia('2026-10-06'));
-  assert.equal(listarHistorico(base).length, 7);
-  assert.equal(fs.readFileSync(listarHistorico(base)[1].arquivo, 'utf8'), 'antes');
-  assert.equal(listarHistorico(base).at(-1).dia, '2026-09-02');
-  assert.throws(() => podarHistorico(base, dia('2026-10-06'), 0), /positivo/);
-});
-
-void test('usa a data local da maquina', () => {
-  assert.equal(nomeDoDia(new Date(2026, 0, 5, 23, 59)), '2026-01-05');
-  assert.equal(nomeDoDia(new Date(2026, 11, 31, 0, 1)), '2026-12-31');
+void test('migracao limpa legado local e preserva snapshots de protecao e arquivos alheios', async t => {
+  const { removerHistoricoLocal } = await import('../scripts/retencao-backup.mjs');
+  const dir = criarTemporarioTeste('sv-legado-'); t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  fs.mkdirSync(path.join(dir, 'historico'));
+  for (const nome of ['portal-atual.sqlite', 'historico/portal-2026-01-01.sqlite', 'pre-expurgo.sqlite', 'pre-atualizacao.sqlite', 'pre-restauracao-preservar.sqlite', 'historico/alheio.txt']) fs.writeFileSync(path.join(dir, nome), 'preservar');
+  removerHistoricoLocal(dir);
+  assert.deepEqual(fs.readdirSync(dir).sort(), ['historico', 'pre-atualizacao.sqlite', 'pre-restauracao-preservar.sqlite']);
+  assert.deepEqual(fs.readdirSync(path.join(dir, 'historico')), ['alheio.txt']);
 });

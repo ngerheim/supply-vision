@@ -9,7 +9,7 @@ import { criarTemporarioTeste } from './apoio/ambiente.mjs';
 import { reservarPortaLoopback } from '../scripts/porta-teste.mjs';
 import { localizarBanco } from '../scripts/banco-local.mjs';
 
-const portal=path.resolve(import.meta.dirname,'..'), produto=path.dirname(portal);
+const portal=path.resolve(import.meta.dirname,'..');
 void test('Portal, consumidores, backup, expurgo, restauracao e semente compartilham o arquivo criado na partida', {
   skip:!fs.existsSync(path.join(portal,'dist/server/index.js')),timeout:90000,
 }, async t=>{
@@ -63,21 +63,12 @@ void test('Portal, consumidores, backup, expurgo, restauracao e semente comparti
   const seed=new DatabaseSync(arquivo);try{seed.prepare("INSERT INTO imports(id,filename,mode,status,created_at,completed_at,summary_json) VALUES('prova-expurgo','fixture.xlsx','replace','completed','2000-01-01','2000-01-01','prova')").run();}finally{seed.close();}
   executar('expurgar-dados.mjs');
   const expurgado=new DatabaseSync(arquivo,{readOnly:true});try{assert.equal(expurgado.prepare("SELECT summary_json FROM imports WHERE id='prova-expurgo'").get().summary_json,null);}finally{expurgado.close();}
-  executar('backup.mjs',['--somente-local']);assert.equal(ler(path.join(pastaPortal,'backups/portal-atual.sqlite')),'PROVA');
+  executar('backup.mjs',['--somente-local']);assert.equal(ler(path.join(pastaPortal,'backups/pre-atualizacao.sqlite')),'PROVA');
   await parar();await iniciar(tokenB);
   assert.equal(localizarBanco(null,pastaPortal),arquivo);assert.equal(await interna(tokenA),401);assert.equal(await interna(tokenB),200);
   await parar();
   const mudar=new DatabaseSync(arquivo);try{mudar.exec("UPDATE units SET name='Depois do backup' WHERE code='PROVA'");}finally{mudar.close();}
-  executar('restaurar-backup.mjs',['--sim']);assert.equal(localizarBanco(null,pastaPortal),arquivo);assert.equal(ler(arquivo),'PROVA');
+  executar('restaurar-backup.mjs',['--sim','--pre-atualizacao']);assert.equal(localizarBanco(null,pastaPortal),arquivo);assert.equal(ler(arquivo),'PROVA');
   const snapshot=path.join(raiz,'semente.sqlite');executar('snapshot-banco.mjs',[arquivo,snapshot]);assert.equal(ler(snapshot),'PROVA');
-  const shell='powershell.exe';
-  if(process.platform==='win32'){
-    const saida=path.join(raiz,'semente');fs.mkdirSync(saida);
-    const envPowerShell=Object.fromEntries(Object.entries(env).filter(([chave])=>chave.toLowerCase()!=='psmodulepath'));
-    for(const dir of ['alertas/config','alertas/parametros'])fs.writeFileSync(path.join(raiz,dir,'fixture.txt'),'ficticio');
-    execFileSync(shell,['-NoProfile','-File',path.join(produto,'scripts/preparar-semente.ps1'),'-Destino',saida],{cwd:produto,env:{...envPowerShell,TEMP:raiz},stdio:'pipe',timeout:20000});
-    const zip=path.join(saida,fs.readdirSync(saida).find(n=>n.endsWith('.zip'))),restaurado=path.join(raiz,'semente-restaurada');
-    execFileSync(shell,['-NoProfile','-File',path.join(produto,'scripts/restaurar-semente.ps1'),'-Zip',zip],{cwd:produto,env:{...envPowerShell,TEMP:raiz,SUPPLY_VISION_PRIVADO:restaurado},stdio:'pipe',timeout:20000});
-    assert.equal(ler(localizarBanco(null,path.join(restaurado,'portal'))),'PROVA');
-  }else{t.diagnostic('Semente: snapshot real aprovado; fluxo PowerShell completo exige Windows e conserva suas guardas.');}
+  t.diagnostic('Semente integrada ao 7z: geracao e restauracao de configuracao exercitadas em backup-restauracao-e2e.test.mjs.');
 });

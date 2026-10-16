@@ -1,159 +1,146 @@
-// Devolve o banco do portal a uma copia de backup.
-//
-// Existia o backup e existia o teste de restauracao, mas a restauracao em si
-// era manual: parar a operacao, achar o arquivo de nome hexadecimal, apagar os
-// -wal/-shm e sobrescrever. Errar um desses passos corrompe o banco, e ninguem
-// devia ter de acertar isso sob pressao.
-//
-//   node scripts/restaurar-backup.mjs [--anterior | --data AAAA-MM-DD] [--sim]
-//
-// Sem opcao, usa a copia mais recente (portal-atual.sqlite).
-// --anterior usa a copia do dia anterior mais recente do historico de 7 dias,
-// que e a que interessa quando um erro ja entrou no backup de hoje. (Antes
-// apontava para portal-atual.anterior.sqlite, que o backup apaga logo depois
-// da troca e por isso nunca existia na hora de restaurar.)
-// --data escolhe um dia especifico do historico.
-// --sim dispensa a confirmacao digitada, para quem chama pela central.
 import fs from 'node:fs';
 import net from 'node:net';
 import path from 'node:path';
-import readline from 'node:readline';
-import { DatabaseSync } from 'node:sqlite';
-
+import readline from 'node:readline/promises';
+import { pathToFileURL } from 'node:url';
 import { portasOperacao } from './portas-operacao.mjs';
-import { lerConfigBruta, portalPrivado } from './configuracao.mjs';
-import { validarBanco as resumir } from './validar-banco.mjs';
+import { lerConfigBruta, lerArquivo } from './configuracao.mjs';
+import { privado, portalPrivado } from './caminhos.mjs';
+import { validarBanco } from './validar-banco.mjs';
+import { criarSnapshot } from './snapshot-banco.mjs';
 import { prepararRestauracao } from './restauracao-segura.mjs';
-import { listarHistorico, nomeDoDia } from './retencao-backup.mjs';
-import { localizarBanco as localizarBancoLocal } from './banco-local.mjs';
+import { localizarBanco, destinoBanco } from './banco-local.mjs';
 import { travarRestauracao } from './trava-restauracao.mjs';
+import { comBackupExclusivo } from './backup-exclusivo.mjs';
+import { comBackupDaRede, exigirDestinoSeguro, configuracaoPermitida, listarConfiguracao } from './backup-pacote.mjs';
+import { listarHistorico } from './retencao-backup.mjs';
+import { FalhaBackup } from './backup-7z.mjs';
 
-const pastaBackup = path.join(portalPrivado, 'backups');
-const anterior = process.argv.includes('--anterior');
-const semPergunta = process.argv.includes('--sim');
-const posicaoData = process.argv.indexOf('--data');
-const dataPedida = posicaoData > 0 ? String(process.argv[posicaoData + 1] || '') : '';
-
-function escolherOrigem() {
-  if (dataPedida) {
-    const item = listarHistorico(pastaBackup).find((entrada) => entrada.dia === dataPedida);
-    if (!item) throw new Error(`Nao ha backup de ${dataPedida} no historico. Disponiveis: ${listarHistorico(pastaBackup).map((entrada) => entrada.dia).join(', ') || 'nenhum'}.`);
-    return item.arquivo;
-  }
-  if (anterior) {
-    const hoje = nomeDoDia();
-    const item = listarHistorico(pastaBackup).find((entrada) => entrada.dia < hoje);
-    if (!item) throw new Error('Ainda nao ha backup de um dia anterior no historico.');
-    return item.arquivo;
-  }
-  return path.join(pastaBackup, 'portal-atual.sqlite');
-}
-const origem = escolherOrigem();
-
-
-function localizarBanco() {
-  const banco = localizarBancoLocal();
-  if (!banco) throw new Error('Banco atual nao encontrado.');
-  return banco;
-}
-
-// O PID do supervisor nao basta: o Portal pode ter sido iniciado a mao ou o
-// arquivo pode estar ausente ou velho. Se algo responde na porta do Portal, o
-// banco esta aberto por alguem, e a restauracao nao pode seguir.
 function portalRespondendo(porta) {
-  return new Promise((resolve) => {
+  return new Promise(resolve => {
     const conexao = net.connect({ host: '127.0.0.1', port: porta });
-    const fim = (resposta) => { conexao.destroy(); resolve(resposta); };
+    const fim = resposta => { conexao.destroy(); resolve(resposta); };
     conexao.setTimeout(1500, () => fim(false));
-    conexao.once('connect', () => fim(true));
-    conexao.once('error', () => fim(false));
+    conexao.once('connect', () => fim(true)); conexao.once('error', () => fim(false));
   });
 }
-
-function operacaoNoAr() {
-  // Com o portal no ar o arquivo esta aberto: sobrescrever deixaria o banco
-  // inconsistente e o processo continuaria escrevendo no que foi substituido.
-  const lock = path.join(portalPrivado, '..', 'operacao', 'supervisor.lock');
+export async function exigirOperacaoParada(raiz = privado, config = lerConfigBruta()) {
+  const lock = path.join(raiz, 'operacao/supervisor.lock');
   if (fs.existsSync(lock)) {
-    try { const fd = fs.openSync(lock, 'r+'); fs.closeSync(fd); } catch { return true; }
+    try { const fd = fs.openSync(lock, 'r+'); fs.closeSync(fd); }
+    catch { throw new FalhaBackup('Pare a operacao antes de restaurar.'); }
   }
-  const pid = path.join(portalPrivado, '..', 'operacao', 'supervisor.pid.json');
-  if (!fs.existsSync(pid)) return false;
-  try {
-    const { pid: numero } = JSON.parse(fs.readFileSync(pid, 'utf8').replace(/^\uFEFF/, ''));
-    if (!numero) return false;
-    process.kill(numero, 0);
-    return true;
-  } catch (erro) { return erro.code === 'EPERM'; }
+  const pid = path.join(raiz, 'operacao/supervisor.pid.json');
+  let numero;
+  if (fs.existsSync(pid)) {
+    try { numero = JSON.parse(fs.readFileSync(pid, 'utf8').replace(/^\uFEFF/, '')).pid; }
+    catch { throw new FalhaBackup('Registro do supervisor ilegivel; confirme a parada antes de restaurar.'); }
+    if (numero) {
+      let ativo = false;
+      try { process.kill(numero, 0); ativo = true; } catch (erro) { ativo = erro.code !== 'ESRCH'; }
+      if (ativo) throw new FalhaBackup('Pare a operacao antes de restaurar.');
+    }
+  }
+  const portas = portasOperacao(config);
+  if (await portalRespondendo(portas.portal) || await portalRespondendo(portas.relatorios)) throw new FalhaBackup('Portal ou relatorios no ar; pare a operacao antes de restaurar.');
 }
-
-async function confirmar(pergunta) {
-  if (semPergunta) return true;
-  const io = readline.createInterface({ input: process.stdin, output: process.stdout });
-  try { return (await new Promise((resolve) => io.question(pergunta, resolve))).trim().toLowerCase() === 'restaurar'; }
-  finally { io.close(); }
+export async function restaurarCopia(origem, { raiz = privado, configuracao = false, pasta, meta } = {}) {
+  const portal = path.join(raiz, 'portal'), backups = path.join(portal, 'backups');
+  await exigirOperacaoParada(raiz, lerArquivo(path.join(raiz, 'portal/configuracao/portal.env')));
+  return comBackupExclusivo(backups, async () => {
+    const liberar = travarRestauracao(true, portal);
+    let restaurando, guardado, concluida = false, preservarRecuperacao = false;
+    try {
+      const existente = localizarBanco(null, portal);
+      const alvo = existente || destinoBanco(meta?.bancoNome || 'portal.sqlite', portal);
+      validarBanco(origem);
+      fs.mkdirSync(path.dirname(alvo), { recursive: true });
+      restaurando = `${alvo}.restaurando`;
+      const { marcados } = prepararRestauracao(origem, restaurando, validarBanco);
+      const nomes = configuracao ? [...new Set([...Object.keys(meta.arquivos).filter(configuracaoPermitida), ...listarConfiguracao(raiz)])] : [];
+      // Validar todos os alvos antes de preservar ou escrever qualquer configuracao.
+      const alvos = nomes.map(nome => ({ nome, alvo: exigirDestinoSeguro(nome, raiz), presente: Object.hasOwn(meta.arquivos, nome) }));
+      const carimbo = new Date().toISOString().replace(/[:.]/g, '-');
+      guardado = path.join(backups, `pre-restauracao-${carimbo}`);
+      fs.mkdirSync(guardado);
+      if (existente) criarSnapshot(existente, path.join(guardado, 'banco.sqlite'));
+      const anteriores = [];
+      for (const item of alvos) {
+        const existe = fs.existsSync(item.alvo);
+        if (existe) {
+          const copia = path.join(guardado, 'configuracao', item.nome);
+          fs.mkdirSync(path.dirname(copia), { recursive: true }); fs.copyFileSync(item.alvo, copia);
+        }
+        anteriores.push({ ...item, existe });
+      }
+      fs.writeFileSync(path.join(guardado, 'configuracao.json'), JSON.stringify(anteriores.map(({ nome, existe }) => ({ nome, existe }))));
+      const escritos = [];
+      try {
+        for (const item of alvos) {
+          escritos.push(item);
+          if (!item.presente) { fs.rmSync(item.alvo, { force: true }); continue; }
+          fs.mkdirSync(path.dirname(item.alvo), { recursive: true });
+          fs.copyFileSync(path.join(pasta, item.nome), `${item.alvo}.restaurando`);
+          fs.renameSync(`${item.alvo}.restaurando`, item.alvo);
+        }
+        for (const sufixo of ['-wal', '-shm']) fs.rmSync(alvo + sufixo, { force: true });
+        fs.renameSync(restaurando, alvo);
+      } catch {
+        try {
+          for (const item of escritos.reverse()) {
+            fs.rmSync(`${item.alvo}.restaurando`, { force: true });
+            if (anteriores.find(a => a.nome === item.nome).existe) fs.copyFileSync(path.join(guardado, 'configuracao', item.nome), item.alvo);
+            else fs.rmSync(item.alvo, { force: true });
+          }
+        } catch {
+          preservarRecuperacao = true;
+          throw new FalhaBackup('Restauracao e recuperacao da configuracao falharam; copia pre-restauracao preservada para revisao.');
+        }
+        throw new FalhaBackup('Restauracao nao concluida; banco anterior preservado. Confira a copia pre-restauracao.');
+      }
+      concluida = true;
+      // Somente depois do compromisso, manter UMA protecao local.
+      try {
+        for (const nome of fs.readdirSync(backups)) {
+          if (/^pre-restauracao-\d{4}-\d{2}-\d{2}T[\dTZ-]+(?:\.sqlite)?$/.test(nome) && nome !== path.basename(guardado))
+            fs.rmSync(path.join(backups, nome), { recursive: true, force: true });
+        }
+      } catch { console.warn('AVISO: restaurado; limpeza da protecao anterior pendente.'); }
+      console.log(`Restauracao concluida; ${marcados} entregas neutralizadas. Inicie a operacao novamente.`);
+      return guardado;
+    } finally {
+      try {
+        if (restaurando) fs.rmSync(restaurando, { force: true });
+        if (guardado && !concluida && !preservarRecuperacao) fs.rmSync(guardado, { recursive: true, force: true });
+      } finally { liberar(); }
+    }
+  });
 }
-
-if (!fs.existsSync(origem)) throw new Error(`Backup nao encontrado: ${origem}`);
-const portas = portasOperacao(lerConfigBruta());
-if (operacaoNoAr() || await portalRespondendo(portas.portal)) throw new Error('A operacao esta no ar (supervisor ativo ou Portal respondendo na porta configurada). Pare a operacao antes de restaurar.');
-if (await portalRespondendo(portas.relatorios)) throw new Error(`O servico de relatorios esta respondendo na porta ${portas.relatorios}. Pare-o antes de restaurar.`);
-
-const liberarRestauracao = travarRestauracao(true);
-try {
-const alvo = localizarBanco();
-const totaisBackup = resumir(origem);
-const dataBackup = fs.statSync(origem).mtime.toLocaleString('pt-BR');
-console.log(`Backup   : ${path.basename(origem)}  (${dataBackup})`);
-console.log(`Conteudo : ${JSON.stringify(totaisBackup)}`);
-console.log(`Destino  : ${alvo}`);
-
-if (!await confirmar('\nO banco atual sera substituido. Digite "restaurar" para continuar: ')) {
-  console.log('Restauracao cancelada. Nada foi alterado.');
-  process.exit(1);
+export async function executarRestauracao(args = process.argv.slice(2)) {
+  let data = args.includes('--data') ? args[args.indexOf('--data') + 1] : undefined;
+  if (args.includes('--data') && !data) throw new FalhaBackup('Use --data AAAA-MM-DD_HHMM.');
+  if (args.includes('--listar') || args.includes('--anterior')) {
+    const config = lerConfigBruta();
+    if (!config.BACKUP_NETWORK_DIR?.trim()) throw new FalhaBackup('BACKUP_NETWORK_DIR nao configurado.');
+    const lista = listarHistorico(config.BACKUP_NETWORK_DIR.trim());
+    console.log(lista.map(item => path.basename(item.arquivo)).join('\n') || 'Nenhum backup na rede.');
+    if (args.includes('--listar')) return;
+    if (!lista[1]) throw new FalhaBackup('Backup anterior nao encontrado.');
+    data = lista[1].data;
+  }
+  await exigirOperacaoParada();
+  if (!args.includes('--sim')) {
+    const io = readline.createInterface({ input: process.stdin, output: process.stdout });
+    try { if ((await io.question('Digite RESTAURAR para substituir o banco: ')) !== 'RESTAURAR') throw new FalhaBackup('Restauracao cancelada.'); }
+    finally { io.close(); }
+  }
+  // Apenas o atualizador usa o snapshot local; restauracao humana usa a rede.
+  if (args.includes('--pre-atualizacao')) return restaurarCopia(path.join(portalPrivado, 'backups/pre-atualizacao.sqlite'));
+  return comBackupDaRede(data, (pasta, meta) => restaurarCopia(path.join(pasta, 'banco/portal.sqlite'), {
+    configuracao: args.includes('--configuracao'), pasta, meta,
+  }));
 }
-
-// O estado atual vira copia datada antes de qualquer escrita: se o backup
-// escolhido for o errado, ainda da para voltar.
-const carimbo = new Date().toISOString().replace(/[:.]/g, '-');
-const guardado = path.join(pastaBackup, `pre-restauracao-${carimbo}.sqlite`);
-const db = new DatabaseSync(alvo, { readOnly: true });
-try { db.exec(`VACUUM INTO '${guardado.replaceAll("'", "''").replaceAll('\\', '/')}'`); }
-finally { db.close(); }
-console.log(`Estado atual guardado em ${path.basename(guardado)}`);
-
-// O backup e copiado ao lado do banco e conferido ali; so entao troca de
-// lugar com o banco, num rename. Copiar direto por cima deixava o banco pela
-// metade se a energia caisse durante a copia.
-const restaurando = `${alvo}.restaurando`;
-const { resumo: totaisRestaurado, marcados } = prepararRestauracao(origem, restaurando, resumir);
-console.log(`Restaurado: ${JSON.stringify(totaisRestaurado)}`);
-if (JSON.stringify(totaisRestaurado) !== JSON.stringify(totaisBackup)) {
-  fs.rmSync(restaurando, { force: true });
-  throw new Error('A copia do backup nao confere com o original. O banco atual nao foi alterado.');
+if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
+  try { await executarRestauracao(); }
+  catch (erro) { console.error(erro instanceof FalhaBackup ? erro.message : 'Restauracao falhou; confira arquivo, banco, configuracao e operacao parada.'); process.exitCode = 1; }
 }
-// -wal e -shm carregam transacoes do banco antigo; deixa-los ao lado do
-// arquivo novo corrompe a base restaurada.
-for (const sufixo of ['-wal', '-shm']) fs.rmSync(alvo + sufixo, { force: true });
-fs.renameSync(restaurando, alvo);
-console.log('\nRestauracao concluida.');
-if (marcados) console.log(`${marcados} e-mail(s) marcado(s) como falha: confirme o reenvio na tela de notificacoes.`);
-} finally { liberarRestauracao(); }
-
-// Cada restauracao guarda o estado anterior como pre-restauracao-*.sqlite,
-// uma copia integral do banco. Fora da retencao de 7 dias do backup, elas se
-// acumulavam para sempre; ficam as 3 mais recentes. O carimbo no nome e ISO,
-// entao a ordem alfabetica e a cronologica.
-//
-// A restauracao ja terminou aqui. A limpeza e secundaria: se um antivirus ou
-// uma sincronizacao segurar um arquivo antigo, ela vira aviso, e o comando nao
-// termina em erro -- o que levaria o operador a restaurar de novo a toa.
-const MANTER_PRE_RESTAURACAO = 3;
-try {
-  const antigas = fs.readdirSync(pastaBackup).filter((nome) => /^pre-restauracao-.*\.sqlite$/.test(nome)).sort().reverse().slice(MANTER_PRE_RESTAURACAO);
-  for (const nome of antigas) fs.rmSync(path.join(pastaBackup, nome), { force: true });
-  if (antigas.length) console.log(`Copias pre-restauracao antigas removidas: ${antigas.join(', ')}`);
-} catch (erro) {
-  console.warn(`AVISO: a restauracao foi concluida, mas nao foi possivel remover copias pre-restauracao antigas (${erro instanceof Error ? erro.message : String(erro)}).`);
-}
-console.log('Inicie a operacao novamente.');

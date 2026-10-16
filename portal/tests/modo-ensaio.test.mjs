@@ -1,3 +1,4 @@
+import { bancoFicticio } from './apoio/backup.mjs';
 import { destinoBanco } from '../scripts/banco-local.mjs';
 import { criarTemporarioTeste } from './apoio/ambiente.mjs';
 import assert from 'node:assert/strict';
@@ -41,7 +42,7 @@ for(const existente of [true,false])void test(`backup em ensaio valida copia loc
   t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
   const arquivo=destinoBanco('a.sqlite',path.join(dir,'portal'));
   fs.mkdirSync(path.dirname(arquivo),{recursive:true});
-  const db=new DatabaseSync(arquivo);db.exec("CREATE TABLE teste(valor TEXT); INSERT INTO teste VALUES('ensaio')");db.close();
+  const db=bancoFicticio(arquivo);db.close();
   const rede=path.join(dir,'rede'),config=path.join(dir,'portal/configuracao');
   fs.mkdirSync(config,{recursive:true});
   fs.writeFileSync(path.join(config,'portal.env'),`PORTAL_PORTA=${await reservarPortaLoopback()}\nRELATORIOS_PORTA=${await reservarPortaLoopback()}\nBACKUP_NETWORK_DIR=${rede}\n`);
@@ -51,9 +52,8 @@ for(const existente of [true,false])void test(`backup em ensaio valida copia loc
   });
   assert.equal(resultado.status,0,resultado.stderr);
   assert.match(resultado.stdout,/ensaio: envio suprimido/);
-  const copia=new DatabaseSync(path.join(dir,'portal/backups/portal-atual.sqlite'),{readOnly:true});
-  try{assert.equal(copia.prepare('PRAGMA integrity_check').get().integrity_check,'ok');assert.equal(copia.prepare('SELECT valor FROM teste').get().valor,'ensaio');}finally{copia.close();}
-  assert.equal(fs.readdirSync(path.join(dir,'portal/backups/historico')).length,1);
+  assert.equal(fs.existsSync(path.join(dir,'portal/backups/portal-atual.sqlite')),false);
+  assert.equal(fs.existsSync(path.join(dir,'portal/backups/historico')),false);
   if(existente){assert.deepEqual(fs.readdirSync(rede),['portal-atual.sqlite']);assert.equal(fs.readFileSync(path.join(rede,'portal-atual.sqlite'),'utf8'),'backup do notebook');}
   else assert.equal(fs.existsSync(rede),false);
 });

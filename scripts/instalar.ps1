@@ -102,7 +102,8 @@ if(!$SemTestes){
 }
 & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $Raiz 'scripts\validar-operacao.ps1') -Raiz $Raiz
 if($LASTEXITCODE){throw 'Configuracao operacional reprovada.'}
-if(Test-Path (Join-Path $Privado 'portal\backups\portal-atual.sqlite')){Rodar $Node @('scripts\testar-restauracao.mjs') $Portal}
+# O primeiro backup da rede depende da senha DPAPI do dono, definida via supv.
+Write-Host 'Configure supv backup senha com a conta do dono; confira a rede com supv backup testar.'
 Instalar-ComandoSupv $Raiz
 Write-Host "`nSupply Vision instalado e validado." -ForegroundColor Green
 if(!$ModoInicializacao-and(Obter-TarefaSupplyVision $Raiz)){Write-Host 'Modo sem login existente preservado.';exit 0}
