@@ -100,12 +100,15 @@ try{
  Git-H2 -Argumentos @('-C',$remoto,'checkout','--detach',$destino)
  Git-H2 -Argumentos @('-C',$remoto,'-c','user.name=CI H2','-c','user.email=ci@h2.test','commit','--allow-empty','-m','fixture: atualizar com reserva H2')
  $destinoReserva=(Git-H2 -Argumentos @('-C',$remoto,'rev-parse','HEAD')).Trim()
+ # A reversao consome a reserva; a proxima atualizacao deve reinstalar.
+ Git-H2 -Argumentos @('-C',$remoto,'-c','user.name=CI H2','-c','user.email=ci@h2.test','commit','--allow-empty','-m','fixture: atualizar depois da reversao H2')
+ $destinoAposReversao=(Git-H2 -Argumentos @('-C',$remoto,'rev-parse','HEAD')).Trim()
  Add-Content $verificador "`nthrow 'H2_FALHA_PREPARAR_INTENCIONAL'"
  Git-H2 -Argumentos @('-C',$remoto,'add','scripts/preparar-configuracao-teste.ps1')
  Git-H2 -Argumentos @('-C',$remoto,'-c','user.name=CI H2','-c','user.email=ci@h2.test','commit','-m','fixture: reprovar depois da reserva H2')
  $negativoFinal=(Git-H2 -Argumentos @('-C',$remoto,'rev-parse','HEAD')).Trim()
- # Falha somente na validacao da operacao nova, depois do build/partida Node.
- Git-H2 -Argumentos @('-C',$remoto,'checkout','--detach',$destino)
+ # Falha depois de sucesso-reserva; rollback deve devolver esse estado.
+ Git-H2 -Argumentos @('-C',$remoto,'checkout','--detach',$destinoReserva)
  $saudeReversao=Join-Path $remoto 'portal/scripts/saude-operacao.mjs'
  Add-Content $saudeReversao @'
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href && !process.exitCode) {
@@ -182,9 +185,10 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
  $snapshot=Join-Path $PastaTeste 'antes.json'
  Node-H2 -Argumentos @($apoio,'snapshot',$raiz,$snapshot)
  $pidBase=(Get-Content (Join-Path $privado 'operacao/supervisor.pid.json') -Raw|ConvertFrom-Json).pid
- foreach($caso in @('negativo','reversao','sucesso','sucesso-reserva','negativo-final')){
+ foreach($caso in @('negativo','sucesso','sucesso-reserva','reversao','sucesso-apos-reversao','negativo-final')){
   Fase "atualizador completo: $caso"
   if($caso-eq'reversao'){
+   Node-H2 -Argumentos @($apoio,'snapshot',$raiz,$snapshot)
    Git-H2 -Argumentos @('-C',$remoto,'update-ref','refs/heads/main',$destinoReversao)
    $logs=Join-Path $PastaTeste $caso;New-Item -ItemType Directory $logs|Out-Null
    $argsReversao=@('-NoProfile','-ExecutionPolicy','Bypass','-File',(Join-Path $raiz 'scripts/atualizar-servidor.ps1'))
@@ -203,7 +207,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
     }
     throw 'Reversao real nao confirmada.'
    }
-   if((Git-H2 -Argumentos @('-C',$raiz,'rev-parse','HEAD')).Trim()-ne$base){throw 'Codigo anterior nao restaurado.'}
+   if((Git-H2 -Argumentos @('-C',$raiz,'rev-parse','HEAD')).Trim()-ne$destinoReserva){throw 'Codigo anterior nao restaurado.'}
    foreach($nomeLog in @('atualizador.log','atualizador-erro.log')){Get-Content (Join-Path $logs $nomeLog)|Write-Host}
    Node-H2 -Argumentos @($apoio,'reversao',$raiz,$snapshot)
    Node-H2 -Argumentos @((Join-Path $raiz 'portal/scripts/saude-operacao.mjs'),'http://127.0.0.1:3000')
@@ -218,6 +222,10 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
   }elseif($caso-eq'sucesso-reserva'){
    if(!(Test-Path -LiteralPath (Join-Path (Pasta-ReservaDependencias $raiz) 'registro.json'))){throw 'Primeira atualizacao nao publicou reserva.'}
    Git-H2 -Argumentos @('-C',$remoto,'update-ref','refs/heads/main',$destinoReserva)
+   Node-H2 -Argumentos @($apoio,'snapshot',$raiz,$snapshot)
+  }elseif($caso-eq'sucesso-apos-reversao'){
+   if(Test-Path -LiteralPath (Join-Path (Pasta-ReservaDependencias $raiz) 'registro.json')){throw 'Reversao deveria ter consumido a reserva.'}
+   Git-H2 -Argumentos @('-C',$remoto,'update-ref','refs/heads/main',$destinoAposReversao)
    Node-H2 -Argumentos @($apoio,'snapshot',$raiz,$snapshot)
   }elseif($caso-eq'negativo-final'){
    Git-H2 -Argumentos @('-C',$remoto,'update-ref','refs/heads/main',$negativoFinal)
@@ -246,7 +254,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
   if(($null-ne$monitor.ExitCode-and$monitor.ExitCode-ne0)-or!(Test-Path (Join-Path $logs 'monitor-aprovado'))){throw "Monitor reprovou $caso."}
   $head=(Git-H2 -Argumentos @('-C',$raiz,'rev-parse','HEAD')).Trim()
   if($caso-notlike'sucesso*'){
-   $headEsperado=if($caso-eq'negativo'){$base}else{$destinoReserva}
+   $headEsperado=if($caso-eq'negativo'){$base}else{$destinoAposReversao}
    if($codigo-eq0-or$saida-notmatch'H2_FALHA_PREPARAR_INTENCIONAL'-or$head-ne$headEsperado){throw 'Falha PREPARAR nao confirmada, ou codigo alterado.'}
    if((Get-Content (Join-Path $privado 'operacao/supervisor.pid.json') -Raw|ConvertFrom-Json).pid-ne$pidBase){throw 'Supervisor original foi substituido no negativo.'}
    $pidsAntes=Get-Content (Join-Path $logs 'consumidores-antes.json') -Raw|ConvertFrom-Json
@@ -257,10 +265,11 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
    if($contexto.fase-ne'cancelado-preparo'-or$contexto.limpeza-ne'concluida'-or(Test-Path $contexto.preparo)){throw 'Negativo nao registrou cancelamento e limpeza do preparo.'}
    Node-H2 -Argumentos @($apoio,'negativo',$raiz,$snapshot)
   }else{
-   $headEsperado=if($caso-eq'sucesso'){$destino}else{$destinoReserva}
+   $headEsperado=if($caso-eq'sucesso'){$destino}elseif($caso-eq'sucesso-reserva'){$destinoReserva}else{$destinoAposReversao}
    if(($null-ne$codigo-and$codigo-ne0)-or$head-ne$headEsperado){throw 'Atualizacao nao chegou ao commit esperado.'}
-   $caminho=if($caso-eq'sucesso'){'copia - motivo: reserva ausente'}else{'reserva reaproveitada'}
+   $caminho=if($caso-eq'sucesso-reserva'){'reserva reaproveitada'}else{'copia - motivo: reserva ausente'}
    foreach($tipo in @('Node','Python')){if($saida-notlike("*Dependencias ${tipo}: $caminho*")){throw "H2 nao exercitou dependencias ${tipo}: $caminho"}}
+   if($caso-eq'sucesso-apos-reversao'){Write-Host '[OK] Apos reversao: dependencias Node e Python reinstaladas - motivo: reserva ausente.'}
    $contexto=Get-Content (Join-Path $privado 'operacao/atualizacao.json') -Raw|ConvertFrom-Json
    if(!(Esperar-CondicaoTeste {!(Test-Path (Join-Path $privado 'operacao/limpeza-preparo.lock'))} 120)){throw 'Limpeza em segundo plano nao encerrou na fixture.'}
    if($contexto.fase-ne'concluido'-or(Test-Path $contexto.preparo)){throw 'Contexto nao concluiu ou preparo permaneceu.'}
