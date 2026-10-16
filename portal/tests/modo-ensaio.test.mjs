@@ -8,6 +8,7 @@ import { spawnSync } from 'node:child_process';
 import { DatabaseSync } from 'node:sqlite';
 import { modoEnsaio } from '../scripts/modo-ensaio.mjs';
 import { processarNotificacoes, processarRelatoriosDiarios } from '../scripts/processar-emails.mjs';
+import { reservarPortaLoopback } from '../scripts/porta-teste.mjs';
 
 void test('somente MODO_ENSAIO=1 ativa o ensaio; as duas filas ficam intactas sem SMTP', async (t) => {
   const anterior=process.env.MODO_ENSAIO;
@@ -35,7 +36,7 @@ void test('somente MODO_ENSAIO=1 ativa o ensaio; as duas filas ficam intactas se
   assert.equal(logs.filter(linha=>linha.includes('ensaio: envio suprimido')).length,2);
 });
 
-for(const existente of [true,false])void test(`backup em ensaio valida copia local e nao toca rede ${existente?'existente':'ausente'}, sem SMTP`,(t)=>{
+for(const existente of [true,false])void test(`backup em ensaio valida copia local e nao toca rede ${existente?'existente':'ausente'}, sem SMTP`,async(t)=>{
   const dir=criarTemporarioTeste('sv-ensaio-');
   t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
   const arquivo=destinoBanco('a.sqlite',path.join(dir,'portal'));
@@ -43,7 +44,7 @@ for(const existente of [true,false])void test(`backup em ensaio valida copia loc
   const db=new DatabaseSync(arquivo);db.exec("CREATE TABLE teste(valor TEXT); INSERT INTO teste VALUES('ensaio')");db.close();
   const rede=path.join(dir,'rede'),config=path.join(dir,'portal/configuracao');
   fs.mkdirSync(config,{recursive:true});
-  fs.writeFileSync(path.join(config,'portal.env'),`BACKUP_NETWORK_DIR=${rede}\n`);
+  fs.writeFileSync(path.join(config,'portal.env'),`PORTAL_PORTA=${await reservarPortaLoopback()}\nRELATORIOS_PORTA=${await reservarPortaLoopback()}\nBACKUP_NETWORK_DIR=${rede}\n`);
   if(existente){fs.mkdirSync(rede);fs.writeFileSync(path.join(rede,'portal-atual.sqlite'),'backup do notebook');}
   const resultado=spawnSync(process.execPath,['--experimental-strip-types','scripts/backup.mjs'],{
     cwd:path.resolve(import.meta.dirname,'..'),env:{...process.env,SUPPLY_VISION_PRIVADO:dir,MODO_ENSAIO:'1'},encoding:'utf8',timeout:15_000,
@@ -57,9 +58,11 @@ for(const existente of [true,false])void test(`backup em ensaio valida copia loc
   else assert.equal(fs.existsSync(rede),false);
 });
 
-void test('processador CLI em ensaio nao exige SMTP nem tenta verificar conexao',(t)=>{
+void test('processador CLI em ensaio nao exige SMTP nem tenta verificar conexao',async(t)=>{
   const dir=criarTemporarioTeste('sv-email-ensaio-');
   t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
+  fs.mkdirSync(path.join(dir,'portal/configuracao'),{recursive:true});
+  fs.writeFileSync(path.join(dir,'portal/configuracao/portal.env'),`PORTAL_PORTA=${await reservarPortaLoopback()}\nRELATORIOS_PORTA=${await reservarPortaLoopback()}\n`);
   for(const args of [[],['--test-connection']]){
     const resultado=spawnSync(process.execPath,['--experimental-strip-types','scripts/processar-emails.mjs',...args],{
       cwd:path.resolve(import.meta.dirname,'..'),env:{...process.env,SUPPLY_VISION_PRIVADO:dir,MODO_ENSAIO:'1'},encoding:'utf8',timeout:15_000,
