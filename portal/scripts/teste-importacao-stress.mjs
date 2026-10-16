@@ -12,12 +12,14 @@ import { abrirRequisicao, multipart } from './cliente-http.mjs';
 import { verificarAcessoConsulta } from './verificar-acesso-consulta.mjs';
 import { LIMITE_LISTA } from '../lib/limites-entrada.ts';
 import { verificarFiltrosBusca } from './verificar-filtros-busca.mjs';
+import { CABECALHOS_SEGURANCA } from '../lib/cabecalhos-seguranca.ts';
 import { passwordHash, PBKDF2_ITERACOES_LEGADO } from '../lib/criptografia.ts';
 
 const portal = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 fs.mkdirSync(path.join(portal, 'work'), { recursive: true });
 const output = fs.mkdtempSync(path.join(fs.realpathSync.native(path.join(portal, 'work')), 'import-stress-'));
-const state = path.join(output, 'state');
+const privadoFixture = path.join(output, 'privado');
+const state = path.join(privadoFixture, 'portal/banco/estado/state');
 const runtime = path.join(output, 'runtime');
 fs.cpSync(path.join(portal, 'dist'), runtime, { recursive: true });
 const serverLog = fs.openSync(path.join(output, 'servidor.log'), 'a');
@@ -114,13 +116,13 @@ function erroDaLinha(data, linha) {
 async function catalog(type, data) { return good(`/api/catalogs/${type}`, { method: 'POST', body: data }, 201); }
 // Fixture de volume no banco descartavel desta execucao. O cadastro HTTP e
 // validado separadamente; 10 mil POSTs mediam cadastro, nao importacao.
-async function localidades(nomes, state = 'GO') {
-  assert.ok(sqlitePath.startsWith(path.join(output, 'state') + path.sep));
+async function localidades(nomes, uf = 'GO') {
+  assert.ok(sqlitePath.startsWith(state + path.sep));
   const fixture = new DatabaseSync(sqlitePath);
   try {
     fixture.exec('PRAGMA busy_timeout=999; BEGIN IMMEDIATE');
     const insert = fixture.prepare('INSERT INTO locations (id,city,state) VALUES (?,?,?)');
-    for (const city of nomes) insert.run(`fixture-${state}-${city}`, city, state);
+    for (const city of nomes) insert.run(`fixture-${uf}-${city}`, city, uf);
     fixture.exec('COMMIT');
   } finally { fixture.close(); }
 }
@@ -140,9 +142,10 @@ async function stopServer() {
   }
 }
 async function startServer(initialPassword = senha) {
-  child = spawn(process.execPath, [path.join(portal, 'scripts/runtime-local.mjs'), 'dev', '--local', '--config', path.join(runtime, 'server/wrangler.json'), '--persist-to', state, ...(initialPassword === null ? [] : ['--var', `INITIAL_ADMIN_PASSWORD:${initialPassword}`]), '--ip', '127.0.0.1', '--port', String(port), '--inspector-port', '0'], {
+  child = spawn(process.execPath, [path.join(portal, 'tests/apoio/servidor.mjs'), runtime, String(port)], {
     cwd: portal, windowsHide: true, stdio: ['ignore', serverLog, serverLog],
-    env: { ...process.env, XDG_CONFIG_HOME:path.join(output,'config'), XDG_CACHE_HOME:path.join(output,'cache'), NODE_ENV: 'development', WRANGLER_SEND_METRICS: 'false', WRANGLER_WRITE_LOGS: 'true', WRANGLER_LOG_PATH: path.join(output, 'wrangler.log'), MINIFLARE_REGISTRY_PATH: path.join(output, 'registry') },
+    env: { ...process.env, SUPPLY_VISION_PRIVADO:privadoFixture, MODO_ENSAIO:'1', PORTAL_CRIAR_BANCO:'1',
+      INITIAL_ADMIN_PASSWORD:initialPassword ?? '', PORTAL_API_TOKEN:'relatorios-token-ci', RELATORIOS_PORTA:String(port+1), NODE_ENV:'production' },
   });
   console.log(`Instância descartável: ${base}; evidências: ${output}`);
   let ready = false;
@@ -167,6 +170,22 @@ try {
   assert.equal(login.status, 200); cookie = login.cookie;
   sqlitePath = locateSqlite(state); assert.ok(sqlitePath);
   reader = new DatabaseSync(sqlitePath, { readOnly: true });
+
+  await check('Servidor Node serve somente o build e mantem cabecalhos de seguranca', async () => {
+    for (const rota of ['/', '/api/health', '/package.json', '/vite.config.ts', '/AGENTS.md', '/.env', '/.git/config', '/scripts/iniciar-portal.mjs', '/privado/portal/banco/estado/state/base.sqlite', '/%2e%2e/package.json', '/%5cprivado/base.sqlite']) {
+      const r=await fetch(base+rota);
+      assert.equal(r.status, ['/', '/api/health'].includes(rota)?200:404,rota);
+      for(const [nome,valor] of Object.entries(CABECALHOS_SEGURANCA)) assert.equal(r.headers.get(nome),valor,rota+' '+nome);
+      await r.arrayBuffer();
+    }
+  });
+  await check('Login usa IP do socket e ignora cabecalhos de origem forjados', async () => {
+    const email='ip-fixture@teste.test';
+    const r=await request('/api/login',{method:'POST',session:'',body:{email,password:'incorreta'},headers:{'cf-connecting-ip':'forjado','cf-ray':'forjado','x-forwarded-for':'forjado','x-sv-client-ip':'forjado','x-sv-client-proof':'a'.repeat(64)}});
+    assert.equal(r.status,401);
+    const tentativas=query('SELECT ip FROM login_attempts WHERE email=?',email);
+    assert.equal(tentativas.length,1);assert.equal(tentativas[0].ip,'127.0.0.1');
+  });
 
   await check('Cadastro recusa 4 caracteres e aceita 5 pela API', async () => {
     const body = { name: 'Limite senha', email: 'limite-senha@teste.test', role: 'viewer', password: '1234' };
@@ -551,7 +570,7 @@ try {
   });
   await check('Importação inteira aborta se a segunda linha contiver erro', () => rejected(file([row(), row({ MEDIDA: 'lirto' })], { name: 'segunda-linha-falha' })));
   await check('Falha na auditoria nao publica nem deixa historico concluido', async () => {
-    assert.ok(sqlitePath.startsWith(path.join(output, 'state') + path.sep));
+    assert.ok(sqlitePath.startsWith(state + path.sep));
     const fixture = new DatabaseSync(sqlitePath);
     try {
       fixture.exec(`CREATE TRIGGER teste_falha_auditoria BEFORE INSERT ON audit_logs WHEN NEW.action='IMPORT'
@@ -690,7 +709,7 @@ try {
   await check('Importação interrompida no meio é limpa pela próxima', async () => {
     // Reproduz o que sobra quando o processo morre durante a gravacao: a
     // importacao em 'processing', uma versao em preparo e condicoes nela.
-    assert.ok(sqlitePath.startsWith(path.join(output, 'state') + path.sep));
+    assert.ok(sqlitePath.startsWith(state + path.sep));
     const modelo = query(`SELECT i.location_id,i.catalog_item_id,i.vehicle_model_id,i.unit_id FROM agreement_items i JOIN agreements a ON a.current_version_id=i.version_id WHERE a.id=? LIMIT 1`, agreementId)[0];
     const usuario = query('SELECT id FROM users LIMIT 1')[0].id;
     const versao = query('SELECT COALESCE(MAX(version_number),0)+1 n FROM agreement_versions WHERE agreement_id=?', agreementId)[0].n;
@@ -755,7 +774,7 @@ try {
     await good(`/api/agreements/${agreementId}`, { method: 'PUT', body: corpo([...atuais, extra.id]) });
     // A disputa acima depende do acaso; esta parte nao. Com o acordo travado
     // por outra operacao, editar e incluir condicao recebem 409 e nada muda.
-    assert.ok(sqlitePath.startsWith(path.join(output, 'state') + path.sep));
+    assert.ok(sqlitePath.startsWith(state + path.sep));
     const fixture = new DatabaseSync(sqlitePath);
     try {
       fixture.exec('PRAGMA busy_timeout=999');
@@ -827,7 +846,7 @@ try {
         assert.equal(concluida,false,'Tentativas precisam se sobrepor a reserva do alvo');
         return tentar();
       };
-      // O burst de 20 conexoes pode derrubar o transporte Miniflare/workerd no
+      // O burst de 20 conexoes pode derrubar o transporte servidor no
       // Windows (500 bruto "Network connection lost."). Mantem as 19 disputas
       // contra a MESMA reserva, com no maximo tres pedidos em voo e sem repetir
       // requisicoes. Qualquer 500/erro de rede continua reprovando o cenario.
@@ -905,8 +924,9 @@ try {
     for (const table of ['agreements','agreement_items']) for (const row of before[table]) row.revision=0;
     reader.close(); reader = null; await stopServer();
     assert.ok(sqlitePath.startsWith(state + path.sep), 'Só permite alterar o banco desta execução');
-    const legado = new DatabaseSync(sqlitePath);
-    try { legado.exec('DROP TABLE import_item_mappings; DROP TABLE import_model_mappings; DROP TRIGGER agreements_revision; DROP TRIGGER agreement_items_revision; DROP INDEX idx_tickets_request_key; ALTER TABLE agreements DROP COLUMN revision; ALTER TABLE agreement_items DROP COLUMN revision; ALTER TABLE tickets DROP COLUMN request_key; ALTER TABLE tickets DROP COLUMN request_hash;'); } finally { legado.close(); }
+    const migracao = new DatabaseSync(sqlitePath);
+    try { migracao.exec('DROP TABLE import_item_mappings; DROP TABLE import_model_mappings; DROP TRIGGER agreements_revision; DROP TRIGGER agreement_items_revision; DROP INDEX idx_tickets_request_key; ALTER TABLE agreements DROP COLUMN revision; ALTER TABLE agreement_items DROP COLUMN revision; ALTER TABLE tickets DROP COLUMN request_key; ALTER TABLE tickets DROP COLUMN request_hash;'); }
+    finally { migracao.close(); }
     await startServer(); reader = new DatabaseSync(sqlitePath, { readOnly: true });
     const after = await good('/api/mappings');
     assert.deepEqual(after.items, []); assert.deepEqual(after.models, []);
@@ -930,7 +950,7 @@ try {
   reader?.close();
   await stopServer();
   fs.closeSync(serverLog);
-  const report = { seed: 20260916, timestamp: new Date().toISOString(), output, passed: checks.filter(c => c.ok).length, failed: checks.filter(c => !c.ok).length, checks, metrics };
+  const report = { bancoLocal:'sqlite', seed: 20260916, timestamp: new Date().toISOString(), output, passed: checks.filter(c => c.ok).length, failed: checks.filter(c => !c.ok).length, checks, metrics };
   fs.writeFileSync(path.join(output, 'resultado.json'), JSON.stringify(report, null, 2));
   console.log(`RESULTADO: ${report.passed} passaram; ${report.failed} falharam. ${path.join(output, 'resultado.json')}`);
   process.exitCode = report.failed ? 1 : 0;

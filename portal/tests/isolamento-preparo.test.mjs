@@ -22,7 +22,7 @@ void test('preload bloqueia arquivos, SQLite, PID/trava e qualquer porta alheia 
   fs.copyFileSync(new URL('../scripts/isolamento-sqlite-hooks.mjs', import.meta.url), path.join(scripts,'isolamento-sqlite-hooks.mjs'));
   const env = { ...process.env, NODE_OPTIONS: '', SV_PREPARO_RAIZ: raiz,
     SUPPLY_VISION_PRIVADO: path.join(raiz,'privado'), TEMP: path.join(raiz,'.cache'), TMP: path.join(raiz,'.cache'), TMPDIR: path.join(raiz,'.cache'),
-    XDG_CONFIG_HOME: path.join(raiz,'.cache'), XDG_CACHE_HOME: path.join(raiz,'.cache'), WRANGLER_LOG_PATH: path.join(raiz,'.cache/log'), MINIFLARE_REGISTRY_PATH: path.join(raiz,'.cache/registry') };
+    XDG_CONFIG_HOME: path.join(raiz,'.cache'), XDG_CACHE_HOME: path.join(raiz,'.cache') };
   const script = `import assert from 'node:assert/strict';import fs from 'node:fs';import net from 'node:net';import {DatabaseSync} from 'node:sqlite';
     const externa=process.argv[1];
     for(const n of ['supervisor.pid.json','supervisor.lock'])assert.throws(()=>fs.readFileSync(externa+'/'+n),/fora do worktree/);
@@ -40,28 +40,19 @@ void test('preload bloqueia arquivos, SQLite, PID/trava e qualquer porta alheia 
   } finally { fs.rmSync(pasta,{recursive:true,force:true}); }
 });
 
-void test('fumaca instala perfil descartavel antes de carregar dependencias', () => {
-  const pasta = fs.mkdtempSync(path.join(os.tmpdir(), 'sv-perfil-fumaca-'));
-  const raiz = path.join(pasta, `.fixture-preparo-${randomBytes(16).toString('hex')}`);
-  const scripts = path.join(raiz, 'portal/scripts');
-  fs.mkdirSync(scripts, { recursive: true });
-  const modulo = path.join(scripts, 'fumaca-preparo.mjs');
-  fs.copyFileSync(new URL('../scripts/fumaca-preparo.mjs', import.meta.url), modulo);
-  // A primeira dependencia observa o perfil antes que o Worker seja carregado.
-  fs.writeFileSync(path.join(scripts, 'sqlite-local.mjs'), `
-    import assert from 'node:assert/strict';import os from 'node:os';import path from 'node:path';
-    const perfil=path.join(process.env.SV_PREPARO_RAIZ,'.cache/perfil-fumaca');
-    assert.equal(os.homedir(),perfil);
-    assert.equal(process.env.APPDATA,path.join(perfil,'AppData/Roaming'));
-    assert.equal(process.env.LOCALAPPDATA,path.join(perfil,'AppData/Local'));
-    throw new Error('perfil-ficticio-conferido');
-  `);
+void test('fumaca recusa portas nao reservadas antes de carregar o servidor', () => {
+  const pasta=fs.mkdtempSync(path.join(os.tmpdir(),'sv-fumaca-guarda-'));
+  const raiz=path.join(pasta,`.fixture-preparo-${randomBytes(16).toString('hex')}`);
+  const scripts=path.join(raiz,'portal/scripts');fs.mkdirSync(scripts,{recursive:true});
+  fs.mkdirSync(path.join(raiz,'.cache/preparo-portas'),{recursive:true});
+  const modulo=path.join(scripts,'fumaca-preparo.mjs');
+  fs.copyFileSync(new URL('../scripts/fumaca-preparo.mjs',import.meta.url),modulo);
+  fs.writeFileSync(path.join(scripts,'servidor-node.mjs'),"throw new Error('nao carregar antes das guardas')");
   try {
-    const resultado = spawnSync(process.execPath, [modulo], { encoding: 'utf8', timeout: 10000,
-      env: { ...process.env, NODE_OPTIONS: '', SV_PREPARO_RAIZ: raiz } });
-    assert.notEqual(resultado.status, 0);
-    assert.match(resultado.stderr, /perfil-ficticio-conferido/);
-    assert.doesNotMatch(resultado.stderr, /AssertionError/);
-    assert.equal(fs.existsSync(path.join(raiz, '.cache/perfil-fumaca')), true);
-  } finally { fs.rmSync(pasta, { recursive: true, force: true }); }
+    for(const portas of [['3000','3001'],['39998','39999']]) {
+      const r=spawnSync(process.execPath,[modulo,...portas],{encoding:'utf8',timeout:10000,env:{...process.env,NODE_OPTIONS:'',SV_PREPARO_RAIZ:raiz}});
+      assert.notEqual(r.status,0);assert.match(r.stderr,/Portas nao reservadas/);
+      assert.doesNotMatch(r.stderr,/nao carregar antes/);
+    }
+  }finally{fs.rmSync(pasta,{recursive:true,force:true});}
 });

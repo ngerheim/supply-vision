@@ -12,10 +12,10 @@ void test('recusa banco ambíguo em vez de escolher o primeiro arquivo', (t) => 
   const pasta = path.join(base, 'banco/estado/state/v3/d1/miniflare-D1DatabaseObject');
   fs.mkdirSync(pasta, { recursive: true });
   fs.writeFileSync(path.join(pasta, 'metadata.sqlite'), '');
-  assert.throws(() => localizarBanco(null, base), /único banco/);
+  assert.equal(localizarBanco(null, base), null);
   const banco = path.join(pasta, 'a.sqlite');
   fs.writeFileSync(banco, '');
   assert.equal(localizarBanco(null, base), banco);
   fs.writeFileSync(path.join(pasta, 'b.sqlite'), '');
-  assert.throws(() => localizarBanco(null, base), /único banco/);
+  assert.throws(() => localizarBanco(null, base), /ambiguo/);
 });

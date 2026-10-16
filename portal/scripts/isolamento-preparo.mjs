@@ -28,7 +28,7 @@ function instalarIsolamento() {
     const relativo = path.relative(raiz, real);
     if (relativo.startsWith('..') || path.isAbsolute(relativo)) throw new Error('PREPARAR isolamento: arquivo fora do worktree.');
   }
-  for (const k of ['SUPPLY_VISION_PRIVADO', 'TEMP', 'TMP', 'TMPDIR', 'XDG_CONFIG_HOME', 'XDG_CACHE_HOME', 'WRANGLER_LOG_PATH', 'MINIFLARE_REGISTRY_PATH']) if (process.env[k]) exigirCaminho(process.env[k]);
+  for (const k of ['SUPPLY_VISION_PRIVADO', 'TEMP', 'TMP', 'TMPDIR', 'XDG_CONFIG_HOME', 'XDG_CACHE_HOME']) if (process.env[k]) exigirCaminho(process.env[k]);
   const registro = path.join(raiz, '.cache/preparo-portas');
   fs.mkdirSync(registro, { recursive: true });
   const proprias = new Set();

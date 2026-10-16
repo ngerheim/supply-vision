@@ -19,10 +19,7 @@ export const LIMITES_CAMPO = {
   busca: 200,
 } as const;
 
-// O D1 aceita no máximo 100 parâmetros vinculados por consulta, e as listas
-// viram "IN (?,?,...)" com um parâmetro por item. Um teto de 500 passaria na
-// aplicação e seria recusado pelo banco.
-// https://developers.cloudflare.com/d1/platform/limits/
+// Limita filtros e o trabalho de cada consulta, preservando o contrato da API.
 export const LIMITE_LISTA = 80;
 
 // Tetos de corpo. O login tem o seu porque é o único caminho que gasta CPU

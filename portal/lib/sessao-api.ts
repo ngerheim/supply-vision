@@ -1,4 +1,4 @@
-import { ipLoginAssinado } from './ip-login.mjs';
+import { ipConexao } from '../scripts/ip-conexao.mjs';
 import { IpConcurrencyGate, KeyedConcurrencyGate } from './concurrency.ts';
 import { corpoLimitado } from './corpo-limitado.ts';
 import { CORPO_MAX_LOGIN } from './limites-entrada.ts';
@@ -13,20 +13,10 @@ export const MIGRAR_SENHA_AUTENTICADA_SQL = `UPDATE users SET password_salt=?,pa
  AND EXISTS (SELECT 1 FROM sessions WHERE token=? AND user_id=users.id)`;
 
 export function sessaoApi(contexto: ContextoApi) {
-  const { audit, currentUser, id, now, rawDb, parseCookies, passwordHash, tokenHash, PBKDF2_ITERACOES_ATUAL, env, ok, fail, first } = contexto;
+  const { audit, currentUser, id, now, rawDb, parseCookies, passwordHash, tokenHash, PBKDF2_ITERACOES_ATUAL, ok, fail, first } = contexto;
 
-  // Cabecalhos de origem sao controlados pelo cliente quando o portal e acessado
-  // direto na LAN: um atacante enviaria cf-connecting-ip diferente a cada
-  // tentativa e ganharia um contador novo. Enquanto nao houver um proxy reverso
-  // confiavel na frente, todo mundo compartilha o mesmo balde 'local'.
-  // TRUSTED_PROXY so deve ser ligado quando existir esse proxy.
-  const clientIp = (request: Request) => {
-    const confiavel = (env as unknown as { TRUSTED_PROXY?: string }).TRUSTED_PROXY === 'true';
-    if (!confiavel) return 'local';
-    return (request.headers.get('cf-ray') ? request.headers.get('cf-connecting-ip') : null)
-      || (request.headers.get('x-forwarded-for') || '').split(',')[0].trim()
-      || 'local';
-  };
+  // A origem vem exclusivamente do socket; cabecalhos enviados pelo cliente nao a alteram.
+  const clientIp = (_request: Request) => ipConexao();
 
   function equalHex(left: string, right: string) {
     if (left.length !== right.length) return false;
@@ -34,19 +24,6 @@ export function sessaoApi(contexto: ContextoApi) {
     for (let index = 0; index < left.length; index += 1) difference |= left.charCodeAt(index) ^ right.charCodeAt(index);
     return difference === 0;
   }
-
-  // Estrategia de defesa contra forca bruta.
-  //
-  // Neste ambiente (Vite/Miniflare sem proxy reverso) NAO ha como distinguir a
-  // origem: todos os clientes da LAN chegam sem x-forwarded-for e cairiam no
-  // mesmo balde. Se o bloqueio fosse cego, uma pessoa errando a senha derrubaria
-  // o portal inteiro -- e a manutencao@ e compartilhada, o que piora o risco.
-
-  //
-  // Por isso a ordem e invertida: a credencial e SEMPRE conferida primeiro.
-  // Quem acerta a senha entra, independente de quantas falhas houve antes.
-  // O custo recai apenas sobre quem erra, na forma de atraso progressivo, o que
-  // reduz a vazao de falhas; reservas curtas podem exigir nova tentativa.
 
   const LOGIN_WINDOW_MIN = 15;
   const LOGIN_SOFT_LIMIT = 5;    // a partir daqui, atraso progressivo
@@ -68,9 +45,7 @@ export function sessaoApi(contexto: ContextoApi) {
     const alvo = textValue(body.email).toLowerCase();
     if (alvo.length > 254) return fail('E-mail ou senha inválidos.', 401);
     const ocupado = () => ok({ error: 'Muitos acessos simultâneos. Tente novamente em alguns segundos.' }, { status: 429, headers: { 'Retry-After': '5' } });
-    const token=(env as unknown as {PORTAL_API_TOKEN?:string}).PORTAL_API_TOKEN;
-    const ipAssinado=await ipLoginAssinado(request.headers,token);
-    const ip=ipAssinado||clientIp(request);
+    const ip=clientIp(request);
     // Sem origem verificavel, nao confundir toda a LAN com um unico cliente.
     const releaseIp=ip==='local'?()=>{}:loginIpGate.acquire(ip);
     if (!releaseIp) return ocupado();

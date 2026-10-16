@@ -9,6 +9,7 @@
 param([switch]$UsarBuildExistente, [string]$Relatorio, [ValidateRange(1024,65535)][int]$Porta = 3199)
 
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot '../../scripts/operacao-logica.ps1')
 $projeto = Split-Path -Parent $PSScriptRoot
 $env:PORTAL_TESTE_PORTA = [string]$Porta
 $baseUrl = "http://127.0.0.1:$porta"
@@ -40,13 +41,13 @@ $script:processoServidor = $null
 function Encerrar {
   $ErrorActionPreference = 'SilentlyContinue'
   if ($script:processoServidor) {
-    # /T encerra tambem os filhos: o wrangler abre workerd separado.
-    & taskkill.exe /PID $script:processoServidor /T /F 2>$null | Out-Null
+    # /T encerra toda a arvore iniciada pelo teste.
+    [void](Executar-NativoOperacao 'taskkill.exe' @('/PID',[string]$script:processoServidor,'/T','/F'))
     $script:processoServidor = $null
   }
   # Rede de seguranca restrita a esta execucao: so processos cuja linha de
   # comando cita a pasta temporaria unica deste teste.
-  Get-CimInstance Win32_Process -Filter "Name='node.exe' OR Name='workerd.exe'" |
+  Get-CimInstance Win32_Process -Filter "Name='node.exe'" |
     Where-Object { $_.CommandLine -like "*$temp*" } |
     ForEach-Object { Stop-Process -Id $_.ProcessId -Force }
   Start-Sleep -Seconds 2
@@ -77,7 +78,7 @@ $env:NODE_ENV = 'development'
 try {
 
 if ($UsarBuildExistente) {
-  if (-not (Test-Path -LiteralPath (Join-Path $projeto 'dist/server/wrangler.json'))) {
+  if (-not (Test-Path -LiteralPath (Join-Path $projeto 'dist/server/index.js'))) {
     throw 'A compilacao existente nao foi encontrada.'
   }
   Write-Host '  Testando a compilacao existente; o codigo-fonte nao sera recompilado.' -ForegroundColor Yellow
@@ -88,8 +89,9 @@ Write-Host '  Compilando...' -ForegroundColor DarkGray
 $preferenciaAnterior = $ErrorActionPreference
 try {
   $ErrorActionPreference = 'Continue'
-  npm.cmd run build *> $logBuild
-  $codigoBuild = $LASTEXITCODE
+  $resultadoBuild = Executar-NativoOperacao 'npm.cmd' @('run','build')
+  $resultadoBuild.saida | Set-Content $logBuild
+  $codigoBuild = $resultadoBuild.codigo
 } finally { $ErrorActionPreference = $preferenciaAnterior }
 if ($codigoBuild -ne 0) {
   Write-Host '  [FALHA] a compilacao nao passou.' -ForegroundColor Red
@@ -99,16 +101,12 @@ if ($codigoBuild -ne 0) {
 
 }
 
-# INITIAL_ADMIN_PASSWORD alimenta a conta semente criada quando o banco esta
-# vazio. Precisa ir como --var: uma variavel do shell nao chega ao Worker, que
-# roda isolado no workerd.
+# A fixture autoriza criar banco apenas no diretorio descartavel.
 $comando = "Set-Location '$projeto'; " +
-  "`$env:MINIFLARE_REGISTRY_PATH='$temp/registry'; " +
-  "`$env:WRANGLER_REGISTRY_PATH='$temp/wrangler-registry'; " +
-  "`$env:WRANGLER_LOG_PATH='$temp/wrangler-logs'; " +
-  "`$env:WRANGLER_SEND_METRICS='false'; " +
-  "node scripts/runtime-local.mjs dev --config dist/server/wrangler.json --persist-to '$temp' " +
-  "--var INITIAL_ADMIN_PASSWORD:'$senhaTeste' --var PORTAL_API_TOKEN:'relatorios-token-ci' --var RELATORIOS_PORTA:$($porta+1) --ip 127.0.0.1 --port $porta *> '$logServidor'"
+  "`$env:SUPPLY_VISION_PRIVADO='$temp'; `$env:MODO_ENSAIO='1'; `$env:PORTAL_CRIAR_BANCO='1'; " +
+  "`$env:PORTAL_PORTA='$porta'; `$env:RELATORIOS_PORTA='$($porta+1)'; " +
+  "`$env:INITIAL_ADMIN_PASSWORD='$senhaTeste'; `$env:PORTAL_API_TOKEN='relatorios-token-ci'; " +
+  "node scripts/iniciar-portal.mjs local *> '$logServidor'"
 $script:processoServidor = (Start-Process powershell.exe -ArgumentList '-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', $comando -WindowStyle Hidden -PassThru).Id
 
 $subiu = $false

@@ -15,7 +15,8 @@ if(!$ExecutarCenario){
  $fase=Join-Path $PastaTeste 'fase.txt';$filho=$null
  try{
   $argumentos=@('-NoProfile','-ExecutionPolicy','Bypass','-File',$PSCommandPath,'-ExecutarCenario','-PastaTeste',$PastaTeste,'-BaseRef',$BaseRef,'-DestinoRef',$DestinoRef)
-  $filho=Start-Process powershell.exe -ArgumentList (@($argumentos|ForEach-Object {Proteger-ArgumentoAtualizacao $_})-join' ') -PassThru -WindowStyle Hidden -RedirectStandardOutput (Join-Path $PastaTeste 'cenario.log') -RedirectStandardError (Join-Path $PastaTeste 'cenario-erro.log');[void]$filho.Handle
+  $filho=Start-Process powershell.exe -ArgumentList (@($argumentos|ForEach-Object {Proteger-ArgumentoAtualizacao $_})-join' ') -PassThru -WindowStyle Hidden -RedirectStandardOutput (Join-Path $PastaTeste 'cenario.log') -RedirectStandardError (Join-Path $PastaTeste 'cenario-erro.log')
+  [void]$filho.Handle
   if(!(Esperar-ProcessoTeste $filho $LimiteSegundos $fase)){
    Encerrar-ArvoreTeste $filho
    throw "Atualizacao real travou: excedeu $LimiteSegundos s; ultima fase=$(Get-Content $fase -Raw -ErrorAction SilentlyContinue); logs=$PastaTeste."
@@ -103,10 +104,21 @@ try{
  Git-H2 -Argumentos @('-C',$remoto,'add','scripts/preparar-configuracao-teste.ps1')
  Git-H2 -Argumentos @('-C',$remoto,'-c','user.name=CI H2','-c','user.email=ci@h2.test','commit','-m','fixture: reprovar depois da reserva H2')
  $negativoFinal=(Git-H2 -Argumentos @('-C',$remoto,'rev-parse','HEAD')).Trim()
+ # Falha somente na validacao da operacao nova, depois do build/partida Node.
+ Git-H2 -Argumentos @('-C',$remoto,'checkout','--detach',$destino)
+ $saudeReversao=Join-Path $remoto 'portal/scripts/saude-operacao.mjs'
+ Add-Content $saudeReversao @'
+if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href && !process.exitCode) {
+  console.error('H2_FALHA_CONCLUIR_INTENCIONAL'); process.exitCode = 1;
+}
+'@
+ Git-H2 -Argumentos @('-C',$remoto,'add','portal/scripts/saude-operacao.mjs')
+ Git-H2 -Argumentos @('-C',$remoto,'-c','user.name=CI H2','-c','user.email=ci@h2.test','commit','-m','fixture: ensaiar reversao do runtime H2')
+ $destinoReversao=(Git-H2 -Argumentos @('-C',$remoto,'rev-parse','HEAD')).Trim()
  Git-H2 -Argumentos @('-C',$remoto,'update-ref','refs/heads/main',$negativo)
  Git-H2 -Argumentos @('clone','--no-hardlinks','--branch','main',$remoto,$raiz)
  Git-H2 -Argumentos @('-C',$raiz,'reset','--hard',$base)
- $env:SUPPLY_VISION_PRIVADO=$privado;$env:MODO_ENSAIO='1';$env:WRANGLER_SEND_METRICS='false'
+ $env:SUPPLY_VISION_PRIVADO=$privado;$env:MODO_ENSAIO='1';$env:PORTAL_CRIAR_BANCO='1'
  Fase 'configuracao ficticia e dependencias da base'
  & (Join-Path $raiz 'scripts/preparar-configuracao-teste.ps1') -Destino $privado
  [IO.File]::WriteAllText((Join-Path $privado 'comum/smtp.env'),"SMTP_HOST=127.0.0.1`nSMTP_PORT=1`nSMTP_USER=teste`nSMTP_PASSWORD=teste`nEMAIL_FROM_NAME=H2`n")
@@ -170,8 +182,27 @@ try{
  $snapshot=Join-Path $PastaTeste 'antes.json'
  Node-H2 -Argumentos @($apoio,'snapshot',$raiz,$snapshot)
  $pidBase=(Get-Content (Join-Path $privado 'operacao/supervisor.pid.json') -Raw|ConvertFrom-Json).pid
- foreach($caso in @('negativo','sucesso','sucesso-reserva','negativo-final')){
+ foreach($caso in @('negativo','reversao','sucesso','sucesso-reserva','negativo-final')){
   Fase "atualizador completo: $caso"
+  if($caso-eq'reversao'){
+   Git-H2 -Argumentos @('-C',$remoto,'update-ref','refs/heads/main',$destinoReversao)
+   $logs=Join-Path $PastaTeste $caso;New-Item -ItemType Directory $logs|Out-Null
+   $argsReversao=@('-NoProfile','-ExecutionPolicy','Bypass','-File',(Join-Path $raiz 'scripts/atualizar-servidor.ps1'))
+   $reversao=Start-Process powershell.exe -ArgumentList (@($argsReversao|ForEach-Object{Proteger-ArgumentoAtualizacao $_})-join' ') -WorkingDirectory $raiz -PassThru -WindowStyle Hidden -RedirectStandardOutput (Join-Path $logs 'atualizador.log') -RedirectStandardError (Join-Path $logs 'atualizador-erro.log')
+   [void]$reversao.Handle
+   $processos+=$reversao
+   if(!(Esperar-ProcessoTeste $reversao 900)){throw 'Reversao excedeu 900 s.'}
+   $saidaReversao=(Get-Content (Join-Path $logs 'atualizador.log') -Raw)+(Get-Content (Join-Path $logs 'atualizador-erro.log') -Raw)
+   $contextoReversao=Get-Content (Join-Path $privado 'operacao/atualizacao.json') -Raw|ConvertFrom-Json
+   if($reversao.ExitCode-eq0-or$saidaReversao-notmatch'H2_FALHA_CONCLUIR_INTENCIONAL'-or$contextoReversao.fase-ne'revertido'){throw 'Reversao real nao confirmada.'}
+   if((Git-H2 -Argumentos @('-C',$raiz,'rev-parse','HEAD')).Trim()-ne$base){throw 'Codigo anterior nao restaurado.'}
+   Node-H2 -Argumentos @($apoio,'negativo',$raiz,$snapshot)
+   Node-H2 -Argumentos @((Join-Path $raiz 'portal/scripts/saude-operacao.mjs'),'http://127.0.0.1:3000')
+   Login-H2
+   Write-Host '[OK] Reversao real: codigo, dependencias, build e banco anteriores restaurados; Portal anterior atende login.'
+   $pidBase=(Get-Content (Join-Path $privado 'operacao/supervisor.pid.json') -Raw|ConvertFrom-Json).pid
+   continue
+  }
   if($caso-eq'sucesso'){
    Git-H2 -Argumentos @('-C',$remoto,'update-ref','refs/heads/main',$destino)
    Node-H2 -Argumentos @($apoio,'pendencia',$raiz)
@@ -187,11 +218,13 @@ try{
   $logs=Join-Path $PastaTeste $caso;New-Item -ItemType Directory $logs|Out-Null
   Obter-PidsConsumidoresH2|ConvertTo-Json|Set-Content (Join-Path $logs 'consumidores-antes.json') -Encoding UTF8
   $modoMonitor=if($caso-like'sucesso*'){'sucesso'}else{'negativo'}
-  $monitor=Start-Process node.exe -ArgumentList (@($apoio,'monitor',$raiz,$logs,$modoMonitor)|ForEach-Object{Proteger-ArgumentoAtualizacao $_}) -PassThru -WindowStyle Hidden -RedirectStandardOutput (Join-Path $logs 'monitor.log') -RedirectStandardError (Join-Path $logs 'monitor-erro.log');[void]$monitor.Handle
+  $monitor=Start-Process node.exe -ArgumentList (@($apoio,'monitor',$raiz,$logs,$modoMonitor)|ForEach-Object{Proteger-ArgumentoAtualizacao $_}) -PassThru -WindowStyle Hidden -RedirectStandardOutput (Join-Path $logs 'monitor.log') -RedirectStandardError (Join-Path $logs 'monitor-erro.log')
+  [void]$monitor.Handle
   $processos+=$monitor
   if(!(Esperar-CondicaoTeste {Test-Path (Join-Path $logs 'monitor-pronto')} 15)){throw 'Monitor independente nao iniciou.'}
   $argsAtualizador=@('-NoProfile','-ExecutionPolicy','Bypass','-File',(Join-Path $raiz 'scripts/atualizar-servidor.ps1'))
-  $atualizador=Start-Process powershell.exe -ArgumentList (@($argsAtualizador|ForEach-Object{Proteger-ArgumentoAtualizacao $_})-join' ') -WorkingDirectory $raiz -PassThru -WindowStyle Hidden -RedirectStandardOutput (Join-Path $logs 'atualizador.log') -RedirectStandardError (Join-Path $logs 'atualizador-erro.log');[void]$atualizador.Handle
+  $atualizador=Start-Process powershell.exe -ArgumentList (@($argsAtualizador|ForEach-Object{Proteger-ArgumentoAtualizacao $_})-join' ') -WorkingDirectory $raiz -PassThru -WindowStyle Hidden -RedirectStandardOutput (Join-Path $logs 'atualizador.log') -RedirectStandardError (Join-Path $logs 'atualizador-erro.log')
+  [void]$atualizador.Handle
   $processos+=$atualizador
   if(!(Esperar-ProcessoTeste $atualizador 900)){throw 'Atualizador excedeu 900 s; veja log da fase.'}
   [IO.File]::WriteAllText((Join-Path $logs 'monitor-parar'),'ok')

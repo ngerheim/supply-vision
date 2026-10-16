@@ -1,99 +1,17 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import path from 'node:path';
-import { execFileSync } from 'node:child_process';
-import { portalPrivado } from '../scripts/configuracao.mjs';
+import { enderecoServidor } from '../scripts/iniciar-portal.mjs';
+import { configuracaoServidor } from '../scripts/configuracao-servidor.mjs';
 
-import { ARQUIVO_VARS, VARIAVEIS_DO_WORKER, montarArgumentos, montarArquivoVars } from '../scripts/iniciar-portal.mjs';
-
-void test('entrega ao Worker as variaveis que ele le de env', () => {
-  const texto = montarArquivoVars({
-    INITIAL_ADMIN_PASSWORD: 'senha-bem-grande',
-    TRUSTED_PROXY: 'true',
-    PORTAL_API_TOKEN: 'a'.repeat(64),
-  });
-  assert.equal(texto, `INITIAL_ADMIN_PASSWORD='senha-bem-grande'\nTRUSTED_PROXY='true'\nPORTAL_API_TOKEN='${'a'.repeat(64)}'\n`);
+void test('host e porta de operacao preservados', () => {
+  assert.deepEqual(enderecoServidor('local'), {host:'127.0.0.1',port:3000});
+  assert.deepEqual(enderecoServidor('lan',{PORTAL_PORTA:'3210'}), {host:'0.0.0.0',port:3210});
+  assert.throws(()=>enderecoServidor('outro'),/invalido/);
+  assert.throws(()=>enderecoServidor('local',{PORTAL_PORTA:'3001'}),/invalidas/);
 });
-
-void test('a credencial interna vai pelo ambiente, nao pelo bundle', () => {
-  assert.ok(VARIAVEIS_DO_WORKER.includes('PORTAL_API_TOKEN'));
-});
-
-void test('segredo nao aparece na linha de comando do wrangler', () => {
-  const args = montarArgumentos('lan', ARQUIVO_VARS);
-  assert.ok(!args.includes('--var'));
-  assert.deepEqual(args.slice(args.indexOf('--env-file'), args.indexOf('--env-file') + 2), ['--env-file', ARQUIVO_VARS]);
-  assert.ok(!args.some((arg) => arg.includes('senha') || arg.includes('PORTAL_API_TOKEN')));
-});
-
-void test('sem variavel, nao passa arquivo', () => {
-  assert.equal(montarArquivoVars({}), '');
-  assert.equal(montarArquivoVars({ TRUSTED_PROXY: '   ' }), '');
-  assert.ok(!montarArgumentos('lan', null).includes('--env-file'));
-});
-
-void test('valor com aspas escolhe um delimitador que ele nao contem', () => {
-  assert.equal(montarArquivoVars({ INITIAL_ADMIN_PASSWORD: "a'b#c" }), 'INITIAL_ADMIN_PASSWORD=`a\'b#c`\n');
-  assert.equal(montarArquivoVars({ INITIAL_ADMIN_PASSWORD: "a'b`c" }), 'INITIAL_ADMIN_PASSWORD="a\'b`c"\n');
-  assert.throws(() => montarArquivoVars({ INITIAL_ADMIN_PASSWORD: 'a\'b"c`d' }), /combinacao de aspas/);
-  // Entre aspas duplas o dotenv transformaria \n em quebra de linha.
-  assert.throws(() => montarArquivoVars({ INITIAL_ADMIN_PASSWORD: "a'b`c\\n" }), /combinacao de aspas/);
-});
-
-void test('cifrao chega literal, sem virar referencia a outra variavel', () => {
-  assert.equal(montarArquivoVars({ INITIAL_ADMIN_PASSWORD: 'Senha$HOME$$' }), "INITIAL_ADMIN_PASSWORD='Senha\\$HOME\\$\\$'\n");
-});
-
-void test('nao repassa segredo que o Worker nao usa', () => {
-  assert.equal(montarArquivoVars({ SMTP_PASSWORD: 'nao-deve-vazar', BACKUP_NETWORK_DIR: '\\\\rede\\backup' }), '');
-  assert.ok(!VARIAVEIS_DO_WORKER.includes('SMTP_PASSWORD'));
-});
-
-void test('mantem o banco persistido na area privada em todos os modos', () => {
-  for (const modo of ['', 'local', 'lan']) {
-    const args = montarArgumentos(modo);
-    assert.equal(args[0], 'dev');
-    const persist = args.indexOf('--persist-to');
-    assert.ok(persist > 0);
-    assert.equal(args[persist + 1], path.join(portalPrivado, 'banco', 'estado', 'state'));
-  }
-});
-
-void test('pasta privada alternativa e compartilhada pelo portal, fila e backup', () => {
-  const privado = path.resolve(import.meta.dirname, 'dados com espacos');
-  const script = `import { montarArgumentos } from './scripts/iniciar-portal.mjs';
-    import { portalPrivado } from './scripts/configuracao.mjs';
-    console.log(JSON.stringify({portalPrivado,args:montarArgumentos('lan')}));`;
-  const output = execFileSync(process.execPath, ['--input-type=module', '-e', script], {
-    cwd: path.resolve(import.meta.dirname, '..'),
-    env: { ...process.env, SUPPLY_VISION_PRIVADO: privado }, encoding: 'utf8',
-  });
-  const { portalPrivado: destino, args } = JSON.parse(output);
-  assert.equal(destino, path.join(privado, 'portal'));
-  assert.equal(args[args.indexOf('--persist-to') + 1], path.join(destino, 'banco', 'estado', 'state'));
-});
-
-void test('escolhe o endereco conforme o modo', () => {
-  assert.ok(!montarArgumentos('').includes('--ip'));
-  assert.deepEqual(montarArgumentos('local').slice(-4), ['--ip', '127.0.0.1', '--port', '3000']);
-  assert.deepEqual(montarArgumentos('lan', ARQUIVO_VARS).slice(-4), ['--ip', '0.0.0.0', '--port', '3000']);
-});
-
-void test('chave antiga do banco e aceita e ignorada em argumentos e variaveis do Worker', () => {
-  for (const valor of ['', 'sqlite', 'd1', 'outro']) {
-    const config = {PORTAL_BANCO_LOCAL:valor};
-    assert.deepEqual(montarArgumentos('local',null,config),montarArgumentos('local'));
-    assert.equal(montarArquivoVars(config),'');
-  }
-});
-
-void test('partida usa a porta configurada tambem no ambiente descartavel', () => {
-  const config={PORTAL_URL:'http://127.0.0.1:4199',PORTAL_PORTA:'4199',RELATORIOS_PORTA:'4198'};
-  assert.deepEqual(montarArgumentos('local',null,config).slice(-4),['--ip','127.0.0.1','--port','4199']);
-  assert.deepEqual(montarArgumentos('',null,config).slice(-2),['--port','4199']);
-  assert.throws(()=>montarArgumentos('local',null,{RELATORIOS_PORTA:'invalida'}),/invalidas/);
-});
-
-void test('URL publica com proxy nao muda a porta local padrao', () => {
-  assert.deepEqual(montarArgumentos('local',null,{PORTAL_URL:'https://portal.empresa.test'}).slice(-2),['--port','3000']);
+void test('configuracao tem lista fechada, preserva caracteres e rejeita quebra de linha', () => {
+  const senha = `aspas'" cifrao$ barra\\n`;
+  assert.equal(configuracaoServidor({INITIAL_ADMIN_PASSWORD:senha}).INITIAL_ADMIN_PASSWORD,senha);
+  assert.equal(configuracaoServidor({SMTP_PASSWORD:'segredo'}).SMTP_PASSWORD,undefined);
+  assert.throws(()=>configuracaoServidor({PORTAL_API_TOKEN:'a\nb'}),/quebra de linha/);
 });

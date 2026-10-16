@@ -45,25 +45,6 @@ Get-ChildItem -LiteralPath $Raiz -Directory -Recurse -Force -Filter '__pycache__
   Where-Object { $_.FullName -notmatch '\\\.venv\\' } |
   ForEach-Object { Remover $_.FullName 'bytecode Python' }
 
-Write-Host "`n-- Temporarios do wrangler --" -ForegroundColor Yellow
-$tmpWrangler = Join-Path $Raiz 'portal\dist\server\.wrangler\tmp'
-$portalNoAr = [bool](Get-NetTCPConnection -LocalPort 3000 -State Listen -ErrorAction SilentlyContinue)
-if ($portalNoAr) {
-  Write-Host '  [PULADO] Portal em execucao; temporarios preservados.' -ForegroundColor DarkGray
-} elseif (Test-Path -LiteralPath $tmpWrangler) {
-  Get-ChildItem -LiteralPath $tmpWrangler -Directory -Force -ErrorAction SilentlyContinue |
-    ForEach-Object { Remover $_.FullName 'temporario de execucao' }
-}
-
-Write-Host "`n-- Rastreamento de observabilidade (regenera sozinho) --" -ForegroundColor Yellow
-if ($portalNoAr) {
-  Write-Host '  [PULADO] o Portal esta no ar; esses arquivos estao abertos pelo wrangler.' -ForegroundColor DarkGray
-  Write-Host '           pare a operacao (supv parar) e rode a faxina de novo para limpa-los.' -ForegroundColor DarkGray
-} else {
-  $obs = Join-Path $Privado 'portal\banco\estado\state\v3\observability\miniflare-wobs-trace-store'
-  Remover $obs 'rastreamento do wrangler (recriado na proxima subida)'
-}
-
 Write-Host "`n-- Pastas vazias remanescentes --" -ForegroundColor Yellow
 # privado\ fica de fora: as pastas de saida sao estruturais e nascem vazias.
 # Apaga-las faria a faxina desfazer o que o instalador acabou de criar.

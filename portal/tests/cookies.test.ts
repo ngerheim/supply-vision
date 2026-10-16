@@ -1,11 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { registerHooks } from 'node:module';
-// O parser real esta no modulo Workers; estes testes nao precisam iniciar
-// um Worker nem abrir banco. Os hooks sao removidos assim que o modulo carrega.
+// O parser real nao precisa iniciar o servidor nem abrir banco.
+// O alias de teste e removido assim que o modulo carrega.
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === 'cloudflare:workers') return { url: 'data:text/javascript,export const env = {}', shortCircuit: true };
     if (specifier === '@/lib/domain') return { url: new URL('../lib/domain.ts', import.meta.url).href, shortCircuit: true };
     return nextResolve(specifier, context);
   },

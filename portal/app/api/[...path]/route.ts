@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { env } from 'cloudflare:workers';
+import { env } from '../../../scripts/configuracao-servidor.mjs';
 import * as banco from '@/lib/database';
 import { currentUser, ensureDatabase, rawDb } from '@/lib/database';
 import { canWrite } from '@/lib/api-compartilhada';
@@ -55,7 +55,7 @@ function rejectCrossOrigin(request: Request) {
   }
 }
 
-// A credencial interna vem do ambiente do Worker, entregue pelo
+// A credencial interna vem da configuracao do servidor, lida pelo
 // scripts/iniciar-portal.mjs a partir do portal.env -- o mesmo arquivo que o
 // rodar.py dos Alertas le a cada execucao.
 //

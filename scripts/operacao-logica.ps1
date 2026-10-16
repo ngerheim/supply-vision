@@ -222,14 +222,12 @@ function Testar-SupervisorEncerrado([string]$Privado) {
 
 
 function Processo-OrfaoDestaInstalacao($Processo,[string]$Raiz){
- if($Processo.Name-notin@('node.exe','workerd.exe')){return $false}
+ if($Processo.Name-notin@('node.exe')){return $false}
  $p=[regex]::Escape($Raiz.TrimEnd('\'))
  $cmd=[string]$Processo.CommandLine
  $script=('(?i)(?:^|[\s"'']){0}\\portal\\scripts\\(?:iniciar-portal|processar-emails|processar-relatorios|aviso-admin)\.mjs(?:["'']|\s|$)' -f $p)
- $motor=('(?i)(?:^|[\s"'']){0}\\portal\\node_modules\\[^"'']*workerd(?:\.exe)?(?:["'']|\s|$)' -f $p)
- $wrangler=('(?i)(?:^|[\s"'']){0}\\portal\\node_modules\\wrangler\\bin\\wrangler\.js(?:["'']|\s|$)' -f $p)
  $npm=('(?i)--prefix\s+["'']?{0}\\portal["'']?\s+run\s+(?:start:lan|email:watch)(?:\s|$)' -f $p)
- return $cmd-match$script-or$cmd-match$motor-or$cmd-match$wrangler-or$cmd-match$npm
+ return $cmd-match$script-or$cmd-match$npm
 }
 function Avisar-FalhaOrfaos {
  if(Get-Command Log -ErrorAction SilentlyContinue){Log 'Nao foi possivel ler ou encerrar processo orfao; confira conta administradora local e permissoes.'}
@@ -238,7 +236,7 @@ function Avisar-FalhaOrfaos {
 function Encerrar-OrfaosInstalacao([string]$Raiz){
  try{$processos=@(Get-CimInstance Win32_Process -ErrorAction Stop)}catch{Avisar-FalhaOrfaos;return}
  foreach($p in $processos){
-  if($p.Name-in@('node.exe','workerd.exe')-and!$p.CommandLine){Avisar-FalhaOrfaos;continue}
+  if($p.Name-in@('node.exe')-and!$p.CommandLine){Avisar-FalhaOrfaos;continue}
   if(!(Processo-OrfaoDestaInstalacao $p $Raiz)){continue}
   try{
    $atual=Get-CimInstance Win32_Process -Filter "ProcessId=$($p.ProcessId)" -ErrorAction Stop

@@ -1,4 +1,4 @@
-import { env } from 'cloudflare:workers';
+import { env } from '../scripts/configuracao-servidor.mjs';
 import { id, now, rawDb } from './database';
 import { validarPedidoRelatorio } from './relatorios.ts';
 import { informarValidadeArquivos, arquivoHistoricoExpirado } from './retencao-relatorios.ts';

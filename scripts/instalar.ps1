@@ -85,7 +85,6 @@ foreach($n in @('excluir_descricoes','excluir_fornecedores','excluir_grupos_desp
 $amb="@echo off`r`nREM Gerado pelo INSTALAR.bat. Caminho portatil.`r`nset `"PYTHON=%~dp0..\..\..\alertas\.venv\Scripts\python.exe`"`r`n"
 [IO.File]::WriteAllText("$Privado\alertas\config\ambiente.bat",$amb,[Text.Encoding]::ASCII)
 Etapa 'Instalando dependencias do Portal'; Rodar $Npm @('ci','--include=dev','--audit=false') $Portal
-Conferir-Workerd $Portal
 Etapa 'Instalando dependencias dos Alertas'
 $PyVenv="$Alertas\.venv\Scripts\python.exe"; if(!(Test-Path $PyVenv)){Rodar $Python @('-m','venv',"$Alertas\.venv") $Raiz}
 Rodar $PyVenv @('-m','pip','install','--upgrade','pip') $Raiz

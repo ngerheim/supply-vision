@@ -28,10 +28,13 @@ function arquivos(pasta) {
     return e.isDirectory() ? arquivos(p) : [p];
   });
 }
-function banco(raiz, gravar = false) {
+function arquivoBanco(raiz) {
   const candidatos = arquivos(path.join(raiz, 'privado/portal/banco')).filter(p => p.endsWith('.sqlite') && path.basename(p) !== 'metadata.sqlite');
   assert.equal(candidatos.length, 1, 'Exige exatamente um banco na fixture');
-  const db = new DatabaseSync(candidatos[0], { readOnly: !gravar });
+  return candidatos[0];
+}
+function banco(raiz, gravar = false) {
+  const db = new DatabaseSync(arquivoBanco(raiz), { readOnly: !gravar });
   db.exec('PRAGMA busy_timeout=5000');
   return db;
 }
@@ -186,9 +189,10 @@ async function executar() {
       // realmente executar a migracao 7, mesmo numa PR sem SQL novo.
       db.exec('DROP INDEX IF EXISTS idx_imports_created_global; DROP INDEX IF EXISTS idx_report_jobs_created_global; DELETE FROM schema_migrations WHERE version=7');
       console.log('Fixture: migracao 7 pendente; dados de negocio mantidos.');
-    } else if (modo === 'snapshot') fs.writeFileSync(destino, JSON.stringify({ dados: dados(db), manifesto: manifesto(raiz) }));
+    } else if (modo === 'snapshot') fs.writeFileSync(destino, JSON.stringify({ dados: dados(db), manifesto: manifesto(raiz), arquivoBanco: path.relative(raiz, arquivoBanco(raiz)) }));
     else if (modo === 'verificar' || modo === 'negativo') {
       const antes = JSON.parse(fs.readFileSync(destino, 'utf8'));
+      assert.equal(path.relative(raiz, arquivoBanco(raiz)), antes.arquivoBanco, 'Caminho do banco alterado');
       conferirBanco(db, antes.dados, versoesEsperadas(raiz));
       if (modo === 'verificar') {
         for (const indice of ['idx_imports_created_global', 'idx_report_jobs_created_global']) {

@@ -1,3 +1,4 @@
+import type { ConsultaLocal } from './sqlite-local.ts';
 import { lerPlanilha } from './planilha.ts';
 import { chaveLocalidade, colunasAusentes, parseImportRow, resolveImportRows, summarizeImportErrors, deduplicateImportRows, validarFornecedorImportacao, uniqueIndex, type ImportTarget } from './importacao.ts';
 import { corpoBinarioLimitado } from './corpo-limitado.ts';
@@ -140,7 +141,7 @@ export function importacoesApi(contexto: ContextoApi, acordos: Pick<ReturnType<t
     resolveImportRows(rows, { items, models, units, locations });
   }
 
-  type PublishImport = (statements: D1PreparedStatement[], details: Record<string, unknown>) => Promise<Record<string, unknown>>;
+  type PublishImport = (statements: ConsultaLocal[], details: Record<string, unknown>) => Promise<Record<string, unknown>>;
 
   async function processAgreementImport(rows: ReturnType<typeof parseImportRow>[], user: User, importId: string, agreementId: string, publish: PublishImport) {
     const agreement = await first<{id:string;number:string}>('SELECT id,number FROM agreements WHERE id=?',[agreementId]); if(!agreement) throw new EntradaInvalida('Acordo não encontrado');
@@ -152,7 +153,7 @@ export function importacoesApi(contexto: ContextoApi, acordos: Pick<ReturnType<t
     const max=await first<{n:number}>('SELECT COALESCE(MAX(version_number),0) n FROM agreement_versions WHERE agreement_id=?',[agreementId]);
     const versionId=id('ver'), versionNumber=Number(max?.n||0)+1;
     await db.prepare(`INSERT INTO agreement_versions (id,agreement_id,version_number,import_id,status,published_at,created_by,created_at) VALUES (?,?,?,?,'processing',NULL,?,?)`).bind(versionId,agreementId,versionNumber,importId,user.id,timestamp).run();
-    const links=new Map<string,string>(), statements:D1PreparedStatement[]=[];
+    const links=new Map<string,string>(), statements:ConsultaLocal[]=[];
     for(const row of rows){ const locationId=row.locationId!; links.set(locationId,locationId); statements.push(db.prepare(`INSERT INTO agreement_items (id,version_id,location_id,catalog_item_id,vehicle_model_id,unit_id,price,courtesy,brands_text,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)`).bind(id('itm'),versionId,locationId,row.itemId,row.modelId,row.unitId,row.price,row.price===0?1:0,row.brands||null,timestamp,timestamp)); }
     await batch(statements,80);
     return publish([
@@ -163,7 +164,7 @@ export function importacoesApi(contexto: ContextoApi, acordos: Pick<ReturnType<t
     ], { agreement: agreement.number, version: versionNumber });
   }
 
-  async function batch(statements: D1PreparedStatement[], size: number) { for(let i=0;i<statements.length;i+=size) await rawDb().batch(statements.slice(i,i+size)); }
+  async function batch(statements: ConsultaLocal[], size: number) { for(let i=0;i<statements.length;i+=size) await rawDb().batch(statements.slice(i,i+size)); }
 
   async function cleanupFailedImport(importId:string){
     const db=rawDb();

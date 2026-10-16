@@ -18,14 +18,6 @@ try{
  Exigir-Correcao $falhou 'verificacao sem escrita alerta runtime ausente'
  Garantir-VisualCpp;Garantir-VisualCpp
  Exigir-Correcao ($script:instalacoes-eq1) 'instala runtime somente quando ausente'
- # Workerd que existe mas encerra; a mesma fronteira executa --version no instalador.
- $portal=Join-Path $pasta 'portal';$exe=Join-Path $portal 'node_modules/@cloudflare/workerd-windows-64/bin/workerd.exe'
- New-Item -ItemType Directory -Force (Split-Path $exe)|Out-Null;Set-Content $exe 'ficticio'
- function Executar-WorkerdVersao {return @{codigo=-1073741515;saida=''}}
- $falhou=$false;try{Conferir-Workerd $portal}catch{$falhou=$_.Exception.Message.Contains('Visual C++')}
- Exigir-Correcao $falhou 'workerd encerra e mensagem explica runtime/antivirus'
- function Executar-WorkerdVersao {return @{codigo=0;saida='workerd 2026'}}
- Conferir-Workerd $portal
  # Deteccao de antivirus, sem consultar nem alterar a protecao real.
  # Captura explicita: Write-Host/InformationRecord varia entre PowerShell 5.1 e 7.
  function Write-Host {param($Object,$ForegroundColor);$script:mensagemAv+=[string]$Object}
@@ -44,10 +36,10 @@ try{
 
  # Seleciona somente processos com caminhos desta instalacao; evita prefixos semelhantes.
  $root='C:\Supply Vision'
- foreach($cmd in @('node "C:\Supply Vision\portal\scripts\processar-relatorios.mjs"','node npm-cli.js --prefix "C:\Supply Vision\portal" run email:watch','"C:\Supply Vision\portal\node_modules\workerd\bin\workerd.exe"')){
+ foreach($cmd in @('node "C:\Supply Vision\portal\scripts\processar-relatorios.mjs"','node npm-cli.js --prefix "C:\Supply Vision\portal" run email:watch')){
   Exigir-Correcao (Processo-OrfaoDestaInstalacao @{Name='node.exe';CommandLine=$cmd} $root) 'orfao desta instalacao selecionado'
  }
- foreach($cmd in @('node "C:\Supply Vision\portal\scripts\processar-emails.mjs" --watch','node "C:\Supply Vision\portal\scripts\iniciar-portal.mjs" lan','node "C:\Supply Vision\portal\node_modules\wrangler\bin\wrangler.js" dev')){
+ foreach($cmd in @('node "C:\Supply Vision\portal\scripts\processar-emails.mjs" --watch','node "C:\Supply Vision\portal\scripts\iniciar-portal.mjs" lan')){
   Exigir-Correcao (Processo-OrfaoDestaInstalacao @{Name='node.exe';CommandLine=$cmd} $root) 'servico sem pai npm tambem selecionado'
  }
  foreach($cmd in @('node "C:\Outra\portal\scripts\processar-relatorios.mjs"','node "C:\Supply Vision extra\portal\scripts\processar-relatorios.mjs"','node app.js')){

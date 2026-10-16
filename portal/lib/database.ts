@@ -1,3 +1,5 @@
+import path from 'node:path';
+import { portalPrivado } from '../scripts/configuracao.mjs';
 import { bancoSqliteLocal } from './sqlite-local.ts';
 import { CRIAR_CONTADOR_CHAMADOS_SQL, MIGRAR_CONTADOR_CHAMADOS_SQL, migrarBuscaChamados, migrarIndicesListasGlobais } from './operacao-dados.ts';
 import { SCHEMA_VALIDACAO } from './operacao-validacao.ts';
@@ -8,7 +10,7 @@ import { registraAtividade } from './atualizacao-periodica.ts';
 import { LIMPAR_TRAVAS_VENCIDAS_SQL, RENOVAR_TRAVA_SQL, TravaPerdida, TRAVA_VALIDADE_MS } from './controle-escrita.ts';
 import { MIGRAR_FORNECEDORES_CHAMADOS_SQL } from './chamados.ts';
 import { TRIGGERS_REVISAO, TABELAS_CADASTRO } from './controle-escrita.ts';
-import { env } from 'cloudflare:workers';
+import { env } from '../scripts/configuracao-servidor.mjs';
 import { type Role, validatePassword } from '@/lib/domain';
 
 export function parseCookies(request: Request): Record<string, string> {
@@ -135,12 +137,13 @@ async function applyColumnMigrations() {
   }
 }
 
-let sqliteLocal: ReturnType<typeof bancoSqliteLocal> | null = null;
-export const rawDb = () => {
-  if (!env.PORTAL_SQLITE_PORTA || !env.PORTAL_SQLITE_TOKEN) throw new Error('Runtime SQLite local incompleto.');
-  sqliteLocal ??= bancoSqliteLocal(String(env.PORTAL_SQLITE_PORTA), String(env.PORTAL_SQLITE_TOKEN), () => env.DB.prepare('SELECT 1').first());
-  return sqliteLocal as unknown as typeof env.DB;
-};
+const chaveBanco = Symbol.for('supply-vision:banco');
+const estadoBanco = globalThis as typeof globalThis & { [chaveBanco]?: ReturnType<typeof bancoSqliteLocal> };
+export const rawDb = () => estadoBanco[chaveBanco] ??= bancoSqliteLocal({
+  persistencia: path.join(portalPrivado, 'banco/estado/state'),
+  pastaRestauracao: portalPrivado,
+  criar: process.env.PORTAL_CRIAR_BANCO === '1' && (process.env.MODO_ENSAIO === '1' || process.env.CI === 'true'),
+});
 
 const hex = (bytes: Uint8Array) => Array.from(bytes).map((b) => b.toString(16).padStart(2, '0')).join('');
 const randomHex = (length = 16) => { const bytes = new Uint8Array(length); crypto.getRandomValues(bytes); return hex(bytes); };
@@ -152,7 +155,7 @@ export const MEDIDAS_PADRAO = ['UNIDADE', 'LITRO', 'PAR', 'JOGO', 'HORA'] as con
 
 export function ensureDatabase() {
   // A promise era memorizada mesmo quando falhava: uma unica falha na subida
-  // -- base vazia sem INITIAL_ADMIN_PASSWORD, erro transitorio do D1 -- fazia
+  // -- base vazia sem INITIAL_ADMIN_PASSWORD, erro transitorio de banco -- fazia
   // TODA requisicao seguinte reaproveitar a promise rejeitada ate o processo
   // reiniciar. Zerando aqui, a proxima requisicao tenta de novo.
   if (!ready) {

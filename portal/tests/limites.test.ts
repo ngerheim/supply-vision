@@ -51,14 +51,6 @@ void test('lista no limite passa e acima não', () => {
   assert.equal(lista(LIMITE_LISTA + 1).length <= LIMITE_LISTA, false);
 });
 
-void test('limite de lista cabe no teto de parâmetros do D1', () => {
-  // O D1 aceita no máximo 100 parâmetros por consulta, e cada item da lista
-  // vira um "?" no IN. Um teto de 500 passaria aqui e seria recusado pelo
-  // banco em produção.
-  assert.ok(LIMITE_LISTA < 100, 'a lista precisa caber em IN (?,?,...) do D1');
-  assert.ok(LIMITE_LISTA <= 100 - 20, 'deixe folga para os demais parâmetros da consulta');
-});
-
 void test('login tem teto menor que o das demais rotas JSON', () => {
   // O login é o único caminho que gasta CPU pesada (PBKDF2) antes de validar.
   assert.ok(CORPO_MAX_LOGIN < CORPO_MAX_JSON);

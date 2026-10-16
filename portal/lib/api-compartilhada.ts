@@ -6,7 +6,7 @@ export type User = { id: string; name: string; email: string; role: Role };
 export type Row = Record<string, unknown>;
 
 // O roteador fornece banco e HTTP uma vez. Importar o SQL de um assunto nos
-// testes nao inicializa o Worker nem depende do ambiente Cloudflare.
+// testes nao inicializa o servidor nem abre o banco.
 export type ContextoApi = Pick<typeof Banco,
   'audit' | 'currentUser' | 'id' | 'now' | 'rawDb' | 'parseCookies' |
   'passwordHash' | 'tokenHash' | 'PBKDF2_ITERACOES_ATUAL' | 'TRAVA_IMPORTACAO' |

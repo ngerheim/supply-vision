@@ -1,3 +1,4 @@
+import type { BancoLocal } from './sqlite-local.ts';
 import { EntradaInvalida } from './limites-entrada.ts';
 export const CONSULTAS_EXPORTACAO = {
   users: 'SELECT id,name,email,role,active,daily_report_enabled,daily_report_time,created_at FROM users ORDER BY created_at',
@@ -27,8 +28,8 @@ export const CONSULTAS_EXPORTACAO = {
 export const MAX_LINHAS_EXPORTACAO = 10_000;
 export const MAX_BYTES_LOG_EXPORTACAO = 8 * 1024 * 1024;
 
-// D1 batch executa as leituras na mesma transacao, inclusive em SQLite local.
-export async function exportarTabelas(db: Pick<D1Database, 'prepare' | 'batch'>) {
+// O lote executa as leituras no mesmo snapshot SQLite.
+export async function exportarTabelas(db: Pick<BancoLocal, 'prepare' | 'batch'>) {
   const entradas=Object.entries(CONSULTAS_EXPORTACAO);
   const consultas=entradas.map(([,sql])=>db.prepare(`${sql} LIMIT ${MAX_LINHAS_EXPORTACAO + 1}`));
   // O limite de logs e verificado no mesmo snapshot; se exceder, sua leitura
