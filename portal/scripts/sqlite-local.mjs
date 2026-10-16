@@ -42,7 +42,6 @@ export function criarServidorSqlite({ persistencia, token, arquivo = null, pasta
     const stmt = banco.prepare(sql);
     const params = values.map(v => Array.isArray(v) ? Buffer.from(v) : v);
     // all() executa tambem DDL/DML sem RETURNING (lista vazia), uma vez.
-    // Evita columns(), ausente no Node minimo 22.13.
     const results = stmt.all(...params).map(row => Object.fromEntries(Object.entries(row).map(([k,v]) => [k, v instanceof Uint8Array ? Array.from(v) : v])));
     const meta = banco.prepare('SELECT total_changes() changes,last_insert_rowid() last_row_id').get();
     return { results, meta: { changes: meta.changes - antes, last_row_id: meta.last_row_id } };

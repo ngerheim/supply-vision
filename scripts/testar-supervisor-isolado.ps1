@@ -1,4 +1,4 @@
-﻿param([switch]$SemLogin, [switch]$Ensaio, [ValidateSet('', 'falha', 'lento')][string]$AvisoAdminTeste='', [int]$AtrasoSegundaInstanciaSegundos=0, [switch]$PortalReal, [ValidateSet('sqlite','d1')][string]$BancoLocal='sqlite', [switch]$ExecutarCenario, [ValidateRange(1,600)][int]$LimiteSegundos=300, [string]$ArquivoFase='')
+﻿param([switch]$SemLogin, [switch]$Ensaio, [ValidateSet('', 'falha', 'lento')][string]$AvisoAdminTeste='', [int]$AtrasoSegundaInstanciaSegundos=0, [switch]$PortalReal, [switch]$ExecutarCenario, [ValidateRange(1,600)][int]$LimiteSegundos=300, [string]$ArquivoFase='')
 $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'espera-testes.ps1')
 # Pai externo limita inclusive venv, chamadas nativas e finally do cenario.
@@ -8,7 +8,7 @@ if(!$ExecutarCenario){
  $fase=Join-Path $logs 'fase.txt';$saida=Join-Path $logs 'saida.log';$erro=Join-Path $logs 'erro.log'
  $argsFilho=@('-NoProfile','-ExecutionPolicy','Bypass','-File',('"'+$PSCommandPath+'"'),'-ExecutarCenario','-ArquivoFase',('"'+$fase+'"'),'-AtrasoSegundaInstanciaSegundos',"$AtrasoSegundaInstanciaSegundos")
  if($SemLogin){$argsFilho+='-SemLogin'};if($Ensaio){$argsFilho+='-Ensaio'}
- if($PortalReal){$argsFilho+='-PortalReal'};$argsFilho+=@('-BancoLocal',$BancoLocal)
+ if($PortalReal){$argsFilho+='-PortalReal'}
  if($AvisoAdminTeste){$argsFilho+=@('-AvisoAdminTeste',$AvisoAdminTeste)}
  $filho=$null
  try{
@@ -84,7 +84,7 @@ try{
  $npmFalso="@echo off`r`n:aguardar`r`nif exist `"..\privado\operacao\parar.sinal`" exit /b 0`r`nping 127.0.0.1 -n 2 >nul`r`ngoto aguardar`r`n"
  [IO.File]::WriteAllText("$temp\bin\npm.cmd",$npmFalso,[Text.Encoding]::ASCII)
  [IO.File]::WriteAllText("$temp\privado\comum\smtp.env","SMTP_HOST=x`r`nSMTP_PORT=1`r`nSMTP_USER=x`r`nSMTP_PASSWORD=x`r`nEMAIL_FROM_NAME=x")
- [IO.File]::WriteAllText("$temp\privado\portal\configuracao\portal.env","PORTAL_URL=$urlFixture`r`nPORTAL_PORTA=$portaFixture`r`nRELATORIOS_PORTA=$($portasFixture[1])`r`nPORTAL_BANCO_LOCAL=$BancoLocal`r`nINITIAL_ADMIN_PASSWORD=senha-ficticia-12345`r`nPORTAL_API_TOKEN=x`r`nBACKUP_EMAIL_TO=x")
+ [IO.File]::WriteAllText("$temp\privado\portal\configuracao\portal.env","PORTAL_URL=$urlFixture`r`nPORTAL_PORTA=$portaFixture`r`nRELATORIOS_PORTA=$($portasFixture[1])`r`nINITIAL_ADMIN_PASSWORD=senha-ficticia-12345`r`nPORTAL_API_TOKEN=x`r`nBACKUP_EMAIL_TO=x")
  [IO.File]::WriteAllText("$temp\privado\alertas\config\cfg_ambiente.txt","QLIK_TENANT=x`r`nQLIK_APP_ID=x`r`nQLIK_OBJ_ID=x`r`nDESTINATARIO_ALERTA=x")
  [IO.File]::WriteAllText("$temp\privado\comum\operacao.env","ALERTAS_HORARIOS=00:00`r`nBACKUP_HORARIOS=00:00`r`nLIMPEZA_HORARIO=00:00`r`nESPACO_MINIMO_GB=1`r`nMODO_ENSAIO=$(if($Ensaio){'1'}else{'0'})")
  [IO.File]::WriteAllText("$temp\privado\portal\configuracao\worker.env",'segredo-ficticio')
@@ -143,8 +143,8 @@ if($Atraso){Start-Sleep -Seconds $Atraso} # Simula VM lenta, somente no teste.
  if(!$apareceu){throw 'Supervisor nao gravou status.json dentro do prazo.'}
  $status=Get-Content $statusPath -Raw|ConvertFrom-Json;if(!$status.portal-or!$status.emails-or!$status.relatorios){throw 'Supervisor nao iniciou os processos simulados.'}
  if($PortalReal){
-  Registrar-FaseSupervisorTeste "health-real-$BancoLocal"
-  if(!(Esperar-CondicaoTeste {try{(Invoke-WebRequest "$urlFixture/api/health" -UseBasicParsing -TimeoutSec 2).StatusCode-eq200}catch{$false}} -Segundos 60)){throw "Portal real $BancoLocal nao ficou pronto."}
+  Registrar-FaseSupervisorTeste "health-real-sqlite"
+  if(!(Esperar-CondicaoTeste {try{(Invoke-WebRequest "$urlFixture/api/health" -UseBasicParsing -TimeoutSec 2).StatusCode-eq200}catch{$false}} -Segundos 60)){throw "Portal real SQLite nao ficou pronto."}
  }
  $saudeIniciada=$false
  for($i=0;$i-lt60;$i++){if(Test-Path "$temp\privado\operacao\saude-iniciada"){$saudeIniciada=$true;break};Start-Sleep -Milliseconds 500}
@@ -213,7 +213,7 @@ if($Atraso){Start-Sleep -Seconds $Atraso} # Simula VM lenta, somente no teste.
   $bancos=@(Get-ChildItem (Join-Path $temp 'privado/portal/banco') -Recurse -File|Where-Object {$_.Name-match '\.sqlite(?:-wal|-shm)?$'})
   if(!$bancos.Count){throw 'Portal real nao abriu banco descartavel.'}
   foreach($arquivo in $bancos){$handle=[IO.File]::Open($arquivo.FullName,[IO.FileMode]::Open,[IO.FileAccess]::ReadWrite,[IO.FileShare]::None);$handle.Dispose()}
-  Write-Host "[OK] Supervisor real ${BancoLocal}: banco/WAL/SHM liberados, worker.env removido e porta fechada."
+  Write-Host "[OK] Supervisor real SQLite: banco/WAL/SHM liberados, worker.env removido e porta fechada."
  }
  Write-Host 'Supervisor isolado: concorrencia, estado, arquivo em uso e encerramento aprovados.' -ForegroundColor Green
 }catch{Write-Host ('FALHA DO CENARIO: '+$_.Exception.Message);if($instancias){Write-Host (Formatar-DiagnosticoTravaTeste $instancias)};throw}finally{$env:Path=$pathAnterior;$env:SUPPLY_VISION_PRIVADO=$privadoAnterior;$env:MODO_ENSAIO=$ensaioAnterior;$env:ADMIN_ALERTA_EMAIL=$adminAnterior;foreach($p in $processos){if($p-and!$p.HasExited){try{Encerrar-ArvoreTeste $p}catch{}}};if(Test-Path $temp){Remover-DiretorioTemporario $temp}}

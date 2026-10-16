@@ -53,6 +53,9 @@ try{
   # A sobrecarga sem encoding escreve UTF8 SEM BOM, inclusive no .NET do PS5.1.
   [IO.File]::WriteAllText((Join-Path $preparo 'scripts/preparar-atualizacao.ps1'),$codigo)
   Copy-Item (Join-Path $fonteRaiz 'portal/portal.env.example') (Join-Path $preparo 'portal')
+  Copy-Item (Join-Path $fonteRaiz 'portal/package.json') (Join-Path $preparo 'portal')
+  New-Item -ItemType Directory -Force (Join-Path $preparo 'portal/scripts')|Out-Null
+  Copy-Item (Join-Path $fonteRaiz 'portal/scripts/versao-node.mjs') (Join-Path $preparo 'portal/scripts')
   Copy-Item (Join-Path $fonteRaiz 'compartilhado/*.env.example') (Join-Path $preparo 'compartilhado')
   Copy-Item (Join-Path $fonteRaiz 'alertas/config/*.exemplo.txt') (Join-Path $preparo 'alertas/config')
   Copy-Item (Join-Path $fonteRaiz 'alertas/parametros/de_para/*.exemplo.csv') (Join-Path $preparo 'alertas/parametros/de_para')
@@ -67,7 +70,7 @@ $ErrorActionPreference='Stop'
 function ValidarPythonMock {}
 function Registrar($Texto){Add-Content (Join-Path $Preparo 'passos.txt') $Texto}
 function Conferir-Isolamento {
- if($env:SV_PREPARO_RAIZ-ne$Preparo-or$env:TEMP-ne(Join-Path $Preparo '.cache')-or$env:SUPPLY_VISION_PRIVADO-ne(Join-Path $Preparo 'privado')-or$env:MODO_ENSAIO-ne'1'-or$env:PORTAL_BANCO_LOCAL-ne'sqlite'){throw 'Ambiente de producao herdado.'}
+ if($env:SV_PREPARO_RAIZ-ne$Preparo-or$env:TEMP-ne(Join-Path $Preparo '.cache')-or$env:SUPPLY_VISION_PRIVADO-ne(Join-Path $Preparo 'privado')-or$env:MODO_ENSAIO-ne'1'-or$env:PORTAL_BANCO_LOCAL){throw 'Ambiente de producao herdado.'}
  $cfg=Ler-ConfigOperacao (Join-Path $env:SUPPLY_VISION_PRIVADO 'portal/configuracao/portal.env')
  $registro=Get-Content (Join-Path $Preparo ('.cache/preparo-portas/'+$PID.ToString()+'.json')) -Raw|ConvertFrom-Json
  $porta=[int]$cfg['PORTAL_PORTA'];$relatorios=[int]$cfg['RELATORIOS_PORTA'];$url=[uri]$cfg['PORTAL_URL']
@@ -94,7 +97,7 @@ function Invoke-RestMethod {
   return @{sha=$sha;commit=@{tree=@{sha=$tree}}}
  }
 
- $nomes=@('Portal','Portal - instalacao nova e autenticacao real','PowerShell','Alertas','Atualizacao real','Node 22.13 - partida e operacao (ubuntu-latest)','Node 22.13 - partida e operacao (windows-latest)')
+ $nomes=@('Portal','Portal - instalacao nova e autenticacao real','PowerShell','Alertas','Atualizacao real')
  $checks=@(foreach($nome in $nomes){[pscustomobject]@{name=$nome;head_sha=('2'*40);status='completed';conclusion=$(if($nome-eq'Atualizacao real'){'skipped'}else{'success'});app=@{slug='github-actions';id=15368}}})
  if($Caso-like'ci-pr-*'){
   $naPR=$Uri-like("*/commits/$prSha/check-runs?*")
@@ -134,7 +137,7 @@ function Invoke-RestMethod {
  if($Caso-notlike'ci-*'-and$Caso-ne'fumaca-falha'){throw 'CI nao aprovado nesta fixture'}
  return (@{total_count=$checks.Count;check_runs=$checks}|ConvertTo-Json -Depth 5|ConvertFrom-Json)
 }
-function node {Conferir-Isolamento;Registrar 'fumaca';$global:LASTEXITCODE=0;if($Caso-eq'fumaca-falha'){$global:LASTEXITCODE=1}}
+function node {if($args[-1]-eq'--exata'){& (Get-Command node -CommandType Application|Select-Object -First 1).Source @args;return};Conferir-Isolamento;Registrar 'fumaca';$global:LASTEXITCODE=0;if($Caso-eq'fumaca-falha'){$global:LASTEXITCODE=1}}
 function git {$global:LASTEXITCODE=0;'2'*40}
 function npm.cmd {
  Conferir-Isolamento;$global:LASTEXITCODE=0

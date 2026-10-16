@@ -60,7 +60,7 @@ Garantir-VisualCpp -SomenteVerificar:$SomenteVerificar
 Etapa 'Verificando a estrutura'
 foreach($c in @($Portal,$Alertas,(Join-Path $Portal 'package-lock.json'),(Join-Path $Alertas 'config\requirements.txt'))){if(!(Test-Path -LiteralPath $c)){throw "Item obrigatorio ausente: $c"}}
 $Node=Comando 'node.exe' 'OpenJS.NodeJS.LTS' 'Node.js'; $Python=Comando 'python.exe' 'Python.Python.3.12' 'Python'
-Versao $Node ([version]'22.13.0') 'Node.js'; Versao $Python ([version]'3.12.0') 'Python'
+& $Node (Join-Path $Portal 'scripts/versao-node.mjs') --exata; if($LASTEXITCODE){throw 'Node.js deve corresponder a engines.node do Portal (mesmo major/minor).'}; Versao $Python ([version]'3.12.0') 'Python'
 $Npm=Join-Path (Split-Path $Node) 'npm.cmd'; if(!(Test-Path $Npm)){$Npm=Comando 'npm.cmd' 'OpenJS.NodeJS.LTS' 'npm'}
 $PyExistente=Join-Path $Alertas '.venv\Scripts\python.exe'
 if(Test-Path -LiteralPath $PyExistente){Validar-PythonAlertas $PyExistente}

@@ -4,8 +4,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import net from 'node:net';
 import sqlite from 'node:sqlite';
-import { syncBuiltinESMExports, register } from 'node:module';
+import { syncBuiltinESMExports, registerHooks } from 'node:module';
 import { fileURLToPath } from 'node:url';
+import { resolve, load } from './isolamento-sqlite-hooks.mjs';
 
 if (process.env.SV_PREPARO_RAIZ) instalarIsolamento();
 function instalarIsolamento() {
@@ -82,8 +83,7 @@ function instalarIsolamento() {
     constructor(arquivo, options = {}) { exigirCaminho(arquivo); super(arquivo, options); }
   };
   syncBuiltinESMExports();
-  // oxlint-disable-next-line typescript/no-deprecated -- Node 22.13 ainda nao tem registerHooks.
-  register('./isolamento-sqlite-hooks.mjs', import.meta.url);
+  registerHooks({ resolve, load });
   // Filhos CLI, workers e consumidores conservam a mesma guarda.
   const preload = `--import=${JSON.stringify(import.meta.url)}`;
   if (!process.env.NODE_OPTIONS?.includes(import.meta.url)) process.env.NODE_OPTIONS = `${process.env.NODE_OPTIONS || ''} ${preload}`.trim();

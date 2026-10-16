@@ -4,7 +4,7 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { portalPrivado } from '../scripts/configuracao.mjs';
 
-import { ARQUIVO_VARS, VARIAVEIS_DO_WORKER, montarArgumentos, montarArquivoVars, bancoLocalConfigurado } from '../scripts/iniciar-portal.mjs';
+import { ARQUIVO_VARS, VARIAVEIS_DO_WORKER, montarArgumentos, montarArquivoVars } from '../scripts/iniciar-portal.mjs';
 
 void test('entrega ao Worker as variaveis que ele le de env', () => {
   const texto = montarArquivoVars({
@@ -79,12 +79,12 @@ void test('escolhe o endereco conforme o modo', () => {
   assert.deepEqual(montarArgumentos('lan', ARQUIVO_VARS).slice(-4), ['--ip', '0.0.0.0', '--port', '3000']);
 });
 
-void test('seletor do banco local usa sqlite por padrao e aceita reversao explicita a d1', () => {
-  for (const config of [{}, {PORTAL_BANCO_LOCAL:''}, {PORTAL_BANCO_LOCAL:'sqlite'}]) assert.equal(bancoLocalConfigurado(config),'sqlite');
-  assert.equal(bancoLocalConfigurado({PORTAL_BANCO_LOCAL:' d1 '}),'d1');
-  assert.throws(()=>bancoLocalConfigurado({PORTAL_BANCO_LOCAL:'outro'}),/sqlite ou d1/);
-  // E uma escolha do processo local, nao uma variavel a publicar na Cloudflare.
-  assert.equal(montarArquivoVars({PORTAL_BANCO_LOCAL:'d1'}),'');
+void test('chave antiga do banco e aceita e ignorada em argumentos e variaveis do Worker', () => {
+  for (const valor of ['', 'sqlite', 'd1', 'outro']) {
+    const config = {PORTAL_BANCO_LOCAL:valor};
+    assert.deepEqual(montarArgumentos('local',null,config),montarArgumentos('local'));
+    assert.equal(montarArquivoVars(config),'');
+  }
 });
 
 void test('partida usa a porta configurada tambem no ambiente descartavel', () => {

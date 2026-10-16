@@ -27,7 +27,7 @@ function Localizar-NodeMaquina([string]$Informado) {
   foreach($dir in ([Environment]::GetEnvironmentVariable('Path','Machine')-split';')){if($dir){$candidatos+=Join-Path $dir 'node.exe'}}
  }
  foreach($c in $candidatos){if([IO.Path]::IsPathRooted($c)-and(Test-Path -LiteralPath $c -PathType Leaf)){return [IO.Path]::GetFullPath($c)}}
- throw 'Node instalado na maquina nao encontrado. Instale Node >= 22.13 para todos os usuarios ou informe seu caminho absoluto.'
+ throw ('Node instalado na maquina nao encontrado. Instale Node '+(Get-Content -LiteralPath (Join-Path $PSScriptRoot '../portal/package.json') -Raw|ConvertFrom-Json).engines.node+' para todos os usuarios ou informe seu caminho absoluto.')
 }
 function Validar-BackupSemLogin([string]$Modo,[string]$Caminho) {
  if($Modo-eq'computador'-and$Caminho-and$Caminho-notmatch '^\\\\[^\\]+\\[^\\]+'){
@@ -108,7 +108,7 @@ function Definir-ModoInicializacao([string]$Raiz,[string]$Privado,[string]$Start
  if($plano.CriarTarefa){
   $node=Localizar-NodeMaquina $NodeExecutavel
   if(!(Test-Path -LiteralPath (Join-Path (Split-Path $node) 'npm.cmd') -PathType Leaf)){throw 'npm.cmd nao encontrado ao lado do Node instalado na maquina.'}
-  $r=Executar-NativoOperacao $node @('--version');$v=($r.stdout-join"`n").Trim();if($r.codigo-ne0-or$v-notmatch '^v(\d+\.\d+\.\d+)' -or [version]$Matches[1]-lt[version]'22.13.0'){throw 'A tarefa exige Node >= 22.13.'}
+  $r=Executar-NativoOperacao $node @((Join-Path $Raiz 'portal/scripts/versao-node.mjs'));if($r.codigo-ne0){throw 'A tarefa exige o major Node do Portal e a versao minima definida em engines.node.'};$r.stderr|ForEach-Object {Write-Warning $_}
   $cfg=Ler-ConfigOperacao (Join-Path $Privado 'portal\configuracao\portal.env');Validar-BackupSemLogin 'computador' $cfg['BACKUP_NETWORK_DIR']
   $conta=if($Credencial){$Credencial.UserName}else{'SYSTEM'}
   if(!(Testar-ContaAdministradora $conta)){throw 'A conta da tarefa deve ser administradora local. Peca a TI a permissao antes de configurar.'}

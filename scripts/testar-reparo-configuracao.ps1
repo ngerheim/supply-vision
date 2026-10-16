@@ -1,5 +1,4 @@
-﻿param([ValidateSet('sqlite','d1')][string]$BancoLocal='sqlite')
-# Confere o reparo da configuracao privada usando a funcao real do atualizador,
+﻿# Confere o reparo da configuracao privada usando a funcao real do atualizador,
 # num diretorio de mentira: nada do servidor e tocado.
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'operacao-logica.ps1')
@@ -29,13 +28,12 @@ try {
     'PORTAL_URL=http://localhost:3000',
     'PORTAL_API_TOKEN=',
     'BACKUP_EMAIL_TO=alguem@example.com',
-    'CHAVE_NOVA=valor-padrao',
-    'PORTAL_BANCO_LOCAL=sqlite'
+    'CHAVE_NOVA=valor-padrao'
   )
   Set-Content -LiteralPath $destinoPortal -Value @(
     'PORTAL_URL=http://servidor.test:3000',
     'BACKUP_EMAIL_TO=real@example.com',
-    "PORTAL_BANCO_LOCAL=$BancoLocal"
+    'PORTAL_BANCO_LOCAL=sqlite'
   )
   Set-Content -LiteralPath (Join-Path $Raiz 'compartilhado\smtp.env.example') -Value @('SMTP_HOST=exemplo')
   Set-Content -LiteralPath (Join-Path $Raiz 'privado\comum\smtp.env') -Value @('SMTP_HOST=servidor-real')
@@ -48,7 +46,7 @@ try {
   if (-not ($linhas | Where-Object { $_ -eq 'CHAVE_NOVA=valor-padrao' })) { throw 'Chave nova com valor padrao nao foi acrescentada.' }
   if (-not ($linhas | Where-Object { $_ -eq 'PORTAL_API_TOKEN=' })) { throw 'Chave nova vazia nao foi acrescentada.' }
   if (($avisos -join ' ') -notmatch 'PORTAL_API_TOKEN') { throw 'A chave vazia deveria virar aviso.' }
-  if(($linhas|Where-Object {$_-eq"PORTAL_BANCO_LOCAL=$BancoLocal"}).Count-ne1){throw 'Reparo alterou a escolha do banco local.'}
+  if(($linhas|Where-Object {$_-eq'PORTAL_BANCO_LOCAL=sqlite'}).Count-ne1){throw 'Reparo alterou uma chave legada ignorada.'}
   Write-Host '[OK] chaves novas acrescentadas sem mexer nas existentes'
 
   $antes = Get-Content -LiteralPath $destinoPortal -Raw
@@ -93,7 +91,7 @@ if(!$JaAtualizado-or!$Reaplicar-or$VersaoAnterior-ne('1'*40)){exit 9}
 exit $Codigo
 '@
  [IO.File]::WriteAllText($scriptNovo,$novo)
- [IO.File]::WriteAllText((Join-Path $tempFilho 'portal.env'),"PORTAL_BANCO_LOCAL=$BancoLocal")
+ [IO.File]::WriteAllText((Join-Path $tempFilho 'portal.env'),'PORTAL_BANCO_LOCAL=sqlite')
  # Usa o lancador real, com o executavel do host apenas como ponto de injecao.
  # Assim PS 5.1 e PS 7 exercitam CreateNoWindow, captura e codigo de saida.
  $script:hostReexecucao=(Get-Process -Id $PID).Path
@@ -104,7 +102,7 @@ exit $Codigo
   $argumentosReexecucao=@(Argumentos-ReexecucaoAtualizador $scriptNovo ('1'*40) $true)+@('-Codigo',$codigoFilho)
   $preferenciaFilho=$ErrorActionPreference;$ErrorActionPreference='Continue'
   $saidaFilho=@(. ([scriptblock]::Create($blocoFilho.Extent.Text)))
-  if($rcFilho-ne$codigoFilho-or$ErrorActionPreference-ne'Stop'-or!(Test-Path (Join-Path $tempFilho 'novo.executado'))-or[IO.File]::ReadAllText((Join-Path $tempFilho 'novo.executado'))-ne"PORTAL_BANCO_LOCAL=$BancoLocal"){throw 'Reexecucao nao leu o codigo novo ou perdeu argumentos/codigo.'}
+  if($rcFilho-ne$codigoFilho-or$ErrorActionPreference-ne'Stop'-or!(Test-Path (Join-Path $tempFilho 'novo.executado'))-or[IO.File]::ReadAllText((Join-Path $tempFilho 'novo.executado'))-ne'PORTAL_BANCO_LOCAL=sqlite'){throw 'Reexecucao nao leu o codigo novo ou perdeu argumentos/codigo.'}
   if(($saidaFilho-join' ')-notlike'*npm warn install-scripts fixture*'){throw 'Reexecucao perdeu stderr do filho.'}
  }
 }finally{Remove-Item Function:Executar-PowerShellOculto -ErrorAction SilentlyContinue;Remove-Item $tempFilho -Recurse -Force -ErrorAction SilentlyContinue}

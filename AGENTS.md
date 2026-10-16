@@ -93,10 +93,8 @@
 - Workers executa interface e API mesmo na instalacao local. SQLite nativo e
   executado no Node por `scripts/sqlite-local.mjs`, acessado pelo adaptador
   `lib/sqlite-local.ts`; nao e uma extensao nativa carregada no workerd.
-- `PORTAL_BANCO_LOCAL=sqlite|d1` e lido na partida; ausente/vazio usa sqlite,
-  valor invalido falha. Troca exige parada e nova partida, sem conversao de dados.
-- D1 local pode escrever bookmarks ate em SELECT; o transporte SQLite retira
-  esse caminho. O D1 remoto continua usando seu binding original.
+- SQLite local e o unico banco operacional. A chave legada `PORTAL_BANCO_LOCAL`
+  continua aceita no portal.env, mas e ignorada e nao vai ao Worker.
 - A criacao do arquivo inexistente ainda passa pelo D1 para preservar identidade.
   Bases existentes no modo sqlite usam SQL parametrizado pela ponte autenticada.
 - WAL permite leitores durante escrita, mas apenas um escritor por vez.
@@ -104,7 +102,6 @@
 - Lotes de escrita usam `BEGIN IMMEDIATE` e rollback integral; lotes somente de
   leitura usam snapshot sem adquirir antecipadamente a reserva do escritor.
 - Nao introduza retentativa de escritas ou de requisicoes HTTP mutantes.
-  A excecao D1 de leitura esta delimitada em `lib/leitura-d1.ts`.
 - Permissoes da API sao obrigatorias mesmo quando a interface esconde o controle.
   Perfis: viewer, editor e admin; alteracoes administrativas invalidam sessoes.
 - Senhas: PBKDF2 com salt individual e custo gravado. Sessoes guardam hash do token,
@@ -223,14 +220,15 @@ Usar dados ficticios e ambientes descartaveis; Windows real exige maquina de tes
 | CLI/console | `./scripts/testar-supv.ps1`; Windows exercita Ctrl+C real e restauracao QuickEdit |
 | PREPARAR/dependencias | `./scripts/testar-dependencias-preparo.ps1`, `testar-fases-atualizacao.ps1`, `testar-espera-testes.ps1` |
 | Health/parada | `./scripts/testar-health-local.ps1`; `node --test portal/tests/runtime-local.test.mjs` |
-| Banco local | `node --experimental-strip-types scripts/teste-modos-banco-local.mjs work/modos` |
-| Importacao/HTTP | `npm run test:imports`; variar `PORTAL_TESTE_BANCO_LOCAL=sqlite|d1` |
+| Banco local | `node --test --experimental-strip-types tests/sqlite-local.test.ts tests/runtime-local.test.mjs` |
+| Importacao/HTTP | `npm run test:imports` (SQLite local) |
 | Backup/restauracao | Testes `backup-*`, `restauracao-*` e `npm run test:restore -- --fixture` |
 | Inventario | `node scripts/inventario-metricas.mjs`; `--ref SHA` compara revisao sem checkout |
 
 - Dependencias Python: `requirements.txt`, `requirements-dev.txt` e `requirements-ci.txt`.
 - CI `.github/workflows/ci.yml`: parser/PSScriptAnalyzer, Portal, integracao Windows,
-  atualizacao real em PR e Alertas. Variantes de banco, ensaio e tarefa sao distintas.
+  atualizacao real em PR e Alertas. Referencias explicitas a testes sao conferidas
+  por `scripts/ci/verificar-testes.mjs`; ensaio e tarefa sao distintos.
 - H2 (PowerShell): `$env:SV_TESTES_INTEGRACAO_WINDOWS='1'`; executar
   `./scripts/testar-atualizacao-real.ps1 -BaseRef origin/main -DestinoRef HEAD`.
   Instala a base do merge-base e atualiza
@@ -240,19 +238,16 @@ Usar dados ficticios e ambientes descartaveis; Windows real exige maquina de tes
 - Artefatos publicos de CI contem somente diagnosticos ficticios, nunca bancos/snapshots.
 - Suites Linux nao substituem PowerShell 5.1, conta SYSTEM, firewall e console Windows.
 
-## Dependencias especiais e hospedagem
+## Dependencias especiais e runtime local
 
-- Runtime da operacao deve acompanhar Node definido no CI; o minimo tecnico da
-  ponte SQLite e 22.13. Node 22 antigo tem regressao de socket ocioso; preservar proxy.
+- Fonte unica da versao Node: `portal/package.json`, campo `node` de `engines`.
+  CI usa node-version-file; instalacao e PREPARAR exigem o mesmo major/minor.
+  Partida exige o major definido e minor minimo; outra diferenca aceita gera aviso.
+  `portal/scripts/versao-node.mjs` aplica estas regras; preservar o proxy local.
 - SheetJS local e copia oficial integra, licenca incluida; hash fixado no verificador
   e integrity no lockfile. Atualizacao exige revisao explicita: Dependabot nao cobre o tarball.
 - Adaptador fast-glob oferece somente sync ao plugin de importacao; nao e substituto
   geral da API. Preservar semantica de arquivos e revisar quando atualizar o consumidor.
-- Sem target, binding local mantem sua identidade. Homologacao exige
-  `SUPPLY_VISION_TARGET=cloudflare-staging` e UUID D1 separado; nao usar banco local.
-- `.github/workflows/preparar-hospedagem.yml` testa, compila e faz deploy dry-run;
-  nao publica nem valida existencia/acesso ao banco remoto.
-- Workers remoto nao executa Python/PowerShell nem consumidores SQLite locais.
-  Migracao depende de filas/consumidores, backups, segredos, HTTPS e rollback homologados.
-- Exportacao funcional omite credenciais e nao substitui migracao integral do banco.
-  Conclusao exige persistencia real, autorizacao, importacao, entregas e restauracao.
+- O plugin Cloudflare do Vite e Wrangler/workerd continuam executando o Portal
+  localmente. O binding em vite.config.ts apenas preserva a identidade existente
+  e inicializa o arquivo SQLite ausente; nao ha alvo de deploy remoto.
