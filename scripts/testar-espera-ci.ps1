@@ -42,13 +42,13 @@ try{
 
  # Worktree Git real: prova remocao da pasta e do registro apos cancelamento.
  $instalacao=Join-Path $base 'instalacao';[void][IO.Directory]::CreateDirectory($instalacao)
- & git -C $instalacao init --initial-branch=main *> $null
- if($LASTEXITCODE){throw 'Git init da fixture falhou.'}
- & git -C $instalacao -c user.name=Fixture -c user.email=fixture@example.test commit --allow-empty -m fixture *> $null
- if($LASTEXITCODE){throw 'Commit da fixture falhou.'}
+ $gitFixture=Executar-NativoOperacao 'git' @('-C',$instalacao,'init','--initial-branch=main')
+ if($gitFixture.codigo){throw ('Git init da fixture falhou. '+($gitFixture.saida-join' '))}
+ $gitFixture=Executar-NativoOperacao 'git' @('-C',$instalacao,'-c','user.name=Fixture','-c','user.email=fixture@example.test','commit','--allow-empty','-m','fixture')
+ if($gitFixture.codigo){throw ('Commit da fixture falhou. '+($gitFixture.saida-join' '))}
  $preparo=Nova-PastaPreparo $instalacao
- & git -C $instalacao worktree add --detach $preparo HEAD *> $null
- if($LASTEXITCODE){throw 'Worktree da fixture falhou.'}
+ $gitFixture=Executar-NativoOperacao 'git' @('-C',$instalacao,'worktree','add','--detach',$preparo,'HEAD')
+ if($gitFixture.codigo){throw ('Worktree da fixture falhou. '+($gitFixture.saida-join' '))}
  [IO.File]::WriteAllText((Join-Path $instalacao 'sentinela'),'operacao no ar')
  $scriptWorker=Join-Path $base 'worker-ci.ps1'
  $codigoWorker=@'
