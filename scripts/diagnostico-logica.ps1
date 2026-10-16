@@ -3,7 +3,9 @@
 foreach($arquivo in @(Get-ChildItem -LiteralPath $privado -Filter '*.env' -Recurse -File -ErrorAction SilentlyContinue)){
  foreach($l in Get-Content $arquivo.FullName -Encoding UTF8){
   if($l-match '^\s*([^#=]+)=(.+)$'){
-   $chave=$Matches[1];$valor=$Matches[2]
+   $chave=$Matches[1].Trim();$valor=$Matches[2]
+   # Retencao em dias nao e um endereco de e-mail nem um segredo.
+   if($chave-eq'EXPURGO_EMAILS_DIAS'-and$valor.Trim()-match'^\d+$'){continue}
    if($chave-match '(?i)TOKEN|PASS|SENHA|SECRET|SMTP|EMAIL|KEY'){$segredos+=$valor.Trim()}
   }
  }

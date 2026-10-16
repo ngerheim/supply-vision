@@ -127,6 +127,8 @@ exit $LASTEXITCODE
    $contexto=Get-Content (Join-Path $raiz 'privado/operacao/atualizacao.json') -Raw|ConvertFrom-Json
    $limpeza=if($caso-ne'preparo-limpeza-falha'){'concluida'}else{'pendente'}
    if($contexto.fase-ne'cancelado-preparo'-or$contexto.limpeza-ne$limpeza-or((Test-Path $contexto.preparo)-ne($limpeza-eq'pendente'))){throw 'Cancelamento/limpeza do PREPARAR nao registrados.'}
+   $a=Ler-AndamentoAtualizacao (Join-Path $raiz 'privado/operacao/atualizacao-andamento.json')
+   if($a.estado-ne'falhou'-or$a.nome-ne'PREPARAR reprovado'-or($saida-join' ')-like'*== PREPARAR / Aprovacao e conferencia ==*'){throw 'PREPARAR reprovado continuou o andamento.'}
    if($caso-eq'ci-reprovado'){
     $a=Ler-AndamentoAtualizacao (Join-Path $raiz 'privado/operacao/atualizacao-andamento.json')
     if($a.erro-notlike'*Portal (failure)*supv atualizar --completo*'-or$contexto.erro-ne$a.erro){throw 'Atualizador perdeu check ou alternativas do CI reprovado.'}
