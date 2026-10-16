@@ -146,7 +146,7 @@ function Limpar-PastaPreparo($Raiz,$Preparo){
   $preparo=Nova-PastaPreparo $raiz;New-Item -ItemType Directory $preparo|Out-Null
   $hostTeste=(Get-Process -Id $PID).Path
   $prodScript=Join-Path $producao 'vivo.mjs';[IO.File]::WriteAllText($prodScript,'setInterval(()=>{},1000)')
-  $processoProducao=Start-Process (Get-Command node.exe).Source -ArgumentList (Proteger-ArgumentoAtualizacao $prodScript) -PassThru -WindowStyle Hidden
+  $processoProducao=Start-Process (Get-Command node.exe).Source -ArgumentList (Proteger-ArgumentoAtualizacao $prodScript) -PassThru -WindowStyle Hidden;[void]$processoProducao.Handle
   $neto=Join-Path $preparo 'neto.mjs';[IO.File]::WriteAllText($neto,'setInterval(()=>{},1000)')
   $filho=Join-Path $preparo 'filho.ps1'
   [IO.File]::WriteAllText($filho,@'

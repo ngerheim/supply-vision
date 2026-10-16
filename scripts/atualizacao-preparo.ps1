@@ -514,7 +514,7 @@ function Encerrar-ProcessosPreparo([string]$Raiz,[string]$Preparo) {
   if((Get-Command Processo-OrfaoDestaInstalacao -ErrorAction SilentlyContinue)-and(Processo-OrfaoDestaInstalacao $p $Raiz)){continue}
   $atual=Get-CimInstance Win32_Process -Filter "ProcessId=$($p.ProcessId)" -ErrorAction Stop
   if(!$atual-or$atual.CreationDate-ne$p.CreationDate-or!(Processo-DestePreparo $atual $Preparo)){continue}
-  $encerrador=Start-Process taskkill.exe -ArgumentList @('/PID',"$($p.ProcessId)",'/T','/F') -PassThru -WindowStyle Hidden
+  $encerrador=Start-Process taskkill.exe -ArgumentList @('/PID',"$($p.ProcessId)",'/T','/F') -PassThru -WindowStyle Hidden;[void]$encerrador.Handle
   try{if(!$encerrador.WaitForExit(3000)){$encerrador.Kill();throw "Prazo excedido ao encerrar PID $($p.ProcessId) do preparo."}}finally{$encerrador.Dispose()}
   $restante=Get-CimInstance Win32_Process -Filter "ProcessId=$($p.ProcessId)" -ErrorAction Stop
   if($restante-and$restante.CreationDate-eq$p.CreationDate-and(Processo-DestePreparo $restante $Preparo)){throw "PID $($p.ProcessId) do preparo permaneceu vivo apos taskkill."}

@@ -106,7 +106,7 @@ time.sleep(30)
   $fasePersistencia='iniciar supervisor'
   Write-Host "Persistencia: inicio; slot=$Slot; agora=$AgoraSimulado; fixture=$temp"
   $proc = Start-Process powershell.exe -PassThru -WindowStyle Hidden -RedirectStandardOutput (Join-Path $temp 'supervisor-saida.log') -RedirectStandardError (Join-Path $temp 'supervisor-erro.log') -ArgumentList @(
-    '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "$temp\scripts\supervisor.ps1")
+    '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "$temp\scripts\supervisor.ps1");[void]$proc.Handle
 
   # O log de conclusao antecede o flush. Sincroniza com a entrada REAL da
   # saude, que registra o estado visto antes de qualquer trabalho demorado.
