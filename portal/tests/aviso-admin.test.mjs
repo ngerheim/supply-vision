@@ -38,8 +38,9 @@ for (const evento of Object.keys(EVENTOS_ADMIN)) void test(`${evento}: envia uma
   assert.deepEqual(mensagem.to, ['um@example.com', 'dois@example.com']);
   assert.deepEqual(mensagem.from, { name: config.EMAIL_FROM_NAME, address: config.SMTP_USER });
   assert.match(mensagem.subject, /^\[Supply Vision\] .+ — .+/);
-  assert.match(mensagem.text, /Data\/hora:/); assert.match(mensagem.text, /O que fazer:/); assert.match(mensagem.text, /AGENTS\.md/);
-  assert.ok(mensagem.text.includes(EVENTOS_ADMIN[evento].secao));
+  assert.match(mensagem.text, /Data\/hora:/); assert.match(mensagem.text, /O que fazer:/); assert.doesNotMatch(mensagem.text, /AGENTS\.md/i);
+  assert.ok(mensagem.text.includes(EVENTOS_ADMIN[evento].acao));
+  assert.match(mensagem.text, /supv help/);
   assert.ok(!JSON.stringify(mensagem).includes(config.SMTP_PASSWORD));
   assert.equal(await enviarAvisoAdmin(evento, { ...opcoes, agora: new Date(instante.getTime() + 60 * 60_000) }), 'enviado');
   assert.equal(mensagens.length, 2);
@@ -97,14 +98,15 @@ void test('controle corrompido impede envio e nao altera outros bancos', async t
   assert.equal(fs.readFileSync(arquivo, 'utf8'), 'invalido');
 });
 
-void test('mensagens usam somente conteudo fixo, maquina e horario e apontam secoes existentes', () => {
-  const manual = fs.readFileSync(new URL('../../AGENTS.md', import.meta.url), 'utf8');
+void test('mensagens preservam acao concreta e supv help sem citar o mapa IA', () => {
   for (const [evento, dados] of Object.entries(EVENTOS_ADMIN)) {
-    assert.ok(manual.includes(`## ${dados.secao}`));
-    assert.equal(dados.ancora, dados.secao.toLowerCase().replaceAll(' ', '-'));
     const mensagem = montarAviso(evento, instante, 'SERVIDOR-TESTE');
     assert.equal(mensagem.subject, `[Supply Vision] ${dados.nome} — SERVIDOR-TESTE`);
-    assert.ok(mensagem.text.includes(`main/AGENTS.md#${dados.ancora}`));
+    assert.ok(mensagem.text.includes(dados.acao));
+    assert.match(mensagem.text, /supv help/);
+    assert.doesNotMatch(JSON.stringify(mensagem), /AGENTS\.md/i);
+    assert.equal(Object.hasOwn(dados, 'secao'), false);
+    assert.equal(Object.hasOwn(dados, 'ancora'), false);
     assert.match(mensagem.text, /08\/10\/2026/); assert.match(mensagem.text, /11:00:00/);
   }
 });
@@ -192,4 +194,13 @@ void test('reserva aguarda lock de escrita acima de um segundo sem perder exclus
     if (!terminou) filho.kill();
     await fim.catch(() => {});
   }
+});
+
+void test('diagnosticos operacionais nao encaminham humanos ao mapa IA', () => {
+  for (const arquivo of ['homologar.ps1', 'operacao-logica.ps1', 'atualizar-servidor.ps1', 'instalacao-requisitos.ps1']) {
+    const codigo = fs.readFileSync(new URL(`../../scripts/${arquivo}`, import.meta.url), 'utf8');
+    assert.doesNotMatch(codigo, /AGENTS\.md/i, arquivo);
+  }
+  const exemplo = fs.readFileSync(new URL('../portal.env.example', import.meta.url), 'utf8');
+  assert.doesNotMatch(exemplo, /AGENTS\.md/i);
 });
