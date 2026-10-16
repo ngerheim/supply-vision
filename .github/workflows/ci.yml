@@ -83,6 +83,8 @@ jobs:
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           ./scripts/testar-fases-atualizacao.ps1
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          ./scripts/testar-espera-ci.ps1
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
           ./scripts/testar-dependencias-preparo.ps1
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           ./scripts/testar-checkpoint-alertas.ps1

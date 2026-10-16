@@ -7,7 +7,7 @@ $base=Join-Path ([IO.Path]::GetTempPath()) ('sv-fases-'+[guid]::NewGuid().ToStri
 $hostTeste=(Get-Process -Id $PID).Path
 $privadoAntes=$env:SUPPLY_VISION_PRIVADO
 try{
- foreach($caso in @('preparo-falha','preparo-limpeza-falha','sucesso','fumaca-falha','troca-parcial','rede-falha','ensaio','medicao-ausente','relogio-falha','medicao-falha','fumaca-sem-medicao','fumaca-relogio-falha')){
+ foreach($caso in @('ci-reprovado','preparo-falha','preparo-limpeza-falha','sucesso','fumaca-falha','troca-parcial','rede-falha','ensaio','medicao-ausente','relogio-falha','medicao-falha','fumaca-sem-medicao','fumaca-relogio-falha')){
   $raiz=Join-Path $base $caso
   foreach($dir in @('scripts','portal/scripts','portal/dist','portal/node_modules','alertas/.venv','privado/operacao','privado/portal/backups','privado/portal/configuracao','privado/comum','compartilhado')){New-Item -ItemType Directory -Force (Join-Path $raiz $dir)|Out-Null}
   Copy-Item (Join-Path $fonteRaiz 'scripts/operacao-logica.ps1') (Join-Path $raiz 'scripts')
@@ -80,6 +80,12 @@ function powershell.exe {
  $global:LASTEXITCODE=0
  if($args -contains '-Instalacao'){
   Registrar 'preparar'
+  if($Caso-eq'ci-reprovado'){
+   $a=Ler-AndamentoAtualizacao (Join-Path (Obter-PastaPrivada $Raiz) 'operacao/atualizacao-andamento.json')
+   $a.erro='CI da main reprovado: Portal (failure). re-run no GitHub, PR de correcao ou supv atualizar --completo.'
+   Publicar-AndamentoAtualizacao $a 'PREPARAR reprovado' 'falhou'
+   $global:LASTEXITCODE=1;return
+  }
   if($Caso-in@('preparo-falha','preparo-limpeza-falha')){$global:LASTEXITCODE=1;return}
   foreach($rel in @('portal/dist','portal/node_modules','alertas/.venv')){
    if($Caso-eq'troca-parcial'-and$rel-eq'alertas/.venv'){continue}
@@ -104,11 +110,15 @@ exit $LASTEXITCODE
    $esperado=if($caso-in@('sucesso','rede-falha','ensaio','medicao-ausente','relogio-falha','medicao-falha')){'nova'}else{'anterior'}
    if((Get-Content (Join-Path $raiz "$rel/versao"))-ne$esperado){throw "Artefato incorreto: $caso / $rel; $saida"}
   }
-  if($caso-in@('preparo-falha','preparo-limpeza-falha')){
+  if($caso-in@('ci-reprovado','preparo-falha','preparo-limpeza-falha')){
    if($passos-contains'backup-local'-or$passos-contains'commit-novo'-or(Test-Path (Join-Path $raiz 'privado/operacao/parar.sinal'))){throw 'Preparo reprovado parou/alterou a instalacao.'}
    $contexto=Get-Content (Join-Path $raiz 'privado/operacao/atualizacao.json') -Raw|ConvertFrom-Json
-   $limpeza=if($caso-eq'preparo-falha'){'concluida'}else{'pendente'}
+   $limpeza=if($caso-ne'preparo-limpeza-falha'){'concluida'}else{'pendente'}
    if($contexto.fase-ne'cancelado-preparo'-or$contexto.limpeza-ne$limpeza-or((Test-Path $contexto.preparo)-ne($limpeza-eq'pendente'))){throw 'Cancelamento/limpeza do PREPARAR nao registrados.'}
+   if($caso-eq'ci-reprovado'){
+    $a=Ler-AndamentoAtualizacao (Join-Path $raiz 'privado/operacao/atualizacao-andamento.json')
+    if($a.erro-notlike'*Portal (failure)*supv atualizar --completo*'-or$contexto.erro-ne$a.erro){throw 'Atualizador perdeu check ou alternativas do CI reprovado.'}
+   }
    if($limpeza-eq'pendente'){
     if(($saida-join' ')-notlike'*Handle ficticio impediu limpeza*'){throw 'Aviso de limpeza pendente perdeu causa.'}
     Remover-ArvorePreparo $contexto.preparo

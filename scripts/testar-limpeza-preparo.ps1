@@ -24,6 +24,9 @@ try{
  $preparoLegado=Nova-PastaPreparo $raiz
  & git -C $raiz worktree add --detach $preparoLegado --quiet
  New-Item -ItemType Directory (Join-Path $preparoLegado 'scripts')|Out-Null
+ New-Item -ItemType Directory -Force (Join-Path $preparoLegado 'portal/scripts')|Out-Null
+ Copy-Item (Join-Path $PSScriptRoot '../portal/package.json') (Join-Path $preparoLegado 'portal')
+ Copy-Item (Join-Path $PSScriptRoot '../portal/scripts/versao-node.mjs') (Join-Path $preparoLegado 'portal/scripts')
  foreach($nome in @('atualizacao-preparo.ps1','operacao-logica.ps1','preparar-atualizacao.ps1')){Copy-Item (Join-Path $PSScriptRoot $nome) (Join-Path $preparoLegado 'scripts')}
  [IO.File]::WriteAllText((Join-Path $preparoLegado 'scripts/preparar-configuracao-teste.ps1'),@'
 if($env:OS-eq'Windows_NT'){

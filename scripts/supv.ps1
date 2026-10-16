@@ -58,8 +58,8 @@ function Ajuda-Supv([string]$Comando){
   status='supv status | Operacao, versao, health, inicializacao, manutencao, preparo e ultimo resumo. Somente leitura.'
   iniciar='supv iniciar | Solicita inicio e aguarda supervisor e health local por ate 60 s.'
   parar='supv parar | Aguarda parada completa da operacao.'
-  atualizar='supv atualizar [--completo] | Processo independente; --completo forca todas as suites. Ctrl+C encerra apenas o acompanhamento. Ex.: supv atualizar --completo'
-  acompanhar='supv acompanhar | Reconecta a atualizacao em andamento ou mostra o ultimo resumo. Ctrl+C encerra apenas o acompanhamento.'
+  atualizar='supv atualizar [--completo] | Processo independente; --completo forca todas as suites. Ctrl+C cancela a espera do CI; nas outras fases encerra apenas o acompanhamento. Ex.: supv atualizar --completo'
+  acompanhar='supv acompanhar | Reconecta a atualizacao em andamento ou mostra o ultimo resumo. Ctrl+C cancela a espera do CI; nas outras fases encerra apenas o acompanhamento.'
   homologar='supv homologar [--copiar] [--destino arquivo.txt] | Mostra e salva relatorio mascarado. Ex.: supv homologar --copiar --destino "C:\Temp\homologacao.txt"'
   saude='supv saude [--desde "yyyy-MM-dd HH:mm"] | Padrao: ultimas 24 h. Falhas por motivo, partida e reinicios; Portal desde o ultimo reinicio.'
   logs='supv logs <supervisor|portal|atualizacao|emails|relatorios> [-n 80] [--bruto] | Atualizacao sem progresso git e diagnosticos de build; --bruto mostra todas as linhas. Dados sensiveis continuam mascarados. Ex.: supv logs portal -n 120'
@@ -124,7 +124,9 @@ function Mostrar-ProgressoSupv($a,$Exibicao=$null){
   }
   $restante=if($null-eq$a.restanteSegundos){'indisponivel'}else{"$($a.restanteSegundos) s"}
   $texto="Etapa $($a.numero) de $($a.total): $($a.nome) | etapa $($a.etapaSegundos) s | total $($a.totalSegundos) s | restante estimado: $restante | modo $modo"
+  if($a.esperaCI.mensagem-and$a.estado-eq'andamento'){$texto=[string]$a.esperaCI.mensagem}
   $terminal=$a.estado-in@('concluido','falhou')
+  if($terminal-and$a.erro){$texto+=' | '+(([string]$a.erro-replace'\s+',' ').Trim())}
  }
  if($null-ne$Exibicao){
   # A conclusao fica fixa enquanto o worker termina; os demais textos mudam
@@ -194,9 +196,9 @@ function Suspender-QuickEditSupv {
 
 function Acompanhar-AtualizacaoSupv($Processo=$null){
  $console=Suspender-QuickEditSupv
- $exibicao=@{}
+ $exibicao=@{};$concluido=$false
  try{
- Escrever-Supv 'Ctrl+C ou fechar o terminal encerra apenas o acompanhamento. Para voltar: supv acompanhar.'
+ Escrever-Supv 'Ctrl+C durante a espera do CI cancela a atualizacao sem parar a operacao. Nas outras fases, encerra apenas o acompanhamento. Para voltar: supv acompanhar.'
  while($true){
   $p=if($Processo){$Processo}else{Consultar-AtualizacaoAdministrada $script:supvRaiz $script:supvPrivado}
   Mostrar-ProgressoSupv (Consultar-AndamentoAdministrado $script:supvPrivado) $exibicao
@@ -219,8 +221,12 @@ function Acompanhar-AtualizacaoSupv($Processo=$null){
   $arquivo=Join-Path $script:supvPrivado 'operacao/atualizacao-resultado.json'
   if(Test-Path -LiteralPath $arquivo){$codigo=(Get-Content -LiteralPath $arquivo -Raw -Encoding UTF8|ConvertFrom-Json).codigo}
  }
+ $concluido=$true
  return Mostrar-ResultadoSupv $codigo
- }finally{if($console){$console.Dispose()}}
+ }finally{
+  if(!$concluido){Solicitar-CancelamentoEsperaCI (Join-Path $script:supvPrivado 'operacao/atualizacao-andamento.json')}
+  if($console){$console.Dispose()}
+ }
 }
 function Consultar-HealthSupv([string]$Url){
  if(!$Url){return 'nao configurado'}
