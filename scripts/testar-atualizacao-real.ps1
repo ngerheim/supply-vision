@@ -58,6 +58,38 @@ function Node-H2([string[]]$Argumentos){
  & node.exe @Argumentos
  if($LASTEXITCODE){throw "Verificacao Node reprovou: $($Argumentos -join ' ')"}
 }
+# Usa os hashes normalizados e as versoes efetivas do proprio preparador.
+function Obter-ExpectativaDependenciasH2([string]$Instalacao,[string]$CodigoDestino,[string]$ShaDestino) {
+ $origem=Obter-AssinaturaDependencias $Instalacao (Join-Path $Instalacao 'alertas/.venv/Scripts/python.exe')
+ $atual=Obter-AssinaturaDependencias $CodigoDestino 'python.exe'
+ # Os commits ficticios mudam so verificadores; os manifestos sao os da PR.
+ $atual.sha=$ShaDestino
+ $nodeIgual=Testar-DependenciasNodeIguais $origem $atual
+ $pythonIgual=$origem.python-ceq$atual.python
+ $requirements=@(@($origem.hashes.Keys)+@($atual.hashes.Keys)|Where-Object {$_-like'alertas/config/requirements*.txt'}|Sort-Object -Unique)
+ foreach($rel in $requirements){if($origem.hashes[$rel]-cne$atual.hashes[$rel]){$pythonIgual=$false}}
+ $registro=Join-Path (Pasta-ReservaDependencias $Instalacao) 'registro.json'
+ $motivoReserva='reserva ausente'
+ if(Test-Path -LiteralPath $registro){$motivoReserva=Comparar-AssinaturaDependencias (Get-Content -LiteralPath $registro -Raw|ConvertFrom-Json) $atual}
+ $esperado=@{}
+ foreach($tipo in @('Node','Python')){
+  $igual=if($tipo-eq'Node'){$nodeIgual}else{$pythonIgual}
+  $assinatura=if($tipo-eq'Node'){'versao Node e hashes normalizados de package/lock'}else{'versao Python e hashes de requirements*.txt'}
+  $caminho=if(!$motivoReserva){'reserva reaproveitada'}elseif($igual){'copia - motivo: '+$motivoReserva}else{'instalacao - motivo: '+$motivoReserva}
+  $esperado[$tipo]=@{caminho=$caminho;motivo="$assinatura; iguais=$igual; reserva=$(if($motivoReserva){$motivoReserva}else{'compativel'}); $($origem.sha) -> $ShaDestino"}
+ }
+ return $esperado
+}
+function Confirmar-CaminhoDependenciasH2([string]$Saida,$Expectativa,[string]$Caso) {
+ foreach($tipo in @('Node','Python')){
+  $esperado=$Expectativa[$tipo].caminho
+  $obtidos=@([regex]::Matches($Saida,("(?m)^Dependencias ${tipo}: ([^\r\n]*)"))|ForEach-Object {$_.Groups[1].Value.Trim()})
+  if($obtidos.Count-ne1-or($obtidos[0]-cne$esperado-and!$obtidos[0].StartsWith($esperado+'; metodo: ',[StringComparison]::Ordinal))){
+   $obtido=if($obtidos.Count){$obtidos-join' | '}else{'linha ausente'}
+   throw "H2 dependencias $tipo ($Caso): esperado=[$esperado]; obtido=[$obtido]; motivo=$($Expectativa[$tipo].motivo)"
+  }
+ }
+}
 function Obter-PidsConsumidoresH2 {
  $todos=@(Get-CimInstance Win32_Process -Filter "Name='node.exe'" -ErrorAction Stop)
  $pidsConsumidores=@{}
@@ -98,6 +130,8 @@ try{
  $negativo=(Git-H2 -Argumentos @('-C',$remoto,'rev-parse','HEAD')).Trim()
  # Commit sucessor sem mudanca de dependencias, exclusivamente na fixture.
  Git-H2 -Argumentos @('-C',$remoto,'checkout','--detach',$destino)
+ Git-H2 -Argumentos @('-C',$remoto,'-c','user.name=CI H2','-c','user.email=ci@h2.test','commit','--allow-empty','-m','fixture: renovar reserva depois de mudar dependencias H2')
+ $destinoAquecerReserva=(Git-H2 -Argumentos @('-C',$remoto,'rev-parse','HEAD')).Trim()
  Git-H2 -Argumentos @('-C',$remoto,'-c','user.name=CI H2','-c','user.email=ci@h2.test','commit','--allow-empty','-m','fixture: atualizar com reserva H2')
  $destinoReserva=(Git-H2 -Argumentos @('-C',$remoto,'rev-parse','HEAD')).Trim()
  # A reversao consome a reserva; a proxima atualizacao deve reinstalar.
@@ -185,9 +219,16 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
  $snapshot=Join-Path $PastaTeste 'antes.json'
  Node-H2 -Argumentos @($apoio,'snapshot',$raiz,$snapshot)
  $pidBase=(Get-Content (Join-Path $privado 'operacao/supervisor.pid.json') -Raw|ConvertFrom-Json).pid
- foreach($caso in @('negativo','sucesso','sucesso-reserva','reversao','sucesso-apos-reversao','negativo-final')){
+ # A reserva publicada guarda ANTERIORES. Se houve instalacao, ela ainda
+ # tem a assinatura da base; uma troca sem mudancas renova-a para a PR.
+ $primeiraExpectativa=Obter-ExpectativaDependenciasH2 $raiz $remoto $destino
+ $casos=@('negativo','sucesso')
+ if($primeiraExpectativa.Node.caminho-like'instalacao*'-or$primeiraExpectativa.Python.caminho-like'instalacao*'){$casos+='sucesso-aquecer-reserva'}
+ $casos+=@('sucesso-reserva','reversao','sucesso-apos-reversao','negativo-final')
+ foreach($caso in $casos){
   Fase "atualizador completo: $caso"
   if($caso-eq'reversao'){
+   $expectativa=Obter-ExpectativaDependenciasH2 $raiz $remoto $destinoReversao
    Node-H2 -Argumentos @($apoio,'snapshot',$raiz,$snapshot)
    Git-H2 -Argumentos @('-C',$remoto,'update-ref','refs/heads/main',$destinoReversao)
    $logs=Join-Path $PastaTeste $caso;New-Item -ItemType Directory $logs|Out-Null
@@ -207,6 +248,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
     }
     throw 'Reversao real nao confirmada.'
    }
+   Confirmar-CaminhoDependenciasH2 $saidaReversao $expectativa $caso
    if((Git-H2 -Argumentos @('-C',$raiz,'rev-parse','HEAD')).Trim()-ne$destinoReserva){throw 'Codigo anterior nao restaurado.'}
    foreach($nomeLog in @('atualizador.log','atualizador-erro.log')){Get-Content (Join-Path $logs $nomeLog)|Write-Host}
    Node-H2 -Argumentos @($apoio,'reversao',$raiz,$snapshot)
@@ -219,8 +261,11 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
   if($caso-eq'sucesso'){
    Git-H2 -Argumentos @('-C',$remoto,'update-ref','refs/heads/main',$destino)
    Node-H2 -Argumentos @($apoio,'pendencia',$raiz)
+  }elseif($caso-eq'sucesso-aquecer-reserva'){
+   Git-H2 -Argumentos @('-C',$remoto,'update-ref','refs/heads/main',$destinoAquecerReserva)
+   Node-H2 -Argumentos @($apoio,'snapshot',$raiz,$snapshot)
   }elseif($caso-eq'sucesso-reserva'){
-   if(!(Test-Path -LiteralPath (Join-Path (Pasta-ReservaDependencias $raiz) 'registro.json'))){throw 'Primeira atualizacao nao publicou reserva.'}
+   if(!(Test-Path -LiteralPath (Join-Path (Pasta-ReservaDependencias $raiz) 'registro.json'))){throw 'Atualizacao anterior nao publicou reserva.'}
    Git-H2 -Argumentos @('-C',$remoto,'update-ref','refs/heads/main',$destinoReserva)
    Node-H2 -Argumentos @($apoio,'snapshot',$raiz,$snapshot)
   }elseif($caso-eq'sucesso-apos-reversao'){
@@ -231,6 +276,13 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
    Git-H2 -Argumentos @('-C',$remoto,'update-ref','refs/heads/main',$negativoFinal)
    Node-H2 -Argumentos @($apoio,'snapshot',$raiz,$snapshot)
    $pidBase=(Get-Content (Join-Path $privado 'operacao/supervisor.pid.json') -Raw|ConvertFrom-Json).pid
+  }
+  if($caso-like'sucesso*'){
+   $alvo=if($caso-eq'sucesso'){$destino}elseif($caso-eq'sucesso-aquecer-reserva'){$destinoAquecerReserva}elseif($caso-eq'sucesso-reserva'){$destinoReserva}else{$destinoAposReversao}
+   $expectativa=Obter-ExpectativaDependenciasH2 $raiz $remoto $alvo
+   if($caso-eq'sucesso-reserva'){
+    foreach($tipo in @('Node','Python')){if($expectativa[$tipo].caminho-ne'reserva reaproveitada'){throw "H2 reserva ${tipo}: esperado=[reserva reaproveitada]; obtido=[$($expectativa[$tipo].caminho)]; motivo=$($expectativa[$tipo].motivo)"}}
+   }
   }
   $logs=Join-Path $PastaTeste $caso;New-Item -ItemType Directory $logs|Out-Null
   Obter-PidsConsumidoresH2|ConvertTo-Json|Set-Content (Join-Path $logs 'consumidores-antes.json') -Encoding UTF8
@@ -265,11 +317,10 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
    if($contexto.fase-ne'cancelado-preparo'-or$contexto.limpeza-ne'concluida'-or(Test-Path $contexto.preparo)){throw 'Negativo nao registrou cancelamento e limpeza do preparo.'}
    Node-H2 -Argumentos @($apoio,'negativo',$raiz,$snapshot)
   }else{
-   $headEsperado=if($caso-eq'sucesso'){$destino}elseif($caso-eq'sucesso-reserva'){$destinoReserva}else{$destinoAposReversao}
+   $headEsperado=$alvo
    if(($null-ne$codigo-and$codigo-ne0)-or$head-ne$headEsperado){throw 'Atualizacao nao chegou ao commit esperado.'}
-   $caminho=if($caso-eq'sucesso-reserva'){'reserva reaproveitada'}else{'copia - motivo: reserva ausente'}
-   foreach($tipo in @('Node','Python')){if($saida-notlike("*Dependencias ${tipo}: $caminho*")){throw "H2 nao exercitou dependencias ${tipo}: $caminho"}}
-   if($caso-eq'sucesso-apos-reversao'){Write-Host '[OK] Apos reversao: dependencias Node e Python reinstaladas - motivo: reserva ausente.'}
+   Confirmar-CaminhoDependenciasH2 $saida $expectativa $caso
+   if($caso-eq'sucesso-apos-reversao'){Write-Host '[OK] Apos reversao: dependencias Node e Python preparadas conforme assinaturas - motivo: reserva ausente.'}
    $contexto=Get-Content (Join-Path $privado 'operacao/atualizacao.json') -Raw|ConvertFrom-Json
    if(!(Esperar-CondicaoTeste {!(Test-Path (Join-Path $privado 'operacao/limpeza-preparo.lock'))} 120)){throw 'Limpeza em segundo plano nao encerrou na fixture.'}
    if($contexto.fase-ne'concluido'-or(Test-Path $contexto.preparo)){throw 'Contexto nao concluiu ou preparo permaneceu.'}
