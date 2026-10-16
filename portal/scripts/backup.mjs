@@ -1,166 +1,152 @@
-import { modoEnsaio } from './modo-ensaio.mjs';
-import { pathToFileURL } from 'node:url';
-import { comBackupExclusivo } from './backup-exclusivo.mjs';
-import { fork } from 'node:child_process';
-import { hashArquivo } from './backup-rede.mjs';
-export { hashArquivo } from './backup-rede.mjs';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
-import { DatabaseSync } from 'node:sqlite';
+import { pathToFileURL } from 'node:url';
+import { fork, spawn } from 'node:child_process';
+import { setTimeout as esperar } from 'node:timers/promises';
+import { modoEnsaio } from './modo-ensaio.mjs';
+import { comBackupExclusivo } from './backup-exclusivo.mjs';
+import { criarTransportador, lerConfigBruta, lerArquivo, privado, portalPrivado } from './configuracao.mjs';
+import { localizarBanco } from './banco-local.mjs';
+import { criarSnapshot } from './snapshot-banco.mjs';
+import { nomeBackup, removerHistoricoLocal } from './retencao-backup.mjs';
+import { montarPacote, compactarPacote } from './backup-pacote.mjs';
+import { localizar7zip, lerSenhaBackup, FalhaBackup } from './backup-7z.mjs';
+import { enviarAvisoAdmin } from './aviso-admin.mjs';
+export { hashArquivo } from './backup-rede.mjs';
 
-import { criarTransportador, lerConfig, lerConfigBruta, portalPrivado } from './configuracao.mjs';
-import { DIAS_RETENCAO, guardarNoHistorico } from './retencao-backup.mjs';
-import { localizarBanco as localizarBancoLocal } from './banco-local.mjs';
-import { montarCasca, escapar, paleta } from '../lib/email-visual.ts';
-
-const pastaBackup = path.join(portalPrivado, 'backups');
-const arquivoFinal = path.join(pastaBackup, 'portal-atual.sqlite');
-const arquivoTemporario = path.join(pastaBackup, 'portal-atual.tmp.sqlite');
-const arquivoAnterior = path.join(pastaBackup, 'portal-atual.anterior.sqlite');
-
-function localizarBanco() {
-  const banco = localizarBancoLocal();
-  if (!banco) throw new Error('Banco atual nao encontrado.');
-  return banco;
+export function criarCopiaIntegra(origem, destino = path.join(portalPrivado, 'backups/pre-atualizacao.sqlite')) {
+  fs.mkdirSync(path.dirname(destino), { recursive: true });
+  const temporario = `${destino}.tmp`;
+  fs.rmSync(temporario, { force: true });
+  criarSnapshot(origem, temporario);
+  try { fs.renameSync(temporario, destino); }
+  finally { fs.rmSync(temporario, { force: true }); }
+  return destino;
 }
-
-export function criarCopiaIntegra(origem) {
-  fs.mkdirSync(pastaBackup, { recursive: true });
-  fs.rmSync(arquivoTemporario, { force: true });
-  const banco = new DatabaseSync(origem, { readOnly: true });
-  try { banco.exec(`VACUUM INTO '${arquivoTemporario.replaceAll("'", "''").replaceAll('\\', '/')}'`); }
-  finally { banco.close(); }
-  const copia = new DatabaseSync(arquivoTemporario, { readOnly: true });
-  try {
-    const resultado = Object.values(copia.prepare('PRAGMA integrity_check').get())[0];
-    if (resultado !== 'ok') throw new Error(`Copia reprovada na verificacao de integridade: ${String(resultado)}`);
-  } finally { copia.close(); }
-  fs.rmSync(arquivoAnterior, { force: true });
-  if (fs.existsSync(arquivoFinal)) fs.renameSync(arquivoFinal, arquivoAnterior);
-  try { fs.renameSync(arquivoTemporario, arquivoFinal); }
-  catch (erro) {
-    if (fs.existsSync(arquivoAnterior)) fs.renameSync(arquivoAnterior, arquivoFinal);
-    throw erro;
-  }
-  fs.rmSync(arquivoAnterior, { force: true });
-  const { apagados } = guardarNoHistorico(pastaBackup, arquivoFinal);
-  console.log(`Historico local: copia do dia guardada (${DIAS_RETENCAO} dias)${apagados.length ? `; removidos: ${apagados.join(', ')}` : ''}.`);
-}
-
 export function prazoRedeMs(config) {
-  const segundos = Number(config.BACKUP_NETWORK_TIMEOUT_SECONDS?.trim() || '600');
-  if (!Number.isInteger(segundos) || segundos < 1 || segundos > 86400)
-    throw new Error('BACKUP_NETWORK_TIMEOUT_SECONDS deve ser inteiro entre 1 e 86400.');
+  const segundos = Number(config.BACKUP_NETWORK_TIMEOUT_SECONDS?.trim() || '60');
+  if (!Number.isInteger(segundos) || segundos < 1 || segundos > 600)
+    throw new FalhaBackup('BACKUP_NETWORK_TIMEOUT_SECONDS deve ser inteiro entre 1 e 600.');
   return segundos * 1000;
 }
-export async function replicarNaRede(config, { origem = arquivoFinal, prazoMs, registrar = console.warn, iniciar = () => fork(new URL('./backup-rede.mjs', import.meta.url), [], { execArgv: [], stdio: ['ignore','ignore','ignore','ipc'] }) } = {}) {
-  const pastaRede = config.BACKUP_NETWORK_DIR?.trim();
-  if (!pastaRede) return null;
-  const limite = prazoMs ?? prazoRedeMs(config);
-  const resultado = await new Promise((resolve, reject) => {
+function encerrarArvore(filho) {
+  if (process.platform === 'win32') {
+    const matar = spawn('taskkill.exe', ['/PID', String(filho.pid), '/T', '/F'], { stdio: 'ignore', windowsHide: true });
+    matar.on('error', () => filho.kill('SIGKILL'));
+    matar.once('exit', codigo => { if (codigo !== 0) filho.kill('SIGKILL'); });
+  } else filho.kill('SIGKILL');
+}
+export async function replicarNaRede(config, { origem, executavel, senha, prazoMs = prazoRedeMs(config), registrar = console.warn,
+  iniciar = () => fork(new URL('./backup-rede.mjs', import.meta.url), [], { execArgv: [], stdio: ['ignore', 'ignore', 'ignore', 'ipc'] }),
+} = {}) {
+  if (!config.BACKUP_NETWORK_DIR?.trim()) throw new FalhaBackup('BACKUP_NETWORK_DIR nao configurado.');
+  return new Promise((resolve, reject) => {
     const filho = iniciar();
     let resposta, excedeu = false;
-    const timer = setTimeout(() => { excedeu = true; filho.kill('SIGKILL'); }, limite);
-    filho.once('error', erro => { clearTimeout(timer); reject(erro); });
+    const timer = setTimeout(() => { excedeu = true; encerrarArvore(filho); }, prazoMs);
+    filho.once('error', () => { clearTimeout(timer); reject(new FalhaBackup('Processo de backup em rede falhou.')); });
     filho.on('message', valor => { if (typeof valor?.aviso === 'string') registrar(valor.aviso); else resposta = valor; });
     filho.once('exit', codigo => {
       clearTimeout(timer);
-      // Confirma o encerramento antes de liberar a trava ou retomar a operacao.
-      if (excedeu) reject(new Error(`Prazo do backup em rede excedido (${limite / 1000} s); processo encerrado, copia local validada preservada.`));
-      else if (codigo !== 0 || !resposta?.ok) reject(new Error(resposta?.erro || 'Processo de backup em rede falhou.'));
-      else resolve(resposta);
+      if (excedeu) reject(new FalhaBackup('Prazo da tentativa de backup em rede excedido; processo encerrado.'));
+      else if (codigo !== 0 || !resposta?.ok) reject(new FalhaBackup(resposta?.erro || 'Processo de backup em rede falhou.'));
+      else resolve(resposta.arquivo);
     });
-    filho.send({ origem, pastaRede });
+    filho.send({ origem, pastaRede: config.BACKUP_NETWORK_DIR.trim(), executavel, senha });
   });
-  console.log(`Copia atual na rede confirmada (SHA-256 ${resultado.hash.slice(0, 16)}).`);
-  return resultado.arquivo;
 }
-async function enviar(config, copiaNaRede, origem = arquivoFinal) {
-  if (!config.BACKUP_EMAIL_TO) throw new Error('BACKUP_EMAIL_TO nao configurado.');
-  const tamanho = fs.statSync(origem).size;
-  const hash = hashArquivo(origem);
-  const tamanhoMb = (tamanho / 1024 / 1024).toFixed(2);
-
-  // O anexo levava o banco INTEIRO para fora da empresa a cada horario de
-  // backup: hashes de senha, sessoes, tentativas de acesso e toda a base
-  // comercial. A exportacao da API ja recusa mandar senhas por principio, e
-  // a copia de rede -- conferida por SHA-256 -- cumpre o papel de redundancia.
-  //
-  // Por padrao o e-mail passa a ser so o comprovante. Anexar de novo e uma
-  // decisao explicita (BACKUP_ANEXAR_BANCO=true). Sem copia de rede nao ha
-  // outra redundancia, entao ali o anexo continua indo, com aviso.
-  const pedidoExplicito = String(config.BACKUP_ANEXAR_BANCO || '').trim().toLowerCase() === 'true';
-  const anexar = pedidoExplicito || !copiaNaRede;
-  if (anexar && !pedidoExplicito) {
-    console.warn('AVISO: sem BACKUP_NETWORK_DIR configurado, o banco segue anexado ao e-mail por falta de outra copia.');
+export async function tentarRede(rede, { agora = Date.now, aguardar = esperar, intervaloMs = 600000, janelaMs = 3600000, registrar = console.warn } = {}) {
+  const inicio = agora();
+  while (agora() - inicio < janelaMs) {
+    const tentativa = agora();
+    try { return await rede(Math.min(janelaMs - (agora() - inicio), intervaloMs)); }
+    catch { registrar('AVISO: backup de rede falhou; nova tentativa em 10 minutos, por ate 1 hora.'); }
+    const proxima = Math.min(tentativa + intervaloMs, inicio + janelaMs);
+    await aguardar(Math.max(0, proxima - agora()));
   }
-  if (anexar && tamanho > 20 * 1024 * 1024) {
-    console.warn(`AVISO: o banco tem ${tamanhoMb} MB e pode ser recusado pelo servidor de e-mail. Configure BACKUP_NETWORK_DIR.`);
-  }
-
-  const data = new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'medium', timeZone: 'America/Sao_Paulo' }).format(new Date());
-  const ondeEsta = copiaNaRede
-    ? `<tr><td><b>Copia integra</b></td><td>${escapar(copiaNaRede)}</td></tr>`
-    : '';
-  const transportador = criarTransportador(config);
+  return null;
+}
+export function limiteAnexo(config) {
+  const mb = Number(config.BACKUP_EMAIL_MAX_MB?.trim() || '15');
+  if (!Number.isFinite(mb) || mb <= 0 || mb > 100) throw new FalhaBackup('BACKUP_EMAIL_MAX_MB deve estar entre 0 e 100 MB.');
+  return mb * 1024 * 1024;
+}
+export async function enviarEmergencia(config, arquivo, { criarTransporte = criarTransportador, registrar = console.warn } = {}) {
+  const to = config.BACKUP_EMAIL_TO?.trim() || config.ADMIN_ALERTA_EMAIL?.trim();
+  if (!to) throw new FalhaBackup('Destinatario de emergencia ausente: configure BACKUP_EMAIL_TO ou ADMIN_ALERTA_EMAIL.');
+  const anexar = fs.statSync(arquivo).size <= limiteAnexo(config);
+  const transporte = criarTransporte(config);
+  let timer;
   try {
-    await transportador.sendMail({
-      from: { name: config.EMAIL_FROM_NAME, address: config.SMTP_USER },
-      to: config.BACKUP_EMAIL_TO,
-      subject: `[Supply Vision] Backup do Portal - ${data}`,
-      text: `Backup integro do banco do Portal Suprimentos.\n\nData: ${data}\nTamanho: ${tamanhoMb} MB\nSHA-256: ${hash}\n`
-        + (copiaNaRede ? `Copia integra em: ${copiaNaRede}\n` : '')
-        + (anexar ? '\nO banco segue anexado a esta mensagem.\n' : '\nO banco NAO segue anexado: confira a copia acima.\n'),
-      html: montarCasca(
-        'Backup do Portal',
-        data,
-        `<p style="margin:0 0 20px;line-height:1.55">Copia integra do banco, conferida com <b>PRAGMA integrity_check</b>${anexar ? ' e anexada a esta mensagem' : ''}.</p>`
-        + `<table role="presentation" width="100%" cellspacing="0" cellpadding="7" style="font-size:14px;background:${paleta.rodapeFundo};border-radius:10px">`
-        + `<tr><td><b>Tamanho</b></td><td>${escapar(tamanhoMb)} MB</td></tr>`
-        + ondeEsta
-        + `<tr><td><b>SHA-256</b></td><td style="font-family:Consolas,monospace;font-size:12px;word-break:break-all">${escapar(hash)}</td></tr>`
-        + `</table>`,
-      ),
-      attachments: anexar
-        ? [{ filename: 'portal-atual.sqlite', path: origem, contentType: 'application/vnd.sqlite3' }]
-        : [],
-    });
-  } finally { transportador.close(); }
-  console.log(`Backup atual confirmado (${tamanhoMb} MB, SHA-256 ${hash.slice(0, 16)}); comprovante enviado por e-mail${anexar ? ' com o banco anexado' : ''}.`);
+    await Promise.race([
+      transporte.sendMail({ from: { name: config.EMAIL_FROM_NAME, address: config.SMTP_USER }, to,
+        subject: '[Supply Vision] Falha no backup de rede',
+        text: 'A pasta de rede falhou durante 1 hora. ' + (anexar
+          ? 'O MESMO arquivo 7z criptografado segue em anexo. Confira a rede com a TI.'
+          : 'O arquivo excede BACKUP_EMAIL_MAX_MB; somente este alerta foi enviado. Nao ha nova copia na rede. Confira com a TI.'),
+        attachments: anexar ? [{ filename: path.basename(arquivo), path: arquivo, contentType: 'application/x-7z-compressed' }] : [],
+      }),
+      new Promise((_, reject) => { timer = setTimeout(() => reject(new FalhaBackup('Prazo do e-mail de emergencia excedido.')), 55000); }),
+    ]);
+  } catch { throw new FalhaBackup('E-mail de emergencia falhou; administrador deve verificar SMTP e rede.'); }
+  finally { clearTimeout(timer); transporte.close(); }
+  registrar(anexar ? 'AVISO: rede falhou; arquivo 7z enviado por e-mail de emergencia.' : 'ALERTA: arquivo acima do limite; somente alerta enviado por e-mail.');
 }
-
-// O codigo 3 e exclusivo do backup pre-atualizacao: copia local ja validada.
-export async function executarBackup({ preAtualizacao = false, somenteLocal = false, somenteRede = false, ensaio = modoEnsaio(),
-  copiar = () => criarCopiaIntegra(localizarBanco()), rede = () => replicarNaRede(lerConfigBruta()),
-  email = copia => enviar(lerConfig(), copia), registrar = console.warn } = {}) {
-  if (!somenteRede) copiar();
-  if (somenteLocal) return 0;
-  if (ensaio) { console.log('ensaio: envio suprimido; backup local validado, backup em rede bloqueado.'); return 0; }
-  let copiaNaRede;
-  try { copiaNaRede = await rede(); }
-  catch (erro) {
-    if (!preAtualizacao) throw erro;
-    registrar(`AVISO: backup local validado; copia de rede falhou. ${erro instanceof Error ? erro.message : ''}`);
-    return 3;
-  }
-  try { await email(copiaNaRede); }
-  catch (erro) {
-    if (!copiaNaRede) throw erro;
-    registrar('AVISO: backup local e na rede confirmados; comprovante não enviado.');
-  }
-  return 0;
+function registrarBackup(mensagem) {
+  console.warn(mensagem);
+  try {
+    const pasta = path.join(portalPrivado, 'logs');
+    fs.mkdirSync(pasta, { recursive: true });
+    fs.appendFileSync(path.join(pasta, 'backup.log'), `${new Date().toISOString()} ${mensagem}\n`);
+  } catch { console.warn('AVISO: registro de backup indisponivel.'); }
+}
+function configBackup() {
+  return { ...lerConfigBruta(), ...lerArquivo(path.join(privado, 'comum/operacao.env')) };
+}
+export async function executarBackup({ somenteLocal = false, ensaio = modoEnsaio(), config = configBackup(),
+  copiar = () => criarCopiaIntegra(localizarBanco()), senha = lerSenhaBackup, zip = localizar7zip,
+  preparar = montarPacote, compactar = compactarPacote, rede = replicarNaRede, retentar = tentarRede,
+  email = enviarEmergencia, avisar = enviarAvisoAdmin, registrar = registrarBackup,
+} = {}) {
+  if (somenteLocal) { copiar(); return 0; }
+  const temp = fs.mkdtempSync(path.join(fs.realpathSync.native(os.tmpdir()), 'sv-backup-'));
+  const pasta = path.join(temp, 'conteudo');
+  const alertar = async detalhe => {
+    try { await avisar('backup-falhou', { destinatarios: config.ADMIN_ALERTA_EMAIL || config.BACKUP_EMAIL_TO, ensaio, detalhe }); }
+    catch { registrar('ALERTA: falha ao avisar administrador; confira SMTP e o backup de rede.'); }
+  };
+  try {
+    fs.mkdirSync(pasta);
+    // Ensaio valida somente a copia descartavel e nunca le senha nem acessa rede.
+    if (ensaio) { preparar(pasta); console.log('ensaio: envio suprimido; copia descartavel validada, rede bloqueada.'); return 0; }
+    const segredo = senha(), executavel = zip(config);
+    limiteAnexo(config); prazoRedeMs(config);
+    if (!config.BACKUP_NETWORK_DIR?.trim()) throw new FalhaBackup('BACKUP_NETWORK_DIR nao configurado.');
+    preparar(pasta);
+    const arquivo = path.join(temp, nomeBackup());
+    compactar(pasta, arquivo, executavel, segredo);
+    fs.rmSync(pasta, { recursive: true, force: true });
+    if (await retentar(limite => rede(config, { origem: arquivo, executavel, senha: segredo,
+      prazoMs: Math.min(prazoRedeMs(config), limite), registrar }), { registrar })) {
+      try { removerHistoricoLocal(path.join(portalPrivado, 'backups')); }
+      catch { registrar('AVISO: backup na rede confirmado; limpeza do historico local legado pendente.'); }
+      console.log(`Backup confirmado na rede: ${path.basename(arquivo)}.`); return 0;
+    }
+    let detalhe = 'Rede indisponivel durante 1 hora; confira a entrega do e-mail de emergencia.';
+    try { await email(config, arquivo, { registrar }); }
+    catch (erro) { detalhe = erro instanceof FalhaBackup ? erro.message : 'ALERTA: e-mail de emergencia falhou.'; registrar(detalhe); }
+    await alertar(detalhe);
+    return 1;
+  } catch (erro) {
+    const mensagem = erro instanceof FalhaBackup ? erro.message : 'Backup falhou; confira banco, configuracao e permissoes.';
+    registrar(mensagem);
+    await alertar(mensagem); return 1;
+  } finally { fs.rmSync(temp, { recursive: true, force: true }); }
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
   try {
-    const origem = process.argv.includes('--snapshot-pre-atualizacao')
-      ? path.join(pastaBackup, 'pre-atualizacao.sqlite') : arquivoFinal;
-    process.exitCode = await comBackupExclusivo(pastaBackup, () => executarBackup({
-      preAtualizacao: process.argv.includes('--pre-atualizacao'),
-      somenteLocal: process.argv.includes('--somente-local'),
-      somenteRede: process.argv.includes('--somente-rede'),
-      rede: () => replicarNaRede(lerConfigBruta(), { origem }),
-      email: copia => enviar(lerConfig(), copia, origem),
-    }));
-  }
-  catch (erro) { console.error(`ERRO: ${erro instanceof Error ? erro.message : 'falha inesperada'}`); process.exitCode = 1; }
+    if (process.argv.some(a => ['--somente-rede', '--snapshot-pre-atualizacao'].includes(a))) throw new FalhaBackup('Replica de snapshot de atualizacao removida.');
+    process.exitCode = await comBackupExclusivo(path.join(portalPrivado, 'backups'), () => executarBackup({ somenteLocal: process.argv.includes('--somente-local') }));
+  } catch (erro) { console.error(erro instanceof FalhaBackup ? erro.message : 'Backup falhou; confira operacao e configuracao.'); process.exitCode = 1; }
 }

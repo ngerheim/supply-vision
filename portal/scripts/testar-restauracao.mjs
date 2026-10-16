@@ -5,12 +5,12 @@ import { prepararRestauracao } from './restauracao-segura.mjs';
 import { validarBanco } from './validar-banco.mjs';
 import { DatabaseSync } from 'node:sqlite';
 import { SCHEMA_RELATORIOS } from '../lib/relatorios.ts';
-import { portalPrivado } from './configuracao.mjs';
+import { comBackupDaRede } from './backup-pacote.mjs';
 
 const pasta = fs.mkdtempSync(path.join(fs.realpathSync.native(os.tmpdir()), 'supply-vision-restauracao-'));
 const copia = path.join(pasta, 'restaurado.sqlite');
 const ficticio = process.argv.includes('--fixture');
-const origem = ficticio ? path.join(pasta, 'origem.sqlite') : path.join(portalPrivado, 'backups', 'portal-atual.sqlite');
+const origem = path.join(pasta, 'origem.sqlite');
 try {
   if (ficticio) {
     const db = new DatabaseSync(origem);
@@ -20,8 +20,9 @@ try {
       db.exec("INSERT INTO users(id,name,email,password_salt,password_hash,role,created_at) VALUES('u','Ficticio','u@example.invalid','salt','hash','editor','x')");
     } finally { db.close(); }
   }
+  if (!ficticio) await comBackupDaRede(undefined, extraido => fs.copyFileSync(path.join(extraido, 'banco/portal.sqlite'), origem));
   if (!fs.existsSync(origem)) throw new Error(`Backup nao encontrado: ${origem}`);
   const { resumo, marcados } = prepararRestauracao(origem, copia, validarBanco);
   validarBanco(copia);
   console.log(`Preparacao da restauracao aprovada em copia descartavel: ${JSON.stringify(resumo)}; ${marcados} entregas neutralizadas. O banco operacional nao foi substituido.`);
-} finally { fs.rmSync(pasta, { recursive: true, force: true }); }
+} catch { console.error('Teste do backup falhou: confira rede, senha, 7-Zip e integridade.'); process.exitCode = 1; } finally { fs.rmSync(pasta, { recursive: true, force: true }); }

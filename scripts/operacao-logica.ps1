@@ -201,9 +201,9 @@ function Obter-AvisoBackup([string]$Privado) {
   $arquivo = Join-Path $Privado 'portal\configuracao\portal.env'
   try {
     $config = Ler-ConfigOperacao $arquivo
-    if (!$config['BACKUP_NETWORK_DIR']) { return 'Backup por e-mail: banco completo anexado (sem pasta de rede).' }
+    if (!$config['BACKUP_NETWORK_DIR']) { return 'BACKUP_NETWORK_DIR ausente: backup indisponivel.' }
     if (!(Test-Path -LiteralPath $config['BACKUP_NETWORK_DIR'] -PathType Container)) { return 'Pasta de backup de rede indisponivel. Confira o ultimo backup.' }
-    if ($config['BACKUP_ANEXAR_BANCO'] -eq 'true') { return 'Backup por e-mail: anexo do banco completo habilitado.' }
+    if (!(Test-Path -LiteralPath (Join-Path $Privado 'comum/backup-senha.dpapi') -PathType Leaf)) { return 'Senha de backup ausente. Execute supv backup senha com a conta do dono.' }
     return ''
   } catch { return 'Nao foi possivel conferir a configuracao de backup.' }
 }
