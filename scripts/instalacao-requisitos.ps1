@@ -15,13 +15,6 @@ function Executar-WorkerdVersao([string]$Exe){
  $r=Executar-NativoOperacao $Exe @('--version')
  return @{saida=($r.saida|Out-String);codigo=$r.codigo}
 }
-function Conferir-Workerd([string]$Portal){
- $exe=Join-Path $Portal 'node_modules\@cloudflare\workerd-windows-64\bin\workerd.exe'
- if(!(Test-Path -LiteralPath $exe)){throw 'workerd.exe ausente. Confira o antivirus e execute npm.cmd ci na pasta portal.'}
- try{$r=Executar-WorkerdVersao $exe;$saida=$r.saida;$codigo=$r.codigo}catch{$codigo=1}
- if($codigo-or$saida-notmatch 'workerd'){throw 'O motor do Portal (workerd) nao executou. Confira Visual C++ Redistributable 2015+ x64 e o antivirus. Reinicie apos instalar; consulte AGENTS.md#diagnostico-e-recuperacao (write EOF).'}
- Write-Host 'Motor do Portal (workerd) executou corretamente.'
-}
 function Avisar-Bitdefender {
  $achou=@(Get-CimInstance -Namespace root/SecurityCenter2 -ClassName AntiVirusProduct -ErrorAction SilentlyContinue|Where-Object displayName -Match 'Bitdefender')
  if(!$achou){$achou=@(Get-Service -ErrorAction SilentlyContinue|Where-Object {$_.DisplayName-match 'Bitdefender'})}

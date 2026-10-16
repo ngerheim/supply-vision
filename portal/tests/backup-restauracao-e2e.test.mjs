@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { DatabaseSync } from 'node:sqlite';
-import { reservarPortaLoopback } from '../scripts/proxy-ip-login.mjs';
+import { reservarPortaLoopback } from '../scripts/porta-teste.mjs';
 import { SCHEMA_RELATORIOS } from '../lib/relatorios.ts';
 
 void test('backup real e restauracao CLI recuperam estado e preservam copia anterior', async () => {

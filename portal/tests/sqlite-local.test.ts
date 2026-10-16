@@ -5,21 +5,18 @@ import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { Worker } from 'node:worker_threads';
 import test from 'node:test';
-import { criarServidorSqlite, arquivoSqliteLocal } from '../scripts/sqlite-local.mjs';
+import { arquivoSqliteLocal } from '../scripts/sqlite-local.mjs';
 import { bancoSqliteLocal } from '../lib/sqlite-local.ts';
 
 async function fixture(t: test.TestContext) {
   const pasta = fs.mkdtempSync(path.join(os.tmpdir(), 'portal-teste-sqlite-local-'));
-  const arquivo = path.join(pasta, 'fixture.sqlite');
+  const dir = path.join(pasta, 'v3/d1/miniflare-D1DatabaseObject');fs.mkdirSync(dir,{recursive:true});
+  const arquivo = path.join(dir, 'fixture.sqlite');
   const seed = new DatabaseSync(arquivo);
   seed.exec('PRAGMA journal_mode=WAL; CREATE TABLE dados (id INTEGER PRIMARY KEY, valor TEXT); CREATE TABLE travas(chave TEXT PRIMARY KEY,dono TEXT)');seed.close();
-  const token = 'a'.repeat(64);
-  const servidor = criarServidorSqlite({ arquivo, token });
-  await new Promise<void>(r => servidor.listen(0, '127.0.0.1', r));
-  const porta = (servidor.address() as {port:number}).port;
-  const db = bancoSqliteLocal(String(porta), token, () => { throw new Error('Base existente nao usa D1'); });
-  t.after(async () => { servidor.closeAllConnections();await new Promise<void>(r => servidor.close(()=>r()));fs.rmSync(pasta, {recursive:true,force:true}); });
-  return { pasta, arquivo, porta, token, db };
+  const db = bancoSqliteLocal({ persistencia: pasta });
+  t.after(() => { db.fechar();fs.rmSync(pasta, {recursive:true,force:true}); });
+  return { pasta, arquivo, db };
 }
 
 void test('leitura durante reserva de escritor externo funciona sem bookmark, inclusive apos a liberacao', async t => {
@@ -54,12 +51,11 @@ void test('batch reverte escrita e auditoria juntas; SELECT em batch mantem snap
   assert.equal(rs[0].meta.changes,1);assert.equal(rs[1].results[0].valor,'confirmado');
 });
 
-void test('transporte SQL exige token e metodo; blob e primeira coluna preservam contrato D1', async t => {
-  const {db,porta,token} = await fixture(t);
-  assert.equal((await fetch(`http://127.0.0.1:${porta}/sql`,{method:'POST',body:'{}'})).status,403);
-  assert.equal((await fetch(`http://127.0.0.1:${porta}/sql`,{headers:{authorization:`Bearer ${token}`}})).status,404);
-  assert.equal((await fetch(`http://127.0.0.1:${porta}/ready`,{headers:{authorization:'Bearer incorreto'}})).status,403);
+void test('blob e primeira coluna preservam contrato esperado pela API', async t => {
+  const {db} = await fixture(t);
   assert.deepEqual(await db.prepare('SELECT ? valor').bind(new Uint8Array([1,2,3])).first('valor'),[1,2,3]);
+  await db.exec('CREATE TABLE relacao(id INTEGER PRIMARY KEY, dado INTEGER REFERENCES dados(id))');
+  await assert.rejects(db.prepare('INSERT INTO relacao VALUES (1,999)').run(),/FOREIGN KEY/);
 });
 
 void test('arquivo persistido e unico; identidade original e recusa de ambiguidade', t => {
@@ -70,18 +66,6 @@ void test('arquivo persistido e unico; identidade original e recusa de ambiguida
   fs.writeFileSync(path.join(dir,'metadata.sqlite'),'');fs.writeFileSync(path.join(dir,'fixture.sqlite'),'');
   assert.equal(arquivoSqliteLocal(pasta),path.join(dir,'fixture.sqlite'));
   fs.writeFileSync(path.join(dir,'outra.sqlite'),'');assert.throws(()=>arquivoSqliteLocal(pasta),/ambiguo/);
-});
-
-void test('falha de transporte em escrita nao provoca nova tentativa', async t => {
-  let envios = 0;
-  t.mock.method(globalThis,'fetch',async (url: string | URL | Request) => {
-    const destino=typeof url==='string'?url:url instanceof URL?url.href:url.url;
-    if (destino.endsWith('/ready')) return new Response('{"pronto":true}');
-    envios++;throw new TypeError('conexao interrompida');
-  });
-  const db=bancoSqliteLocal('3199','a'.repeat(64),()=>{throw new Error('nao inicializar');});
-  await assert.rejects(db.prepare('INSERT INTO dados VALUES (1,?)').bind('fixture').run(),/conexao interrompida/);
-  assert.equal(envios,1);
 });
 
 void test('batch de escrita aguarda reserva externa sem reenviar ou confirmar parcialmente', async t => {
@@ -97,26 +81,34 @@ void test('batch de escrita aguarda reserva externa sem reenviar ou confirmar pa
   }finally{await fim;}
 });
 
-void test('base preparada pela restauracao em journal DELETE retorna a WAL ao abrir no executor', async t => {
-  const {arquivo,db}=await fixture(t);
-  const restaurado=new DatabaseSync(arquivo);
-  restaurado.exec('PRAGMA journal_mode=DELETE');restaurado.close();
-  await db.prepare('SELECT 1').first();
-  const leitura=new DatabaseSync(arquivo,{readOnly:true});
-  try{assert.equal(leitura.prepare('PRAGMA journal_mode').get()?.journal_mode,'wal');assert.equal(leitura.prepare('PRAGMA integrity_check').get()?.integrity_check,'ok');}finally{leitura.close();}
+void test('restauracao em DELETE volta a WAL e conexao ativa bloqueia restauracao exclusiva', async t => {
+  const { travarRestauracao } = await import('../scripts/trava-restauracao.mjs');
+  const {pasta,arquivo,db} = await fixture(t);
+  db.fechar();
+  const seed = new DatabaseSync(arquivo);seed.exec('PRAGMA journal_mode=DELETE');seed.close();
+  const reaberto=bancoSqliteLocal({persistencia:pasta,pastaRestauracao:pasta});
+  try {
+    assert.throws(()=>travarRestauracao(true,pasta),/ao mesmo tempo/);
+    const leitura=new DatabaseSync(arquivo,{readOnly:true});
+    try { assert.equal(leitura.prepare('PRAGMA journal_mode').get()?.journal_mode,'wal'); }
+    finally { leitura.close(); }
+  } finally { reaberto.fechar(); }
+  const liberar=travarRestauracao(true,pasta);liberar();
 });
 
-void test('ponte SQLite ativa impede restauracao mesmo sem supervisor/porta publica', async t => {
-  const { travarRestauracao } = await import('../scripts/trava-restauracao.mjs');
-  const pasta=fs.mkdtempSync(path.join(os.tmpdir(),'sv-ponte-restauracao-'));
-  const arquivo=path.join(pasta,'base.sqlite');const seed=new DatabaseSync(arquivo);seed.exec('CREATE TABLE dados(id INTEGER)');seed.close();
-  const token='a'.repeat(64);const servidor=criarServidorSqlite({arquivo,token,pastaRestauracao:pasta});
-  t.after(()=>{servidor.closeAllConnections();servidor.close();fs.rmSync(pasta,{recursive:true,force:true});});
-  await new Promise<void>(r=>servidor.listen(0,'127.0.0.1',r));
-  const porta=(servidor.address() as {port:number}).port;
-  const db=bancoSqliteLocal(String(porta),token,()=>{throw new Error('nao inicializar');});
-  await db.prepare('SELECT * FROM dados').all();
-  assert.throws(()=>travarRestauracao(true,pasta),/ao mesmo tempo/);
-  servidor.closeAllConnections();await new Promise<void>(r=>servidor.close(()=>r()));
-  const liberar=travarRestauracao(true,pasta);liberar();
+void test('arquivo existente mantem caminho, inode e dados; criacao explicita usa nome fixo', async t => {
+  const pasta=fs.mkdtempSync(path.join(os.tmpdir(),'sv-identidade-'));
+  t.after(()=>fs.rmSync(pasta,{recursive:true,force:true}));
+  assert.throws(()=>bancoSqliteLocal({persistencia:pasta}),/nao inicializado/);
+  const novo=bancoSqliteLocal({persistencia:pasta,criar:true});
+  const arquivo=novo.arquivo!;
+  assert.equal(path.basename(arquivo),'portal.sqlite');
+  await novo.exec("CREATE TABLE prova(valor TEXT);INSERT INTO prova VALUES('preservado')");novo.fechar();
+  const legado=path.join(path.dirname(arquivo),'hash-legado.sqlite');fs.renameSync(arquivo,legado);
+  const antes=fs.statSync(legado).ino;
+  const aberto=bancoSqliteLocal({persistencia:pasta});
+  try {
+    assert.equal(aberto.arquivo,legado);assert.equal(fs.statSync(legado).ino,antes);
+    assert.equal(await aberto.prepare('SELECT valor FROM prova').first('valor'),'preservado');
+  }finally{aberto.fechar();}
 });

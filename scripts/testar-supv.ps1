@@ -196,7 +196,7 @@ try{
   '[2026-10-15 01:00:01] Health falhou: motivo=status-http; http=500;',
   'segredo-ficticio pessoa@example.com Bearer abc123',
   'SELECT * FROM banco') -Encoding UTF8
- Set-Content (Join-Path $op 'portal-saida.log') @('GET /teste 500 Internal Server Error','HTTP/1.1 503','D1_ERROR: teste','[portal] D1 interno na leitura; nova tentativa unica em 100 ms.') -Encoding UTF8
+ Set-Content (Join-Path $op 'portal-saida.log') @('GET /teste 500 Internal Server Error','HTTP/1.1 503') -Encoding UTF8
  $script:supvSegredos=Obter-SegredosHomologacao $script:supvPrivado
  # ErrorRecord sob Stop reproduz o risco do PS5.1 tambem no pwsh/Linux.
  function Nativo-ErroTeste {Write-Error 'stderr ficticio';$global:LASTEXITCODE=$script:codigoNativoTeste}
@@ -262,7 +262,7 @@ try{
  Exigir-Supv ($texto-notmatch'segredo-ficticio|pessoa@example.com|abc123|SELECT'-and$texto-like'*conteudo omitido*') 'logs usam mesmo mascaramento da homologacao'
  $texto=Capturar-Supv {Executar-ComandoSupv (Ler-ComandoSupv @('saude','--desde','2026-10-15 00:00'))}
  Exigir-Supv (([regex]::Matches($texto,'\[partida\]')).Count-eq3-and$texto-like'*Falhas de health: 4*'-and$texto-like'*Supervisor iniciado no periodo: 1*') 'saude: limites de 30 s, inicio antes do recorte e reinicios'
- Exigir-Supv ($texto-like'*HTTP 5xx: 2 | D1_ERROR: 1 | Retentativas D1: 1*'-and$texto-like'*ultimo reinicio*') 'saude: Portal e cobertura dos logs'
+ Exigir-Supv ($texto-like'*HTTP 5xx: 2*'-and$texto-like'*ultimo reinicio*') 'saude: Portal e cobertura dos logs'
  # Filtro antes do -n: progressos e blocos nao expulsam erros reais do final.
  $ruido=@(
   'Updating files: 12% (12/100)',

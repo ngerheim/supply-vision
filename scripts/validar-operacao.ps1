@@ -57,7 +57,7 @@ Chaves-Repetidas (Join-Path $privado 'comum\operacao.env')
 $amb=Ler-Chaves (Join-Path $privado 'alertas\config\cfg_ambiente.txt') @('QLIK_TENANT','QLIK_APP_ID','QLIK_OBJ_ID','DESTINATARIO_ALERTA')
 Exigir-Arquivo (Join-Path $privado 'alertas\config\cfg_qlik.txt');Exigir-Arquivo (Join-Path $privado 'alertas\config\destinatarios.txt')
 Exigir-Arquivo (Join-Path $privado 'alertas\parametros\de_para\itens.csv');Exigir-Arquivo (Join-Path $privado 'alertas\parametros\de_para\modelos.csv')
-Exigir-Arquivo (Join-Path $Raiz 'portal\dist\server\wrangler.json');Exigir-Arquivo (Join-Path $Raiz 'alertas\.venv\Scripts\python.exe')
+Exigir-Arquivo (Join-Path $Raiz 'portal\dist\server\index.js');Exigir-Arquivo (Join-Path $Raiz 'alertas\.venv\Scripts\python.exe')
 $python = Join-Path $Raiz 'alertas\.venv\Scripts\python.exe'
 if (Test-Path -LiteralPath $python -PathType Leaf) {
  try {

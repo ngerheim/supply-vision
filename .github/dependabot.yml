@@ -42,14 +42,6 @@ updates:
           - vite
           - '@vitejs/*'
         update-types: [minor, patch]
-      # Runtime do Portal: wrangler, vinext e os pacotes da Cloudflare sobem
-      # juntos porque compartilham contrato.
-      plataforma:
-        patterns:
-          - vinext
-          - wrangler
-          - '@cloudflare/*'
-        update-types: [minor, patch]
 
   - package-ecosystem: pip
     directory: /alertas/config

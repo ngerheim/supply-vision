@@ -1,3 +1,4 @@
+import type { ConsultaLocal } from './sqlite-local.ts';
 import { EntradaInvalida, LIMITES_CAMPO, exigeTexto } from './limites-entrada.ts';
 import { errorMessage, isValidCnpj, isValidState, situacaoAtiva, normalizeImportText } from './domain.ts';
 import { type ContextoApi, type User, textValue, nullableText } from './api-compartilhada.ts';
@@ -111,7 +112,7 @@ export function catalogosApi(contexto: ContextoApi) {
     if (!existing) return fail('Cadastro não encontrado.', 404);
     if(!revisaoConfere(body.expectedRevision,existing.revision))return fail('Cadastro alterado. Atualize a lista antes de salvar.',409);
     const active = situacaoAtiva(body.active, existing.active);
-    let escrita: D1PreparedStatement;
+    let escrita: ConsultaLocal;
     try {
       if (type === 'suppliers') {
         if (!textValue(body.tradeName) || !isValidCnpj(body.cnpj)) return fail('Informe o nome e um CNPJ válido.');

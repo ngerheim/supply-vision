@@ -2,22 +2,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import http from 'node:http';
-import os from 'node:os';
-import { syncBuiltinESMExports } from 'node:module';
-import { randomBytes } from 'node:crypto';
 
 
 const raiz = fs.realpathSync(process.env.SV_PREPARO_RAIZ || '');
-// Wrangler consulta os.homedir() mesmo sem telemetria; o perfil descartavel
-// precisa estar instalado antes de carregar Wrangler ou qualquer dependencia dele.
 if (fs.realpathSync(path.resolve(import.meta.dirname, '../..')) !== raiz || !/^\..+-preparo-[0-9a-f]{32}$/.test(path.basename(raiz))) throw new Error('Perfil da fumaca fora do preparo');
-const perfil = path.join(raiz, '.cache/perfil-fumaca');
-fs.mkdirSync(perfil, { recursive: true });
-os.homedir = () => perfil;
-process.env.APPDATA = path.join(perfil, 'AppData/Roaming');
-process.env.LOCALAPPDATA = path.join(perfil, 'AppData/Local');
-syncBuiltinESMExports();
-const { criarServidorSqlite } = await import('./sqlite-local.mjs');
 const projeto = fs.realpathSync(path.resolve(import.meta.dirname, '..'));
 const porta = Number(process.argv[2]), relatorios = Number(process.argv[3]);
 if (path.dirname(projeto) !== raiz || !path.basename(raiz).match(/^\..+-preparo-[0-9a-f]{32}$/)) throw new Error('Fumaca exige worktree de preparo');
@@ -28,7 +16,7 @@ if (![porta, relatorios].every(p => Number.isInteger(p) && p >= 1024 && p <= 655
 })) throw new Error('Portas nao reservadas pelo preparo');
 const persistencia = fs.mkdtempSync(path.join(raiz, '.cache/fumaca-'));
 const senha = 'fumaca-ficticia-123456';
-let worker, sqlite;
+let servidor;
 const prazoFinal = setTimeout(() => { console.error('Fumaca excedeu 20 s.');process.exit(1); }, 20_000);prazoFinal.unref();
 const limite = AbortSignal.timeout(17_000);
 function consultar(rota, corpo, signal = limite) {
@@ -44,19 +32,10 @@ function consultar(rota, corpo, signal = limite) {
   });
 }
 try {
-  const token = randomBytes(32).toString('hex');
-  sqlite = criarServidorSqlite({ persistencia, token });
-  await new Promise((resolve, reject) => { sqlite.once('error', reject);sqlite.listen(0, '127.0.0.1', resolve); });
-  const { unstable_startWorker } = await import('wrangler');
-  const vars = { INITIAL_ADMIN_PASSWORD: senha, PORTAL_API_TOKEN: 'fumaca-ficticia', RELATORIOS_PORTA: String(relatorios),
-    PORTAL_SQLITE_PORTA: String(sqlite.address().port), PORTAL_SQLITE_TOKEN: token };
-  // API do mesmo Wrangler do Portal, com inspetor e watcher desligados.
-  // Assim todos os listeners Node sao registrados pela guarda do PREPARAR.
-  worker = await unstable_startWorker({ config: path.join(projeto, 'dist/server/wrangler.json'),
-    bindings: Object.fromEntries(Object.entries(vars).map(([nome, value]) => [nome, { type: 'plain_text', value }])),
-    dev: { server: { hostname: '127.0.0.1', port: porta }, inspector: false, watch: false, remote: false,
-      persist: persistencia, logLevel: 'error', registry: undefined } });
-  await Promise.race([worker.ready, new Promise((_, reject) => limite.addEventListener('abort', () => reject(limite.reason), { once: true }))]);
+  Object.assign(process.env, { SUPPLY_VISION_PRIVADO: persistencia, MODO_ENSAIO: '1', PORTAL_CRIAR_BANCO: '1',
+    INITIAL_ADMIN_PASSWORD: senha, PORTAL_API_TOKEN: 'fumaca-ficticia', RELATORIOS_PORTA: String(relatorios) });
+  const { iniciarServidorNode } = await import('./servidor-node.mjs');
+  servidor = await iniciarServidorNode({ outDir: path.join(projeto, 'dist'), host: '127.0.0.1', port: porta });
   while (true) {
     limite.throwIfAborted();
     try {
@@ -69,8 +48,7 @@ try {
   if (login.status !== 200 || !login.headers['set-cookie']?.some(c => c.includes('acordos_session='))) throw new Error('Login ficticio reprovado');
   console.log('Fumaca aprovada: health e login ficticio no Portal compilado.');
 } finally {
-  try { await worker?.dispose(); } finally {
-    sqlite?.encerrar();
+  try { await servidor?.encerrar(); } finally {
     fs.rmSync(persistencia, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
     clearTimeout(prazoFinal);
   }

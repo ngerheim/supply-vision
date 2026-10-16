@@ -85,14 +85,9 @@ $verificacaoSaude=$null;$inicioSaude=$null
 $inicioPortal=Get-Date;$ultimoReinicio=Get-Date
 $portalJaPronto=$false;$aguardandoPortal=$false
 $portalPronto=$false;$falhasSaude=0;$PortalUrl='http://127.0.0.1:3000'
-# O trace store local do miniflare cresce sem limite (5,5 MB para 14,5 MB em
-# tres dias de operacao) e NAO e controlado por "observability" no
-# wrangler.json. A unica chave e esta variavel, lida direto do ambiente.
-$env:X_LOCAL_OBSERVABILITY='false'
 if($SemLogin){
  $cache=Join-Path $Operacao 'cache';New-Item -ItemType Directory -Force $cache|Out-Null
  $env:XDG_CONFIG_HOME=$cache;$env:XDG_CACHE_HOME=$cache;$env:npm_config_cache=Join-Path $cache 'npm'
- $env:WRANGLER_CACHE_DIR=Join-Path $cache 'wrangler';$env:WRANGLER_LOG_PATH=Join-Path $cache 'wrangler.log';$env:WRANGLER_SEND_METRICS='false'
  $env:TEMP=$cache;$env:TMP=$cache
 }
 $configPortalHealth=Ler-ConfigOperacao (Join-Path $Privado 'portal/configuracao/portal.env')
@@ -162,6 +157,6 @@ try{
  }
 }catch{$codigoSupervisor=1;Log "ERRO FATAL: $($_.Exception.Message)";Log "Origem: $($_.ScriptStackTrace -replace '\s*\r?\n\s*',' | ')"}finally{
  if($clienteHealth){$clienteHealth.cliente.Dispose()}
- @{atualizado=(Get-Date).ToString('o');ensaio=$ensaio;portal=$false;emails=$false;relatorios=$false;alertas='parado';backup='parado';limpeza='parada';manutencao=$false;disco='desconhecido'}|ConvertTo-Json -Compress|ForEach-Object{[void](Gravar-Tolerante $StatusFile $_)};Encerrar-AvisosAdmin $avisosAdmin;Log 'Encerrando a operacao.';if($portalPronto){[void](Notificar 'Supply Vision' 'Operacao encerrada. O Portal saiu do ar.')};foreach($p in $processos.Values){Encerrar $p};Encerrar $alerta;Encerrar $backup;Encerrar $limpeza;Encerrar $expurgo;Encerrar $verificacaoSaude;if(!$processos['portal']-or$processos['portal'].HasExited){Remove-Item -LiteralPath (Join-Path $Privado 'portal\configuracao\worker.env') -Force -ErrorAction SilentlyContinue};Remove-Item $PidFile,$PararFile -Force -ErrorAction SilentlyContinue;if($LockHandle){$LockHandle.Dispose()}}
+ @{atualizado=(Get-Date).ToString('o');ensaio=$ensaio;portal=$false;emails=$false;relatorios=$false;alertas='parado';backup='parado';limpeza='parada';manutencao=$false;disco='desconhecido'}|ConvertTo-Json -Compress|ForEach-Object{[void](Gravar-Tolerante $StatusFile $_)};Encerrar-AvisosAdmin $avisosAdmin;Log 'Encerrando a operacao.';if($portalPronto){[void](Notificar 'Supply Vision' 'Operacao encerrada. O Portal saiu do ar.')};foreach($p in $processos.Values){Encerrar $p};Encerrar $alerta;Encerrar $backup;Encerrar $limpeza;Encerrar $expurgo;Encerrar $verificacaoSaude;Remove-Item $PidFile,$PararFile -Force -ErrorAction SilentlyContinue;if($LockHandle){$LockHandle.Dispose()}}
 
 if($SemLogin){exit $codigoSupervisor}

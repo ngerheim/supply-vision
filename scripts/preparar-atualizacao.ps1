@@ -56,11 +56,6 @@ try {
  $env:XDG_CACHE_HOME=$env:XDG_CONFIG_HOME
  [void][IO.Directory]::CreateDirectory($env:XDG_CONFIG_HOME)
  $env:TEMP=$env:XDG_CONFIG_HOME;$env:TMP=$env:XDG_CONFIG_HOME;$env:TMPDIR=$env:XDG_CONFIG_HOME
- $env:WRANGLER_REGISTRY_PATH=Join-Path $env:XDG_CONFIG_HOME 'wrangler-registry'
- $env:WRANGLER_CACHE_DIR=Join-Path $env:XDG_CONFIG_HOME 'wrangler'
- $env:WRANGLER_LOG_PATH=Join-Path $Raiz '.cache/wrangler.log'
- $env:WRANGLER_SEND_METRICS='false'
- $env:MINIFLARE_REGISTRY_PATH=Join-Path $Raiz '.cache/registry'
  # Ate a compilacao do helper nativo usa o TEMP descartavel, nunca o da operacao.
  # Antes de build/testes: a saida deste processo encerra a arvore inteira.
  Entrar-JobPreparo

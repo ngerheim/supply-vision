@@ -86,7 +86,7 @@ time.sleep(30)
 
 
   $conteudos = @{
-    'portal\dist\server\wrangler.json'                 = '{}'
+    'portal\dist\server\index.js'                 = '{}'
     'privado\alertas\config\cfg_qlik.txt'              = 'token'
     'privado\alertas\config\destinatarios.txt'         = 'destino'
     'acordos.xlsx'                                     = 'teste'

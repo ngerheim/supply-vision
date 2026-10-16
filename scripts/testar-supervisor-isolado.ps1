@@ -55,10 +55,10 @@ try{
  Registrar-FaseSupervisorTeste 'preparacao'
  Preparar-InstalacaoSupervisorTeste $raizReal $temp
  New-Item -ItemType Directory -Force "$temp\alertas\.venv\Scripts"|Out-Null
- $conteudos=@{'portal\dist\server\wrangler.json'='{}';'portal\dist\server\index.js'='const PORTAL_API_TOKEN="x";';'alertas\.venv\Scripts\python.exe'='teste';'privado\alertas\config\cfg_qlik.txt'='token';'privado\alertas\config\destinatarios.txt'='destino';'acordos.xlsx'='teste'}
+ $conteudos=@{'portal\dist\server\index.js'='const PORTAL_API_TOKEN="x";';'alertas\.venv\Scripts\python.exe'='teste';'privado\alertas\config\cfg_qlik.txt'='token';'privado\alertas\config\destinatarios.txt'='destino';'acordos.xlsx'='teste'}
  foreach($item in $conteudos.GetEnumerator()){[IO.File]::WriteAllText((Join-Path $temp $item.Key),$item.Value)}
 
- [IO.File]::WriteAllText("$temp\alertas\processo\pipeline.py","import json,os,pathlib,sys`npathlib.Path('../privado/operacao/pipeline-args.json').write_text(json.dumps({'args':sys.argv[1:],'ensaio':os.environ.get('MODO_ENSAIO'),'path':os.environ.get('PATH'),'cache':str(pathlib.Path(os.environ['XDG_CONFIG_HOME']).resolve()) if os.environ.get('XDG_CONFIG_HOME') else None,'cache_xdg':str(pathlib.Path(os.environ['XDG_CACHE_HOME']).resolve()) if os.environ.get('XDG_CACHE_HOME') else None,'cache_wrangler':str(pathlib.Path(os.environ['WRANGLER_CACHE_DIR']).resolve()) if os.environ.get('WRANGLER_CACHE_DIR') else None,'log_wrangler':str(pathlib.Path(os.environ['WRANGLER_LOG_PATH']).resolve()) if os.environ.get('WRANGLER_LOG_PATH') else None,'temp':str(pathlib.Path(os.environ['TEMP']).resolve())}))`nprint('pipeline ficticio concluido')")
+ [IO.File]::WriteAllText("$temp\alertas\processo\pipeline.py","import json,os,pathlib,sys`npathlib.Path('../privado/operacao/pipeline-args.json').write_text(json.dumps({'args':sys.argv[1:],'ensaio':os.environ.get('MODO_ENSAIO'),'path':os.environ.get('PATH'),'cache':str(pathlib.Path(os.environ['XDG_CONFIG_HOME']).resolve()) if os.environ.get('XDG_CONFIG_HOME') else None,'cache_xdg':str(pathlib.Path(os.environ['XDG_CACHE_HOME']).resolve()) if os.environ.get('XDG_CACHE_HOME') else None,'temp':str(pathlib.Path(os.environ['TEMP']).resolve())}))`nprint('pipeline ficticio concluido')")
  [IO.File]::WriteAllText("$temp\alertas\processo\verificar_saude.py", "import pathlib,time`npathlib.Path('../privado/operacao/saude-iniciada').write_text('ficticio')`ntime.sleep(600)")
  Remove-Item -LiteralPath "$temp\alertas\.venv\Scripts\python.exe" -Force
  Registrar-FaseSupervisorTeste 'python-venv'
@@ -70,7 +70,7 @@ try{
   Copy-Item "$temp\portal\scripts\processar-relatorios.mjs" "$temp\portal\scripts\$entrada"
  }
  if($PortalReal){
-  if(!(Test-Path (Join-Path $raizReal 'portal/dist/server/wrangler.json'))){throw 'PortalReal exige build local.'}
+  if(!(Test-Path (Join-Path $raizReal 'portal/dist/server/index.js'))){throw 'PortalReal exige build local.'}
   Copy-Item (Join-Path $raizReal 'portal/scripts/*') (Join-Path $temp 'portal/scripts') -Recurse -Force
   Copy-Item (Join-Path $raizReal 'portal/lib') (Join-Path $temp 'portal/lib') -Recurse -Force
   Copy-Item (Join-Path $raizReal 'portal/dist/*') (Join-Path $temp 'portal/dist') -Recurse -Force
@@ -86,10 +86,9 @@ try{
  $npmFalso="@echo off`r`n:aguardar`r`nif exist `"..\privado\operacao\parar.sinal`" exit /b 0`r`nping 127.0.0.1 -n 2 >nul`r`ngoto aguardar`r`n"
  [IO.File]::WriteAllText("$temp\bin\npm.cmd",$npmFalso,[Text.Encoding]::ASCII)
  [IO.File]::WriteAllText("$temp\privado\comum\smtp.env","SMTP_HOST=x`r`nSMTP_PORT=1`r`nSMTP_USER=x`r`nSMTP_PASSWORD=x`r`nEMAIL_FROM_NAME=x")
- [IO.File]::WriteAllText("$temp\privado\portal\configuracao\portal.env","PORTAL_URL=$urlFixture`r`nPORTAL_PORTA=$portaFixture`r`nRELATORIOS_PORTA=$($portasFixture[1])`r`nINITIAL_ADMIN_PASSWORD=senha-ficticia-12345`r`nPORTAL_API_TOKEN=x`r`nBACKUP_EMAIL_TO=x")
+ [IO.File]::WriteAllText("$temp\privado\portal\configuracao\portal.env","PORTAL_URL=$urlFixture`r`nPORTAL_PORTA=$portaFixture`r`nRELATORIOS_PORTA=$($portasFixture[1])`r`nPORTAL_CRIAR_BANCO=1`r`nINITIAL_ADMIN_PASSWORD=senha-ficticia-12345`r`nPORTAL_API_TOKEN=x`r`nBACKUP_EMAIL_TO=x")
  [IO.File]::WriteAllText("$temp\privado\alertas\config\cfg_ambiente.txt","QLIK_TENANT=x`r`nQLIK_APP_ID=x`r`nQLIK_OBJ_ID=x`r`nDESTINATARIO_ALERTA=x")
  [IO.File]::WriteAllText("$temp\privado\comum\operacao.env","ALERTAS_HORARIOS=00:00`r`nBACKUP_HORARIOS=00:00`r`nLIMPEZA_HORARIO=00:00`r`nESPACO_MINIMO_GB=1`r`nMODO_ENSAIO=$(if($Ensaio){'1'}else{'0'})")
- [IO.File]::WriteAllText("$temp\privado\portal\configuracao\worker.env",'segredo-ficticio')
  if($AvisoAdminTeste){Add-Content "$temp\privado\comum\operacao.env" "`r`nADMIN_ALERTA_EMAIL=admin@example.com"}
  $filho="import fs from 'node:fs';fs.appendFileSync('../privado/operacao/avisos-iniciados',process.argv[2]+'\n');"
  if($AvisoAdminTeste-eq'falha'){$filho+="process.exitCode=1;"}else{$filho+="setTimeout(()=>process.exit(0),120000);"}
@@ -160,7 +159,7 @@ if($Atraso){Start-Sleep -Seconds $Atraso} # Simula VM lenta, somente no teste.
   $pythonTeste=Join-Path $temp 'alertas\.venv\Scripts\python.exe'
   $cacheEsperado=(& $pythonTeste -c 'import pathlib,sys;print(pathlib.Path(sys.argv[1]).resolve())' (Join-Path $temp 'privado\operacao\cache')|Out-String).Trim()
   if($pipeline.cache-ne$cacheEsperado-or$pipeline.temp-ne$cacheEsperado){throw "Cache/TEMP divergentes: cache=$($pipeline.cache); TEMP=$($pipeline.temp); esperado=$cacheEsperado."}
-  if($pipeline.cache_xdg-ne$cacheEsperado-or$pipeline.cache_wrangler-ne(Join-Path $cacheEsperado 'wrangler')-or$pipeline.log_wrangler-ne(Join-Path $cacheEsperado 'wrangler.log')){throw 'Wrangler dependeu de cache do perfil.'}
+  if($pipeline.cache_xdg-ne$cacheEsperado){throw 'Processo dependeu de cache do perfil.'}
   $binEsperado=(& $pythonTeste -c 'import pathlib,sys;print(pathlib.Path(sys.argv[1]).resolve())' (Join-Path $temp 'bin')|Out-String).Trim()
   $pathEsperado=$binEsperado+';'+[Environment]::GetEnvironmentVariable('Path','Machine')
   if($pipeline.path-ne$pathEsperado){throw "PATH divergente: atual=$($pipeline.path); esperado=$pathEsperado."}
@@ -207,7 +206,6 @@ if($Atraso){Start-Sleep -Seconds $Atraso} # Simula VM lenta, somente no teste.
  Registrar-FaseSupervisorTeste 'parada'
  New-Item -ItemType File -Force "$temp\privado\operacao\parar.sinal"|Out-Null;$vivos[0].WaitForExit(25000)|Out-Null;if(!$vivos[0].HasExited){throw 'Supervisor nao encerrou.'}
  $statusFinal=Get-Content $statusPath -Raw|ConvertFrom-Json;if($statusFinal.ensaio-ne[bool]$Ensaio){throw 'Status de encerramento perdeu o modo ensaio.'}
- if(Test-Path -LiteralPath "$temp\privado\portal\configuracao\worker.env"){throw 'Supervisor deixou worker.env depois de encerrar.'}
  if($PortalReal){
   if(@(Get-NetTCPConnection -LocalPort $portaFixture -State Listen -ErrorAction SilentlyContinue).Count){throw 'Parada deixou a porta publica aberta.'}
   # Sidecars podem permanecer apos parada forcada: a verificacao e de handles,
@@ -215,7 +213,7 @@ if($Atraso){Start-Sleep -Seconds $Atraso} # Simula VM lenta, somente no teste.
   $bancos=@(Get-ChildItem (Join-Path $temp 'privado/portal/banco') -Recurse -File|Where-Object {$_.Name-match '\.sqlite(?:-wal|-shm)?$'})
   if(!$bancos.Count){throw 'Portal real nao abriu banco descartavel.'}
   foreach($arquivo in $bancos){$handle=[IO.File]::Open($arquivo.FullName,[IO.FileMode]::Open,[IO.FileAccess]::ReadWrite,[IO.FileShare]::None);$handle.Dispose()}
-  Write-Host "[OK] Supervisor real SQLite: banco/WAL/SHM liberados, worker.env removido e porta fechada."
+  Write-Host "[OK] Supervisor real SQLite: banco/WAL/SHM liberados, porta fechada."
  }
  Write-Host 'Supervisor isolado: concorrencia, estado, arquivo em uso e encerramento aprovados.' -ForegroundColor Green
 }catch{Write-Host ('FALHA DO CENARIO: '+$_.Exception.Message);if($PortalReal){Mostrar-DiagnosticoPortalTeste $temp $DiagnosticoDestino};if($instancias){Write-Host (Formatar-DiagnosticoTravaTeste $instancias)};throw}finally{$env:Path=$pathAnterior;$env:SUPPLY_VISION_PRIVADO=$privadoAnterior;$env:MODO_ENSAIO=$ensaioAnterior;$env:ADMIN_ALERTA_EMAIL=$adminAnterior;foreach($p in $processos){if($p-and!$p.HasExited){try{Encerrar-ArvoreTeste $p}catch{}}};if(Test-Path $temp){Remover-DiretorioTemporario $temp}}

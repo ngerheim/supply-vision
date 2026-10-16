@@ -1,26 +1,11 @@
-import fs from 'node:fs';
+import { arquivoSqliteLocal } from './sqlite-local.mjs';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { portalPrivado } from './configuracao.mjs';
 
 export function localizarBanco(informado = null, pastaPrivada = portalPrivado) {
   if (informado) return path.resolve(informado);
-  const diretorio = path.join(
-    pastaPrivada,
-    'banco',
-    'estado',
-    'state',
-    'v3',
-    'd1',
-    'miniflare-D1DatabaseObject',
-  );
-  if (!fs.existsSync(diretorio)) return null;
-  const arquivos = fs
-    .readdirSync(diretorio)
-    .filter((nome) => nome.endsWith('.sqlite') && nome !== 'metadata.sqlite');
-  if (arquivos.length !== 1)
-    throw new Error('Não foi possível identificar um único banco local.');
-  return path.join(diretorio, arquivos[0]);
+  return arquivoSqliteLocal(path.join(pastaPrivada, 'banco/estado/state'));
 }
 export function abrirBancoLocal(tabela, informado = null) {
   const arquivo = localizarBanco(informado);

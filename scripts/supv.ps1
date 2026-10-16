@@ -287,9 +287,7 @@ function Mostrar-SaudeSupv([datetime]$Desde){
  # Nao aplica --desde a linhas sem timestamp do runtime; declara a cobertura real.
  Escrever-Supv 'Portal: logs atuais cobrem so desde o ultimo reinicio; contagens abaixo abrangem esses arquivos (sem recorte --desde).'
  $http=@($portal|Where-Object {$_-match'(?i)(?:\bHTTP(?:/\d(?:\.\d)?)?\s+|\b(?:GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)\s+\S+\s+|\bstatus(?:Code)?["\s:=]+)5\d\d\b'})
- $d1=@($portal|Where-Object {$_-match'\bD1_ERROR\b'})
- $retry=@($portal|Where-Object {$_-match'(?i)D1.*(retent|retry|tentativa)|(?:retent|retry|tentativa).*D1'})
- Escrever-Supv "HTTP 5xx: $($http.Count) | D1_ERROR: $($d1.Count) | Retentativas D1: $($retry.Count)"
+ Escrever-Supv "HTTP 5xx: $($http.Count)"
 }
 function Executar-ComandoSupv($c){
  $p=@($c.posicionais);$o=$c.opcoes;$comando=$c.comando

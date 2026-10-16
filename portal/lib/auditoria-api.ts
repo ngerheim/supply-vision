@@ -15,7 +15,7 @@ export function erroExportacaoAuditoria(total: number): string | null {
     ? 'A exportação permite até 10.000 registros. Restrinja o período ou os filtros do histórico.'
     : null;
 }
-// INSTR preserva a busca literal e evita o limite de padrao LIKE do D1.
+// INSTR preserva a busca literal e evita o limite de padrao LIKE do SQLite.
 export const BUSCA_LITERAL_AUDITORIA_SQL = '(instr(lower(l.details),lower(?))>0 OR instr(lower(l.entity),lower(?))>0 OR instr(lower(u.name),lower(?))>0)';
 
 // Registro de auditoria como instrucao preparada, para entrar no MESMO batch

@@ -167,9 +167,7 @@ jobs:
       - run: npm run build
       # O instalador ja cobrava isto na maquina; o CI nao. Vulnerabilidade
       # precisa aparecer no PR, nao na instalacao. A auditoria e completa de
-      # proposito: no servidor o Portal sobe com wrangler/miniflare, que sao
-      # devDependencies. (O --omit=dev de antes ja era anulado pelo include=dev
-      # do portal/.npmrc; agora o comando diz o que de fato faz.)
+      # Runtime e ferramentas sao auditados juntos.
       - run: npm audit
 
   portal-integracao:
@@ -271,7 +269,7 @@ jobs:
     name: Atualizacao real
     if: github.event_name == 'pull_request'
     runs-on: windows-latest
-    timeout-minutes: 25
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -298,15 +296,15 @@ jobs:
             alertas/config/requirements.txt
             alertas/config/requirements-dev.txt
             alertas/config/requirements-ci.txt
-      - name: Atualizar por copia e reserva; reprovar PREPARAR sem parada
-        timeout-minutes: 22
+      - name: Atualizar, reverter runtime e reutilizar reserva
+        timeout-minutes: 37
         shell: powershell
         env:
           SV_TESTES_INTEGRACAO_WINDOWS: '1'
           SV_PREPARO_COMPLETO: '1'
           TEMP: ${{ runner.temp }}
           TMP: ${{ runner.temp }}
-        run: ./scripts/testar-atualizacao-real.ps1 -BaseRef origin/main -DestinoRef HEAD -LimiteSegundos 1200
+        run: ./scripts/testar-atualizacao-real.ps1 -BaseRef origin/main -DestinoRef HEAD -LimiteSegundos 1800
       - name: Guardar diagnostico da atualizacao (inclusive em falha)
         if: always()
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
@@ -317,6 +315,7 @@ jobs:
           path: |
             ${{ runner.temp }}/sv-h2-*/fase.txt
             ${{ runner.temp }}/sv-h2-*/*.log
+            ${{ runner.temp }}/sv-h2-*/reversao/*.log
             ${{ runner.temp }}/sv-h2-*/negativo/*.log
             ${{ runner.temp }}/sv-h2-*/negativo/*.jsonl
             ${{ runner.temp }}/sv-h2-*/negativo/consumidores-*.json

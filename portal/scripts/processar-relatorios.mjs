@@ -61,7 +61,7 @@ export function reservarRelatorio(db) {
   if (validacaoAtiva(db)) return null;
   // Leitura antes da transação de escrita: o ciclo roda a cada 3 s e a fila
   // quase sempre está vazia. Abrir BEGIN IMMEDIATE à toa disputava o arquivo
-  // com o portal (miniflare/D1), que não espera o lock e responde 500.
+  // com o Portal e os outros consumidores durante as escritas.
   if (!db.prepare("SELECT 1 FROM report_jobs WHERE status='queued' LIMIT 1").get()) return null;
   db.exec('BEGIN IMMEDIATE');
   try {

@@ -3,7 +3,7 @@ import { EntradaInvalida, LIMITES_CAMPO } from './limites-entrada.ts';
 export const CAMPOS_BUSCA = ['state', 'location', 'item', 'model', 'supplier'] as const;
 export type FiltrosBusca = Record<typeof CAMPOS_BUSCA[number], string[]>;
 export const filtrosVazios = (): FiltrosBusca => ({ state: [], location: [], item: [], model: [], supplier: [] });
-// Uma data + até 80 valores: mantém a consulta abaixo dos 100 parâmetros do D1.
+// Uma data e ate 80 valores por consulta limitam o trabalho de cada filtro.
 export const MAX_FILTROS_BUSCA = 80;
 
 export function parametrosBusca(filters: FiltrosBusca) {

@@ -46,7 +46,7 @@
 | `portal/components/imports.tsx`, `import-*.tsx` | Envio, previa, correspondencias, resumo, erros e historico de importacao |
 | `portal/components/reports.tsx` | Relatorios |
 | `portal/scripts/iniciar-portal.mjs` | Configuracao e partida do runtime |
-| `portal/scripts/runtime-local.mjs` | Wrangler, proxy e encerramento da arvore |
+| `portal/scripts/servidor-node.mjs` | Servidor Node, IP do socket, assets e fechamento do SQLite |
 | `portal/scripts/processar-emails.mjs` | Filas de chamados e relatorio diario |
 | `portal/scripts/processar-relatorios.mjs` | Pedidos Python, arquivos e redacao de logs |
 | `alertas/processo/pipeline.py` | Orquestracao diaria e entrega |
@@ -90,13 +90,16 @@
 
 ## Portal e banco
 
-- Workers executa interface e API mesmo na instalacao local. SQLite nativo e
-  executado no Node por `scripts/sqlite-local.mjs`, acessado pelo adaptador
-  `lib/sqlite-local.ts`; nao e uma extensao nativa carregada no workerd.
-- SQLite local e o unico banco operacional. A chave legada `PORTAL_BANCO_LOCAL`
-  continua aceita no portal.env, mas e ignorada e nao vai ao Worker.
-- A criacao do arquivo inexistente ainda passa pelo D1 para preservar identidade.
-  Bases existentes no modo sqlite usam SQL parametrizado pela ponte autenticada.
+- Interface e API rodam no Node 24.20, via `vinext/server/prod-server`.
+  `lib/sqlite-local.ts` usa `scripts/sqlite-local.mjs` no mesmo processo.
+- `arquivoSqliteLocal()` e compartilhado com consumidores/backup; preserva o
+  caminho e o nome legado, recusando bases ambiguas. Nunca cria base na operacao.
+  Fixtures de CI autorizam criacao explicita (`PORTAL_CRIAR_BANCO=1` e ensaio/CI)
+  no mesmo diretorio, com nome fixo `portal.sqlite`.
+- Configuracao do servidor: `scripts/configuracao-servidor.mjs`, com lista fechada
+  de chaves; process.env sobrepoe portal.env. Segredos nao vao ao build/comando.
+- Login usa o IP do socket em contexto assincrono por requisicao; cabecalhos de
+  encaminhamento nao alteram limites nem o historico de tentativas.
 - WAL permite leitores durante escrita, mas apenas um escritor por vez.
   Executor, consumidores e expurgo usam timeout de lock; ele nao e espera ilimitada.
 - Lotes de escrita usam `BEGIN IMMEDIATE` e rollback integral; lotes somente de
@@ -113,8 +116,8 @@
   Travas, dono, revisao e auditoria precisam permanecer atomicos na publicacao.
 - Preservar datas civis e a precisao monetaria. Identidade inclui UF quando exigida;
   parametros privados e normalizacao participam da comparacao.
-- Proxy local fecha conexoes depois da resposta completa para evitar sockets
-  ociosos encerrados pelo workerd; nao corrige falhas repetindo requisicoes.
+- Servidor Node entrega apenas assets do build; caminhos reservados e symlinks
+  para fora de dist/client sao recusados. Preservar cabecalhos e limites de corpo.
 - Power BI e montado no servidor a partir da configuracao privada e validado por
   `lib/powerbi.ts`; `PBI_PAGINA` seleciona a pagina interna. Manter CSP e
   restricoes de URL sem publicar links reais.
@@ -136,7 +139,7 @@
 - Relatorios, recortes e limpeza compartilham o lock de arquivos.
 - Historicos expiram 24 horas apos geracao; logs Alertas duram cinco dias.
   `processo/limpeza.py --dry-run` permite verificar alvos sem excluir.
-- Worker so enfileira; o consumidor local valida novamente permissoes antes de
+- Portal so enfileira; o consumidor local valida novamente permissoes antes de
   executar Python. Download exige autorizacao, vinculo ao pedido e arquivo permitido.
 - Restauracao neutraliza filas antigas e exige confirmacao de reenvio; reinicio
   normal preserva pedidos novos. Nao confundir esses dois eventos.
@@ -153,7 +156,7 @@
   Tarefa deve pertencer a esta instalacao; nunca substituir outra tarefa ou matar
   processos so pelo nome.
 - PID inclui instante de inicio para evitar confundir reutilizacao do numero.
-- A parada encerra a arvore Wrangler/workerd/Python, fecha SQLite explicitamente
+- A parada encerra a arvore Node/Python, fecha SQLite explicitamente
   e verifica handles/portas; encerrar apenas o launcher deixa descendentes vivos.
 - Nao apagar WAL/SHM para simular parada. A recuperacao desses arquivos pertence
   ao SQLite; termino abrupto nao garante finally do JavaScript.
@@ -168,15 +171,19 @@
   parada/preparo, salvo reparo/completo; contexto e status registram sem-parada.
   Health apos religar consulta imediatamente e a cada 500 ms por ate 120 s.
 - Nao copiar dados reais para o preparo nem desativar suas guardas para fazer testes.
-  Portas sao reservadas pelo SO; configuracao, perfil Wrangler e caches sao descartaveis.
+  Portas sao reservadas pelo SO; configuracao e caches sao descartaveis.
 - `isolamento-preparo.mjs` barra I/O fora da raiz fisica e conexoes alheias a fixture;
   hooks SQLite preservam a mesma barreira para imports ESM.
 - CI reutilizado exige SHA/arvore e checks esperados; integracao H2 pode forcar
   suites completas. Nao considerar check ausente, pendente ou skipped como aprovacao.
+- PREPARAR aguarda CI pendente da main por ate 30 min, com operacao no ar;
+  falha conhecida bloqueia a troca. Preservar cancelamento cooperativo e as
+  guardas de chamadas nativas/handles em scripts/ci/.
 - Reserva de dependencias requer inventario e compatibilidade; rollback preserva
   a copia anterior se a reposicao falhar. Recuperacao nao pode religar dados ambiguos.
-- O pai de atualizacao 6ef675c entrega contexto codigo, preparo e artefatos
-  instalados; preservar esse salto no check Atualizacao real, inclusive recuperacao.
+- O atualizador da main anterior entrega contexto codigo, preparo e artefatos
+  instalados; preservar esse salto no check Atualizacao real, inclusive reversao
+  ao runtime anterior. A reserva aceita caches legados para restaurar os artefatos.
 - Scripts Windows devem continuar compativeis com PowerShell 5.1. Preservar BOM
   quando existente e strings interpoladas ASCII onde a copia sem BOM e exercitada.
 - `.gitattributes` guarda LF no indice e entrega CRLF aos scripts Windows.
@@ -186,7 +193,7 @@
 - `portal/scripts/backup.mjs` faz copia consistente por VACUUM INTO com origem
   somente leitura. Copia local e replica antecedem validacao SMTP.
 - `restaurar-backup.mjs`, `restauracao-segura.mjs` e `trava-restauracao.mjs`
-  exigem operacao parada e exclusao mutua com consumidores e ponte SQLite.
+  exigem operacao parada e exclusao mutua com consumidores e servidor SQLite.
 - Restauracao usa copia integra verificada e preserva a base anterior; nao
   sobrescrever a unica copia de recuperacao nem assumir que exportacao funcional e backup.
 - Semente inclui codigo, configuracao e dados privados; tratar como material privado.
@@ -224,14 +231,13 @@ Usar dados ficticios e ambientes descartaveis; Windows real exige maquina de tes
 | PREPARAR/dependencias | `./scripts/testar-dependencias-preparo.ps1`, `testar-fases-atualizacao.ps1`, `testar-espera-testes.ps1` |
 | Health/parada | `./scripts/testar-health-local.ps1`; `node --test portal/tests/runtime-local.test.mjs` |
 | Banco local | `node --test --experimental-strip-types tests/sqlite-local.test.ts tests/runtime-local.test.mjs` |
-| Importacao/HTTP | `npm run test:imports` (SQLite local) |
+| Importacao/HTTP | `npm run test:imports` |
 | Backup/restauracao | Testes `backup-*`, `restauracao-*` e `npm run test:restore -- --fixture` |
 | Inventario | `node scripts/inventario-metricas.mjs`; `--ref SHA` compara revisao sem checkout |
 
 - Dependencias Python: `requirements.txt`, `requirements-dev.txt` e `requirements-ci.txt`.
 - CI `.github/workflows/ci.yml`: parser/PSScriptAnalyzer, Portal, integracao Windows,
-  atualizacao real em PR e Alertas. Referencias explicitas a testes sao conferidas
-  por `scripts/ci/verificar-testes.mjs`; ensaio e tarefa sao distintos.
+  atualizacao real em PR e Alertas. Variantes de banco, ensaio e tarefa sao distintas.
 - H2 (PowerShell): `$env:SV_TESTES_INTEGRACAO_WINDOWS='1'`; executar
   `./scripts/testar-atualizacao-real.ps1 -BaseRef origin/main -DestinoRef HEAD`.
   Instala a base do merge-base e atualiza
@@ -241,16 +247,16 @@ Usar dados ficticios e ambientes descartaveis; Windows real exige maquina de tes
 - Artefatos publicos de CI contem somente diagnosticos ficticios, nunca bancos/snapshots.
 - Suites Linux nao substituem PowerShell 5.1, tarefa com conta de usuario, firewall e console Windows.
 
-## Dependencias especiais e runtime local
+## Dependencias especiais
 
-- Fonte unica da versao Node: `portal/package.json`, campo `node` de `engines`.
-  CI usa node-version-file; instalacao e PREPARAR exigem o mesmo major/minor.
+- A versao Node e definida uma unica vez em `portal/package.json`; CI usa
+  node-version-file; instalacao e PREPARAR exigem o mesmo major/minor.
   Partida exige o major definido e minor minimo; outra diferenca aceita gera aviso.
-  `portal/scripts/versao-node.mjs` aplica estas regras; preservar o proxy local.
+  `portal/scripts/versao-node.mjs` aplica estas regras.
+- `iniciar-portal.mjs` e a entrada de producao; o build Node usa output standalone,
+  sem processos auxiliares.
 - SheetJS local e copia oficial integra, licenca incluida; hash fixado no verificador
   e integrity no lockfile. Atualizacao exige revisao explicita: Dependabot nao cobre o tarball.
 - Adaptador fast-glob oferece somente sync ao plugin de importacao; nao e substituto
   geral da API. Preservar semantica de arquivos e revisar quando atualizar o consumidor.
-- O plugin Cloudflare do Vite e Wrangler/workerd continuam executando o Portal
-  localmente. O binding em vite.config.ts apenas preserva a identidade existente
-  e inicializa o arquivo SQLite ausente; nao ha alvo de deploy remoto.
+- Exportacao funcional omite credenciais e nao substitui backup integral do banco.

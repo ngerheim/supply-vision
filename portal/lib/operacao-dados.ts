@@ -1,10 +1,11 @@
+import type { BancoLocal } from './sqlite-local.ts';
 import { textoBusca } from './busca.ts';
 
 export const INDICES_LISTAS_GLOBAIS_SQL = [
   'CREATE INDEX IF NOT EXISTS idx_imports_created_global ON imports(created_at DESC)',
   'CREATE INDEX IF NOT EXISTS idx_report_jobs_created_global ON report_jobs(created_at DESC,id DESC)',
 ] as const;
-export async function migrarIndicesListasGlobais(db: D1Database, agora: string) {
+export async function migrarIndicesListasGlobais(db: BancoLocal, agora: string) {
   if (await db.prepare('SELECT 1 ok FROM schema_migrations WHERE version=7').first()) return;
   // DDL e marcador no mesmo batch transacional: queda/falha permite retomar.
   await db.batch([
@@ -37,7 +38,7 @@ export const LISTAR_CHAMADOS_SEM_BUSCA_SQL = `SELECT id,code,supplier_name,city,
 export const GRAVAR_BUSCA_CHAMADO_SQL = `UPDATE tickets SET search_text=?,supplier_sort=?
  WHERE id=? AND code IS ? AND supplier_name IS ? AND city IS ? AND state IS ?`;
 // Lotes pequenos, retomaveis. A condicao evita sobrescrever uma edicao concorrente.
-export async function migrarBuscaChamados(db: D1Database) {
+export async function migrarBuscaChamados(db: BancoLocal) {
   for (;;) {
     const linhas = (await db.prepare(LISTAR_CHAMADOS_SEM_BUSCA_SQL).all<CamposBuscaChamado & { id: string }>()).results;
     if (!linhas.length) return;

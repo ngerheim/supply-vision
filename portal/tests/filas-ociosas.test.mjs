@@ -1,5 +1,5 @@
 // Filas ociosas nao abrem transacao de escrita. O banco e o mesmo arquivo do
-// portal (miniflare/D1), que nao espera lock: cada BEGIN IMMEDIATE externo sem
+// Portal e consumidores disputam a reserva de escrita: cada BEGIN IMMEDIATE sem
 // necessidade era uma chance de o portal responder 500 a um usuario.
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
