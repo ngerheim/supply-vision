@@ -33,7 +33,7 @@ foreach($url in @('http://127.0.0.1:3000',$cfg['PORTAL_URL'])){
  Item-Homologacao "Health $url" {if(!$url){throw 'url'};$h=Invoke-RestMethod ($url.TrimEnd('/')+'/api/health') -TimeoutSec 5;if($h.status-ne'ok'){throw 'health'};'respondendo'}
 }
 Item-Homologacao 'Tarefa e inicializacao' {
- $startup=Join-Path ([Environment]::GetFolderPath('Startup')) 'Supply Vision.cmd';$modo=Obter-ModoInicializacao $Raiz $startup
+ $modo=Obter-ModoInicializacao $Raiz
  $t=Obter-TarefaSupplyVision $Raiz
  if($modo-eq'computador'){$aviso=Obter-AvisoContaTarefa $Raiz;if($aviso){throw $aviso};"$modo; estado $($t.State); conta $($t.Principal.UserId)"}else{$modo}
 }

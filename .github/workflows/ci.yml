@@ -98,7 +98,7 @@ jobs:
           $achados | Format-Table -AutoSize RuleName, ScriptName, Line, Message | Out-String -Width 300 | Write-Host
           if ($achados.Count) { exit 1 }
 
-      - name: Validar modos de inicializacao e tarefa SYSTEM real
+      - name: Validar inicializacao com conta e atualizacao
         shell: powershell
         env:
           SV_TESTES_INTEGRACAO_WINDOWS: '1'
@@ -121,17 +121,11 @@ jobs:
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           ./scripts/testar-espera-testes.ps1
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
-          ./scripts/testar-pos-migracao.ps1
-          if ($LASTEXITCODE) { exit $LASTEXITCODE }
           ./scripts/testar-correcoes-ensaio.ps1
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           ./scripts/testar-reversao-arquivos.ps1
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
-          ./scripts/testar-migracao.ps1
-          if ($LASTEXITCODE) { exit $LASTEXITCODE }
           ./scripts/testar-inicializacao.ps1
-          if ($LASTEXITCODE) { exit $LASTEXITCODE }
-          ./scripts/testar-tarefa-system.ps1
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           node --test portal/tests/orfaos-windows.test.mjs
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
@@ -139,12 +133,6 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: '3.12'
-      - name: Supervisor isolado com outra instalacao em tarefa ativa
-        shell: powershell
-        env:
-          SV_TESTES_INTEGRACAO_WINDOWS: '1'
-        run: ./scripts/testar-supervisor-com-outra-tarefa.ps1
-
       - name: Validar restricao de firewall sem alterar regras reais
         shell: powershell
         run: ./portal/scripts/testar-restricao-firewall.ps1
@@ -233,7 +221,7 @@ jobs:
           "SUPPLY_VISION_PRIVADO=$pastaTeste" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
       - run: npm ci
         working-directory: portal
-      - name: npm sem elevacao e migracao SYSTEM com TEMP curto 8.3
+      - name: npm com conta de usuario e TEMP curto 8.3
         shell: powershell
         env:
           SV_TESTES_INTEGRACAO_WINDOWS: '1'

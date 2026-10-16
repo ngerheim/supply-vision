@@ -5,7 +5,7 @@ $raizReal=(Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $pasta=Join-Path ([IO.Path]::GetTempPath()) ('sv-recuperacao-'+[guid]::NewGuid().ToString('N'))
 $privadoAnterior=$env:SUPPLY_VISION_PRIVADO
 try {
-  foreach($caso in @('legado','legado-repetido','prevoo','configuracao','credencial','npm','build','teste','partida','health','filho','restauracao','saude-completa','consumidor','python')) {
+  foreach($caso in @('prevoo','configuracao','credencial','partida','health','filho','restauracao','saude-completa','consumidor','python')) {
     $raiz=Join-Path $pasta $caso
     foreach($dir in @('scripts','portal/scripts','alertas','compartilhado','privado/operacao','privado/portal/backups','privado/portal/configuracao','privado/comum')) { New-Item -ItemType Directory -Force (Join-Path $raiz $dir)|Out-Null }
     Copy-Item (Join-Path $raizReal 'scripts/operacao-logica.ps1') (Join-Path $raiz 'scripts')
@@ -21,9 +21,15 @@ try {
     foreach($arq in @('privado/comum/smtp.env','privado/comum/operacao.env')) { Set-Content (Join-Path $raiz $arq) '' }
     $env:SUPPLY_VISION_PRIVADO=Join-Path $raiz 'privado'
     . (Join-Path $raiz 'scripts/operacao-logica.ps1')
-    Gravar-EstadoOperacao (Join-Path $env:SUPPLY_VISION_PRIVADO 'operacao/atualizacao.json') @{anterior=('1'*40);remoto=('2'*40);fase='codigo'}
-    if($caso -eq 'legado-repetido'){Gravar-EstadoOperacao (Join-Path $env:SUPPLY_VISION_PRIVADO 'operacao/atualizacao.json') @{anterior=('1'*40);remoto=('2'*40);fase='revertido'}}
-    if($caso -eq 'legado'){Remove-Item -LiteralPath (Join-Path $env:SUPPLY_VISION_PRIVADO 'operacao/atualizacao.json')}
+    . (Join-Path $raiz 'scripts/atualizacao-preparo.ps1')
+    $preparo=Nova-PastaPreparo $raiz
+    foreach($rel in @('portal/dist','portal/node_modules','alertas/.venv')){
+      New-Item -ItemType Directory -Force (Join-Path $raiz $rel),(Join-Path $preparo $rel)|Out-Null
+      [IO.File]::WriteAllText((Join-Path $raiz "$rel/versao"),'anterior')
+      [IO.File]::WriteAllText((Join-Path $preparo "$rel/versao"),'nova')
+    }
+    if($caso-ne'filho'){Trocar-ArtefatosPreparo $raiz $preparo}
+    Gravar-EstadoOperacao (Join-Path $env:SUPPLY_VISION_PRIVADO 'operacao/atualizacao.json') @{anterior=('1'*40);remoto=('2'*40);fase='codigo';preparo=$preparo;artefatos=$true}
     Set-Content (Join-Path $raiz 'privado/portal/backups/portal-atual.sqlite') 'snapshot ficticio'
     Set-Content (Join-Path $raiz 'privado/portal/backups/pre-atualizacao.sqlite') 'snapshot ficticio'
     if($caso -ne 'configuracao') { Set-Content (Join-Path $raiz 'privado/portal/configuracao/portal.env') ('PORTAL_API_TOKEN='+('a'*64)) }
@@ -31,7 +37,7 @@ try {
     $runner=@'
 param($Caso,$Raiz)
 $ErrorActionPreference='Stop'
-$global:builds=0;$global:resetou=$false
+$global:resetou=$false
 function git {
   $global:LASTEXITCODE=0
   switch($args[0]) {
@@ -67,14 +73,10 @@ function node {
   if(!$global:resetou -and $arquivo -like '*saude-operacao*' -and $Caso -in @('saude-completa','consumidor')){$global:LASTEXITCODE=1}
   if($arquivo -like '*restaurar-backup*') { Add-Content (Join-Path $Raiz 'restore.log') 'restore'; if($Caso -eq 'restauracao'){$global:LASTEXITCODE=1} }
 }
-function npm {
-  $global:LASTEXITCODE=0
-  if(!$global:resetou -and (($Caso -eq 'npm' -and $args[0] -eq 'ci') -or ($Caso -in @('build','legado','legado-repetido') -and $args[1] -eq 'build') -or ($Caso -eq 'teste' -and $args[0] -eq 'test'))) {$global:LASTEXITCODE=1}
-}
+function npm.cmd {throw 'Build/instalacao/testes nao podem rodar durante TROCAR.'}
 # Caso python: a versao e lida, mas o codigo de saida vem -1, como o Windows
 # PowerShell registra para um processo nativo interrompido.
 function pythonmock { $global:LASTEXITCODE=0; if($args[0] -eq '--version'){'Python 3.12.0'; if($Caso -eq 'python'){$global:LASTEXITCODE=-1}} }
-function npm.cmd { npm @args }
 function powershell.exe {
   $global:LASTEXITCODE=0
   if($args -contains '-Instalacao'){return}
@@ -101,6 +103,10 @@ exit $LASTEXITCODE
     $fase=(Ler-EstadoOperacao (Join-Path $env:SUPPLY_VISION_PRIVADO 'operacao/atualizacao.json')).fase
     if($fase -ne $(if($caso -eq 'restauracao'){'recuperando'}else{'revertido'})) { throw "Recuperacao incompleta em ${caso}: $saida" }
     if($caso -eq 'restauracao' -and @(Get-Content (Join-Path $raiz 'inicio.log')).Count -ne 1) { throw 'Banco inseguro foi religado.' }
+    foreach($rel in @('portal/dist','portal/node_modules','alertas/.venv')){
+      $esperado=if($caso-eq'restauracao'){'nova'}else{'anterior'}
+      if((Get-Content (Join-Path $raiz "$rel/versao"))-ne$esperado){throw "Artefato incorreto em $caso / $rel"}
+    }
     Write-Host "[OK] Recuperacao: $caso"
   }
 } finally {
