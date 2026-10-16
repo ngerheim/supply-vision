@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
+import { setTimeout as esperar } from 'node:timers/promises';
 import { EVENTOS_ADMIN, destinatariosAdmin, enviarAvisoAdmin, montarAviso, reservarAviso } from '../scripts/aviso-admin.mjs';
 
 function fixture(t) {
@@ -152,28 +153,43 @@ void test('processos concorrentes enviam todos os tipos mas reservam cada tipo u
   assert.equal(resultados.filter(r => r === 'limitado').length, 3);
 });
 
-void test('reserva aguarda lock de escrita acima de um segundo sem perder exclusao', async t => {
+void test('reserva aguarda lock de escrita acima de um segundo sem perder exclusao', { timeout: 15_000 }, async t => {
   const { arquivo, pasta } = fixture(t);
   reservarAviso(arquivo, 'supervisor-iniciado', 0);
   const { DatabaseSync } = await import('node:sqlite');
   const db = new DatabaseSync(arquivo);
   db.exec('BEGIN IMMEDIATE');
   const modulo = new URL('../scripts/aviso-admin.mjs', import.meta.url).href;
-  const codigo = `import {reservarAviso} from ${JSON.stringify(modulo)}; console.log('pronto'); process.stdout.write(JSON.stringify(reservarAviso(process.argv[1],'backup-falhou')));`;
-  let liberado = false, timer;
+  // writeSync entrega a prontidao antes de entrar na espera SQLite sincrona.
+  const codigo = `import fs from 'node:fs'; import {reservarAviso} from ${JSON.stringify(modulo)}; fs.writeSync(1,'pronto\\n'); fs.writeSync(1,JSON.stringify(reservarAviso(process.argv[1],'backup-falhou')));`;
+  let liberado = false, terminou = false;
+  const filho = spawn(process.execPath, ['--input-type=module', '-e', codigo, arquivo], { env: { ...process.env, SUPPLY_VISION_PRIVADO: pasta, NO_COLOR: '1', FORCE_COLOR: '0' } });
+  t.after(() => filho.kill());
+  let stdout = '', stderr = '', pronto;
+  const prontidao = new Promise(resolve => { pronto = resolve; });
+  filho.stdout.on('data', dados => { stdout += dados; if (stdout.includes('pronto\n')) pronto(); });
+  filho.stderr.on('data', dados => { stderr += dados; });
+  // A mesma promessa observa saida/erro tanto na prontidao como no resultado.
+  const fim = new Promise((resolve, reject) => {
+    filho.on('error', reject);
+    filho.on('close', code => { terminou = true; if (code !== 0) reject(new Error(stderr || `Filho encerrou: ${code}`)); else resolve(stdout); });
+  });
   try {
-    const saida = await new Promise((resolve, reject) => {
-      const filho = spawn(process.execPath, ['--input-type=module', '-e', codigo, arquivo], { env: { ...process.env, SUPPLY_VISION_PRIVADO: pasta, NO_COLOR: '1', FORCE_COLOR: '0' } });
-      let stdout = '', stderr = '';
-      filho.stdout.on('data', dados => {
-        stdout += dados;
-        if (!timer && stdout.includes('pronto')) timer = setTimeout(() => { db.exec('COMMIT'); liberado = true; }, 1400);
-      });
-      filho.stderr.on('data', dados => { stderr += dados; });
-      filho.on('error', reject);
-      filho.on('close', code => code ? reject(new Error(stderr)) : resolve(stdout));
-    });
+    await Promise.race([prontidao, fim.then(() => assert.fail('Filho encerrou antes da prontidao'))]);
+    await esperar(1400);
+    assert.equal(terminou, false, stderr || 'Reserva concluiu com o escritor ainda reservado');
+    assert.equal(stdout, 'pronto\n', 'Reserva nao pode produzir resultado antes da liberacao');
+    // A transacao da fixture nao escreveu nada: basta soltar RESERVED. No
+    // journal DELETE, COMMIT pode exigir EXCLUSIVE e disputar com o leitor de
+    // schema do filho. ROLLBACK vazio nao exige essa promocao de lock.
+    db.exec('ROLLBACK'); liberado = true;
+    const saida = await fim;
     assert.equal(saida.trim(), 'pronto\ntrue');
     assert.equal(reservarAviso(arquivo, 'backup-falhou'), false);
-  } finally { clearTimeout(timer); if (!liberado) db.exec('ROLLBACK'); db.close(); }
+  } finally {
+    if (!liberado) db.exec('ROLLBACK');
+    db.close();
+    if (!terminou) filho.kill();
+    await fim.catch(() => {});
+  }
 });

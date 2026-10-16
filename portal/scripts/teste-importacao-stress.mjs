@@ -812,31 +812,61 @@ try {
     const alvo='alvo-inexistente@example.invalid';
     for(let i=0;i<5;i++)assert.equal((await request('/api/login',{method:'POST',body:{email:alvo,password:'senha-incorreta'}})).status,401);
     const inicio=performance.now();
-    const resultados=await Promise.allSettled(Array.from({length:20},()=>request('/api/login',{method:'POST',body:{email:alvo,password:'senha-incorreta'}})));
-    const lote=resultados.filter(r=>r.status==='fulfilled').map(r=>r.value);
-    const distribuicao=new Map();
-    for(const r of resultados){
-      const status=r.status==='fulfilled'?r.value.status:'sem-status';
-      distribuicao.set(status,(distribuicao.get(status)||0)+1);
-    }
-    console.log(`Login paralelo por alvo - status: ${[...distribuicao].sort(([a],[b])=>String(a).localeCompare(String(b))).map(([status,n])=>`${status}x${n}`).join(', ')}`);
-    for(const [indice,r] of resultados.entries()){
-      if(r.status==='rejected'){
-        const erro=r.reason;
-        console.log(`Login paralelo por alvo - requisicao ${indice+1} sem status: ${JSON.stringify({erro:erro?.message||String(erro),codigo:erro?.code,causa:erro?.cause?.message,codigoCausa:erro?.cause?.code})}`);
-      }else if(![401,429].includes(r.value.status)){
-        const corpo=typeof r.value.data==='string'?r.value.data:JSON.stringify(r.value.data);
-        console.log(`Login paralelo por alvo - requisicao ${indice+1} HTTP ${r.value.status}: ${corpo.slice(0,500)}`);
+    const tentar=()=>request('/api/login',{method:'POST',body:{email:alvo,password:'senha-incorreta'}});
+    const tentativasAntes=query('SELECT COUNT(*) n FROM login_attempts WHERE email=?',alvo)[0].n;
+    let concluida=false, duracaoPrimeira;
+    const primeira=Promise.allSettled([tentar()]).then(resultados=>{concluida=true;duracaoPrimeira=performance.now()-inicio;return resultados[0];});
+    try {
+      // A insercao acontece depois da reserva por alvo. Aguarda esse efeito real,
+      // em vez de presumir que o primeiro fetch ja entrou no Worker.
+      const prazo=performance.now()+5000;
+      while(query('SELECT COUNT(*) n FROM login_attempts WHERE email=?',alvo)[0].n===tentativasAntes){
+        assert.equal(concluida,false,'Primeira tentativa encerrou antes de registrar a reserva');
+        assert.ok(performance.now()<prazo,'Primeira tentativa nao registrou a reserva');
+        await pause(10);
       }
-    }
-    assert.equal(lote.filter(r=>r.status===401).length,1);
-    assert.equal(lote.filter(r=>r.status===429).length,19);
-    assert.ok(performance.now()-inicio>=750,'Atraso progressivo foi contornado');
-    const [legitimo, falha]=await Promise.all([
-      request('/api/login',{method:'POST',body:{email:'admin@portal.test',password:senha}}),
-      request('/api/login',{method:'POST',body:{email:alvo,password:'senha-incorreta'}}),
-    ]);
-    assert.equal(legitimo.status,200); assert.equal(falha.status,401);
+      const duplicada=()=>{
+        assert.equal(concluida,false,'Tentativas precisam se sobrepor a reserva do alvo');
+        return tentar();
+      };
+      // O burst de 20 conexoes pode derrubar o transporte Miniflare/workerd no
+      // Windows (500 bruto "Network connection lost."). Mantem as 19 disputas
+      // contra a MESMA reserva, com no maximo tres pedidos em voo e sem repetir
+      // requisicoes. Qualquer 500/erro de rede continua reprovando o cenario.
+      const [legitimo, primeiraDuplicada]=await Promise.all([
+        request('/api/login',{method:'POST',body:{email:'admin@portal.test',password:senha}}),
+        Promise.allSettled([duplicada()]),
+      ]);
+      assert.equal(legitimo.status,200,JSON.stringify(legitimo.data));
+      assert.equal(concluida,false,'Outro usuario deve entrar durante a reserva do alvo');
+      const resultados=[null,...primeiraDuplicada];
+      for(let restantes=18;restantes>0;restantes-=2){
+        resultados.push(...await Promise.allSettled([duplicada(),duplicada()]));
+      }
+      resultados[0]=await primeira;
+      const lote=resultados.filter(r=>r.status==='fulfilled').map(r=>r.value);
+      const distribuicao=new Map();
+      for(const r of resultados){
+        const status=r.status==='fulfilled'?r.value.status:'sem-status';
+        distribuicao.set(status,(distribuicao.get(status)||0)+1);
+      }
+      console.log(`Login paralelo por alvo - status: ${[...distribuicao].sort(([a],[b])=>String(a).localeCompare(String(b))).map(([status,n])=>`${status}x${n}`).join(', ')}`);
+      for(const [indice,r] of resultados.entries()){
+        if(r.status==='rejected'){
+          const erro=r.reason;
+          console.log(`Login paralelo por alvo - requisicao ${indice+1} sem status: ${JSON.stringify({erro:erro?.message||String(erro),codigo:erro?.code,causa:erro?.cause?.message,codigoCausa:erro?.cause?.code})}`);
+        }else if(![401,429].includes(r.value.status)){
+          const corpo=typeof r.value.data==='string'?r.value.data:JSON.stringify(r.value.data);
+          console.log(`Login paralelo por alvo - requisicao ${indice+1} HTTP ${r.value.status}: ${corpo.slice(0,500)}`);
+        }
+      }
+      assert.equal(lote.filter(r=>r.status===401).length,1);
+      assert.equal(lote.filter(r=>r.status===429).length,19);
+      assert.ok(duracaoPrimeira>=750,'Atraso progressivo foi contornado');
+      assert.equal(query('SELECT COUNT(*) n FROM login_attempts WHERE email=?',alvo)[0].n,tentativasAntes+1,'Duplicadas nao podem entrar na autenticacao');
+      const falha=await tentar();
+      assert.equal(falha.status,401,'Reserva deve ser liberada depois da tentativa');
+    } finally { await primeira; }
   });
   await check('Importacao com acordo ocupado retorna conflito e nao publica', async () => {
     const db=new DatabaseSync(sqlitePath);

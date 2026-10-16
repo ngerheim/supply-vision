@@ -57,7 +57,11 @@ for(const bancoLocal of ['sqlite','d1']) for(const motivo of ['explicito','sinal
     await runtime.encerrar();
     await ate(()=>{
       if(!vivo(descendente))return true;
-      if(process.platform==='linux')return fs.readFileSync(`/proc/${descendente}/stat`,'utf8').split(') ')[1].startsWith('Z');
+      if(process.platform==='linux'){
+        try{return fs.readFileSync(`/proc/${descendente}/stat`,'utf8').split(') ')[1].startsWith('Z');}
+        // O kernel pode recolher o processo entre vivo() e a leitura de stat.
+        catch(erro){if(erro.code==='ENOENT')return true;throw erro;}
+      }
       return false;
     });
     assert(performance.now()-inicio<6000,'Parada excedeu 6 segundos.');
