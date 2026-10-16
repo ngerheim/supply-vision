@@ -5,6 +5,7 @@ import { api, errorText } from '@/lib/api';
 import { EmailNotifications } from '@/components/email-notifications';
 import { Imports } from '@/components/imports';
 import { AgreementDialog, ItemDialog } from '@/components/agreement-dialogs';
+import { salvarEAtualizar } from '@/lib/atualizacao-periodica';
 import { filtrosVazios } from '@/lib/filtros-busca';
 import { dataDeNegocio } from '@/lib/data-negocio';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -93,11 +94,4 @@ export default function PortalApp() {
     {itemModal&&<ItemDialog open value={itemModal} catalogs={catalogs} busy={busy} onClose={()=>setItemModal(null)} onSave={(body:AnyRow)=>run(async()=>{if(body.id)await api(`/api/items/${body.id}`,{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify(body)});else await api(`/api/agreements/${body.agreementId}/items`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});setItemModal(null)},'Condição salva.')}/>}
     {catalogModal&&<CatalogDialog open value={catalogModal} busy={busy} onClose={()=>setCatalogModal(null)} onSave={(body:AnyRow)=>run(async()=>{const path=body.id?`/api/catalogs/${body.type}/${body.id}`:`/api/catalogs/${body.type}`;await api(path,{method:body.id?'PUT':'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});setCatalogModal(null)},'Cadastro salvo.')}/>}
   </main>;
-}
-
-export async function salvarEAtualizar<T>(save: () => Promise<T>, refresh: () => Promise<unknown>, onSaved: () => void, onRefreshError: (error: unknown) => void): Promise<T> {
-  const result = await save();
-  onSaved();
-  try { await refresh(); } catch (error) { onRefreshError(error); }
-  return result;
 }

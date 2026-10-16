@@ -1,8 +1,7 @@
 import assert from 'node:assert/strict';
-import test, { before } from 'node:test';
+import test from 'node:test';
 import { setImmediate } from 'node:timers/promises';
-import { fileURLToPath } from 'node:url';
-import { CABECALHO_ATUALIZACAO_AUTOMATICA, iniciarAtualizacaoPeriodica, registraAtividade } from '../lib/atualizacao-periodica.ts';
+import { CABECALHO_ATUALIZACAO_AUTOMATICA, iniciarAtualizacaoPeriodica, registraAtividade, salvarEAtualizar } from '../lib/atualizacao-periodica.ts';
 import { api } from '../lib/api.ts';
 
 void test('consulta lenta não sobrepõe pedidos e a parada cancela o pedido ativo', async t => {
@@ -72,34 +71,6 @@ void test('cliente envia o cabeçalho de consulta automática só quando pedido'
   assert.deepEqual(recebidos, ['1', null]);
 });
 
-let salvarEAtualizar: typeof import('../components/portal-app.tsx').salvarEAtualizar;
-before(async () => {
-  // Compila o export do consumidor TSX sem abrir servidor. O tree shaking
-  // dispensa as telas neste teste do contrato de salvar e atualizar.
-  const { build } = await import('vite');
-  const bundle = await build({
-    configFile: false,
-    logLevel: 'silent',
-    resolve: { alias: { '@': fileURLToPath(new URL('../', import.meta.url)) } },
-    plugins: [{
-      name: 'contrato-salvar-atualizar',
-      resolveId: id => id.endsWith('/contrato') || id === 'contrato' ? '\0contrato' : undefined,
-      load: id => id === '\0contrato'
-        ? `export { salvarEAtualizar } from ${JSON.stringify(fileURLToPath(new URL('../components/portal-app.tsx', import.meta.url)))};`
-        : undefined,
-    }],
-    build: {
-      write: false,
-      lib: { entry: 'contrato', formats: ['es'] },
-      rolldownOptions: { treeshake: { moduleSideEffects: false } },
-    },
-  });
-  const result = Array.isArray(bundle) ? bundle[0] : bundle;
-  if (!('output' in result)) throw new Error('Bundle de contrato ausente');
-  const chunk = result.output.find(output => output.type === 'chunk');
-  if (!chunk) throw new Error('Export de contrato ausente');
-  ({ salvarEAtualizar } = await import(`data:text/javascript;base64,${Buffer.from(chunk.code).toString('base64')}`));
-});
 void test('falha na recarga após salvar preserva confirmação e não repete escrita', async () => {
   const events: string[] = [];
   const result = await salvarEAtualizar(async () => { events.push('save'); return 42; },
