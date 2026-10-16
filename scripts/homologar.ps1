@@ -14,7 +14,7 @@ $linhas=New-Object 'Collections.Generic.List[string]'
 $segredos=Obter-SegredosHomologacao $privado
 function Item-Homologacao([string]$Nome,[scriptblock]$Conferir,[switch]$Classificar){
  try{$detalhe=& $Conferir;$icone='✅';if($Classificar){$icone=switch($detalhe.nivel){'ok'{'✅'} 'aviso'{'⚠️'} 'erro'{'❌'}};$detalhe=$detalhe.mensagem};$linhas.Add($icone+' '+(Mascarar-Homologacao $Nome $segredos)+': '+(Mascarar-Homologacao ($detalhe-join' ') $segredos))}
- catch{$linhas.Add('❌ '+(Mascarar-Homologacao $Nome $segredos)+': nao aprovado/indisponivel. Consulte AGENTS.md#diagnostico-e-recuperacao.')} # Nao publica excecoes que podem conter segredos.
+ catch{$linhas.Add('❌ '+(Mascarar-Homologacao $Nome $segredos)+': nao aprovado/indisponivel. Confira supv status e supv logs supervisor; consulte supv help.')} # Nao publica excecoes que podem conter segredos.
 }
 $linhas.Add('Supply Vision — verificacao somente leitura — '+(Get-Date -Format 'yyyy-MM-dd HH:mm:ss'))
 Item-Homologacao 'Commit e alteracoes locais' {
@@ -87,4 +87,4 @@ foreach($tipo in @('supervisor','portal','emails','relatorios')){
  }
 }
 [IO.File]::WriteAllLines([IO.Path]::GetFullPath($Destino),$linhas,(New-Object Text.UTF8Encoding($true)))
-Write-Host "Relatorio criado: $Destino. Itens com X exigem verificacao; consulte AGENTS.md#diagnostico-e-recuperacao."
+Write-Host "Relatorio criado: $Destino. Itens com X exigem verificacao; confira supv status e supv logs supervisor; consulte supv help."

@@ -45,6 +45,7 @@ Caminhos abreviados nas células mantêm o diretório do primeiro arquivo.
 - Backup consistente via VACUUM INTO, origem somente leitura; cópia local/réplica precedem SMTP. Restauração exige operação parada e exclusão mútua com consumidores/SQLite; preservar base anterior e única cópia válida. Exportação funcional não substitui backup; semente é privada.
 - `MODO_ENSAIO=1` impede SMTP e backup de rede; supervisor reaplica aos filhos (ausente = 0). Diagnósticos mascaram segredos.
 - Detector: executar `scripts/verificar-infra-publica.mjs`; não afrouxar para passar conteúdo. Barra IP privado, UNC, DNS local, máquinas, contas e links compartilhados Power BI. Em textos, nomes com nome e sobrenome separados por ponto também são contas; usar rótulos sem ponto, sem remontar identidades reais. Exceções só nos caminhos explícitos de testes/exemplos. Lista local opcional `privado/termos-proibidos.txt`: UTF-8, termos literais sem distinção de caixa, um por linha; ignora vazias/`#`; nunca publicar lista real.
+- Antivírus: em falhas `write EOF`/`unable to unlink`, conferir locks e Bitdefender, inclusive controle avançado de ameaças; liberar a pasta pode não bastar. Após corrigir proteção ou instalar Visual C++ x64, reiniciar e validar a partida.
 - SheetJS vendorizado: preservar licença, hash oficial e integrity do lock; atualização exige revisão explícita.
 
 ## Validação e fluxo
