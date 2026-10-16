@@ -73,7 +73,7 @@ catch [OperationCanceledException]{
  [IO.File]::WriteAllText($scriptWorker,$codigoWorker)
  $argumentos=@('-NoProfile','-File',$scriptWorker,$fonte,$instalacao,$preparo,$arquivo)
  $argumentos=(@($argumentos|ForEach-Object {Proteger-ArgumentoAtualizacao $_})-join' ')
- $worker=Start-Process $hostTeste -ArgumentList $argumentos -PassThru -RedirectStandardOutput (Join-Path $base 'worker-saida.log') -RedirectStandardError (Join-Path $base 'worker-erro.log')
+ $worker=Start-Process $hostTeste -ArgumentList $argumentos -PassThru -RedirectStandardOutput (Join-Path $base 'worker-saida.log') -RedirectStandardError (Join-Path $base 'worker-erro.log');[void]$worker.Handle
  Exigir-CI (Esperar-CI {(Consultar-AndamentoAdministrado $privado).esperaCI}) 'worker real publicou CI pendente'
  if($env:OS-eq'Windows_NT'){
   $scriptCliente=Join-Path $base 'cliente-ci.ps1'
@@ -85,7 +85,7 @@ function Consultar-AtualizacaoAdministrada {Get-Process -Id $Worker -ErrorAction
 Acompanhar-AtualizacaoSupv
 '@)
   $argumentos=(@(@('-NoProfile','-File',$scriptCliente,$fonte,$privado,[string]$worker.Id)|ForEach-Object {Proteger-ArgumentoAtualizacao $_})-join' ')
-  $cliente=Start-Process $hostTeste -ArgumentList $argumentos -PassThru -WindowStyle Hidden -RedirectStandardOutput (Join-Path $base 'cliente-saida.log') -RedirectStandardError (Join-Path $base 'cliente-erro.log')
+  $cliente=Start-Process $hostTeste -ArgumentList $argumentos -PassThru -WindowStyle Hidden -RedirectStandardOutput (Join-Path $base 'cliente-saida.log') -RedirectStandardError (Join-Path $base 'cliente-erro.log');[void]$cliente.Handle
   Exigir-CI (Esperar-CI {Select-String -LiteralPath (Join-Path $base 'cliente-saida.log') -Pattern 'checks concluidos' -Quiet}) 'cliente real acompanha a espera'
   $sinal=Join-Path $base 'ctrl-c.ps1'
   [IO.File]::WriteAllText($sinal,@'
@@ -113,6 +113,10 @@ Start-Sleep -Milliseconds 300
  }
  Exigir-CI (Esperar-CI {$worker.Refresh();$worker.HasExited}) 'worker encerra antes do proximo polling'
  $worker.WaitForExit()
+ if($worker.ExitCode-ne17){
+  Write-Host "Codigo inesperado do worker: [$($worker.ExitCode)]"
+  foreach($log in @('worker-saida.log','worker-erro.log')){Write-Host "Ultimas linhas de ${log}:";Get-Content (Join-Path $base $log) -Tail 40 -ErrorAction SilentlyContinue|Write-Host}
+ }
  Exigir-CI ($worker.ExitCode-eq17) 'worker cancelou sem prosseguir'
  Exigir-CI (!(Test-Path $preparo)) 'pasta de preparo removida'
  $worktrees=(& git -C $instalacao worktree list --porcelain)-join"`n"

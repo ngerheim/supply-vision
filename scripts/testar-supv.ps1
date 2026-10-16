@@ -64,7 +64,7 @@ $base=Join-Path ([IO.Path]::GetTempPath()) ('supv-console-'+[guid]::NewGuid().To
 $p=$null
 try{
  $hostTeste=(Get-Process -Id $PID).Path
- $p=Start-Process $hostTeste -ArgumentList ('-NoProfile -File "'+$PSCommandPath+'" -Modo cliente -Pasta "'+$base+'"') -PassThru -RedirectStandardOutput (Join-Path $base 'saida.log') -RedirectStandardError (Join-Path $base 'erro.log')
+ $p=Start-Process $hostTeste -ArgumentList ('-NoProfile -File "'+$PSCommandPath+'" -Modo cliente -Pasta "'+$base+'"') -PassThru -RedirectStandardOutput (Join-Path $base 'saida.log') -RedirectStandardError (Join-Path $base 'erro.log');[void]$p.Handle
  $tempo=[Diagnostics.Stopwatch]::StartNew()
  while(!(Test-Path (Join-Path $base 'pronto'))){
   if($p.HasExited-or$tempo.Elapsed.TotalSeconds-gt15){throw ('Cliente sem console: '+(Get-Content (Join-Path $base 'erro.log') -Raw))}

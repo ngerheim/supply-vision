@@ -61,7 +61,7 @@ function Esperar-ProcessoTeste($Processo,[int]$Segundos,[string]$ArquivoFase='')
 function Encerrar-ArvoreTeste($Processo){
  if(!$Processo){return}
  if($env:OS-eq'Windows_NT'){
-  $kill=Start-Process taskkill.exe -ArgumentList @('/PID',"$($Processo.Id)",'/T','/F') -PassThru -WindowStyle Hidden
+  $kill=Start-Process taskkill.exe -ArgumentList @('/PID',"$($Processo.Id)",'/T','/F') -PassThru -WindowStyle Hidden;[void]$kill.Handle
   try{if(!$kill.WaitForExit(5000)){$kill.Kill()}}finally{$kill.Dispose()}
  }else{try{$Processo.Kill($true)}catch{}}
  try{if(!$Processo.WaitForExit(5000)){$Processo.Kill()}}catch{}

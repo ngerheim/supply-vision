@@ -158,7 +158,7 @@ filho.once('message',msg=>{
 });
 '@)
  $fase=Join-Path $dir 'fase.txt';[IO.File]::WriteAllText($fase,'espera-provocada')
- $travado=Start-Process $node -ArgumentList @(('"'+$entrada+'"'),'arvore') -PassThru -RedirectStandardOutput (Join-Path $dir 'arvore-saida.log') -RedirectStandardError (Join-Path $dir 'arvore-erro.log')
+ $travado=Start-Process $node -ArgumentList @(('"'+$entrada+'"'),'arvore') -PassThru -RedirectStandardOutput (Join-Path $dir 'arvore-saida.log') -RedirectStandardError (Join-Path $dir 'arvore-erro.log');[void]$travado.Handle
  $descendente=Esperar-ProntidaoArvoreTeste $travado (Join-Path $dir 'arvore-pronto.json')
  $relogio=[Diagnostics.Stopwatch]::StartNew()
  if(Esperar-ProcessoTeste $travado 1 $fase){throw 'Cenario travado foi aprovado ou saiu antes do prazo.'}
@@ -177,7 +177,7 @@ filho.once('message',msg=>{
 
  # Caso separado: EOF herdado, sem depender de uma corrida pai -> filho.
  # O pai aguarda liberacao explicita e o escritor tem console independente.
- $pai=Start-Process $node -ArgumentList @(('"'+$entrada+'"'),'eof') -PassThru -RedirectStandardOutput (Join-Path $dir 'saida.log') -RedirectStandardError (Join-Path $dir 'erro.log')
+ $pai=Start-Process $node -ArgumentList @(('"'+$entrada+'"'),'eof') -PassThru -RedirectStandardOutput (Join-Path $dir 'saida.log') -RedirectStandardError (Join-Path $dir 'erro.log');[void]$pai.Handle
  $escritor=Esperar-ProntidaoArvoreTeste $pai (Join-Path $dir 'eof-pronto.json')
  [IO.File]::WriteAllText((Join-Path $dir 'liberar-pai'),'sair')
  if(!(Esperar-CondicaoTeste {$pai.Refresh();$pai.HasExited} -Segundos 5)){throw 'Pai da fixture EOF nao saiu apos liberacao.'}

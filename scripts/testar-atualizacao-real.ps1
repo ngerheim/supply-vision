@@ -15,7 +15,7 @@ if(!$ExecutarCenario){
  $fase=Join-Path $PastaTeste 'fase.txt';$filho=$null
  try{
   $argumentos=@('-NoProfile','-ExecutionPolicy','Bypass','-File',$PSCommandPath,'-ExecutarCenario','-PastaTeste',$PastaTeste,'-BaseRef',$BaseRef,'-DestinoRef',$DestinoRef)
-  $filho=Start-Process powershell.exe -ArgumentList (@($argumentos|ForEach-Object {Proteger-ArgumentoAtualizacao $_})-join' ') -PassThru -WindowStyle Hidden -RedirectStandardOutput (Join-Path $PastaTeste 'cenario.log') -RedirectStandardError (Join-Path $PastaTeste 'cenario-erro.log')
+  $filho=Start-Process powershell.exe -ArgumentList (@($argumentos|ForEach-Object {Proteger-ArgumentoAtualizacao $_})-join' ') -PassThru -WindowStyle Hidden -RedirectStandardOutput (Join-Path $PastaTeste 'cenario.log') -RedirectStandardError (Join-Path $PastaTeste 'cenario-erro.log');[void]$filho.Handle
   if(!(Esperar-ProcessoTeste $filho $LimiteSegundos $fase)){
    Encerrar-ArvoreTeste $filho
    throw "Atualizacao real travou: excedeu $LimiteSegundos s; ultima fase=$(Get-Content $fase -Raw -ErrorAction SilentlyContinue); logs=$PastaTeste."
@@ -187,11 +187,11 @@ try{
   $logs=Join-Path $PastaTeste $caso;New-Item -ItemType Directory $logs|Out-Null
   Obter-PidsConsumidoresH2|ConvertTo-Json|Set-Content (Join-Path $logs 'consumidores-antes.json') -Encoding UTF8
   $modoMonitor=if($caso-like'sucesso*'){'sucesso'}else{'negativo'}
-  $monitor=Start-Process node.exe -ArgumentList (@($apoio,'monitor',$raiz,$logs,$modoMonitor)|ForEach-Object{Proteger-ArgumentoAtualizacao $_}) -PassThru -WindowStyle Hidden -RedirectStandardOutput (Join-Path $logs 'monitor.log') -RedirectStandardError (Join-Path $logs 'monitor-erro.log')
+  $monitor=Start-Process node.exe -ArgumentList (@($apoio,'monitor',$raiz,$logs,$modoMonitor)|ForEach-Object{Proteger-ArgumentoAtualizacao $_}) -PassThru -WindowStyle Hidden -RedirectStandardOutput (Join-Path $logs 'monitor.log') -RedirectStandardError (Join-Path $logs 'monitor-erro.log');[void]$monitor.Handle
   $processos+=$monitor
   if(!(Esperar-CondicaoTeste {Test-Path (Join-Path $logs 'monitor-pronto')} 15)){throw 'Monitor independente nao iniciou.'}
   $argsAtualizador=@('-NoProfile','-ExecutionPolicy','Bypass','-File',(Join-Path $raiz 'scripts/atualizar-servidor.ps1'))
-  $atualizador=Start-Process powershell.exe -ArgumentList (@($argsAtualizador|ForEach-Object{Proteger-ArgumentoAtualizacao $_})-join' ') -WorkingDirectory $raiz -PassThru -WindowStyle Hidden -RedirectStandardOutput (Join-Path $logs 'atualizador.log') -RedirectStandardError (Join-Path $logs 'atualizador-erro.log')
+  $atualizador=Start-Process powershell.exe -ArgumentList (@($argsAtualizador|ForEach-Object{Proteger-ArgumentoAtualizacao $_})-join' ') -WorkingDirectory $raiz -PassThru -WindowStyle Hidden -RedirectStandardOutput (Join-Path $logs 'atualizador.log') -RedirectStandardError (Join-Path $logs 'atualizador-erro.log');[void]$atualizador.Handle
   $processos+=$atualizador
   if(!(Esperar-ProcessoTeste $atualizador 900)){throw 'Atualizador excedeu 900 s; veja log da fase.'}
   [IO.File]::WriteAllText((Join-Path $logs 'monitor-parar'),'ok')

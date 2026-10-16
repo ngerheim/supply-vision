@@ -62,7 +62,7 @@ exit /b %SV_RESULTADO_NPM%
 "@|Set-Content -LiteralPath $launcher -Encoding ASCII
  $env:GIT_CONFIG_COUNT='1';$env:GIT_CONFIG_KEY_0='safe.directory';$env:GIT_CONFIG_VALUE_0=$raiz
  $env:SV_TESTES_INTEGRACAO_WINDOWS=$null
- $proc=Start-Process -FilePath $env:ComSpec -Credential ([pscredential]::new($conta,$senha)) -WorkingDirectory (Join-Path $raiz 'portal') -ArgumentList @('/d','/c',('"'+$launcher+'"')) -RedirectStandardOutput (Join-Path $longo 'npm.log') -RedirectStandardError (Join-Path $longo 'npm-erro.log') -PassThru
+ $proc=Start-Process -FilePath $env:ComSpec -Credential ([pscredential]::new($conta,$senha)) -WorkingDirectory (Join-Path $raiz 'portal') -ArgumentList @('/d','/c',('"'+$launcher+'"')) -RedirectStandardOutput (Join-Path $longo 'npm.log') -RedirectStandardError (Join-Path $longo 'npm-erro.log') -PassThru;[void]$proc.Handle
  if(!$proc.WaitForExit(600000)){
   & taskkill.exe /PID $proc.Id /T /F|Out-Null
   Get-Content (Join-Path $longo 'npm.log'),(Join-Path $longo 'npm-erro.log') -ErrorAction SilentlyContinue|Write-Host

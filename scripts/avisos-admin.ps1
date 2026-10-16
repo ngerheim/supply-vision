@@ -32,7 +32,7 @@ function Avisar-Administrador([hashtable]$Controle, [string]$Evento) {
     $anterior = $env:ADMIN_ALERTA_EMAIL
     try {
       $env:ADMIN_ALERTA_EMAIL = $Controle.Email
-      $processo = Start-Process $Controle.Node -ArgumentList @('scripts\aviso-admin.mjs', $Evento) -WorkingDirectory $Controle.Portal -WindowStyle Hidden -PassThru
+      $processo = Start-Process $Controle.Node -ArgumentList @('scripts\aviso-admin.mjs', $Evento) -WorkingDirectory $Controle.Portal -WindowStyle Hidden -PassThru;[void]$processo.Handle
     } finally { $env:ADMIN_ALERTA_EMAIL = $anterior }
     $Controle.Pendentes[$Evento] = @{ Processo=$processo; Cronometro=[Diagnostics.Stopwatch]::StartNew(); Timeout=$false }
   } catch { Log "Falha ao iniciar aviso ao administrador — $Evento. A operação continua." }

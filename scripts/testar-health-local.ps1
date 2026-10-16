@@ -19,7 +19,7 @@ const server=http.createServer((req,res)=>{
 });server.listen(0,'127.0.0.1',()=>fs.writeFileSync(process.argv[2],String(server.address().port)));
 '@
  [IO.File]::WriteAllText($servidor,$fonte,(New-Object Text.UTF8Encoding($false)))
- $proc=Start-Process (Get-Command node).Source -ArgumentList @(('"'+$servidor+'"'),('"'+$portaArquivo+'"')) -PassThru
+ $proc=Start-Process (Get-Command node).Source -ArgumentList @(('"'+$servidor+'"'),('"'+$portaArquivo+'"')) -PassThru;[void]$proc.Handle
  if(!(Esperar-CondicaoTeste {Test-Path $portaArquivo})){throw 'Servidor ficticio nao iniciou.'}
  $porta=[int][IO.File]::ReadAllText($portaArquivo)
  # Proxy que daria erro; o handler deve ignora-lo mesmo no Windows 5.1.
