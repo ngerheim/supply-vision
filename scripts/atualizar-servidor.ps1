@@ -224,7 +224,12 @@ try{
  if(!$script:AndamentoAtualizacao){$script:AndamentoAtualizacao=Novo-AndamentoAtualizacao $arquivoAndamento (Join-Path (Obter-PastaPrivada $Raiz) 'operacao/atualizacao-tempos.log')}
 }catch{}
 function Etapa([string]$t) {
- if(!$Simular){try{Publicar-AndamentoAtualizacao $script:AndamentoAtualizacao $t}catch{}}
+ # O pre-voo do filho nao reinicia o progresso herdado do pai.
+ if(!$Simular){try{
+  $indice=[array]::IndexOf([object[]]$script:AndamentoAtualizacao.plano,$t)
+  $retomando=$JaAtualizado-and$indice-ge0-and$indice+1-lt$script:AndamentoAtualizacao.numero
+  if(!$retomando){Publicar-AndamentoAtualizacao $script:AndamentoAtualizacao $t}
+ }catch{}}
  try{Inicializar-MedicaoAtualizacao;Iniciar-EtapaMedida $script:MedicaoAtualizacao $t}catch{}
  Write-Host "`n== $t ==" -ForegroundColor Cyan
 }
@@ -523,11 +528,13 @@ if (-not $JaAtualizado) {
    $script:MedicaoAtualizacao.preparar=[math]::Round(([datetime]::UtcNow-$inicioPreparo).TotalSeconds,2)
   }catch{}
   if($script:AndamentoAtualizacao){$script:AndamentoAtualizacao=Ler-AndamentoAtualizacao $script:AndamentoAtualizacao.arquivo}
-  Etapa 'PREPARAR / Aprovacao e conferencia'
   if($rcPreparo-ne0){
-   if($script:AndamentoAtualizacao.erro){throw $script:AndamentoAtualizacao.erro}
-   throw 'PREPARAR reprovado. Atualizacao cancelada SEM parar a operacao ou alterar a instalacao.'
+   $erroPreparo=if($script:AndamentoAtualizacao.erro){$script:AndamentoAtualizacao.erro}else{'PREPARAR reprovado. Atualizacao cancelada SEM parar a operacao ou alterar a instalacao.'}
+   if($script:AndamentoAtualizacao){$script:AndamentoAtualizacao.erro=$erroPreparo}
+   Publicar-AndamentoAtualizacao $script:AndamentoAtualizacao 'PREPARAR reprovado' 'falhou'
+   throw $erroPreparo
   }
+  Etapa 'PREPARAR / Aprovacao e conferencia'
   $aprovacao=Join-Path $script:PastaPreparo 'preparo-aprovado'
   if(!(Test-Path $aprovacao)-or(Get-Content $aprovacao -Raw).Trim()-ne$remoto){throw 'Preparo sem aprovacao do commit esperado; operacao continua no ar.'}
   # Reconfere o checkout antes de parar: o preparo pode levar alguns minutos.
@@ -651,6 +658,7 @@ Write-Host "`n=== Atualizado: $($anterior.Substring(0,7)) -> $($remoto.Substring
 exit 0
 } catch {
   $falha = $_
+  if($script:AndamentoAtualizacao){$script:AndamentoAtualizacao.erro=$falha.Exception.Message}
   if(!$CodigoTrocado-and!$script:ParadaSolicitada-and$script:PastaPreparo){$script:FalhaPreparo=$falha.Exception.Message}
   try{
    if($inicioPreparo-and!$script:MedicaoAtualizacao.preparar){$script:MedicaoAtualizacao.preparar=[math]::Round(([datetime]::UtcNow-$inicioPreparo).TotalSeconds,2)}
