@@ -10,8 +10,11 @@ foreach($nome in @('Testar-CaminhoSemParada','Testar-AtualizacaoSemParada','Espe
 }
 function Exigir-SemParada($Ok,[string]$Mensagem){if(!$Ok){throw $Mensagem}}
 function Git-Fixture([string]$Pasta,[string[]]$Argumentos){
- $saida=@(& git -C $Pasta @Argumentos 2>&1)
- if($LASTEXITCODE){throw ('Git fixture falhou: '+($saida-join' '))}
+ $preferencia=$ErrorActionPreference
+ $ErrorActionPreference='Continue'
+ try{$saida=@(& git -C $Pasta @Argumentos 2>&1);$codigo=$LASTEXITCODE}
+ finally{$ErrorActionPreference=$preferencia}
+ if($codigo){throw ('Git fixture falhou: '+($saida-join' '))}
  return $saida
 }
 $base=Join-Path ([IO.Path]::GetTempPath()) ('sv-sem-parada-'+[guid]::NewGuid().ToString('N'))
@@ -45,10 +48,14 @@ function Publicar-AndamentoAtualizacao($Andamento,$Nome,$Estado='andamento'){
   if($caso-eq'import-python'){$consumidor='from tests.modulo_fixture import fixture'}
   [IO.File]::WriteAllText((Join-Path $semente 'portal/lib/fixture.mjs'),$consumidor)
   [void](Git-Fixture $semente @('init','-q','-b','main'))
+  [void](Git-Fixture $semente @('config','--local','core.autocrlf','false'))
+  [void](Git-Fixture $semente @('config','--local','core.safecrlf','false'))
   [void](Git-Fixture $semente @('add','.'))
   [void](Git-Fixture $semente @('-c','user.name=Fixture','-c','user.email=fixture@example.invalid','commit','-qm','anterior'))
   $anterior=@(Git-Fixture $semente @('rev-parse','HEAD'))[0]
   [void](Git-Fixture $base @('clone','-q',$semente,$raiz))
+  [void](Git-Fixture $raiz @('config','--local','core.autocrlf','false'))
+  [void](Git-Fixture $raiz @('config','--local','core.safecrlf','false'))
   switch($caso){
    'misto' {[IO.File]::WriteAllText((Join-Path $semente 'portal/lib/fixture.mjs'),'export const fixture=2;')}
    'renomeado-fora' {[void](Git-Fixture $semente @('mv','README.md','portal/lib/fixture.txt'))}
