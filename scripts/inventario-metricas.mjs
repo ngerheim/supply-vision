@@ -6,6 +6,8 @@
 // testar-/teste-/test_ => testes; demais textos rastreados => producao (inclui configs).
 // Linhas fisicas: CRLF/CR normalizados, ultima linha sem terminador conta;
 // terminador final nao cria linha extra. Vazio tem zero linhas.
+// Caracteres: pontos de codigo Unicode; sem espacos em branco usa \s do JavaScript.
+// Linhas acima de 300: comprimento inclui espacos e tabs, exclui CR/LF.
 // Pequeno: arquivo de producao com <30 linhas, inclusive wrappers/configs.
 // Contagens sao indicadores; nao objetivos de reducao.
 import fs from 'node:fs';
@@ -27,15 +29,34 @@ export function contarLinhas(texto){
   return linhas.length-(linhas.at(-1)===''?1:0);
 }
 export function inventario(arquivos){
-  const categorias=Object.fromEntries(['producao','testes','docs','ci'].map(c=>[c,{arquivos:0,linhas:0}])),itens=[];
+  const categorias=Object.fromEntries(['producao','testes','docs','ci'].map(c=>[c,{
+    arquivos:0,linhas:0,caracteresSemEspacos:0,
+  }])),itens=[],arquivosComLinhasLongas=[];
   for(const {arquivo,conteudo} of arquivos){
     const categoria=categorizar(arquivo);
     if(!categoria||conteudo.includes(0))continue;
-    const linhas=contarLinhas(conteudo.toString('utf8'));
+    const texto=conteudo.toString('utf8'),linhas=contarLinhas(texto);
+    const caracteresSemEspacos=Array.from(texto.replace(/\s/gu,'')).length;
+    const comprimentos=texto.replace(/\r\n?/g,'\n').split('\n').map(l=>Array.from(l).length);
+    const longas=comprimentos.filter(n=>n>300);
     categorias[categoria].arquivos++;categorias[categoria].linhas+=linhas;
+    categorias[categoria].caracteresSemEspacos+=caracteresSemEspacos;
     itens.push({arquivo,categoria,linhas});
+    if(longas.length)arquivosComLinhasLongas.push({
+      arquivo,categoria,linhasAcimaDe300:longas.length,maiorLinha:longas.reduce((a,n)=>Math.max(a,n),0),
+    });
   }
-  return {categorias,total:Object.values(categorias).reduce((a,c)=>({arquivos:a.arquivos+c.arquivos,linhas:a.linhas+c.linhas}),{arquivos:0,linhas:0}),pequenos:itens.filter(i=>i.categoria==='producao'&&i.linhas<30).sort((a,b)=>a.arquivo.localeCompare(b.arquivo)),maiores:itens.sort((a,b)=>b.linhas-a.linhas||a.arquivo.localeCompare(b.arquivo)).slice(0,10)};
+  return {
+    categorias,
+    // Preserva o contrato existente de total (arquivos/linhas).
+    total:Object.values(categorias).reduce((a,c)=>({
+      arquivos:a.arquivos+c.arquivos,linhas:a.linhas+c.linhas,
+    }),{arquivos:0,linhas:0}),
+    totalCaracteresSemEspacos:Object.values(categorias).reduce((a,c)=>a+c.caracteresSemEspacos,0),
+    arquivosComLinhasLongas:arquivosComLinhasLongas.sort((a,b)=>a.arquivo.localeCompare(b.arquivo)),
+    pequenos:itens.filter(i=>i.categoria==='producao'&&i.linhas<30).sort((a,b)=>a.arquivo.localeCompare(b.arquivo)),
+    maiores:itens.sort((a,b)=>b.linhas-a.linhas||a.arquivo.localeCompare(b.arquivo)).slice(0,10),
+  };
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(path.resolve(process.argv[1])).href){
   const raiz=path.resolve(import.meta.dirname,'..'),pos=process.argv.indexOf('--ref');
