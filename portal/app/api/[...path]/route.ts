@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { env } from 'cloudflare:workers';
 import * as banco from '@/lib/database';
 import { currentUser, ensureDatabase, rawDb } from '@/lib/database';
-import { leituraD1 } from '@/lib/leitura-d1';
 import { canWrite } from '@/lib/api-compartilhada';
 import { VALIDACAO_ATIVA_SQL } from '@/lib/operacao-validacao';
 import { consultarRelatorios, solicitarRelatorio, cancelarRelatorio } from '@/lib/relatorios-api';
@@ -101,8 +100,8 @@ async function jsonBody<T>(request: Request, maximo = CORPO_MAX_JSON) {
   return value as T;
 }
 
-const all = async <T = Record<string, unknown>>(sql: string, values: unknown[] = []) => (await leituraD1(sql, () => rawDb().prepare(sql).bind(...values).all<T>())).results;
-const first = async <T = Record<string, unknown>>(sql: string, values: unknown[] = []) => leituraD1(sql, () => rawDb().prepare(sql).bind(...values).first<T>());
+const all = async <T = Record<string, unknown>>(sql: string, values: unknown[] = []) => (await rawDb().prepare(sql).bind(...values).all<T>()).results;
+const first = async <T = Record<string, unknown>>(sql: string, values: unknown[] = []) => rawDb().prepare(sql).bind(...values).first<T>();
 
 const contexto = { ...banco, env, NextResponse, ok, fail, denyWrite, jsonBody, CorpoGrandeDemais, all, first };
 const sessao = sessaoApi(contexto);

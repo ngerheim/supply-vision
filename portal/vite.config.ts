@@ -1,7 +1,6 @@
 import tailwindcss from '@tailwindcss/postcss';
 import vinext from 'vinext';
 import { defineConfig } from 'vite';
-import { configuracaoBinding } from './scripts/configuracao-hospedagem.mjs';
 
 // Banco D1 local. NAO altere database_name nem database_id: o Miniflare usa
 // esses valores para localizar o arquivo do banco em
@@ -39,7 +38,12 @@ export default defineConfig(async () => {
       vinext(),
       cloudflare({
         viteEnvironment: { name: 'rsc', childEnvironments: ['ssr'] },
-        config: configuracaoBinding(),
+        config: {
+          main: 'vinext/server/fetch-handler',
+          compatibility_flags: ['nodejs_compat'],
+          observability: { enabled: false },
+          d1_databases: [{ binding: 'DB', database_name: 'site-creator-d1', database_id: '00000000-0000-4000-8000-000000000000' }],
+        },
       }),
     ],
   };

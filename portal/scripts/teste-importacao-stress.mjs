@@ -22,8 +22,6 @@ const runtime = path.join(output, 'runtime');
 fs.cpSync(path.join(portal, 'dist'), runtime, { recursive: true });
 const serverLog = fs.openSync(path.join(output, 'servidor.log'), 'a');
 const senha = '12345';
-const bancoLocal = process.env.PORTAL_TESTE_BANCO_LOCAL || 'sqlite';
-if (!['sqlite','d1'].includes(bancoLocal)) throw new Error('PORTAL_TESTE_BANCO_LOCAL deve ser sqlite ou d1.');
 const checks = [], metrics = [];
 let child, cookie = '', sqlitePath, reader, agreementId = '';
 let seed = 20260916;
@@ -142,7 +140,7 @@ async function stopServer() {
   }
 }
 async function startServer(initialPassword = senha) {
-  child = spawn(process.execPath, [path.join(portal, 'scripts/runtime-local.mjs'), 'dev', '--banco-local', bancoLocal, '--local', '--config', path.join(runtime, 'server/wrangler.json'), '--persist-to', state, ...(initialPassword === null ? [] : ['--var', `INITIAL_ADMIN_PASSWORD:${initialPassword}`]), '--ip', '127.0.0.1', '--port', String(port), '--inspector-port', '0'], {
+  child = spawn(process.execPath, [path.join(portal, 'scripts/runtime-local.mjs'), 'dev', '--local', '--config', path.join(runtime, 'server/wrangler.json'), '--persist-to', state, ...(initialPassword === null ? [] : ['--var', `INITIAL_ADMIN_PASSWORD:${initialPassword}`]), '--ip', '127.0.0.1', '--port', String(port), '--inspector-port', '0'], {
     cwd: portal, windowsHide: true, stdio: ['ignore', serverLog, serverLog],
     env: { ...process.env, XDG_CONFIG_HOME:path.join(output,'config'), XDG_CACHE_HOME:path.join(output,'cache'), NODE_ENV: 'development', WRANGLER_SEND_METRICS: 'false', WRANGLER_WRITE_LOGS: 'true', WRANGLER_LOG_PATH: path.join(output, 'wrangler.log'), MINIFLARE_REGISTRY_PATH: path.join(output, 'registry') },
   });
@@ -907,7 +905,8 @@ try {
     for (const table of ['agreements','agreement_items']) for (const row of before[table]) row.revision=0;
     reader.close(); reader = null; await stopServer();
     assert.ok(sqlitePath.startsWith(state + path.sep), 'Só permite alterar o banco desta execução');
-    execFileSync(process.execPath, [path.join(portal, 'node_modules/wrangler/bin/wrangler.js'), 'd1', 'execute', 'DB', '--local', '--config', path.join(runtime, 'server/wrangler.json'), '--persist-to', state, '--command', 'DROP TABLE import_item_mappings; DROP TABLE import_model_mappings; DROP TRIGGER agreements_revision; DROP TRIGGER agreement_items_revision; DROP INDEX idx_tickets_request_key; ALTER TABLE agreements DROP COLUMN revision; ALTER TABLE agreement_items DROP COLUMN revision; ALTER TABLE tickets DROP COLUMN request_key; ALTER TABLE tickets DROP COLUMN request_hash;'], { cwd: portal, windowsHide: true, stdio: ['ignore', serverLog, serverLog], env: { ...process.env, WRANGLER_SEND_METRICS: 'false', WRANGLER_WRITE_LOGS: 'false' } });
+    const legado = new DatabaseSync(sqlitePath);
+    try { legado.exec('DROP TABLE import_item_mappings; DROP TABLE import_model_mappings; DROP TRIGGER agreements_revision; DROP TRIGGER agreement_items_revision; DROP INDEX idx_tickets_request_key; ALTER TABLE agreements DROP COLUMN revision; ALTER TABLE agreement_items DROP COLUMN revision; ALTER TABLE tickets DROP COLUMN request_key; ALTER TABLE tickets DROP COLUMN request_hash;'); } finally { legado.close(); }
     await startServer(); reader = new DatabaseSync(sqlitePath, { readOnly: true });
     const after = await good('/api/mappings');
     assert.deepEqual(after.items, []); assert.deepEqual(after.models, []);
@@ -931,7 +930,7 @@ try {
   reader?.close();
   await stopServer();
   fs.closeSync(serverLog);
-  const report = { bancoLocal, seed: 20260916, timestamp: new Date().toISOString(), output, passed: checks.filter(c => c.ok).length, failed: checks.filter(c => !c.ok).length, checks, metrics };
+  const report = { seed: 20260916, timestamp: new Date().toISOString(), output, passed: checks.filter(c => c.ok).length, failed: checks.filter(c => !c.ok).length, checks, metrics };
   fs.writeFileSync(path.join(output, 'resultado.json'), JSON.stringify(report, null, 2));
   console.log(`RESULTADO: ${report.passed} passaram; ${report.failed} falharam. ${path.join(output, 'resultado.json')}`);
   process.exitCode = report.failed ? 1 : 0;

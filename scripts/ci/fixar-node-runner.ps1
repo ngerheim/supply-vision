@@ -1,7 +1,8 @@
 # Exclusivo do runner descartavel: setup-node muda o PATH do usuario, enquanto
 # o supervisor SYSTEM e o atualizador escolhem HKLM/PATH da maquina.
 [CmdletBinding()]
-param([Parameter(Mandatory=$true)][string]$Versao)
+param()
+$Versao=(Get-Content -LiteralPath (Join-Path $PSScriptRoot '../../portal/package.json') -Raw|ConvertFrom-Json).engines.node
 $ErrorActionPreference='Stop'
 if($env:GITHUB_ACTIONS-ne'true'-or$env:RUNNER_OS-ne'Windows'-or$env:OS-ne'Windows_NT'){
  throw 'Fixar Node da maquina exige o runner Windows descartavel do GitHub Actions.'

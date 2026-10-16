@@ -16,8 +16,8 @@ async function ate(condicao, prazo=5000) {
   throw new Error('Prazo esgotado esperando encerramento/prontidao da fixture.');
 }
 function vivo(pid){try{process.kill(pid,0);return true;}catch{return false;}}
-for(const bancoLocal of ['sqlite','d1']) for(const motivo of ['explicito','sinal','pai']) {
-  void test(`runtime ${bancoLocal}: ${motivo} libera banco, conexoes e descendente resistente`, {timeout:15000}, async t => {
+for(const motivo of ['explicito','sinal','pai']) {
+  void test(`runtime SQLite: ${motivo} libera banco, conexoes e descendente resistente`, {timeout:15000}, async t => {
     const projeto=fs.mkdtempSync(path.join(os.tmpdir(),'sv-runtime-parada-'));
     const estado={};let cliente;
     t.after(async()=>{
@@ -32,16 +32,16 @@ for(const bancoLocal of ['sqlite','d1']) for(const motivo of ['explicito','sinal
     db.exec('PRAGMA journal_mode=WAL;CREATE TABLE dados(valor TEXT);INSERT INTO dados VALUES (\'preservado\')');db.close();
     const wrangler=path.join(projeto,'node_modules/wrangler/bin');fs.mkdirSync(wrangler,{recursive:true});
     // Descendente herda stdout e ignora SIGTERM, reproduzindo a arvore que
-    // kill() no pai nao encerra. Em d1 tambem mantem o SQLite aberto.
+    // kill() no pai nao encerra. Tambem mantem o SQLite aberto.
     fs.writeFileSync(path.join(projeto,'filho.mjs'),`import fs from 'node:fs';import {DatabaseSync} from 'node:sqlite';const db=new DatabaseSync(${JSON.stringify(arquivo)});db.exec('PRAGMA journal_mode=WAL');process.on('SIGTERM',()=>{});fs.writeFileSync('filho-pronto','ok');setInterval(()=>{},1000);`);
     fs.writeFileSync(path.join(wrangler,'wrangler.js'),`const fs=require('node:fs'),{spawn}=require('node:child_process');const filho=spawn(process.execPath,['filho.mjs'],{stdio:'inherit'});const vars=fs.readFileSync(process.argv[process.argv.indexOf('--env-file')+1],'utf8');fs.writeFileSync('portas.json',JSON.stringify({pid:filho.pid,porta:Number(vars.match(/PORTAL_SQLITE_PORTA=(.*)/)[1]),token:vars.match(/PORTAL_SQLITE_TOKEN=(.*)/)[1]}));setInterval(()=>{},1000);`);
     const pararArquivo=path.join(projeto,'parar.sinal');
     const pai=motivo==='pai'?spawn(process.execPath,['-e','setInterval(()=>{},1000)'],{stdio:'ignore'}):null;estado.pai=pai;
-    const runtime=await iniciarRuntimeLocal(['dev','--persist-to',persistencia,'--port',String(await reservarPortaLoopback())],{projeto,bancoLocal,pararArquivo:motivo==='sinal'?pararArquivo:null,pai:pai?.pid});
+    const runtime=await iniciarRuntimeLocal(['dev','--persist-to',persistencia,'--port',String(await reservarPortaLoopback())],{projeto,pararArquivo:motivo==='sinal'?pararArquivo:null,pai:pai?.pid});
     estado.runtime=runtime;
     await ate(()=>fs.existsSync(path.join(projeto,'filho-pronto')));
     const dados=JSON.parse(fs.readFileSync(path.join(projeto,'portas.json'),'utf8'));const descendente=dados.pid;estado.descendente=descendente;
-    if(bancoLocal==='sqlite'){
+    {
       const r=await fetch(`http://127.0.0.1:${dados.porta}/sql`,{method:'POST',headers:{authorization:`Bearer ${dados.token}`},body:JSON.stringify({operacao:'consulta',consultas:[{sql:'SELECT * FROM dados',values:[]}]})});
       assert.equal(r.status,200);await r.arrayBuffer();
       // Um POST que nunca termina nao pode reter a ponte/banco na parada.

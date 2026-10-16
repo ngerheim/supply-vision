@@ -137,7 +137,6 @@ async function applyColumnMigrations() {
 
 let sqliteLocal: ReturnType<typeof bancoSqliteLocal> | null = null;
 export const rawDb = () => {
-  if (!env.PORTAL_SQLITE_PORTA && !env.PORTAL_SQLITE_TOKEN) return env.DB;
   if (!env.PORTAL_SQLITE_PORTA || !env.PORTAL_SQLITE_TOKEN) throw new Error('Runtime SQLite local incompleto.');
   sqliteLocal ??= bancoSqliteLocal(String(env.PORTAL_SQLITE_PORTA), String(env.PORTAL_SQLITE_TOKEN), () => env.DB.prepare('SELECT 1').first());
   return sqliteLocal as unknown as typeof env.DB;

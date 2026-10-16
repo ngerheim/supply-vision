@@ -606,7 +606,7 @@ function Consultar-CIPreparo([string]$Sha,[switch]$ForcarCompleto) {
  $completo=@{rapido=$false;sha=$Sha;motivo='resposta inesperada da API'}
  if($ForcarCompleto){$completo.motivo='preparo completo forcado';return $completo}
  if($Sha-notmatch'^[0-9a-f]{40}$'){$completo.motivo='SHA invalido';return $completo}
- $obrigatorios=@('Portal','Portal - instalacao nova e autenticacao real','PowerShell','Alertas','Atualizacao real','Node 22.13 - partida e operacao (ubuntu-latest)','Node 22.13 - partida e operacao (windows-latest)')
+ $obrigatorios=@('Portal','Portal - instalacao nova e autenticacao real','PowerShell','Alertas','Atualizacao real')
  $contexto='CI da main'
  try{
   $checks=@(Obter-ChecksCIPreparo $Sha)

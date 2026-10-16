@@ -30,12 +30,6 @@ import { lerConfigBruta, portalPrivado } from './configuracao.mjs';
 // mandaria SMTP_PASSWORD e afins para dentro do Worker sem ninguem pedir.
 export const VARIAVEIS_DO_WORKER = ['INITIAL_ADMIN_PASSWORD', 'TRUSTED_PROXY', 'PORTAL_API_TOKEN', 'PBI_RELATORIO_URL', 'PBI_PAGINA', 'RELATORIOS_PORTA'];
 
-export function bancoLocalConfigurado(config = {}) {
-  const modo = String(config.PORTAL_BANCO_LOCAL ?? '').trim().toLowerCase() || 'sqlite';
-  if (!['sqlite', 'd1'].includes(modo)) throw new Error('PORTAL_BANCO_LOCAL deve ser sqlite ou d1.');
-  return modo;
-}
-
 export const ARQUIVO_VARS = path.join(portalPrivado, 'configuracao', 'worker.env');
 
 // O wrangler le o arquivo como .env: dotenv e, em seguida, dotenv-expand. Dois
@@ -84,7 +78,6 @@ function apagarArquivoVars() {
 if (process.argv[1] && path.resolve(process.argv[1]).endsWith('iniciar-portal.mjs')) {
   const modo = process.argv[2] || '';
   const config = lerConfigBruta();
-  const bancoLocal = bancoLocalConfigurado(config);
   const conteudo = montarArquivoVars(config);
   // Sempre regrava: um arquivo que sobrou de uma queda nao pode entregar
   // valores antigos depois que o portal.env mudou.
@@ -94,7 +87,6 @@ if (process.argv[1] && path.resolve(process.argv[1]).endsWith('iniciar-portal.mj
     fs.writeFileSync(ARQUIVO_VARS, conteudo, { encoding: 'utf8', mode: 0o600 });
   }
   const runtime = await iniciarRuntimeLocal(montarArgumentos(modo, conteudo ? ARQUIVO_VARS : null, config), {
-    bancoLocal,
     pastaRestauracao: portalPrivado,
     pararArquivo: path.join(portalPrivado, '..', 'operacao', 'parar.sinal'),
     pai: process.ppid > 1 ? process.ppid : null,

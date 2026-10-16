@@ -13,39 +13,11 @@ on:
 permissions:
   contents: read
 
-env:
-  # Versao exata do servidor; o minimo continua em job separado.
-  NODE_SERVIDOR: '24.20.0'
-
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  node-minimo:
-    name: Node 22.13 - partida e operacao (${{ matrix.os }})
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, windows-latest]
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 15
-    defaults:
-      run:
-        working-directory: portal
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: '22.13.0'
-          cache: npm
-          cache-dependency-path: portal/package-lock.json
-      - run: npm ci
-      # A partida padrao nao pode precisar de suporte TypeScript implicito.
-      - run: node --test tests/iniciar-portal.test.mjs tests/ip-login.test.mjs
-      - run: node --test tests/backup-exclusivo.test.mjs tests/trava-restauracao.test.mjs
-      - run: node --experimental-strip-types --test tests/operacao-dados.test.mjs tests/backup-atualizacao.test.mjs tests/chamados-paginacao.test.mjs
-
   powershell:
     name: PowerShell
     runs-on: windows-latest
@@ -54,10 +26,10 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: ${{ env.NODE_SERVIDOR }}
+          node-version-file: portal/package.json
       - name: Alinhar Node da maquina com o servidor
         shell: powershell
-        run: ./scripts/ci/fixar-node-runner.ps1 -Versao $env:NODE_SERVIDOR
+        run: ./scripts/ci/fixar-node-runner.ps1
       # Windows PowerShell 5.1, o mesmo do servidor. Um erro de sintaxe no
       # atualizador ou no supervisor so apareceria no servidor.
       - name: Analise sintatica dos scripts
@@ -150,9 +122,12 @@ jobs:
           fetch-depth: 0
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: ${{ env.NODE_SERVIDOR }}
+          node-version-file: portal/package.json
           cache: npm
           cache-dependency-path: portal/package-lock.json
+      - name: Conferir arquivos de teste citados no CI
+        working-directory: .
+        run: node scripts/ci/verificar-testes.mjs
       - name: Conferir pacote SheetJS contra o oficial
         working-directory: .
         run: curl --fail --location --retry 3 --max-time 120 https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz --output "$RUNNER_TEMP/xlsx-oficial.tgz"
@@ -197,13 +172,13 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: ${{ env.NODE_SERVIDOR }}
+          node-version-file: portal/package.json
           cache: npm
           cache-dependency-path: portal/package-lock.json
       - name: Alinhar Node da maquina com o servidor
         shell: powershell
         run: |
-          ./scripts/ci/fixar-node-runner.ps1 -Versao $env:NODE_SERVIDOR
+          ./scripts/ci/fixar-node-runner.ps1
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           node -v
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
@@ -230,18 +205,16 @@ jobs:
         shell: powershell
         run: ./portal/scripts/teste-instalacao-nova.ps1
 
-      - name: Validar parada do supervisor com Portal real nos dois bancos
+      - name: Validar parada do supervisor com Portal real e SQLite
         timeout-minutes: 11
         shell: powershell
         run: |
           node --test portal/tests/runtime-local.test.mjs
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
-          foreach ($modo in @('sqlite','d1')) {
-            & powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./scripts/testar-reparo-configuracao.ps1 -BancoLocal $modo
-            if ($LASTEXITCODE) { exit $LASTEXITCODE }
-            & powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./scripts/testar-supervisor-isolado.ps1 -SemLogin -AvisoAdminTeste falha -PortalReal -BancoLocal $modo
-            if ($LASTEXITCODE) { exit $LASTEXITCODE }
-          }
+          & powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./scripts/testar-reparo-configuracao.ps1
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          & powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./scripts/testar-supervisor-isolado.ps1 -SemLogin -AvisoAdminTeste falha -PortalReal
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
 
       - name: Validar operacao e persistencia dos alertas
         shell: powershell
@@ -291,12 +264,12 @@ jobs:
           if ($LASTEXITCODE) { throw 'Nao foi possivel obter main para Atualizacao real.' }
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: ${{ env.NODE_SERVIDOR }}
+          node-version-file: portal/package.json
           cache: npm
           cache-dependency-path: portal/package-lock.json
       - name: Alinhar Node da maquina com o servidor
         shell: powershell
-        run: ./scripts/ci/fixar-node-runner.ps1 -Versao $env:NODE_SERVIDOR
+        run: ./scripts/ci/fixar-node-runner.ps1
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: '3.12'
@@ -352,10 +325,10 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: ${{ env.NODE_SERVIDOR }}
+          node-version-file: portal/package.json
       - name: Alinhar Node da maquina com o servidor
         shell: powershell
-        run: ./scripts/ci/fixar-node-runner.ps1 -Versao $env:NODE_SERVIDOR
+        run: ./scripts/ci/fixar-node-runner.ps1
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"

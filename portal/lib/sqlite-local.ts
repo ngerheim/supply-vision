@@ -1,7 +1,7 @@
 // A instalacao Windows tem consumidores Node que acessam o mesmo SQLite.
 // D1 local escreve um bookmark ate em SELECT e nao aguarda SQLITE_BUSY.
-// O transporte local executa SQL no Node com busy_timeout; D1 remoto permanece
-// com o binding original. Cada operacao e enviada uma vez, inclusive escritas.
+// O transporte executa SQL no Node com busy_timeout. Cada operacao e enviada
+// uma vez, inclusive escritas.
 export function bancoSqliteLocal(porta: string, token: string, prepararD1: () => Promise<unknown>) {
   if (!/^\d+$/.test(porta) || Number(porta) < 1 || Number(porta) > 65535 || !/^[0-9a-f]{64}$/.test(token)) throw new Error('Configuracao SQLite local invalida.');
   const url = `http://127.0.0.1:${porta}`;
