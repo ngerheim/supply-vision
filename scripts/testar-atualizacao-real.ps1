@@ -24,7 +24,7 @@ if(!$ExecutarCenario){
   if(($null-ne$filho.ExitCode-and$filho.ExitCode-ne0)-or(Get-Content $fase -Raw)-ne'concluido'){throw "Atualizacao real reprovada; logs=$PastaTeste."}
  }finally{
   if($filho){if(!$filho.HasExited){Encerrar-ArvoreTeste $filho};$filho.Dispose()}
-  # SYSTEM e um ramo separado da arvore: timeout tambem precisa remove-lo.
+  # A tarefa de usuario e um ramo separado: timeout tambem precisa remove-la.
   $instalacao=Join-Path $PastaTeste 'instalacao'
   . (Join-Path $PSScriptRoot 'operacao-logica.ps1')
   . (Join-Path $PSScriptRoot 'inicializacao-logica.ps1')
@@ -35,6 +35,12 @@ if(!$ExecutarCenario){
    if(Test-Path $instalacao){[void](Parar-Operacao $instalacao 30)}
   }finally{$env:SUPPLY_VISION_PRIVADO=$privadoAntes}
   if(Obter-TarefaSupplyVision $instalacao){Stop-ScheduledTask -TaskName 'Supply Vision';Unregister-ScheduledTask -TaskName 'Supply Vision' -Confirm:$false}
+  $marcadorConta=Join-Path $PastaTeste 'conta-criada'
+  if(Test-Path $marcadorConta){
+   $usuarioH2='svh2'+(Split-Path $PastaTeste -Leaf).Substring(6,12)
+   Remove-LocalUser -Name $usuarioH2 -ErrorAction SilentlyContinue
+   Remove-Item -LiteralPath $marcadorConta
+  }
  }
  return
 }
@@ -72,7 +78,8 @@ function Login-H2 {
 }
 $raiz=Join-Path $PastaTeste 'instalacao';$remoto=Join-Path $PastaTeste 'remoto'
 $apoio=Join-Path $fonte 'scripts/ci/atualizacao-real.mjs'
-$privado=Join-Path $raiz 'privado';$tarefaCriada=$false
+$privado=Join-Path $raiz 'privado';$tarefaCriada=$false;$contaCriada=$false
+$usuarioH2='svh2'+(Split-Path $PastaTeste -Leaf).Substring(6,12)
 $processos=@();$privadoAntes=$env:SUPPLY_VISION_PRIVADO
 try{
  Fase 'merge-base e remoto local'
@@ -134,12 +141,27 @@ try{
  Remover-ArvorePreparo ($modulos+'-instalado')
  Fase 'supervisor, Portal e consumidores reais na base'
  if(Get-ScheduledTask -TaskName 'Supply Vision' -ErrorAction SilentlyContinue){throw 'Recusa alterar tarefa Supply Vision preexistente.'}
- if(Testar-Elevacao){
-  # Mesma definicao SYSTEM do servidor; ACL herdada do TEMP do runner elevado.
-  $xml=Montar-DefinicaoTarefa $raiz $privado (Localizar-NodeMaquina) (Get-Process -Id $PID).Path
-  Register-ScheduledTask -TaskName 'Supply Vision' -TaskPath '\' -Xml $xml|Out-Null
-  $tarefaCriada=$true
- }else{Write-Host 'Sem elevacao: supervisor em modo login; tarefa SYSTEM nao viavel.'}
+ # Conta descartavel com senha: logon em lote, independente da sessao do runner.
+ if(!(Testar-Elevacao)){throw 'H2 exige elevacao para criar a tarefa de usuario sem sessao.'}
+ $senhaH2=New-Object Security.SecureString
+ foreach($caractere in ('Aa!'+[guid]::NewGuid().ToString('N')).ToCharArray()){$senhaH2.AppendChar($caractere)}
+ $senhaH2.MakeReadOnly()
+ New-LocalUser -Name $usuarioH2 -Password $senhaH2 -AccountNeverExpires|Out-Null
+ $contaCriada=$true
+ [IO.File]::WriteAllText((Join-Path $PastaTeste 'conta-criada'),'fixture')
+ Add-LocalGroupMember -Group (Get-LocalGroup -SID 'S-1-5-32-544') -Member $usuarioH2
+ $contaH2=$env:COMPUTERNAME+'\'+$usuarioH2
+ & icacls.exe $PastaTeste /grant ($contaH2+':(OI)(CI)M') /T /Q|Out-Null
+ if($LASTEXITCODE){throw 'ACL da conta H2 falhou.'}
+ $credencialH2=[pscredential]::new($contaH2,$senhaH2)
+ # Usa o XML real da base. O atualizador deve preservar a tarefa em todo o salto.
+ $xml=Montar-DefinicaoTarefa $raiz $privado (Localizar-NodeMaquina) (Get-Process -Id $PID).Path $contaH2
+ try{
+  $senhaRegistro=$credencialH2.GetNetworkCredential().Password
+  Register-ScheduledTask -TaskName 'Supply Vision' -TaskPath '\' -Xml $xml -User $contaH2 -Password $senhaRegistro|Out-Null
+ }finally{$senhaRegistro=$null}
+ $tarefaCriada=$true
+ $xmlTarefaAntes=Export-ScheduledTask -TaskName 'Supply Vision' -TaskPath '\'
  Iniciar-OperacaoConfigurada $raiz
  if(!(Esperar-CondicaoTeste {try{(Invoke-RestMethod 'http://127.0.0.1:3000/api/health' -TimeoutSec 2).status-eq'ok'}catch{$false}} 120)){throw 'Portal da base nao iniciou em 120 s.'}
  Node-H2 -Argumentos @((Join-Path $raiz 'portal/scripts/saude-operacao.mjs'),'http://127.0.0.1:3000')
@@ -206,6 +228,7 @@ try{
   if(@(Get-ChildItem $PastaTeste -Directory -Force -Filter '.instalacao-preparo-*').Count){throw 'Pasta de preparo nao removida.'}
   Node-H2 -Argumentos @((Join-Path $raiz 'portal/scripts/saude-operacao.mjs'),'http://127.0.0.1:3000')
   Login-H2
+  if((Export-ScheduledTask -TaskName 'Supply Vision' -TaskPath '\')-cne$xmlTarefaAntes){throw 'Atualizacao reconfigurou a tarefa existente.'}
  }
  $tempos=Get-Content (Join-Path $privado 'operacao/atualizacao-tempos.log') -Raw
  if($tempos-notmatch'Resumo atualizacao:.*operacao PARADA=\d+(?:\.\d+)? s.*PREPARAR='){throw 'Resumo de tempos da atualizacao ausente.'}
@@ -217,5 +240,6 @@ try{
  if($tarefaCriada){Disable-ScheduledTask -TaskName 'Supply Vision'|Out-Null}
  if(Test-Path $raiz){[void](Parar-Operacao $raiz 30)}
  if($tarefaCriada){Stop-ScheduledTask -TaskName 'Supply Vision';Unregister-ScheduledTask -TaskName 'Supply Vision' -Confirm:$false}
+ if($contaCriada){Remove-LocalUser -Name $usuarioH2;Remove-Item -LiteralPath (Join-Path $PastaTeste 'conta-criada')}
  $env:SUPPLY_VISION_PRIVADO=$privadoAntes
 }

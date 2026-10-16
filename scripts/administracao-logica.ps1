@@ -15,7 +15,7 @@ function Testar-ConclusaoAtualizacao($Codigo,[string]$Saida){
 function Filtrar-AvisosAtualizacao($Linhas){
  return @($Linhas|Where-Object {$_-notmatch'(?i)\b(INEFFECTIVE_DYNAMIC_IMPORT|PLUGIN_TIMINGS)\b|^\s*npm\s+warn\b|^\s*(WARNING|AVISO): Nao foi possivel gravar a medicao'})
 }
-function Consultar-TarefaAdministrada([string]$Raiz,[string]$Startup){
+function Consultar-TarefaAdministrada([string]$Raiz){
  $total=[Diagnostics.Stopwatch]::StartNew();$medir=[Diagnostics.Stopwatch]::StartNew();$t=$null;$info=$null;$tempoInfo=0;$resultado='ok';$aviso=''
  try{
   if(Get-Command Get-ScheduledTask -ErrorAction SilentlyContinue){
@@ -28,7 +28,7 @@ function Consultar-TarefaAdministrada([string]$Raiz,[string]$Startup){
    $medir.Restart();try{$info=Get-ScheduledTaskInfo -TaskName 'Supply Vision' -TaskPath '\' -ErrorAction Stop}finally{$tempoInfo=$medir.ElapsedMilliseconds}
    $aviso=Obter-FalhaLogonTarefa ([long]$info.LastTaskResult)
   }
-  $modo=if($t){'computador'}elseif($Startup-and(Test-Path -LiteralPath $Startup)){'login'}else{'desligado'}
+  $modo=if($t){'computador'}else{'desligado'}
  }catch{$tempoTarefa=if($null-eq$tempoTarefa){$medir.ElapsedMilliseconds}else{$tempoTarefa};$modo=$null;$resultado='erro';$aviso='Agendador indisponivel; execute supv homologar e tente novamente.'}
  $total.Stop()
  return @{modo=$modo;aviso=$aviso;totalMs=$total.ElapsedMilliseconds;tarefaMs=$tempoTarefa;infoMs=$tempoInfo;resultado=$resultado}
@@ -42,13 +42,12 @@ function Consultar-EstadoAdministrado([string]$Privado,[string]$Raiz){
  try{$ensaio=(Ler-ConfigOperacao (Join-Path $Privado 'comum/operacao.env'))['MODO_ENSAIO']-eq'1'}catch{}
  if($ativo-and$st){$ensaio=!!$st.ensaio}
  $aviso=if($ensaio){Obter-AvisoEnsaio $true}else{Obter-AvisoBackup $Privado}
- $migrada=Test-Path -LiteralPath (Join-Path $Privado 'operacao/migrada.sinal')
  $tempoConfig=$medir.ElapsedMilliseconds;$versao=$null;$tempoGit=0
  if($Raiz){$medir.Restart();$versao=Obter-VersaoAdministrada $Raiz;$tempoGit=$medir.ElapsedMilliseconds}
  $total.Stop()
- return @{ativo=$ativo;status=$st;ensaio=$ensaio;avisoBackup=$aviso;migrada=$migrada;totalMs=$total.ElapsedMilliseconds;supervisorMs=$tempoSupervisor;estadoMs=$tempoEstado;configMs=$tempoConfig;versao=$versao;gitMs=$tempoGit}
+ return @{ativo=$ativo;status=$st;ensaio=$ensaio;avisoBackup=$aviso;totalMs=$total.ElapsedMilliseconds;supervisorMs=$tempoSupervisor;estadoMs=$tempoEstado;configMs=$tempoConfig;versao=$versao;gitMs=$tempoGit}
 }
-function Executar-AcaoAdministrada([string]$Raiz,[string]$Privado,[string]$Startup,[string]$Tipo,$Dados){
+function Executar-AcaoAdministrada([string]$Raiz,[string]$Privado,[string]$Tipo,$Dados){
  switch($Tipo){
   'iniciar' {Iniciar-OperacaoConfigurada $Raiz;return @{ok=$true}}
   'parar' {return @{ok=(Parar-Operacao $Raiz)}}
@@ -75,7 +74,9 @@ function Executar-AcaoAdministrada([string]$Raiz,[string]$Privado,[string]$Start
   }
   'modo' {
    if(!(Testar-SupervisorEncerrado $Privado)){throw 'Pare a operacao antes de mudar o modo de inicializacao.'}
-   Definir-ModoInicializacao $Raiz $Privado $Startup $Dados.modo;return @{ok=$true}
+   $credencial=$null
+   if($Dados.modo-eq'computador'){$credencial=Get-Credential -Message 'Conta do dono que executara a tarefa Supply Vision';if(!$credencial){throw 'Conta nao informada.'}}
+   Definir-ModoInicializacao $Raiz $Privado $Dados.modo -Credencial $credencial;return @{ok=$true}
   }
   'manutencao' {
    $op=Join-Path $Privado 'operacao';New-Item -ItemType Directory -Force $op|Out-Null
@@ -83,19 +84,9 @@ function Executar-AcaoAdministrada([string]$Raiz,[string]$Privado,[string]$Start
    if($Dados.ativo){New-Item -ItemType File -Force $arquivo|Out-Null}else{Remove-Item -LiteralPath $arquivo -Force -ErrorAction SilentlyContinue}
    return @{ok=$true}
   }
-  'migrar' {Preparar-Migracao $Raiz $Privado $Startup $Dados.destino $Dados.modo;return @{ok=$true}}
   'fim-atualizacao' {
    $op=Join-Path $Privado 'operacao'
    $arquivoSaida=Join-Path $op 'atualizacao-processo-saida.log'
-   if(!$Dados.saida){
-    # Atualizador iniciado antes da troca: o worker le o codigo novo, mas stdout
-    # ainda esta no nome legado. Escolhe a captura mais recente, nao os tempos.
-    $captura=@('atualizacao-processo-saida.log','atualizacao-saida.log')|ForEach-Object {Get-Item -LiteralPath (Join-Path $op $_) -ErrorAction SilentlyContinue}|Where-Object {
-     # Na G0, este nome tambem podia conter apenas medicoes do pai.
-     @(Get-Content -LiteralPath $_.FullName -Tail 12 -ErrorAction SilentlyContinue|Where-Object {$_-match'\S'-and$_-notmatch'^\[\d{4}-\d{2}-\d{2} '}).Count-gt0
-    }|Sort-Object LastWriteTimeUtc -Descending|Select-Object -First 1
-    if($captura){$arquivoSaida=$captura.FullName}
-   }
    $texto=@(Get-Content -LiteralPath $arquivoSaida -ErrorAction SilentlyContinue)-join"`n"
    $concluiu=Testar-ConclusaoAtualizacao $Dados.codigo $texto
    $versao=Obter-VersaoAdministrada $Raiz

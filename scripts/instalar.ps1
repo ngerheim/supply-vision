@@ -1,10 +1,10 @@
 ﻿[CmdletBinding()]
-param([switch]$SomenteVerificar,[switch]$SemTestes,[switch]$SemBuild,[ValidateSet('desligado','login','computador')][string]$ModoInicializacao,[switch]$ContaPersonalizada,[pscredential]$CredencialTarefa)
+param([switch]$SomenteVerificar,[switch]$SemTestes,[switch]$SemBuild,[ValidateSet('desligado','computador')][string]$ModoInicializacao,[switch]$ContaPersonalizada,[pscredential]$CredencialTarefa)
 $ErrorActionPreference='Stop'
 $Raiz=(Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 . (Join-Path $PSScriptRoot 'operacao-logica.ps1')
 . (Join-Path $PSScriptRoot 'inicializacao-logica.ps1')
-. (Join-Path $PSScriptRoot 'migrar.ps1') -Biblioteca
+. (Join-Path $PSScriptRoot 'instalacao-requisitos.ps1')
 if($ModoInicializacao-and!(Testar-Elevacao)){throw 'Escolher o modo de inicializacao exige executar como administrador.'}
 if($ContaPersonalizada-and$ModoInicializacao-ne'computador'){throw 'ContaPersonalizada exige ModoInicializacao computador.'}
 $Portal=Join-Path $Raiz 'portal'; $Alertas=Join-Path $Raiz 'alertas'; $Privado=Obter-PastaPrivada $Raiz
@@ -56,6 +56,7 @@ function Copiar([string]$origem,[string]$destino){
 function Rodar([string]$exe,[string[]]$Argumentos,[string]$pasta){
   Push-Location $pasta; try{& $exe @Argumentos; if($LASTEXITCODE){throw "Falha: $exe $($Argumentos-join ' ')"}}finally{Pop-Location}
 }
+Avisar-Bitdefender
 Garantir-VisualCpp -SomenteVerificar:$SomenteVerificar
 Etapa 'Verificando a estrutura'
 foreach($c in @($Portal,$Alertas,(Join-Path $Portal 'package-lock.json'),(Join-Path $Alertas 'config\requirements.txt'))){if(!(Test-Path -LiteralPath $c)){throw "Item obrigatorio ausente: $c"}}
@@ -103,14 +104,10 @@ if($LASTEXITCODE){throw 'Configuracao operacional reprovada.'}
 if(Test-Path (Join-Path $Privado 'portal\backups\portal-atual.sqlite')){Rodar $Node @('scripts\testar-restauracao.mjs') $Portal}
 Instalar-ComandoSupv $Raiz
 Write-Host "`nSupply Vision instalado e validado." -ForegroundColor Green
-$Startup=Join-Path ([Environment]::GetFolderPath('Startup')) 'Supply Vision.cmd'
-if(Testar-Elevacao){[void](Preparar-GrupoOperadores)}
 if(!$ModoInicializacao-and(Obter-TarefaSupplyVision $Raiz)){Write-Host 'Modo sem login existente preservado.';exit 0}
 if($ModoInicializacao){
- $credencial=$CredencialTarefa;if($ContaPersonalizada-and!$credencial){$credencial=Get-Credential -Message 'Conta da tarefa Supply Vision';if(!$credencial){throw 'Conta nao informada.'}}
- Definir-ModoInicializacao $Raiz $Privado $Startup $ModoInicializacao -Credencial $credencial
+ $credencial=$CredencialTarefa;if($ModoInicializacao-eq'computador'-and!$credencial){$credencial=Get-Credential -Message 'Conta da tarefa Supply Vision';if(!$credencial){throw 'Conta nao informada.'}}
+ Definir-ModoInicializacao $Raiz $Privado $ModoInicializacao -Credencial $credencial
  Write-Host "Modo de inicializacao configurado: $ModoInicializacao";exit 0
 }
-$linha=Montar-InicializacaoLogin $Raiz
-[IO.File]::WriteAllText($Startup,$linha,[Text.Encoding]::ASCII)
-Write-Host 'Inicializacao automatica no login do Windows configurada.'
+Write-Host 'Para ativar a inicializacao, execute supv modo computador e informe a conta do dono.'

@@ -147,7 +147,7 @@ function Registrar-TempoAtualizacao($Medicao,[string]$Texto){
  $codigoMedicao=Get-Variable -Name LASTEXITCODE -Scope Global -ValueOnly -ErrorAction SilentlyContinue
  try{
   if(!$Medicao-or!$Medicao.arquivo){return}
-  # Arquivo proprio: um cliente legado mantem stdout aberto sem compartilhar escrita.
+  # Arquivo proprio: pai e filho registram tempos sem disputar stdout do cliente.
   for($tentativa=0;$tentativa-lt3;$tentativa++){
    $arquivo=$null;$escritor=$null
    try{
@@ -200,7 +200,7 @@ function Resumir-MedicaoAtualizacao($Medicao,[bool]$Delegada=$false){
   if($Delegada){try{if(@(Get-Content -LiteralPath $Medicao.arquivo -Tail 60 -Encoding UTF8 -ErrorAction Stop|Where-Object {$_-like"*Resumo atualizacao:*medicao=$($Medicao.id).*"}).Count){return}}catch{}}
   $fim=Obter-HoraMedicaoAtualizacao $Medicao
   $total=[math]::Max(0,[math]::Round(($fim-$Medicao.inicio).TotalSeconds,2)).ToString('0.##',[Globalization.CultureInfo]::InvariantCulture)
-  $parada=if($Medicao.paradaDesconhecida){'horario de encerramento indisponivel (reexecucao legada)'}else{'nao houve encerramento confirmado'}
+  $parada=if($Medicao.paradaDesconhecida){'horario de encerramento indisponivel'}else{'nao houve encerramento confirmado'}
   if($Medicao.parada){
    $ate=if($Medicao.health){$Medicao.health}else{$fim}
    $s=[math]::Max(0,[math]::Round(($ate-$Medicao.parada).TotalSeconds,2)).ToString('0.##',[Globalization.CultureInfo]::InvariantCulture)
@@ -324,7 +324,7 @@ function Iniciar-OperacaoAtualizada {
 function Parar-OperacaoAtualizacao([int]$Limite=60) {
  $script:ParadaSolicitada=$true
  if($script:TarefaSemLogin){Disable-ScheduledTask -TaskName 'Supply Vision' -TaskPath '\'|Out-Null}
- # A funcao tambem e executada isoladamente pela fixture SYSTEM, sem helpers.
+ # A funcao tambem e executada isoladamente nos testes, sem helpers.
  $inicioParada=[datetime]::UtcNow
  try{Inicializar-MedicaoAtualizacao;$inicioParada=Obter-HoraMedicaoAtualizacao $script:MedicaoAtualizacao}catch{}
  if(!(Parar-Operacao $Raiz $Limite)){throw 'Supervisor ou portas nao encerraram no prazo; troca de codigo e banco bloqueada.'}
@@ -378,24 +378,8 @@ function Reverter([string]$motivo) {
   git reset --hard $anterior --quiet
   if ($LASTEXITCODE -ne 0) { throw 'Nao foi possivel restaurar o codigo anterior. Operacao permanece parada.' }
   Remover-ArquivosIntroduzidos $Raiz $introduzidos
-  if($script:PastaPreparo){
-    Etapa 'Restaurando artefatos anteriores por renomeacao'
-    Restaurar-ArtefatosPreparo $Raiz $script:PastaPreparo
-  } else {
-  if ($mexeuNode) {
-    Etapa 'Restaurando dependencias Node'
-    Push-Location $Portal
-    try { & $Npm ci --no-audit --no-fund | Out-Null; if ($LASTEXITCODE -ne 0) { throw 'Falha ao restaurar dependencias Node.' } } finally { Pop-Location }
-  }
-  if ($mexeuPython) {
-    Etapa 'Restaurando dependencias Python'
-    & $Python -m pip install -r (Join-Path $Alertas 'config\requirements.txt') -r (Join-Path $Alertas 'config\requirements-dev.txt') --quiet
-    if ($LASTEXITCODE -ne 0) { throw 'Falha ao restaurar dependencias Python.' }
-  }
-  Etapa 'Reconstruindo a versao anterior'
-  Push-Location $Portal
-  try { & $Npm run build | Out-Null; if ($LASTEXITCODE -ne 0) { throw 'Falha ao reconstruir a versao anterior. Operacao permanece parada.' } } finally { Pop-Location }
-  } # Reexecucao legada sem artefatos: conserva recuperacao anterior.
+  Etapa 'Restaurando artefatos anteriores por renomeacao'
+  Restaurar-ArtefatosPreparo $Raiz $script:PastaPreparo
   Etapa 'Solicitando inicio da versao anterior'
   Iniciar-OperacaoAtualizada
   if ($LASTEXITCODE -ne 0) { throw 'Codigo restaurado, mas falhou a solicitacao de inicio da operacao.' }
@@ -417,29 +401,14 @@ try {
   # O pai conserva o contexto fora do checkout; o filho pode falhar ate no
   # pre-voo. Sem contexto verificavel, parametros internos nao autorizam reset.
   if ($JaAtualizado) {
-    $contextoAnterior = Ler-EstadoOperacao $ContextoArquivo
-    $repeticaoLegada = $contextoAnterior.fase -eq 'revertido' -and $contextoAnterior.anterior -eq $VersaoAnterior
-    if (!(Test-Path -LiteralPath $ContextoArquivo) -or $repeticaoLegada) {
-      # Primeira chegada desta correcao: o pai da versao anterior ainda nao
-      # gravava contexto. Tambem aceita repetir uma tentativa ja revertida.
-      # Verifica o commit e o snapshot que o pai entregou.
-      if ($VersaoAnterior -notmatch '^[0-9a-f]{40}$' -or !(Test-Path -LiteralPath $BackupAntesAtualizacao)) { throw 'Reexecucao legada sem commit/snapshot verificavel.' }
-      & git rev-parse --verify $VersaoAnterior | Out-Null
-      if ($LASTEXITCODE -ne 0) { throw 'Commit anterior nao encontrado.' }
-      & git merge-base --is-ancestor $VersaoAnterior HEAD
-      if ($LASTEXITCODE -ne 0) { throw 'Commit anterior nao pertence a esta atualizacao.' }
-      $remoto = (git rev-parse --verify HEAD).Trim()
-      New-Item -ItemType Directory -Force (Split-Path $ContextoArquivo -Parent) | Out-Null
-      Gravar-ContextoAtualizacao $ContextoArquivo @{anterior=$VersaoAnterior;remoto=$remoto;fase='codigo'}
-    }
     $contexto = Ler-EstadoOperacao $ContextoArquivo
     if ($VersaoAnterior -notmatch '^[0-9a-f]{40}$' -or $contexto.anterior -ne $VersaoAnterior -or $contexto.fase -ne 'codigo') { throw 'Contexto de reexecucao invalido.' }
     $remoto = $contexto.remoto
-    if($contexto.preparo){
-      Validar-PastaPreparo $Raiz $contexto.preparo
-      $script:PastaPreparo=$contexto.preparo
-      $script:ArtefatosPreparados=[bool]$contexto.artefatos
-    }
+    # Contrato do pai 6ef675c: contexto codigo, preparo validado e artefatos trocados.
+    if(!$contexto.preparo-or!$contexto.artefatos){throw 'Reexecucao sem artefatos aprovados pelo PREPARAR.'}
+    Validar-PastaPreparo $Raiz $contexto.preparo
+    $script:PastaPreparo=$contexto.preparo
+    $script:ArtefatosPreparados=$true
     $CodigoTrocado = $true
     $OperacaoParada = $true
     try{Inicializar-MedicaoAtualizacao;$script:MedicaoAtualizacao.paradaDesconhecida=!$script:MedicaoAtualizacao.parada}catch{}
@@ -549,7 +518,7 @@ if (-not $JaAtualizado) {
   $logPreparo=Join-Path $script:PastaPreparo 'preparo-tempos.log'
   try{
    Inicializar-MedicaoAtualizacao
-   # O filho novo registra cada passo imediatamente; filho legado ainda copia ao voltar.
+   # Importa o log local somente se a medicao opcional nao forneceu um destino.
    if($argsPreparo-notcontains'-TemposArquivo'-and(Test-Path $logPreparo)){foreach($linha in @(Get-Content $logPreparo)){Registrar-TempoAtualizacao $script:MedicaoAtualizacao $linha}}
    $script:MedicaoAtualizacao.preparar=[math]::Round(([datetime]::UtcNow-$inicioPreparo).TotalSeconds,2)
   }catch{}
@@ -633,67 +602,10 @@ Reparar-ConfiguracaoPrivada
 # antes do build, porque o endpoint interno a incorpora no servidor.
 if (Garantir-CredencialPortal (Join-Path (Obter-PastaPrivada $Raiz) 'portal/configuracao/portal.env')) { Ok 'credencial interna do Portal criada ou reparada' }
 
-if(!$script:ArtefatosPreparados){
-# Compatibilidade com pai legado que chegou sem fase PREPARAR.
-if ($mexeuNode) {
-  Etapa 'Dependencias Node mudaram: npm.cmd ci'
-  Push-Location $Portal; & $Npm ci --no-audit --no-fund; $rc = $LASTEXITCODE; Pop-Location
-  if ($rc -ne 0) { Reverter 'npm.cmd ci falhou.' }
-  Ok 'dependencias Node atualizadas'
-} else { Aviso 'dependencias Node inalteradas — npm.cmd ci dispensado' }
-
-# requirements-dev.txt entra junto, como no instalador e no CI: a suite de
-# testes logo abaixo roda pytest, e uma versao nova dele so chegaria ao
-# servidor numa reinstalacao completa. O mesmo vale para o Reverter.
-if ($mexeuPython) {
-  Etapa 'Dependencias Python mudaram: pip install'
-  & $Python -m pip install -r (Join-Path $Alertas 'config\requirements.txt') -r (Join-Path $Alertas 'config\requirements-dev.txt') --quiet
-  if ($LASTEXITCODE -ne 0) { Reverter 'pip install falhou.' }
-  Ok 'dependencias Python atualizadas'
-} else { Aviso 'dependencias Python inalteradas — pip install dispensado' }
-
-Etapa 'Build do Portal'
-Push-Location $Portal; & $Npm run build; $rc = $LASTEXITCODE; Pop-Location
-if ($rc -ne 0) { Reverter 'O build falhou.' }
-Ok 'build concluido'
-
-Etapa 'Suites de teste'
-$suites = @(
-  @{ nome = 'testes do Portal';        exe = $Npm; args = @('test');        pasta = $Portal },
-  @{ nome = 'testes dos Alertas';      exe = $Python;   args = @('-m', 'pytest', 'tests', '-q'); pasta = $Alertas }
-)
-foreach ($s in $suites) {
-  Etapa $s.nome
-  Push-Location $s.pasta; & $s.exe @($s.args); $rc = $LASTEXITCODE; Pop-Location
-  if ($rc -ne 0) { Reverter "Falhou: $($s.nome)." }
-  Ok $s.nome
-}
-foreach ($t in @('validar-operacao.ps1', 'testar-operacao.ps1', 'testar-supervisor-isolado.ps1', 'testar-persistencia-alertas.ps1')) {
-  Etapa ('Teste operacional: '+$t)
-  if ($t -eq 'validar-operacao.ps1') { [void](Garantir-CredencialPortal (Join-Path (Obter-PastaPrivada $Raiz) 'portal/configuracao/portal.env')) }
-  # ErrorActionPreference='Stop' transforma QUALQUER escrita em stderr de um
-  # programa externo em erro terminante. Um teste que reprova escrevendo no
-  # stderr derrubava o atualizador aqui, antes de Reverter -- a versao nova
-  # ficava aplicada e a operacao, parada. O codigo de saida e quem decide.
-  $anterioPreferencia = $ErrorActionPreference
-  $ErrorActionPreference = 'Continue'
-  try {
-    $saidaTeste = @(Executar-PowerShellOculto @('-NoProfile','-WindowStyle','Hidden','-ExecutionPolicy','Bypass','-File',(Join-Path $PSScriptRoot $t)) *>&1)
-    $rc = $LASTEXITCODE
-  } finally { $ErrorActionPreference = $anterioPreferencia }
-  $saidaTeste | ForEach-Object { Write-Host "   $_" }
-  if ($rc -ne 0) {
-    $detalhes = (@($saidaTeste | Select-Object -Last 8) -join ' | ')
-    Reverter "Falhou: $t. Detalhes: $detalhes"
-  }
-}
-Ok 'suites de operacao aprovadas'
-} else {
- Ok 'Build e verificacoes exigidas pelo modo do PREPARAR aprovados; artefatos ja instalados.'
- Etapa 'Conferindo configuracao da instalacao antes da partida'
- Executar-PowerShellOculto @('-NoProfile','-WindowStyle','Hidden','-ExecutionPolicy','Bypass','-File',(Join-Path $PSScriptRoot 'validar-operacao.ps1'))
- if($LASTEXITCODE-ne0){Reverter 'Configuracao da instalacao reprovada antes da partida.'}
-}
+Ok 'Build e verificacoes exigidas pelo modo do PREPARAR aprovados; artefatos ja instalados.'
+Etapa 'Conferindo configuracao da instalacao antes da partida'
+Executar-PowerShellOculto @('-NoProfile','-WindowStyle','Hidden','-ExecutionPolicy','Bypass','-File',(Join-Path $PSScriptRoot 'validar-operacao.ps1'))
+if($LASTEXITCODE-ne0){Reverter 'Configuracao da instalacao reprovada antes da partida.'}
 
 Etapa 'Religando a operacao'
 $NovaVersaoIniciada = $true

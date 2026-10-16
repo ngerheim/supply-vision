@@ -5,7 +5,8 @@
 - Este e o mapa unico do repositorio. Codex o carrega pela raiz; Claude deve le-lo
   explicitamente antes de alterar o projeto. Motivos locais ficam junto do codigo.
 - Produto: acordos comerciais, chamados, comparacao de compras e alertas.
-- A operacao atual e Windows/LAN, com Portal, supervisor e consumidores locais.
+- A operacao usa um unico servidor Windows 11 Pro definitivo na LAN, com Portal,
+  supervisor e consumidores locais. Nao ha mais migracao entre maquinas.
 - A fonte de verdade e o codigo e seus testes; nao copie limites ou SQL nos testes.
 - Preserve comentarios de motivo, invariantes e restricoes de compatibilidade.
   Remova apenas comentarios que repetem literalmente a instrucao seguinte.
@@ -30,7 +31,6 @@
 | `scripts/diagnostico-logica.ps1` | Mascaramento e relatorios de diagnostico |
 | `scripts/atualizar-servidor.ps1` | Coordenacao da atualizacao e recuperacao |
 | `scripts/atualizacao-preparo.ps1` | Worktree, portas, dependencias e gates do PREPARAR |
-| `scripts/migrar.ps1`, `migracao-logica.ps1` | Ensaio, transferencia e bloqueio da origem |
 | `portal/app/api/[...path]/route.ts` | Roteamento HTTP, autenticacao, origem, corpo JSON e erros comuns |
 | `portal/lib/sessao-api.ts`, `usuarios-api.ts` | Login, logout e administracao de usuarios; SQL junto dos handlers |
 | `portal/lib/acordos-api.ts`, `catalogos-api.ts`, `mapeamentos-api.ts` | Acordos, condicoes, busca de precos, cadastros e De/Para |
@@ -146,9 +146,12 @@
 ## Supervisor e atualizacao
 
 - `supv help` e a referencia de argumentos. Entradas principais: iniciar, parar,
-  status, logs, atualizar, config validar, backup testar e migrar.
-- Modo login e tarefa sem login sao distintos. Tarefa deve pertencer a esta
-  instalacao; nunca substituir outra tarefa ou matar processos so pelo nome.
+  status, logs, atualizar, config validar e backup testar.
+- Inicializacao: computador com a conta de dominio do dono (ContaPersonalizada),
+  sem sessao aberta; desligado desativa. Configuracao explicita pede credencial.
+  Tarefa existente e preservada sem exigir novo formato, conta ou reconfiguracao.
+  Tarefa deve pertencer a esta instalacao; nunca substituir outra tarefa ou matar
+  processos so pelo nome.
 - PID inclui instante de inicio para evitar confundir reutilizacao do numero.
 - A parada encerra a arvore Wrangler/workerd/Python, fecha SQLite explicitamente
   e verifica handles/portas; encerrar apenas o launcher deixa descendentes vivos.
@@ -172,8 +175,8 @@
   suites completas. Nao considerar check ausente, pendente ou skipped como aprovacao.
 - Reserva de dependencias requer inventario e compatibilidade; rollback preserva
   a copia anterior se a reposicao falhar. Recuperacao nao pode religar dados ambiguos.
-- Migracao definitiva bloqueia origem para impedir duas producoes; ensaio preserva
-  origem e suprime entregas. Dependencias sao reconstruidas, nao copiadas entre maquinas.
+- O pai de atualizacao 6ef675c entrega contexto codigo, preparo e artefatos
+  instalados; preservar esse salto no check Atualizacao real, inclusive recuperacao.
 - Scripts Windows devem continuar compativeis com PowerShell 5.1. Preservar BOM
   quando existente e strings interpoladas ASCII onde a copia sem BOM e exercitada.
 - `.gitattributes` guarda LF no indice e entrega CRLF aos scripts Windows.
@@ -236,7 +239,7 @@ Usar dados ficticios e ambientes descartaveis; Windows real exige maquina de tes
 - H2 verifica continuidade em PREPARAR/CONCLUIR, parada em TROCAR, reserva reutilizada,
   migracoes e recuperacao; negativo vem primeiro. Timeout informa fase e encerra arvore.
 - Artefatos publicos de CI contem somente diagnosticos ficticios, nunca bancos/snapshots.
-- Suites Linux nao substituem PowerShell 5.1, conta SYSTEM, firewall e console Windows.
+- Suites Linux nao substituem PowerShell 5.1, tarefa com conta de usuario, firewall e console Windows.
 
 ## Dependencias especiais e runtime local
 

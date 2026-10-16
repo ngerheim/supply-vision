@@ -65,23 +65,6 @@ Igual '08:00' $slot.hora 'segunda retoma apos o fim de semana'
 # Chave de dia com horario invalido precisa ser recusada.
 try{Validar-Horarios @{ALERTAS_HORARIOS='08:00';ALERTAS_HORARIOS_SEX='14:0';BACKUP_HORARIOS='12:30';LIMPEZA_HORARIO='05:30'};throw 'Horario de dia invalido foi aceito'}catch{if($_.Exception.Message-eq'Horario de dia invalido foi aceito'){throw}}
 
-# A atualizacao do servidor preserva privado/: a agenda padrao anterior e
-# migrada no proximo inicio, sem mexer em configuracoes personalizadas.
-$temp=Join-Path ([IO.Path]::GetTempPath()) ('sv-agenda-'+[guid]::NewGuid().ToString('N')+'.env')
-try {
-  @('ALERTAS_HORARIOS=08:00,12:00,17:00','ALERTAS_HORARIOS_SEX=08:00,12:00,16:00','BACKUP_HORARIOS=12:30') | Set-Content -LiteralPath $temp
-  Igual $true (Atualizar-AgendaAlertasLegada $temp) 'agenda antiga foi migrada'
-  $migrada=Ler-ConfigOperacao $temp
-  Igual '08:00,11:00,14:00,17:00' $migrada.ALERTAS_HORARIOS 'agenda semanal migrada'
-  Igual '08:00,11:00,14:00' $migrada.ALERTAS_HORARIOS_SEX 'sexta migrada'
-
-  @('ALERTAS_HORARIOS=09:15','ALERTAS_HORARIOS_SEX=13:45') | Set-Content -LiteralPath $temp
-  Igual $false (Atualizar-AgendaAlertasLegada $temp) 'agenda personalizada preservada'
-  $personalizada=Ler-ConfigOperacao $temp
-  Igual '09:15' $personalizada.ALERTAS_HORARIOS 'padrao personalizado intacto'
-  Igual '13:45' $personalizada.ALERTAS_HORARIOS_SEX 'sexta personalizada intacta'
-} finally { Remove-Item -LiteralPath $temp -Force -ErrorAction SilentlyContinue }
-
 Write-Host 'Logica operacional: 6 cenarios base + agenda semanal aprovados.' -ForegroundColor Green
 
 # Exercita a mesma resolução diária que o supervisor usa para backups.

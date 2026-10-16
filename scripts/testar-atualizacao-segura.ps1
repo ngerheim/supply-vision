@@ -190,43 +190,28 @@ public static class SvLogTeste {
  $opMedicao=Join-Path $pastaMedicao 'operacao';New-Item -ItemType Directory $opMedicao|Out-Null
  $saidaProcesso=Join-Path $opMedicao 'atualizacao-processo-saida.log'
  [IO.File]::WriteAllText($saidaProcesso,'Nada a fazer')
- $r=Executar-AcaoAdministrada $PSScriptRoot $pastaMedicao '' 'fim-atualizacao' @{codigo=0}
+ $r=Executar-AcaoAdministrada $PSScriptRoot $pastaMedicao 'fim-atualizacao' @{codigo=0}
  if(!$r.ok-or$r.mensagem-notlike'*versao mais recente*'){throw 'Central perdeu resultado sem atualizacao.'}
  [IO.File]::WriteAllText($saidaProcesso,'suite reprovada')
  [IO.File]::WriteAllText((Join-Path $opMedicao 'atualizacao-saida.log'),'[2026-10-13 12:00:00] Resumo atualizacao: total=12 s')
- $r=Executar-AcaoAdministrada $PSScriptRoot $pastaMedicao '' 'fim-atualizacao' @{codigo=1}
+ $r=Executar-AcaoAdministrada $PSScriptRoot $pastaMedicao 'fim-atualizacao' @{codigo=1}
  if($r.ok-or$r.mensagem-notlike'*suite reprovada*'){throw 'Central ocultou falha real com arquivo de tempos.'}
  # Avisos em stderr nao mudam o resultado real.
  $avisos=@('INEFFECTIVE_DYNAMIC_IMPORT: aviso de build','PLUGIN_TIMINGS: aviso de build','npm warn install-scripts aviso')
  [IO.File]::WriteAllLines((Join-Path $opMedicao 'atualizacao-erro.log'),$avisos)
  [IO.File]::WriteAllText($saidaProcesso,'=== Atualizado: 0bd5245 -> ddf9939 ===')
- $r=Executar-AcaoAdministrada $PSScriptRoot $pastaMedicao '' 'fim-atualizacao' @{codigo=0}
+ $r=Executar-AcaoAdministrada $PSScriptRoot $pastaMedicao 'fim-atualizacao' @{codigo=0}
  if(!$r.ok){throw 'Avisos em stderr converteram conclusao real em falha.'}
- $r=Executar-AcaoAdministrada $PSScriptRoot $pastaMedicao '' 'fim-atualizacao' @{codigo=$null}
+ $r=Executar-AcaoAdministrada $PSScriptRoot $pastaMedicao 'fim-atualizacao' @{codigo=$null}
  if(!$r.ok){throw 'Marcador valido nao resgatou ExitCode indisponivel.'}
- $r=Executar-AcaoAdministrada $PSScriptRoot $pastaMedicao '' 'fim-atualizacao' @{codigo=1}
+ $r=Executar-AcaoAdministrada $PSScriptRoot $pastaMedicao 'fim-atualizacao' @{codigo=1}
  if($r.ok){throw 'Marcador ocultou codigo de falha explicito.'}
  [IO.File]::WriteAllText($saidaProcesso,'suite reprovada')
  [IO.File]::WriteAllLines((Join-Path $opMedicao 'atualizacao-erro.log'),(@('ERRO REAL: build falhou')+$avisos+$avisos+$avisos))
- $r=Executar-AcaoAdministrada $PSScriptRoot $pastaMedicao '' 'fim-atualizacao' @{codigo=1}
+ $r=Executar-AcaoAdministrada $PSScriptRoot $pastaMedicao 'fim-atualizacao' @{codigo=1}
  if($r.ok-or$r.mensagem-notlike'*ERRO REAL*'-or$r.mensagem-match'INEFFECTIVE_DYNAMIC_IMPORT|PLUGIN_TIMINGS|npm warn'){throw 'Central nao filtrou avisos antes de selecionar erros reais.'}
  [IO.File]::WriteAllText($saidaProcesso,'apenas etapa intermediaria')
- $r=Executar-AcaoAdministrada $PSScriptRoot $pastaMedicao '' 'fim-atualizacao' @{codigo=0}
+ $r=Executar-AcaoAdministrada $PSScriptRoot $pastaMedicao 'fim-atualizacao' @{codigo=0}
  if($r.ok){throw 'Codigo zero sem conclusao foi aprovado.'}
- # Central antiga inicia stdout legado; apos checkout worker usa logica nova.
- [IO.File]::WriteAllText($saidaProcesso,'captura antiga sem conclusao')
- [IO.File]::SetLastWriteTimeUtc($saidaProcesso,[datetime]::UtcNow.AddMinutes(-1))
- $saidaLegada=Join-Path $opMedicao 'atualizacao-saida.log'
- [IO.File]::WriteAllText($saidaLegada,'=== Atualizado: 0bd5245 -> ddf9939 ===')
- $r=Executar-AcaoAdministrada $PSScriptRoot $pastaMedicao '' 'fim-atualizacao' @{codigo=$null}
- if(!$r.ok){throw 'Central antiga perdeu captura apos trocar codigo.'}
- $r=Executar-AcaoAdministrada $PSScriptRoot $pastaMedicao '' 'fim-atualizacao' @{codigo=0;saida='atualizacao-processo-saida.log'}
- if($r.ok){throw 'Central nova aceitou marcador legado de execucao anterior.'}
- # Central G0 sem metadado: tempos do pai nao substituem stdout novo.
- [IO.File]::WriteAllText($saidaProcesso,'=== Atualizado: 0bd5245 -> ddf9939 ===')
- [IO.File]::SetLastWriteTimeUtc($saidaProcesso,[datetime]::UtcNow.AddMinutes(-1))
- [IO.File]::WriteAllText($saidaLegada,'[2026-10-13 12:00:00] Resumo atualizacao: total=12 s')
- $r=Executar-AcaoAdministrada $PSScriptRoot $pastaMedicao '' 'fim-atualizacao' @{codigo=$null}
- if(!$r.ok){throw 'Tempos do pai G0 esconderam conclusao do filho novo.'}
  Write-Host 'Medicao: etapas, duracao, reexecucao, resumo unico, falhas e central aprovados.'
 }finally{Remove-Item -LiteralPath $pastaMedicao -Recurse -Force -ErrorAction SilentlyContinue}

@@ -3,7 +3,7 @@
 $supvArgumentos=@($args)
 $ErrorActionPreference='Stop'
 $supvRaiz=(Resolve-Path (Join-Path $PSScriptRoot '..')).Path
-foreach($supvNome in @('operacao-logica','inicializacao-logica','migracao-logica','administracao-logica','diagnostico-logica','atualizacao-preparo')){
+foreach($supvNome in @('operacao-logica','inicializacao-logica','administracao-logica','diagnostico-logica','atualizacao-preparo')){
  . (Join-Path $PSScriptRoot ($supvNome+'.ps1'))
 }
 # A area de transferencia pertence a um processo STA isolado. Nem COM nem
@@ -65,14 +65,13 @@ function Ajuda-Supv([string]$Comando){
   logs='supv logs <supervisor|portal|atualizacao|emails|relatorios> [-n 80] [--bruto] | Atualizacao sem progresso git e diagnosticos de build; --bruto mostra todas as linhas. Dados sensiveis continuam mascarados. Ex.: supv logs portal -n 120'
   config='supv config validar | Executa validar-operacao.ps1.'
   backup='supv backup testar | supv backup restaurar [--anterior] [--sim] | Restaurar para a operacao e exige RESTAURAR, ou --sim para automacao.'
-  modo='supv modo <desligado|login|computador> | Exige operacao parada e terminal como administrador. Ex.: supv modo computador'
+  modo='supv modo <desligado|computador> | Exige operacao parada e terminal como administrador. Ex.: supv modo computador'
   manutencao='supv manutencao <on|off> | Pausa ou libera rotinas automaticas. Ex.: supv manutencao on'
   firewall='supv firewall restringir | Restringe acesso de rede pelo script atual, com teste interativo. Exige administrador.'
-  migrar='supv migrar --destino <pasta> --modo <ensaio|definitiva> | Exige administrador. Definitiva exige digitar MIGRAR. Ex.: supv migrar --destino "E:\semente" --modo ensaio'
  }
  if($Comando){if(!$ajudas.ContainsKey($Comando)){throw "Comando desconhecido: $Comando"};Escrever-Supv $ajudas[$Comando];return}
  Escrever-Supv 'Supply Vision - supv <comando> [opcoes]'
- foreach($chave in @('status','iniciar','parar','atualizar','acompanhar','homologar','saude','logs','config','backup','modo','manutencao','firewall','migrar')){Escrever-Supv $ajudas[$chave]}
+ foreach($chave in @('status','iniciar','parar','atualizar','acompanhar','homologar','saude','logs','config','backup','modo','manutencao','firewall')){Escrever-Supv $ajudas[$chave]}
  Escrever-Supv 'Ajuda: supv help | supv <comando> --help | supv help <comando>'
 }
 function Ler-ComandoSupv([object[]]$Argumentos){
@@ -84,7 +83,6 @@ function Ler-ComandoSupv([object[]]$Argumentos){
   'saude' {@('--desde')}
   'logs' {@('-n','--bruto')}
   'backup' {@('--anterior','--sim')}
-  'migrar' {@('--destino','--modo')}
   default {@()}
  }
  for($i=1;$i-lt$Argumentos.Count;$i++){
@@ -106,7 +104,7 @@ function Exigir-AdministradorSupv {
  if(!(Testar-Elevacao)){throw 'Este comando exige permissao: abra o terminal como administrador.'}
 }
 function Executar-AcaoSupv([string]$Tipo,$Dados=@{}){
- $valores=@(& {Executar-AcaoAdministrada $script:supvRaiz $script:supvPrivado $script:supvStartup $Tipo $Dados} 6>&1)
+ $valores=@(& {Executar-AcaoAdministrada $script:supvRaiz $script:supvPrivado $Tipo $Dados} 6>&1)
  $r=$null
  foreach($valor in $valores){if($valor-is[hashtable]-and$valor.ContainsKey('ok')){$r=$valor}elseif($valor-is[hashtable]-and$valor.elevar){$r=$valor}else{Escrever-Supv ([string]$valor)}}
  if($r.elevar){Exigir-AdministradorSupv;throw 'Atualizacao nao iniciada.'}
@@ -140,7 +138,7 @@ function Mostrar-ProgressoSupv($a,$Exibicao=$null){
  Escrever-Supv $texto
 }
 function Mostrar-ResultadoSupv($Codigo=$null){
- $r=Executar-AcaoAdministrada $script:supvRaiz $script:supvPrivado $script:supvStartup 'fim-atualizacao' @{codigo=$Codigo;saida='atualizacao-processo-saida.log'}
+ $r=Executar-AcaoAdministrada $script:supvRaiz $script:supvPrivado 'fim-atualizacao' @{codigo=$Codigo;saida='atualizacao-processo-saida.log'}
  Escrever-Supv $r.mensagem
  return [bool]$r.ok
 }
@@ -242,9 +240,8 @@ function Consultar-HealthSupv([string]$Url){
 }
 function Mostrar-StatusSupv {
  $d=Consultar-EstadoAdministrado $script:supvPrivado $script:supvRaiz
- $t=Consultar-TarefaAdministrada $script:supvRaiz $script:supvStartup
+ $t=Consultar-TarefaAdministrada $script:supvRaiz
  Escrever-Supv ('Operacao: '+$(if($d.ativo){'ativa'}else{'parada'}))
- if($d.migrada){Escrever-Supv 'Esta instalacao foi migrada para outro servidor.'}
  if($d.status){
   $st=$d.status
   Escrever-Supv "Portal: $($st.portal) | E-mails: $($st.emails) | Alertas: $($st.alertas) | Backup: $($st.backup) | Limpeza: $($st.limpeza) | Disco: $($st.espacoLivreGb) GB livres"
@@ -374,7 +371,7 @@ function Executar-ComandoSupv($c){
    [void](Executar-AcaoSupv 'restaurar' @{anterior=[bool]$o['--anterior']});return 0
   }
   'modo' {
-   if($p[0]-notin@('desligado','login','computador')){throw 'Modo invalido: use desligado, login ou computador.'}
+   if($p[0]-notin@('desligado','computador')){throw 'Modo invalido: use desligado ou computador.'}
    Exigir-AdministradorSupv;[void](Executar-AcaoSupv 'modo' @{modo=$p[0]});Escrever-Supv 'Modo de inicializacao alterado.';return 0
   }
   'manutencao' {
@@ -385,12 +382,6 @@ function Executar-ComandoSupv($c){
    if($p[0]-ne'restringir'){throw 'Use supv firewall restringir.'};Exigir-AdministradorSupv
    $r=Executar-NativoOperacao 'powershell.exe' @('-NoProfile','-ExecutionPolicy','Bypass','-File',(Join-Path $script:supvRaiz 'portal/scripts/restringir-firewall.ps1')) -AoReceber {param($linha) Escrever-Supv $linha}
    if($r.codigo-ne0){throw 'Restricao de firewall nao concluida.'};return 0
-  }
-  'migrar' {
-   if(!$o['--destino']-or$o['--modo']-notin@('ensaio','definitiva')){throw 'Use supv migrar --destino <pasta> --modo <ensaio|definitiva>.'}
-   Exigir-AdministradorSupv
-   if($o['--modo']-eq'definitiva'-and(Read-Host 'Digite MIGRAR para confirmar a migracao definitiva')-cne'MIGRAR'){throw 'Migracao cancelada.'}
-   [void](Executar-AcaoSupv 'migrar' @{destino=$o['--destino'];modo=$o['--modo']});return 0
   }
   default {throw "Comando desconhecido: $comando. Use supv help."}
  }
@@ -403,7 +394,6 @@ if($MyInvocation.InvocationName-ne'.'){
   if($c.comando-eq'help'){$codigo=Executar-ComandoSupv $c}
   else{
    $script:supvPrivado=Obter-PastaPrivada $supvRaiz
-   $inicio=[Environment]::GetFolderPath('Startup');$script:supvStartup=if($inicio){Join-Path $inicio 'Supply Vision.cmd'}else{''}
    $script:supvSegredos=Obter-SegredosHomologacao $script:supvPrivado
    $codigo=Executar-ComandoSupv $c
   }

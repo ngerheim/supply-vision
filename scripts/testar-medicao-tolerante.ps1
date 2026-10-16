@@ -7,7 +7,7 @@ $parar=$ast.Find({param($n) $n-is[Management.Automation.Language.FunctionDefinit
 $iniciar=$ast.Find({param($n) $n-is[Management.Automation.Language.FunctionDefinitionAst]-and$n.Name-eq'Iniciar-OperacaoAtualizada'},$true).Extent.Text
 $base=Join-Path ([IO.Path]::GetTempPath()) ('sv-medicao-opcional-'+[guid]::NewGuid().ToString('N'))
 try{
- # Replica o teste SYSTEM: importa apenas parada/retomada, sem bootstrap nem
+ # Importa apenas parada/retomada da tarefa com conta, sem bootstrap nem
  # funcoes de medicao. Modulo novo garante outro escopo script, sem heranca.
  foreach($tarefa in @($false,$true)){
   $raiz=Join-Path $base ([string]$tarefa);New-Item -ItemType Directory -Force $raiz|Out-Null
