@@ -1,3 +1,4 @@
+import { diretorioBanco } from '../scripts/banco-local.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -17,7 +18,7 @@ void test('homologacao usa data do recibo e sent_at real; nao mtime ou tentativa
     fs.writeFileSync(arquivo,JSON.stringify({estado:'enviado',atualizado:`2026-10-${String(7+i).padStart(2,'0')}T11:00:00-03:00`,destinatarios:['nao-expor@example.invalid']}));
     fs.utimesSync(arquivo,new Date(2026,0,1,0,i),new Date(2026,0,1,0,7-i));
   }
-  const estado=path.join(privado,'portal/banco/estado/state/v3/d1/miniflare-D1DatabaseObject');fs.mkdirSync(estado,{recursive:true});
+  const estado=diretorioBanco(path.join(privado,'portal'));fs.mkdirSync(estado,{recursive:true});
   const arquivo=path.join(estado,'banco.sqlite'),db=new DatabaseSync(arquivo);
   db.exec("CREATE TABLE daily_report_deliveries(status TEXT,sent_at TEXT,updated_at TEXT);INSERT INTO daily_report_deliveries VALUES('sent','2026-10-13T14:01:00Z','2026-10-13T14:01:00Z'),('pending',NULL,'2026-10-13T15:00:00Z'),('failed',NULL,'2026-10-13T16:00:00Z')");db.close();
   const antes=fs.readFileSync(arquivo),resultado=ultimasEntregas(privado);

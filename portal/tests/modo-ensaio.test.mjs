@@ -1,3 +1,4 @@
+import { destinoBanco } from '../scripts/banco-local.mjs';
 import { criarTemporarioTeste } from './apoio/ambiente.mjs';
 import assert from 'node:assert/strict';
 import test from 'node:test';
@@ -37,7 +38,7 @@ void test('somente MODO_ENSAIO=1 ativa o ensaio; as duas filas ficam intactas se
 for(const existente of [true,false])void test(`backup em ensaio valida copia local e nao toca rede ${existente?'existente':'ausente'}, sem SMTP`,(t)=>{
   const dir=criarTemporarioTeste('sv-ensaio-');
   t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
-  const arquivo=path.join(dir,'portal/banco/estado/state/v3/d1/miniflare-D1DatabaseObject/a.sqlite');
+  const arquivo=destinoBanco('a.sqlite',path.join(dir,'portal'));
   fs.mkdirSync(path.dirname(arquivo),{recursive:true});
   const db=new DatabaseSync(arquivo);db.exec("CREATE TABLE teste(valor TEXT); INSERT INTO teste VALUES('ensaio')");db.close();
   const rede=path.join(dir,'rede'),config=path.join(dir,'portal/configuracao');

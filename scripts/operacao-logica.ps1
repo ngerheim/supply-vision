@@ -414,3 +414,16 @@ function Garantir-CredencialPortal([string]$portalEnv) {
   if (-not $confirmacao) { throw 'A credencial interna do Portal nao foi gravada corretamente.' }
   return $alterada
 }
+
+# Ponte de argumentos apenas: todo calculo e descoberta pertence ao localizador Node.
+function Localizar-BancoPortal([string]$Raiz,[string]$Privado,[switch]$Obrigatorio,[string]$NomeDestino) {
+ $argumentos=@((Join-Path $Raiz 'portal/scripts/banco-local.mjs'),'--pasta-portal',(Join-Path $Privado 'portal'))
+ if($Obrigatorio){$argumentos+='--exigir'}
+ if($NomeDestino){$argumentos+=@('--destino',$NomeDestino)}
+ $resultado=Executar-NativoOperacao 'node' $argumentos
+ if($resultado.codigo){throw 'Nao foi possivel localizar um unico banco do Portal.'}
+ $linhas=@($resultado.stdout|Where-Object {![string]::IsNullOrWhiteSpace($_)})
+ if($linhas.Count-gt1){throw 'Resposta invalida do localizador do banco.'}
+ if($linhas.Count){return $linhas[0].Trim()}
+ return $null
+}

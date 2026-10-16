@@ -19,7 +19,7 @@
     "test": "node --import ./scripts/isolamento-preparo.mjs --test --experimental-strip-types tests/*.test.ts tests/*.test.mjs",
     "format": "oxfmt",
     "test:restore": "node --experimental-strip-types scripts/testar-restauracao.mjs",
-    "test:imports": "node --experimental-strip-types scripts/teste-importacao-stress.mjs"
+    "test:imports": "node --test tests/banco-compartilhado.test.mjs && node --experimental-strip-types scripts/teste-importacao-stress.mjs"
   },
   "dependencies": {
     "@base-ui/react": "1.9.0",

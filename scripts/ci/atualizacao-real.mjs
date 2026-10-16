@@ -1,3 +1,4 @@
+import { localizarBanco } from '../../portal/scripts/banco-local.mjs';
 // H2 usa o atualizador real da base e do destino, sem dispensar build ou suites.
 // O negativo verifica continuidade sem trocar HEAD/dados; os positivos verificam
 // troca e reserva reutilizada. TEMP isola os dados; artefatos nao incluem bancos.
@@ -29,9 +30,9 @@ function arquivos(pasta) {
   });
 }
 function arquivoBanco(raiz) {
-  const candidatos = arquivos(path.join(raiz, 'privado/portal/banco')).filter(p => p.endsWith('.sqlite') && path.basename(p) !== 'metadata.sqlite');
-  assert.equal(candidatos.length, 1, 'Exige exatamente um banco na fixture');
-  return candidatos[0];
+  const arquivo = localizarBanco(null, path.join(raiz, 'privado/portal'));
+  assert.ok(arquivo, 'Banco da fixture ausente');
+  return arquivo;
 }
 function banco(raiz, gravar = false) {
   const db = new DatabaseSync(arquivoBanco(raiz), { readOnly: !gravar });
@@ -63,6 +64,30 @@ function dados(db) {
     colunas: db.prepare(`PRAGMA table_info("${t}")`).all().map(c => c.name),
     linhas: db.prepare(`SELECT * FROM "${t}" ORDER BY id`).all(),
   }]));
+}
+const modelosConfiguracao = {
+  'privado/portal/configuracao/portal.env': 'portal/portal.env.example',
+  'privado/comum/smtp.env': 'compartilhado/smtp.env.example',
+  'privado/comum/operacao.env': 'compartilhado/operacao.env.example',
+};
+function configuracoes(raiz) {
+  return Object.fromEntries(Object.keys(modelosConfiguracao).map(nome => [path.normalize(nome), fs.readFileSync(path.join(raiz,nome),'utf8')]));
+}
+function chavesEnv(texto) {
+  return Object.fromEntries(texto.split(/\r?\n/).map(l=>l.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=(.*)$/)).filter(Boolean).map(m=>[m[1],m[2].trim()]));
+}
+// A reversao ocorre DEPOIS de TROCAR. O reparo so acrescenta defaults e nao e
+// desfeito pelo rollback. O negativo do PREPARAR continua exigindo bytes identicos.
+export function conferirManifestoReversao(antes, atual, configsAntes, configsAtuais, modelos) {
+  const esperado = { ...antes };
+  for (const [nome, original] of Object.entries(configsAntes)) {
+    const recebido = configsAtuais[nome];
+    if (recebido === original) continue;
+    assert.ok(recebido?.startsWith(original), `Configuracao existente alterada na reversao: ${nome}`);
+    assert.deepEqual(chavesEnv(recebido), { ...chavesEnv(modelos[nome]), ...chavesEnv(original) }, `Reparo fora dos defaults aprovados: ${nome}`);
+    esperado[nome] = crypto.createHash('sha256').update(recebido).digest('hex');
+  }
+  assert.deepEqual(atual, esperado, 'Artefatos alterados na reversao');
 }
 function manifesto(raiz) {
   // Exclui estado dinamico (logs, heartbeats, sessoes, caches). Inclui TODOS
@@ -189,8 +214,8 @@ async function executar() {
       // realmente executar a migracao 7, mesmo numa PR sem SQL novo.
       db.exec('DROP INDEX IF EXISTS idx_imports_created_global; DROP INDEX IF EXISTS idx_report_jobs_created_global; DELETE FROM schema_migrations WHERE version=7');
       console.log('Fixture: migracao 7 pendente; dados de negocio mantidos.');
-    } else if (modo === 'snapshot') fs.writeFileSync(destino, JSON.stringify({ dados: dados(db), manifesto: manifesto(raiz), arquivoBanco: path.relative(raiz, arquivoBanco(raiz)) }));
-    else if (modo === 'verificar' || modo === 'negativo') {
+    } else if (modo === 'snapshot') fs.writeFileSync(destino, JSON.stringify({ dados: dados(db), manifesto: manifesto(raiz), configuracoes: configuracoes(raiz), arquivoBanco: path.relative(raiz, arquivoBanco(raiz)) }));
+    else if (modo === 'verificar' || modo === 'negativo' || modo === 'reversao') {
       const antes = JSON.parse(fs.readFileSync(destino, 'utf8'));
       assert.equal(path.relative(raiz, arquivoBanco(raiz)), antes.arquivoBanco, 'Caminho do banco alterado');
       conferirBanco(db, antes.dados, versoesEsperadas(raiz));
@@ -198,6 +223,11 @@ async function executar() {
         for (const indice of ['idx_imports_created_global', 'idx_report_jobs_created_global']) {
           assert.ok(db.prepare("SELECT 1 FROM sqlite_schema WHERE type='index' AND name=?").get(indice), `Indice da migracao 7 ausente: ${indice}`);
         }
+      }
+      if (modo === 'reversao') {
+        const fonte = path.resolve(import.meta.dirname, '../..');
+        const modelos = Object.fromEntries(Object.entries(modelosConfiguracao).map(([nome, modelo]) => [path.normalize(nome), fs.readFileSync(path.join(fonte,modelo),'utf8')]));
+        conferirManifestoReversao(antes.manifesto, manifesto(raiz), antes.configuracoes, configuracoes(raiz), modelos);
       }
       if (modo === 'negativo') assert.deepEqual(manifesto(raiz), antes.manifesto, 'Instalacao alterada no PREPARAR reprovado');
       console.log('Dados ficticios preservados; integridade, chaves estrangeiras e migracoes OK.');

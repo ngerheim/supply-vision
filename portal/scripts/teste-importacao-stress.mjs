@@ -1,3 +1,4 @@
+import { localizarBanco } from './banco-local.mjs';
 // Teste HTTP real, sempre em um banco novo e local. Nunca aceita URL/banco externo.
 // npm run test:imports (requer npm run build). Evidências ficam em work/.
 import assert from 'node:assert/strict';
@@ -70,13 +71,7 @@ function query(sql, ...args) { return reader.prepare(sql).all(...args); }
 function businessSnapshot() {
   return Object.fromEntries(['suppliers', 'locations', 'catalog_items', 'vehicle_models', 'units', 'agreements', 'agreement_locations', 'agreement_versions', 'agreement_items'].map(table => [table, query(`SELECT * FROM ${table} ORDER BY rowid`)]));
 }
-function locateSqlite(dir) {
-  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-    const file = path.join(dir, entry.name);
-    if (entry.isDirectory()) { const result = locateSqlite(file); if (result) return result; }
-    else if (file.endsWith('.sqlite') && entry.name !== 'metadata.sqlite') return file;
-  }
-}
+
 const headers = ['CIDADE', 'UF', 'MODELO', 'PECA_SERVICO', 'PRECO', 'MEDIDA', 'MARCAS', 'CNPJ', 'FORNECEDOR'];
 const row = (changes = {}) => ({ CIDADE: 'GOIANIA', UF: 'GO', MODELO: 'Hilux teste', PECA_SERVICO: 'Óleo teste', PRECO: 42.5, MEDIDA: 'litro', MARCAS: 'MARCA TESTE', CNPJ: '11.222.333/0001-81', FORNECEDOR: 'FORNECEDOR TESTE', ...changes });
 function file(rows, { name = 'teste', format = 'xlsx', aoa, range, extraSheet } = {}) {
@@ -159,7 +154,7 @@ async function startServer(initialPassword = senha) {
 try {
   await startServer();
   // Email reservado somente na base nova desta fixture; hash/iteracoes reais.
-  sqlitePath=locateSqlite(state);assert.ok(sqlitePath&&sqlitePath.startsWith(state+path.sep));
+  sqlitePath=localizarBanco(null, path.join(privadoFixture, 'portal'));assert.ok(sqlitePath&&sqlitePath.startsWith(state+path.sep));
   const fixtureAdmin=new DatabaseSync(sqlitePath);
   try{
     fixtureAdmin.exec('PRAGMA busy_timeout=5000');
@@ -168,7 +163,7 @@ try {
   }finally{fixtureAdmin.close();}
   const login = await request('/api/login', { method: 'POST', body: { email: 'admin@portal.test', password: senha } });
   assert.equal(login.status, 200); cookie = login.cookie;
-  sqlitePath = locateSqlite(state); assert.ok(sqlitePath);
+  sqlitePath = localizarBanco(null, path.join(privadoFixture, 'portal')); assert.ok(sqlitePath);
   reader = new DatabaseSync(sqlitePath, { readOnly: true });
 
   await check('Servidor Node serve somente o build e mantem cabecalhos de seguranca', async () => {

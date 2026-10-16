@@ -1,3 +1,4 @@
+import { diretorioBanco, destinoBanco } from '../scripts/banco-local.mjs';
 import { criarTemporarioTeste } from './apoio/ambiente.mjs';
 import assert from 'node:assert/strict';
 import test from 'node:test';
@@ -22,7 +23,7 @@ void test('semente apaga credenciais temporarias no sucesso e na falha', { skip:
     fs.writeFileSync(path.join(privado,'operacao/estado.json'),estadoSlots);
     fs.writeFileSync(path.join(privado,'alertas/estado-envios/slot.json'),estadoEntrega);
     fs.writeFileSync(path.join(privado,'comum/operacao.env'),'ALERTAS_HORARIOS=08:00');
-    const d1=path.join(privado,'portal/banco/estado/state/v3/d1/miniflare-D1DatabaseObject');fs.mkdirSync(d1,{recursive:true});
+    const d1=diretorioBanco(path.join(privado,'portal'));fs.mkdirSync(d1,{recursive:true});
     const banco=path.join(d1,'fixture.sqlite'),db=new DatabaseSync(banco);
     for(const [,ddl] of fs.readFileSync(path.join(root,'portal/lib/database.ts'),'utf8').matchAll(/`(CREATE TABLE IF NOT EXISTS [^`]+)`/g))db.exec(ddl);
     db.exec("INSERT INTO users VALUES('u','Ficticio','ficticio@example.com','salt','hash','admin',1,'x'); INSERT INTO tickets(id,code,supplier_name,status,created_at,updated_at) VALUES('t','SUP-1','Ficticio','aberto','x','x'); INSERT INTO email_notifications(id,ticket_id,event_id,type,recipient_name,recipient_email,payload_json,status,next_attempt_at,dedupe_key,created_at,updated_at) VALUES('e','t','v','atribuicao','Ficticio','ficticio@example.com','{}','pending','x','d','x','x')");
@@ -36,7 +37,7 @@ void test('semente apaga credenciais temporarias no sucesso e na falha', { skip:
     execFileSync('powershell.exe',['-NoProfile','-ExecutionPolicy','Bypass','-File',path.join(root,'scripts/restaurar-semente.ps1'),'-Zip',zip],{cwd:root,env:{...env,TEMP:dir,SUPPLY_VISION_PRIVADO:destino},stdio:'pipe'});
     assert.equal(fs.readFileSync(path.join(destino,'operacao/estado.json'),'utf8'),estadoSlots);
     assert.equal(fs.readFileSync(path.join(destino,'alertas/estado-envios/slot.json'),'utf8'),estadoEntrega);
-    const restaurado=new DatabaseSync(path.join(destino,'portal/banco/estado/state/v3/d1/miniflare-D1DatabaseObject/fixture.sqlite'));
+    const restaurado=new DatabaseSync(destinoBanco('fixture.sqlite',path.join(destino,'portal')));
     try { assert.equal(restaurado.prepare("SELECT status FROM email_notifications WHERE id='e'").get().status,'failed'); }
     finally { restaurado.close(); }
     assert.equal(fs.readdirSync(dir).some(n=>n.startsWith('semente-restauro-')),false);

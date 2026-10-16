@@ -1,4 +1,3 @@
-import path from 'node:path';
 import { portalPrivado } from '../scripts/configuracao.mjs';
 import { bancoSqliteLocal } from './sqlite-local.ts';
 import { CRIAR_CONTADOR_CHAMADOS_SQL, MIGRAR_CONTADOR_CHAMADOS_SQL, migrarBuscaChamados, migrarIndicesListasGlobais } from './operacao-dados.ts';
@@ -140,7 +139,7 @@ async function applyColumnMigrations() {
 const chaveBanco = Symbol.for('supply-vision:banco');
 const estadoBanco = globalThis as typeof globalThis & { [chaveBanco]?: ReturnType<typeof bancoSqliteLocal> };
 export const rawDb = () => estadoBanco[chaveBanco] ??= bancoSqliteLocal({
-  persistencia: path.join(portalPrivado, 'banco/estado/state'),
+  pastaPrivada: portalPrivado,
   pastaRestauracao: portalPrivado,
   criar: process.env.PORTAL_CRIAR_BANCO === '1' && (process.env.MODO_ENSAIO === '1' || process.env.CI === 'true'),
 });

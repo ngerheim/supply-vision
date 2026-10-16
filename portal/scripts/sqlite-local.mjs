@@ -3,27 +3,17 @@ import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { travarRestauracao } from './trava-restauracao.mjs';
 
-// O formato legado preserva o arquivo existente e permite rollback da versao anterior.
-export function arquivoSqliteLocal(persistencia) {
-  const pasta = path.join(persistencia, 'v3/d1/miniflare-D1DatabaseObject');
-  if (!fs.existsSync(pasta)) return null;
-  const arquivos = fs.readdirSync(pasta).filter(n => n.endsWith('.sqlite') && n !== 'metadata.sqlite');
-  if (arquivos.length > 1) throw new Error('SQLite local ambiguo.');
-  return arquivos.length ? path.join(pasta, arquivos[0]) : null;
-}
+import { localizarBanco } from './banco-local.mjs';
+import { portalPrivado } from './caminhos.mjs';
 
-/** @param {{ persistencia: string, pastaRestauracao?: string | null, criar?: boolean }} options */
-export function abrirSqliteLocal({ persistencia, pastaRestauracao = null, criar = false }) {
-  let arquivo = arquivoSqliteLocal(persistencia);
-  if (!arquivo && criar) {
-    const pasta = path.join(persistencia, 'v3/d1/miniflare-D1DatabaseObject');
-    fs.mkdirSync(pasta, { recursive: true });
-    arquivo = path.join(pasta, 'portal.sqlite');
-  }
+/** @param {{ pastaPrivada?: string, pastaRestauracao?: string | null, criar?: boolean }} options */
+export function abrirSqliteLocal({ pastaPrivada = portalPrivado, pastaRestauracao = pastaPrivada, criar = false } = {}) {
+  const arquivo = localizarBanco(null, pastaPrivada, { criar });
   if (!arquivo) throw new Error('SQLite local ainda nao inicializado.');
   const liberar = pastaRestauracao ? travarRestauracao(false, pastaRestauracao) : () => {};
   let db;
   try {
+    if (criar) fs.mkdirSync(path.dirname(arquivo), { recursive: true });
     db = new DatabaseSync(arquivo);
     db.exec('PRAGMA busy_timeout=5000; PRAGMA foreign_keys=ON');
     // Restauracao entrega journal DELETE; a partida deve restabelecer WAL.

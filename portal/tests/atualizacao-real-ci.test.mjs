@@ -78,3 +78,18 @@ void test('H2 semeia dados ficticios usando o schema real da aplicacao', () => {
     assert.equal(db.prepare('SELECT scope FROM tickets').get().scope, 'Dado a preservar');
   } finally { db.close(); }
 });
+
+void test('reversao permite apenas defaults acrescentados depois da troca; artefatos e valores anteriores sao imutaveis', async () => {
+  const { conferirManifestoReversao } = await import('../../scripts/ci/atualizacao-real.mjs');
+  const { createHash } = await import('node:crypto');
+  const nome=path.normalize('privado/comum/operacao.env'), antigo='MODO_ENSAIO=1\n', novo=antigo+'# reparo\nNOVA=padrao\n';
+  const hash=s=>createHash('sha256').update(s).digest('hex');
+  const antes={artefato:'original',[nome]:hash(antigo)},atual={artefato:'original',[nome]:hash(novo)};
+  const conferir=(texto,artefato='original')=>conferirManifestoReversao(antes,{...atual,artefato,[nome]:hash(texto)},{[nome]:antigo},{[nome]:texto},{[nome]:'MODO_ENSAIO=0\nNOVA=padrao\n'});
+  assert.doesNotThrow(()=>conferir(novo));
+  assert.throws(()=>conferir('MODO_ENSAIO=0\nNOVA=padrao\n'),/Configuracao existente alterada/);
+  assert.throws(()=>conferir(antigo+'NOVA=inesperado\n'),/defaults aprovados/);
+  assert.throws(()=>conferir(novo+'INTRUSA=1\n'),/defaults aprovados/);
+  assert.throws(()=>conferir(novo,'alterado'),/Artefatos alterados/);
+  assert.throws(()=>assert.deepEqual(atual,antes),/Expected/);
+});

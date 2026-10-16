@@ -41,10 +41,10 @@ try {
   if (!(Testar-SupervisorEncerrado $Privado)) { throw 'Pare a operacao antes de restaurar a semente.' }
 
   Etapa 'Conferindo o destino'
-  $d1 = Join-Path $Privado 'portal\banco\estado\state\v3\d1\miniflare-D1DatabaseObject'
-  $jaTem = @(Get-ChildItem $d1 -Filter '*.sqlite' -File -ErrorAction SilentlyContinue | Where-Object { $_.Name -ne 'metadata.sqlite' })
-  if ($jaTem.Count -gt 0) {
-    $aviso = "Ja existe um banco em $d1. Esta restauracao sobrescreveria dados. Mova o banco atual antes de continuar."
+  $existente = Localizar-BancoPortal $Raiz $Privado
+  $bancoDestino = Localizar-BancoPortal $Raiz $Privado -NomeDestino $meta.banco.arquivo
+  if ($existente) {
+    $aviso = "Ja existe um banco em $existente. Esta restauracao sobrescreveria dados. Mova o banco atual antes de continuar."
     if (-not $Simular) { throw $aviso }
     Write-Host "   AVISO (simulacao): $aviso" -ForegroundColor Yellow
   } else { Ok 'destino limpo' }
@@ -62,7 +62,6 @@ try {
   $recuperacao = Join-Path $Privado ('.recuperacao-semente-' + [guid]::NewGuid().ToString('N'))
   $preservarRecuperacao = $false
   $copiadas = @()
-  $bancoDestino = Join-Path $d1 $meta.banco.arquivo
   try {
     foreach ($d in $pastas) {
       $origem = Join-Path $temp $d
@@ -76,7 +75,7 @@ try {
       New-Item -ItemType Directory -Force $destino | Out-Null
       if (Test-Path -LiteralPath $origem) { Get-ChildItem -LiteralPath $origem -Force | Copy-Item -Destination $destino -Recurse -Force }
     }
-    New-Item -ItemType Directory -Force $d1 | Out-Null
+    New-Item -ItemType Directory -Force (Split-Path $bancoDestino) | Out-Null
     Move-Item -LiteralPath $bancoValidado -Destination $bancoDestino
   } catch {
     $erroOriginal = $_

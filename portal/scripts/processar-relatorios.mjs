@@ -355,6 +355,8 @@ export function criarServidorArquivos({ token, abrirBanco, raiz = privado }) {
     }
   });
 }
+export const abrirBancoRelatorios = () => abrirBancoLocal('report_jobs');
+
 async function principal() {
   const liberarRestauracao = travarRestauracao();
   // Mantem a trava durante toda a vida do runner, incluindo downloads e filas.
@@ -367,7 +369,7 @@ async function principal() {
   const porta = Number(config.RELATORIOS_PORTA || 3001);
   if (!Number.isInteger(porta) || porta < 1024 || porta > 65535)
     throw new Error('RELATORIOS_PORTA deve ser uma porta entre 1024 e 65535.');
-  const abrir = () => abrirBancoLocal('report_jobs');
+  const abrir = abrirBancoRelatorios;
   const servidor = criarServidorArquivos({
     token: config.PORTAL_API_TOKEN,
     abrirBanco: abrir,
