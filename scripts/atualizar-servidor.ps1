@@ -555,7 +555,10 @@ if (-not $JaAtualizado) {
   }catch{}
   if($script:AndamentoAtualizacao){$script:AndamentoAtualizacao=Ler-AndamentoAtualizacao $script:AndamentoAtualizacao.arquivo}
   Etapa 'PREPARAR / Aprovacao e conferencia'
-  if($rcPreparo-ne0){throw 'PREPARAR reprovado. Atualizacao cancelada SEM parar a operacao ou alterar a instalacao.'}
+  if($rcPreparo-ne0){
+   if($script:AndamentoAtualizacao.erro){throw $script:AndamentoAtualizacao.erro}
+   throw 'PREPARAR reprovado. Atualizacao cancelada SEM parar a operacao ou alterar a instalacao.'
+  }
   $aprovacao=Join-Path $script:PastaPreparo 'preparo-aprovado'
   if(!(Test-Path $aprovacao)-or(Get-Content $aprovacao -Raw).Trim()-ne$remoto){throw 'Preparo sem aprovacao do commit esperado; operacao continua no ar.'}
   # Reconfere o checkout antes de parar: o preparo pode levar alguns minutos.

@@ -132,7 +132,8 @@ try {
  Iniciar-PassoPreparo 'Consulta CI'
  $sha=(& git rev-parse HEAD).Trim()
  if($LASTEXITCODE-ne0){throw 'Nao foi possivel obter SHA do preparo.'}
- $ci=Consultar-CIPreparo $sha -ForcarCompleto:$ForcarCompleto
+ $ci=Consultar-CIPreparo $sha -ForcarCompleto:$ForcarCompleto -Andamento $script:AndamentoPreparo
+ if($ci.bloqueado){throw $ci.motivo}
  Concluir-PassoPreparo
  $modo=if($ci.rapido){'rapido'}else{'completo'}
  $linhaModo=if($ci.rapido){"PREPARAR: modo rapido - $($ci.motivo)"}else{"PREPARAR: modo completo - motivo: $($ci.motivo)"}
@@ -164,6 +165,7 @@ try {
  exit 0
 }catch{
  while($script:PassosPreparo.Count){Concluir-PassoPreparo 'falhou'}
+ $script:AndamentoPreparo.erro=$_.Exception.Message
  Publicar-AndamentoAtualizacao $script:AndamentoPreparo 'PREPARAR reprovado' 'falhou'
  Write-Error "PREPARAR falhou; operacao original continua no ar: $($_.Exception.Message)" -ErrorAction Continue
  try{

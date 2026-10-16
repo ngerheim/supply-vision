@@ -579,10 +579,11 @@ function Executar-PowerShellOculto([string[]]$Argumentos,[string]$Executavel='po
  }finally{$processo.Dispose()}
 }
 
-# A API publica e apenas uma otimizacao: qualquer ambiguidade usa todas as suites.
+# CI conhecido pode bloquear a troca; indisponibilidade usa todas as suites.
 function Consultar-APICIPreparo([string]$Caminho) {
  # Sem Authorization, sem token e sem ferramentas autenticadas do GitHub.
- Invoke-RestMethod -Uri ("https://api.github.com/repos/ngerheim/supply-vision/"+$Caminho) -Headers @{Accept='application/vnd.github+json';'User-Agent'='Supply-Vision-Preparo';'X-GitHub-Api-Version'='2022-11-28'} -TimeoutSec 8 -ErrorAction Stop
+ try{Invoke-RestMethod -Uri ("https://api.github.com/repos/ngerheim/supply-vision/"+$Caminho) -Headers @{Accept='application/vnd.github+json';'User-Agent'='Supply-Vision-Preparo';'X-GitHub-Api-Version'='2022-11-28'} -TimeoutSec 8 -ErrorAction Stop}
+ catch{$_.Exception.Data['CIPreparoAPI']=$true;throw}
 }
 function Obter-ChecksCIPreparo([string]$Sha) {
  $checks=@();$total=-1
@@ -602,29 +603,9 @@ function Obter-ChecksCIPreparo([string]$Sha) {
  }
  return $checks
 }
-function Consultar-CIPreparo([string]$Sha,[switch]$ForcarCompleto) {
- $completo=@{rapido=$false;sha=$Sha;motivo='resposta inesperada da API'}
- if($ForcarCompleto){$completo.motivo='preparo completo forcado';return $completo}
- if($Sha-notmatch'^[0-9a-f]{40}$'){$completo.motivo='SHA invalido';return $completo}
- $obrigatorios=@('Portal','Portal - instalacao nova e autenticacao real','PowerShell','Alertas','Atualizacao real')
- $contexto='CI da main'
+function Consultar-CIPRIdentica([string]$Sha,$ChecksMain) {
+ $checks=$ChecksMain
  try{
-  $checks=@(Obter-ChecksCIPreparo $Sha)
-  # Inspeciona todas as conclusoes ANTES de considerar pendencias: uma falha
-  # ou cancelamento nunca pode ser escondido pela ordem dos checks na API.
-  foreach($c in $checks){
-   if(($c.conclusion-and$c.conclusion-cne'success'-and!($c.name-ceq'Atualizacao real'-and$c.conclusion-ceq'skipped'))-or($c.status-ceq'completed'-and!$c.conclusion)){
-    $completo.motivo="check nao aprovado: $($c.name) ($($c.status)/$($c.conclusion))";return $completo
-   }
-  }
-  foreach($nome in $obrigatorios){
-   $encontrados=@($checks|Where-Object {$_.name-ceq$nome-and$_.app.slug-ceq'github-actions'-and$_.app.id-eq15368})
-   if(!$encontrados.Count){$completo.motivo=('check obrigatorio ausente: '+$nome);return $completo}
-   if($encontrados.Count-ne1){$completo.motivo=('check obrigatorio ambiguo: '+$nome);return $completo}
-  }
-  $pendentes=@($checks|Where-Object {$_.status-cne'completed'})
-  if(!$pendentes.Count){return @{rapido=$true;sha=$Sha;motivo="CI da main verde ($($Sha.Substring(0,7)))"}}
-  $c=$pendentes[0];$contexto="CI da main pendente; check pendente: $($c.name) ($($c.status))"
   # O endpoint pode associar outras PRs ao commit. Exige uma unica PR mesclada
   # para main deste repositorio cujo commit final do merge seja o alvo exato.
   $prs=@()
@@ -638,7 +619,6 @@ function Consultar-CIPreparo([string]$Sha,[switch]$ForcarCompleto) {
   if($prs.Count-ne1){throw 'PR de origem mesclada nao encontrada ou ambigua'}
   $pr=$prs[0];$head=[string]$pr.head.sha
   if($head-cnotmatch'^[0-9a-f]{40}$'-or!$pr.number){throw 'head SHA ou numero da PR invalido'}
-  $contexto+="; PR #$($pr.number)"
   $main=Consultar-APICIPreparo "commits/$Sha"
   $origem=Consultar-APICIPreparo "commits/$head"
   if($main.sha-cne$Sha-or$origem.sha-cne$head-or$main.commit.tree.sha-cnotmatch'^[0-9a-f]{40}$'-or$origem.commit.tree.sha-cnotmatch'^[0-9a-f]{40}$'){throw 'resposta inesperada da API de commits'}
@@ -654,7 +634,91 @@ function Consultar-CIPreparo([string]$Sha,[switch]$ForcarCompleto) {
    if($cobertura.Count-ne1){throw "check da main sem cobertura unica na PR (bloqueia): $($c.name)"}
   }
   return @{rapido=$true;sha=$Sha;motivo="CI da PR #$($pr.number) ($($head.Substring(0,7))) verde, conteudo identico ao da main ($($Sha.Substring(0,7)))"}
- }catch{$completo.motivo=$contexto+': falha ao consultar ou validar API publica do GitHub: '+$_.Exception.Message;return $completo}
+ }catch{return @{rapido=$false;indisponivel=[bool]$_.Exception.Data['CIPreparoAPI'];motivo=$_.Exception.Message}}
+}
+# A espera pertence ao PREPARAR; nenhuma falha conhecida da main autoriza TROCAR.
+function Consultar-CIPreparo([string]$Sha,[switch]$ForcarCompleto,$Andamento=$null,
+ [scriptblock]$Agora={ [datetime]::UtcNow },[scriptblock]$Pausa={param($Ms) Start-Sleep -Milliseconds $Ms}) {
+ $completo=@{rapido=$false;sha=$Sha;motivo='resposta inesperada da API'}
+ if($ForcarCompleto){$completo.motivo='preparo completo forcado';return $completo}
+ if($Sha-notmatch'^[0-9a-f]{40}$'){$completo.motivo='SHA invalido';return $completo}
+ $obrigatorios=@('Portal','Portal - instalacao nova e autenticacao real','PowerShell','Alertas','Atualizacao real')
+ $motivoPrazo='Prazo de 30 min aguardando CI da main esgotado; modo completo'
+ $inicio=& $Agora;$id=[guid]::NewGuid().ToString('N');$prConsultada=$false;$aguardou=$false;$motivoPR=''
+ try{
+  while($true){
+   if(Testar-CancelamentoEsperaCI $Andamento $id){throw (New-Object OperationCanceledException 'Espera do CI cancelada; operacao continua no ar e preparo sera limpo.')}
+   if($aguardou-and((& $Agora)-$inicio).TotalSeconds-ge1800){
+    $completo.motivo="$motivoPrazo; check pendente: $($c.name) ($($c.status)); $incompleto $motivoPR";return $completo
+   }
+   try{$checks=@(Obter-ChecksCIPreparo $Sha)}
+   catch{$completo.motivo='CI da main: consulta indisponivel ou invalida; modo completo: '+$_.Exception.Message;return $completo}
+   # Falhas precedem pendencias e qualquer tentativa de aproveitar a PR.
+   foreach($c in $checks){
+    if($c.conclusion-cin@('failure','timed_out','cancelled','action_required','startup_failure')){
+     return @{rapido=$false;bloqueado=$true;sha=$Sha;motivo="CI da main ($($Sha.Substring(0,7))) reprovado; check nao aprovado: $($c.name) ($($c.status)/$($c.conclusion)). Atualizacao cancelada SEM parar a operacao. Saidas: re-run no GitHub, PR de correcao, ou supv atualizar --completo."}
+    }
+    if(($c.conclusion-and$c.conclusion-cne'success'-and!($c.name-ceq'Atualizacao real'-and$c.conclusion-ceq'skipped'))-or($c.status-ceq'completed'-and!$c.conclusion)){
+     $completo.motivo="check nao aprovado: $($c.name) ($($c.status)/$($c.conclusion)); modo completo";return $completo
+    }
+   }
+   if(((& $Agora)-$inicio).TotalSeconds-ge1800){$completo.motivo=$motivoPrazo;return $completo}
+   $incompleto=''
+   foreach($nome in $obrigatorios){
+    $encontrados=@($checks|Where-Object {$_.name-ceq$nome-and$_.app.slug-ceq'github-actions'-and$_.app.id-eq15368})
+    if(!$encontrados.Count){$incompleto='check obrigatorio ausente: '+$nome;break}
+    if($encontrados.Count-ne1){$incompleto='check obrigatorio ambiguo: '+$nome;break}
+   }
+   $pendentes=@($checks|Where-Object {$_.status-cne'completed'})
+   if(!$pendentes.Count){
+    if($incompleto){$completo.motivo=$incompleto+'; modo completo';return $completo}
+    return @{rapido=$true;sha=$Sha;motivo="CI da main verde ($($Sha.Substring(0,7)))"}
+   }
+   if(!$prConsultada-and!$incompleto){
+    $prConsultada=$true;$pr=Consultar-CIPRIdentica $Sha $checks
+    if(((& $Agora)-$inicio).TotalSeconds-ge1800){$completo.motivo=$motivoPrazo;return $completo}
+    if($pr.rapido){return $pr};$motivoPR=$pr.motivo
+    if($pr.indisponivel){$completo.motivo='CI da main pendente; consulta indisponivel; modo completo: '+$motivoPR;return $completo}
+   }
+   $aguardou=$true
+   $c=$pendentes[0]
+   if(((& $Agora)-$inicio).TotalSeconds-ge1800){
+    $completo.motivo="$motivoPrazo; check pendente: $($c.name) ($($c.status)); $incompleto $motivoPR";return $completo
+   }
+   $minutos=[math]::Floor(((& $Agora)-$inicio).TotalMinutes)
+   $concluidos=@($checks|Where-Object {$_.status-ceq'completed'}).Count
+   $mensagem="Aguardando CI da main ($($Sha.Substring(0,7))): $concluidos de $($checks.Count) checks concluidos, $minutos min"
+   Write-Host $mensagem
+   if($Andamento){$Andamento.esperaCI=@{id=$id;mensagem=$mensagem};Publicar-AndamentoAtualizacao $Andamento 'PREPARAR / Consulta CI'}
+   # API a cada 30 s; o sinal cooperativo e observado sem esperar o polling.
+   for($i=0;$i-lt60;$i++){
+    if(Testar-CancelamentoEsperaCI $Andamento $id){throw (New-Object OperationCanceledException 'Espera do CI cancelada; operacao continua no ar e preparo sera limpo.')}
+    & $Pausa 500
+    if(((& $Agora)-$inicio).TotalSeconds-ge1800){break}
+   }
+  }
+ }finally{
+  $cancelado=Testar-CancelamentoEsperaCI $Andamento $id
+  if($Andamento){
+   $Andamento.esperaCI=$null
+   Publicar-AndamentoAtualizacao $Andamento 'PREPARAR / Consulta CI'
+   Remove-Item -LiteralPath ($Andamento.arquivo+'.cancelar-ci') -Force -ErrorAction SilentlyContinue
+  }
+  if($cancelado){throw (New-Object OperationCanceledException 'Espera do CI cancelada; operacao continua no ar e preparo sera limpo.')}
+ }
+}
+function Testar-CancelamentoEsperaCI($Andamento,[string]$Id) {
+ if(!$Andamento-or!$Andamento.arquivo){return $false}
+ try{return [IO.File]::ReadAllText($Andamento.arquivo+'.cancelar-ci')-ceq$Id}catch{return $false}
+}
+function Solicitar-CancelamentoEsperaCI([string]$ArquivoAndamento) {
+ # O identificador impede um Ctrl+C atrasado de cancelar outra execucao.
+ try{
+  $a=Ler-AndamentoAtualizacao $ArquivoAndamento
+  if($a.estado-eq'andamento'-and$a.esperaCI.id-match'^[0-9a-f]{32}$'){
+   [IO.File]::WriteAllText($ArquivoAndamento+'.cancelar-ci',[string]$a.esperaCI.id)
+  }
+ }catch{}
 }
 function Plano-AndamentoAtualizacao([bool]$Rapido=$false) {
  $preparo=@('Inicializacao isolada','Limpeza de preparos reprovados','Configuracao de teste','Metadados das dependencias','Conferencia geral da reserva','Conferencia da reserva Node','Conferencia da reserva Python','Consumo da reserva','Descarte da reserva','Dependencias Node','Materializacao de junctions Node','Dependencias Python','Validar-PythonAlertas','Consulta CI','Build do Portal')
