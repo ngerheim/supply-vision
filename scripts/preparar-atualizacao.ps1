@@ -48,7 +48,7 @@ try {
  if($LASTEXITCODE){throw 'PREPARAR exige Node com o mesmo major/minor de engines.node do Portal.'}
  Iniciar-PassoPreparo 'Inicializacao isolada'
  # Nao herdar caminhos, credenciais, caches ou modo de producao.
- Get-ChildItem Env: | Where-Object Name -Match '^(SUPPLY_VISION_|SV_|PORTAL_|SMTP_|EMAIL_|BACKUP_|QLIK_|ADMIN_|MODO_ENSAIO|RELATORIOS_|WRANGLER_|MINIFLARE_|XDG_|CLOUDFLARE_|CF_|GIT_|NPM_CONFIG_|PIP_|PYTHONPATH$|VIRTUAL_ENV$|NODE_OPTIONS$)' | ForEach-Object {Remove-Item ('Env:'+$_.Name)}
+ Get-ChildItem Env: | Where-Object Name -Match '^(SUPPLY_VISION_|SV_|PORTAL_|SMTP_|EMAIL_|BACKUP_|QLIK_|ADMIN_|MODO_ENSAIO|RELATORIOS_|XDG_|GIT_|NPM_CONFIG_|PIP_|PYTHONPATH$|VIRTUAL_ENV$|NODE_OPTIONS$)' | ForEach-Object {Remove-Item ('Env:'+$_.Name)}
  $env:SUPPLY_VISION_PRIVADO=Join-Path $Raiz 'privado'
  $env:MODO_ENSAIO='1'
  $env:SV_PREPARO_RAIZ=$Raiz

@@ -29,9 +29,6 @@ export function mapeamentosApi(contexto: ContextoApi) {
   }
 
   async function validateMappingInput(request: Request, type: string) {
-    // O corpo e lido antes de qualquer recusa: devolver resposta sem consumir a
-    // requisicao derruba a conexao do Worker, e o cliente recebe 500 no lugar do
-    // 400 que explica o problema.
     const body = await jsonBody<MappingInput>(request);
     const cfg = mappingConfig[type];
     if (!cfg) return { error: 'Tipo de De/Para inválido.' };

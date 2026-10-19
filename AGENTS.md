@@ -3,7 +3,7 @@
 ## Operação
 - Claude e Codex: ler antes de editar; código e testes definem os contratos. Preservar comentários de motivo e conferir entradas, consumidores e testes antes de mudar comportamento.
 - Servidor único definitivo Windows 11 Pro, somente LAN; inicialização em modo `computador`, conta do dono, sem sessão aberta. Sem migração entre máquinas.
-- Portal direto em Node 24.20, sem workerd/Cloudflare ou D1. Versão em `portal/package.json#engines.node`; regras em `portal/scripts/versao-node.mjs`. SQLite local único.
+- Portal direto em Node 24.20. Versão em `portal/package.json#engines.node`; regras em `portal/scripts/versao-node.mjs`. SQLite local único.
 - Repositório público de portfólio, mantido apenas pelo dono. Dados reais, credenciais, bancos, relatórios e infraestrutura ficam fora do Git, fixtures e artefatos públicos.
 
 ## Mapa

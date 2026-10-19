@@ -18,7 +18,7 @@ try{
  await new Promise((r,j)=>{escritor.once('message',r);escritor.once('error',j);});
  const respostas=await Promise.all(Array.from({length:20},(_,i)=>fetch(`http://127.0.0.1:${porta}/api/${i%2?'search/options':'health'}`,{headers:{cookie:process.env.PORTAL_TESTE_COOKIE,'x-portal-poll':'1'},signal:AbortSignal.timeout(4000)})));
  for(const r of respostas){assert.equal(r.status,200,await r.clone().text());await r.arrayBuffer();}
- console.log('[OK] Health e opcoes respondem durante transacao SQLite externa, sem erro D1 nem novas tentativas.');
+ console.log('[OK] Health e opcoes respondem durante transacao SQLite externa, sem erro de lock nem novas tentativas.');
 }finally{
  Atomics.store(controle,0,1);Atomics.notify(controle,0);await fim;
  db.prepare('DELETE FROM audit_logs WHERE id=?').run(id);db.close();

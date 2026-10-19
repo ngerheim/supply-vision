@@ -28,7 +28,7 @@ function banco() {
   }
   return db;
 }
-function d1(db, falhar=false) {
+function adaptador(db, falhar=false) {
   return {
     prepare(sql) {
       let valores=[];
@@ -50,7 +50,7 @@ void test('migracao 7 preserva banco existente e os 100 mais recentes, eliminand
     for(const sql of consultas)assert.match(plano(db,sql),/USE TEMP B-TREE FOR ORDER BY/);
     // Tambem aceita uma primeira tentativa com um indice ja criado.
     db.exec(INDICES_LISTAS_GLOBAIS_SQL[0]);
-    await migrarIndicesListasGlobais(d1(db),'2026-10-13T12:00:00Z');
+    await migrarIndicesListasGlobais(adaptador(db),'2026-10-13T12:00:00Z');
     for(let i=0;i<consultas.length;i++) {
       assert.doesNotMatch(plano(db,consultas[i]),/USE TEMP B-TREE FOR ORDER BY/);
       const rows=db.prepare(consultas[i]).all();
@@ -58,17 +58,17 @@ void test('migracao 7 preserva banco existente e os 100 mais recentes, eliminand
       assert.equal(rows.length,100);assert.equal(rows[0].id,'0205');assert.equal(rows.at(-1).id,'0106');
     }
     assert.deepEqual(['users','imports','report_jobs'].map(t=>db.prepare(`SELECT * FROM ${t} ORDER BY id`).all()),dados);
-    await migrarIndicesListasGlobais(d1(db),'depois');
+    await migrarIndicesListasGlobais(adaptador(db),'depois');
     assert.deepEqual(db.prepare('SELECT version,applied_at FROM schema_migrations ORDER BY version').all().map(r=>[r.version,r.applied_at]),[...Array.from({length:6},(_,i)=>[i+1,'antes']),[7,'2026-10-13T12:00:00Z']]);
   }finally{db.close();}
 });
 void test('interrupcao desfaz indices e marcador; retomada completa os dois indices',async()=>{
   const db=banco();
   try {
-    await assert.rejects(migrarIndicesListasGlobais(d1(db,true),'primeira'),/interrupcao/);
+    await assert.rejects(migrarIndicesListasGlobais(adaptador(db,true),'primeira'),/interrupcao/);
     assert.equal(db.prepare('SELECT COUNT(*) n FROM schema_migrations WHERE version=7').get().n,0);
     assert.equal(db.prepare("SELECT COUNT(*) n FROM sqlite_schema WHERE name LIKE '%created_global'").get().n,0);
-    await migrarIndicesListasGlobais(d1(db),'segunda');
+    await migrarIndicesListasGlobais(adaptador(db),'segunda');
     assert.equal(db.prepare("SELECT COUNT(*) n FROM sqlite_schema WHERE name LIKE '%created_global'").get().n,2);
     for(const sql of consultas)assert.doesNotMatch(plano(db,sql),/USE TEMP B-TREE FOR ORDER BY/);
   }finally{db.close();}

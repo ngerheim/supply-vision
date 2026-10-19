@@ -52,7 +52,7 @@ Chaves-Repetidas (Join-Path $privado 'comum\operacao.env')
 
 # Aqui existia uma conferencia do PORTAL_API_TOKEN contra o Portal compilado.
 # Ela deixou de fazer sentido quando a credencial passou a ser entregue ao
-# Worker em tempo de execucao, a partir do mesmo portal.env que os Alertas
+# Portal em tempo de execucao, a partir do mesmo portal.env que os Alertas
 # leem: nao ha mais dois valores para divergir. Mantida so a recusa de chave
 # repetida, que continua sendo o unico jeito de os dois lados discordarem.
 $amb=Ler-Chaves (Join-Path $privado 'alertas\config\cfg_ambiente.txt') @('QLIK_TENANT','QLIK_APP_ID','QLIK_OBJ_ID','DESTINATARIO_ALERTA')

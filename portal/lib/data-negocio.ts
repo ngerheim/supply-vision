@@ -2,10 +2,10 @@
 // da maquina.
 //
 // As regras de vigencia (acordo vigente, agendado, expirado, a vencer e a
-// busca de precos) usavam date('now') no SQLite, que e UTC -- e o Worker
-// tambem roda em UTC. Das 21h a meia-noite o Portal ja agia como se fosse o
-// dia seguinte: um acordo que vence hoje sumia da busca tres horas antes, e
-// um que comeca amanha aparecia antes da hora. Agora o dia e calculado aqui,
+// busca de precos) usavam date('now') no SQLite, que e UTC. Das 21h a
+// meia-noite o Portal ja agia como se fosse o dia seguinte: um acordo que
+// vence hoje sumia da busca tres horas antes, e um que comeca amanha aparecia
+// antes da hora. Agora o dia e calculado aqui,
 // com o fuso explicito, e entra nas consultas como parametro.
 export const FUSO_NEGOCIO = 'America/Sao_Paulo';
 

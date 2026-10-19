@@ -140,7 +140,7 @@ try{
   }
   # Caches criados depois de guardar tambem sao removidos antes de validar.
   if($caso-eq'valida'){
-   foreach($cache in @('portal/node_modules/.cache','portal/node_modules/.mf','portal/node_modules/.wrangler','alertas/.venv/__pycache__')){
+   foreach($cache in @('portal/node_modules/.cache','alertas/.venv/__pycache__')){
     New-Item -ItemType Directory -Force (Join-Path $reserva $cache)|Out-Null
     [IO.File]::WriteAllText((Join-Path $reserva ($cache+'/execucao')),'descartar')
    }

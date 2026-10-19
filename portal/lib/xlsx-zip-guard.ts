@@ -40,9 +40,8 @@ export type ResultadoZip =
 //
 // Por isso o teto NÃO cabe em 128 MB. Uma única importação de 24 MB de
 // expansão pode passar de 300 MB de RSS. O número atual é adequado para a
-// máquina do portal (que tem memória de sobra), mas seria preciso reduzir
-// bastante antes de rodar em Worker — e a decisão dependeria de medir naquele
-// ambiente, não neste.
+// máquina do portal. Uma redução de memória disponível exigiria novas
+// medições e revisão deste teto.
 export const LIMITES_XLSX_ZIP = {
   entradas: 512,
   diretorioCentral: 1024 * 1024,

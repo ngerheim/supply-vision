@@ -44,9 +44,9 @@ export async function corpoBinarioLimitado(request: Request, maximo: number, pra
         partes.length = 0;
         fimDrenagem = Date.now() + (prazos.drenagemMs ?? 5_000);
       }
-      // O proxy local do Wrangler perde a conexao quando o Worker cancela um
-      // corpo ainda em envio. Drenar e descartar mantem a memoria limitada e
-      // permite devolver o codigo HTTP correto sem materializar o excedente.
+      // Drenar e descartar o excedente mantem a memoria limitada e permite
+      // concluir a leitura para responder ao cliente. Os tetos de bytes e
+      // prazo de drenagem impedem que um envio excessivo prenda a requisicao.
       if (!excedeu) partes.push(value);
       else {
         drenados += value.byteLength;
