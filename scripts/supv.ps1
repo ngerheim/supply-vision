@@ -50,8 +50,23 @@ function Converter-TextoSupv([string]$Texto){
  $normal=$Texto.Normalize([Text.NormalizationForm]::FormD)
  return [regex]::Replace($normal,'[^\x00-\x7F]','')
 }
-function Escrever-Supv([string]$Texto){
- foreach($linha in ($Texto-split'\r?\n')){Write-Host (Converter-TextoSupv (Mascarar-Homologacao $linha $script:supvSegredos))}
+function Obter-LarguraConsoleSupv {
+ try{
+  if([Console]::IsOutputRedirected){return 0}
+  return [math]::Max(0,[Console]::WindowWidth-1)
+ }catch{return 0} # Sem console legivel, conservar a linha completa.
+}
+function Limitar-ProgressoSupv([string]$Texto) {
+ $largura=Obter-LarguraConsoleSupv
+ if($largura-gt0-and$Texto.Length-gt$largura){return $Texto.Substring(0,$largura)}
+ return $Texto
+}
+function Escrever-Supv([string]$Texto,[switch]$Andamento){
+ foreach($linha in ($Texto-split'\r?\n')){
+  $visivel=Converter-TextoSupv (Mascarar-Homologacao $linha $script:supvSegredos)
+  if($Andamento){$visivel=Limitar-ProgressoSupv $visivel}
+  Write-Host $visivel
+ }
 }
 function Ajuda-Supv([string]$Comando){
  $ajudas=@{
@@ -138,7 +153,7 @@ function Mostrar-ProgressoSupv($a,$Exibicao=$null){
    if($a.erro){$Exibicao.erroMostrado=(([string]$a.erro-replace'\s+',' ').Trim())}
   }
  }
- Escrever-Supv $texto
+ Escrever-Supv $texto -Andamento
 }
 function Mostrar-ResultadoSupv($Codigo=$null,$Exibicao=$null){
  $r=Executar-AcaoAdministrada $script:supvRaiz $script:supvPrivado 'fim-atualizacao' @{codigo=$Codigo;saida='atualizacao-processo-saida.log'}

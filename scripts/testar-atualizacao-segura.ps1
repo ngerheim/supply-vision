@@ -1,6 +1,7 @@
 ﻿# Exercita a conferencia real do atualizador com Git simulado, sem parar servicos.
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'operacao-logica.ps1')
+. (Join-Path $PSScriptRoot 'atualizacao-preparo.ps1')
 function Executar-PowerShellOculto($Argumentos){ & powershell.exe @Argumentos }
 $source = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'atualizar-servidor.ps1') -Raw
 $start = $source.IndexOf("Etapa 'Conferindo o repositorio'")

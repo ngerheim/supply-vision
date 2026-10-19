@@ -1,3 +1,5 @@
+import { arquivoLogEmail } from './apoio/logs-email.mjs';
+import fs from 'node:fs';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { DatabaseSync } from 'node:sqlite';
@@ -22,6 +24,7 @@ void test('falha momentanea na confirmacao nao reenvia e conclui na nova tentati
   try{
     await processarNotificacoes(db,config,t,{esperas:[0,0],concluir:(banco,item)=>{if(falhas-->0)throw new Error('database is locked');concluir(banco,item)}});
     assert.equal(t.enviados,1);
+    assert.match(fs.readFileSync(arquivoLogEmail, 'utf8'), /um/);
     assert.equal(db.prepare('SELECT status FROM email_notifications').get().status,'sent');
   }finally{db.close()}
 });
@@ -31,6 +34,7 @@ void test('confirmacao que nunca grava vira falha explicita e nao volta para a f
   try{
     await processarNotificacoes(db,config,t,{esperas:[0,0],concluir:()=>{throw new Error('disk I/O error')}});
     assert.equal(t.enviados,1);
+    assert.match(fs.readFileSync(arquivoLogEmail, 'utf8'), /um/);
     const r=db.prepare('SELECT status,last_error,locked_at FROM email_notifications').get();
     assert.equal(r.status,'failed');assert.equal(r.last_error,MENSAGEM_NAO_CONFIRMADO);assert.equal(r.locked_at,null);
     assert.equal(reservar(db).length,0);
