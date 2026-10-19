@@ -34,7 +34,7 @@ if(!$ExecutarCenario){
   $privadoAntes=$env:SUPPLY_VISION_PRIVADO
   try{
    $env:SUPPLY_VISION_PRIVADO=Join-Path $instalacao 'privado'
-   if(Test-Path $instalacao){[void](Parar-Operacao $instalacao 30)}
+   if((Test-Path $instalacao)-and(Get-Command Parar-Operacao -CommandType Function -ErrorAction SilentlyContinue)){[void](Parar-Operacao $instalacao 30)}
   }finally{$env:SUPPLY_VISION_PRIVADO=$privadoAntes}
   if(Obter-TarefaSupplyVision $instalacao){Stop-ScheduledTask -TaskName 'Supply Vision';Unregister-ScheduledTask -TaskName 'Supply Vision' -Confirm:$false}
   $marcadorConta=Join-Path $PastaTeste 'conta-criada'
@@ -356,7 +356,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
 }finally{
  foreach($p in $processos){if(!$p.HasExited){Encerrar-ArvoreTeste $p};$p.Dispose()}
  if($tarefaCriada){Disable-ScheduledTask -TaskName 'Supply Vision'|Out-Null}
- if(Test-Path $raiz){[void](Parar-Operacao $raiz 30)}
+ if((Test-Path $raiz)-and(Get-Command Parar-Operacao -CommandType Function -ErrorAction SilentlyContinue)){[void](Parar-Operacao $raiz 30)}
  if($tarefaCriada){Stop-ScheduledTask -TaskName 'Supply Vision';Unregister-ScheduledTask -TaskName 'Supply Vision' -Confirm:$false}
  if($contaCriada){Remove-LocalUser -Name $usuarioH2;Remove-Item -LiteralPath (Join-Path $PastaTeste 'conta-criada')}
  $env:SUPPLY_VISION_PRIVADO=$privadoAntes
