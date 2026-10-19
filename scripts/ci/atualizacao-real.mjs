@@ -138,17 +138,34 @@ export function conferirAmostras(amostras, negativo = false, pidsAntes = amostra
     assert.ok(ultimo.health && ultimo.supervisor && ultimo.consumidores, 'Operacao nao voltou');
   }
 }
+export async function lerLogFases(log) {
+  for (let tentativa = 1; ; tentativa++) {
+    try { return await fs.promises.readFile(log, 'utf8'); }
+    catch (e) {
+      if (!['EBUSY', 'EPERM', 'EACCES'].includes(e.code) || tentativa >= 10) {
+        throw new Error(`Nao foi possivel ler o log de fases ${log} apos ${tentativa} tentativa(s): ${e.code || e.name}: ${e.message}`, { cause: e });
+      }
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+  }
+}
 async function monitorar(raiz, pasta, negativo) {
   const log = path.join(raiz, 'privado/operacao/atualizacao-tempos.log');
-  const offset = fs.existsSync(log) ? fs.readFileSync(log, 'utf8').length : 0;
+  const offset = fs.existsSync(log) ? (await lerLogFases(log)).length : 0;
   const amostras = [];
   const pidsAntes = JSON.parse(fs.readFileSync(path.join(pasta, 'consumidores-antes.json'), 'utf8').replace(/^\uFEFF/, ''));
   const intervalos = intervalosConsumidores(raiz);
   let fase = 'PREPARAR';
   do {
-    const texto = fs.existsSync(log) ? fs.readFileSync(log, 'utf8').slice(offset) : '';
-    const fases = [...texto.matchAll(/\] (PREPARAR|TROCAR|CONCLUIR):[^\n]*inicio\./g)].map(m => m[1]);
-    if (fases.length) fase = fases.at(-1);
+    let erroLogFases = null;
+    const atualizarFase = async () => {
+      try {
+        const texto = fs.existsSync(log) ? (await lerLogFases(log)).slice(offset) : '';
+        const fases = [...texto.matchAll(/\] (PREPARAR|TROCAR|CONCLUIR):[^\n]*inicio\./g)].map(m => m[1]);
+        if (fases.length) fase = fases.at(-1);
+      } catch (e) { erroLogFases = e.message; }
+    };
+    await atualizarFase();
     let health = false;
     try { const r = await fetch('http://127.0.0.1:3000/api/health', { signal: AbortSignal.timeout(2000) }); health = r.ok && (await r.json()).status === 'ok'; } catch { /* parada medida */ }
     let supervisor = false, consumidores = false, pid = null, erro = null, detalhesConsumidores = {};
@@ -168,10 +185,9 @@ async function monitorar(raiz, pasta, negativo) {
       } finally { db.close(); }
     } catch (e) { erro = `${e.code || e.name}: ${e.message}`; }
     // A fase pode mudar enquanto o pedido HTTP aguarda a parada.
-    const recentes = fs.existsSync(log) ? [...fs.readFileSync(log, 'utf8').slice(offset).matchAll(/\] (PREPARAR|TROCAR|CONCLUIR):[^\n]*inicio\./g)] : [];
-    if (recentes.length) fase = recentes.at(-1)[1];
+    await atualizarFase();
     const a = { instante: Date.now(), fase, health, supervisor: !!supervisor, consumidores: !!consumidores, pid,
-      pidsConsumidores: pids, detalhesConsumidores, erro };
+      pidsConsumidores: pids, detalhesConsumidores, erro, erroLogFases };
     amostras.push(a);
     fs.appendFileSync(path.join(pasta, 'amostras.jsonl'), `${JSON.stringify(a)}\n`);
     if (amostras.length === 1) {
@@ -181,7 +197,7 @@ async function monitorar(raiz, pasta, negativo) {
     if (fs.existsSync(path.join(pasta, 'monitor-parar'))) break;
     await new Promise(resolve => setTimeout(resolve, 500));
   } while (true);
-  const fasesRegistradas = [...fs.readFileSync(log, 'utf8').slice(offset).matchAll(/\] (PREPARAR|TROCAR|CONCLUIR):[^\n]*inicio\./g)].map(m => m[1]);
+  const fasesRegistradas = [...(await lerLogFases(log)).slice(offset).matchAll(/\] (PREPARAR|TROCAR|CONCLUIR):[^\n]*inicio\./g)].map(m => m[1]);
   const transicoes = fasesRegistradas.filter((f, i) => f !== fasesRegistradas[i - 1]);
   assert.deepEqual(transicoes, negativo ? ['PREPARAR'] : ['PREPARAR', 'TROCAR', 'CONCLUIR'], 'Ordem das fases no log invalida');
   const preparar = amostras.filter(a => a.fase === 'PREPARAR');

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 import test from 'node:test';
-import { conferirAmostras, conferirBanco, versoesEsperadas, semearBanco, avaliarConsumidor, intervalosConsumidores, pidsConsumidores } from '../../scripts/ci/atualizacao-real.mjs';
+import { lerLogFases, conferirAmostras, conferirBanco, versoesEsperadas, semearBanco, avaliarConsumidor, intervalosConsumidores, pidsConsumidores } from '../../scripts/ci/atualizacao-real.mjs';
 import path from 'node:path';
 import fs from 'node:fs';
 
@@ -92,4 +92,30 @@ void test('reversao permite apenas defaults acrescentados depois da troca; artef
   assert.throws(()=>conferir(novo+'INTRUSA=1\n'),/defaults aprovados/);
   assert.throws(()=>conferir(novo,'alterado'),/Artefatos alterados/);
   assert.throws(()=>assert.deepEqual(atual,antes),/Expected/);
+});
+
+void test('H2 repete apenas locks transitorios do log e informa esgotamento', async t => {
+  for (const code of ['EBUSY', 'EPERM', 'EACCES']) {
+    let chamadas = 0;
+    const leitura = t.mock.method(fs.promises, 'readFile', async () => {
+      if (++chamadas < 3) throw Object.assign(new Error('lock ficticio'), { code });
+      return '] PREPARAR: inicio.';
+    });
+    try {
+      assert.equal(await lerLogFases('log-ficticio'), '] PREPARAR: inicio.');
+      assert.equal(chamadas, 3);
+    } finally { leitura.mock.restore(); }
+  }
+  for (const [code, tentativas] of [['EBUSY', 10], ['ENOENT', 1]]) {
+    const causa = Object.assign(new Error('falha ficticia'), { code });
+    const leitura = t.mock.method(fs.promises, 'readFile', async () => { throw causa; });
+    try {
+      await assert.rejects(lerLogFases('log-ficticio'), e => {
+        assert.match(e.message, new RegExp(`log-ficticio apos ${tentativas} tentativa`));
+        assert.equal(e.cause, causa);
+        return true;
+      });
+      assert.equal(leitura.mock.callCount(), tentativas);
+    } finally { leitura.mock.restore(); }
+  }
 });
