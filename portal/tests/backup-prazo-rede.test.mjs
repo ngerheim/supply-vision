@@ -29,6 +29,10 @@ void test('falha persistente envia o MESMO 7z e avisa administrador mesmo se SMT
   assert.equal(tentativas, 6); assert.equal(alertas, 1); assert.equal(fs.existsSync(pasta), false);
 });
 void test('rede testa antes de publicar; hash divergente e nome existente preservam copia anterior', t => {
+  // O H2 herda ensaio; esta fixture precisa exercitar a publicacao na rede.
+  const ensaioAnterior = process.env.MODO_ENSAIO;
+  delete process.env.MODO_ENSAIO;
+  t.after(() => { if (ensaioAnterior === undefined) delete process.env.MODO_ENSAIO; else process.env.MODO_ENSAIO = ensaioAnterior; });
   const dir = criarTemporarioTeste('sv-rede-segura-'); t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const rede = path.join(dir, 'rede'); fs.mkdirSync(rede);
   const origem = path.join(dir, 'supply-vision-2026-10-16_2059.7z'); fs.writeFileSync(origem, 'novo');
