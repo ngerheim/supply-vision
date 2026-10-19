@@ -121,3 +121,26 @@ try {
 Igual 3000 (Obter-PortaPortalLocal @{PORTAL_URL='https://portal.empresa.test'}) 'URL publica nao define porta local'
 Igual 42345 (Obter-PortaPortalLocal @{PORTAL_PORTA='42345'}) 'porta de fixture configurada'
 $portaRecusada=$false;try{Obter-PortaPortalLocal @{PORTAL_PORTA='0'}}catch{$portaRecusada=$true};Igual $true $portaRecusada 'porta invalida recusada'
+
+# Exercita o leitor real do supervisor sem iniciar a operacao.
+$errosSupervisor=$null
+$astSupervisor=[Management.Automation.Language.Parser]::ParseFile((Join-Path $PSScriptRoot 'supervisor.ps1'),[ref]$null,[ref]$errosSupervisor)
+if($errosSupervisor){throw 'Erro de sintaxe no supervisor.'}
+$funcaoDetalhe=$astSupervisor.Find({param($n) $n-is[Management.Automation.Language.FunctionDefinitionAst]-and$n.Name-eq'Obter-DetalheFalha'},$true)
+. ([scriptblock]::Create($funcaoDetalhe.Extent.Text))
+$Operacao=Join-Path ([IO.Path]::GetTempPath()) ('sv-detalhe-'+[guid]::NewGuid().ToString('N'))
+New-Item -ItemType Directory $Operacao|Out-Null
+try{
+ foreach($nome in @('backup','limpeza','expurgo')){
+  Igual '' (Obter-DetalheFalha $nome) 'logs ausentes nao interrompem supervisor'
+  Set-Content (Join-Path $Operacao "$nome-saida.log") @('primeira','motivo na saida','','  ')
+  Igual ': motivo na saida' (Obter-DetalheFalha $nome) 'fallback para stdout'
+  Set-Content (Join-Path $Operacao "$nome-erro.log") @('','  ')
+  Igual ': motivo na saida' (Obter-DetalheFalha $nome) 'stderr vazio usa stdout'
+  Set-Content (Join-Path $Operacao "$nome-erro.log") @('anterior','motivo no erro','',' ')
+  Igual ': motivo no erro' (Obter-DetalheFalha $nome) 'ultima linha nao vazia de stderr prevalece'
+  Set-Content (Join-Path $Operacao "$nome-erro.log") ('x'*400)
+  Igual (': '+('x'*300)) (Obter-DetalheFalha $nome) 'detalhe limitado a 300 caracteres'
+ }
+}finally{Remove-Item $Operacao -Recurse -Force}
+Write-Host 'OK: detalhes de falha do supervisor.'
