@@ -18,8 +18,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  powershell:
-    name: PowerShell
+  powershell-inicializacao:
+    name: PowerShell - inicializacao e atualizacao
     runs-on: windows-latest
     timeout-minutes: 30
     steps:
@@ -110,20 +110,21 @@ jobs:
           node --test portal/tests/orfaos-windows.test.mjs
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
 
+  powershell-protecoes:
+    name: PowerShell - protecoes e agenda
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: portal/package.json
+      - name: Alinhar Node da maquina com o servidor
+        shell: powershell
+        run: ./scripts/ci/fixar-node-runner.ps1
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: '3.12'
-      - name: Validar restricao de firewall sem alterar regras reais
-        shell: powershell
-        run: ./portal/scripts/testar-restricao-firewall.ps1
-
-      - name: Validar ensaio sem login e supressao de avisos
-        timeout-minutes: 11
-        shell: powershell
-        run: |
-          & powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./scripts/testar-supervisor-isolado.ps1 -SemLogin -Ensaio -AvisoAdminTeste falha
-          if ($LASTEXITCODE) { exit $LASTEXITCODE }
-
       - name: Validar protecoes da atualizacao e agenda
         shell: powershell
         run: |
@@ -138,6 +139,50 @@ jobs:
             & powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./scripts/testar-supervisor-isolado.ps1 @argumentos
             if ($LASTEXITCODE) { exit $LASTEXITCODE }
           }
+
+  powershell-ensaio:
+    name: PowerShell - ensaio e firewall
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: portal/package.json
+      - name: Alinhar Node da maquina com o servidor
+        shell: powershell
+        run: ./scripts/ci/fixar-node-runner.ps1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12'
+      - name: Validar restricao de firewall sem alterar regras reais
+        shell: powershell
+        run: ./portal/scripts/testar-restricao-firewall.ps1
+
+      - name: Validar ensaio sem login e supressao de avisos
+        timeout-minutes: 11
+        shell: powershell
+        run: |
+          & powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./scripts/testar-supervisor-isolado.ps1 -SemLogin -Ensaio -AvisoAdminTeste falha
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+
+  powershell:
+    name: PowerShell
+    needs: [powershell-inicializacao, powershell-protecoes, powershell-ensaio]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Exigir sucesso dos tres grupos
+        env:
+          INICIALIZACAO: ${{ needs.powershell-inicializacao.result }}
+          PROTECOES: ${{ needs.powershell-protecoes.result }}
+          ENSAIO: ${{ needs.powershell-ensaio.result }}
+        run: |
+          if [ "$INICIALIZACAO" != success ] || [ "$PROTECOES" != success ] || [ "$ENSAIO" != success ]; then
+            echo "::error::PowerShell reprovado: inicializacao=$INICIALIZACAO, protecoes=$PROTECOES, ensaio=$ENSAIO (exige todos com sucesso)."
+            exit 1
+          fi
 
   portal:
     name: Portal
