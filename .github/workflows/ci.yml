@@ -250,7 +250,7 @@ jobs:
 
       - name: Guardar logs ficticios da partida do Portal em falha
         if: failure()
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: portal-supervisor-partida
           retention-days: 7
@@ -272,7 +272,7 @@ jobs:
         run: npm run test:restore -- --fixture
       - name: Guardar evidencias das importacoes em falha
         if: failure()
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: portal-importacoes-diagnostico
           retention-days: 7
@@ -329,7 +329,7 @@ jobs:
         run: ./scripts/testar-atualizacao-real.ps1 -BaseRef origin/main -DestinoRef HEAD -LimiteSegundos 1800 -Grupo ${{ matrix.grupo }}
       - name: Guardar diagnostico da atualizacao (inclusive em falha)
         if: always()
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: atualizacao-real-${{ matrix.grupo }}
           retention-days: 7
