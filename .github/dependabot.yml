@@ -1,5 +1,6 @@
 # Atualizacao de dependencias por PR, para o CI provar cada uma antes de
 # qualquer coisa chegar ao servidor.
+# Cooldown de 14 dias evita versoes comprometidas retiradas logo apos a publicacao.
 #
 # Os grupos existem para juntar o que sobe junto -- React com as tipagens do
 # React, Tailwind com o plugin do Tailwind -- e nada alem disso. A primeira
@@ -13,6 +14,8 @@ version: 2
 updates:
   - package-ecosystem: npm
     directory: /portal
+    cooldown:
+      default-days: 14
     schedule:
       interval: weekly
       day: monday
@@ -45,6 +48,8 @@ updates:
 
   - package-ecosystem: pip
     directory: /alertas/config
+    cooldown:
+      default-days: 14
     schedule:
       interval: weekly
       day: monday
@@ -56,6 +61,8 @@ updates:
 
   - package-ecosystem: github-actions
     directory: /
+    cooldown:
+      default-days: 14
     schedule:
       interval: monthly
     open-pull-requests-limit: 2
