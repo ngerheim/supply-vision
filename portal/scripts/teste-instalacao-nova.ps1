@@ -102,12 +102,29 @@ if ($codigoBuild -ne 0) {
 }
 
 # A fixture autoriza criar banco apenas no diretorio descartavel.
-$comando = "Set-Location '$projeto'; " +
-  "`$env:SUPPLY_VISION_PRIVADO='$temp'; `$env:MODO_ENSAIO='1'; `$env:PORTAL_CRIAR_BANCO='1'; " +
-  "`$env:PORTAL_PORTA='$porta'; `$env:RELATORIOS_PORTA='$($porta+1)'; " +
-  "`$env:INITIAL_ADMIN_PASSWORD='$senhaTeste'; `$env:PORTAL_API_TOKEN='relatorios-token-ci'; " +
-  "node scripts/iniciar-portal.mjs local *> '$logServidor'"
-$script:processoServidor = (Start-Process powershell.exe -ArgumentList '-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', $comando -WindowStyle Hidden -PassThru).Id
+$ambienteServidor = @{
+  SUPPLY_VISION_PRIVADO = $temp
+  MODO_ENSAIO = '1'
+  PORTAL_CRIAR_BANCO = '1'
+  PORTAL_PORTA = [string]$porta
+  RELATORIOS_PORTA = [string]($porta + 1)
+  INITIAL_ADMIN_PASSWORD = $senhaTeste
+  PORTAL_API_TOKEN = 'relatorios-token-ci'
+}
+$ambienteAnterior = @{}
+foreach ($nome in $ambienteServidor.Keys) {
+  $ambienteAnterior[$nome] = [Environment]::GetEnvironmentVariable($nome, 'Process')
+}
+try {
+  foreach ($nome in $ambienteServidor.Keys) {
+    [Environment]::SetEnvironmentVariable($nome, $ambienteServidor[$nome], 'Process')
+  }
+  $script:processoServidor = (Start-Process powershell.exe -ArgumentList '-NoProfile', '-Command', "node scripts/iniciar-portal.mjs local *> '$logServidor'" -WorkingDirectory $projeto -NoNewWindow -PassThru).Id
+} finally {
+  foreach ($nome in $ambienteAnterior.Keys) {
+    [Environment]::SetEnvironmentVariable($nome, $ambienteAnterior[$nome], 'Process')
+  }
+}
 
 $subiu = $false
 for ($i = 0; $i -lt 60; $i++) {
