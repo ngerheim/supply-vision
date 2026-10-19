@@ -52,6 +52,28 @@ function Copiar-DependenciasPreparo([string]$Origem,[string]$Destino) {
  Copiar-ArvoreDependencias $Origem $Destino $bases
  return $true
 }
+# npm cria junction para pacote file: de pasta (vendor/fast-glob-compat).
+# Materializa somente cada link, no proprio lugar e com a mesma validacao de
+# destino de Copiar-ArvoreDependencias. Copiar a arvore inteira por causa de
+# um unico link levava 171 s no servidor; o resto ja e fisico.
+function Materializar-LinksDependencias([string]$Modulos) {
+ $base=[IO.Path]::GetFullPath($Modulos).TrimEnd('\','/')+[IO.Path]::DirectorySeparatorChar
+ $bases=@($base,([IO.Path]::GetFullPath((Join-Path (Split-Path $Modulos -Parent) 'vendor'))+[IO.Path]::DirectorySeparatorChar))
+ $total=0
+ # Um link por volta: o destino copiado pode trazer links novos.
+ for($volta=0;$volta-lt256;$volta++){
+  $link=@(Get-ChildItem -LiteralPath $Modulos -Recurse -Force -Attributes ReparsePoint -ErrorAction Stop|Select-Object -First 1)
+  if(!$link.Count){return $total}
+  $caminho=$link[0].FullName;$temporario=$caminho+'.sv-materializado'
+  if(Test-Path -LiteralPath $temporario){Remover-ArvorePreparo $temporario}
+  Copiar-ArvoreDependencias $caminho $temporario $bases
+  # Delete nao recursivo remove o link, nunca o conteudo do destino.
+  if($link[0].PSIsContainer){[IO.Directory]::Delete($caminho,$false)}else{[IO.File]::Delete($caminho)}
+  if($link[0].PSIsContainer){[IO.Directory]::Move($temporario,$caminho)}else{[IO.File]::Move($temporario,$caminho)}
+  $total++
+ }
+ throw 'Links demais nas dependencias; preparo cancelado.'
+}
 # Reserva e copia usam apenas arvores fisicas. Qualquer reparse point exige
 # materializacao pelo caminho conservador, inclusive links internos.
 function Inicializar-ArvoreDependencias {
@@ -639,6 +661,12 @@ function Obter-ChecksCIPreparo([string]$Sha) {
  }
  return $checks
 }
+# O H2 so roda em PR. No push da main, o agregador e os grupos da matriz
+# aparecem pulados; o GitHub pode registrar o nome sem expandir a matriz
+# ("Atualizacao real - ${{ matrix.grupo }}"). Somente eles podem ser skipped.
+function Testar-H2PuladoNaMain($Check) {
+ return $Check.status-ceq'completed'-and$Check.conclusion-ceq'skipped'-and$Check.name-cmatch'^Atualizacao real( - .+)?$'
+}
 function Consultar-CIPRIdentica([string]$Sha,$ChecksMain) {
  $checks=$ChecksMain
  try{
@@ -666,6 +694,9 @@ function Consultar-CIPRIdentica([string]$Sha,$ChecksMain) {
   }
   # Compara tambem checks extras observados na main, sem afrouxar jobs push-only.
   foreach($c in $checks){
+   # Grupos do H2 pulados na main nao existem com esse nome na PR; o
+   # agregador "Atualizacao real" da PR ja exige os dois grupos verdes.
+   if((Testar-H2PuladoNaMain $c)-and$c.name-cne'Atualizacao real'){continue}
    $cobertura=@($checksPR|Where-Object {$_.name-ceq$c.name-and$_.app.id-eq$c.app.id-and$_.app.slug-ceq$c.app.slug})
    if($cobertura.Count-ne1){throw "check da main sem cobertura unica na PR (bloqueia): $($c.name)"}
   }
@@ -694,7 +725,7 @@ function Consultar-CIPreparo([string]$Sha,[switch]$ForcarCompleto,$Andamento=$nu
     if($c.conclusion-cin@('failure','timed_out','cancelled','action_required','startup_failure')){
      return @{rapido=$false;bloqueado=$true;sha=$Sha;motivo="CI da main ($($Sha.Substring(0,7))) reprovado; check nao aprovado: $($c.name) ($($c.status)/$($c.conclusion)). Atualizacao cancelada SEM parar a operacao. Saidas: re-run no GitHub, PR de correcao, ou supv atualizar --completo."}
     }
-    if(($c.conclusion-and$c.conclusion-cne'success'-and!($c.name-ceq'Atualizacao real'-and$c.conclusion-ceq'skipped'))-or($c.status-ceq'completed'-and!$c.conclusion)){
+    if(($c.conclusion-and$c.conclusion-cne'success'-and!(Testar-H2PuladoNaMain $c))-or($c.status-ceq'completed'-and!$c.conclusion)){
      $completo.motivo="check nao aprovado: $($c.name) ($($c.status)/$($c.conclusion)); modo completo";return $completo
     }
    }

@@ -109,12 +109,7 @@ try {
  Iniciar-PassoPreparo 'Materializacao de junctions Node'
  # npm cria junctions para pacotes file: (fast-glob/vendor). Materializa antes
  # de mover node_modules; links absolutos apontariam para o preparo ja limpo.
- $modulos=Join-Path $portal 'node_modules'
- if(@(Get-ChildItem -LiteralPath $modulos -Recurse -Force -Attributes ReparsePoint).Count){
-  [void](Copiar-DependenciasPreparo $modulos ($modulos+'-isolado'))
-  [IO.Directory]::Move($modulos,($modulos+'-instalado'))
-  [IO.Directory]::Move(($modulos+'-isolado'),$modulos)
- }
+ [void](Materializar-LinksDependencias (Join-Path $portal 'node_modules'))
  Concluir-PassoPreparo
  Iniciar-PassoPreparo 'Dependencias Python'
  if($usoReserva.usada){$caminhoPython='reserva reaproveitada'}
