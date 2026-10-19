@@ -1,6 +1,7 @@
 ﻿# Medicao e opcional: nao pode impedir parada, troca, retomada ou reversao.
 # Somente diretorios e tarefas ficticios; compativel com Windows PowerShell 5.1.
 $ErrorActionPreference='Stop'
+. (Join-Path $PSScriptRoot 'atualizacao-preparo.ps1')
 $fonte=[IO.File]::ReadAllText((Join-Path $PSScriptRoot 'atualizar-servidor.ps1'))
 $ast=[Management.Automation.Language.Parser]::ParseInput($fonte,[ref]$null,[ref]$null)
 $parar=$ast.Find({param($n) $n-is[Management.Automation.Language.FunctionDefinitionAst]-and$n.Name-eq'Parar-OperacaoAtualizacao'},$true).Extent.Text
@@ -82,6 +83,21 @@ try{
  if($avisos.Count-ne3){throw 'Falhas de escrita nao geraram os avisos previstos.'}
  $script:MedicaoAtualizacao='estado invalido';Inicializar-MedicaoAtualizacao $arquivo
  if($script:MedicaoAtualizacao-isnot[hashtable]-or$LASTEXITCODE-ne7){throw 'Medicao invalida nao foi reparada sem alterar resultado.'}
+ # A retencao preserva ordem/resumo, tolera leitor sem compartilhamento de exclusao e recupera depois.
+ $rotacao=Join-Path $base 'rotacao.log'
+ [IO.File]::WriteAllLines($rotacao,[string[]](1..600|ForEach-Object {"linha $_"}))
+ $global:LASTEXITCODE=7
+ Registrar-LinhaTempoAtualizacao $rotacao 'Resumo atualizacao: mais recente'
+ $linhas=@(Get-Content -LiteralPath $rotacao)
+ if($linhas.Count-ne500-or$linhas[0]-ne'linha 102'-or$linhas[-1]-ne'Resumo atualizacao: mais recente'){throw 'Rotacao perdeu ordem, limite ou resumo.'}
+ $leitor=[IO.File]::Open($rotacao,[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::ReadWrite)
+ try{Registrar-LinhaTempoAtualizacao $rotacao 'gravada com rotacao bloqueada'}finally{$leitor.Dispose()}
+ if((Get-Content -LiteralPath $rotacao -Tail 1)-ne'gravada com rotacao bloqueada'){throw 'Falha na troca perdeu append.'}
+ Registrar-LinhaTempoAtualizacao $rotacao 'gravada depois da liberacao'
+ $linhas=@(Get-Content -LiteralPath $rotacao)
+ if($linhas.Count-ne500-or$linhas[-2]-ne'gravada com rotacao bloqueada'-or$linhas[-1]-ne'gravada depois da liberacao'-or$LASTEXITCODE-ne7){throw 'Rotacao nao recuperou limite ou alterou codigo.'}
+ if(@(Get-ChildItem -LiteralPath $base -Filter '*.tmp').Count){throw 'Rotacao deixou temporario.'}
+ Write-Host '[OK] Rotacao atomica: 500 linhas, ordem, resumo, falha tolerada, recuperacao e codigo preservado.'
  Write-Host '[OK] Medicao opcional: idempotencia, relancamento, contexto/relogio/estado invalidos, log bloqueado e codigo preservado.'
 }finally{if(Test-Path $base){Remove-Item -LiteralPath $base -Recurse -Force}}
 $global:LASTEXITCODE=0

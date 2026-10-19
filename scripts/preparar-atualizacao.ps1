@@ -24,14 +24,14 @@ function Concluir-PassoPreparo([string]$Codigo='0') {
  $tempo=([math]::Round(([datetime]::UtcNow-$p.inicio).TotalSeconds,2)).ToString('0.##',[Globalization.CultureInfo]::InvariantCulture)
  $linha="PREPARAR / $($p.nome): codigo=$Codigo; duracao=$tempo s."
  try{Add-Content -LiteralPath (Join-Path $Raiz 'preparo-tempos.log') -Value $linha -Encoding UTF8}catch{}
- if($publicarTempos){try{Add-Content -LiteralPath $TemposArquivo -Value $linha -Encoding UTF8}catch{}}
+ if($publicarTempos){try{Registrar-LinhaTempoAtualizacao $TemposArquivo $linha}catch{}}
  Write-Host $linha
 }
 function Registrar-CaminhoDependencias([string]$Linha) {
  Write-Host $Linha
  try{
   Add-Content -LiteralPath (Join-Path $Raiz 'preparo-tempos.log') -Value $Linha -Encoding UTF8
-  if($publicarTempos){Add-Content -LiteralPath $TemposArquivo -Value $Linha -Encoding UTF8}
+  if($publicarTempos){Registrar-LinhaTempoAtualizacao $TemposArquivo $Linha}
  }catch{}
 }
 function Executar-Preparo([scriptblock]$Comando,[string]$Falha) {
@@ -133,7 +133,7 @@ try {
  $ci.motivo=Formatar-MotivoPreparo $ci.motivo
  $linhaModo=if($ci.rapido){"PREPARAR: modo rapido - $($ci.motivo)"}else{"PREPARAR: modo completo - motivo: $($ci.motivo)"}
  Write-Host $linhaModo
- try{Add-Content (Join-Path $Raiz 'preparo-tempos.log') $linhaModo -Encoding UTF8;if($publicarTempos){Add-Content $TemposArquivo $linhaModo -Encoding UTF8}}catch{}
+ try{Add-Content (Join-Path $Raiz 'preparo-tempos.log') $linhaModo -Encoding UTF8;if($publicarTempos){Registrar-LinhaTempoAtualizacao $TemposArquivo $linhaModo}}catch{}
  Publicar-AndamentoAtualizacao $script:AndamentoPreparo 'PREPARAR / Build do Portal' -Modo $modo -MotivoModo $ci.motivo
  Push-Location $portal
  try{

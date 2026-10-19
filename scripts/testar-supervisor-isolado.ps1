@@ -14,7 +14,7 @@ if(!$ExecutarCenario){
  if($AvisoAdminTeste){$argsFilho+=@('-AvisoAdminTeste',$AvisoAdminTeste)}
  $filho=$null
  try{
-  $filho=Start-Process (Get-Process -Id $PID).Path -ArgumentList $argsFilho -PassThru -RedirectStandardOutput $saida -RedirectStandardError $erro;[void]$filho.Handle
+  $filho=Start-Process (Get-Process -Id $PID).Path -ArgumentList $argsFilho -PassThru -NoNewWindow -RedirectStandardOutput $saida -RedirectStandardError $erro;[void]$filho.Handle
   if(!(Esperar-ProcessoTeste $filho $LimiteSegundos $fase)){
    Encerrar-ArvoreTeste $filho
    $etapa=if(Test-Path $fase){Get-Content $fase -Raw}else{'iniciando'}
@@ -123,7 +123,7 @@ if($Atraso){Start-Sleep -Seconds $Atraso} # Simula VM lenta, somente no teste.
   $args=@('-NoProfile','-ExecutionPolicy','Bypass','-File',('"'+"$temp\entrada-teste.ps1"+'"'),'-PastaPrivada',('"'+"$temp\privado"+'"'),'-Manifesto',('"'+$manifesto+'"'))
   if($SemLogin){$args+=@('-SemLogin','-NodeExecutavel',('"'+"$temp\bin\node.exe"+'"'))}
   if($nome-eq'b'){$args+=@('-Atraso',$AtrasoSegundaInstanciaSegundos)}
-  $proc=Start-Process powershell.exe -ArgumentList $args -PassThru -WindowStyle Hidden -RedirectStandardOutput $saida -RedirectStandardError $erro;[void]$proc.Handle
+  $proc=Start-Process powershell.exe -ArgumentList $args -PassThru -NoNewWindow -RedirectStandardOutput $saida -RedirectStandardError $erro;[void]$proc.Handle
   $processos+=$proc
   $instancias+=@{pid=$proc.Id;trava="$temp\privado\operacao\supervisor.lock";manifesto=$manifesto;saida=$saida;erro=$erro;log="$temp\privado\operacao\supervisor.log"}
  }

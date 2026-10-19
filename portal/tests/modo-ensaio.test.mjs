@@ -1,3 +1,4 @@
+import './apoio/logs-email.mjs';
 import { bancoFicticio } from './apoio/backup.mjs';
 import { destinoBanco } from '../scripts/banco-local.mjs';
 import { criarTemporarioTeste } from './apoio/ambiente.mjs';
@@ -62,12 +63,15 @@ void test('processador CLI em ensaio nao exige SMTP nem tenta verificar conexao'
   const dir=criarTemporarioTeste('sv-email-ensaio-');
   t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
   fs.mkdirSync(path.join(dir,'portal/configuracao'),{recursive:true});
+  fs.mkdirSync(path.join(dir,'portal/logs'),{recursive:true});
   fs.writeFileSync(path.join(dir,'portal/configuracao/portal.env'),`PORTAL_PORTA=${await reservarPortaLoopback()}\nRELATORIOS_PORTA=${await reservarPortaLoopback()}\n`);
   for(const args of [[],['--test-connection']]){
     const resultado=spawnSync(process.execPath,['--experimental-strip-types','scripts/processar-emails.mjs',...args],{
       cwd:path.resolve(import.meta.dirname,'..'),env:{...process.env,SUPPLY_VISION_PRIVADO:dir,MODO_ENSAIO:'1'},encoding:'utf8',timeout:15_000,
     });
     assert.equal(resultado.status,0,resultado.stderr);
+    assert.doesNotMatch(resultado.stderr, /Nao foi possivel gravar o log/);
+    assert.ok(fs.statSync(path.join(dir, 'portal/logs/portal-email.log')).size > 0);
     assert.match(resultado.stdout,args.length?/ensaio: envio suprimido/:/Fila ainda nao disponivel/);
   }
 });

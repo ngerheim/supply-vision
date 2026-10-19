@@ -637,6 +637,40 @@ function Executar-PowerShellOculto([string[]]$Argumentos,[string]$Executavel='po
  }finally{$processo.Dispose()}
 }
 
+function Registrar-LinhaTempoAtualizacao([string]$Caminho,[string]$Texto) {
+ $codigo=Get-Variable LASTEXITCODE -ValueOnly -ErrorAction SilentlyContinue
+ Set-Variable -Name limiteLinhas -Value 500 -Option Constant
+ try{
+  for($tentativa=0;$tentativa-lt3;$tentativa++){
+   $trava=$null;$arquivo=$null;$escritor=$null;$temporario=$null
+   try{
+    [void][IO.Directory]::CreateDirectory((Split-Path $Caminho -Parent))
+    # Serializa os escritores (pai, PREPARAR e limpeza) durante append/rotacao.
+    $trava=[IO.File]::Open(($Caminho+'.lock'),[IO.FileMode]::OpenOrCreate,[IO.FileAccess]::ReadWrite,[IO.FileShare]::None)
+    $arquivo=[IO.File]::Open($Caminho,[IO.FileMode]::Append,[IO.FileAccess]::Write,[IO.FileShare]::ReadWrite)
+    $escritor=New-Object IO.StreamWriter($arquivo,(New-Object Text.UTF8Encoding($false)))
+    $escritor.WriteLine($Texto);$escritor.Dispose();$escritor=$null;$arquivo=$null
+    try{
+     $linhas=@(Get-Content -LiteralPath $Caminho -Tail ($limiteLinhas+1) -Encoding UTF8 -ErrorAction Stop)
+     if($linhas.Count-gt$limiteLinhas){
+      $temporario=$Caminho+'.'+[guid]::NewGuid().ToString('N')+'.tmp'
+      [IO.File]::WriteAllLines($temporario,[string[]]$linhas[-$limiteLinhas..-1],(New-Object Text.UTF8Encoding($false)))
+      [IO.File]::Replace($temporario,$Caminho,[NullString]::Value)
+     }
+    }catch{} # Se a troca falhar, o append ja esta preservado; tentar na proxima linha.
+    return
+   }catch{
+    if($tentativa-eq2){Write-Warning 'Nao foi possivel gravar a medicao de tempos da atualizacao.' -WarningAction Continue}
+   }finally{
+    try{if($escritor){$escritor.Dispose()}elseif($arquivo){$arquivo.Dispose()}}catch{}
+    if($temporario){Remove-Item -LiteralPath $temporario -Force -ErrorAction SilentlyContinue}
+    if($trava){$trava.Dispose()}
+   }
+   if($tentativa-lt2){Start-Sleep -Milliseconds 100}
+  }
+ }catch{}finally{$global:LASTEXITCODE=$codigo}
+}
+
 function Formatar-MotivoPreparo([string]$Motivo) {
  # Expressoes de matriz do GitHub sao rotulos, nao registros de banco.
  return ([regex]::Replace($Motivo,'\$\{\{\s*([^{}]+?)\s*\}\}','($1)') -replace '\s+', ' ').Trim()

@@ -148,21 +148,7 @@ function Registrar-TempoAtualizacao($Medicao,[string]$Texto){
  try{
   if(!$Medicao-or!$Medicao.arquivo){return}
   # Arquivo proprio: pai e filho registram tempos sem disputar stdout do cliente.
-  for($tentativa=0;$tentativa-lt3;$tentativa++){
-   $arquivo=$null;$escritor=$null
-   try{
-    [void][IO.Directory]::CreateDirectory((Split-Path $Medicao.arquivo -Parent))
-    $arquivo=[IO.File]::Open($Medicao.arquivo,[IO.FileMode]::Append,[IO.FileAccess]::Write,[IO.FileShare]::ReadWrite)
-    $escritor=New-Object IO.StreamWriter($arquivo,(New-Object Text.UTF8Encoding($false)))
-    $escritor.WriteLine($Texto);$escritor.Flush()
-    return
-   }catch{
-    if($tentativa-eq2){Write-Warning 'Nao foi possivel gravar a medicao de tempos da atualizacao.' -WarningAction Continue}
-   }finally{
-    try{if($escritor){$escritor.Dispose()}elseif($arquivo){$arquivo.Dispose()}}catch{}
-   }
-   if($tentativa-lt2){Start-Sleep -Milliseconds 100}
-  }
+  Registrar-LinhaTempoAtualizacao $Medicao.arquivo $Texto
  }catch{}finally{$global:LASTEXITCODE=$codigoMedicao}
 }
 function Encerrar-EtapaMedida($Medicao,[string]$Resultado='concluido'){

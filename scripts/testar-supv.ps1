@@ -247,6 +247,30 @@ try{
    Exigir-Supv ((Mascarar-Homologacao $linha)-eq'[conteudo omitido]') 'regra de omissao integral permanece restritiva'
   }
  }
+ # A largura afeta somente o andamento do console, nunca o texto completo guardado.
+ & {
+  $larguraReal=(Get-Command Obter-LarguraConsoleSupv).ScriptBlock
+  try{
+   $a=@{numero=1;total=37;nome=('etapa longa '*30);modo='rapido';estado='andamento';etapaSegundos=0;totalSegundos=0;restanteSegundos=$null}
+   foreach($largura in @(1,40,80,0)){
+    $script:larguraTeste=$largura
+    function Obter-LarguraConsoleSupv {return $script:larguraTeste}
+    $exibicao=@{}
+    $texto=Capturar-Supv {Mostrar-ProgressoSupv $a $exibicao}
+    Exigir-Supv ($largura-eq0-or$texto.Length-le$largura) 'andamento cabe na largura disponivel sem quebrar linha'
+    Exigir-Supv ($exibicao.ultimaLinha.Contains($a.nome)) 'andamento completo permanece disponivel'
+    if($largura-eq0){Exigir-Supv ($texto-eq$exibicao.ultimaLinha) 'sem largura legivel conserva texto completo'}
+    $normal=Capturar-Supv {Escrever-Supv $a.nome}
+    Exigir-Supv ($normal-eq$a.nome) 'outras mensagens nao sao truncadas'
+   }
+  }finally{Set-Item Function:Obter-LarguraConsoleSupv $larguraReal}
+  if([Console]::IsOutputRedirected){Exigir-Supv ((Obter-LarguraConsoleSupv)-eq0) 'saida redirecionada usa fallback sem largura'}
+  $fonteSupervisor=[IO.File]::ReadAllText((Join-Path $origem 'testar-supervisor-isolado.ps1'))
+  $astSupervisor=[Management.Automation.Language.Parser]::ParseInput($fonteSupervisor,[ref]$null,[ref]$null)
+  $partidas=@($astSupervisor.FindAll({param($n) $n-is[Management.Automation.Language.CommandAst]-and$n.GetCommandName()-eq'Start-Process'},$true))
+  Exigir-Supv ($partidas.Count-eq2) 'duas partidas do supervisor isolado conferidas'
+  foreach($partida in $partidas){Exigir-Supv ($partida.Extent.Text-match'-NoNewWindow'-and$partida.Extent.Text-notmatch'-WindowStyle') 'supervisor isolado inicia sem criar janela'}
+ }
  # Consultas identicas nao imprimem de novo; segundos e modo ainda atualizam.
  & {
   $a=@{numero=1;total=37;nome='Conferindo ambiente de atualizacao';modo='a definir';motivoModo='';estado='andamento';etapaSegundos=0;totalSegundos=0;restanteSegundos=$null}

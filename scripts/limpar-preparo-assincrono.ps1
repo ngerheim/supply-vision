@@ -24,8 +24,8 @@ finally{
  $tempo=([math]::Round(([datetime]::UtcNow-$inicio).TotalSeconds,2)).ToString('0.##',[Globalization.CultureInfo]::InvariantCulture)
  try{
   $texto="[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] Limpeza de preparo em segundo plano: $resultado em $tempo s; $mensagem"
-  Add-Content -LiteralPath (Join-Path $Operacao 'atualizacao-tempos.log') -Value ('Reserva de dependencias: '+$reservaResultado) -Encoding UTF8
-  Add-Content -LiteralPath (Join-Path $Operacao 'atualizacao-tempos.log') -Value $texto -Encoding UTF8
+  Registrar-LinhaTempoAtualizacao (Join-Path $Operacao 'atualizacao-tempos.log') ('Reserva de dependencias: '+$reservaResultado)
+  Registrar-LinhaTempoAtualizacao (Join-Path $Operacao 'atualizacao-tempos.log') $texto
   @{resultado=$resultado;duracao=$tempo;fim=[datetime]::UtcNow.ToString('o')}|ConvertTo-Json|Set-Content -LiteralPath (Join-Path $Operacao 'limpeza-preparo.json') -Encoding UTF8
  }catch{}
  if($h){$h.Dispose();Remove-Item -LiteralPath $arquivo -Force -ErrorAction SilentlyContinue}
