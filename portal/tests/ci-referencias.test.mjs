@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
+import { fileURLToPath } from 'node:url';
 import { arquivosTesteCI, verificarTestesCI } from '../../scripts/ci/verificar-testes.mjs';
 
 void test('guarda do CI recusa arquivo ausente, inclusive nome construido em laco', t => {
@@ -22,4 +23,22 @@ void test('guarda do CI recusa arquivo ausente, inclusive nome construido em lac
     assert.throws(() => verificarTestesCI(workflow, raiz), erro => erro.message.includes(arquivo));
     fs.writeFileSync(alvo, '');
   }
+});
+
+void test('referencias dos grupos PowerShell cobrem scripts literais e lacos em jobs distintos', () => {
+  const workflow = fs.readFileSync(new URL('../../.github/workflows/ci.yml', import.meta.url), 'utf8');
+  const grupos = [...workflow.matchAll(/^  powershell-(?:inicializacao|protecoes|ensaio):\r?\n([\s\S]*?)(?=^  [\w-]+:)/gm)];
+  assert.equal(grupos.length, 3);
+  const arquivos = arquivosTesteCI(grupos.map(([, corpo]) => corpo).join('\n'));
+  const esperados = [
+    'scripts/testar-inicializacao.ps1',
+    'scripts/testar-dependencias-preparo.ps1',
+    'scripts/testar-atualizacao-segura.ps1',
+    'scripts/testar-recuperacao-atualizacao.ps1',
+    'scripts/testar-supervisor-isolado.ps1',
+    'portal/scripts/testar-restricao-firewall.ps1',
+    'portal/tests/orfaos-windows.test.mjs',
+  ];
+  for (const arquivo of esperados) assert.ok(arquivos.includes(arquivo), arquivo);
+  assert.equal(verificarTestesCI(workflow, fileURLToPath(new URL('../../', import.meta.url))), arquivosTesteCI(workflow).length);
 });

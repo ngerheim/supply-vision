@@ -37,7 +37,7 @@ foreach($amostra in $amostras){
 }
 Write-Host '[OK] Strings duplas ASCII e parser ANSI de copias sem BOM nos scripts operacionais e na CLI.'
 try{
- foreach($caso in @('inalteradas','alteradas','metadata-engines','metadata-pacote','metadata-reaplicar','metadata-mesmo-sha','build-falha','portal-falha','alertas-falha','operacional-falha','ci-espera-verde','ci-espera-vermelho','ci-espera-api','ci-espera-cancelada','ci-aprovado','ci-log-explicito','ci-pr-verde','ci-pr-arvore','ci-pr-falho','ci-pr-pendente','ci-pr-ausente','ci-pr-erro','ci-pr-skipped','ci-pr-skipped-real','ci-pr-push-only','ci-pr-sem-check','ci-pr-app','ci-pr-ambigua','ci-pr-main-falho','ci-pr-main-cancelado','ci-pr-queued','ci-pr-tree-api','ci-pr-sha','ci-pr-paginacao','ci-pr-matriz','ci-matriz-pulada','ci-rede','ci-ausente','ci-pendente','ci-falho','ci-timeout','ci-cancelado','ci-skipped','ci-sha','ci-invalido','ci-forcado','ci-forcado-env','fumaca-falha')){
+ foreach($caso in @('inalteradas','alteradas','metadata-engines','metadata-pacote','metadata-reaplicar','metadata-mesmo-sha','build-falha','portal-falha','alertas-falha','operacional-falha','ci-espera-verde','ci-espera-vermelho','ci-espera-api','ci-espera-cancelada','ci-aprovado','ci-log-explicito','ci-pr-verde','ci-pr-arvore','ci-pr-falho','ci-pr-pendente','ci-pr-ausente','ci-pr-erro','ci-pr-skipped','ci-pr-skipped-real','ci-pr-push-only','ci-pr-sem-check','ci-pr-app','ci-pr-ambigua','ci-pr-main-falho','ci-pr-main-cancelado','ci-pr-queued','ci-pr-tree-api','ci-pr-sha','ci-pr-paginacao','ci-pr-matriz','ci-matriz-pulada','ci-powershell-verde','ci-powershell-skipped','ci-powershell-falho','ci-pr-powershell-verde','ci-pr-powershell-ausente','ci-pr-powershell-renomeado','ci-pr-powershell-duplicado','ci-pr-powershell-pendente','ci-pr-powershell-skipped','ci-rede','ci-ausente','ci-pendente','ci-falho','ci-timeout','ci-cancelado','ci-skipped','ci-sha','ci-invalido','ci-forcado','ci-forcado-env','fumaca-falha')){
   $instalacao=Join-Path $base $caso
   $preparo=Nova-PastaPreparo $instalacao
   foreach($dir in @('portal/node_modules','alertas/.venv/Scripts','privado')){New-Item -ItemType Directory -Force (Join-Path $instalacao $dir)|Out-Null}
@@ -113,6 +113,8 @@ function Invoke-RestMethod {
 
  Registrar 'api-checks'
  $nomes=@('Portal','Portal - instalacao nova e autenticacao real','PowerShell','Alertas','Atualizacao real')
+ # Os grupos sao checks extras: exigem success na main e cobertura unica na PR.
+ if($Caso-like'*powershell*'){$nomes+=@('PowerShell - inicializacao e atualizacao','PowerShell - protecoes e agenda','PowerShell - ensaio e firewall')}
  if($Caso-like'ci-espera-*'){
   $segundos=($global:ciAgora-[datetime]'2026-01-01').TotalSeconds
   Registrar ("consulta-ci:"+$segundos)
@@ -130,6 +132,11 @@ function Invoke-RestMethod {
    if($Caso-eq'ci-pr-sem-check'){$checks=@($checks|Where-Object name -ne 'PowerShell')}
    if($Caso-eq'ci-pr-app'){$checks[0].app=@{slug='outro';id=9}}
    if($Caso-eq'ci-pr-sha'){$checks[0].head_sha=$mainSha}
+   if($Caso-eq'ci-pr-powershell-ausente'){$checks=@($checks|Where-Object name -ne 'PowerShell - ensaio e firewall')}
+   if($Caso-eq'ci-pr-powershell-renomeado'){$checks[-1].name='PowerShell - outro grupo'}
+   if($Caso-eq'ci-pr-powershell-duplicado'){$checks+=@($checks[-1])}
+   if($Caso-eq'ci-pr-powershell-pendente'){$checks[-1].status='in_progress';$checks[-1].conclusion=$null}
+   if($Caso-eq'ci-pr-powershell-skipped'){$checks[-1].conclusion='skipped'}
    # Check exclusivo da PR tambem precisa estar verde.
    $checks+=@([pscustomobject]@{name='Revisao de dependencias';head_sha=$prSha;status='completed';conclusion='success';app=@{slug='github-actions';id=15368}})
   }else{
@@ -153,6 +160,8 @@ function Invoke-RestMethod {
  if($Caso-eq'ci-pr-matriz'-and$naPR){
   foreach($grupo in @('atualizacao','reversao')){$checks+=@([pscustomobject]@{name="Atualizacao real - $grupo";head_sha=$prSha;status='completed';conclusion='success';app=@{slug='github-actions';id=15368}})}
  }
+ if($Caso-eq'ci-powershell-skipped'){$checks[-1].conclusion='skipped'}
+ if($Caso-eq'ci-powershell-falho'){$checks[-1].conclusion='failure'}
  if($Caso-eq'ci-ausente'){$checks=@($checks|Where-Object name -ne 'PowerShell')}
  if($Caso-eq'ci-pendente'){$checks[3].status='in_progress'}
  if($Caso-eq'ci-falho'){$checks[0].conclusion='failure'}
@@ -207,15 +216,15 @@ exit $LASTEXITCODE
   if(!(Test-Path (Join-Path $preparo 'passos.txt'))){throw "Preparador nao chegou aos comandos: $saida"}
   $passos=@(Get-Content (Join-Path $preparo 'passos.txt'))
   if($caso-eq'ci-pendente'-and$passos-notcontains'tempo-ci:1800'){throw 'Espera nao respeitou o prazo total de 30 min.'}
-  if(($rc-eq0)-ne($caso-notin@('build-falha','portal-falha','alertas-falha','operacional-falha','fumaca-falha','ci-falho','ci-timeout','ci-cancelado','ci-pr-main-falho','ci-pr-main-cancelado','ci-espera-vermelho','ci-espera-cancelada'))){throw "Preparo incorreto em $caso (rc=$rc): $saida"}
+  if(($rc-eq0)-ne($caso-notin@('build-falha','portal-falha','alertas-falha','operacional-falha','fumaca-falha','ci-powershell-falho','ci-falho','ci-timeout','ci-cancelado','ci-pr-main-falho','ci-pr-main-cancelado','ci-espera-vermelho','ci-espera-cancelada'))){throw "Preparo incorreto em $caso (rc=$rc): $saida"}
   if(($passos-contains'npm-ci')-ne($caso-in@('alteradas','metadata-pacote','metadata-reaplicar','metadata-mesmo-sha'))-or($passos-contains'pip')-ne($caso-eq'alteradas')){throw "Decisao de dependencias incorreta: $caso"}
   if($caso-eq'metadata-engines'-and($saida-join' ')-notlike'*Dependencias Node: copia - motivo: reserva ausente*'){throw 'Pai legado nao reutilizou copia apos mudanca somente em engines.'}
-  $rapido=$caso-in@('ci-espera-verde','ci-aprovado','ci-log-explicito','fumaca-falha','ci-pr-verde','ci-pr-queued','ci-pr-skipped-real','ci-pr-paginacao','ci-pr-matriz','ci-matriz-pulada')
+  $rapido=$caso-in@('ci-espera-verde','ci-aprovado','ci-log-explicito','fumaca-falha','ci-pr-verde','ci-pr-queued','ci-pr-skipped-real','ci-pr-paginacao','ci-pr-matriz','ci-matriz-pulada','ci-powershell-verde','ci-pr-powershell-verde')
   if($rc-eq0-and@($passos|Where-Object {$_-like'operacional:*'}).Count-ne$(if($rapido){2}else{4})){throw 'Removeu verificacao operacional.'}
   if($rapido-and($passos-contains'portal'-or$passos-contains'alertas'-or$passos-notcontains'fumaca')){throw 'Modo rapido nao respeitou suites/fumaca.'}
   if(!$rapido-and$rc-eq0-and($passos-notcontains'portal'-or$passos-notcontains'alertas')){throw 'Fallback nao executou todas as suites.'}
   if($caso-in@('ci-aprovado','ci-falho','ci-cancelado','ci-pr-main-falho','ci-pr-main-cancelado','ci-forcado')-and$passos-contains'api-pr'){throw 'Consultou PR sem autorizacao pelo estado da main.'}
-  if($caso-in@('ci-falho','ci-timeout','ci-cancelado','ci-pr-main-falho','ci-pr-main-cancelado','ci-espera-vermelho','ci-espera-cancelada')){
+  if($caso-in@('ci-powershell-falho','ci-falho','ci-timeout','ci-cancelado','ci-pr-main-falho','ci-pr-main-cancelado','ci-espera-vermelho','ci-espera-cancelada')){
    if($passos-contains'build'-or$passos-contains'portal'-or$passos-contains'alertas'){throw 'CI reprovado/cancelado chegou ao build ou suites.'}
    $mensagem=(Get-Content (Join-Path $instalacao 'privado/operacao/atualizacao-andamento.json') -Raw|ConvertFrom-Json).erro
    if($caso-eq'ci-espera-cancelada'){
@@ -251,6 +260,12 @@ exit $LASTEXITCODE
    if($andamentoModo.modo-ne$modoEsperado-or!$andamentoModo.motivoModo){throw 'Decisao ou motivo ausente no acompanhamento.'}
    if(!$tempos.Contains($andamentoModo.motivoModo)){throw 'Motivo do acompanhamento difere do log.'}
    $motivoEsperado=switch($caso){
+    'ci-powershell-skipped' {'check nao aprovado: PowerShell - ensaio e firewall (completed/skipped)'}
+    'ci-pr-powershell-ausente' {'check da main sem cobertura unica na PR (bloqueia): PowerShell - ensaio e firewall'}
+    'ci-pr-powershell-renomeado' {'check da main sem cobertura unica na PR (bloqueia): PowerShell - ensaio e firewall'}
+    'ci-pr-powershell-duplicado' {'check da main sem cobertura unica na PR (bloqueia): PowerShell - ensaio e firewall'}
+    'ci-pr-powershell-pendente' {'check da PR nao aprovado: PowerShell - ensaio e firewall (in_progress/)'}
+    'ci-pr-powershell-skipped' {'check da PR nao aprovado: PowerShell - ensaio e firewall (completed/skipped)'}
     'ci-espera-verde' {'CI da main verde (2222222)'}
     'ci-espera-api' {'consulta indisponivel ou invalida; modo completo'}
     'ci-pr-verde' {'CI da PR #123 (3333333) verde, conteudo identico ao da main (2222222)'}
