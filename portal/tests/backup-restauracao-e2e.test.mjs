@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import { fork } from 'node:child_process';
 import { DatabaseSync } from 'node:sqlite';
 import test from 'node:test';
 import { criarTemporarioTeste } from './apoio/ambiente.mjs';
@@ -14,6 +15,10 @@ import { executar7z } from '../scripts/backup-7z.mjs';
 import { nomeBackup } from '../scripts/retencao-backup.mjs';
 
 void test('7z real: banco WAL consistente, configuracao da semente, rede, senha, restauracao segura e retencao de uma protecao', async t => {
+  // O H2 herda ensaio; esta fixture precisa exercitar a publicacao na rede.
+  const ensaioAnterior = process.env.MODO_ENSAIO;
+  delete process.env.MODO_ENSAIO;
+  t.after(() => { if (ensaioAnterior === undefined) delete process.env.MODO_ENSAIO; else process.env.MODO_ENSAIO = ensaioAnterior; });
   const exe = ferramenta7z(t); if (!exe) return;
   const dir = criarTemporarioTeste('sv-backup-e2e-'); t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const raiz = path.join(dir, 'privado-ficticio'), banco = destinoBanco('fixture.sqlite', path.join(raiz, 'portal'));
@@ -33,7 +38,11 @@ void test('7z real: banco WAL consistente, configuracao da semente, rede, senha,
   const arquivo = path.join(dir, nomeBackup()), rede = path.join(dir, 'rede'); fs.mkdirSync(rede);
   compactarPacote(pasta, arquivo, exe, senhaFicticia);
   assert.throws(() => executar7z(exe, 'incorreta', ['t', arquivo]), /7-Zip falhou/);
-  await replicarNaRede({ BACKUP_NETWORK_DIR: rede }, { origem: arquivo, executavel: exe, senha: senhaFicticia });
+  await replicarNaRede({ BACKUP_NETWORK_DIR: rede }, { origem: arquivo, executavel: exe, senha: senhaFicticia,
+    iniciar: () => fork(new URL('../scripts/backup-rede.mjs', import.meta.url), [], {
+      env: { ...process.env, MODO_ENSAIO: '0' }, execArgv: [], stdio: ['ignore', 'ignore', 'ignore', 'ipc'],
+    }),
+  });
   const opcoes = { config: { BACKUP_NETWORK_DIR: rede }, executavel: exe, senha: senhaFicticia };
   db.exec("UPDATE users SET name='Depois'"); db.close();
   fs.writeFileSync(path.join(raiz, 'comum/smtp.env'), 'atual');
