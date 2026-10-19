@@ -7,7 +7,7 @@ $base=Join-Path ([IO.Path]::GetTempPath()) ('sv-fases-'+[guid]::NewGuid().ToStri
 $hostTeste=(Get-Process -Id $PID).Path
 $privadoAntes=$env:SUPPLY_VISION_PRIVADO
 try{
- foreach($caso in @('ci-reprovado','preparo-falha','preparo-limpeza-falha','sucesso','fumaca-falha','troca-parcial','rede-falha','ensaio','medicao-ausente','relogio-falha','medicao-falha','fumaca-sem-medicao','fumaca-relogio-falha')){
+ foreach($caso in @('ci-reprovado','preparo-falha','preparo-limpeza-falha','sucesso','fumaca-falha','troca-parcial','backup-falha','rede-falha','ensaio','medicao-ausente','relogio-falha','medicao-falha','fumaca-sem-medicao','fumaca-relogio-falha')){
   $raiz=Join-Path $base $caso
   foreach($dir in @('scripts','portal/scripts','portal/dist','portal/node_modules','alertas/.venv','privado/operacao','privado/portal/backups','privado/portal/configuracao','privado/comum','compartilhado')){New-Item -ItemType Directory -Force (Join-Path $raiz $dir)|Out-Null}
   Copy-Item (Join-Path $fonteRaiz 'scripts/operacao-logica.ps1') (Join-Path $raiz 'scripts')
@@ -45,6 +45,7 @@ try{
    }
   }
   foreach($rel in @('portal/dist','portal/node_modules','alertas/.venv')){[IO.File]::WriteAllText((Join-Path $raiz "$rel/versao"),'anterior')}
+  if($caso-eq'rede-falha'){[IO.File]::AppendAllText((Join-Path $raiz 'privado/portal/configuracao/portal.env'),"`nBACKUP_NETWORK_DIR=$(Join-Path $raiz 'rede-indisponivel')`n")}
   if($caso-eq'ensaio'){[IO.File]::WriteAllText((Join-Path $raiz 'privado/comum/operacao.env'),'MODO_ENSAIO=1')}
   [IO.File]::WriteAllText((Join-Path $raiz 'privado/banco-ficticio'),'banco-anterior')
   $env:SUPPLY_VISION_PRIVADO=Join-Path $raiz 'privado'
@@ -72,12 +73,22 @@ function Testar-SupervisorEncerrado {$false}
 function Get-NetTCPConnection {}
 function Start-Sleep {}
 function pythonmock {$global:LASTEXITCODE=0;'Python 3.12.0'}
-function IniciarMock {$global:LASTEXITCODE=0;Registrar 'iniciar';if(!$global:resetou){[IO.File]::WriteAllText((Join-Path $Raiz 'privado/banco-ficticio'),'banco-migrado')}}
+function IniciarMock {$global:LASTEXITCODE=0;Registrar 'iniciar';if($global:novo-and!$global:resetou){[IO.File]::WriteAllText((Join-Path $Raiz 'privado/banco-ficticio'),'banco-migrado')}}
 function node {
  $global:LASTEXITCODE=0
- if($args -contains '--somente-local'){Registrar 'backup-local';Copy-Item (Join-Path $Raiz 'privado/banco-ficticio') (Join-Path $Raiz 'privado/portal/backups/portal-atual.sqlite')}
- if($args -contains '--somente-rede'){if($Caso-eq'ensaio'-and$env:MODO_ENSAIO-ne'1'){throw 'Backup perdeu modo ensaio.'};Registrar 'backup-rede';if($Caso-eq'rede-falha'){$global:LASTEXITCODE=3}}
- if(($args-join' ')-like'*restaurar-backup*'){Registrar 'banco-restaurado';Copy-Item (Join-Path $Raiz 'privado/portal/backups/portal-atual.sqlite') (Join-Path $Raiz 'privado/banco-ficticio') -Force}
+ if(@($args|Where-Object {[string]$_-match'(?:^|[\\/])backup\.mjs$'}).Count){
+  # A atualizacao usa somente o snapshot de rollback: nao consulta rede, 7z ou senha.
+  if($args-notcontains'--somente-local'-or$args-contains'--somente-rede'){Registrar 'backup-rede';$global:LASTEXITCODE=1;return}
+  if($args-notcontains'--pre-atualizacao'){throw 'Snapshot perdeu a finalidade de rollback.'}
+  if($Caso-eq'ensaio'-and$env:MODO_ENSAIO-ne'1'){throw 'Snapshot perdeu modo ensaio.'}
+  Registrar 'backup-local'
+  if($Caso-eq'backup-falha'){$global:LASTEXITCODE=1;return}
+  Copy-Item (Join-Path $Raiz 'privado/banco-ficticio') (Join-Path $Raiz 'privado/portal/backups/pre-atualizacao.sqlite')
+ }
+ if(($args-join' ')-like'*restaurar-backup*'){
+  if($args-notcontains'--pre-atualizacao'){throw 'Rollback tentou restaurar backup agendado em vez do snapshot.'}
+  Registrar 'banco-restaurado';Copy-Item (Join-Path $Raiz 'privado/portal/backups/pre-atualizacao.sqlite') (Join-Path $Raiz 'privado/banco-ficticio') -Force
+ }
  if(($args-join' ')-like'*saude-operacao*'){
   Registrar 'fumaca'
   if($Caso-in@('fumaca-falha','fumaca-sem-medicao','fumaca-relogio-falha')-and!$global:resetou){$global:LASTEXITCODE=1}
@@ -119,6 +130,18 @@ exit $LASTEXITCODE
    $esperado=if($caso-in@('sucesso','rede-falha','ensaio','medicao-ausente','relogio-falha','medicao-falha')){'nova'}else{'anterior'}
    if((Get-Content (Join-Path $raiz "$rel/versao"))-ne$esperado){throw "Artefato incorreto: $caso / $rel; $saida"}
   }
+  if($passos-contains'backup-rede'){throw 'Atualizacao tentou publicar snapshot na rede; CONCLUIR nao faz backup agendado.'}
+  if($caso-notin@('ci-reprovado','preparo-falha','preparo-limpeza-falha')){
+   if(@($passos|Where-Object {$_-eq'backup-local'}).Count-ne1){throw 'Snapshot de rollback nao foi solicitado exatamente uma vez.'}
+   $snapshot=Join-Path $raiz 'privado/portal/backups/pre-atualizacao.sqlite'
+   if($caso-eq'backup-falha'){
+    if(Test-Path $snapshot){throw 'Fixture de falha criou snapshot.'}
+   }else{
+    if(!(Test-Path $snapshot)-or(Get-Content $snapshot -Raw).Trim()-ne'banco-anterior'){throw 'Snapshot anterior a troca nao foi preservado.'}
+    $indiceBackup=[array]::IndexOf($passos,'backup-local');$indiceCommit=[array]::IndexOf($passos,'commit-novo')
+    if($indiceCommit-lt0-or$indiceBackup-ge$indiceCommit){throw 'Codigo foi trocado antes do snapshot de rollback.'}
+   }
+  }
   if($caso-in@('ci-reprovado','preparo-falha','preparo-limpeza-falha')){
    if($passos-contains'backup-local'-or$passos-contains'commit-novo'-or(Test-Path (Join-Path $raiz 'privado/operacao/parar.sinal'))){throw 'Preparo reprovado parou/alterou a instalacao.'}
    foreach($arquivoConfig in $configsAntes.Keys){
@@ -136,7 +159,13 @@ exit $LASTEXITCODE
     Remover-ArvorePreparo $contexto.preparo
    }
   }elseif($caso-in@('sucesso','rede-falha','ensaio','medicao-ausente','relogio-falha','medicao-falha')){
-   if([array]::IndexOf($passos,'backup-rede')-lt[array]::IndexOf($passos,'fumaca')-or$passos-notcontains'reexecucao'){throw 'Rede fora da fase CONCLUIR ou faltou reexecucao.'}
+   if($passos-notcontains'reexecucao'-or$passos-notcontains'fumaca'){throw 'Atualizacao perdeu reexecucao ou validacao da operacao.'}
+   if([array]::IndexOf($passos,'reexecucao')-ge[array]::IndexOf($passos,'fumaca')){throw 'Validacao ocorreu antes de carregar o codigo novo.'}
+   $contexto=Get-Content (Join-Path $raiz 'privado/operacao/atualizacao.json') -Raw|ConvertFrom-Json
+   if($contexto.fase-ne'concluido'){throw 'CONCLUIR nao confirmou a atualizacao.'}
+  }elseif($caso-eq'backup-falha'){
+   if($passos-contains'commit-novo'-or$passos-contains'reexecucao'-or$passos-contains'banco-restaurado'){throw 'Falha de snapshot permitiu troca de codigo ou restauracao sem copia.'}
+   if(($saida-join' ')-notlike'*O backup falhou. Atualizacao cancelada*'){throw 'Falha de snapshot nao foi denunciada.'}
   }else{
    if($passos-notcontains'commit-anterior'){throw 'Commit nao foi revertido.'}
    if(($passos-contains'banco-restaurado')-ne($caso-in@('fumaca-falha','fumaca-sem-medicao','fumaca-relogio-falha'))){throw 'Restauracao de snapshot incorreta.'}

@@ -87,11 +87,17 @@ try {
   $cfgBackup=Join-Path $raizBackup 'portal\configuracao';New-Item -ItemType Directory -Path $cfgBackup -Force|Out-Null
   $arquivoBackup=Join-Path $cfgBackup 'portal.env'
   Set-Content -LiteralPath $arquivoBackup -Value 'BACKUP_NETWORK_DIR='
-  Igual $true ((Obter-AvisoBackup $raizBackup) -like '*anexado*') 'aviso de anexo sem rede'
+  Igual $true ((Obter-AvisoBackup $raizBackup) -like '*BACKUP_NETWORK_DIR ausente*') 'rede obrigatoria sem fallback diario'
+  Set-Content -LiteralPath $arquivoBackup -Value "BACKUP_NETWORK_DIR=$(Join-Path $raizBackup 'rede-ausente')"
+  Igual $true ((Obter-AvisoBackup $raizBackup) -like '*rede indisponivel*') 'aviso de rede fora'
   Set-Content -LiteralPath $arquivoBackup -Value "BACKUP_NETWORK_DIR=$raizBackup"
-  Igual '' (Obter-AvisoBackup $raizBackup) 'rede disponivel sem anexo'
+  Igual $true ((Obter-AvisoBackup $raizBackup) -like '*supv backup senha*') 'senha ausente mesmo com rede disponivel'
+  New-Item -ItemType Directory -Path (Join-Path $raizBackup 'comum')|Out-Null
+  # Obter-AvisoBackup consulta existencia, nao decifra DPAPI. Nenhuma senha real.
+  Set-Content -LiteralPath (Join-Path $raizBackup 'comum/backup-senha.dpapi') -Value 'cifra-ficticia-nao-decifravel'
+  Igual '' (Obter-AvisoBackup $raizBackup) 'rede e arquivo de senha presentes'
   Add-Content -LiteralPath $arquivoBackup -Value 'BACKUP_ANEXAR_BANCO=true'
-  Igual $true ((Obter-AvisoBackup $raizBackup) -like '*habilitado*') 'anexo explicito'
+  Igual '' (Obter-AvisoBackup $raizBackup) 'chave antiga de anexo ignorada'
 } finally { Remove-Item -LiteralPath $raizBackup -Recurse -Force }
 
 # Mesmas fixtures do Node e Python; somente diretorio descartavel.
