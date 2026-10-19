@@ -52,7 +52,7 @@ export function executar7z(executavel, senha, argumentos, { cwd, timeout = 12000
     // A listagem cifrada -slt -ba tem este prefixo exato. Nao usar trim ou
     // remover linhas no meio: formato novo/inesperado deve falhar fechado.
     if (!argumentos.includes('-slt') || !argumentos.includes('-ba') || !saida.startsWith(promptSenha)) throw new Error();
-    const lista = saida.slice(promptSenha.length);
+    const lista = saida.substring(promptSenha.length);
     if (!lista.startsWith('Path = ') || /[\r\n]Enter password|[\r\n]Verify password/.test(lista)) throw new Error();
     return lista;
   } catch { throw new FalhaBackup('7-Zip falhou: confira senha, arquivo e permissoes.'); }
