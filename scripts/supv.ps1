@@ -118,7 +118,7 @@ function Mostrar-ProgressoSupv($a,$Exibicao=$null){
  if($a){
   $modo=if($a.modo-in@('rapido','completo')){$a.modo}else{'a definir'}
   if($a.motivoModo-and$modo-ne'a definir'-and($null-eq$Exibicao-or!$Exibicao.motivoMostrado)){
-   $motivo=([string]$a.motivoModo -replace '\s+', ' ').Trim()
+   $motivo=Formatar-MotivoPreparo $a.motivoModo
    Escrever-Supv ("Modo ${modo}: "+$motivo)
    if($null-ne$Exibicao){$Exibicao.motivoMostrado=$true}
   }

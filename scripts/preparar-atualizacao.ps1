@@ -130,6 +130,7 @@ try {
  if($ci.bloqueado){throw $ci.motivo}
  Concluir-PassoPreparo
  $modo=if($ci.rapido){'rapido'}else{'completo'}
+ $ci.motivo=Formatar-MotivoPreparo $ci.motivo
  $linhaModo=if($ci.rapido){"PREPARAR: modo rapido - $($ci.motivo)"}else{"PREPARAR: modo completo - motivo: $($ci.motivo)"}
  Write-Host $linhaModo
  try{Add-Content (Join-Path $Raiz 'preparo-tempos.log') $linhaModo -Encoding UTF8;if($publicarTempos){Add-Content $TemposArquivo $linhaModo -Encoding UTF8}}catch{}

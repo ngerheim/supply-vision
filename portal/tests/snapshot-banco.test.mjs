@@ -4,6 +4,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
+import { fileURLToPath } from 'node:url';
+import { execFileSync } from 'node:child_process';
 import { criarSnapshot } from '../scripts/snapshot-banco.mjs';
 
 void test('snapshot inclui transacoes confirmadas no WAL sem fechar escritor', () => {
@@ -21,5 +23,7 @@ void test('snapshot inclui transacoes confirmadas no WAL sem fechar escritor', (
     try { assert.equal(copia.prepare('SELECT email FROM users').get().email, 'a@example.com'); }
     finally { copia.close(); }
     assert.throws(() => criarSnapshot(origem, destino), /ja existe/);
+    const saida = execFileSync(process.execPath, [fileURLToPath(new URL('../scripts/snapshot-banco.mjs', import.meta.url)), origem, path.join(dir, 'cli.sqlite')], { encoding: 'utf8' });
+    assert.equal(saida.trim(), 'users=1, tickets=0, agreements=0, agreement_items=0, suppliers=0, catalog_items=0, units=0, email_notifications=0');
   } finally { db.close(); fs.rmSync(dir, { recursive: true, force: true }); }
 });
