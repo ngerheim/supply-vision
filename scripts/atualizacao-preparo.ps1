@@ -637,6 +637,11 @@ function Executar-PowerShellOculto([string[]]$Argumentos,[string]$Executavel='po
  }finally{$processo.Dispose()}
 }
 
+function Formatar-MotivoPreparo([string]$Motivo) {
+ # Expressoes de matriz do GitHub sao rotulos, nao registros de banco.
+ return ([regex]::Replace($Motivo,'\$\{\{\s*([^{}]+?)\s*\}\}','($1)') -replace '\s+', ' ').Trim()
+}
+
 # CI conhecido pode bloquear a troca; indisponibilidade usa todas as suites.
 function Consultar-APICIPreparo([string]$Caminho) {
  # Sem Authorization, sem token e sem ferramentas autenticadas do GitHub.

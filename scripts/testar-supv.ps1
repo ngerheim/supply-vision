@@ -213,10 +213,39 @@ try{
   Set-Content $envTeste 'EXPURGO_EMAILS_DIAS=180' -Encoding UTF8
   $segredos=Obter-SegredosHomologacao $privadoTeste
   Exigir-Supv ((Mascarar-Homologacao 'total 180 s' $segredos)-eq'total 180 s') 'dias de retencao nao mascaram duracao'
+  Add-Content $envTeste "SMTP_PORT=587`nBACKUP_EMAIL_MAX_MB=15`nSMTP_SECURE=false`nSMTP_HOST=smtp.exemplo.test`nSMTP_USER=conta-ficticia" -Encoding UTF8
+  $segredos=Obter-SegredosHomologacao $privadoTeste
+  $numeros='total 587 s, 15 MB, false, a3d153f; 154.1 GB; 11:15'
+  Exigir-Supv ((Mascarar-Homologacao $numeros $segredos)-eq$numeros) 'parametros numericos e booleanos nao mascaram duracao, tamanho, SHA ou horario'
+  Exigir-Supv ((Mascarar-Homologacao 'smtp.exemplo.test conta-ficticia' $segredos)-eq'[mascarado] [mascarado]') 'host e conta SMTP continuam secretos'
+  foreach($valor in @('true','FALSE','0','1')){
+   Add-Content $envTeste ("SMTP_TESTE="+$valor) -Encoding UTF8
+  }
+  $segredos=Obter-SegredosHomologacao $privadoTeste
+  Exigir-Supv ((Mascarar-Homologacao 'true FALSE 0 1' $segredos)-eq'true FALSE 0 1') 'booleanos SMTP nao viram segredos independentemente da caixa'
   Add-Content $envTeste "SMTP_PASSWORD=180`nPORTAL_API_TOKEN=segredo-ficticio`nEMAIL_FROM=pessoa@example.com" -Encoding UTF8
   $segredos=Obter-SegredosHomologacao $privadoTeste
   $texto=Mascarar-Homologacao '180 segredo-ficticio pessoa@example.com Bearer abc123' $segredos
   Exigir-Supv ($texto-notmatch'180|segredo-ficticio|pessoa@example.com|abc123') 'segredos reais inclusive numericos continuam mascarados'
+ }
+ # Resumos operacionais e rotulos de matriz passam pelo mesmo mascaramento dos logs/status.
+ & {
+  $r=Executar-NativoOperacao (Get-Command node.exe).Source @('--experimental-strip-types',(Join-Path $origem '../portal/scripts/testar-restauracao.mjs'),'--fixture')
+  Exigir-Supv ($r.codigo-eq0) 'restauracao em copia descartavel aprovada'
+  $resumo=@($r.stdout|Where-Object {$_-like'Preparacao da restauracao aprovada*'})
+  Exigir-Supv ($resumo.Count-eq1-and$resumo[0]-like'*users=1, tickets=0*') 'resumo da restauracao exibe contagens legiveis'
+  Exigir-Supv ((Mascarar-Homologacao $resumo[0])-eq$resumo[0]) 'resumo real da restauracao nao e omitido'
+  foreach($modo in @('rapido','completo')){
+   $motivo=Formatar-MotivoPreparo 'check nao aprovado: Atualizacao real - ${{ matrix.grupo }} (completed/skipped); modo completo'
+   $linha="PREPARAR: modo $modo - motivo: $motivo"
+   Exigir-Supv ((Mascarar-Homologacao $linha)-eq$linha-and$linha.Contains('(matrix.grupo)')) 'linha do modo PREPARAR preserva motivo nos logs'
+   $a=@{numero=1;total=37;nome='PREPARAR / Build do Portal';modo=$modo;motivoModo='check nao aprovado: Atualizacao real - ${{ matrix.grupo }} (completed/skipped)';estado='andamento';etapaSegundos=0;totalSegundos=0;restanteSegundos=$null}
+   $texto=Capturar-Supv {Mostrar-ProgressoSupv $a @{}}
+   Exigir-Supv ($texto.Contains("Modo ${modo}: check nao aprovado: Atualizacao real - (matrix.grupo)")-and$texto-notlike'*conteudo omitido*') 'status preserva motivo do modo com rotulo de matriz'
+  }
+  foreach($linha in @('{"users":11}','SELECT * FROM users','usuario=exemplo','payload: sigiloso','preco=10','chamado: exemplo')){
+   Exigir-Supv ((Mascarar-Homologacao $linha)-eq'[conteudo omitido]') 'regra de omissao integral permanece restritiva'
+  }
  }
  # Consultas identicas nao imprimem de novo; segundos e modo ainda atualizam.
  & {

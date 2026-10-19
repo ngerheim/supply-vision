@@ -4,9 +4,10 @@ foreach($arquivo in @(Get-ChildItem -LiteralPath $privado -Filter '*.env' -Recur
  foreach($l in Get-Content $arquivo.FullName -Encoding UTF8){
   if($l-match '^\s*([^#=]+)=(.+)$'){
    $chave=$Matches[1].Trim();$valor=$Matches[2]
-   # Retencao em dias nao e um endereco de e-mail nem um segredo.
-   if($chave-eq'EXPURGO_EMAILS_DIAS'-and$valor.Trim()-match'^\d+$'){continue}
-   if($chave-match '(?i)TOKEN|PASS|SENHA|SECRET|SMTP|EMAIL|KEY'){$segredos+=$valor.Trim()}
+   $valor=$valor.Trim()
+   # Credenciais numericas continuam secretas; parametros SMTP/EMAIL nao sao credenciais.
+   if($chave-match '(?i)TOKEN|PASS|SENHA|SECRET|KEY'){$segredos+=$valor}
+   elseif($chave-match '(?i)SMTP|EMAIL'-and$valor-notmatch'(?i)^(\d+|true|false)$'){$segredos+=$valor}
   }
  }
 }

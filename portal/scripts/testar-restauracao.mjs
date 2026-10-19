@@ -24,5 +24,5 @@ try {
   if (!fs.existsSync(origem)) throw new Error(`Backup nao encontrado: ${origem}`);
   const { resumo, marcados } = prepararRestauracao(origem, copia, validarBanco);
   validarBanco(copia);
-  console.log(`Preparacao da restauracao aprovada em copia descartavel: ${JSON.stringify(resumo)}; ${marcados} entregas neutralizadas. O banco operacional nao foi substituido.`);
+  console.log(`Preparacao da restauracao aprovada em copia descartavel: ${Object.entries(resumo).map(([tabela, total]) => `${tabela}=${total}`).join(", ")}; ${marcados} entregas neutralizadas. O banco operacional nao foi substituido.`);
 } catch { console.error('Teste do backup falhou: confira rede, senha, 7-Zip e integridade.'); process.exitCode = 1; } finally { fs.rmSync(pasta, { recursive: true, force: true }); }

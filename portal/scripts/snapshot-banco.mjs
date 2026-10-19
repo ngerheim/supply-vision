@@ -17,5 +17,5 @@ export function criarSnapshot(origem, destino) {
 
 if (process.argv[1] && pathToFileURL(path.resolve(process.argv[1])).href === import.meta.url) {
   if (process.argv.length !== 4) throw new Error('Uso: snapshot-banco.mjs origem.sqlite destino.sqlite');
-  console.log(JSON.stringify(criarSnapshot(path.resolve(process.argv[2]), path.resolve(process.argv[3]))));
+  console.log(Object.entries(criarSnapshot(path.resolve(process.argv[2]), path.resolve(process.argv[3]))).map(([tabela, total]) => `${tabela}=${total}`).join(", "));
 }
