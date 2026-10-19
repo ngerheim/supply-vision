@@ -830,7 +830,7 @@ try {
     const primeira=Promise.allSettled([tentar()]).then(resultados=>{concluida=true;duracaoPrimeira=performance.now()-inicio;return resultados[0];});
     try {
       // A insercao acontece depois da reserva por alvo. Aguarda esse efeito real,
-      // em vez de presumir que o primeiro fetch ja entrou no Worker.
+      // em vez de presumir que o primeiro fetch ja entrou no servidor.
       const prazo=performance.now()+5000;
       while(query('SELECT COUNT(*) n FROM login_attempts WHERE email=?',alvo)[0].n===tentativasAntes){
         assert.equal(concluida,false,'Primeira tentativa encerrou antes de registrar a reserva');
@@ -841,21 +841,17 @@ try {
         assert.equal(concluida,false,'Tentativas precisam se sobrepor a reserva do alvo');
         return tentar();
       };
-      // O burst de 20 conexoes pode derrubar o transporte servidor no
-      // Windows (500 bruto "Network connection lost."). Mantem as 19 disputas
-      // contra a MESMA reserva, com no maximo tres pedidos em voo e sem repetir
-      // requisicoes. Qualquer 500/erro de rede continua reprovando o cenario.
-      const [legitimo, primeiraDuplicada]=await Promise.all([
-        request('/api/login',{method:'POST',body:{email:'admin@portal.test',password:senha}}),
-        Promise.allSettled([duplicada()]),
+      // O burst de 20 tentativas contra o alvo soma a primeira em andamento e as 19 duplicadas.
+      const [legitimo, duplicadas]=await Promise.all([
+        request('/api/login',{method:'POST',body:{email:'admin@portal.test',password:senha}}).then(resultado=>{
+          assert.equal(resultado.status,200,JSON.stringify(resultado.data));
+          assert.equal(concluida,false,'Outro usuario deve entrar durante a reserva do alvo');
+          return resultado;
+        }),
+        Promise.allSettled(Array.from({length:19},duplicada)),
       ]);
       assert.equal(legitimo.status,200,JSON.stringify(legitimo.data));
-      assert.equal(concluida,false,'Outro usuario deve entrar durante a reserva do alvo');
-      const resultados=[null,...primeiraDuplicada];
-      for(let restantes=18;restantes>0;restantes-=2){
-        resultados.push(...await Promise.allSettled([duplicada(),duplicada()]));
-      }
-      resultados[0]=await primeira;
+      const resultados=[await primeira,...duplicadas];
       const lote=resultados.filter(r=>r.status==='fulfilled').map(r=>r.value);
       const distribuicao=new Map();
       for(const r of resultados){
