@@ -49,7 +49,7 @@ jobs:
         shell: powershell
         run: ./scripts/ci/testar-diagnostico-portal.ps1
       - name: Cache PSScriptAnalyzer 1.25.0
-        uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ runner.temp }}/pssa/PSScriptAnalyzer/1.25.0
           key: pssa-${{ runner.os }}-1.25.0-v2
