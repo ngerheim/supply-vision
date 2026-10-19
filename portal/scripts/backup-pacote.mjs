@@ -3,7 +3,7 @@ import path from 'node:path';
 import { privado } from './caminhos.mjs';
 import { localizarBanco } from './banco-local.mjs';
 import { criarSnapshot } from './snapshot-banco.mjs';
-import { executar7z, FalhaBackup } from './backup-7z.mjs';
+import { executar7z, exigirNomesCriptografados, FalhaBackup } from './backup-7z.mjs';
 import { hashArquivo } from './backup-rede.mjs';
 import { validarBanco } from './validar-banco.mjs';
 
@@ -57,10 +57,11 @@ export function montarPacote(pasta, { raiz = privado, banco = localizarBanco(nul
   const arquivos = Object.fromEntries(listarArquivos(pasta).map(nome => [nome, hashArquivo(path.join(pasta, nome))]));
   fs.writeFileSync(path.join(pasta, 'backup.json'), JSON.stringify({ formato: 1, bancoNome: path.basename(banco), arquivos }));
 }
-export function compactarPacote(pasta, arquivo, executavel, senha) {
+export function compactarPacote(pasta, arquivo, executavel, senha, { executar } = {}) {
   if (fs.existsSync(arquivo)) throw new FalhaBackup('Arquivo de backup ja existe.');
-  executar7z(executavel, senha, ['a', '-t7z', '-m0=lzma2', '-mx=9', '-mhe=on', arquivo, '.'], { cwd: pasta });
-  executar7z(executavel, senha, ['t', arquivo]);
+  executar7z(executavel, senha, ['a', '-t7z', '-m0=lzma2', '-mx=9', '-mhe=on', arquivo, '.'], { cwd: pasta, executar });
+  exigirNomesCriptografados(executavel, arquivo, { executar });
+  executar7z(executavel, senha, ['t', arquivo], { executar });
 }
 export function validarPacote(pasta) {
   const meta = JSON.parse(fs.readFileSync(path.join(pasta, 'backup.json'), 'utf8'));
@@ -78,16 +79,17 @@ export function validarPacote(pasta) {
   validarBanco(path.join(pasta, 'banco/portal.sqlite'));
   return meta;
 }
-export function extrairPacote(arquivo, pasta, executavel, senha) {
-  executar7z(executavel, senha, ['t', arquivo]);
+export function extrairPacote(arquivo, pasta, executavel, senha, { executar } = {}) {
+  exigirNomesCriptografados(executavel, arquivo, { executar });
+  executar7z(executavel, senha, ['t', arquivo], { executar });
   // Conferir nomes ANTES de extrair: um pacote adulterado nao pode sair do TEMP.
-  const lista = executar7z(executavel, senha, ['l', '-slt', '-ba', arquivo]);
+  const lista = executar7z(executavel, senha, ['l', '-slt', '-ba', arquivo], { executar });
   for (const bloco of lista.trim().split(/\r?\n\r?\n/)) {
     const nome = /^Path = (.+)$/m.exec(bloco)?.[1]?.trim().replaceAll('\\', '/');
     if (!nome || nome.startsWith('/') || nome.split('/').some(p => p === '..' || /[:\0]/.test(p))
       || /^(?:Symbolic Link|Hard Link) =/m.test(bloco) || /^Attributes = .*\bl[rw-]/m.test(bloco)) throw new FalhaBackup('Caminho inseguro no arquivo de backup.');
   }
-  executar7z(executavel, senha, ['x', arquivo, `-o${pasta}`]);
+  executar7z(executavel, senha, ['x', arquivo, `-o${pasta}`], { executar });
   return validarPacote(pasta);
 }
 export function exigirDestinoSeguro(nome, raiz = privado) {

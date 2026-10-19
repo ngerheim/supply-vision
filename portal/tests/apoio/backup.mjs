@@ -1,13 +1,18 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
+import { randomBytes } from 'node:crypto';
 import { SCHEMA_RELATORIOS } from '../../lib/relatorios.ts';
-import { localizar7zip } from '../../scripts/backup-7z.mjs';
-export const senhaFicticia = 'Ficticia com espaco ç!"123';
+import { localizar7zip, FalhaBackup } from '../../scripts/backup-7z.mjs';
+export const senhaFicticia = `Ficticia com espaco ç!"${randomBytes(18).toString('hex')}`;
 export function ferramenta7z(t) {
   const config = { BACKUP_7ZIP_EXE: process.env.SV_TEST_7ZIP };
   try { return localizar7zip(config); }
-  catch { t.skip('Integracao 7z exige SV_TEST_7ZIP com 7-Zip oficial >=24.09.'); return null; }
+  catch (erro) {
+    if (!(erro instanceof FalhaBackup) || !erro.message.startsWith('7-Zip ausente ou indisponivel.')) throw erro;
+    t.skip('Integracao 7z pulada: executavel ausente ou indisponivel. Instale o 7-Zip oficial >=24.09 ou configure SV_TEST_7ZIP.');
+    return null;
+  }
 }
 export function bancoFicticio(arquivo) {
   fs.mkdirSync(path.dirname(arquivo), { recursive: true });

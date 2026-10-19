@@ -275,6 +275,11 @@ jobs:
           "SUPPLY_VISION_PRIVADO=$pastaTeste" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
       - run: npm ci
         working-directory: portal
+      - name: Validar senha 7-Zip via stdin e restauracao ficticia
+        shell: powershell
+        run: |
+          node --experimental-strip-types --test portal/tests/backup-7z.test.mjs portal/tests/backup-7z-integracao.test.mjs portal/tests/backup-restauracao-e2e.test.mjs
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
       - name: npm com conta de usuario e TEMP curto 8.3
         shell: powershell
         env:
