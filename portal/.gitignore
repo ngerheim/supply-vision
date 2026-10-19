@@ -35,7 +35,6 @@ yarn-error.log*
 .vercel
 next-env.d.ts
 /dist/
-/.wrangler/
 /outputs/
 /work/
 
@@ -43,8 +42,7 @@ next-env.d.ts
 # Dados sensiveis da operacao - NAO VERSIONAR
 # ---------------------------------------------------------------
 
-# Banco de dados local (D1/Miniflare): precos, usuarios, hashes de senha
-/.wrangler/
+# Banco SQLite local: precos, usuarios, hashes de senha
 *.sqlite
 *.sqlite-shm
 *.sqlite-wal

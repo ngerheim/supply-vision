@@ -19,7 +19,7 @@ function inserir(db,id,fornecedor='ÁGUA e Peças',cidade='São   Paulo',normali
     .run(String(id),campos.code,fornecedor,cidade,'SP',normalizado?dados.searchText:null,normalizado?dados.supplierSort:null,new Date(Date.UTC(2026,0,1)+Number(id)*1000).toISOString());
   return campos;
 }
-function d1(db,antesBatch=()=>{}) {
+function adaptador(db,antesBatch=()=>{}) {
   return {
     prepare(sql) {
       let valores=[];
@@ -46,13 +46,13 @@ void test('migra legado em lotes e retoma apos interrupcao sem alterar dados ori
   try{
     for(let i=1;i<=251;i++)inserir(db,i,'ÓLEO e AÇÃO','Ribeirão Preto',false);
     let lotes=0;
-    await assert.rejects(migrarBuscaChamados(d1(db,()=>{if(++lotes===2)throw new Error('interrupcao ficticia');})),/interrupcao/);
+    await assert.rejects(migrarBuscaChamados(adaptador(db,()=>{if(++lotes===2)throw new Error('interrupcao ficticia');})),/interrupcao/);
     assert.equal(db.prepare('SELECT COUNT(*) n FROM tickets WHERE search_text IS NOT NULL').get().n,100);
-    await migrarBuscaChamados(d1(db));
+    await migrarBuscaChamados(adaptador(db));
     assert.equal(db.prepare('SELECT COUNT(*) n FROM tickets WHERE search_text IS NULL OR supplier_sort IS NULL').get().n,0);
     assert.equal(db.prepare('SELECT COUNT(*) n FROM tickets WHERE supplier_name=? AND city=?').get('ÓLEO e AÇÃO','Ribeirão Preto').n,251);
     assert.equal(listar(db,{q:'OLEO E ACAO'}).length,50);
-    await migrarBuscaChamados(d1(db,()=>assert.fail('legado pronto nao deve ser regravado')));
+    await migrarBuscaChamados(adaptador(db,()=>assert.fail('legado pronto nao deve ser regravado')));
   }finally{db.close();}
 });
 void test('migracao nao grava chave calculada com uma localidade antiga',async()=>{
@@ -60,7 +60,7 @@ void test('migracao nao grava chave calculada com uma localidade antiga',async()
   try{
     inserir(db,1,'ÁGUA','São Paulo',false);
     let primeiro=true;
-    await migrarBuscaChamados(d1(db,()=>{if(primeiro){primeiro=false;db.prepare('UPDATE tickets SET city=? WHERE id=?').run('ÁREA NOVA','1');}}));
+    await migrarBuscaChamados(adaptador(db,()=>{if(primeiro){primeiro=false;db.prepare('UPDATE tickets SET city=? WHERE id=?').run('ÁREA NOVA','1');}}));
     assert.equal(listar(db,{q:'sao paulo'}).length,0);
     assert.equal(listar(db,{q:'AREA NOVA'}).length,1);
   }finally{db.close();}

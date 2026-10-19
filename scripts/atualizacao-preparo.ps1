@@ -92,7 +92,7 @@ namespace SupplyVision {
    } else using(FileStream handle = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.None, 1)) { }
   }
   static string Hex(byte[] bytes) { return BitConverter.ToString(bytes).Replace("-", "").ToLowerInvariant(); }
-  static bool Cache(string name) { return name == ".cache" || name == ".mf" || name == ".wrangler" || name == ".miniflare" || name == "__pycache__"; }
+  static bool Cache(string name) { return name == ".cache" || name == "__pycache__"; }
   static void Inventariar(string root, DirectoryInfo directory, StringBuilder entries, ref long files, ref long dirs, int depth, Action<string> limpar) {
    if(depth > 64) throw new IOException("Profundidade excessiva nas dependencias.");
    // FileSystemInfo reutiliza os metadados retornados pela enumeracao no Windows.

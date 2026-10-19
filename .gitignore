@@ -9,7 +9,6 @@
 **/.pytest_cache/
 **/.venv/
 **/dist/
-**/.wrangler/
 **/work/
 **/coverage/
 
@@ -18,6 +17,9 @@
 **/*.lock
 **/*.pid
 **/.DS_Store
+
+# Estado residual de instalacoes antigas pode conter banco e dados sensiveis.
+**/.wrangler/
 
 # Defesa contra dados reais fora da area privada
 *.xlsx

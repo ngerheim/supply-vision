@@ -1,7 +1,7 @@
 import { revisarPedidosInterrompidos } from './pedidos-interrompidos.mjs';
 import { travarRestauracao } from './trava-restauracao.mjs';
 import { validacaoAtiva } from './operacao-validacao.mjs';
-// Ponte local: o Worker só enfileira pedidos; este processo executa Python.
+// Consumidor local: o Portal enfileira pedidos; este processo executa Python.
 import fs from 'node:fs';
 import path from 'node:path';
 import http from 'node:http';
