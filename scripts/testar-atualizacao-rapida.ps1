@@ -34,6 +34,25 @@ try{
    $recusou=$false
    try{[void](Copiar-DependenciasPreparo (Join-Path $raiz 'portal/node_modules') (Join-Path $preparo 'proibido'))}catch{$recusou=$true}
    Exigir $recusou 'Copia seguiu link para privado da producao.'
+   # Materializacao direcionada: so o link vira copia; o resto nao e recopiado.
+   [IO.Directory]::Delete((Join-Path $raiz 'portal/node_modules/proibido'),$false)
+   $instalado=Join-Path $raiz 'portal/node_modules'
+   New-Item -ItemType Directory -Force (Join-Path $instalado 'fisico')|Out-Null
+   [IO.File]::WriteAllText((Join-Path $instalado 'fisico/marca'),'fisico')
+   $antes=(Get-Item -LiteralPath (Join-Path $instalado 'fisico/marca')).LastWriteTimeUtc
+   Exigir ((Materializar-LinksDependencias $instalado)-eq1) 'Nao materializou exatamente um link.'
+   Exigir (!@(Get-ChildItem -LiteralPath $instalado -Recurse -Force -Attributes ReparsePoint).Count) 'Link sobreviveu a materializacao.'
+   Exigir ((Get-Content (Join-Path $instalado 'pacote/versao'))-eq'vendor') 'Conteudo do link nao foi materializado.'
+   Exigir ((Get-Item -LiteralPath (Join-Path $instalado 'fisico/marca')).LastWriteTimeUtc-eq$antes) 'Arvore fisica foi recopiada.'
+   [IO.File]::WriteAllText((Join-Path $instalado 'pacote/versao'),'alterado')
+   Exigir ((Get-Content (Join-Path $vendor 'versao'))-eq'vendor') 'Materializacao alterou o destino do link.'
+   Exigir ((Materializar-LinksDependencias $instalado)-eq0) 'Arvore fisica nao deve ter links.'
+   New-Item -ItemType $(if($env:OS-eq'Windows_NT'){'Junction'}else{'SymbolicLink'}) -Path (Join-Path $instalado 'proibido') -Target $privado|Out-Null
+   $recusou=$false
+   try{[void](Materializar-LinksDependencias $instalado)}catch{$recusou=$true}
+   Exigir $recusou 'Materializacao seguiu link para privado da producao.'
+   Exigir (Test-Path -LiteralPath $privado) 'Recusa removeu o destino proibido.'
+   [IO.Directory]::Delete((Join-Path $instalado 'proibido'),$false)
    Exigir (!(Copiar-DependenciasPreparo (Join-Path $raiz 'ausente') (Join-Path $preparo 'ausente'))) 'Dependencias ausentes devem instalar.'
   }else{
    if($caso-eq'falha-parcial'){Remove-Item (Join-Path $preparo 'alertas/.venv') -Recurse -Force}

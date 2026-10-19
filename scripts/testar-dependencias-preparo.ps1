@@ -37,7 +37,7 @@ foreach($amostra in $amostras){
 }
 Write-Host '[OK] Strings duplas ASCII e parser ANSI de copias sem BOM nos scripts operacionais e na CLI.'
 try{
- foreach($caso in @('inalteradas','alteradas','metadata-engines','metadata-pacote','metadata-reaplicar','metadata-mesmo-sha','build-falha','portal-falha','alertas-falha','operacional-falha','ci-espera-verde','ci-espera-vermelho','ci-espera-api','ci-espera-cancelada','ci-aprovado','ci-log-explicito','ci-pr-verde','ci-pr-arvore','ci-pr-falho','ci-pr-pendente','ci-pr-ausente','ci-pr-erro','ci-pr-skipped','ci-pr-skipped-real','ci-pr-push-only','ci-pr-sem-check','ci-pr-app','ci-pr-ambigua','ci-pr-main-falho','ci-pr-main-cancelado','ci-pr-queued','ci-pr-tree-api','ci-pr-sha','ci-pr-paginacao','ci-rede','ci-ausente','ci-pendente','ci-falho','ci-timeout','ci-cancelado','ci-skipped','ci-sha','ci-invalido','ci-forcado','ci-forcado-env','fumaca-falha')){
+ foreach($caso in @('inalteradas','alteradas','metadata-engines','metadata-pacote','metadata-reaplicar','metadata-mesmo-sha','build-falha','portal-falha','alertas-falha','operacional-falha','ci-espera-verde','ci-espera-vermelho','ci-espera-api','ci-espera-cancelada','ci-aprovado','ci-log-explicito','ci-pr-verde','ci-pr-arvore','ci-pr-falho','ci-pr-pendente','ci-pr-ausente','ci-pr-erro','ci-pr-skipped','ci-pr-skipped-real','ci-pr-push-only','ci-pr-sem-check','ci-pr-app','ci-pr-ambigua','ci-pr-main-falho','ci-pr-main-cancelado','ci-pr-queued','ci-pr-tree-api','ci-pr-sha','ci-pr-paginacao','ci-pr-matriz','ci-matriz-pulada','ci-rede','ci-ausente','ci-pendente','ci-falho','ci-timeout','ci-cancelado','ci-skipped','ci-sha','ci-invalido','ci-forcado','ci-forcado-env','fumaca-falha')){
   $instalacao=Join-Path $base $caso
   $preparo=Nova-PastaPreparo $instalacao
   foreach($dir in @('portal/node_modules','alertas/.venv/Scripts','privado')){New-Item -ItemType Directory -Force (Join-Path $instalacao $dir)|Out-Null}
@@ -146,6 +146,13 @@ function Invoke-RestMethod {
    return (@{total_count=$total;check_runs=$checks}|ConvertTo-Json -Depth 5|ConvertFrom-Json)
   }
  }
+ # Push da main: grupos da matriz do H2 pulados, com o nome sem expandir.
+ if($Caso-in@('ci-matriz-pulada','ci-pr-matriz')-and!($Caso-eq'ci-pr-matriz'-and$naPR)){
+  $checks+=@([pscustomobject]@{name='Atualizacao real - ${{ matrix.grupo }}';head_sha=$checks[0].head_sha;status='completed';conclusion='skipped';app=@{slug='github-actions';id=15368}})
+ }
+ if($Caso-eq'ci-pr-matriz'-and$naPR){
+  foreach($grupo in @('atualizacao','reversao')){$checks+=@([pscustomobject]@{name="Atualizacao real - $grupo";head_sha=$prSha;status='completed';conclusion='success';app=@{slug='github-actions';id=15368}})}
+ }
  if($Caso-eq'ci-ausente'){$checks=@($checks|Where-Object name -ne 'PowerShell')}
  if($Caso-eq'ci-pendente'){$checks[3].status='in_progress'}
  if($Caso-eq'ci-falho'){$checks[0].conclusion='failure'}
@@ -203,7 +210,7 @@ exit $LASTEXITCODE
   if(($rc-eq0)-ne($caso-notin@('build-falha','portal-falha','alertas-falha','operacional-falha','fumaca-falha','ci-falho','ci-timeout','ci-cancelado','ci-pr-main-falho','ci-pr-main-cancelado','ci-espera-vermelho','ci-espera-cancelada'))){throw "Preparo incorreto em $caso (rc=$rc): $saida"}
   if(($passos-contains'npm-ci')-ne($caso-in@('alteradas','metadata-pacote','metadata-reaplicar','metadata-mesmo-sha'))-or($passos-contains'pip')-ne($caso-eq'alteradas')){throw "Decisao de dependencias incorreta: $caso"}
   if($caso-eq'metadata-engines'-and($saida-join' ')-notlike'*Dependencias Node: copia - motivo: reserva ausente*'){throw 'Pai legado nao reutilizou copia apos mudanca somente em engines.'}
-  $rapido=$caso-in@('ci-espera-verde','ci-aprovado','ci-log-explicito','fumaca-falha','ci-pr-verde','ci-pr-queued','ci-pr-skipped-real','ci-pr-paginacao')
+  $rapido=$caso-in@('ci-espera-verde','ci-aprovado','ci-log-explicito','fumaca-falha','ci-pr-verde','ci-pr-queued','ci-pr-skipped-real','ci-pr-paginacao','ci-pr-matriz','ci-matriz-pulada')
   if($rc-eq0-and@($passos|Where-Object {$_-like'operacional:*'}).Count-ne$(if($rapido){2}else{4})){throw 'Removeu verificacao operacional.'}
   if($rapido-and($passos-contains'portal'-or$passos-contains'alertas'-or$passos-notcontains'fumaca')){throw 'Modo rapido nao respeitou suites/fumaca.'}
   if(!$rapido-and$rc-eq0-and($passos-notcontains'portal'-or$passos-notcontains'alertas')){throw 'Fallback nao executou todas as suites.'}
