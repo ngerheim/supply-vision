@@ -49,35 +49,47 @@ $Reaplicar=$argumentos -contains '-Reaplicar'
 if (!$mexeuNode -or !$mexeuPython) { throw 'Reparo sem diff dispensou dependencias.' }
 Write-Host '[OK] Reexecucao do reparo reinstala Node e Python.'
 
-# Codigo 3 do backup (inclusive prazo da rede): o bloco real preserva a copia
-# local e o reinicio real reabilita/dispara a tarefa, sem Agendador neste teste.
-$pastaBackupTeste=Join-Path ([IO.Path]::GetTempPath()) ('sv-backup-prazo-'+[guid]::NewGuid().ToString('N'))
+# O snapshot local e obrigatorio antes da troca. A rede/7z/senha pertencem ao
+# backup agendado e nao participam desta janela de parada.
+$pastaBackupTeste=Join-Path ([IO.Path]::GetTempPath()) ('sv-backup-local-'+[guid]::NewGuid().ToString('N'))
 try {
  New-Item -ItemType Directory -Path $pastaBackupTeste|Out-Null
- $BackupAntesAtualizacaoOrigem=Join-Path $pastaBackupTeste 'local.sqlite'
  $BackupAntesAtualizacao=Join-Path $pastaBackupTeste 'pre-atualizacao.sqlite'
- Set-Content -LiteralPath $BackupAntesAtualizacaoOrigem 'snapshot local ficticio validado'
  $ast=[Management.Automation.Language.Parser]::ParseFile((Join-Path $PSScriptRoot 'atualizar-servidor.ps1'),[ref]$null,[ref]$null)
- $bloco=$ast.Find({param($n) $n-is[Management.Automation.Language.IfStatementAst]-and$n.Extent.Text.Contains("Etapa 'Backup do banco antes de trocar a versao'")},$true)
  $reinicio=$ast.Find({param($n) $n-is[Management.Automation.Language.FunctionDefinitionAst]-and$n.Name-eq'Iniciar-OperacaoAtualizada'},$true)
- function nodeBackupTeste {$global:LASTEXITCODE=3}
- function Testar-SupervisorEncerrado {return $false}
- function Parar-OperacaoAtualizacao {}
- function Aviso {param($Texto);$script:avisoBackup=$Texto}
+ function nodeBackupTeste {
+  $global:LASTEXITCODE=$script:codigoSnapshot
+  if($args-notcontains'--somente-local'-or$args-notcontains'--pre-atualizacao'-or$args-contains'--somente-rede'){throw 'Atualizacao pediu backup fora do contrato de snapshot local.'}
+  if($script:codigoSnapshot-eq0){Set-Content -LiteralPath $BackupAntesAtualizacao 'snapshot local ficticio validado'}
+ }
  function Enable-ScheduledTask {$script:habilitouBackup=$true}
  function Start-ScheduledTask {$script:retomouBackup=$true}
- $Node='nodeBackupTeste';$Portal=$pastaBackupTeste;$Raiz=$pastaBackupTeste;$JaAtualizado=$false
- $script:TarefaSemLogin=$true;$script:habilitouBackup=$false;$script:retomouBackup=$false
+ $Node='nodeBackupTeste';$Portal=$pastaBackupTeste;$Raiz=$pastaBackupTeste
+ $script:TarefaSemLogin=$true
  $inicioBackup=$source.IndexOf("  Etapa 'Backup do banco antes de trocar a versao'")
  $fimBackup=$source.IndexOf('  Ok "copia de antes da atualizacao:', $inicioBackup)
  $fimBackup=$source.IndexOf("`n",$fimBackup)
- . ([scriptblock]::Create($source.Substring($inicioBackup,$fimBackup-$inicioBackup)))
- if(!(Test-Path $BackupAntesAtualizacao)-or(Get-Content $BackupAntesAtualizacao -Raw)-ne(Get-Content $BackupAntesAtualizacaoOrigem -Raw)){throw 'Codigo 3 perdeu a copia local'}
- if($script:avisoBackup-notmatch 'rede falhou ou excedeu o prazo'){throw 'Prazo de rede nao explica continuidade'}
+ if($inicioBackup-lt0-or$fimBackup-le$inicioBackup){throw 'Bloco de snapshot obrigatorio nao encontrado.'}
+ $backupLocal=[scriptblock]::Create($source.Substring($inicioBackup,$fimBackup-$inicioBackup))
  . ([scriptblock]::Create($reinicio.Extent.Text))
- Iniciar-OperacaoAtualizada
- if(!$script:habilitouBackup-or!$script:retomouBackup){throw 'Retomada nao reabilitou/disparou tarefa'}
- Write-Host '[OK] Prazo da rede: copia local preservada; codigo 3 continua e tarefa e retomada.'
+ # O antigo codigo 3 de replica nao autoriza mais continuar; qualquer erro bloqueia.
+ foreach($codigoSnapshot in @(0,1,3)){
+  Set-Content -LiteralPath $BackupAntesAtualizacao 'protecao anterior ficticia'
+  $script:codigoSnapshot=$codigoSnapshot;$script:habilitouBackup=$false;$script:retomouBackup=$false
+  $erroBackup=$null
+  try{. $backupLocal}catch{$erroBackup=$_}
+  if($codigoSnapshot-eq0){
+   if($erroBackup){throw $erroBackup}
+   if((Get-Content $BackupAntesAtualizacao -Raw).Trim()-ne'snapshot local ficticio validado'){throw 'Snapshot de rollback nao foi gerado.'}
+   Iniciar-OperacaoAtualizada
+   if(!$script:habilitouBackup-or!$script:retomouBackup){throw 'Retomada nao reabilitou/disparou tarefa'}
+  }else{
+   if(!$erroBackup-or$erroBackup.Exception.Message-notlike'*O backup falhou. Atualizacao cancelada*'){throw 'Erro de snapshot deixou a atualizacao continuar.'}
+   if((Get-Content $BackupAntesAtualizacao -Raw).Trim()-ne'protecao anterior ficticia'){throw 'Erro de snapshot descartou a protecao anterior.'}
+   if($script:habilitouBackup-or$script:retomouBackup){throw 'Falha foi tratada como snapshot concluido.'}
+  }
+ }
+ Write-Host '[OK] Snapshot local: sucesso retoma tarefa; codigos 1 e 3 bloqueiam troca e preservam copia anterior.'
 } finally {Remove-Item -LiteralPath $pastaBackupTeste -Recurse -Force}
 
 # Executa o bloco real de reexecucao com processo nativo sintetico.
