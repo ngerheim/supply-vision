@@ -1,5 +1,3 @@
-# Revisao obrigatoria de quem responde pela operacao.
-#
-# Vale sobretudo para PR aberto por automacao: sem isto, uma atualizacao de
-# dependencia poderia entrar sozinha com o auto-merge ligado.
+# Responsavel pela revisao, inclusive de PRs de dependencias.
+# Exigir aprovacao depende de Require review from Code Owners na protecao da branch.
 * @ngerheim

@@ -40,5 +40,25 @@ void test('referencias dos grupos PowerShell cobrem scripts literais e lacos em 
     'portal/tests/orfaos-windows.test.mjs',
   ];
   for (const arquivo of esperados) assert.ok(arquivos.includes(arquivo), arquivo);
-  assert.equal(verificarTestesCI(workflow, fileURLToPath(new URL('../../', import.meta.url))), arquivosTesteCI(workflow).length);
+  const todos = new Set([...arquivosTesteCI(workflow), 'scripts/testar-persistencia-alertas.ps1', 'scripts/validar-operacao.ps1']);
+  assert.equal(verificarTestesCI(workflow, fileURLToPath(new URL('../../', import.meta.url))), todos.size);
+});
+
+void test('referencias incluem drivers transitivos, nomes PS1 sem pasta e validacao operacional', t => {
+  const raiz = fs.mkdtempSync(path.join(os.tmpdir(), 'sv-ci-drivers-'));
+  t.after(() => fs.rmSync(raiz, { recursive: true, force: true }));
+  const gravar = (nome, texto = '') => {
+    fs.mkdirSync(path.dirname(path.join(raiz, nome)), { recursive: true });
+    fs.writeFileSync(path.join(raiz, nome), texto);
+  };
+  gravar('scripts/ci/testar-driver.ps1', "./scripts/ci/testar-secundario.ps1\n$teste='testar-filho.ps1'\n$teste='validar-operacao.ps1'");
+  gravar('scripts/ci/testar-secundario.ps1', './scripts/ci/testar-driver.ps1');
+  const workflow = 'run: ./scripts/ci/testar-driver.ps1';
+  assert.throws(() => verificarTestesCI(workflow, raiz), /scripts\/testar-filho\.ps1/);
+  gravar('scripts/testar-filho.ps1', "# teste-fixture.ps1 e criado so durante a suite");
+  assert.throws(() => verificarTestesCI(workflow, raiz), /scripts\/validar-operacao\.ps1/);
+  gravar('scripts/validar-operacao.ps1');
+  assert.equal(verificarTestesCI(workflow, raiz), 4);
+  fs.unlinkSync(path.join(raiz, 'scripts/ci/testar-secundario.ps1'));
+  assert.throws(() => verificarTestesCI(workflow, raiz), /scripts\/ci\/testar-secundario\.ps1/);
 });

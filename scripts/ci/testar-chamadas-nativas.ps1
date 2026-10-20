@@ -1,7 +1,9 @@
 ﻿# AST ignora comentarios e strings de fixtures; nenhuma resolucao pelo PATH.
 [CmdletBinding()]
-param([string]$Raiz=(Resolve-Path (Join-Path $PSScriptRoot '../..')).Path)
+param([string]$Raiz)
 $ErrorActionPreference='Stop'
+# No PS5.1 -File, PSScriptRoot ainda pode estar vazio no default do parametro.
+if(!$PSBoundParameters.ContainsKey('Raiz')){$Raiz=(Resolve-Path (Join-Path $PSScriptRoot '../..')).Path}
 . (Join-Path $Raiz 'scripts/operacao-logica.ps1')
 function Encontrar-CapturasNativas([string]$Codigo,[string]$Arquivo) {
  $erros=$null;$ast=[Management.Automation.Language.Parser]::ParseInput($Codigo,[ref]$null,[ref]$erros)
@@ -75,7 +77,7 @@ try{
 }finally{$global:LASTEXITCODE=$antes}
 # Filho real: captura antes de Refresh/HasExited, como no acompanhamento do CI.
 foreach($codigo in @(0,7,17)){
- $processo=Start-Process $node -ArgumentList @('-e',("process.exit($codigo)")) -PassThru;[void]$processo.Handle
+ $processo=Start-Process $node -ArgumentList @('-e',("process.exit($codigo)")) -PassThru -WindowStyle Hidden;[void]$processo.Handle
  try{
   $prazo=[Diagnostics.Stopwatch]::StartNew()
   while($true){

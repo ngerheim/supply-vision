@@ -32,6 +32,8 @@
 *.sqlite-*
 *.db
 *.env
+*.env.*
+!*.env.example
 
 # Saida de arquivos entregues pelo Claude; nao faz parte do projeto.
 Claude outputs/
