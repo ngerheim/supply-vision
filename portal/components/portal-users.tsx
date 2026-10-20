@@ -1,7 +1,7 @@
 'use client';
-import { api } from '@/lib/api';
+import { api, errorText } from '@/lib/api';
 import { MIN_PASSWORD_LENGTH, validatePassword } from '@/lib/domain';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { CheckCircle2, Download, Pencil, Plus } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -30,17 +30,33 @@ import {
   Field,
   SelectField,
   roleName,
+  Loading,
+  FalhaDeCarregamento,
 } from './portal-presentation';
 
-export function Administration({ user, initialUsers, run }: JsonData) {
-  const [users, setUsers] = useState<AnyRow[]>(initialUsers || []),
+export function Administration({ user, busy, run }: JsonData) {
+  const [users, setUsers] = useState<AnyRow[] | null>(null),
     [open, setOpen] = useState(false),
     [edit, setEdit] = useState<AnyRow | null>(null);
-  const load = useCallback(async () => {
-    const result = await api('/api/users');
+  const [loadError, setLoadError] = useState('');
+  const load = useCallback(async (signal?: AbortSignal) => {
+    const result = await api('/api/users', { signal });
+    if (signal?.aborted) return;
     setUsers(result.users);
+    setLoadError('');
   }, []);
+  useEffect(() => {
+    const controller = new AbortController();
+    queueMicrotask(() => {
+      if (!controller.signal.aborted) void load(controller.signal).catch(error => {
+        if (!controller.signal.aborted) setLoadError(errorText(error));
+      });
+    });
+    return () => controller.abort();
+  }, [load]);
   const isAdmin = user.role === 'admin';
+  if (loadError) return <FalhaDeCarregamento erro={loadError} tentar={() => void load().catch(error => setLoadError(errorText(error)))}/>;
+  if (!users) return <Loading label="Carregando usuários…"/>;
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap justify-between gap-3">
@@ -53,11 +69,11 @@ export function Administration({ user, initialUsers, run }: JsonData) {
           >
             <Download /> Exportar dados
           </Button>
-          <Button variant="outline" onClick={() => void run(load)}>
+          <Button disabled={busy} variant="outline" onClick={() => void run(load)}>
             Atualizar lista
           </Button>
           {isAdmin && (
-            <Button onClick={() => setOpen(true)}>
+            <Button disabled={busy} onClick={() => setOpen(true)}>
               <Plus /> Novo usuário
             </Button>
           )}
@@ -128,6 +144,8 @@ export function Administration({ user, initialUsers, run }: JsonData) {
                       <Button
                         size="icon-sm"
                         variant="ghost"
+                        disabled={busy}
+                        aria-label={`Editar usuário ${r.name}`}
                         onClick={() => setEdit({ ...r })}
                       >
                         <Pencil />
@@ -140,8 +158,9 @@ export function Administration({ user, initialUsers, run }: JsonData) {
           </Table>
         </CardContent>
       </Card>
-      <UserDialog
-        open={open}
+      {open && <UserDialog
+        open
+        busy={busy}
         onClose={() => setOpen(false)}
         onSave={(body: AnyRow) =>
           run(async () => {
@@ -151,13 +170,14 @@ export function Administration({ user, initialUsers, run }: JsonData) {
               body: JSON.stringify(body),
             });
             setOpen(false);
-            await load();
+            await load().catch(error => setLoadError(errorText(error)));
           }, 'Usuário criado.')
         }
-      />
+      />}
       {edit && (
         <UserEditDialog
           open
+          busy={busy}
           value={edit}
           self={user}
           onClose={() => setEdit(null)}
@@ -169,7 +189,7 @@ export function Administration({ user, initialUsers, run }: JsonData) {
                 body: JSON.stringify(body),
               });
               setEdit(null);
-              await load();
+              await load().catch(error => setLoadError(errorText(error)));
             }, 'Usuário atualizado.')
           }
         />
@@ -178,7 +198,7 @@ export function Administration({ user, initialUsers, run }: JsonData) {
   );
 }
 
-function UserEditDialog({ open, value, self, onClose, onSave }: JsonData) {
+function UserEditDialog({ open, busy, value, self, onClose, onSave }: JsonData) {
   const [form, setForm] = useState<AnyRow>({
     ...value,
     expectedRevision: value.revision,
@@ -187,13 +207,13 @@ function UserEditDialog({ open, value, self, onClose, onSave }: JsonData) {
   const isSelf = value.id === self.id;
   const passwordError = form.password ? validatePassword(form.password) : null;
   return (
-    <Dialog open={open} onOpenChange={(x) => !x && onClose()}>
+    <Dialog open={open} onOpenChange={(x) => !x && !busy && onClose()}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Editar usuário</DialogTitle>
           <DialogDescription>{value.email}</DialogDescription>
         </DialogHeader>
-        <div className="space-y-4">
+        <fieldset disabled={busy} className="space-y-4">
           <Field label="Nome">
             <Input
               value={form.name || ''}
@@ -202,6 +222,7 @@ function UserEditDialog({ open, value, self, onClose, onSave }: JsonData) {
           </Field>
           <SelectField
             label="Perfil"
+            disabled={busy || isSelf}
             value={form.role || 'viewer'}
             onChange={(v: string) =>
               setForm({
@@ -240,7 +261,7 @@ function UserEditDialog({ open, value, self, onClose, onSave }: JsonData) {
             <div className="flex items-center gap-2">
               <Checkbox
                 id="daily-report-enabled"
-                disabled={form.role === 'viewer'}
+                disabled={busy || form.role === 'viewer'}
                 checked={form.role !== 'viewer' && !!form.dailyReportEnabled}
                 onCheckedChange={(c: JsonData) =>
                   setForm({ ...form, dailyReportEnabled: !!c })
@@ -271,21 +292,21 @@ function UserEditDialog({ open, value, self, onClose, onSave }: JsonData) {
               onCheckedChange={(c: JsonData) =>
                 setForm({ ...form, active: !!c })
               }
-              disabled={isSelf}
+              disabled={busy || isSelf}
             />
             <span className="text-sm">
               Conta ativa
               {isSelf ? ' (não é possível desativar a própria conta)' : ''}
             </span>
           </label>
-        </div>
+        </fieldset>
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>
+          <Button disabled={busy} variant="outline" onClick={onClose}>
             Cancelar
           </Button>
           <Button
-            disabled={!!passwordError}
-            onClick={() => !passwordError && onSave(form)}
+            disabled={busy || !!passwordError}
+            onClick={() => !busy && !passwordError && onSave(form)}
           >
             <CheckCircle2 /> Salvar
           </Button>
@@ -295,7 +316,7 @@ function UserEditDialog({ open, value, self, onClose, onSave }: JsonData) {
   );
 }
 
-function UserDialog({ open, onClose, onSave }: JsonData) {
+function UserDialog({ open, busy, onClose, onSave }: JsonData) {
   const [form, setForm] = useState({
     name: '',
     email: '',
@@ -304,12 +325,12 @@ function UserDialog({ open, onClose, onSave }: JsonData) {
   });
   const passwordError = validatePassword(form.password);
   return (
-    <Dialog open={open} onOpenChange={(x) => !x && onClose()}>
+    <Dialog open={open} onOpenChange={(x) => !x && !busy && onClose()}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Novo usuário autorizado</DialogTitle>
         </DialogHeader>
-        <div className="space-y-4">
+        <fieldset disabled={busy} className="space-y-4">
           <Field label="Nome *">
             <Input
               value={form.name}
@@ -340,6 +361,7 @@ function UserDialog({ open, onClose, onSave }: JsonData) {
           </Field>
           <SelectField
             label="Perfil"
+            disabled={busy}
             value={form.role}
             onChange={(v: string) => setForm({ ...form, role: v })}
             rows={[
@@ -348,14 +370,14 @@ function UserDialog({ open, onClose, onSave }: JsonData) {
               { id: 'admin', name: 'Administrador' },
             ]}
           />
-        </div>
+        </fieldset>
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>
+          <Button disabled={busy} variant="outline" onClick={onClose}>
             Cancelar
           </Button>
           <Button
-            disabled={!!passwordError}
-            onClick={() => !passwordError && onSave(form)}
+            disabled={busy || !!passwordError || !form.name.trim() || !form.email.trim()}
+            onClick={() => !busy && !passwordError && onSave(form)}
           >
             Criar usuário
           </Button>

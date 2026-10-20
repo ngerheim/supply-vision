@@ -17,10 +17,11 @@ export function EmailNotifications({users,run}:{users:Row[];run:(action:()=>Prom
   const filter=(key:keyof typeof filters,value:string)=>{setFilters({...filters,[key]:value});setPage(1);};
   useEffect(()=>{
     let active=true;
+    const controller=new AbortController();
     queueMicrotask(()=>{if(active){setLoading(true);setError('');}});
     const params=new URLSearchParams({...filters,page:String(page),pageSize:'25'});
-    void api(`/api/email-notifications?${params}`).then(result=>{if(active)setData(result);}).catch(cause=>{if(active){setError(errorText(cause));setData(null);}}).finally(()=>{if(active)setLoading(false);});
-    return()=>{active=false;};
+    void api(`/api/email-notifications?${params}`,{signal:controller.signal}).then(result=>{if(active)setData(result);}).catch(cause=>{if(active){setError(errorText(cause));setData(null);}}).finally(()=>{if(active)setLoading(false);});
+    return()=>{active=false;controller.abort();};
   },[filters,page,revision]);
   const select=(label:string,key:'status'|'type'|'recipient',options:Record<string,string>)=><label htmlFor={`${fieldId}-${key}`} className="space-y-1 text-sm"><span>{label}</span><NativeSelect aria-label={label} id={`${fieldId}-${key}`} className="w-full" value={filters[key]} onChange={e=>filter(key,e.target.value)}><NativeSelectOption value="">Todos</NativeSelectOption>{Object.entries(options).map(([id,name])=><NativeSelectOption key={id} value={id}>{name}</NativeSelectOption>)}</NativeSelect></label>;
   return <div className="space-y-5">

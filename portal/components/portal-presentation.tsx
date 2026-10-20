@@ -9,13 +9,12 @@ import { Card, CardContent } from '@/components/ui/card';
 export type JsonData = ReturnType<typeof JSON.parse>;
 export type AnyRow = Record<string, JsonData>;
 
-export const money = (value: number) =>
-  new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(
-    value ?? 0,
-  );
+const moneyFormatter = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
+const dateFormatter = new Intl.DateTimeFormat('pt-BR');
+export const money = (value: number) => moneyFormatter.format(value ?? 0);
 export const date = (value?: string | null) =>
   value
-    ? new Intl.DateTimeFormat('pt-BR').format(
+    ? dateFormatter.format(
         new Date(`${value.slice(0, 10)}T12:00:00`),
       )
     : 'Indeterminado';
@@ -29,7 +28,7 @@ export function Loading({ label }: { label: string }) {
     <div className="grid min-h-screen place-items-center bg-[#eef2f5]">
       <div className="flex items-center gap-3 rounded-2xl bg-white px-6 py-5 shadow-lg">
         <LoaderCircle className="size-5 animate-spin text-primary" />
-        <span className="text-sm font-medium">{label}</span>
+        <output className="text-sm font-medium">{label}</output>
       </div>
     </div>
   );
@@ -106,11 +105,13 @@ export function SelectField({
   onChange,
   rows,
   labelFn = (x: AnyRow) => x.name,
+  disabled = false,
 }: JsonData) {
   return (
     <SearchSelect
       searchable={!label.includes('UF')}
       label={label}
+      disabled={disabled}
       value={value}
       onChange={onChange}
       options={rows.map((row: AnyRow) => ({ id: row.id, name: labelFn(row) }))}

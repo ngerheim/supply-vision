@@ -114,7 +114,6 @@ function TicketStatus({ value }: JsonData) {
 export function Tickets({
   busy,
   users,
-  agreements,
   run,
   initialDetail,
 }: JsonData) {
@@ -172,7 +171,6 @@ export function Tickets({
         busy={busy}
         id={detail}
         users={users}
-        agreements={agreements}
         onBack={() => {
           setDetail(null);
           void load();
@@ -363,7 +361,6 @@ export function Tickets({
           open
           value={open}
           users={users}
-          agreements={agreements}
           onClose={() => setOpen(null)}
           onSave={(body: AnyRow, submissionKey: string) =>
             run(async () => {
@@ -385,7 +382,7 @@ export function Tickets({
   );
 }
 
-function TicketDetail({ busy, id, users, agreements, onBack, run }: JsonData) {
+function TicketDetail({ busy, id, users, onBack, run }: JsonData) {
   const tentativaAndamento = useRef<{ message: string; key: string } | null>(
     null,
   );
@@ -395,31 +392,44 @@ function TicketDetail({ busy, id, users, agreements, onBack, run }: JsonData) {
     [statusMessage, setStatusMessage] = useState(''),
     [editing, setEditing] = useState(false);
   const [loadError, setLoadError] = useState('');
-  const load = useCallback(async () => {
+  const [loading, setLoading] = useState(false);
+  const [statusRevision, setStatusRevision] = useState<number | null>(null);
+  const loadSequence = useRef({ value: 0 });
+  const load = useCallback(async (resetStatus = true) => {
+    const sequence = ++loadSequence.current.value;
+    setLoading(true);
     setLoadError('');
     try {
       const x = await api(`/api/tickets/${id}`);
+      if (sequence !== loadSequence.current.value) return;
       setD(x);
-      setStatus(x.ticket.status);
-      setStatusMessage('');
+      if (resetStatus) {
+        setStatus(x.ticket.status);
+        setStatusMessage('');
+        setStatusRevision(x.ticket.revision);
+      }
     } catch (error) {
-      setLoadError(errorText(error));
+      if (sequence === loadSequence.current.value) setLoadError(errorText(error));
+    } finally {
+      if (sequence === loadSequence.current.value) setLoading(false);
     }
   }, [id]);
   useEffect(() => {
+    const sequence = loadSequence.current;
     let active = true;
     queueMicrotask(() => {
       if (active) void load();
     });
     return () => {
       active = false;
+      sequence.value++;
     };
   }, [load]);
   if (loadError)
     return (
       <FalhaDeCarregamento
         erro={loadError}
-        tentar={() => void load()}
+        tentar={() => void load(!d || (status === d.ticket.status && !statusMessage))}
         voltar={onBack}
       />
     );
@@ -445,10 +455,13 @@ function TicketDetail({ busy, id, users, agreements, onBack, run }: JsonData) {
           </div>
           <p className="text-sm text-muted-foreground font-mono">{t.code}</p>
         </div>
-        <Button variant="outline" onClick={() => void load()}>
+        <Button disabled={busy || loading} variant="outline" onClick={() => {
+          if ((status !== t.status || statusMessage) && !confirm('Atualizar o chamado descarta a situação e a mensagem de alteração ainda não salvas. Continuar?')) return;
+          void load();
+        }}>
           <RefreshCw /> Atualizar
         </Button>
-        <Button onClick={() => setEditing(true)}>
+        <Button disabled={busy || loading} onClick={() => setEditing(true)}>
           <Pencil /> Editar chamado
         </Button>
       </div>
@@ -495,9 +508,11 @@ function TicketDetail({ busy, id, users, agreements, onBack, run }: JsonData) {
         </Card>
       )}
       <Card size="sm">
-        <CardContent className="grid gap-3 sm:grid-cols-[minmax(12rem,14rem)_minmax(0,1fr)_auto] sm:items-end">
+        <CardContent>
+        <fieldset disabled={busy || loading} className="grid gap-3 sm:grid-cols-[minmax(12rem,14rem)_minmax(0,1fr)_auto] sm:items-end">
           <SelectField
             label="Alterar para"
+            disabled={busy || loading}
             value={status}
             onChange={setStatus}
             rows={Object.entries(ticketStatusMap).map(([k, v]: JsonData) => ({
@@ -512,7 +527,7 @@ function TicketDetail({ busy, id, users, agreements, onBack, run }: JsonData) {
             />
           </Field>
           <Button
-            disabled={status === t.status}
+            disabled={busy || loading || status === t.status}
             onClick={() =>
               run(async () => {
                 await api(`/api/tickets/${id}`, {
@@ -521,7 +536,7 @@ function TicketDetail({ busy, id, users, agreements, onBack, run }: JsonData) {
                   body: JSON.stringify({
                     status,
                     statusMessage,
-                    expectedRevision: t.revision,
+                    expectedRevision: statusRevision,
                   }),
                 });
                 await load();
@@ -530,6 +545,8 @@ function TicketDetail({ busy, id, users, agreements, onBack, run }: JsonData) {
           >
             <RefreshCw /> Aplicar
           </Button>
+        </fieldset>
+        {statusRevision !== t.revision && <output className="mt-3 block text-sm">O chamado mudou. Sua alteração ainda não foi salva. Use Atualizar para conferir a situação atual antes de aplicar.</output>}
         </CardContent>
       </Card>
       <Card>
@@ -574,11 +591,11 @@ function TicketDetail({ busy, id, users, agreements, onBack, run }: JsonData) {
           </ol>
           <div className="mt-6 space-y-3 border-t pt-5">
             <Field label="Registrar andamento">
-              <Textarea value={msg} onChange={(e) => setMsg(e.target.value)} />
+              <Textarea disabled={busy || loading} value={msg} onChange={(e) => setMsg(e.target.value)} />
             </Field>
             <div className="flex justify-end">
               <Button
-                disabled={!msg.trim()}
+                disabled={busy || loading || !msg.trim()}
                 onClick={() =>
                   run(async () => {
                     if (
@@ -599,7 +616,7 @@ function TicketDetail({ busy, id, users, agreements, onBack, run }: JsonData) {
                     });
                     tentativaAndamento.current = null;
                     setMsg('');
-                    await load();
+                    await load(status === t.status && !statusMessage);
                   }, 'Andamento registrado.')
                 }
               >
@@ -626,7 +643,6 @@ function TicketDetail({ busy, id, users, agreements, onBack, run }: JsonData) {
             notes: t.notes,
           }}
           users={users}
-          agreements={agreements}
           onClose={() => setEditing(false)}
           onSave={(body: AnyRow) =>
             run(async () => {
@@ -636,7 +652,7 @@ function TicketDetail({ busy, id, users, agreements, onBack, run }: JsonData) {
                 body: JSON.stringify(body),
               });
               setEditing(false);
-              await load();
+              await load(status === t.status && !statusMessage);
             }, 'Chamado atualizado.')
           }
         />
@@ -690,6 +706,7 @@ function TicketDialog({ busy, open, value, users, onClose, onSave }: JsonData) {
           </Field>
           <SelectField
             label="Prioridade"
+            disabled={busy}
             value={form.priority || 'media'}
             onChange={(v: string) => setForm({ ...form, priority: v })}
             rows={[
@@ -700,6 +717,7 @@ function TicketDialog({ busy, open, value, users, onClose, onSave }: JsonData) {
           />
           <SelectField
             label="Responsável"
+            disabled={busy}
             value={form.assignedTo || ''}
             onChange={(v: string) => setForm({ ...form, assignedTo: v })}
             rows={users || []}

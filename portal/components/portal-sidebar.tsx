@@ -36,6 +36,7 @@ export function Sidebar({
   nav,
   setNav,
   user,
+  busy,
   onLogout,
   collapsed,
   onToggle,
@@ -103,6 +104,7 @@ export function Sidebar({
           size="icon-sm"
           variant="ghost"
           onClick={onLogout}
+          disabled={busy}
           aria-label="Sair"
           title="Sair"
         >

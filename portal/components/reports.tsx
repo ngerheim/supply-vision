@@ -65,9 +65,17 @@ export function Reports() {
   const key = useRef<string | null>(null),
     sending = useRef(false),
     mounted = useRef(false);
+  const loadSequence = useRef({ value: 0 });
   const load = useCallback(async (signal?: AbortSignal, automatica = false) => {
-    const data = await api('/api/reports', automatica ? { signal, headers: CABECALHO_ATUALIZACAO_AUTOMATICA } : { signal });
-    if (!mounted.current) return;
+    const sequence = ++loadSequence.current.value;
+    let data;
+    try {
+      data = await api('/api/reports', automatica ? { signal, headers: CABECALHO_ATUALIZACAO_AUTOMATICA } : { signal });
+    } catch (error) {
+      if (mounted.current && sequence === loadSequence.current.value) throw error;
+      return;
+    }
+    if (!mounted.current || sequence !== loadSequence.current.value) return;
     setJobs(data.jobs);
     setTotal(data.total);
     setOnline(data.runnerOnline);
@@ -75,6 +83,7 @@ export function Reports() {
     setLoadError('');
   }, []);
   useEffect(() => {
+    const sequence = loadSequence.current;
     mounted.current = true;
     const parar = iniciarAtualizacaoPeriodica((signal) => load(signal, true), (e) => {
       setLoadError(errorText(e));
@@ -82,6 +91,7 @@ export function Reports() {
     }, () => document.visibilityState !== 'hidden');
     return () => {
       mounted.current = false;
+      sequence.value++;
       parar();
     };
   }, [load]);
@@ -133,12 +143,13 @@ export function Reports() {
         body: JSON.stringify(pedido),
       });
       key.current = null;
+      setLog('');
       setLogError('');
       setSelected(result.id);
       setNotice(
         'Solicitação registrada. Você pode sair desta aba, pois a execução continua no servidor.',
       );
-      await load();
+      await load().catch(e => setLoadError(`Solicitação registrada, mas não foi possível atualizar a lista: ${errorText(e)}`));
     } catch (e) {
       setError(errorText(e));
     } finally {
@@ -297,7 +308,8 @@ export function Reports() {
         elegíveis, nenhum relatório ou e-mail é gerado. Períodos longos podem
         levar mais tempo para processar.
       </p>
-      {!jobs.length && (
+      {!loaded && !loadError && <output className="block text-sm text-muted-foreground">Carregando execuções…</output>}
+      {loaded && !loadError && !jobs.length && (
         <p className="text-sm text-muted-foreground">
           Nenhuma execução solicitada pelo portal.
         </p>
