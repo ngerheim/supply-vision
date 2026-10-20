@@ -82,8 +82,6 @@ Copiar "$Alertas\config\destinatarios.exemplo.txt" "$Privado\alertas\config\dest
 Copiar "$Alertas\parametros\de_para\itens.exemplo.csv" "$Privado\alertas\parametros\de_para\itens.csv"
 Copiar "$Alertas\parametros\de_para\modelos.exemplo.csv" "$Privado\alertas\parametros\de_para\modelos.csv"
 foreach($n in @('excluir_descricoes','excluir_fornecedores','excluir_grupos_despesa','excluir_modelos')){Copiar "$Alertas\parametros\filtros\$n.exemplo.txt" "$Privado\alertas\parametros\filtros\$n.txt"}
-$amb="@echo off`r`nREM Gerado pelo INSTALAR.bat. Caminho portatil.`r`nset `"PYTHON=%~dp0..\..\..\alertas\.venv\Scripts\python.exe`"`r`n"
-[IO.File]::WriteAllText("$Privado\alertas\config\ambiente.bat",$amb,[Text.Encoding]::ASCII)
 Etapa 'Instalando dependencias do Portal'; Rodar $Npm @('ci','--include=dev','--audit=false') $Portal
 Etapa 'Instalando dependencias dos Alertas'
 $PyVenv="$Alertas\.venv\Scripts\python.exe"; if(!(Test-Path $PyVenv)){Rodar $Python @('-m','venv',"$Alertas\.venv") $Raiz}
