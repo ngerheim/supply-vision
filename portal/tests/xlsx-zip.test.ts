@@ -390,3 +390,96 @@ void test('marcador de pasta é aceito e não conta na expansão', async () => {
   // Os 3 obrigatórios contam; o marcador de pasta não.
   if (r.ok) assert.equal(r.metricas.entradas, 3);
 });
+
+for (const metodo of [0, 8] as const) {
+  for (const deslocamento of [18, 22]) {
+    void test(`recusa tamanho local divergente: metodo ${metodo}, campo ${deslocamento}`, async () => {
+      const zip = montarZip(base().map(item => ({ ...item, metodo })));
+      new DataView(zip.buffer).setUint32(deslocamento, 512 * 1024 * 1024, true);
+      assert.equal((await inspecionarXlsxZip(zip)).ok, false);
+    });
+  }
+}
+
+void test('data descriptor nao permite tamanho local excessivo', async () => {
+  const zip = montarZip(base());
+  const dv = new DataView(zip.buffer);
+  const central = dv.getUint32(zip.length - 6, true);
+  dv.setUint16(6, 8, true);
+  dv.setUint16(central + 8, 8, true);
+  dv.setUint32(22, 512 * 1024 * 1024, true);
+  assert.equal((await inspecionarXlsxZip(zip)).ok, false);
+});
+
+void test('data descriptor valido aceita tamanhos locais zerados ou conhecidos', async () => {
+  for (const zerados of [true, false]) {
+    const original = montarZip(base());
+    const origem = new DataView(original.buffer);
+    const fimDados = 30 + origem.getUint16(26, true) + origem.getUint32(18, true);
+    const descriptor = new Uint8Array(16);
+    const dados = new DataView(descriptor.buffer);
+    dados.setUint32(0, 0x08074b50, true);
+    dados.setUint32(8, origem.getUint32(18, true), true);
+    dados.setUint32(12, origem.getUint32(22, true), true);
+    const zip = concat([original.subarray(0, fimDados), descriptor, original.subarray(fimDados)]);
+    const dv = new DataView(zip.buffer);
+    const central = origem.getUint32(original.length - 6, true) + descriptor.length;
+    dv.setUint32(zip.length - 6, central, true);
+    dv.setUint16(6, 8, true);
+    dv.setUint16(central + 8, 8, true);
+    if (zerados) { dv.setUint32(18, 0, true); dv.setUint32(22, 0, true); }
+    let p = central;
+    for (let i = 0; i < 3; i++) {
+      if (i > 0) dv.setUint32(p + 42, dv.getUint32(p + 42, true) + descriptor.length, true);
+      p += 46 + dv.getUint16(p + 28, true);
+    }
+    assert.equal((await inspecionarXlsxZip(zip)).ok, true);
+  }
+});
+
+// Acrescenta um extra a primeira entrada, ajustando todos os offsets afetados.
+function comExtra(zip: Uint8Array, extra: Uint8Array, local: boolean) {
+  const original = new DataView(zip.buffer, zip.byteOffset, zip.byteLength);
+  const central = original.getUint32(zip.length - 6, true);
+  const cabecalho = local ? 0 : central;
+  const tamanhoFixo = local ? 30 : 46;
+  const campoNome = local ? 26 : 28;
+  const campoExtra = local ? 28 : 30;
+  const posicao = cabecalho + tamanhoFixo + original.getUint16(cabecalho + campoNome, true);
+  const novo = concat([zip.subarray(0, posicao), extra, zip.subarray(posicao)]);
+  const dv = new DataView(novo.buffer);
+  dv.setUint16(cabecalho + campoExtra, extra.length, true);
+  const novoCentral = local ? central + extra.length : central;
+  if (local) {
+    dv.setUint32(novo.length - 6, novoCentral, true);
+    let p = novoCentral;
+    for (let i = 0; i < 3; i++) {
+      if (i > 0) dv.setUint32(p + 42, dv.getUint32(p + 42, true) + extra.length, true);
+      p += 46 + dv.getUint16(p + 28, true) + dv.getUint16(p + 30, true) + dv.getUint16(p + 32, true);
+    }
+  } else {
+    dv.setUint32(novo.length - 10, original.getUint32(zip.length - 10, true) + extra.length, true);
+  }
+  return novo;
+}
+
+for (const local of [true, false]) {
+  void test(`recusa extra ZIP64 sem sentinela no cabecalho ${local ? 'local' : 'central'}`, async () => {
+    const extra = new Uint8Array(20);
+    const dv = new DataView(extra.buffer);
+    dv.setUint16(0, 1, true);
+    dv.setUint16(2, 16, true);
+    dv.setUint32(4, 512 * 1024 * 1024, true);
+    assert.equal((await inspecionarXlsxZip(comExtra(montarZip(base()), extra, local))).ok, false);
+  });
+
+  void test(`aceita extra comum no cabecalho ${local ? 'local' : 'central'}`, async () => {
+    const extra = new Uint8Array([0xfe, 0xca, 2, 0, 1, 2]);
+    assert.equal((await inspecionarXlsxZip(comExtra(montarZip(base()), extra, local))).ok, true);
+  });
+
+  void test(`recusa extra truncado no cabecalho ${local ? 'local' : 'central'}`, async () => {
+    const extra = new Uint8Array([0xfe, 0xca, 8, 0, 1]);
+    assert.equal((await inspecionarXlsxZip(comExtra(montarZip(base()), extra, local))).ok, false);
+  });
+}

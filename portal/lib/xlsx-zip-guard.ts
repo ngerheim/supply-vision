@@ -23,13 +23,13 @@ export type MetricasZip = {
 };
 
 export type ResultadoZip =
-  | { ok: true; metricas: MetricasZip }
+  | { ok: true; metricas: MetricasZip; fimSemComentario: number }
   | { ok: false; erro: string };
 
 // Medido nas planilhas reais e em planilhas adversariais (textos únicos em
 // cada célula, que derrotam a deduplicação de sharedStrings). Cada medição
 // rodou em processo próprio, medindo RSS, para a memória de gerar o arquivo de
-// teste não contaminar o número. Ver DOCUMENTACAO.md.
+// teste não contaminar o número.
 //
 //   ACORDOS.xlsx (real)   10,7 MB de expansão →  +99,5 MB de RSS
 //   adversarial 5k linhas  8,0 MB de expansão → +103,0 MB de RSS
@@ -81,6 +81,21 @@ type EntradaCentral = {
 // exceção não tratada.
 function cabe(dv: DataView, posicao: number, bytes: number) {
   return posicao >= 0 && posicao + bytes <= dv.byteLength;
+}
+
+// O SheetJS usa tamanhos ZIP64 dos extras mesmo sem os marcadores sentinela.
+// ZIP64 inteiro e recusado; os outros extras precisam caber no proprio campo.
+function extrasValidos(dv: DataView, inicio: number, tamanho: number) {
+  if (!cabe(dv, inicio, tamanho)) return false;
+  const fim = inicio + tamanho;
+  for (let p = inicio; p < fim;) {
+    if (p + 4 > fim) return false;
+    const tipo = dv.getUint16(p, true);
+    const bytes = dv.getUint16(p + 2, true);
+    if (tipo === 0x0001 || p + 4 + bytes > fim) return false;
+    p += 4 + bytes;
+  }
+  return true;
 }
 
 function localizarEocd(dv: DataView): number {
@@ -174,6 +189,7 @@ export async function inspecionarXlsxZip(bytes: Uint8Array): Promise<ResultadoZi
     if (comprimido === MARCA_ZIP64_32 || descomprimido === MARCA_ZIP64_32) return { ok: false, erro: ERRO_ESTRUTURA };
     if (nomeLen === 0 || nomeLen > LIMITES_XLSX_ZIP.nomeEntrada) return { ok: false, erro: ERRO_CAMINHO };
     if (!cabe(dv, p + 46, nomeLen)) return { ok: false, erro: ERRO_ESTRUTURA };
+    if (!extrasValidos(dv, p + 46 + nomeLen, extraLen)) return { ok: false, erro: ERRO_ESTRUTURA };
     if (comprimido > dv.byteLength || posicaoLocal >= dv.byteLength) return { ok: false, erro: ERRO_ESTRUTURA };
 
     const nome = new TextDecoder().decode(new Uint8Array(dv.buffer, dv.byteOffset + p + 46, nomeLen));
@@ -203,7 +219,7 @@ export async function inspecionarXlsxZip(bytes: Uint8Array): Promise<ResultadoZi
     if (!vistos.has(exigido.toLowerCase())) return { ok: false, erro: ERRO_ESTRUTURA };
   }
 
-  return conferirConteudo(dv, bytes, lista, inicioCd);
+  return conferirConteudo(dv, bytes, lista, inicioCd, eocd + 22);
 }
 
 // Segunda camada: confere o cabeçalho local de cada entrada e descomprime de
@@ -213,6 +229,7 @@ async function conferirConteudo(
   bytes: Uint8Array,
   lista: EntradaCentral[],
   inicioCd: number,
+  fimSemComentario: number,
 ): Promise<ResultadoZip> {
   let descomprimidoTotal = 0;
   let maiorEntrada = 0;
@@ -225,6 +242,8 @@ async function conferirConteudo(
     }
     const flagsLocal = dv.getUint16(local + 6, true);
     const metodoLocal = dv.getUint16(local + 8, true);
+    const comprimidoLocal = dv.getUint32(local + 18, true);
+    const descomprimidoLocal = dv.getUint32(local + 22, true);
     const nomeLenLocal = dv.getUint16(local + 26, true);
     const extraLenLocal = dv.getUint16(local + 28, true);
     if (metodoLocal !== entrada.metodo) return { ok: false, erro: ERRO_ESTRUTURA };
@@ -233,6 +252,14 @@ async function conferirConteudo(
     if (flagsLocal !== entrada.flags) return { ok: false, erro: ERRO_ESTRUTURA };
     if (flagsLocal & 0x0001) return { ok: false, erro: ERRO_METODO };
     if (!cabe(dv, local + 30, nomeLenLocal)) return { ok: false, erro: ERRO_ESTRUTURA };
+    if (!extrasValidos(dv, local + 30 + nomeLenLocal, extraLenLocal)) return { ok: false, erro: ERRO_ESTRUTURA };
+    // O parser aloca a saida pelo tamanho LOCAL antes de comparar com o central.
+    // Com descriptor, zero e permitido; qualquer tamanho informado deve coincidir.
+    const comDescriptor = (flagsLocal & 0x0008) !== 0;
+    if ((comprimidoLocal !== entrada.comprimido && !(comDescriptor && comprimidoLocal === 0))
+      || (descomprimidoLocal !== entrada.descomprimido && !(comDescriptor && descomprimidoLocal === 0))) {
+      return { ok: false, erro: ERRO_ESTRUTURA };
+    }
 
     const nomeLocal = new TextDecoder().decode(
       new Uint8Array(dv.buffer, dv.byteOffset + local + 30, nomeLenLocal),
@@ -288,5 +315,5 @@ async function conferirConteudo(
   }
 
   const comConteudo = lista.filter((e) => !e.diretorio).length;
-  return { ok: true, metricas: { entradas: comConteudo, descomprimidoTotal, maiorEntrada, maiorTaxa } };
+  return { ok: true, metricas: { entradas: comConteudo, descomprimidoTotal, maiorEntrada, maiorTaxa }, fimSemComentario };
 }

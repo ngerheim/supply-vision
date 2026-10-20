@@ -8,11 +8,11 @@
 // antes da hora. Agora o dia e calculado aqui,
 // com o fuso explicito, e entra nas consultas como parametro.
 export const FUSO_NEGOCIO = 'America/Sao_Paulo';
+const formatoDia = new Intl.DateTimeFormat('en-CA', { timeZone: FUSO_NEGOCIO, year: 'numeric', month: '2-digit', day: '2-digit' });
 
 export function dataDeNegocio(agora: Date = new Date()): string {
   const partes = Object.fromEntries(
-    new Intl.DateTimeFormat('en-CA', { timeZone: FUSO_NEGOCIO, year: 'numeric', month: '2-digit', day: '2-digit' })
-      .formatToParts(agora)
+    formatoDia.formatToParts(agora)
       .map(({ type, value }) => [type, value]),
   );
   return `${partes.year}-${partes.month}-${partes.day}`;

@@ -88,3 +88,15 @@ void test('somente as seis colunas e direcoes fixas chegam ao SQL',()=>{
     assert.deepEqual(listar(db,{sort:'code'}).map(r=>r.id),['1','2']);
   }finally{db.close();}
 });
+
+void test('grupos desconhecidos nao consultam propriedades herdadas e preservam a busca',()=>{
+  const db=banco();
+  try {
+    inserir(db,1,'FORNECEDOR FICTICIO ALFA');
+    inserir(db,2,'FORNECEDOR FICTICIO BETA');
+    for(const group of ['constructor','__proto__','toString','desconhecido']) {
+      assert.deepEqual(listar(db,{group}),listar(db,{}));
+      assert.deepEqual(listar(db,{group,q:'ALFA'}).map(r=>r.id),['1']);
+    }
+  } finally { db.close(); }
+});

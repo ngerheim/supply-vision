@@ -21,6 +21,11 @@ void test('histórico respeita o dia de 23 horas com início do horário de ver�
   assert.equal(inicioDiaNegocio('2018-11-05'), '2018-11-05T02:00:00.000Z');
 });
 
+void test('histórico respeita o dia de 25 horas com fim do horário de verão', () => {
+  assert.equal(inicioDiaNegocio('2019-02-16'), '2019-02-16T02:00:00.000Z');
+  assert.equal(inicioDiaNegocio('2019-02-17'), '2019-02-17T03:00:00.000Z');
+});
+
 void test('filtros abertos, virada do ano e datas inválidas', () => {
   assert.deepEqual(intervaloDatasNegocio(null,null), {inicio:null,fim:null});
   assert.deepEqual(intervaloDatasNegocio(null,'2026-12-31'), {inicio:null,fim:'2027-01-01T03:00:00.000Z'});

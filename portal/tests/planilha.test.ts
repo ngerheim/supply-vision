@@ -157,3 +157,22 @@ for (const ref of ['A1:J1001', 'A1:CW2', 'A1:CW1001']) {
     assert.equal((await lerPlanilha(new File([bytes], 'area.xlsx'))).ok, false);
   });
 }
+
+void test('comentario ZIP com assinatura falsa nao muda o diretorio lido pelo parser', async () => {
+  const original = new Uint8Array(await arquivoDe([LINHA_BOA]).arrayBuffer());
+  const comentario = new Uint8Array(30);
+  new DataView(comentario.buffer).setUint32(0, 0x06054b50, true);
+  const bytes = new Uint8Array(original.length + comentario.length);
+  bytes.set(original);
+  bytes.set(comentario, original.length);
+  new DataView(bytes.buffer).setUint16(original.length - 2, comentario.length, true);
+  const resultado = await lerPlanilha(new File([bytes], 'comentario.xlsx'));
+  assert.equal(resultado.ok, true);
+  if (resultado.ok) assert.equal(resultado.linhas[0].CIDADE, LINHA_BOA.CIDADE);
+});
+
+void test('erro do parser XLS nao expoe detalhes internos', async () => {
+  const bytes = new Uint8Array([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]);
+  const resultado = await lerPlanilha(new File([bytes], 'corrompido.xls'));
+  assert.deepEqual(resultado, { ok: false, erro: 'Não foi possível abrir a planilha. Salve como .xlsx e tente de novo.' });
+});

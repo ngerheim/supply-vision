@@ -48,7 +48,7 @@ export async function lerPlanilha(arquivo: File): Promise<ResultadoLeitura> {
     return { ok: false, erro: `O arquivo tem ${(arquivo.size / 1024 / 1024).toFixed(1)} MB. O limite é ${PLANILHA_LIMITES.bytes / 1024 / 1024} MB.` };
   }
 
-  const bytes = new Uint8Array(await arquivo.arrayBuffer());
+  let bytes = new Uint8Array(await arquivo.arrayBuffer());
   const assinatura = assinaturaValida(bytes);
   if (!assinatura) {
     return { ok: false, erro: 'O arquivo não é uma planilha do Excel válida. Salve como .xlsx e tente de novo.' };
@@ -61,6 +61,13 @@ export async function lerPlanilha(arquivo: File): Promise<ResultadoLeitura> {
   if (assinatura === 'xlsx') {
     const zip = await inspecionarXlsxZip(bytes);
     if (!zip.ok) return { ok: false, erro: zip.erro };
+    // O parser procura a ultima assinatura de EOCD, inclusive no comentario.
+    // Retira so o comentario para que ele use o mesmo diretorio ja inspecionado.
+    if (zip.fimSemComentario < bytes.length) {
+      bytes = bytes.slice(0, zip.fimSemComentario);
+      bytes[bytes.length - 2] = 0;
+      bytes[bytes.length - 1] = 0;
+    }
   }
 
   let workbook: XLSX.WorkBook;
@@ -76,8 +83,8 @@ export async function lerPlanilha(arquivo: File): Promise<ResultadoLeitura> {
       // Só a primeira aba é usada; ler as demais seria trabalho jogado fora.
       sheets: 0,
     });
-  } catch (erro) {
-    return { ok: false, erro: `Não foi possível abrir a planilha: ${erro instanceof Error ? erro.message : 'arquivo inválido ou corrompido'}.` };
+  } catch {
+    return { ok: false, erro: 'Não foi possível abrir a planilha. Salve como .xlsx e tente de novo.' };
   }
 
   const nomeAba = workbook.SheetNames?.[0];
@@ -133,8 +140,8 @@ export async function lerPlanilha(arquivo: File): Promise<ResultadoLeitura> {
       campos.set(key, cell);
     }
     brutas = XLSX.utils.sheet_to_json<LinhaPlanilha>(aba, { defval: '', range: cabecalho });
-  } catch (erro) {
-    return { ok: false, erro: `Não foi possível interpretar os dados: ${erro instanceof Error ? erro.message : 'formato inesperado'}.` };
+  } catch {
+    return { ok: false, erro: 'Não foi possível interpretar os dados. Confira o formato da planilha e tente de novo.' };
   }
 
   if (brutas.length >= PLANILHA_LIMITES.linhas) return { ok: false, erro: 'A planilha excede o limite de linhas.' };
