@@ -72,6 +72,8 @@ function businessSnapshot() {
   return Object.fromEntries(['suppliers', 'locations', 'catalog_items', 'vehicle_models', 'units', 'agreements', 'agreement_locations', 'agreement_versions', 'agreement_items'].map(table => [table, query(`SELECT * FROM ${table} ORDER BY rowid`)]));
 }
 
+// Gerado para esta fixture, com digitos verificadores validos e diferente do acordo.
+const cnpjFornecedorB = '90.000.004/0001-62';
 const headers = ['CIDADE', 'UF', 'MODELO', 'PECA_SERVICO', 'PRECO', 'MEDIDA', 'MARCAS', 'CNPJ', 'FORNECEDOR'];
 const row = (changes = {}) => ({ CIDADE: 'GOIANIA', UF: 'GO', MODELO: 'Hilux teste', PECA_SERVICO: 'Óleo teste', PRECO: 42.5, MEDIDA: 'litro', MARCAS: 'MARCA TESTE', CNPJ: '11.222.333/0001-81', FORNECEDOR: 'FORNECEDOR TESTE', ...changes });
 function file(rows, { name = 'teste', format = 'xlsx', aoa, range, extraSheet } = {}) {
@@ -294,7 +296,7 @@ try {
     for (const [url, method, body] of [
       ['/api/catalogs/locations', 'POST', { city: 'ALMAS', state: 'TI' }],
       [`/api/catalogs/locations/${location.id}`, 'PUT', { city: 'GOIANIA', state: 'TI' }],
-      ['/api/catalogs/suppliers', 'POST', { tradeName: 'TESTE', cnpj: '04.252.011/0001-10', state: 'TI' }],
+      ['/api/catalogs/suppliers', 'POST', { tradeName: 'TESTE', cnpj: cnpjFornecedorB, state: 'TI' }],
       [`/api/catalogs/suppliers/${supplier.id}`, 'PUT', { tradeName: 'FORNECEDOR TESTE', cnpj: row().CNPJ, state: 'TI' }],
       ['/api/tickets', 'POST', { supplierName: 'TESTE', state: 'TI' }],
     ]) assert.equal((await request(url, { method, body })).status, 400, url);
@@ -376,23 +378,21 @@ try {
       assert.equal(query("SELECT dono FROM travas WHERE chave='importacao'")[0].dono,'outro-dono');
     } finally { aberto.destruir();db.exec("DELETE FROM travas WHERE dono='outro-dono'");db.close(); }
   });
-  for (const route of [replace]) {
-    const mode = 'substituir';
-    const invalidCases = /** @type {Array<[string, Record<string, unknown>, RegExp]>} */ ([
-      ['item-desconhecido', { PECA_SERVICO: 'PEÇA inexistente' }, /PECA_SERVICO.*PEÇA inexistente/],
-      ['modelo-desconhecido', { MODELO: 'MODELO inexistente' }, /MODELO.*MODELO inexistente/],
-      ['lirto', { MEDIDA: 'lirto' }, /UNIDADE.*lirto/],
-      ['unidade-vazia', { MEDIDA: '' }, /MEDIDA|UNIDADE/],
-      ['preco-vazio', { PRECO: '' }, /PRECO/],
-      ['preco-negativo', { PRECO: -10 }, /negativo/i],
-      ['preco-texto', { PRECO: 'a combinar' }, /Preço/],
-      ['preco-malformado', { PRECO: '12.34,56' }, /Preço/],
-      ['uf-invalida', { UF: 'XX' }, /UF/],
-    ]);
-    for (const [label, changes, match] of invalidCases) await check(`${mode}: ${label} aborta tudo e localiza linha`, () => rejected(file([row(), row(changes)], { name: `${mode}-${label}` }), route, 400, data => {
-      assert.match(erroDaLinha(data, 3), match);
-    }));
-  }
+  const mode = 'substituir';
+  const invalidCases = /** @type {Array<[string, Record<string, unknown>, RegExp]>} */ ([
+    ['item-desconhecido', { PECA_SERVICO: 'PEÇA inexistente' }, /PECA_SERVICO.*PEÇA inexistente/],
+    ['modelo-desconhecido', { MODELO: 'MODELO inexistente' }, /MODELO.*MODELO inexistente/],
+    ['lirto', { MEDIDA: 'lirto' }, /UNIDADE.*lirto/],
+    ['unidade-vazia', { MEDIDA: '' }, /MEDIDA|UNIDADE/],
+    ['preco-vazio', { PRECO: '' }, /PRECO/],
+    ['preco-negativo', { PRECO: -10 }, /negativo/i],
+    ['preco-texto', { PRECO: 'a combinar' }, /Preço/],
+    ['preco-malformado', { PRECO: '12.34,56' }, /Preço/],
+    ['uf-invalida', { UF: 'XX' }, /UF/],
+  ]);
+  for (const [label, changes, match] of invalidCases) await check(`${mode}: ${label} aborta tudo e localiza linha`, () => rejected(file([row(), row(changes)], { name: `${mode}-${label}` }), replace, 400, data => {
+    assert.match(erroDaLinha(data, 3), match);
+  }));
   await check('Linha real após vazios e cabeçalho deslocado', () => rejected(file([], { name: 'linha-real', aoa: [[], [], headers, Object.values(row()), [], Object.values(row({ MEDIDA: 'lirto' }))] }), replace, 400, data => assert.match(erroDaLinha(data, 6), /UNIDADE/)));
   await check('Nomenclatura repetida vira um registro agrupado, nao um por linha', () => rejected(file(Array.from({ length: 120 }, (_, index) => row(index % 2 ? { PECA_SERVICO: 'ITEM FANTASMA A' } : { PECA_SERVICO: 'ITEM FANTASMA B' })), { name: 'nomenclatura-agrupada' }), replace, 400, data => {
     assert.equal(data.totalErros, 120);
@@ -522,18 +522,16 @@ try {
     // Sem uniao de marcas: sobrevive a marca da linha mantida.
     assert.equal(query('SELECT brands_text FROM agreement_items WHERE version_id=(SELECT current_version_id FROM agreements WHERE id=?)', agreementId)[0].brands_text, 'A');
   });
-  await check('Preço maior é descartado e reportado nos dois modos', async () => {
-    for (const [modo, route] of [['substituição', replace]]) {
-      const result = await upload(file([row({ PRECO: 120 }), row({ PRECO: 90 })], { name: `preco-maior-${modo}` }), route);
-      assert.equal(result.status, 200, `${modo}: ${JSON.stringify(result.data)}`);
-      assert.equal(result.data.summary.duplicatas, 1, modo);
-      const [duplicata] = result.data.summary.amostraDuplicatas;
-      assert.equal(duplicata.motivo, 'preço maior', modo);
-      assert.equal(duplicata.precoMantido, 90, modo);
-      assert.equal(duplicata.precoDescartado, 120, modo);
-      assert.equal(duplicata.linhaMantida, 3, modo);
-      assert.equal(duplicata.linhaDescartada, 2, modo);
-    }
+  await check('Preço maior é descartado e reportado na substituição', async () => {
+    const result = await upload(file([row({ PRECO: 120 }), row({ PRECO: 90 })], { name: 'preco-maior-substituição' }), replace);
+    assert.equal(result.status, 200, JSON.stringify(result.data));
+    assert.equal(result.data.summary.duplicatas, 1);
+    const [duplicata] = result.data.summary.amostraDuplicatas;
+    assert.equal(duplicata.motivo, 'preço maior');
+    assert.equal(duplicata.precoMantido, 90);
+    assert.equal(duplicata.precoDescartado, 120);
+    assert.equal(duplicata.linhaMantida, 3);
+    assert.equal(duplicata.linhaDescartada, 2);
   });
   await check('Importação sem duplicatas não reporta nenhuma', async () => {
     const result = await upload(file([row()], { name: 'sem-duplicatas' }), replace);
@@ -548,18 +546,16 @@ try {
     const result = await upload(file([row({ MARCAS: 'C' }), row({ MEDIDA: ' LITRO ', MARCAS: 'D' })], { name: 'medida-grafia' }), replace);
     assert.equal(result.status, 200); assert.equal(result.data.summary.items, 1);
   });
-  await check('Cidades homonimas em UFs diferentes preservam ambas as condicoes nos dois modos', async () => {
-    for (const route of [replace, undefined]) {
-      const result = await upload(file([row(), row({ UF: 'MG', PRECO: 90 })], { name: 'homonimos-por-uf' }), route);
-      assert.equal(result.status, 200); assert.equal(result.data.summary.items, 2);
-      assert.equal(result.data.summary.duplicatas, 0);
-      const items = query('SELECT l.state,ai.price FROM agreement_items ai JOIN locations l ON l.id=ai.location_id WHERE ai.version_id=(SELECT current_version_id FROM agreements WHERE id=?) ORDER BY l.state', agreementId);
-      assert.deepEqual(items.map(x => [x.state, x.price]), [['GO', 42.5], ['MG', 90]]);
-    }
+  await check('Cidades homonimas em UFs diferentes preservam ambas as condicoes na substituicao', async () => {
+    const result = await upload(file([row(), row({ UF: 'MG', PRECO: 90 })], { name: 'homonimos-por-uf' }), replace);
+    assert.equal(result.status, 200); assert.equal(result.data.summary.items, 2);
+    assert.equal(result.data.summary.duplicatas, 0);
+    const items = query('SELECT l.state,ai.price FROM agreement_items ai JOIN locations l ON l.id=ai.location_id WHERE ai.version_id=(SELECT current_version_id FROM agreements WHERE id=?) ORDER BY l.state', agreementId);
+    assert.deepEqual(items.map(x => [x.state, x.price]), [['GO', 42.5], ['MG', 90]]);
   });
   await check('Substituicao rejeita fornecedor divergente sem publicar', async () => {
     const before = query('SELECT * FROM suppliers');
-    await rejected(file([row({ CNPJ: '04.252.011/0001-10', FORNECEDOR: 'MEGATRNS' })], { name: 'fornecedor-do-acordo' }), replace);
+    await rejected(file([row({ CNPJ: cnpjFornecedorB, FORNECEDOR: 'FORNECEDOR FICTICIO B' })], { name: 'fornecedor-do-acordo' }), replace, 400, data => assert.match(erroDaLinha(data, 2), /CNPJ.*não corresponde/));
     assert.deepEqual(query('SELECT * FROM suppliers'), before);
     assert.equal(query('SELECT supplier_id FROM agreements WHERE id=?', agreementId)[0].supplier_id, supplier.id);
   });
@@ -570,10 +566,8 @@ try {
     try {
       fixture.exec(`CREATE TRIGGER teste_falha_auditoria BEFORE INSERT ON audit_logs WHEN NEW.action='IMPORT'
         BEGIN SELECT RAISE(ABORT, 'falha sintetica na auditoria'); END`);
-      for (const route of [replace]) {
-        const result = await rejected(file([row({ PRECO: 999 })], { name: 'falha-auditoria' }), route, 500);
-        assert.equal(query('SELECT status FROM imports WHERE id=?', result.data.importId)[0].status, 'error');
-      }
+      const result = await rejected(file([row({ PRECO: 999 })], { name: 'falha-auditoria' }), replace, 500);
+      assert.equal(query('SELECT status FROM imports WHERE id=?', result.data.importId)[0].status, 'error');
     } finally {
       fixture.exec('DROP TRIGGER IF EXISTS teste_falha_auditoria');
       fixture.close();
