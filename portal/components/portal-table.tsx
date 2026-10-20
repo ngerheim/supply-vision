@@ -58,7 +58,7 @@ export function CabecalhoOrdenavel({
   return (
     <TableRow>
       {titulos.map((titulo: string, indice: number) => (
-        <TableHead key={titulo}>
+        <TableHead key={titulo} aria-sort={ordem?.coluna === indice ? (ordem.direcao === 1 ? 'ascending' : 'descending') : undefined}>
           <button
             type="button"
             className="flex items-center gap-1 hover:text-foreground"

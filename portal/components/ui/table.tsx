@@ -11,7 +11,10 @@ function Table({ className, horizontalControls=false, ...props }: React.Componen
     if(!horizontalControls)return;
     const node=scrollRef.current;
     if(!node)return;
-    const update=()=>setScroll({left:node.scrollLeft,max:Math.max(0,node.scrollWidth-node.clientWidth)});
+    const update=()=>{
+      const left=node.scrollLeft,max=Math.max(0,node.scrollWidth-node.clientWidth);
+      setScroll(current=>current.left===left&&current.max===max?current:{left,max});
+    };
     const wheel=(event:WheelEvent)=>{if(event.shiftKey&&event.deltaY){event.preventDefault();node.scrollLeft+=event.deltaY;}};
     const observer=new ResizeObserver(update);observer.observe(node);
     if(node.firstElementChild)observer.observe(node.firstElementChild);
