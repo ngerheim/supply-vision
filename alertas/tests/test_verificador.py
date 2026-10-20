@@ -8,6 +8,7 @@ import pytest
 
 
 ROOT = Path(__file__).resolve().parents[1]
+AGORA = datetime(2026, 10, 20, 12, 0)
 
 
 def carregar_verificador(monkeypatch, tmp_path):
@@ -29,12 +30,22 @@ def carregar_verificador(monkeypatch, tmp_path):
     )
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
+    class Relogio(datetime):
+        @classmethod
+        def now(cls):
+            return AGORA
+    class Dia(date):
+        @classmethod
+        def today(cls):
+            return AGORA.date()
+    monkeypatch.setattr(mod, 'datetime', Relogio)
+    monkeypatch.setattr(mod, 'date', Dia)
     return mod
 
 
 def test_encontra_log_legado_e_log_com_run_id(monkeypatch, tmp_path):
     mod = carregar_verificador(monkeypatch, tmp_path)
-    hoje = datetime.now().strftime("%Y%m%d")
+    hoje = AGORA.strftime("%Y%m%d")
     legado = tmp_path / f"pipeline_{hoje}_0800.log"
     novo = tmp_path / f"pipeline_{hoje}_120000_abcdef.log"
     legado.write_text("ok", encoding="utf-8")
@@ -45,14 +56,14 @@ def test_encontra_log_legado_e_log_com_run_id(monkeypatch, tmp_path):
 
 def test_execucao_manual_fora_da_janela_nao_mascara_falha(monkeypatch, tmp_path):
     mod = carregar_verificador(monkeypatch, tmp_path)
-    hoje = datetime.now().strftime("%Y%m%d")
+    hoje = AGORA.strftime("%Y%m%d")
     (tmp_path / f"pipeline_{hoje}_120500_abcdef.log").write_text("ok", encoding="utf-8")
     assert mod.encontrar_log("1200") is None
 
 
 def test_execucao_recuperada_fora_da_janela_e_encontrada_pelo_run_id(monkeypatch, tmp_path):
     mod = carregar_verificador(monkeypatch, tmp_path)
-    hoje = datetime.now().strftime("%Y%m%d")
+    hoje = AGORA.strftime("%Y%m%d")
     run_id = f"{hoje}_082822_abcdef"
     recuperado = tmp_path / f"pipeline_{run_id}.log"
     recuperado.write_text("PIPELINE CONCLUÍDO COM SUCESSO", encoding="utf-8")
@@ -62,7 +73,7 @@ def test_execucao_recuperada_fora_da_janela_e_encontrada_pelo_run_id(monkeypatch
 
 def test_run_id_exato_nao_aceita_outro_log(monkeypatch, tmp_path):
     mod = carregar_verificador(monkeypatch, tmp_path)
-    hoje = datetime.now().strftime("%Y%m%d")
+    hoje = AGORA.strftime("%Y%m%d")
     (tmp_path / f"pipeline_{hoje}_080000_outro1.log").write_text("ok", encoding="utf-8")
     assert mod.encontrar_log("0800", f"{hoje}_082822_abcdef") is None
 
@@ -70,7 +81,7 @@ def test_run_id_exato_nao_aceita_outro_log(monkeypatch, tmp_path):
 @pytest.mark.parametrize('dias', [0, 1])
 def test_aviso_da_chave_indica_arquivo_privado_configurado(monkeypatch, tmp_path, dias):
     mod = carregar_verificador(monkeypatch, tmp_path)
-    monkeypatch.setattr(mod, 'CHAVE_QLIK_EXPIRA', date.today() + timedelta(days=dias))
+    monkeypatch.setattr(mod, 'CHAVE_QLIK_EXPIRA', AGORA.date() + timedelta(days=dias))
     mensagens = []
     monkeypatch.setattr(mod, '_enviar_email', lambda assunto, corpo: mensagens.append(corpo))
     mod.checar_expiracao_chave('0800')

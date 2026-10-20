@@ -84,11 +84,9 @@ def test_saude_suprime_email_somente_no_ensaio(monkeypatch, tmp_path, modo):
 
 
 def test_saude_e_aviso_de_chave_nao_anunciam_envio_em_ensaio(monkeypatch, tmp_path):
-    from datetime import date
-
     mod = carregar_verificador(monkeypatch, tmp_path)
     monkeypatch.setenv('MODO_ENSAIO', '1')
-    monkeypatch.setattr(mod, 'CHAVE_QLIK_EXPIRA', date.today())
+    monkeypatch.setattr(mod, 'CHAVE_QLIK_EXPIRA', mod.date.today())
     monkeypatch.setattr(mod, 'conectar', lambda *args: pytest.fail('SMTP bloqueado'))
     mod.verificar('0800')
     mod.checar_expiracao_chave('0800')

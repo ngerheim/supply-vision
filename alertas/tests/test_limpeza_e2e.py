@@ -18,7 +18,7 @@ sys.path.insert(0, str(RAIZ / "processo"))
 limpeza = importlib.import_module("limpeza")
 sv_paths = importlib.import_module("sv_paths")
 
-AGORA = datetime.now()
+AGORA = datetime(2026, 10, 20, 12, 0)
 
 
 def ts(delta: timedelta, segundos: bool = True) -> str:
@@ -40,12 +40,18 @@ def arvore(tmp_path, monkeypatch):
     monkeypatch.setattr(sv_paths, "RELATORIOS_DIARIOS", diarios)
     monkeypatch.setattr(sv_paths, "RELATORIOS_HISTORICOS", historicos)
     monkeypatch.setattr(sv_paths, "ALERTAS", tmp_path)
+    class Relogio(datetime):
+        @classmethod
+        def now(cls):
+            return AGORA
+    monkeypatch.setattr(limpeza, "datetime", Relogio)
     return {"logs": logs, "diarios": diarios, "historicos": historicos}
 
 
 def criar(pasta: Path, nome: str) -> Path:
     alvo = pasta / nome
     alvo.write_text("conteudo", encoding="utf-8")
+    os.utime(alvo, (AGORA.timestamp(), AGORA.timestamp()))
     return alvo
 
 
@@ -135,7 +141,7 @@ def test_extensao_desconhecida_e_estado_incerto_sao_preservados(arvore):
     antigo = ts(timedelta(days=40))
     arquivo = criar(arvore["diarios"], f"config_{antigo}.env")
     estados = sv_paths.OPERACAO / "estado-envios"; estados.mkdir()
-    atualizado = (datetime.now() - timedelta(days=40)).isoformat()
+    atualizado = (AGORA - timedelta(days=40)).isoformat()
     for estado, nome in [("enviado", "2026-01-01_0800.json"), ("incerto", "2026-01-01_1100.json"), ("parcial", "2026-01-01_1400.json"), ("enviado", "manual.json")]:
         (estados / nome).write_text(json.dumps({"estado": estado, "atualizado": atualizado}))
     limpeza.limpar(dry_run=True)

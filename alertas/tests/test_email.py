@@ -158,6 +158,7 @@ def test_assunto_e_corpo_de_segunda_incluem_domingo(monkeypatch, tmp_path):
 
 def test_destinatario_recusado_e_falha(monkeypatch, tmp_path):
     mod = carregar_email(monkeypatch, tmp_path)
+    monkeypatch.setenv("MODO_ENSAIO", "0")  # SMTP substituido abaixo.
     monkeypatch.delenv("SUPPLY_VISION_SEM_ENVIO", raising=False)
 
     envios = []
@@ -185,10 +186,12 @@ def test_destinatario_recusado_e_falha(monkeypatch, tmp_path):
 
 def test_resultado_incerto_bloqueia_retentativa_e_confirmado_nao_reenvia(monkeypatch, tmp_path):
     mod = carregar_email(monkeypatch, tmp_path)
+    monkeypatch.setenv("MODO_ENSAIO", "0")  # SMTP proibido abaixo.
     monkeypatch.delenv('SUPPLY_VISION_SEM_ENVIO', raising=False)
     mod.estado_entrega.registrar_entrega('incerto', ['teste@example.com'], exclusivo=True)
     monkeypatch.setattr(mod.smtplib, 'SMTP', lambda *a, **k: (_ for _ in ()).throw(AssertionError('Nao deveria abrir SMTP')))
     with pytest.raises(mod.estado_entrega.EntregaEmRevisao):
         mod.enviar_email('a', 'b', [], ['teste@example.com'], copia_oculta=[])
     mod.estado_entrega.registrar_entrega('enviado', ['teste@example.com'])
-    mod.enviar_email('a', 'b', [], ['teste@example.com'], copia_oculta=[])
+    assert mod.enviar_email('a', 'b', [], ['teste@example.com'], copia_oculta=[]) is None
+    assert mod.estado_entrega.consultar_entrega()['estado'] == 'enviado'

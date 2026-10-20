@@ -1,16 +1,20 @@
 import numpy as np
 import pandas as pd
-from openpyxl import load_workbook
 
 
 KEY = ["_fornec_norm", "_cidade_norm", "_modelo_norm", "_peca_norm"]
+# Gerados de raizes ficticias com os dois digitos verificadores calculados.
+CNPJ = "02424242000138"
+CNPJ_OUTRO = "02424242000219"
+# Chave sem o zero inicial preserva a regressao de padding na exportacao.
+CHAVE_CNPJ = CNPJ.lstrip("0")
 
 
 def acordo(precos):
     linhas = []
     for preco in precos:
         linhas.append({
-            "_fornec_norm": "1", "_cidade_norm": "X", "_modelo_norm": "M",
+            "_fornec_norm": CHAVE_CNPJ, "_cidade_norm": "X", "_modelo_norm": "M",
             "_peca_norm": "ITEM", "PECA_SERVICO": "ITEM", "FORNECEDOR": "F",
             "PRECO": preco, "_preco_original": str(preco),
             "_preco_valido": bool(pd.notna(preco) and np.isfinite(preco) and preco >= 0),
@@ -21,7 +25,7 @@ def acordo(precos):
 def base(qtd=1, preco=100):
     return pd.DataFrame({
         "Modelo": ["M"] * qtd, "_desc_norm": ["ITEM"] * qtd,
-        "_cidade_norm": ["X"] * qtd, "_fornec_norm": ["1"] * qtd,
+        "_cidade_norm": ["X"] * qtd, "_fornec_norm": [CHAVE_CNPJ] * qtd,
         "Valor Unitario": [preco] * qtd, "OS Quantidade": [1] * qtd,
         "Data Abertura": ["01/08/2026"] * qtd, "Codigo OS": range(1, qtd + 1),
         "Forncedor por Cidade": ["X"] * qtd, "Fornecedor": ["F"] * qtd,
@@ -40,7 +44,7 @@ def com_vigencia(df, inicio="18/09/2026", fim=None, status="active"):
 
 def test_preco_compra_nao_finito_em_excel_vai_para_quarentena(rodar, tmp_path):
     compras = base(qtd=6, preco=10)
-    compras['Fornecedor CNPJ'] = '1'
+    compras['Fornecedor CNPJ'] = CNPJ
     compras['Valor Unitario'] = ['inf', '-inf', '1e309', 'ilegivel', '', '10']
     arquivo = tmp_path / 'precos.xlsx'
     compras.to_excel(arquivo, index=False)
@@ -102,7 +106,7 @@ def test_precos_iguais_na_precisao_monetaria(rodar):
 def test_carregamento_arredonda_e_rejeita_preco_nao_finito(rodar):
     bruto = pd.DataFrame({
         "MODELO": ["M"] * 6, "PECA_SERVICO": ["ITEM"] * 6,
-        "CIDADE": ["X"] * 6, "CNPJ": ["1"] * 6,
+        "CIDADE": ["X"] * 6, "CNPJ": [CNPJ] * 6,
         "PRECO": [10, 10.0000000001, 0, -1, np.inf, 1e308], "FORNECEDOR": ["F"] * 6,
     })
     with np.errstate(over="ignore"):
@@ -114,7 +118,7 @@ def test_carregamento_arredonda_e_rejeita_preco_nao_finito(rodar):
 def test_celula_vazia_de_preco_nao_vira_cortesia(rodar):
     bruto = pd.DataFrame({
         "MODELO": ["M"], "PECA_SERVICO": ["ITEM"], "CIDADE": ["X"],
-        "CNPJ": ["1"], "PRECO": [""], "FORNECEDOR": ["F"],
+        "CNPJ": [CNPJ], "PRECO": [""], "FORNECEDOR": ["F"],
     })
     carregado = rodar._preparar_acordos(bruto)
     assert not bool(carregado.loc[0, "_preco_valido"])
@@ -123,7 +127,7 @@ def test_celula_vazia_de_preco_nao_vira_cortesia(rodar):
 def test_preco_negativo_subcentavo_nao_vira_cortesia(rodar, tmp_path):
     bruto = pd.DataFrame({
         "MODELO": ["M"], "PECA_SERVICO": ["ITEM"], "CIDADE": ["X"],
-        "CNPJ": ["1"], "PRECO": [-0.001], "FORNECEDOR": ["F"],
+        "CNPJ": [CNPJ], "PRECO": [-0.001], "FORNECEDOR": ["F"],
     })
     carregado = rodar._preparar_acordos(bruto)
     assert not bool(carregado.loc[0, "_preco_valido"])
@@ -188,11 +192,11 @@ def test_tres_grupos_sao_mutuamente_exclusivos(rodar):
     assert all(sum(bool(g.iloc[i]) for g in grupos) == 1 for i in range(len(statuses)))
 
 
-def test_nomes_de_modelo_e_item_sao_traduzidos_com_fallback(rodar):
+def test_nomes_de_modelo_e_item_sao_traduzidos_com_fallback(rodar, monkeypatch):
     import regras_comparacao
 
-    regras_comparacao.MODELOS.update({"M": "MODELO PADRONIZADO"})
-    regras_comparacao.SINONIMOS.update({"ITEM": "ITEM PADRONIZADO"})
+    monkeypatch.setitem(regras_comparacao.MODELOS, "M", "MODELO PADRONIZADO")
+    monkeypatch.setitem(regras_comparacao.SINONIMOS, "ITEM", "ITEM PADRONIZADO")
     resultado = rodar.processar(base(qtd=2), acordo([90]))
     assert resultado.loc[0, "Modelo"] == "MODELO PADRONIZADO"
     assert resultado.loc[0, "Item"] == "ITEM PADRONIZADO"
@@ -206,18 +210,18 @@ def test_nomes_de_modelo_e_item_sao_traduzidos_com_fallback(rodar):
     assert sem_mapa.loc[0, "Item"] == "DESCRICAO ORIGINAL"
 
 
-def test_anexo_diario_reproduz_layout_classico_sem_verde(rodar, tmp_path):
+def test_anexo_diario_reproduz_layout_classico_sem_verde(rodar, tmp_path, abrir_planilha):
     dados = rodar.processar(base(preco=100), acordo([90]))
     destino = tmp_path / "divergencias.xlsx"
     rodar.gerar_alerta_acordo(dados, destino)
 
-    wb = load_workbook(destino)
+    wb = abrir_planilha(destino)
     ws = wb["Relatório"]
     cabecalhos = [celula.value for celula in ws[1]]
     coluna_cnpj = cabecalhos.index("CNPJ") + 1
     letra_cnpj = ws.cell(1, coluna_cnpj).column_letter
     assert ws.column_dimensions[letra_cnpj].hidden is not True
-    assert ws.cell(2, coluna_cnpj).value == "00000000000001"
+    assert ws.cell(2, coluna_cnpj).value == CNPJ
     assert len(ws.conditional_formatting) == 4
     formulas = {
         formula
@@ -267,7 +271,7 @@ def test_recorte_historico_reune_quatro_estados_e_indica_acordo(rodar):
     assert dados["Com acordo"].tolist() == ["SIM", "SIM", "SIM", "NÃO"]
 
 
-def test_planilha_historica_e_unica_e_contem_coluna_com_acordo(rodar, tmp_path):
+def test_planilha_historica_e_unica_e_contem_coluna_com_acordo(rodar, tmp_path, abrir_planilha):
     partes = [
         rodar.processar(base(preco=90), acordo([90])),
         rodar.processar(base(preco=100), acordo([90])),
@@ -276,7 +280,7 @@ def test_planilha_historica_e_unica_e_contem_coluna_com_acordo(rodar, tmp_path):
     ]
     destino = tmp_path / "recorte.xlsx"
     assert rodar.gerar_recorte_historico(pd.concat(partes, ignore_index=True), destino)
-    wb = load_workbook(destino)
+    wb = abrir_planilha(destino)
     assert wb.sheetnames == ["Relatório"]
     ws = wb.active
     cabecalhos = [celula.value for celula in ws[1]]
@@ -289,7 +293,7 @@ def test_planilha_historica_e_unica_e_contem_coluna_com_acordo(rodar, tmp_path):
     assert tabela.tableStyleInfo.showRowStripes is True
     assert tabela.tableStyleInfo.name == "TableStyleMedium15"
     coluna_cnpj = cabecalhos.index("CNPJ") + 1
-    assert ws.cell(2, coluna_cnpj).value == "00000000000001"
+    assert ws.cell(2, coluna_cnpj).value == CNPJ
     assert ws.row_dimensions[1].height == 20
     assert ws.sheet_format.defaultRowHeight == 18
     coluna_item = ws.cell(1, cabecalhos.index("Item") + 1).column_letter
@@ -327,22 +331,21 @@ def test_medida_ausente_nao_impede_comparacao(rodar):
 def test_medidas_distintas_nao_afetam_referencia(rodar):
     compras = base(preco=100); compras["Fornecedor por Estado"] = "SP"
     ac = acordo([50, 30]); ac["UF"] = "SP"; ac["MEDIDA"] = ["UNIDADE", "PAR"]
-    ac.loc[1, "_fornec_norm"] = "2"; ac.loc[1, "FORNECEDOR"] = "G"
+    ac.loc[1, "_fornec_norm"] = CNPJ_OUTRO.lstrip("0"); ac.loc[1, "FORNECEDOR"] = "G"
     resultado = rodar.processar(compras, ac)
     assert resultado.loc[0, "Preco Acordo"] == 50
     assert resultado.loc[0, "Menor Preco Acordo"] == 30
 
 
-def test_uf_ausente_ou_invalida_tem_planilha_de_conferencia(rodar, tmp_path):
+def test_uf_ausente_ou_invalida_tem_planilha_de_conferencia(rodar, tmp_path, abrir_planilha):
     compras = base(qtd=2); compras["Fornecedor por Estado"] = ["", "TI"]
     ac = acordo([50]); ac["UF"] = "SP"; ac["MEDIDA"] = "UNIDADE"
     resultado = rodar.processar(compras, ac)
     assert resultado["Status"].tolist() == [rodar.STATUS_DIMENSAO_PENDENTE] * 2
     destino = tmp_path / "pendencias.xlsx"
     assert rodar.gerar_pendencias_comparacao(resultado, destino)
-    wb = load_workbook(destino)
+    wb = abrir_planilha(destino)
     assert wb.active.max_row == 3
-    wb.close()
 
 
 def test_alerta_pendencias_apenas_acima_de_metade(rodar):
@@ -378,7 +381,7 @@ def test_listas_de_exclusao_comparam_texto_normalizado(rodar, monkeypatch, tmp_p
         "Codigo OS": ["1", "2"], "Data Abertura": ["01/10/2026"] * 2,
         "Descrição": ["ITEM"] * 2, "OS Quantidade": ["1"] * 2,
         "Valor Unitario": ["10"] * 2, "Fornecedor": ["Oficina São José", "Outra"],
-        "Forncedor por Cidade": ["X"] * 2, "Fornecedor CNPJ": ["1", "2"],
+        "Forncedor por Cidade": ["X"] * 2, "Fornecedor CNPJ": [CNPJ, CNPJ_OUTRO],
         "Criado Por": ["T"] * 2,
     })
     caminho = tmp_path / "base.xlsx"

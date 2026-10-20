@@ -124,10 +124,10 @@ def test_quantidade_nao_positiva_vai_para_quarentena(rodar, quantidade):
     assert rodar.resumir_status(resultado)["total_quarentena"] == 1
 
 
-def test_alias_modelo_normalizado_antes_do_de_para(rodar):
+def test_alias_modelo_normalizado_antes_do_de_para(rodar, monkeypatch):
     import regras_comparacao
 
-    regras_comparacao.MODELOS = {"APELIDO": "M"}
+    monkeypatch.setattr(regras_comparacao, 'MODELOS', {"APELIDO": "M"})
     compra = base(preco=10)
     compra["Modelo"] = " apelido "
     assert rodar.processar(compra, acordo([10])).loc[0, "Status"] == "CONFORME"

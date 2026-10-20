@@ -12,6 +12,7 @@ from test_email import carregar_email
 @pytest.mark.parametrize("saude", [False, True])
 @pytest.mark.parametrize("certificado_valido", [False, True])
 def test_tls_valida_certificado_antes_de_enviar_credenciais(monkeypatch, tmp_path, saude, certificado_valido, seguro):
+    monkeypatch.setenv("MODO_ENSAIO", "0")  # SMTP/SMTP_SSL substituidos abaixo.
     mod = carregar_email(monkeypatch, tmp_path)
     if saude:
         fake = sys.modules["sv_paths"]
