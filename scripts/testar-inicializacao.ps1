@@ -76,7 +76,9 @@ if((Consultar-TarefaAdministrada $raizTeste).modo-ne'computador'){throw 'Consult
  function New-ScheduledTaskAction {}
  function New-ScheduledTaskTrigger {}
  function New-ScheduledTaskSettingsSet {}
- $senha=ConvertTo-SecureString 'ficticia' -AsPlainText -Force
+ $senha=New-Object Security.SecureString
+ foreach($caractere in 'ficticia'.ToCharArray()){$senha.AppendChar($caractere)}
+ $senha.MakeReadOnly()
  $credencial=[pscredential]::new('DOMINIO\ficticio',$senha)
  foreach($desligar in @($true,$false)){
   $script:mutouVigilancia=$false;$recusou=$false
