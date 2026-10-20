@@ -1,10 +1,11 @@
 ﻿[CmdletBinding()]
-param()
+param([string]$PastaPrivada)
 $ErrorActionPreference='Stop'
 $raiz=(Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 . (Join-Path $PSScriptRoot 'operacao-logica.ps1')
 . (Join-Path $PSScriptRoot 'inicializacao-logica.ps1')
 . (Join-Path $PSScriptRoot 'avisos-admin.ps1')
+if($PastaPrivada){$env:SUPPLY_VISION_PRIVADO=$PastaPrivada}
 $privado=Obter-PastaPrivada $raiz
 $log=Join-Path $privado 'operacao/supervisor.log'
 $clienteHealth=$null

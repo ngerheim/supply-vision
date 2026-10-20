@@ -2,6 +2,34 @@
 . (Join-Path $PSScriptRoot 'operacao-logica.ps1')
 $pasta=Join-Path ([IO.Path]::GetTempPath()) ('sv-etapa-a-'+[guid]::NewGuid().ToString('N'))
 $antes=$env:SUPPLY_VISION_PRIVADO
+& {
+ . (Join-Path $PSScriptRoot 'inicializacao-logica.ps1')
+ $codigo=[IO.File]::ReadAllText((Join-Path $PSScriptRoot 'configurar-vigilancia.ps1')).Replace(". (Join-Path `$PSScriptRoot 'inicializacao-logica.ps1')",'')
+ $codigo=$codigo.Replace('$PSScriptRoot',("'"+$PSScriptRoot+"'"))
+ function Testar-Elevacao {return $true}
+ function Testar-ContaAdministradora {return $true}
+ function Get-ScheduledTask {return $null}
+ function New-ScheduledTaskAction {param($Execute,$Argument,$WorkingDirectory);$script:acaoVigilancia=@{Execute=$Execute;Arguments=$Argument;WorkingDirectory=$WorkingDirectory};return $script:acaoVigilancia}
+ function New-ScheduledTaskTrigger {}
+ function New-ScheduledTaskSettingsSet {}
+ function Register-ScheduledTask {}
+ $alternativo=Join-Path $pasta 'dados alternativos'
+ try{
+  $env:SUPPLY_VISION_PRIVADO=$alternativo
+  $credencial=[pscredential]::new('DOMINIO\ficticio',(ConvertTo-SecureString 'ficticia' -AsPlainText -Force))
+  & ([scriptblock]::Create($codigo)) -CredencialTarefa $credencial
+  if($script:acaoVigilancia.Arguments-notlike('*-PastaPrivada "'+$alternativo+'"')){throw 'Vigilancia nao transporta raiz privada alternativa.'}
+  if(!(Testar-IdentidadeTarefa @{Actions=$script:acaoVigilancia} (Split-Path $PSScriptRoot) 'vigiar-operacao.ps1')){throw 'Acao nova nao reconhecida.'}
+  $legada=$script:acaoVigilancia.Clone();$legada.Arguments=$legada.Arguments.Replace((' -PastaPrivada "'+$alternativo+'"'),'')
+  if(!(Testar-IdentidadeTarefa @{Actions=$legada} (Split-Path $PSScriptRoot) 'vigiar-operacao.ps1')){throw 'Acao legada nao reconhecida.'}
+  $inicio=[IO.File]::ReadAllText((Join-Path $PSScriptRoot 'vigiar-operacao.ps1'))
+  $inicio=$inicio.Substring(0,$inicio.IndexOf('$log=')).Replace('$PSScriptRoot',("'"+$PSScriptRoot+"'"))
+  $env:SUPPLY_VISION_PRIVADO=$null
+  $recebido=& ([scriptblock]::Create($inicio+"`n`$privado")) -PastaPrivada $alternativo
+  if($recebido-ne$alternativo){throw 'Vigilancia nao aplica raiz privada recebida.'}
+  Write-Host '[OK] Vigilancia transporta/aplica raiz privada e reconhece acao legada.'
+ }finally{$env:SUPPLY_VISION_PRIVADO=$antes}
+}
 try{
  New-Item -ItemType Directory -Path (Join-Path $pasta 'operacao') -Force|Out-Null
  $env:SUPPLY_VISION_PRIVADO=$pasta

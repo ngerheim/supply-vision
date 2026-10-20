@@ -23,9 +23,11 @@ foreach($modo in @('desligado','computador')){
 $script:avisos=@();function Log([string]$Texto){$script:avisos+=$Texto}
 if(Notificar 'teste' 'teste' $false){throw 'Toast sem sessao interativa foi aceito.'}
 if(!$script:avisos.Count){throw 'Ausencia de sessao nao foi registrada.'}
-# Tarefa preexistente com propriedades desconhecidas continua valida pelo caminho.
+# Fixture no formato exato gerado pela versao atual, com principal desconhecido.
 $raizTeste=Join-Path ([IO.Path]::GetTempPath()) 'sv-tarefa-existente'
-$script:tarefaExistente=@{Actions=@{Arguments=('-File "'+(Join-Path $raizTeste 'scripts\supervisor.ps1')+'" -ParametroAntigo')};Principal=@{UserId='SID-preservado';LogonType='desconhecido'}}
+$definicaoExistente=[xml](Montar-DefinicaoTarefa $raizTeste (Join-Path $raizTeste 'privado') 'C:\Node\node.exe' "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" 'DOMINIO\ficticio')
+$acaoExistente=$definicaoExistente.Task.Actions.Exec
+$script:tarefaExistente=@{Actions=@{Execute=$acaoExistente.Command;Arguments=$acaoExistente.Arguments;WorkingDirectory=$acaoExistente.WorkingDirectory};Principal=@{UserId='SID-preservado';LogonType='desconhecido'}}
 function Get-ScheduledTask {return $script:tarefaExistente}
 function Register-ScheduledTask {throw 'Nao pode reconfigurar a tarefa existente.'}
 function Get-Credential {throw 'Nao pode pedir credencial para reconhecer/iniciar.'}
@@ -36,6 +38,59 @@ if(!$script:iniciouExistente){throw 'Tarefa existente nao iniciou.'}
 . (Join-Path $PSScriptRoot 'administracao-logica.ps1')
 function Get-ScheduledTaskInfo {return @{LastTaskResult=0}}
 if((Consultar-TarefaAdministrada $raizTeste).modo-ne'computador'){throw 'Consulta recusou tarefa existente.'}
+& {
+ function Testar-Elevacao {return $true}
+ function Unregister-ScheduledTask {throw 'ALTEROU TAREFA ALHEIA'}
+ $legitima=$script:tarefaExistente
+ try{
+  $falhas=@()
+  foreach($caso in @('executavel','sufixo','argumento','raiz','multiplas')){
+   $acao=@{Execute=$acaoExistente.Command;Arguments=$acaoExistente.Arguments;WorkingDirectory=$acaoExistente.WorkingDirectory}
+   switch($caso){
+    'executavel' {$acao.Execute='C:\alheio\powershell.exe'}
+    'sufixo' {$acao.Arguments=$acao.Arguments.Replace('supervisor.ps1','supervisor.ps1.alheio')}
+    'argumento' {$acao.Arguments='-Command Write-Output "'+(Join-Path $raizTeste 'scripts\supervisor.ps1')+'"'}
+    'raiz' {$acao.WorkingDirectory='C:\alheio'}
+   }
+   $script:tarefaExistente=@{Actions=@($acao)}
+   if($caso-eq'multiplas'){$script:tarefaExistente.Actions+=@{Execute='alheio';Arguments='';WorkingDirectory=$raizTeste}}
+   if(Obter-TarefaSupplyVision $raizTeste){$falhas+="reconheceu $caso"}
+   if((Consultar-TarefaAdministrada $raizTeste).modo-eq'computador'){$falhas+="consulta reconheceu $caso"}
+   foreach($modo in @('desligado','computador')){
+    $recusou=$false;try{Definir-ModoInicializacao $raizTeste $raizTeste $modo}catch{$recusou=$_.Exception.Message-like'*outra instalacao*'}
+    if(!$recusou){$falhas+="$modo nao recusou $caso"}
+   }
+  }
+  if($falhas.Count){throw ($falhas-join'; ')}
+ }finally{$script:tarefaExistente=$legitima}
+}
+& {
+ $codigo=[IO.File]::ReadAllText((Join-Path $PSScriptRoot 'configurar-vigilancia.ps1')).Replace(". (Join-Path `$PSScriptRoot 'inicializacao-logica.ps1')",'')
+ $codigo=$codigo.Replace('$PSScriptRoot',("'"+$PSScriptRoot+"'"))
+ function Testar-Elevacao {return $true}
+ function Testar-ContaAdministradora {return $true}
+ $script:tarefaVigilanciaTeste=@{Actions=@{Execute='alheio';Arguments='alheio';WorkingDirectory='C:\alheio'}}
+ function Get-ScheduledTask {return $script:tarefaVigilanciaTeste}
+ function Unregister-ScheduledTask {$script:mutouVigilancia=$true}
+ function Register-ScheduledTask {$script:mutouVigilancia=$true}
+ function New-ScheduledTaskAction {}
+ function New-ScheduledTaskTrigger {}
+ function New-ScheduledTaskSettingsSet {}
+ $senha=ConvertTo-SecureString 'ficticia' -AsPlainText -Force
+ $credencial=[pscredential]::new('DOMINIO\ficticio',$senha)
+ foreach($desligar in @($true,$false)){
+  $script:mutouVigilancia=$false;$recusou=$false
+  try{& ([scriptblock]::Create($codigo)) -Desligar:$desligar -CredencialTarefa $credencial}catch{$recusou=$_.Exception.Message-like'*outra instalacao*'}
+  if(!$recusou-or$script:mutouVigilancia){throw 'Vigilancia alterou tarefa homonima alheia.'}
+ }
+ # Acao da versao atual, anterior ao transporte explicito de PastaPrivada.
+ $script:tarefaVigilanciaTeste=@{Actions=@{Execute="$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe";Arguments=('-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "'+(Join-Path $PSScriptRoot 'vigiar-operacao.ps1')+'"');WorkingDirectory=(Split-Path $PSScriptRoot)}}
+ foreach($desligar in @($true,$false)){
+  $script:mutouVigilancia=$false
+  & ([scriptblock]::Create($codigo)) -Desligar:$desligar -CredencialTarefa $credencial
+  if(!$script:mutouVigilancia){throw 'Vigilancia nao operou sobre a acao legada da instalacao.'}
+ }
+}
 $script:tarefaExistente.Actions.Arguments='-File outra-instalacao.ps1'
 if(Obter-TarefaSupplyVision $raizTeste){throw 'Tarefa de outra instalacao reconhecida.'}
 function Testar-Elevacao {return $true}

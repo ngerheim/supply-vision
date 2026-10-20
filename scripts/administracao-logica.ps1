@@ -1,4 +1,5 @@
 ﻿. (Join-Path $PSScriptRoot 'atualizacao-preparo.ps1')
+if(!(Get-Command Testar-IdentidadeTarefa -ErrorAction SilentlyContinue)){. (Join-Path $PSScriptRoot 'inicializacao-logica.ps1')}
 function Obter-VersaoAdministrada([string]$Raiz) {
  $r=Executar-NativoOperacao 'git' @('-C',$Raiz,'log','-1','--date=format:%d/%m/%Y','--pretty=format:%h  %ad')
  if($r.codigo-eq0){
@@ -23,7 +24,7 @@ function Consultar-TarefaAdministrada([string]$Raiz){
    catch{if($_.CategoryInfo.Category-ne'ObjectNotFound'){throw}}
   }
   $tempoTarefa=$medir.ElapsedMilliseconds
-  if($t-and!([string]$t.Actions.Arguments).Contains((Join-Path $Raiz 'scripts\supervisor.ps1'))){$t=$null}
+  if($t-and!(Testar-IdentidadeTarefa $t $Raiz)){$t=$null}
   if($t){
    $medir.Restart();try{$info=Get-ScheduledTaskInfo -TaskName 'Supply Vision' -TaskPath '\' -ErrorAction Stop}finally{$tempoInfo=$medir.ElapsedMilliseconds}
    $aviso=Obter-FalhaLogonTarefa ([long]$info.LastTaskResult)
