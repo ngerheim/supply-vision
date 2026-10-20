@@ -1,11 +1,14 @@
 import assert from 'node:assert/strict';
 import { randomBytes } from 'node:crypto';
+import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
+import { pathToFileURL } from 'node:url';
 import { executar7z, exigirNomesCriptografados, FalhaBackup } from '../scripts/backup-7z.mjs';
 import { compactarPacote, extrairPacote, listarConfiguracao, exigirDestinoSeguro } from '../scripts/backup-pacote.mjs';
 import { criarTemporarioTeste } from './apoio/ambiente.mjs';
+import { bancoFicticio } from './apoio/backup.mjs';
 
 const eol = process.platform === 'win32' ? '\r\n' : '\n';
 const prompt = `${eol}Enter password (will not be echoed):${eol}`;
@@ -13,17 +16,60 @@ const lista = `Path = banco/portal.sqlite${eol}Encrypted = +${eol}${eol}`;
 const senhaTeste = () => `Ficticia ç !"${randomBytes(18).toString('hex')}`;
 const eofCriptografado = () => Object.assign(new Error('saida nativa'), { status: 255, stdout: Buffer.from(prompt) });
 
-void test('pacote: recusa junction intermediaria na configuracao e ancestral da raiz privada', t => {
+void test('pacote: recusa junction intermediaria na configuracao e no destino dentro da base', t => {
   const dir = criarTemporarioTeste('sv-pacote-ancestral-');
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const raiz = path.join(dir, 'privado'), fora = path.join(dir, 'fora');
   fs.mkdirSync(raiz); fs.mkdirSync(path.join(fora, 'config'), { recursive: true });
   fs.writeFileSync(path.join(fora, 'config/fixture.env'), 'FICTICIO=1');
   fs.symlinkSync(fora, path.join(raiz, 'alertas'), process.platform === 'win32' ? 'junction' : 'dir');
-  fs.mkdirSync(path.join(fora, 'privado/comum'), { recursive: true });
-  fs.symlinkSync(fora, path.join(dir, 'atalho'), process.platform === 'win32' ? 'junction' : 'dir');
-  assert.throws(() => exigirDestinoSeguro('comum/novo.env', path.join(dir, 'atalho/privado')), /Link|fora/);
+  fs.mkdirSync(path.join(fora, 'configuracao'), { recursive: true });
+  fs.symlinkSync(fora, path.join(raiz, 'portal'), process.platform === 'win32' ? 'junction' : 'dir');
+  assert.throws(() => exigirDestinoSeguro('portal/configuracao/novo.env', raiz), /Link|fora/);
   assert.throws(() => listarConfiguracao(raiz), /Link|fora/);
+});
+
+void test('pacote: aceita base configurada sob junction externa', t => {
+  const dir = criarTemporarioTeste('sv-pacote-base-');
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const fisico = path.join(dir, 'fisico'), alias = path.join(dir, 'alias');
+  fs.mkdirSync(path.join(fisico, 'privado/comum'), { recursive: true });
+  fs.writeFileSync(path.join(fisico, 'privado/comum/fixture.env'), 'FICTICIO=1');
+  fs.symlinkSync(fisico, alias, process.platform === 'win32' ? 'junction' : 'dir');
+  const raiz = path.join(alias, 'privado');
+  assert.deepEqual(listarConfiguracao(raiz), ['comum/fixture.env']);
+  assert.equal(exigirDestinoSeguro('comum/novo.env', raiz), path.join(raiz, 'comum/novo.env'));
+});
+
+void test('pacote: backup sob preload ativo nao consulta caminhos acima das bases', t => {
+  const dir = criarTemporarioTeste('sv-pacote-isolado-');
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const raiz = path.join(dir, `.fixture-preparo-${randomBytes(16).toString('hex')}`);
+  const scripts = path.join(raiz, 'portal/scripts'), privado = path.join(raiz, 'privado'), cache = path.join(raiz, '.cache');
+  fs.mkdirSync(scripts, { recursive: true }); fs.mkdirSync(cache);
+  fs.mkdirSync(path.join(privado, 'comum'), { recursive: true });
+  fs.writeFileSync(path.join(privado, 'comum/fixture.env'), 'FICTICIO=1');
+  for (const nome of ['backup-pacote', 'caminhos', 'banco-local', 'snapshot-banco', 'backup-7z', 'backup-rede',
+    'validar-banco', 'retencao-backup', 'modo-ensaio', 'isolamento-preparo', 'isolamento-sqlite-hooks']) {
+    fs.copyFileSync(new URL(`../scripts/${nome}.mjs`, import.meta.url), path.join(scripts, `${nome}.mjs`));
+  }
+  bancoFicticio(path.join(privado, 'fixture.sqlite')).close();
+  const codigo = `import assert from 'node:assert/strict';import fs from 'node:fs';import path from 'node:path';
+    import {montarPacote,validarPacote,listarConfiguracao,exigirDestinoSeguro} from ${JSON.stringify(pathToFileURL(path.join(scripts, 'backup-pacote.mjs')).href)};
+    const raiz=process.env.SV_PREPARO_RAIZ,privado=process.env.SUPPLY_VISION_PRIVADO,pacote=path.join(raiz,'pacote');
+    assert.throws(()=>fs.lstatSync(path.dirname(raiz)),/fora do worktree/);
+    montarPacote(pacote,{raiz:privado,banco:path.join(privado,'fixture.sqlite')});
+    assert.equal(validarPacote(pacote).formato,1);
+    const permitido=p=>{const r=path.relative(privado,path.resolve(p));assert.ok(!r.startsWith('..')&&!path.isAbsolute(r),'acesso acima da base: '+p)};
+    for(const nome of ['existsSync','lstatSync']){const original=fs[nome];fs[nome]=(...args)=>{permitido(args[0]);return original(...args)}}
+    const real=fs.realpathSync.native;fs.realpathSync.native=(...args)=>{permitido(args[0]);return real(...args)};
+    assert.deepEqual(listarConfiguracao(privado),['comum/fixture.env']);
+    assert.equal(exigirDestinoSeguro('comum/novo.env',privado),path.join(privado,'comum/novo.env'));`;
+  const env = { ...process.env, NODE_OPTIONS: '', SV_PREPARO_RAIZ: raiz, SUPPLY_VISION_PRIVADO: privado,
+    TEMP: cache, TMP: cache, TMPDIR: cache, XDG_CONFIG_HOME: cache, XDG_CACHE_HOME: cache };
+  const r = spawnSync(process.execPath, ['--import', pathToFileURL(path.join(scripts, 'isolamento-preparo.mjs')).href,
+    '--input-type=module', '-e', codigo], { env, encoding: 'utf8', timeout: 20000, windowsHide: true });
+  assert.equal(r.status, 0, r.stderr || r.stdout);
 });
 
 void test('7z: argumentos e stdin por comando, sem senha na linha de comando', async t => {

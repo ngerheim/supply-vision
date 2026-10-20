@@ -5,6 +5,28 @@ $base=Join-Path ([IO.Path]::GetTempPath()) ('sv-h1-'+[guid]::NewGuid().ToString(
 $raiz=Join-Path $base 'instalacao'
 function Exigir($Condicao,[string]$Mensagem){if(!$Condicao){throw $Mensagem}}
 & {
+ $fixture=Join-Path $base 'bases-limitadas';$fisico=Join-Path $fixture 'fisico';$alias=Join-Path $fixture 'alias'
+ try{
+  New-Item -ItemType Directory -Force (Join-Path $fisico 'modulos'),(Join-Path $fisico 'saida')|Out-Null
+  [IO.File]::WriteAllText((Join-Path $fisico 'modulos/arquivo'),'ficticio')
+  New-Item -ItemType Junction -Path $alias -Target $fisico|Out-Null
+  $baseOrigemTeste=Join-Path $alias 'modulos';$baseDestinoTeste=Join-Path $alias 'saida'
+  & {
+   # A guarda falha mesmo antes de alcancar a junction acima das bases.
+   function Test-Path {param($LiteralPath)
+    if($LiteralPath-ne$baseOrigemTeste-and!$LiteralPath.StartsWith($baseOrigemTeste+'\')-and$LiteralPath-ne$baseDestinoTeste-and!$LiteralPath.StartsWith($baseDestinoTeste+'\')){throw 'Consulta acima das bases permitidas.'}
+    Microsoft.PowerShell.Management\Test-Path -LiteralPath $LiteralPath
+   }
+   Copiar-ArvoreDependencias (Join-Path $baseOrigemTeste 'arquivo') (Join-Path $baseDestinoTeste 'arquivo') @($baseOrigemTeste)
+  }
+  Exigir ((Get-Content (Join-Path $baseDestinoTeste 'arquivo'))-eq'ficticio') 'Copia recusou ancestral externo da base.'
+  Write-Host '[OK] Copia aceita junction acima das bases sem consultar ancestrais externos.'
+ }finally{
+  if(Test-Path -LiteralPath $alias){[IO.Directory]::Delete($alias,$false)}
+  if(Test-Path -LiteralPath $fixture){Remover-ArvorePreparo $fixture}
+ }
+}
+& {
  $fixture=Join-Path $base 'ancestrais';$modulos=Join-Path $fixture 'portal/node_modules';$vendor=Join-Path $fixture 'portal/vendor';$fora=Join-Path $fixture 'fora'
  try{
   New-Item -ItemType Directory -Force $modulos,$vendor,(Join-Path $fora 'pacote')|Out-Null
