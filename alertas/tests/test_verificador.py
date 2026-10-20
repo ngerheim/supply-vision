@@ -1,8 +1,10 @@
 import importlib.util
 import sys
 import types
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
+
+import pytest
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -19,6 +21,7 @@ def carregar_verificador(monkeypatch, tmp_path):
     fake.REMETENTE = "teste@example.com"
     fake.DESTINATARIO_ALERTA = "alerta@example.com"
     fake.QLIK_TENANT = "tenant.example.com"
+    fake.CFG_QLIK = tmp_path / "alertas/config/cfg_qlik.txt"
     fake.CHAVE_QLIK_EXPIRA = date(2027, 6, 23)
     monkeypatch.setitem(sys.modules, "sv_paths", fake)
     spec = importlib.util.spec_from_file_location(
@@ -62,3 +65,15 @@ def test_run_id_exato_nao_aceita_outro_log(monkeypatch, tmp_path):
     hoje = datetime.now().strftime("%Y%m%d")
     (tmp_path / f"pipeline_{hoje}_080000_outro1.log").write_text("ok", encoding="utf-8")
     assert mod.encontrar_log("0800", f"{hoje}_082822_abcdef") is None
+
+
+@pytest.mark.parametrize('dias', [0, 1])
+def test_aviso_da_chave_indica_arquivo_privado_configurado(monkeypatch, tmp_path, dias):
+    mod = carregar_verificador(monkeypatch, tmp_path)
+    monkeypatch.setattr(mod, 'CHAVE_QLIK_EXPIRA', date.today() + timedelta(days=dias))
+    mensagens = []
+    monkeypatch.setattr(mod, '_enviar_email', lambda assunto, corpo: mensagens.append(corpo))
+    mod.checar_expiracao_chave('0800')
+    assert len(mensagens) == 1
+    assert str(mod.sv_paths.CFG_QLIK) in mensagens[0]
+    assert 'README' not in mensagens[0]

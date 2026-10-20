@@ -1,4 +1,4 @@
 @echo off
-REM MODELO ? copie para config\ambiente.bat e ajuste o caminho.
-REM Define o interpretador Python usado pelos .bat do projeto.
+REM MODELO - ajuste o caminho do interpretador Python.
+REM A instalacao gera privado\alertas\config\ambiente.bat.
 set "PYTHON=C:\caminho\para\python.exe"

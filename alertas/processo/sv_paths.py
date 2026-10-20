@@ -36,7 +36,7 @@ def _carregar(path):
         if not texto or texto.startswith("#"):
             continue
         if "=" not in texto:
-            raise SystemExit(f"ERRO: linha inválida em {path} ({numero}): {texto!r}")
+            raise SystemExit(f"ERRO: linha inválida em {path} ({numero}): esperado CHAVE=valor.")
         chave, _, valor = texto.partition("=")
         if not chave.strip():
             raise SystemExit("ERRO: chave vazia na configuração.")

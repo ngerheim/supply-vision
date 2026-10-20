@@ -8,9 +8,9 @@ nunca para os destinatários do relatório nem para a cópia oculta.
 
 LIMITE: roda no mesmo host e usa o mesmo SMTP do pipeline. Detecta pipeline
 que não concluiu enquanto máquina, agendador, rede e SMTP continuam de pé.
-Não cobre indisponibilidade do próprio host: máquina desligada ou sessão
-encerrada param os dois, e nenhum alerta sai. Cobrir isso exigiria um monitor
-em outro host.
+Não cobre indisponibilidade do próprio host: máquina desligada impede os dois,
+e nenhum alerta sai. O supervisor roda sem sessão aberta; cobrir falhas do host
+exigiria um monitor em outro host.
 
 Uso:
     python verificar_saude.py 0800
@@ -115,8 +115,7 @@ def checar_expiracao_chave(hhmm_esperado):
             f"{CHAVE_QLIK_EXPIRA.strftime('%d/%m/%Y')} — faltam {dias} dia(s).\n\n"
             f"Renovar ANTES da data, para o pipeline não parar:\n"
             f"  1. Gerar nova chave em https://{sv_paths.QLIK_TENANT}/settings/api-keys\n"
-            f"  2. Substituir o conteúdo de config\\cfg_qlik.txt\n\n"
-            f"Detalhes na seção sobre a chave de API do Qlik, no README.\n\n"
+            f"  2. Substituir o conteúdo de {sv_paths.CFG_QLIK}\n\n"
             f"— Verificação automática, sem intervenção humana."
         )
     else:
@@ -125,7 +124,7 @@ def checar_expiracao_chave(hhmm_esperado):
             f"A chave de API do Qlik Cloud expirou em {CHAVE_QLIK_EXPIRA.strftime('%d/%m/%Y')}. "
             f"O pipeline vai falhar na autenticação até a chave ser renovada.\n\n"
             f"  1. Gerar nova chave em https://{sv_paths.QLIK_TENANT}/settings/api-keys\n"
-            f"  2. Substituir o conteúdo de config\\cfg_qlik.txt\n\n"
+            f"  2. Substituir o conteúdo de {sv_paths.CFG_QLIK}\n\n"
             f"— Verificação automática, sem intervenção humana."
         )
 
@@ -173,7 +172,7 @@ def verificar(hhmm_esperado, run_id=None):
             detalhe=(
                 "Nenhum arquivo de log foi encontrado para este horário, dentro "
                 f"de uma tolerância de {TOLERANCIA_SEGUNDOS}s. Causa mais "
-                "provável: máquina desligada ou sessão encerrada no horário do "
+                "provável: máquina desligada no horário do "
                 "disparo. O supervisor residente pode ter sido interrompido ou "
                 "a execução pode ter falhado antes de criar o log."
             )

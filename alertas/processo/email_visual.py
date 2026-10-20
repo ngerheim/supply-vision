@@ -1,7 +1,7 @@
 """Casca visual dos e-mails do Supply Vision.
 
 Mesma identidade dos e-mails do Portal: cabecalho escuro, corpo branco e
-rodape discreto. A paleta vem de portal/lib/email-chamados.ts.
+rodape discreto. A casca e a paleta espelham portal/lib/email-visual.ts.
 
 Por que HTML de tabela e estilo inline: cliente de e-mail nao e navegador. O
 Outlook renderiza com o motor do Word, que ignora JavaScript, folhas de estilo

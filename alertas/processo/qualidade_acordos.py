@@ -13,14 +13,14 @@ MIN_LINHAS_DESTINO = 10
 
 
 def _validar_parametros(df_acordo):
-    """Guarda-corpo dos parâmetros de universo (SINONIMOS / MODELOS).
+    """Guarda-corpo dos sinônimos contra os acordos do Portal.
 
     O merge com o acordo é por igualdade exata de string. Se um DESTINO de
     sinônimo não existe nos acordos do Portal, a linha nunca casa e cai em
     SEM ACORDO sem nenhum sinal — o percentual sobe e parece comportamento de
     compra.
 
-    Duas checagens, ambas só avisam (não derrubam o pipeline):
+    As checagens só avisam (não derrubam o pipeline):
       1) destino inexistente no Portal -> sinônimo morto;
       2) chave mais frequente que o destino   -> sinônimo INVERTIDO, isto é,
          está reescrevendo o nome canônico (centenas de linhas de acordo) para

@@ -75,9 +75,12 @@ def _preparar_acordos(df):
     df["_cidade_norm"] = df["CIDADE"].apply(_norm)
     df["_fornec_norm"] = df["CNPJ"].apply(_normcnpj)
     df["_preco_original"] = df["PRECO"]
-    df["PRECO"]        = pd.to_numeric(df["PRECO"], errors="coerce").round(2)
+    precos = pd.to_numeric(df["PRECO"], errors="coerce")
+    df["PRECO"] = precos.round(2)
 
-    df["_preco_valido"] = np.isfinite(df["PRECO"]) & (df["PRECO"] >= 0)
+    # Validar antes de arredondar: negativo subcentavo não pode virar cortesia.
+    # O arredondamento também pode transbordar em valores extremos.
+    df["_preco_valido"] = np.isfinite(precos) & (precos >= 0) & np.isfinite(df["PRECO"])
     n_inval = int((~df["_preco_valido"]).sum())
     if n_inval:
         print(f"AVISO: {n_inval} condição(ões) do Portal com preço inválido "

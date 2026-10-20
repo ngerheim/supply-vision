@@ -25,3 +25,15 @@ def test_contrato_env(caso, tmp_path):
         assert _carregar(arquivo) == caso["valores"]
         assert _carregar_opcional(arquivo) == caso["valores"]
     assert _carregar_opcional(tmp_path / "ausente.env") == {}
+
+
+def test_linha_invalida_nao_expoe_conteudo_da_configuracao(tmp_path):
+    arquivo = tmp_path / 'smtp.env'
+    segredo = 'segredo-ficticio-sem-delimitador'
+    arquivo.write_text('# fixture\n' + segredo, encoding='utf-8')
+    with pytest.raises(SystemExit) as erro:
+        _carregar(arquivo)
+    mensagem = str(erro.value)
+    assert str(arquivo) in mensagem
+    assert '(2)' in mensagem
+    assert segredo not in mensagem

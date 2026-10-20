@@ -200,7 +200,10 @@ def test_probe_detecta_lock_sobrevivente_sem_executar_pipeline():
 
 
 @pytest.mark.parametrize("estado,codigo", [("enviado", 0), ("incerto", 3), ("parcial", 3), (None, 1)])
-def test_falha_apos_envio_respeita_estado_persistido(monkeypatch, tmp_path, estado, codigo):
+def test_falha_apos_envio_respeita_estado_persistido(monkeypatch, tmp_path, caplog, estado, codigo):
+    import logging
+
+    caplog.set_level(logging.INFO)
     mod = carregar_pipeline(monkeypatch, tmp_path)
     monkeypatch.delenv("SUPPLY_VISION_SEM_ENVIO", raising=False)
     monkeypatch.setattr(sys, "argv", ["pipeline.py"])
@@ -215,6 +218,7 @@ def test_falha_apos_envio_respeita_estado_persistido(monkeypatch, tmp_path, esta
     monkeypatch.setattr(mod, "rodar_script", lambda *a, **kw: next(respostas))
     if codigo == 0:
         mod.main()
+        assert 'PIPELINE CONCLUÍDO COM SUCESSO' in caplog.text
     else:
         with pytest.raises(SystemExit) as saida:
             mod.main()
