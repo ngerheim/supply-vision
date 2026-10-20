@@ -1,4 +1,4 @@
-// Testes HTTP de baixo nivel e da trava concorrente. So rodam contra a
+// Testes HTTP de baixo nivel: cookies e limites de corpo em fluxo. So rodam contra a
 // instalacao descartavel criada por teste-instalacao-nova.ps1.
 import { requisitar } from './cliente-http.mjs';
 
