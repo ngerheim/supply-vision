@@ -5,3 +5,4 @@ $ErrorActionPreference='Stop'
 $argumentos=@('backup','restaurar','--configuracao')
 if($Data){$argumentos+=@('--data',$Data)}
 & (Join-Path $PSScriptRoot 'supv.ps1') @argumentos
+exit $LASTEXITCODE
