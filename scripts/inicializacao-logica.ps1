@@ -107,7 +107,7 @@ function Definir-ModoInicializacao([string]$Raiz,[string]$Privado,[ValidateSet('
   if(!$Credencial){throw 'O modo computador exige a credencial da conta do dono (ContaPersonalizada).'}
   $node=Localizar-NodeMaquina $NodeExecutavel
   if(!(Test-Path -LiteralPath (Join-Path (Split-Path $node) 'npm.cmd') -PathType Leaf)){throw 'npm.cmd nao encontrado ao lado do Node instalado na maquina.'}
-  $r=Executar-NativoOperacao $node @((Join-Path $Raiz 'portal/scripts/versao-node.mjs'));if($r.codigo-ne0){throw 'A tarefa exige o major Node do Portal e a versao minima definida em engines.node.'};$r.stderr|ForEach-Object {Write-Warning $_}
+  $r=Executar-NativoOperacao $node @((Join-Path $Raiz 'portal/scripts/versao-node.mjs'));if($r.codigo-ne0){throw 'A tarefa exige o major Node do Portal e a versao minima definida em engines.node.'};$r.saida|ForEach-Object {Write-Warning $_}
   $cfg=Ler-ConfigOperacao (Join-Path $Privado 'portal\configuracao\portal.env');Validar-BackupSemLogin 'computador' $cfg['BACKUP_NETWORK_DIR']
   $conta=$Credencial.UserName
   if(!(Testar-ContaAdministradora $conta)){throw 'A conta da tarefa deve ser administradora local. Peca a TI a permissao antes de configurar.'}

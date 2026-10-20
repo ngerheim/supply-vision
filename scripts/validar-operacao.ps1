@@ -14,12 +14,12 @@ function Exigir-Arquivo([string]$p){
 }
 function Ler-Chaves([string]$p,[string[]]$chaves){
  try{
-  if(!(Test-Path -LiteralPath $p -PathType Leaf -ErrorAction Stop)){Falha "Arquivo ausente: $p";return}
+  if(!(Test-Path -LiteralPath $p -PathType Leaf -ErrorAction Stop)){Falha "Arquivo ausente: $p";return @{}}
   $linhas=@(Get-Content -LiteralPath $p -ErrorAction Stop)
- }catch{Falha "Sem acesso ao arquivo: $p ($($_.Exception.Message))";return}
+ }catch{Falha "Sem acesso ao arquivo: $p ($($_.Exception.Message))";return @{}}
  $valores=@{};foreach($l in $linhas){$t=$l.Trim();if($t-and!$t.StartsWith('#')-and$t.Contains('=')){$k,$v=$t.Split('=',2);$valores[$k.Trim().ToUpper()]=$v.Trim()}};foreach($k in $chaves){if(!$valores[$k]){Falha "Configuracao ausente em $p`: $k"}};return $valores
 }
-$op=Join-Path $privado 'comum\operacao.env';try{$cfg=Ler-ConfigOperacao $op;Validar-Horarios $cfg}catch{Falha $_.Exception.Message}
+$op=Join-Path $privado 'comum\operacao.env';$cfg=@{};try{$cfg=Ler-ConfigOperacao $op;Validar-Horarios $cfg}catch{Falha $_.Exception.Message}
 if($cfg){$minimo=0.0;if(![double]::TryParse($cfg['ESPACO_MINIMO_GB'],[Globalization.NumberStyles]::Number,[Globalization.CultureInfo]::InvariantCulture,[ref]$minimo)-or$minimo-lt1){Falha 'ESPACO_MINIMO_GB deve ser um numero maior ou igual a 1.'}}
 Ler-Chaves (Join-Path $privado 'comum\smtp.env') @('SMTP_HOST','SMTP_PORT','SMTP_USER','SMTP_PASSWORD','EMAIL_FROM_NAME')|Out-Null
 $portalEnv=Join-Path $privado 'portal\configuracao\portal.env'

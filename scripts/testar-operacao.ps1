@@ -144,3 +144,20 @@ try{
  }
 }finally{Remove-Item $Operacao -Recurse -Force}
 Write-Host 'OK: detalhes de falha do supervisor.'
+
+# Configuracao ausente deve acumular falhas, sem escapar por indice em null.
+& {
+ $fixture=Join-Path ([IO.Path]::GetTempPath()) ('sv-validacao-'+[guid]::NewGuid().ToString('N'))
+ $privadoAntes=$env:SUPPLY_VISION_PRIVADO;$falhasValidacao=New-Object 'Collections.Generic.List[string]'
+ function Write-Error {param($Message,$ErrorAction);$falhasValidacao.Add([string]$Message)}
+ try{
+  $env:SUPPLY_VISION_PRIVADO=Join-Path $fixture 'dados-ficticios'
+  $erroValidacao=''
+  try{& (Join-Path $PSScriptRoot 'validar-operacao.ps1') -Raiz $fixture}catch{$erroValidacao=$_.Exception.Message}
+  if($erroValidacao-notlike'Validacao operacional reprovada em * item(ns).'-or$falhasValidacao.Count-lt9){throw "Configuracao ausente: mensagem=$erroValidacao; diagnosticos=$($falhasValidacao.Count)."}
+ }finally{
+  $env:SUPPLY_VISION_PRIVADO=$privadoAntes
+  if(Test-Path -LiteralPath $fixture){Remove-Item -LiteralPath $fixture -Recurse -Force}
+ }
+}
+Write-Host 'OK: configuracao ausente preserva a lista de falhas.'

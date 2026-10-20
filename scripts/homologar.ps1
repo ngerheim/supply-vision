@@ -29,8 +29,15 @@ foreach($nome in @('status','estado')){
  Item-Homologacao "$nome.json" { $j=Get-Content -LiteralPath $arquivoJson -Raw -Encoding UTF8|ConvertFrom-Json;if($null-eq$j-or$j-is[string]-or$j-is[array]-or$j-is[ValueType]){throw 'Objeto JSON esperado'};'JSON legivel e valido' }
 }
 $cfg=@{};try{$cfg=Ler-ConfigOperacao (Join-Path $privado 'portal\configuracao\portal.env')}catch{}
-foreach($url in @('http://127.0.0.1:3000',$cfg['PORTAL_URL'])){
- Item-Homologacao "Health $url" {if(!$url){throw 'url'};$h=Invoke-RestMethod ($url.TrimEnd('/')+'/api/health') -TimeoutSec 5;if($h.status-ne'ok'){throw 'health'};'respondendo'}
+# O health local usa a mesma porta e o mesmo prazo finito do supervisor.
+Item-Homologacao 'Health local' {
+ $url='http://127.0.0.1:'+(Obter-PortaPortalLocal $cfg)+'/api/health'
+ $clienteHealth=Novo-ClienteHealth
+ try{if(!(Consultar-HealthLocal $clienteHealth $url).saudavel){throw 'health'};'respondendo'}finally{$clienteHealth.cliente.Dispose()}
+}
+Item-Homologacao "Health $($cfg['PORTAL_URL'])" {
+ $url=$cfg['PORTAL_URL'];if(!$url){throw 'url'}
+ $h=Invoke-RestMethod ($url.TrimEnd('/')+'/api/health') -TimeoutSec 5;if($h.status-ne'ok'){throw 'health'};'respondendo'
 }
 Item-Homologacao 'Tarefa e inicializacao' {
  $modo=Obter-ModoInicializacao $Raiz
