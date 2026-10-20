@@ -46,17 +46,59 @@ function Preparar-InstalacaoSupervisorTeste([string]$Raiz,[string]$Destino){
 
 # Espera apenas o processo, nunca WaitForExit() sem prazo (que espera tambem
 # EOF de pipes herdados por descendentes). O limite independe do filho.
-function Esperar-ProcessoTeste($Processo,[int]$Segundos,[string]$ArquivoFase=''){
+function Esperar-ProcessoTeste($Processo,[int]$Segundos,[string]$ArquivoFase='',[scriptblock]$LerFase){
  $cronometro=[Diagnostics.Stopwatch]::StartNew();$ultimaFase='';$ultimoAviso=-30
  do{
   if($Processo.WaitForExit(100)){return $true}
-  $fase=if($ArquivoFase-and(Test-Path -LiteralPath $ArquivoFase)){Get-Content -LiteralPath $ArquivoFase -Raw -ErrorAction SilentlyContinue}else{'iniciando'}
+  $fase=if($LerFase){try{& $LerFase}catch{'progresso indisponivel'}}elseif($ArquivoFase-and(Test-Path -LiteralPath $ArquivoFase)){Get-Content -LiteralPath $ArquivoFase -Raw -ErrorAction SilentlyContinue}else{'nao informada'}
   if($fase-ne$ultimaFase-or$cronometro.Elapsed.TotalSeconds-$ultimoAviso-ge30){
    Write-Host ("Cenario em andamento: fase=$fase; duracao=$([int]$cronometro.Elapsed.TotalSeconds) s; PID=$($Processo.Id).")
    $ultimaFase=$fase;$ultimoAviso=$cronometro.Elapsed.TotalSeconds
   }
   if($cronometro.Elapsed.TotalSeconds-ge$Segundos){return $false}
  }while($true)
+}
+# H2 reutiliza a instalacao: o JSON do caso anterior nao prova progresso do novo.
+# A saida do caso e exclusiva e tambem serve para versoes sem acompanhamento.
+function Ler-FaseAtualizadorTeste([string]$ArquivoAndamento,[string]$ArquivoSaida,[datetime]$Inicio){
+ try{
+  $a=Get-Content -LiteralPath $ArquivoAndamento -Raw -Encoding UTF8 -ErrorAction Stop|ConvertFrom-Json -ErrorAction Stop
+  $inicioRegistro=if($a.inicioGeral-is[datetime]){$a.inicioGeral}else{[datetime]::Parse($a.inicioGeral,[Globalization.CultureInfo]::InvariantCulture,[Globalization.DateTimeStyles]::RoundtripKind)}
+  if($inicioRegistro.ToUniversalTime()-ge$Inicio.ToUniversalTime()-and$a.nome){
+   if($a.esperaCI.mensagem){return "$($a.nome); $($a.esperaCI.mensagem)"}
+   return [string]$a.nome
+  }
+ }catch{}
+ try{
+  $etapas=@(Get-Content -LiteralPath $ArquivoSaida -Tail 80 -Encoding UTF8 -ErrorAction Stop|Where-Object {$_-match'^== .+ ==$'})
+  if($etapas.Count){return $etapas[-1].Trim('=',' ')}
+ }catch{}
+ return 'sem fase publicada na execucao atual'
+}
+# Apenas logs ficticios ja incluidos nos artefatos H2. Falha de observacao
+# nao substitui o timeout, nao espera EOF e nao publica comandos/credenciais.
+function Mostrar-DiagnosticoAtualizadorTeste($Processo,[string]$Logs,[string]$Operacao){
+ try{
+  $Processo.Refresh()
+  Write-Host "Atualizador aguardado: PID=$($Processo.Id); inicio=$($Processo.StartTime.ToUniversalTime().ToString('o')); encerrado=$($Processo.HasExited)."
+ }catch{Write-Host 'Estado do processo aguardado indisponivel.'}
+ foreach($arquivo in @((Join-Path $Logs 'atualizador.log'),(Join-Path $Logs 'atualizador-erro.log'))+@('atualizacao-andamento.json','atualizacao-tempos.log','limpeza-preparo.lock','limpeza-preparo.json'|ForEach-Object {Join-Path $Operacao $_})){
+  Write-Host "Diagnostico H2: $(Split-Path $arquivo -Leaf) (ultimas 80 linhas):"
+  try{Get-Content -LiteralPath $arquivo -Tail 80 -Encoding UTF8 -ErrorAction Stop|Write-Host}catch{Write-Host '(arquivo ausente ou indisponivel)'}
+ }
+ if($env:OS-eq'Windows_NT'){
+  try{
+   $todos=@(Get-CimInstance Win32_Process -OperationTimeoutSec 3 -ErrorAction Stop)
+   $ids=@([int]$Processo.Id)
+   do{
+    $filhos=@($todos|Where-Object {$_.ParentProcessId-in$ids-and$_.ProcessId-notin$ids})
+    $ids+=@($filhos|ForEach-Object {[int]$_.ProcessId})
+   }while($filhos.Count)
+   foreach($p in @($todos|Where-Object {$_.ProcessId-in$ids})){
+    Write-Host "Processo H2: PID=$($p.ProcessId); pai=$($p.ParentProcessId); nome=$($p.Name); inicio=$($p.CreationDate)."
+   }
+  }catch{Write-Host 'Arvore de processos H2 indisponivel.'}
+ }
 }
 function Encerrar-ArvoreTeste($Processo){
  if(!$Processo){return}
