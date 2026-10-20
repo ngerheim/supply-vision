@@ -94,7 +94,7 @@ function manifesto(raiz) {
   // os artefatos e configuracoes estaveis, nao apenas tamanho/data de arquivos.
   const pastas = ['scripts', 'portal/dist', 'portal/node_modules', 'alertas/.venv',
     'privado/comum', 'privado/portal/configuracao', 'privado/alertas/config', 'privado/alertas/parametros'];
-  return Object.fromEntries(pastas.flatMap(p => arquivos(path.join(raiz, p))).sort().map(p => [path.relative(raiz, p),
+  return Object.fromEntries(pastas.flatMap(p => arquivos(path.join(raiz, p))).sort((a, b) => a < b ? -1 : a > b ? 1 : 0).map(p => [path.relative(raiz, p),
     fs.lstatSync(p).isSymbolicLink() ? `link:${fs.readlinkSync(p)}` : crypto.createHash('sha256').update(fs.readFileSync(p)).digest('hex')]));
 }
 export function intervalosConsumidores(raiz) {
@@ -128,6 +128,7 @@ export function conferirAmostras(amostras, negativo = false, pidsAntes = amostra
   assert.ok(amostras.some(a => a.fase === 'PREPARAR'), 'PREPARAR nao observado');
   assert.ok(pidsAntes?.emails > 0 && pidsAntes?.relatorios > 0, 'PIDs iniciais dos consumidores ausentes');
   for (const a of amostras) {
+    assert.ok(!a.erroLogFases, `Fase da atualizacao desconhecida: ${a.erroLogFases}`);
     if (negativo || a.fase !== 'TROCAR') assert.ok(a.health && a.supervisor && a.consumidores, `Operacao caiu fora de TROCAR: ${JSON.stringify(a)}`);
     if (negativo || a.fase === 'PREPARAR') assert.deepEqual(a.pidsConsumidores, pidsAntes, `Consumidores reiniciaram no PREPARAR: ${JSON.stringify(a)}`);
   }
@@ -156,7 +157,7 @@ async function monitorar(raiz, pasta, negativo) {
   const pidsAntes = JSON.parse(fs.readFileSync(path.join(pasta, 'consumidores-antes.json'), 'utf8').replace(/^\uFEFF/, ''));
   const intervalos = intervalosConsumidores(raiz);
   let fase = 'PREPARAR';
-  do {
+  for (;;) {
     let erroLogFases = null;
     const atualizarFase = async () => {
       try {
@@ -168,7 +169,8 @@ async function monitorar(raiz, pasta, negativo) {
     await atualizarFase();
     let health = false;
     try { const r = await fetch('http://127.0.0.1:3000/api/health', { signal: AbortSignal.timeout(2000) }); health = r.ok && (await r.json()).status === 'ok'; } catch { /* parada medida */ }
-    let supervisor = false, consumidores = false, pid = null, erro = null, detalhesConsumidores = {};
+    let supervisor = false, consumidores = false, pid = null, erro = null;
+    const detalhesConsumidores = {};
     let pids = {};
     try {
       const st = JSON.parse(fs.readFileSync(path.join(raiz, 'privado/operacao/status.json'), 'utf8').replace(/^\uFEFF/, ''));
@@ -196,7 +198,7 @@ async function monitorar(raiz, pasta, negativo) {
     }
     if (fs.existsSync(path.join(pasta, 'monitor-parar'))) break;
     await new Promise(resolve => setTimeout(resolve, 500));
-  } while (true);
+  }
   const fasesRegistradas = [...(await lerLogFases(log)).slice(offset).matchAll(/\] (PREPARAR|TROCAR|CONCLUIR):[^\n]*inicio\./g)].map(m => m[1]);
   const transicoes = fasesRegistradas.filter((f, i) => f !== fasesRegistradas[i - 1]);
   assert.deepEqual(transicoes, negativo ? ['PREPARAR'] : ['PREPARAR', 'TROCAR', 'CONCLUIR'], 'Ordem das fases no log invalida');

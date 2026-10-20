@@ -3,7 +3,7 @@
 ## Operação
 - Claude e Codex: ler antes de editar; código e testes definem os contratos. Preservar comentários de motivo e conferir entradas, consumidores e testes antes de mudar comportamento.
 - Servidor único definitivo Windows 11 Pro, somente LAN; inicialização em modo `computador`, conta do dono, sem sessão aberta. Sem migração entre máquinas.
-- Portal direto em Node 24.20. Versão em `portal/package.json#engines.node`; regras em `portal/scripts/versao-node.mjs`. SQLite local único.
+- Portal direto em Node. Versão exata em `portal/package.json#engines.node`; regras em `portal/scripts/versao-node.mjs`. SQLite local único.
 - Repositório público de portfólio, mantido apenas pelo dono. Dados reais, credenciais, bancos, relatórios e infraestrutura ficam fora do Git, fixtures e artefatos públicos.
 
 ## Mapa
@@ -57,4 +57,4 @@ Caminhos abreviados nas células mantêm o diretório do primeiro arquivo.
 - Raiz: `python -m pytest alertas/tests -q`, `ruff check alertas`; detector: `node --test portal/tests/infra-publica.test.mjs` e `node scripts/verificar-infra-publica.mjs`.
 - PowerShell: `./scripts/ci/testar-chamadas-nativas.ps1`, `./scripts/testar-supv.ps1`, `./scripts/testar-health-local.ps1`; preparo: `./scripts/testar-dependencias-preparo.ps1`, `./scripts/testar-fases-atualizacao.ps1`, `./scripts/testar-espera-testes.ps1`, `./scripts/testar-espera-ci.ps1`.
 - Atualização real (H2, Windows): `$env:SV_TESTES_INTEGRACAO_WINDOWS='1'`; `./scripts/testar-atualizacao-real.ps1 -BaseRef origin/main -DestinoRef HEAD`. Preservar continuidade PREPARAR/CONCLUIR, parada TROCAR e recuperação; sem mocks de build/suites.
-- Ao alterar testes/CI, conferir referências, inclusive chamadas PowerShell montadas dinamicamente: `node scripts/ci/verificar-testes.mjs`.
+- Ao alterar testes/CI, conferir referências no workflow e nos drivers de `scripts/ci/`, inclusive nomes PowerShell construídos em laços: `node scripts/ci/verificar-testes.mjs`.

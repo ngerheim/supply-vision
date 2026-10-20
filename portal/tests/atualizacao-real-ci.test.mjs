@@ -119,3 +119,13 @@ void test('H2 repete apenas locks transitorios do log e informa esgotamento', as
     } finally { leitura.mock.restore(); }
   }
 });
+
+void test('H2 reprova amostras cuja fase ficou desconhecida por falha de leitura do log', () => {
+  const positivo = [ok('PREPARAR'), { ...ok('TROCAR'), health: false }, ok('CONCLUIR')];
+  for (const [amostras, negativo] of [[positivo, false], [[ok('PREPARAR'), ok('PREPARAR')], true]]) {
+    for (let i = 0; i < amostras.length; i++) {
+      const incompletas = amostras.map((a, j) => i === j ? { ...a, erroLogFases: 'EACCES ficticio' } : a);
+      assert.throws(() => conferirAmostras(incompletas, negativo), /Fase da atualizacao desconhecida: EACCES ficticio/);
+    }
+  }
+});

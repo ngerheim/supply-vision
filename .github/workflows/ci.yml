@@ -167,6 +167,7 @@ jobs:
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
 
   powershell:
+    permissions: {}
     name: PowerShell
     needs: [powershell-inicializacao, powershell-protecoes, powershell-ensaio]
     if: always()
@@ -238,9 +239,7 @@ jobs:
         working-directory: .
         shell: pwsh
         run: ./scripts/testar-credencial-portal.ps1 -ExigirBuild
-      # O instalador ja cobrava isto na maquina; o CI nao. Vulnerabilidade
-      # precisa aparecer no PR, nao na instalacao. A auditoria e completa de
-      # Runtime e ferramentas sao auditados juntos.
+      # Auditar runtime e ferramentas no PR e na execucao semanal.
       - run: npm audit
 
   portal-integracao:
@@ -413,6 +412,7 @@ jobs:
             ${{ runner.temp }}/sv-h2-*/instalacao/privado/operacao/relatorios-*.log
 
   atualizacao-real:
+    permissions: {}
     name: Atualizacao real
     needs: [atualizacao-real-cenarios]
     if: always() && github.event_name == 'pull_request'

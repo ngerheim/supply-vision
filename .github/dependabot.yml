@@ -1,13 +1,9 @@
 # Atualizacao de dependencias por PR, para o CI provar cada uma antes de
 # qualquer coisa chegar ao servidor.
-# Cooldown de 14 dias evita versoes comprometidas retiradas logo apos a publicacao.
+# Cooldown de 14 dias adia versoes novas para permitir avaliacao antes da adocao.
 #
-# Os grupos existem para juntar o que sobe junto -- React com as tipagens do
-# React, Tailwind com o plugin do Tailwind -- e nada alem disso. A primeira
-# versao tinha um grupo "producao" com patterns ['*'], que virou um PR de 17
-# pacotes: quando o CI reprovou, nao havia como saber qual deles foi, e o PR
-# so servia para ser fechado. O que nao entra em grupo vem individual, que e
-# facil de aprovar e facil de reverter.
+# Grupos separam React, Tailwind e ferramental para localizar falhas e reverter
+# cada conjunto. Pacotes fora dos grupos recebem PRs individuais.
 #
 # Majors ficam fora dos grupos de proposito: cada uma merece ser lida sozinha.
 version: 2
