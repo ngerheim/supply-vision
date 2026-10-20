@@ -71,7 +71,7 @@ void test('H2 semeia dados ficticios usando o schema real da aplicacao', () => {
       assert.ok(sql, `Schema real ausente: ${nome}`);
       db.exec(sql);
     }
-    db.exec("INSERT INTO users(id,name,email,password_salt,password_hash,role,created_at) VALUES('admin','Ficticio','admin@portal.local','salt','hash','admin','2026-01-01')");
+    db.exec("INSERT INTO users(id,name,email,password_salt,password_hash,role,created_at) VALUES('admin','Pessoa Ficticia','admin@example.com','salt','hash','admin','2026-01-01')");
     semearBanco(db);
     assert.equal(db.prepare('SELECT email FROM users').get().email, 'admin@h2.test');
     assert.equal(db.prepare('SELECT legal_name FROM suppliers').get().legal_name, 'Fornecedor ficticio H2');
@@ -91,7 +91,7 @@ void test('reversao permite apenas defaults acrescentados depois da troca; artef
   assert.throws(()=>conferir(antigo+'NOVA=inesperado\n'),/defaults aprovados/);
   assert.throws(()=>conferir(novo+'INTRUSA=1\n'),/defaults aprovados/);
   assert.throws(()=>conferir(novo,'alterado'),/Artefatos alterados/);
-  assert.throws(()=>assert.deepEqual(atual,antes),/Expected/);
+  assert.notDeepEqual(atual,antes);
 });
 
 void test('H2 repete apenas locks transitorios do log e informa esgotamento', async t => {

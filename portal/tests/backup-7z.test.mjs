@@ -37,12 +37,16 @@ void test('7z: argumentos e stdin por comando, sem senha na linha de comando', a
 });
 
 void test('7z: valida senha e recusa -p fornecido pelo chamador antes de iniciar processo', () => {
+  let chamadas = 0;
+  const executar = () => { chamadas++; throw new Error('processo nao deveria iniciar'); };
   for (const senha of ['', 'a\rb', 'a\nb', 'a\0b', null, 123]) {
-    assert.throws(() => executar7z('fixture', senha, ['t', 'fixture.7z'], { executar() { assert.fail(); } }), FalhaBackup);
+    assert.throws(() => executar7z('fixture', senha, ['t', 'fixture.7z'], { executar }), FalhaBackup);
+    assert.equal(chamadas, 0);
   }
   const senha = senhaTeste();
   for (const argumento of ['-p', `-p${senha}`, `-P${senha}`]) {
-    assert.throws(() => executar7z('fixture', senha, ['t', 'fixture.7z', argumento], { executar() { assert.fail(); } }), FalhaBackup);
+    assert.throws(() => executar7z('fixture', senha, ['t', 'fixture.7z', argumento], { executar }), FalhaBackup);
+    assert.equal(chamadas, 0);
   }
 });
 

@@ -94,7 +94,13 @@ void test('transporte que demora alem do limite nao bloqueia outras tarefas e e 
 
 void test('controle corrompido impede envio e nao altera outros bancos', async t => {
   const { arquivo } = fixture(t); fs.mkdirSync(path.dirname(arquivo)); fs.writeFileSync(arquivo, 'invalido');
-  await assert.rejects(enviarAvisoAdmin('backup-falhou', { destinatarios: 'admin@example.com', ensaio: false, arquivo, criarTransporte: () => assert.fail('sem controle nao pode enviar') }));
+  let leituras = 0, transportes = 0;
+  await assert.rejects(enviarAvisoAdmin('backup-falhou', { destinatarios: 'admin@example.com', ensaio: false, arquivo,
+    lerSmtp: () => { leituras++; return config; },
+    criarTransporte: () => { transportes++; assert.fail('sem controle nao pode enviar'); },
+  }), /not a database/);
+  assert.equal(leituras, 0);
+  assert.equal(transportes, 0);
   assert.equal(fs.readFileSync(arquivo, 'utf8'), 'invalido');
 });
 
@@ -140,10 +146,10 @@ void test('processos concorrentes enviam todos os tipos mas reservam cada tipo u
   const codigo = `import {enviarAvisoAdmin} from ${JSON.stringify(modulo)};
     console.log(await enviarAvisoAdmin(process.argv[2],{destinatarios:'admin@example.com',ensaio:false,arquivo:process.argv[1],agora:new Date('2026-10-08T14:00:00Z'),lerSmtp:()=>({}),criarTransporte:()=>({async sendMail(){},close(){}})}));`;
   const executar = (evento, controle = arquivo) => new Promise((resolve, reject) => {
-    const filho = spawn(process.execPath, ['--input-type=module', '-e', codigo, controle, evento], { env: { ...process.env, NO_COLOR: '1', FORCE_COLOR: '0', SUPPLY_VISION_PRIVADO: pasta } });
+    const filho = spawn(process.execPath, ['--input-type=module', '-e', codigo, controle, evento], { env: { ...process.env, NO_COLOR: '1', FORCE_COLOR: '0', SUPPLY_VISION_PRIVADO: pasta }, timeout: 15000, windowsHide: true });
     let stdout = '', stderr = '';
     filho.stdout.on('data', dados => { stdout += dados; }); filho.stderr.on('data', dados => { stderr += dados; });
-    filho.on('error', reject); filho.on('close', status => { if (status) reject(new Error(stderr)); else resolve(stdout.trim()); });
+    filho.on('error', reject); filho.on('close', (status, sinal) => { if (status !== 0) reject(new Error(stderr || `Filho encerrou: ${status}, ${sinal}`)); else resolve(stdout.trim()); });
   });
   const tipos = Object.keys(EVENTOS_ADMIN);
   const primeiras = await Promise.all(tipos.map(evento => executar(evento)));

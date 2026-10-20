@@ -19,6 +19,7 @@ for(const caso of casos)void test(`contrato env: ${caso.nome}`,t=>{
   else assert.deepEqual(lerArquivo(arquivo),caso.valores);
   if(caso.ausente)assert.deepEqual(lerArquivo(arquivo),{});
   fs.mkdirSync(path.join(pasta,'comum'));if(!caso.ausente)fs.writeFileSync(path.join(pasta,'comum/operacao.env'),caso.texto);
-  const filho=spawnSync(process.execPath,['--experimental-strip-types',fileURLToPath(new URL('../scripts/expurgar-dados.mjs',import.meta.url))],{env:{...process.env,SUPPLY_VISION_PRIVADO:pasta},encoding:'utf8'});
+  const filho=spawnSync(process.execPath,['--experimental-strip-types',fileURLToPath(new URL('../scripts/expurgar-dados.mjs',import.meta.url))],{env:{...process.env,SUPPLY_VISION_PRIVADO:pasta},encoding:'utf8',timeout:10000,windowsHide:true});
+  assert.ifError(filho.error);
   assert.equal(filho.status,caso.erro?1:0,filho.stderr);
 });

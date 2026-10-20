@@ -15,12 +15,9 @@ void test('link publico do Power BI nao entra em arquivo versionado', () => {
   const assinatura = ['app.powerbi.com', '/view?r='].join('');
   const encontrados = [];
   for (const arquivo of arquivos) {
-    try {
-      if (readFileSync(resolve(raiz, arquivo), 'utf8').includes(assinatura))
-        encontrados.push(arquivo);
-    } catch {
-      /* arquivo binario: nao participa desta verificacao */
-    }
+    // Buffer tambem examina binarios; falha de leitura deve reprovar a guarda.
+    if (readFileSync(resolve(raiz, arquivo)).includes(Buffer.from(assinatura)))
+      encontrados.push(arquivo);
   }
   assert.deepEqual(
     encontrados,

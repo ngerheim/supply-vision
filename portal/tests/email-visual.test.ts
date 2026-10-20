@@ -45,6 +45,10 @@ void test('titulo, subtitulo e botao sao escapados', () => {
   assert.ok(html.includes('&lt;'));
   assert.ok(html.includes('&amp;'));
   assert.ok(!html.includes('5 < 10'));
+  assert.ok(html.includes('5 &lt; 10'));
+  assert.ok(html.includes('a &amp; b'));
+  assert.ok(html.includes('href="http://x.test/?a=1&amp;b=2"'));
+  assert.ok(html.includes('&quot;ir&quot;</a>'));
 });
 
 void test('botao so aparece quando informado', () => {

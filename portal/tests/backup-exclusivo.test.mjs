@@ -9,16 +9,16 @@ import { comBackupExclusivo } from '../scripts/backup-exclusivo.mjs';
 
 void test('backup concorrente nao toca arquivos e lock libera depois de falha', async () => {
   const pasta = fs.mkdtempSync(path.join(os.tmpdir(), 'sv-backup-lock-'));
-  let liberar;
+  let liberar, primeiro;
   try {
-    const primeiro = comBackupExclusivo(pasta, () => new Promise(r => { liberar = r; }));
+    primeiro = comBackupExclusivo(pasta, () => new Promise(r => { liberar = r; }));
     let executou = false;
     await assert.rejects(comBackupExclusivo(pasta, () => { executou = true; }), /locked/);
     assert.equal(executou, false);
     liberar(); await primeiro;
     await assert.rejects(comBackupExclusivo(pasta, () => { throw new Error('falha injetada'); }), /falha injetada/);
     assert.equal(await comBackupExclusivo(pasta, () => 'ok'), 'ok');
-  } finally { fs.rmSync(pasta, { recursive: true, force: true }); }
+  } finally { liberar?.(); await primeiro; fs.rmSync(pasta, { recursive: true, force: true }); }
 });
 
 void test('queda do processo libera lock sem apagar arquivo manualmente', { timeout: 15000 }, async () => {
@@ -31,10 +31,10 @@ void test('queda do processo libera lock sem apagar arquivo manualmente', { time
     await comBackupExclusivo(process.argv[1], () => new Promise(() => {
       setTimeout(() => console.log('pronto'), 200);
     }));`;
-  const filho = spawn(process.execPath, ['--expose-gc', '--input-type=module', '-e', codigo, pasta], { windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
+  const filho = spawn(process.execPath, ['--expose-gc', '--input-type=module', '-e', codigo, pasta], { windowsHide: true, timeout: 10000, stdio: ['ignore', 'pipe', 'pipe'] });
   const encerrado = once(filho, 'close');
   try {
-    const [saida] = await once(filho.stdout, 'data');
+    const [saida] = await Promise.race([once(filho.stdout, 'data'), encerrado.then(() => assert.fail('Filho encerrou antes da prontidao'))]);
     assert.equal(String(saida).trim(), 'pronto');
     assert.equal(filho.exitCode, null); assert.equal(filho.signalCode, null);
     let executou = false;
