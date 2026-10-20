@@ -98,7 +98,7 @@ time.sleep(30)
   [IO.File]::WriteAllText("$temp\privado\comum\smtp.env", "SMTP_HOST=x`r`nSMTP_PORT=1`r`nSMTP_USER=x`r`nSMTP_PASSWORD=x`r`nEMAIL_FROM_NAME=x")
   [IO.File]::WriteAllText("$temp\privado\portal\configuracao\portal.env", "PORTAL_URL=http://127.0.0.1:$($portasFixture[0])`r`nPORTAL_PORTA=$($portasFixture[0])`r`nRELATORIOS_PORTA=$($portasFixture[1])`r`nPORTAL_API_TOKEN=x`r`nBACKUP_EMAIL_TO=x")
   [IO.File]::WriteAllText("$temp\privado\alertas\config\cfg_ambiente.txt", "QLIK_TENANT=x`r`nQLIK_APP_ID=x`r`nQLIK_OBJ_ID=x`r`nDESTINATARIO_ALERTA=x")
-  [IO.File]::WriteAllText("$temp\privado\comum\operacao.env", "ALERTAS_HORARIOS=$Slot`r`nBACKUP_HORARIOS=23:59`r`nLIMPEZA_HORARIO=23:59`r`nESPACO_MINIMO_GB=1")
+  [IO.File]::WriteAllText("$temp\privado\comum\operacao.env", "MODO_ENSAIO=1`r`nALERTAS_HORARIOS=$Slot`r`nBACKUP_HORARIOS=23:59`r`nLIMPEZA_HORARIO=23:59`r`nESPACO_MINIMO_GB=1")
 
   # Estado inicial: backup e limpeza ja feitos; o slot de ALERTAS fica pendente.
   @{ "backup-$data-23:59" = 'ok'; "limpeza-$data-23:59" = 'ok' } | ConvertTo-Json | Set-Content "$temp\privado\operacao\estado.json"

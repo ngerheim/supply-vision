@@ -1,6 +1,7 @@
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
+import { isIP } from 'node:net';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
@@ -12,9 +13,15 @@ export const EXEMPLOS_FICTICIOS = Object.freeze({
 });
 const dns = /\b[a-z0-9.-]+\.local\b/gi;
 const ipv4 = /(?<![\w.])(?:\d{1,3}\.){3}\d{1,3}(?![\w.])/g;
-const powerbi = /powerbi\.com\/view\?r=/i;
+const ipv6 = /(?<![\w:])(?:[a-f0-9]{0,4}:){2,}[a-f0-9:.]*(?:%[a-z0-9_.-]+)?(?![\w:.%])/gi;
+const powerbi = /powerbi\.com\/(?:view\?(?:[^\s"'<>#]*&(?:amp;)?)?r=|reportEmbed\?(?:[^\s"'<>#]*&(?:amp;)?)?reportId=)/i;
 const usuario = /\bC:\\{1,4}Users\\{1,4}([^\\\s"'<>]+)/gi;
+const perfilAlternativo = /\b[a-z]:[\\/]+Users[\\/]+([^\\/\s"'<>]+)/gi;
 const unc = /(?:^|[\s="'`])\\{2,4}([a-z0-9._-]+)\\{1,4}([a-z0-9_$.-]+)/gi;
+const uncAlternativo = /(?:^|[\s="'`([{<])\\{2,}([a-z0-9](?:[a-z0-9._-]*[a-z0-9])?)\\+([a-z0-9_$.-]+)/gi;
+const redeUrl = /(?:\b(?:file|smb):\/{2}|(?:^|[\s="'`([{<])\/{2})([a-z0-9._-]+)\/+([a-z0-9_$.-]+)/gi;
+const email = /(?<![a-z0-9._%+-])[a-z0-9_%+-](?:[a-z0-9._%+-]*[a-z0-9_%+-])?@((?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,})(?![a-z0-9.-])/gi;
+const emailsNoreply = new Set(['noreply@openai.com', 'noreply@anthropic.com', 'noreply@github.com']);
 const maquina = /\b[a-z]{2}-\d{4}\b/i;
 // Delimitadores evitam confundir chamadas/propriedades JS com uma conta literal.
 const conta = /(?:^|[\s="'`\\])([a-z][a-z0-9_-]+\.[a-z][a-z0-9_-]+)(?=$|[\s"'`,;\\])/gi;
@@ -27,6 +34,17 @@ export function arquivoFicticio(nome) {
     || /(?:\.exemplo(?:\.|$)|\.example$)/.test(path.basename(nome));
 }
 export function contemInfra(texto, { arquivo = '', termos = [] } = {}) {
+  const opcoes = { arquivo, termos };
+  if (detectarInfra(texto, opcoes)) return true;
+  // Verificacao adicional: conservar sempre a leitura original para que um
+  // escape nao apague uma ocorrencia que as guardas existentes ja barravam.
+  const normalizado = texto.replace(/\\u00([a-f0-9]{2})|%([a-f0-9]{2})/gi,
+    (_, unicode, percentual) => String.fromCharCode(parseInt(unicode || percentual, 16)))
+    .replace(/\\\//g, '/')
+    .replace(/\\{2,}[?.]\\+UNC\\+/gi, () => '\\\\');
+  return normalizado !== texto && detectarInfra(normalizado, opcoes);
+}
+function detectarInfra(texto, { arquivo, termos }) {
   const lower = texto.toLowerCase();
   if (termos.some(termo => lower.includes(termo.toLowerCase())) || powerbi.test(texto)) return true;
   for (const m of texto.matchAll(ipv4)) {
@@ -34,11 +52,35 @@ export function contemInfra(texto, { arquivo = '', termos = [] } = {}) {
     if ([a, b, c, d].some(n => n > 255)) continue;
     if (a === 10 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168)) return true;
   }
+  for (const m of texto.matchAll(ipv6)) {
+    const endereco = m[0].split('%')[0].replace(/\.+$/, '');
+    if (isIP(endereco) !== 6) continue;
+    const prefixo = parseInt(endereco.split(':')[0], 16);
+    if ((prefixo & 0xfe00) === 0xfc00 || (prefixo & 0xffc0) === 0xfe80) return true;
+  }
   for (const m of texto.matchAll(dns)) if (!EXEMPLOS_FICTICIOS.dns.includes(m[0].toLowerCase())) return true;
   for (const m of texto.matchAll(usuario)) if (!EXEMPLOS_FICTICIOS.usuarios.includes(m[1].toLowerCase())) return true;
+  for (const m of texto.matchAll(perfilAlternativo)) if (!EXEMPLOS_FICTICIOS.usuarios.includes(m[1].toLowerCase())) return true;
   for (const m of texto.matchAll(unc)) if (!EXEMPLOS_FICTICIOS.unc.includes(m[1].toLowerCase())) return true;
+  for (const m of texto.matchAll(uncAlternativo)) if (!EXEMPLOS_FICTICIOS.unc.includes(m[1].toLowerCase())) return true;
+  for (const m of texto.matchAll(redeUrl)) if (!EXEMPLOS_FICTICIOS.unc.includes(m[1].toLowerCase())) return true;
+  let textoIdentidades = texto;
+  for (const m of texto.matchAll(email)) {
+    // Identidades publicas de autoria; nunca liberar o dominio inteiro.
+    const endereco = m[0].toLowerCase();
+    if (emailsNoreply.has(endereco) || /^\d+\+[a-z0-9-]+@users\.noreply\.github\.com$/.test(endereco)) {
+      textoIdentidades = textoIdentidades.replace(m[0], '');
+      continue;
+    }
+    const dominio = m[1].toLowerCase();
+    // Reservados para exemplos de email; nao dispensam as demais guardas.
+    if (!/^(?:[a-z0-9-]+\.)*example\.(?:com|net|org)$/.test(dominio)
+      && !/\.(?:test|invalid)$/.test(dominio) && !EXEMPLOS_FICTICIOS.dns.includes(dominio)) return true;
+    const local = m[0].slice(0, m[0].lastIndexOf('@'));
+    if (!arquivoFicticio(arquivo) && detectarInfra(local, { arquivo, termos })) return true;
+  }
   if (!arquivoFicticio(arquivo)) {
-    if (maquina.test(texto)) return true;
+    if (maquina.test(textoIdentidades)) return true;
     // Propriedades, colunas SQL e nomes de arquivos tambem contem ponto.
     // Em codigo/configuracao, exigir contexto de conta ou um valor isolado;
     // isso evita tratar objeto.campo ou uma expressao do GitHub como usuario.
@@ -80,7 +122,10 @@ export function lockfileSeguro(texto, opcoes = {}) {
   if (!lock || ![2, 3].includes(lock.lockfileVersion) || !lock.packages) return false;
   function conferir(valor, chave = '') {
     if (typeof valor === 'string') {
-      if (chave === 'integrity') return /^(?:sha(?:256|384|512)-[A-Za-z0-9+/=]+)(?:\s+sha(?:256|384|512)-[A-Za-z0-9+/=]+)*$/.test(valor);
+      // Hash pode coincidir com os padroes de contas; a lista literal privada
+      // continua obrigatoria mesmo neste campo validado estruturalmente.
+      if (chave === 'integrity') return !(opcoes.termos || []).some(termo => valor.toLowerCase().includes(termo.toLowerCase()))
+        && /^(?:sha(?:256|384|512)-[A-Za-z0-9+/=]+)(?:\s+sha(?:256|384|512)-[A-Za-z0-9+/=]+)*$/.test(valor);
       return !contemInfra(valor, opcoes);
     }
     if (valor && typeof valor === 'object') return Object.entries(valor).every(([k, v]) => !contemInfra(k, opcoes) && conferir(v, k));

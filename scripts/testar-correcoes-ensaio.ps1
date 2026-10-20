@@ -63,6 +63,9 @@ try{
  New-Item -ItemType Directory -Force (Join-Path $falso 'scripts'),(Join-Path $priv 'operacao')|Out-Null
  foreach($arq in @('diagnostico-logica.ps1','homologar.ps1','operacao-logica.ps1','inicializacao-logica.ps1')){Copy-Item (Join-Path $PSScriptRoot $arq) (Join-Path $falso 'scripts')}
  $env:SUPPLY_VISION_PRIVADO=$priv
+ # Homologacao le somente a fixture; nao sonda HTTP nem tarefas do notebook.
+ function Invoke-RestMethod {throw 'HTTP indisponivel na fixture'}
+ function Get-ScheduledTask {return $null}
  foreach($bom in @($false,$true)){
   [IO.File]::WriteAllText((Join-Path $priv 'operacao/status.json'),(@{ensaio=$true;portal=$true;emails=$true;relatorios=$true;atualizado=(Get-Date).ToString('o')}|ConvertTo-Json -Compress),(New-Object Text.UTF8Encoding($bom)))
   [IO.File]::WriteAllText((Join-Path $priv 'operacao/estado.json'),(@{'alertas-2026-10-09-08:00'='ok'}|ConvertTo-Json -Compress),(New-Object Text.UTF8Encoding($bom)))
