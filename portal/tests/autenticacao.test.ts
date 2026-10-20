@@ -4,7 +4,8 @@ import test from 'node:test';
 import { passwordHash as pbkdf2, tokenHash as sha256, PBKDF2_ITERACOES_ATUAL as ITERACOES_ATUAL, PBKDF2_ITERACOES_LEGADO as ITERACOES_LEGADO } from '../lib/criptografia.ts';
 
 void test('senha gravada com o custo atual valida com o custo atual', async () => {
-  const hash = await pbkdf2('senha-de-teste', 'sal', ITERACOES_ATUAL);
+  const hash = pbkdf2Sync('senha-de-teste', 'sal', 600000, 32, 'sha256').toString('hex');
+  assert.equal(ITERACOES_ATUAL, 600000);
   assert.equal(await pbkdf2('senha-de-teste', 'sal', ITERACOES_ATUAL), hash);
 });
 
@@ -16,7 +17,8 @@ void test('conferir com o custo errado reprova a senha correta', async () => {
 });
 
 void test('senha antiga continua validando com o custo que foi gravado', async () => {
-  const hashAntigo = await pbkdf2('senha-antiga', 'sal-antigo', ITERACOES_LEGADO);
+  const hashAntigo = pbkdf2Sync('senha-antiga', 'sal-antigo', 120000, 32, 'sha256').toString('hex');
+  assert.equal(ITERACOES_LEGADO, 120000);
   assert.equal(await pbkdf2('senha-antiga', 'sal-antigo', ITERACOES_LEGADO), hashAntigo);
 });
 
@@ -27,7 +29,7 @@ void test('migração de custo produz hash diferente para a mesma senha', async 
   assert.equal(novo.length, 64);
 });
 
-void test('token de sessão vira hash de 64 hex e não é reversível', async () => {
+void test('token de sessão vira hash de 64 hex diferente do cookie e do hash do hash', async () => {
   const token = randomUUID().replaceAll('-', '') + randomUUID().replaceAll('-', '');
   const guardado = await sha256(token);
   assert.equal(guardado.length, 64);

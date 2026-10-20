@@ -15,7 +15,8 @@ void test('exportacao mantem referencias quando exclusao ocorre durante leituras
     for(const [,ddl] of fs.readFileSync(new URL('../lib/database.ts',import.meta.url),'utf8').matchAll(/`(CREATE TABLE IF NOT EXISTS [^`]+)`/g))reader.exec(ddl);
     for(const ddl of SCHEMA_RELATORIOS)reader.exec(ddl);
     reader.exec(`ALTER TABLE users ADD COLUMN daily_report_enabled INTEGER DEFAULT 0; ALTER TABLE users ADD COLUMN daily_report_time TEXT;
-      INSERT INTO suppliers(id,legal_name,trade_name,cnpj,created_at,updated_at) VALUES('s','Ficticio','Ficticio','0','x','x');
+      INSERT INTO users(id,name,email,password_salt,password_hash,created_at) VALUES('u','Pessoa Ficticia','pessoa@example.com','sal-ficticio','hash-ficticio','2026-01-01');
+      INSERT INTO suppliers(id,legal_name,trade_name,cnpj,created_at,updated_at) VALUES('s','Fornecedor Ficticio','Fornecedor Ficticio','97463218000114','x','x');
       INSERT INTO agreements(id,number,supplier_id,start_date,current_version_id,created_at,updated_at) VALUES('a','1','s','2026-10-01','v','x','x');
       INSERT INTO agreement_versions(id,agreement_id,version_number,created_at) VALUES('v','a',1,'x'); INSERT INTO agreement_versions(id,agreement_id,version_number,status,created_at) VALUES('preparacao','a',2,'processing','x')`);
     let lotes=0;
@@ -33,7 +34,10 @@ void test('exportacao mantem referencias quando exclusao ocorre durante leituras
     assert.equal(lotes,1);assert.equal(tables.agreements.length,1);assert.equal(tables.agreementVersions.length,1);
     assert.equal(tables.agreements[0].current_version_id,tables.agreementVersions[0].id);
     assert.equal(writer.prepare('SELECT COUNT(*) n FROM agreements').get().n,0);
+    assert.equal(tables.users.length,1);
+    assert.equal(tables.users[0].email,'pessoa@example.com');
     assert.equal(tables.users.some(u=>'password_hash' in u),false);
+    assert.equal(tables.users.some(u=>'password_salt' in u),false);
   } finally { reader.close();writer.close();fs.rmSync(dir,{recursive:true,force:true}); }
 });
 

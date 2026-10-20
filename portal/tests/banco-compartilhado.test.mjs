@@ -26,8 +26,11 @@ void test('Portal, consumidores, backup, expurgo, restauracao e semente comparti
   async function parar(){
     if(!filho||filho.exitCode!==null)return;
     const fim=new Promise(r=>filho.once('exit',r));fs.writeFileSync(path.join(raiz,'operacao/parar.sinal'),'parar');
-    await Promise.race([fim,esperar(6000)]);
-    assert.notEqual(filho.exitCode,null,'Launcher nao encerrou: '+log);
+    const prazo=new AbortController();
+    try{
+      await Promise.race([fim,esperar(6000,undefined,{signal:prazo.signal})]);
+      assert.notEqual(filho.exitCode,null,'Launcher nao encerrou: '+log);
+    }finally{prazo.abort();}
   }
   t.after(async()=>{try{await parar();}finally{if(filho?.exitCode===null)filho.kill();fs.rmSync(raiz,{recursive:true,force:true});}});
   async function iniciar(token){
@@ -50,7 +53,10 @@ void test('Portal, consumidores, backup, expurgo, restauracao e semente comparti
   assert.ok(arquivo);assert.equal(path.basename(arquivo),'portal.sqlite');
   assert.equal(executar('banco-local.mjs',['--pasta-portal',pastaPortal,'--exigir']).trim(),arquivo);
   assert.ok(fs.existsSync(path.join(pastaPortal,'restauracao.lock.sqlite')),'Fixture deve conter tambem o banco da trava');
-  const login=await fetch(url+'/api/login',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({email:'admin@portal.local',password:senha})});
+  const admin=new DatabaseSync(arquivo);
+  try{assert.equal(admin.prepare("UPDATE users SET email=?,name=? WHERE role='admin'").run('admin@example.com','Administrador Ficticio').changes,1);}
+  finally{admin.close();}
+  const login=await fetch(url+'/api/login',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({email:'admin@example.com',password:senha})});
   assert.equal(login.status,200,await login.clone().text());const cookie=login.headers.get('set-cookie').split(';')[0];await login.arrayBuffer();
   const cadastro=await fetch(url+'/api/catalogs/units',{method:'POST',headers:{cookie,'content-type':'application/json'},body:JSON.stringify({code:'PROVA',name:'PROVA'})});
   assert.equal(cadastro.status,201,await cadastro.clone().text());await cadastro.arrayBuffer();

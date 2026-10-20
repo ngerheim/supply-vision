@@ -32,10 +32,11 @@ void test('normaliza texto de importação removendo acentos e caracteres invis�
 });
 
 void test('normaliza e valida CNPJ pelo tamanho e pelos dígitos verificadores', () => {
-  assert.equal(normalizeCnpj('11.222.333/0001-81'), '11222333000181');
+  // Base sintetica 974632180001; digitos calculados para esta fixture.
+  assert.equal(normalizeCnpj('97.463.218/0001-14'), '97463218000114');
   assert.equal(normalizeCnpj('123'), '123');
-  assert.equal(isValidCnpj('11.222.333/0001-81'), true);
-  assert.equal(isValidCnpj('11.222.333/0001-82'), false);
+  assert.equal(isValidCnpj('97.463.218/0001-14'), true);
+  assert.equal(isValidCnpj('97.463.218/0001-15'), false);
   assert.equal(isValidCnpj('00.000.000/0000-00'), false);
 });
 

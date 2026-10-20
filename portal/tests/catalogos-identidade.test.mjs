@@ -17,6 +17,10 @@ void test('referencias inclusive historicas impedem reinterpretar unidade e loca
     assert.equal(db.prepare(ATUALIZAR_UNIDADE_SQL).run('LITRO','LITRO',0,'u',0,'LITRO').changes,1);
     assert.equal(db.prepare(ATUALIZAR_LOCALIDADE_SQL).run('OUTRA','RJ','l',0,'OUTRA','RJ').changes,0);
     db.exec('DELETE FROM agreement_items');
+    db.exec("INSERT INTO import_unit_mappings VALUES('u'); INSERT INTO agreement_locations VALUES('l')");
+    assert.equal(db.prepare(ATUALIZAR_UNIDADE_SQL).run('PAR','PAR',1,'u',0,'PAR').changes,0);
+    assert.equal(db.prepare(ATUALIZAR_LOCALIDADE_SQL).run('OUTRA','RJ','l',0,'OUTRA','RJ').changes,0);
+    db.exec('DELETE FROM import_unit_mappings; DELETE FROM agreement_locations');
     assert.equal(db.prepare(ATUALIZAR_UNIDADE_SQL).run('PAR','PAR',1,'u',0,'PAR').changes,1);
     assert.equal(db.prepare(ATUALIZAR_LOCALIDADE_SQL).run('OUTRA','RJ','l',0,'OUTRA','RJ').changes,1);
   }finally{db.close()}

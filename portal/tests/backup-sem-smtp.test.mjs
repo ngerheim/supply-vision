@@ -54,12 +54,17 @@ void test('DPAPI indecifravel nunca propaga saida nativa, e falha de versao cheg
 });
 void test('Windows: senha gravada duas vezes sem eco e decifrada com DPAPI da conta atual', { skip: process.platform !== 'win32' }, async t => {
   const { execFileSync } = await import('node:child_process');
+  // O host pode ser PS7: seus modulos herdados impedem o PS5.1 de carregar
+  // Microsoft.PowerShell.Security. O filho deve usar os modulos do proprio PS5.1.
+  const modulosAnteriores = process.env.PSModulePath;
+  delete process.env.PSModulePath;
+  t.after(() => { if (modulosAnteriores === undefined) delete process.env.PSModulePath; else process.env.PSModulePath = modulosAnteriores; });
   const dir = criarTemporarioTeste('sv-senha-windows-'); t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const script = path.resolve(import.meta.dirname, '../../scripts/backup-senha.ps1');
-  const codigo = "function Read-Host { ConvertTo-SecureString $env:SV_SENHA_FIXTURE -AsPlainText -Force }; & $env:SV_SCRIPT_FIXTURE";
+  const codigo = "$global:leiturasFixture=0; function Read-Host { param([string]$Prompt,[switch]$AsSecureString); if (!$AsSecureString) { throw 'Leitura deve ser segura' }; $global:leiturasFixture++; ConvertTo-SecureString $env:SV_SENHA_FIXTURE -AsPlainText -Force }; & $env:SV_SCRIPT_FIXTURE; if ($global:leiturasFixture -ne 2) { throw 'Exige duas entradas' }";
   const senha = 'Ficticia ç !"123';
   const saida = execFileSync('powershell.exe', ['-NoProfile', '-Command', codigo], { encoding: 'utf8', env: { ...process.env,
-    SUPPLY_VISION_PRIVADO: dir, SV_SENHA_FIXTURE: senha, SV_SCRIPT_FIXTURE: script }, stdio: ['ignore', 'pipe', 'pipe'] });
+    SUPPLY_VISION_PRIVADO: dir, SV_SENHA_FIXTURE: senha, SV_SCRIPT_FIXTURE: script }, stdio: ['ignore', 'pipe', 'pipe'], timeout: 15000, windowsHide: true });
   assert.ok(!saida.includes(senha));
   assert.ok(!fs.readFileSync(path.join(dir, 'comum/backup-senha.dpapi'), 'utf8').includes(senha));
   assert.equal(lerSenhaBackup({ raiz: dir }), senha);

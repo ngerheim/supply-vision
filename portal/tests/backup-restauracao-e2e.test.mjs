@@ -20,9 +20,11 @@ void test('7z real: banco WAL consistente, configuracao da semente, rede, senha,
   delete process.env.MODO_ENSAIO;
   t.after(() => { if (ensaioAnterior === undefined) delete process.env.MODO_ENSAIO; else process.env.MODO_ENSAIO = ensaioAnterior; });
   const exe = ferramenta7z(t); if (!exe) return;
-  const dir = criarTemporarioTeste('sv-backup-e2e-'); t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const dir = criarTemporarioTeste('sv-backup-e2e-');
+  const fixture = { db: null };
+  t.after(() => { if (fixture.db?.isOpen) fixture.db.close(); fs.rmSync(dir, { recursive: true, force: true }); });
   const raiz = path.join(dir, 'privado-ficticio'), banco = destinoBanco('fixture.sqlite', path.join(raiz, 'portal'));
-  const db = bancoFicticio(banco); t.after(() => { try { db.close(); } catch {} });
+  const db = bancoFicticio(banco); fixture.db = db;
   db.exec('PRAGMA journal_mode=WAL');
   const configPortal = `PORTAL_PORTA=${await reservarPortaLoopback()}\nRELATORIOS_PORTA=${await reservarPortaLoopback()}\n`;
   const arquivos = { 'comum/smtp.env': 'SMTP_USER=ficticio@example.com', 'portal/configuracao/portal.env': configPortal,
@@ -50,8 +52,10 @@ void test('7z real: banco WAL consistente, configuracao da semente, rede, senha,
   await restaurar(false);
   assert.equal(fs.readFileSync(path.join(raiz, 'comum/smtp.env'), 'utf8'), 'atual');
   const restaurado = new DatabaseSync(banco);
-  assert.equal(restaurado.prepare('SELECT name FROM users').get().name, 'Antes');
-  assert.equal(restaurado.prepare('SELECT status FROM report_jobs').get().status, 'review'); restaurado.close();
+  try {
+    assert.equal(restaurado.prepare('SELECT name FROM users').get().name, 'Antes');
+    assert.equal(restaurado.prepare('SELECT status FROM report_jobs').get().status, 'review');
+  } finally { restaurado.close(); }
   fs.writeFileSync(path.join(raiz, 'alertas/parametros/de_para/sobra.txt'), 'posterior');
   await restaurar(true);
   assert.equal(fs.existsSync(path.join(raiz, 'alertas/parametros/de_para/sobra.txt')), false);
@@ -76,7 +80,8 @@ void test('7z real: banco WAL consistente, configuracao da semente, rede, senha,
   const invalido = path.join(dir, 'invalido.sqlite'); fs.writeFileSync(invalido, 'corrompido');
   await assert.rejects(restaurarCopia(invalido, { raiz }));
   const preservado = new DatabaseSync(banco);
-  assert.equal(preservado.prepare('SELECT name FROM users').get().name, 'Antes'); preservado.close();
+  try { assert.equal(preservado.prepare('SELECT name FROM users').get().name, 'Antes'); }
+  finally { preservado.close(); }
   assert.equal(fs.readdirSync(path.join(raiz, 'portal/backups')).filter(n => n.startsWith('pre-restauracao-')).length, 2);
   const extracao = path.join(dir, 'extracao'); fs.mkdirSync(extracao);
   assert.throws(() => extrairPacote(arquivo, extracao, exe, 'incorreta'), /7-Zip falhou/);

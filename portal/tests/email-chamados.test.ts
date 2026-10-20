@@ -2,19 +2,19 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { montarEmailChamado, proximaTentativa, type DadosEmailChamado } from '../lib/email-chamados.ts';
 
-const dados: DadosEmailChamado = { ticketId: 'tck_123', codigo: 'SUP-0007', fornecedor: 'OFICINA & FILHOS', prioridade: 'alta', situacao: 'fechado', solicitante: 'Ana', responsavel: 'Bruno', autor: 'Carla', resumo: 'A negociação foi finalizada.', alteracoes: ['Situação: Aberto → Concluído'], mensagem: '<acordo aprovado>' };
+const dados: DadosEmailChamado = { ticketId: 'tck_123', codigo: 'SUP-0007', fornecedor: 'OFICINA FICTICIA & FILHOS', prioridade: 'alta', situacao: 'fechado', solicitante: 'Solicitante Ficticia', responsavel: 'Responsavel Ficticio', autor: 'Autora Ficticia', resumo: 'A negociação foi finalizada.', alteracoes: ['Situação: Aberto → Concluído'], mensagem: '<acordo aprovado>' };
 
 void test('monta assunto, texto e link do chamado', () => {
-  const email = montarEmailChamado('conclusao', dados, 'http://127.0.0.1:3000/');
+  const email = montarEmailChamado('conclusao', dados, 'http://portal.test/');
   assert.equal(email.assunto, '[Portal Suprimentos] SUP-0007 concluído');
   assert.match(email.texto, /A negociação foi finalizada/);
-  assert.equal(email.url, 'http://127.0.0.1:3000/?chamado=tck_123');
+  assert.equal(email.url, 'http://portal.test/?chamado=tck_123');
 });
 void test('escapa conteudo inserido no HTML', () => {
-  const email = montarEmailChamado('conclusao', dados, 'http://127.0.0.1:3000');
+  const email = montarEmailChamado('conclusao', dados, 'http://portal.test');
   assert.doesNotMatch(email.html, /<acordo aprovado>/);
   assert.match(email.html, /&lt;acordo aprovado&gt;/);
-  assert.match(email.html, /OFICINA &amp; FILHOS/);
+  assert.match(email.html, /OFICINA FICTICIA &amp; FILHOS/);
 });
 void test('usa intervalos crescentes e limita a ultima faixa', () => {
   const agora = new Date('2026-09-09T12:00:00.000Z');
@@ -24,7 +24,7 @@ void test('usa intervalos crescentes e limita a ultima faixa', () => {
 });
 
 void test('chamado sem fornecedor e identificado pelo titulo no email', () => {
-  const email = montarEmailChamado('atribuicao', { ...dados, titulo: 'Negociar <pneus>', fornecedor: '' }, 'http://127.0.0.1:3000');
+  const email = montarEmailChamado('atribuicao', { ...dados, titulo: 'Negociar <pneus>', fornecedor: '' }, 'http://portal.test');
   assert.match(email.texto, /SUP-0007 — Negociar <pneus>/);
   assert.match(email.texto, /Fornecedor: Não informado/);
   assert.match(email.html, /Negociar &lt;pneus&gt;/);
