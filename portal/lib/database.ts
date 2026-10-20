@@ -83,7 +83,7 @@ const schema = [
 
 // CREATE TABLE IF NOT EXISTS nao altera tabelas que ja existem. Colunas novas
 // precisam entrar aqui, senao bancos antigos ficam sem elas e as consultas
-// quebram. Cada entrada roda uma unica vez e ignora erro de coluna duplicada.
+// quebram. Confere as colunas a cada partida; so cria as que faltam.
 const columnMigrations: Array<[string, string, string]> = [
   ...TABELAS_CADASTRO.map((tabela): [string,string,string] => [tabela,'revision','INTEGER NOT NULL DEFAULT 0']),
   ['suppliers', 'city', 'TEXT'],
@@ -115,13 +115,9 @@ const columnMigrations: Array<[string, string, string]> = [
 
 async function applyColumnMigrations() {
   for (const [table, column, type] of columnMigrations) {
-    let info: { results?: Array<{ name: string }> };
-    try {
-      info = await rawDb().prepare(`PRAGMA table_info(${table})`).all<{ name: string }>();
-    } catch {
-      // Tabela ainda nao existe nesta base: nada a migrar.
-      continue;
-    }
+    // O schema ja criou as tabelas. Erro ao consultar nao equivale a ausencia:
+    // precisa interromper a partida, antes de usar um schema incompleto.
+    const info = await rawDb().prepare(`PRAGMA table_info(${table})`).all<{ name: string }>();
     if ((info.results || []).some((c) => c.name === column)) continue;
     try {
       await rawDb().prepare(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`).run();
@@ -213,6 +209,12 @@ async function initialize() {
       db.prepare('INSERT INTO schema_migrations (version,applied_at) VALUES (2,?)').bind(now()),
     ]);
   }
+  const relatorioConfigurado = await db.prepare('SELECT 1 ok FROM schema_migrations WHERE version=3').first();
+  if (!relatorioConfigurado) {
+    await db.batch([
+      db.prepare('INSERT INTO schema_migrations (version,applied_at) VALUES (3,?)').bind(now()),
+    ]);
+  }
   // Versao 4: localidade deixou de ter De/Para (a cidade se cadastra), e a
   // tabela ficou sem nenhum leitor. O indice cai junto com ela.
   const semDeParaDeLocalidade = await db.prepare('SELECT 1 ok FROM schema_migrations WHERE version=4').first();
@@ -230,12 +232,6 @@ async function initialize() {
     await db.batch([
       db.prepare('DROP TABLE IF EXISTS brands'),
       db.prepare('INSERT INTO schema_migrations (version,applied_at) VALUES (5,?)').bind(now()),
-    ]);
-  }
-  const relatorioConfigurado = await db.prepare('SELECT 1 ok FROM schema_migrations WHERE version=3').first();
-  if (!relatorioConfigurado) {
-    await db.batch([
-      db.prepare('INSERT INTO schema_migrations (version,applied_at) VALUES (3,?)').bind(now()),
     ]);
   }
   // Depois das migracoes que alteram codigo e fornecedor, normaliza o legado.

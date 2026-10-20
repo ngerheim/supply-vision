@@ -52,7 +52,7 @@ export function filtroChamados(params: URLSearchParams) {
   const conditions: string[] = [], values: unknown[] = [];
   const grupos: Record<string, string[]> = { ativos: ['aberto', 'aguardando_fornecedor'], fechados: ['fechado'], cancelados: ['cancelado'] };
   const grupo = params.get('group');
-  if (grupo && grupos[grupo]) {
+  if (grupo && Object.hasOwn(grupos, grupo)) {
     conditions.push(`t.status IN (${grupos[grupo].map(() => '?').join(',')})`);
     values.push(...grupos[grupo]);
   }
