@@ -79,7 +79,7 @@ function Ajuda-Supv([string]$Comando){
   saude='supv saude [--desde "yyyy-MM-dd HH:mm"] | Padrao: ultimas 24 h. Falhas por motivo, partida e reinicios; Portal desde o ultimo reinicio.'
   logs='supv logs <supervisor|portal|atualizacao|emails|relatorios> [-n 80] [--bruto] | Atualizacao sem progresso git e diagnosticos de build; --bruto mostra todas as linhas. Dados sensiveis continuam mascarados. Ex.: supv logs portal -n 120'
   config='supv config validar | Executa validar-operacao.ps1.'
-  backup='supv backup senha | supv backup testar | supv backup restaurar [--data AAAA-MM-DD_HHMM] [--configuracao] [--sim] | Lista a rede; padrao mais recente. Restaurar para a operacao e exige RESTAURAR, ou --sim.'
+  backup='supv backup senha | supv backup testar | supv backup restaurar [--data AAAA-MM-DD_HHMM | --anterior] [--configuracao] [--sim] | Lista a rede; padrao mais recente. Restaurar para a operacao e exige RESTAURAR, ou --sim.'
   modo='supv modo <desligado|computador> | Exige operacao parada e terminal como administrador. Ex.: supv modo computador'
   manutencao='supv manutencao <on|off> | Pausa ou libera rotinas automaticas. Ex.: supv manutencao on'
   firewall='supv firewall restringir | Restringe acesso de rede pelo script atual, com teste interativo. Exige administrador.'
@@ -106,7 +106,7 @@ function Ler-ComandoSupv([object[]]$Argumentos){
   if($arg.StartsWith('-')){
    if($arg-notin$permitidas){throw "Opcao desconhecida para ${comando}: $arg. Use supv $comando --help."}
    if($opcoes.ContainsKey($arg)){throw "Opcao repetida: $arg"}
-   if($arg-in@('--destino','--desde','--modo','--data','-n')){
+   if($arg-in@('--destino','--desde','--data','-n')){
     $i++;if($i-ge$Argumentos.Count-or([string]$Argumentos[$i]).StartsWith('-')){throw "Falta valor para $arg"}
     $opcoes[$arg]=[string]$Argumentos[$i]
    }else{$opcoes[$arg]=$true}

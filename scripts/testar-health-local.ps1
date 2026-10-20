@@ -116,6 +116,42 @@ const server=http.createServer((req,res)=>{
  $r=Consultar-HealthLocal @{cliente=$falso;prazoMs=100}
  if($r.motivo-ne'timeout'-or!$falso.cancelou-or$r.duracaoMs-gt1500){throw 'Espera ignorou prazo quando cancelamento do HttpClient atrasou.'}
  Write-Host 'OK health: espera limitada mesmo com timer/cancelamento pendente'
+ # Executa os consumidores reais do health sem tarefa, SMTP ou conta reais.
+ & {
+  . (Join-Path $PSScriptRoot 'inicializacao-logica.ps1')
+  . (Join-Path $PSScriptRoot 'avisos-admin.ps1')
+  function Obter-TarefaSupplyVision {return $null}
+  function Localizar-NodeMaquina {return 'node-ficticio'}
+  function Log {param($Texto);throw $Texto}
+  function Obter-EventoVigilancia {param($FalhaTarefa,$Saudavel);$script:saudeVigilancia=$Saudavel;return ''}
+  $privado=Join-Path $pasta 'vigilancia';$raiz=$pasta
+  foreach($dir in @('comum','portal/configuracao')){[void][IO.Directory]::CreateDirectory((Join-Path $privado $dir))}
+  Set-Content (Join-Path $privado 'comum/operacao.env') "ADMIN_ALERTA_EMAIL=admin@example.com`nMODO_ENSAIO=1"
+  $configPortal=Join-Path $privado 'portal/configuracao/portal.env'
+  $astVigilancia=[Management.Automation.Language.Parser]::ParseFile((Join-Path $PSScriptRoot 'vigiar-operacao.ps1'),[ref]$null,[ref]$null)
+  $blocoVigilancia=$astVigilancia.Find({param($n) $n-is[Management.Automation.Language.TryStatementAst]-and$n.Extent.Text.Contains('Obter-EventoVigilancia')},$true)
+  if(!$blocoVigilancia){throw 'Bloco real de vigilancia nao encontrado.'}
+  foreach($portaTeste in @($porta,0)){
+   Set-Content $configPortal ("PORTAL_PORTA="+$portaTeste)
+   $controle=$null;$clienteHealth=$null;$script:saudeVigilancia=$null
+   . ([scriptblock]::Create($blocoVigilancia.Extent.Text))
+   if($script:saudeVigilancia-ne($portaTeste-eq$porta)){throw 'Vigilancia ignorou porta configurada ou aprovou porta invalida.'}
+   if($clienteHealth){
+    $descartado=$false;try{[void]$clienteHealth.cliente.GetAsync("http://127.0.0.1:$porta/api/health")}catch{$descartado=$true}
+    if(!$descartado){throw 'Vigilancia deixou cliente HTTP aberto.'}
+   }
+  }
+  $astHomologacao=[Management.Automation.Language.Parser]::ParseFile((Join-Path $PSScriptRoot 'homologar.ps1'),[ref]$null,[ref]$null)
+  $itemLocal=$astHomologacao.Find({param($n) $n-is[Management.Automation.Language.CommandAst]-and$n.GetCommandName()-eq'Item-Homologacao'-and$n.CommandElements[1].Value-eq'Health local'},$true)
+  if(!$itemLocal){throw 'Item real de health local nao encontrado.'}
+  function Item-Homologacao {param($Nome,$Conferir);& $Conferir}
+  $cfg=@{PORTAL_PORTA=$porta}
+  if((& ([scriptblock]::Create($itemLocal.Extent.Text)))-ne'respondendo'){throw 'Homologacao ignorou porta local configurada.'}
+  $cfg=@{PORTAL_PORTA=0};$recusou=$false
+  try{& ([scriptblock]::Create($itemLocal.Extent.Text))|Out-Null}catch{$recusou=$true}
+  if(!$recusou){throw 'Homologacao aprovou porta invalida.'}
+ }
+ Write-Host 'OK health: vigilancia e homologacao usam porta configurada; porta invalida recusada e cliente descartado'
  Write-Host 'PASSOU: proxy, prazo total, HTTP, corpo, conexao, sigilo e duas falhas consecutivas.'
 }finally{
  [Net.WebRequest]::DefaultWebProxy=$proxyAntigo

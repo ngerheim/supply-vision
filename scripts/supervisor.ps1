@@ -87,7 +87,7 @@ function Encerrar($p){
  }catch{Log "AVISO ao encerrar processo: $($_.Exception.Message)"}
 }
 function Pode-Tentar([string]$tipo){$k="tentativa-$tipo";if(!$estado[$k]){return $true};return (Get-Date)-ge([datetime]$estado[$k]).AddMinutes(10)}
-$Npm=if($SemLogin){Join-Path (Split-Path $NodeExecutavel) 'npm.cmd'}else{(Get-Command npm.cmd).Source};$Node=if($SemLogin){$NodeExecutavel}else{(Get-Command node.exe).Source};$Python=Join-Path $Alertas '.venv\Scripts\python.exe'
+$Node=if($SemLogin){$NodeExecutavel}else{(Get-Command node.exe).Source};$Python=Join-Path $Alertas '.venv\Scripts\python.exe'
 $avisosAdmin=Novo-ControleAvisosAdmin $config $ensaio $Node $Portal
 $alerta=$null;$alertaChave='';$alertaHora='';$alertaRunId='';$backup=$null;$backupChave='';$limpeza=$null;$limpezaChave=''
 $expurgo=$null

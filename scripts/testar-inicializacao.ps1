@@ -64,3 +64,31 @@ function Start-Process {throw 'partida recusada'}
 $falhou=$false;try{Iniciar-OperacaoConfigurada 'ficticio'}catch{$falhou=$_.Exception.Message-eq'partida recusada'}
 if(!$falhou){throw 'Falha de inicio direto foi ignorada.'}
 Write-Host 'Inicio direto, caminhos com espacos, falha via supv aprovados.'
+
+# Executa o ramo real de inicializacao com aviso de versao nativo simulado.
+& {
+ . (Join-Path $PSScriptRoot 'inicializacao-logica.ps1')
+ function Testar-Elevacao {return $true}
+ function Testar-SupervisorEncerrado {return $true}
+ function Get-ScheduledTask {return $null}
+ function Localizar-NodeMaquina {return 'C:\ficticio\node.exe'}
+ function Test-Path {param($LiteralPath,$Path,$PathType);return $true}
+ function Executar-NativoOperacao {return @{codigo=0;saida=@('aviso de versao ficticio');stdout=@()}}
+ function Ler-ConfigOperacao {return @{BACKUP_NETWORK_DIR=''}}
+ function Testar-ContaAdministradora {return $true}
+ function Liberar-AcessoOperacao {}
+ function Montar-DefinicaoTarefa {return '<Task />'}
+ function Register-ScheduledTask {throw 'registro ficticio interrompido antes de COM'}
+ function Unregister-ScheduledTask {}
+ $senha=New-Object Security.SecureString
+ $senha.AppendChar('x')
+ try{
+  $credencial=[pscredential]::new('DOMINIO\ficticio',$senha)
+  $avisos=@(& {
+   try{Definir-ModoInicializacao 'C:\ficticio' 'C:\ficticio\dados' 'computador' -Credencial $credencial;throw 'Registro ficticio nao foi chamado.'}
+   catch{if($_.Exception.Message-ne'registro ficticio interrompido antes de COM'){throw}}
+  } 3>&1)
+  if($avisos.Count-ne1-or$avisos[0]-isnot[Management.Automation.WarningRecord]-or[string]$avisos[0]-ne'aviso de versao ficticio'){throw 'Inicializacao perdeu o aviso nativo de versao.'}
+ }finally{$senha.Dispose()}
+}
+Write-Host 'Aviso nativo de versao preservado sem registrar tarefa real.'
