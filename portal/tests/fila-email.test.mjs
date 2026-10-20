@@ -62,6 +62,7 @@ void test('relatório diário respeita horário e não duplica o envio do dia',(
   assert.equal(db.prepare('SELECT COUNT(*) total FROM daily_report_deliveries').get().total,0);
   prepararRelatoriosDiarios(db,new Date('2026-09-09T20:45:00.000Z'));
   prepararRelatoriosDiarios(db,new Date('2026-09-09T21:00:00.000Z'));
+  assert.equal(db.prepare('SELECT COUNT(*) total FROM daily_report_deliveries').get().total,1);
   const registro=db.prepare('SELECT report_date,status FROM daily_report_deliveries').get();
   assert.equal(registro.report_date,'2026-09-09');
   assert.equal(registro.status,'pending');

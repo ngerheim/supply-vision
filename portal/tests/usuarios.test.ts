@@ -64,10 +64,17 @@ void test('senha e cadastro revertem juntos se encerramento falha; revisao antig
   const db=banco();
   try {
     const update=db.prepare(ATUALIZAR_USUARIO_COM_SENHA_SQL), close=db.prepare(ENCERRAR_SESSOES_REDEFINIDAS_SQL);
+    const antes = {
+      usuarios: db.prepare('SELECT * FROM users ORDER BY id').all(),
+      sessoes: db.prepare('SELECT * FROM sessions ORDER BY token').all(),
+    };
     db.exec("CREATE TRIGGER impedir BEFORE DELETE ON sessions BEGIN SELECT RAISE(ABORT,'falha sintetica'); END; BEGIN");
     update.run('Novo','admin',1,0,'18:00','sn','hn',600000,'a',0,'admin',1);
     assert.throws(()=>close.run('a','a','sn'),/falha sintetica/);db.exec('ROLLBACK');
-    assert.equal(db.prepare("SELECT password_hash FROM users WHERE id='a'").get()?.password_hash,'ha');
+    assert.deepEqual({
+      usuarios: db.prepare('SELECT * FROM users ORDER BY id').all(),
+      sessoes: db.prepare('SELECT * FROM sessions ORDER BY token').all(),
+    }, antes);
     db.exec('DROP TRIGGER impedir; BEGIN');
     update.run('Novo','admin',1,0,'18:00','sn','hn',600000,'a',0,'admin',1);
     close.run('a','a','sn');db.exec('COMMIT');
