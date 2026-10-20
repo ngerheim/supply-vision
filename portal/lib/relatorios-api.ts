@@ -189,9 +189,9 @@ export async function cancelarRelatorio(jobId: string, userId: string) {
       .bind(timestamp, jobId),
     rawDb()
       .prepare(
-        "INSERT INTO audit_logs(id,user_id,action,entity,entity_id,details,created_at) SELECT ?,?,'UPDATE','report_job',?,'Pedido cancelado antes de iniciar',? WHERE EXISTS(SELECT 1 FROM report_jobs WHERE id=? AND status='cancelled' AND completed_at=?)",
+        "INSERT INTO audit_logs(id,user_id,action,entity,entity_id,details,created_at) SELECT ?,?,'UPDATE','report_job',?,'Pedido cancelado antes de iniciar',? WHERE changes()=1",
       )
-      .bind(id('aud'), userId, jobId, timestamp, jobId, timestamp),
+      .bind(id('aud'), userId, jobId, timestamp),
   ]);
   return alterada.meta.changes
     ? resposta({ success: true })

@@ -154,7 +154,8 @@ export function acordosApi(contexto: ContextoApi) {
       item: 'ci.name', model: 'vm.name', location: "l.state || '/' || l.city",
       brands: "COALESCE(ai.brands_text,'')", unit: 'un.code', price: 'ai.price',
     };
-    const sortColumn = sortColumns[params.get('sort') || 'item'] || sortColumns.item;
+    const sort = params.get('sort') || 'item';
+    const sortColumn = Object.hasOwn(sortColumns, sort) ? sortColumns[sort] : sortColumns.item;
     const sortDirection = params.get('direction') === 'desc' ? 'DESC' : 'ASC';
     const agreement = await first(`SELECT a.*,
     (SELECT COUNT(*) FROM agreement_items ai WHERE ai.version_id=a.current_version_id) AS totalItems,
