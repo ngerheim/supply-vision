@@ -1,7 +1,7 @@
 'use client';
 import { api, errorText } from '@/lib/api';
 import { normalizeImportText } from '@/lib/domain';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { CheckCircle2, LoaderCircle, Pencil, Plus, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -13,6 +13,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { SearchSelect } from '@/components/search-select';
 import {
   Table,
   TableBody,
@@ -25,7 +26,6 @@ import {
   type AnyRow,
   FalhaDeCarregamento,
   Field,
-  SelectField,
 } from './portal-presentation';
 import { useOrdenacao, CabecalhoOrdenavel } from './portal-table';
 
@@ -33,17 +33,30 @@ export function Mappings({ catalogs, run }: JsonData) {
   const [data, setData] = useState<AnyRow>({ items: [], models: [] }),
     [type, setType] = useState<'items' | 'models' | 'units'>('items'),
     [edit, setEdit] = useState<AnyRow | null>(null),
-    [loading, setLoading] = useState(true);
+    [loading, setLoading] = useState(true),
+    [busy, setBusy] = useState(false);
+  const busyRef = useRef(false);
+  const sequence = useRef(0);
+  const controller = useRef<AbortController | null>(null);
+  const cancelLoad = useCallback(() => {
+    sequence.current++;
+    controller.current?.abort();
+  }, []);
   const [loadError, setLoadError] = useState('');
   const load = useCallback(async () => {
+    const request = ++sequence.current;
+    controller.current?.abort();
+    const pending = new AbortController();
+    controller.current = pending;
     setLoading(true);
     setLoadError('');
     try {
-      setData(await api('/api/mappings'));
+      const next = await api('/api/mappings', { signal: pending.signal });
+      if (request === sequence.current) setData(next);
     } catch (error) {
-      setLoadError(errorText(error));
+      if (request === sequence.current) setLoadError(errorText(error));
     } finally {
-      setLoading(false);
+      if (request === sequence.current) setLoading(false);
     }
   }, []);
   useEffect(() => {
@@ -53,13 +66,13 @@ export function Mappings({ catalogs, run }: JsonData) {
     });
     return () => {
       active = false;
+      cancelLoad();
     };
-  }, [load]);
+  }, [load, cancelLoad]);
   const rows = data[type] || [],
-    targets = catalogs[type].map((row: AnyRow) => ({
+    targets = catalogs[edit?.type || type].map((row: AnyRow) => ({
       ...row,
-      name: type === 'units' ? row.code : row.name,
-      active: row.active,
+      name: (edit?.type || type) === 'units' ? row.code : row.name,
     }));
   const { ordem, alternar, ordenar } = useOrdenacao(type);
   const valoresDoMapeamento = (linha: AnyRow) => [linha.source, linha.target];
@@ -81,7 +94,7 @@ export function Mappings({ catalogs, run }: JsonData) {
         <div>
           <h1 className="text-2xl font-semibold">De/Para da importação</h1>
         </div>
-        <Button onClick={() => setEdit({ type, active: true })}>
+        <Button disabled={busy} onClick={() => setEdit({ type, active: true })}>
           <Plus /> Nova correspondência
         </Button>
       </div>
@@ -131,6 +144,8 @@ export function Mappings({ catalogs, run }: JsonData) {
                       <Button
                         size="icon-sm"
                         variant="ghost"
+                        aria-label="Editar correspondência"
+                        disabled={busy}
                         onClick={() =>
                           setEdit({
                             ...row,
@@ -144,6 +159,8 @@ export function Mappings({ catalogs, run }: JsonData) {
                       <Button
                         size="icon-sm"
                         variant="ghost"
+                        aria-label="Excluir correspondência"
+                        disabled={busy}
                         onClick={() => remove(row)}
                       >
                         <Trash2 />
@@ -166,65 +183,71 @@ export function Mappings({ catalogs, run }: JsonData) {
       {edit && (
         <MappingDialog
           value={edit}
+          busy={busy}
           targets={targets}
           onClose={() => setEdit(null)}
-          onSave={(body: AnyRow) =>
-            run(async () => {
-              const path = body.id
-                ? `/api/mappings/${body.type}/${body.id}`
-                : `/api/mappings/${body.type}`;
-              await api(path, {
-                method: body.id ? 'PUT' : 'POST',
-                headers: { 'content-type': 'application/json' },
-                body: JSON.stringify(body),
-              });
-              setEdit(null);
-              await load();
-            }, 'Correspondência salva.')
-          }
+          onSave={async (body: AnyRow) => {
+            if (busyRef.current) return;
+            busyRef.current = true;
+            setBusy(true);
+            try {
+              await run(async () => {
+                const path = body.id
+                  ? `/api/mappings/${body.type}/${body.id}`
+                  : `/api/mappings/${body.type}`;
+                await api(path, {
+                  method: body.id ? 'PUT' : 'POST',
+                  headers: { 'content-type': 'application/json' },
+                  body: JSON.stringify(body),
+                });
+                setEdit(null);
+                await load();
+              }, 'Correspondência salva.');
+            } finally {
+              busyRef.current = false;
+              setBusy(false);
+            }
+          }}
         />
       )}
     </div>
   );
 }
 
-function MappingDialog({ value, targets, onClose, onSave }: JsonData) {
+function MappingDialog({ value, targets, busy, onClose, onSave }: JsonData) {
   const [form, setForm] = useState<AnyRow>({ ...value });
   return (
-    <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent>
+    <Dialog open onOpenChange={(open) => !open && !busy && onClose()}>
+      <DialogContent showCloseButton={!busy}>
         <DialogHeader>
           <DialogTitle>
-            {form.id ? 'Editar' : 'Nova correspondência'}
+            {form.id ? 'Editar correspondência' : 'Nova correspondência'}
           </DialogTitle>
         </DialogHeader>
-        <div className="space-y-4">
-          <Field
-            label={
-              form.type === 'locations'
-                ? 'Original (CIDADE/UF) *'
-                : 'Original *'
-            }
-          >
+        <fieldset disabled={busy} className="space-y-4">
+          <Field label="Original *">
             <Input
               value={form.source || ''}
               onChange={(e) => setForm({ ...form, source: e.target.value })}
             />
           </Field>
-          <SelectField
+          <SearchSelect
+            disabled={busy}
             label="Correspondente *"
             value={form.targetId || ''}
             onChange={(targetId: string) => setForm({ ...form, targetId })}
-            rows={targets.filter((row: AnyRow) => row.active)}
+            options={targets.filter(
+              (row: AnyRow) => row.active || row.id === form.targetId,
+            )}
           />
-        </div>
+        </fieldset>
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>
+          <Button variant="outline" disabled={busy} onClick={onClose}>
             Cancelar
           </Button>
           <Button
-            disabled={!form.source || !form.targetId}
-            onClick={() => onSave(form)}
+            disabled={busy || !form.source?.trim() || !form.targetId}
+            onClick={() => !busy && onSave(form)}
           >
             <CheckCircle2 /> Salvar
           </Button>
