@@ -19,7 +19,9 @@ export function abrirRequisicao({ metodo = 'POST', caminho, cabecalhos = {}, por
       headers: { connection: 'close', ...cabecalhos },
     }, (res) => {
       let dados = '';
+      res.setEncoding('utf8');
       res.on('data', (c) => { dados += c; });
+      res.on('error', (e) => concluir({ status: 0, corpo: '', erro: e.message }));
       res.on('end', () => concluir({ status: res.statusCode, corpo: dados, cabecalhos: res.headers }));
     });
     req.setTimeout(timeoutMs, () => req.destroy(new Error(`tempo limite de ${timeoutMs} ms`)));

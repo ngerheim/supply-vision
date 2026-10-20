@@ -12,15 +12,16 @@ export function prepararRestauracao(origem, temporario, validar) {
     const db = new DatabaseSync(temporario);
     try {
       db.exec('PRAGMA journal_mode=DELETE; BEGIN IMMEDIATE');
+      let marcados;
       try {
-        const marcados = marcarFilasAposRestauracao(db);
+        marcados = marcarFilasAposRestauracao(db);
         if (db.prepare("SELECT 1 FROM sqlite_schema WHERE type='table' AND name='operacao_validacao'").get())
           db.exec('UPDATE operacao_validacao SET ativa=0');
         db.exec('COMMIT');
-        if (db.prepare("SELECT 1 FROM sqlite_schema WHERE type='table' AND name='report_jobs'").get())
-          revisarPedidosInterrompidos(db, true);
-        return { resumo, marcados };
       } catch (erro) { db.exec('ROLLBACK'); throw erro; }
+      if (db.prepare("SELECT 1 FROM sqlite_schema WHERE type='table' AND name='report_jobs'").get())
+        revisarPedidosInterrompidos(db, true);
+      return { resumo, marcados };
     } finally { db.close(); }
   } catch (erro) {
     for (const sufixo of ['', '-journal', '-wal', '-shm']) fs.rmSync(temporario + sufixo, { force: true });

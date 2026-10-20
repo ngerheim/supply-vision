@@ -15,7 +15,7 @@ export const EVENTOS_ADMIN = Object.freeze({
   'backup-falhou': { nome: 'Backup falhou', ocorrido: 'A rotina de backup terminou com falha.', acao: 'Confira supervisor.log, o último backup e o acesso à pasta de rede. Não sobrescreva o banco atual.' },
   'alertas-falharam': { nome: 'Alertas falharam', ocorrido: 'A execução dos Alertas terminou com falha.', acao: 'Confira supervisor.log e o último pipeline_*.log. Valide a configuração e a conectividade antes de tentar novamente.' },
   'alertas-revisao': { nome: 'Alertas exigem revisão de entrega', ocorrido: 'A execução dos Alertas indicou entrega parcial ou incerta.', acao: 'Confira a entrega com os destinatários e os registros em privado/alertas/estado-envios. Não reenvie antes de conferir.' },
-  'disco-baixo': { nome: 'Espaço em disco baixo', ocorrido: 'O espaço livre ficou abaixo do limite ESPACO_MINIMO_GB.', acao: 'Confira o espaço livre com supv status e a limpeza diária. Consulte supv help para a faxina com a operação parada.' },
+  'disco-baixo': { nome: 'Espaço em disco baixo', ocorrido: 'O espaço livre ficou abaixo do limite ESPACO_MINIMO_GB.', acao: 'Confira o espaço livre com supv status e o resultado da limpeza diária em supv logs supervisor. Se continuar baixo, peça à TI para avaliar o uso do disco.' },
   'supervisor-iniciado': { nome: 'Supervisor iniciado', ocorrido: 'O supervisor iniciou a operação nesta máquina.', acao: 'Use supv status para conferir se os módulos estão ativos. Se a partida foi inesperada, consulte supervisor.log e verifique o reinício da máquina.' },
 });
 

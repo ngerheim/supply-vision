@@ -86,6 +86,9 @@ export async function restaurarCopia(origem, { raiz = privado, configuracao = fa
         for (const sufixo of ['-wal', '-shm']) fs.rmSync(alvo + sufixo, { force: true });
         fs.renameSync(restaurando, alvo);
       } catch {
+        // A troca pode falhar apos remover WAL/SHM; o snapshot consistente
+        // anterior precisa sobreviver mesmo se a configuracao for recuperada.
+        preservarRecuperacao = true;
         try {
           for (const item of escritos.reverse()) {
             fs.rmSync(`${item.alvo}.restaurando`, { force: true });
@@ -93,10 +96,9 @@ export async function restaurarCopia(origem, { raiz = privado, configuracao = fa
             else fs.rmSync(item.alvo, { force: true });
           }
         } catch {
-          preservarRecuperacao = true;
           throw new FalhaBackup('Restauracao e recuperacao da configuracao falharam; copia pre-restauracao preservada para revisao.');
         }
-        throw new FalhaBackup('Restauracao nao concluida; banco anterior preservado. Confira a copia pre-restauracao.');
+        throw new FalhaBackup('Restauracao nao concluida; copia pre-restauracao preservada. Confira o banco e esta copia antes de iniciar a operacao.');
       }
       concluida = true;
       // Somente depois do compromisso, manter UMA protecao local.

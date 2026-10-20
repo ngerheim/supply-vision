@@ -63,14 +63,21 @@ void test('7z real: banco WAL consistente, configuracao da semente, rede, senha,
     return renomear(origem, destino);
   });
   fs.writeFileSync(path.join(raiz, 'comum/smtp.env'), 'preservar na falha');
-  await assert.rejects(restaurar(true), /banco anterior preservado/);
+  await assert.rejects(restaurar(true), /copia pre-restauracao preservada/);
   falha.mock.restore();
   assert.equal(fs.readFileSync(path.join(raiz, 'comum/smtp.env'), 'utf8'), 'preservar na falha');
+  const protecoes = fs.readdirSync(path.join(raiz, 'portal/backups')).filter(n => n.startsWith('pre-restauracao-'));
+  assert.equal(protecoes.length, 2, 'falha na troca deve preservar tambem a copia anterior a esta tentativa');
+  for (const nome of protecoes) {
+    const copia = new DatabaseSync(path.join(raiz, 'portal/backups', nome, 'banco.sqlite'), { readOnly: true });
+    try { assert.equal(copia.prepare('SELECT name FROM users').get().name, 'Antes'); }
+    finally { copia.close(); }
+  }
   const invalido = path.join(dir, 'invalido.sqlite'); fs.writeFileSync(invalido, 'corrompido');
   await assert.rejects(restaurarCopia(invalido, { raiz }));
   const preservado = new DatabaseSync(banco);
   assert.equal(preservado.prepare('SELECT name FROM users').get().name, 'Antes'); preservado.close();
-  assert.equal(fs.readdirSync(path.join(raiz, 'portal/backups')).filter(n => n.startsWith('pre-restauracao-')).length, 1);
+  assert.equal(fs.readdirSync(path.join(raiz, 'portal/backups')).filter(n => n.startsWith('pre-restauracao-')).length, 2);
   const extracao = path.join(dir, 'extracao'); fs.mkdirSync(extracao);
   assert.throws(() => extrairPacote(arquivo, extracao, exe, 'incorreta'), /7-Zip falhou/);
   assert.deepEqual(fs.readdirSync(extracao), []);
