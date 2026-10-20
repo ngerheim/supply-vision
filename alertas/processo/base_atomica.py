@@ -21,7 +21,9 @@ def salvar_base(df, destino, meta=None, conteudo_meta=''):
         with tempfile.NamedTemporaryFile(dir=destino.parent, suffix='.xlsx', delete=False) as arquivo:
             planilha = Path(arquivo.name)
         temporarios.append(planilha)
-        df.to_excel(planilha, index=False)
+        # Texto externo do Qlik deve sobreviver à releitura sem virar fórmula.
+        df.to_excel(planilha, index=False, engine='xlsxwriter',
+                    engine_kwargs={'options': {'strings_to_formulas': False}})
         with planilha.open('r+b') as arquivo:
             os.fsync(arquivo.fileno())
         if meta is not None:

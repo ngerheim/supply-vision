@@ -101,13 +101,14 @@ def test_precos_iguais_na_precisao_monetaria(rodar):
 
 def test_carregamento_arredonda_e_rejeita_preco_nao_finito(rodar):
     bruto = pd.DataFrame({
-        "MODELO": ["M"] * 5, "PECA_SERVICO": ["ITEM"] * 5,
-        "CIDADE": ["X"] * 5, "CNPJ": ["1"] * 5,
-        "PRECO": [10, 10.0000000001, 0, -1, np.inf], "FORNECEDOR": ["F"] * 5,
+        "MODELO": ["M"] * 6, "PECA_SERVICO": ["ITEM"] * 6,
+        "CIDADE": ["X"] * 6, "CNPJ": ["1"] * 6,
+        "PRECO": [10, 10.0000000001, 0, -1, np.inf, 1e308], "FORNECEDOR": ["F"] * 6,
     })
-    carregado = rodar._preparar_acordos(bruto)
+    with np.errstate(over="ignore"):
+        carregado = rodar._preparar_acordos(bruto)
     assert carregado.loc[0, "PRECO"] == carregado.loc[1, "PRECO"] == 10.0
-    assert carregado["_preco_valido"].tolist() == [True, True, True, False, False]
+    assert carregado["_preco_valido"].tolist() == [True, True, True, False, False, False]
 
 
 def test_celula_vazia_de_preco_nao_vira_cortesia(rodar):
@@ -117,6 +118,23 @@ def test_celula_vazia_de_preco_nao_vira_cortesia(rodar):
     })
     carregado = rodar._preparar_acordos(bruto)
     assert not bool(carregado.loc[0, "_preco_valido"])
+
+
+def test_preco_negativo_subcentavo_nao_vira_cortesia(rodar, tmp_path):
+    bruto = pd.DataFrame({
+        "MODELO": ["M"], "PECA_SERVICO": ["ITEM"], "CIDADE": ["X"],
+        "CNPJ": ["1"], "PRECO": [-0.001], "FORNECEDOR": ["F"],
+    })
+    carregado = rodar._preparar_acordos(bruto)
+    assert not bool(carregado.loc[0, "_preco_valido"])
+    compra = base(preco=10)
+    compra["_fornec_norm"] = carregado.loc[0, "_fornec_norm"]
+    resultado = rodar.processar(compra, carregado)
+    assert resultado.loc[0, "Status"] == rodar.STATUS_PRECO_INVALIDO
+    assert pd.isna(resultado.loc[0, "Preco Acordo"])
+    assert pd.isna(resultado.loc[0, "Diferenca Total"])
+    assert rodar.resumir_status(resultado)["total_quarentena"] == 1
+    assert rodar.gerar_qualidade_acordos(carregado, tmp_path / 'qualidade.csv') == 1
 
 
 def test_ambiguo_nao_expoe_nenhuma_referencia(rodar):

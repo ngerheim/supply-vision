@@ -241,8 +241,8 @@ def _processar_periodo_compativel(df_base, df_acordo):
 def processar(df_base, df_acordo):
     """Cruza cada compra com o universo de acordos válido para sua data.
 
-    Compras anteriores a 18/09/2026 usam todos os acordos ativos da tabela atual, conforme
-    a regra de transição definida pela operação. Da data de corte em diante,
+    Compras anteriores a CORTE_VIGENCIA_ACORDOS usam todos os acordos ativos da
+    tabela atual, conforme a regra de transição. Da data de corte em diante,
     situação e intervalo de vigência passam a ser respeitados.
     """
     _validar_parametros(df_acordo)

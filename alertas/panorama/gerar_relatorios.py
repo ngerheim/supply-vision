@@ -1,7 +1,7 @@
 """
 Gera um relatório consolidado da base histórica privada.
 
-NÃO duplica a lógica de negócio: importa carregar_base, carregar_acordo,
+NÃO duplica a lógica de negócio: importa carregar_base, carregar_acordos_portal,
 processar e gerar_recorte_historico direto de processo\\rodar.py — os filtros
 de universo (parametros\\) e o layout do relatório vêm juntos, sempre
 sincronizados com o pipeline diário.

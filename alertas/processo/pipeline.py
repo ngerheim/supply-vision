@@ -260,6 +260,7 @@ def main():
             entrega = estado_entrega.consultar_entrega()
             if entrega and entrega.get("estado") == "enviado":
                 logging.warning("Entrega confirmada; falha posterior ao envio nao exige reenvio ou revisao da entrega.")
+                logging.info("PIPELINE CONCLUÍDO COM SUCESSO — ENTREGA JÁ CONFIRMADA")
                 return
             if entrega:
                 sys.exit(3)

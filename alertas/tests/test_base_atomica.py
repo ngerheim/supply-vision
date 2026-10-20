@@ -28,6 +28,22 @@ def test_falha_na_escrita_nao_substitui_base_anterior(tmp_path):
     assert list(tmp_path.iterdir()) == [base]
 
 
+def test_texto_externo_na_base_nao_vira_formula(tmp_path):
+    from openpyxl import load_workbook
+
+    base = tmp_path / 'base.xlsx'
+    texto = '=1+1'
+    base_atomica.salvar_base(pd.DataFrame({'Descrição': [texto]}), base)
+    planilha = load_workbook(base)
+    try:
+        celula = planilha.active['A2']
+        assert celula.data_type == 's'
+        assert celula.value == texto
+    finally:
+        planilha.close()
+    assert pd.read_excel(base).loc[0, 'Descrição'] == texto
+
+
 def test_interrupcao_entre_planilha_e_meta_invalida_marcador_antigo(tmp_path, monkeypatch):
     base, meta = tmp_path / 'base.xlsx', tmp_path / 'base.info.txt'
     meta.write_text('PERIODO=antigo\n', encoding='utf-8')

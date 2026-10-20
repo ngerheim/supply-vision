@@ -38,3 +38,15 @@ def test_recusa_csv_sem_colunas_obrigatorias(validar):
     (parametros / 'de_para' / 'itens.csv').write_text('origem;destino\na;b\n')
     with pytest.raises(RuntimeError, match='colunas ausentes'):
         executar()
+
+
+def test_modelos_recusam_colisao_que_a_carga_real_recusaria(validar):
+    executar, parametros = validar
+    (parametros / 'de_para' / 'modelos.csv').write_text(
+        'modelo_qlik;modelo_acordo;ativo\n'
+        'MODELO FICTÍCIO;DESTINO A;Sim\n'
+        ' modelo ficticio ;DESTINO B;Sim\n', encoding='utf-8-sig',
+    )
+    with pytest.raises(RuntimeError, match='colidem'):
+        executar()
+    assert not (parametros / '.contagens.json').exists()

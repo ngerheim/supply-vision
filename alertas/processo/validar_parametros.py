@@ -10,7 +10,7 @@ def validar():
         dados['carregar_lista'](nome, registrar=False)
     dados['carregar_de_para']('itens.csv', 'descricao_qlik', 'item_acordo', registrar=False)
     dados['carregar_de_para']('modelos.csv', 'modelo_qlik', 'modelo_acordo',
-                             normalizar_chave=False, registrar=False)
+                             registrar=False)
 
 
 if __name__ == '__main__':
