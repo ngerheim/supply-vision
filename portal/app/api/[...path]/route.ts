@@ -78,8 +78,10 @@ function tokenInternoValido(request: Request) {
 // Erro com codigo proprio para corpo excessivo: quem chama devolve 413 em vez
 // de tratar como JSON invalido.
 class CorpoGrandeDemais extends Error {
-  constructor(public readonly maximo: number) {
+  readonly maximo: number;
+  constructor(maximo: number) {
     super(`Corpo da requisição acima do limite de ${Math.round(maximo / 1024)} KB.`);
+    this.maximo = maximo;
   }
 }
 
@@ -267,7 +269,10 @@ async function DELETEInterno(request: NextRequest) {
   if (parts[0] === 'items' && parts[1]) {
     return comTravaDoAcordo(request, await acordoDaCondicao(parts[1]), () => deleteItem(user, parts[1], revisaoDaQuery(request)));
   }
-  if (parts[0] === 'agreements' && parts[1] && parts.length === 2) return comTravaDoAcordo(request, parts[1], () => deleteAgreement(user, parts[1], revisaoDaQuery(request)));
+  if (parts[0] === 'agreements' && parts[1] && parts.length === 2) {
+    if (user.role !== 'admin') return fail('Somente administradores podem excluir um acordo. Um acordo apagado leva consigo os preços e todo o histórico de versões.', 403);
+    return comTravaDoAcordo(request, parts[1], () => deleteAgreement(user, parts[1], revisaoDaQuery(request)));
+  }
   if (parts[0] === 'catalogs' && parts[1] && parts[2]) return deleteCatalog(user, parts[1], parts[2], revisaoDaQuery(request));
   if (parts[0] === 'reports' && parts[1]) {if(user.role!=='admin')return fail('Somente administradores podem cancelar relatórios.',403);return cancelarRelatorio(parts[1],user.id);}
   if (parts[0] === 'mappings' && parts[1] && parts[2]) return deleteMapping(user, parts[1], parts[2], revisaoDaQuery(request));

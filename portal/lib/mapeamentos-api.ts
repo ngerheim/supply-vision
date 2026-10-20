@@ -30,7 +30,7 @@ export function mapeamentosApi(contexto: ContextoApi) {
 
   async function validateMappingInput(request: Request, type: string) {
     const body = await jsonBody<MappingInput>(request);
-    const cfg = mappingConfig[type];
+    const cfg = Object.hasOwn(mappingConfig, type) ? mappingConfig[type] : null;
     if (!cfg) return { error: 'Tipo de De/Para inválido.' };
     const source = textValue(body.source), targetId = textValue(body.targetId);
     const sourceKey = normalizeImportText(source);
@@ -88,7 +88,7 @@ export function mapeamentosApi(contexto: ContextoApi) {
 
   async function deleteMapping(user: User, type: string, recordId: string, expectedRevision: number | null) {
     if (!canWrite(user)) return fail('Seu perfil não permite gerenciar o De/Para.', 403);
-    const cfg=mappingConfig[type]; if(!cfg) return fail('Tipo de De/Para inválido.');
+    const cfg=Object.hasOwn(mappingConfig,type)?mappingConfig[type]:null; if(!cfg) return fail('Tipo de De/Para inválido.');
     const existing=await first<{sourceKey:string;revision:number}>(`SELECT revision,source_key AS sourceKey FROM ${cfg.table} WHERE id=?`,[recordId]);
     if(!existing) return fail('Correspondência não encontrada.',404);
     if(!revisaoConfere(expectedRevision,existing.revision))return fail('Registro alterado. Atualize a lista antes de excluir.',409);
@@ -99,8 +99,6 @@ export function mapeamentosApi(contexto: ContextoApi) {
     if(!excluido.meta.changes)return fail('Registro alterado. Atualize a lista antes de excluir.',409);
     return ok({success:true});
   }
-
-  // Campos de cadastro sao os mesmos em criar e editar: valida num lugar so.
 
   return { mappingList, createMapping, updateMapping, deleteMapping };
 }

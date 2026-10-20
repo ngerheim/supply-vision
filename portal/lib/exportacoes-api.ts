@@ -65,7 +65,7 @@ export function exportacoesApi(contexto: ContextoApi) {
     // Monta primeiro e so entao registra: gravar antes faria a auditoria
     // afirmar que houve download mesmo se a exportacao falhasse.
     const resposta = await exportDatabase();
-    await audit(user.id, 'EXPORT', 'system', null, 'Backup completo da base gerado para download');
+    await audit(user.id, 'EXPORT', 'system', null, 'Exportação de dados gerada para download');
     return resposta;
   }
 

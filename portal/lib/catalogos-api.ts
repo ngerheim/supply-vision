@@ -30,7 +30,7 @@ export function catalogosApi(contexto: ContextoApi) {
   };
 
   async function deleteCatalog(user: User, type: string, recordId: string, expectedRevision: number | null) {
-    const cfg = catalogConfig[type];
+    const cfg = Object.hasOwn(catalogConfig, type) ? catalogConfig[type] : null;
     if (!cfg) return fail('Cadastro inválido.');
     const existing = await first<{ id: string; active: number; revision: number }>(`SELECT * FROM ${cfg.table} WHERE id=?`, [recordId]);
     if (!existing) return fail('Cadastro não encontrado.', 404);
@@ -71,7 +71,7 @@ export function catalogosApi(contexto: ContextoApi) {
   }
 
   async function createCatalog(request: Request, user: User, type: string) {
-    const cfg = catalogConfig[type]; if (!cfg) return fail('Cadastro inválido.');
+    const cfg = Object.hasOwn(catalogConfig, type) ? catalogConfig[type] : null; if (!cfg) return fail('Cadastro inválido.');
     const body = await jsonBody<CatalogInput>(request), recordId = id(type.slice(0, 3)), timestamp = now();
     exigeCamposDeCatalogo(body);
     let sql = '', values: unknown[] = [];
@@ -104,7 +104,7 @@ export function catalogosApi(contexto: ContextoApi) {
   }
 
   async function updateCatalog(request: Request, user: User, type: string, recordId: string) {
-    const cfg = catalogConfig[type];
+    const cfg = Object.hasOwn(catalogConfig, type) ? catalogConfig[type] : null;
     if (!cfg) return fail('Cadastro inválido.');
     const body = await jsonBody<CatalogInput>(request);
     exigeCamposDeCatalogo(body);
