@@ -9,6 +9,16 @@ import { validarBanco } from './validar-banco.mjs';
 
 // Allowlist da antiga semente. Nao atravessa links nem inclui caches ou backups.
 const pastasExcluidas = new Set(['node_modules', '.venv', '.git', '.cache', 'work', 'dist', 'logs', 'backups', 'worktrees', 'preparos']);
+function exigirCaminhoFisico(caminho) {
+  for (let atual = path.resolve(caminho); ; atual = path.dirname(atual)) {
+    if (fs.existsSync(atual)) {
+      const real = fs.realpathSync.native(atual);
+      const iguais = process.platform === 'win32' ? real.toLowerCase() === atual.toLowerCase() : real === atual;
+      if (!iguais || fs.lstatSync(atual).isSymbolicLink()) throw new FalhaBackup('Link recusado no caminho do backup.');
+    }
+    if (atual === path.dirname(atual)) break;
+  }
+}
 export function configuracaoPermitida(nome) {
   return /^(comum\/[^/]+\.env|portal\/configuracao\/[^/]+\.env|alertas\/(config|parametros)\/.+|alertas\/estado-envios\/[^/]+\.json|operacao\/estado\.json)$/.test(nome)
     && !/(?:\.log(?:\.|$)|\.(?:sqlite|7z|zip|bak|tmp)$)/i.test(nome)
@@ -16,6 +26,7 @@ export function configuracaoPermitida(nome) {
       || pastasExcluidas.has(p.toLowerCase()));
 }
 function listarArquivos(pasta, prefixo = '', ignorarPastas = false) {
+  exigirCaminhoFisico(pasta);
   if (!fs.existsSync(pasta)) return [];
   if (fs.lstatSync(pasta).isSymbolicLink()) throw new FalhaBackup('Link recusado no conteudo do backup.');
   return fs.readdirSync(pasta, { withFileTypes: true }).flatMap(item => {
@@ -26,10 +37,12 @@ function listarArquivos(pasta, prefixo = '', ignorarPastas = false) {
   });
 }
 export function listarConfiguracao(raiz = privado) {
+  exigirCaminhoFisico(raiz);
   const pastas = ['alertas/config', 'alertas/parametros'];
   const recursivos = pastas.flatMap(pasta => listarArquivos(path.join(raiz, pasta), pasta + '/', true));
   const diretos = ['comum', 'portal/configuracao', 'alertas/estado-envios', 'operacao'].flatMap(pasta => {
     const diretorio = path.join(raiz, pasta);
+    exigirCaminhoFisico(diretorio);
     if (!fs.existsSync(diretorio)) return [];
     if (fs.lstatSync(diretorio).isSymbolicLink()) throw new FalhaBackup('Link recusado no conteudo do backup.');
     return fs.readdirSync(diretorio).map(nome => pasta + '/' + nome).filter(configuracaoPermitida).map(nome => {
@@ -46,10 +59,12 @@ function validarEstado(nome, arquivo) {
 }
 export function montarPacote(pasta, { raiz = privado, banco = localizarBanco(null, path.join(raiz, 'portal')) } = {}) {
   if (!banco) throw new FalhaBackup('Banco atual nao encontrado.');
+  exigirCaminhoFisico(path.join(pasta, 'banco/portal.sqlite'));
   fs.mkdirSync(path.join(pasta, 'banco'), { recursive: true });
   criarSnapshot(banco, path.join(pasta, 'banco/portal.sqlite'));
   for (const nome of listarConfiguracao(raiz)) {
     const destino = path.join(pasta, nome);
+    exigirCaminhoFisico(destino);
     fs.mkdirSync(path.dirname(destino), { recursive: true });
     fs.copyFileSync(path.join(raiz, nome), destino);
     validarEstado(nome, destino);
@@ -64,6 +79,7 @@ export function compactarPacote(pasta, arquivo, executavel, senha, { executar } 
   executar7z(executavel, senha, ['t', arquivo], { executar });
 }
 export function validarPacote(pasta) {
+  exigirCaminhoFisico(path.join(pasta, 'backup.json'));
   const meta = JSON.parse(fs.readFileSync(path.join(pasta, 'backup.json'), 'utf8'));
   if (meta.formato !== 1 || typeof meta.bancoNome !== 'string' || !/^[^/\\:]+\.sqlite$/.test(meta.bancoNome) || meta.bancoNome === 'metadata.sqlite'
     || !meta.arquivos || !Object.hasOwn(meta.arquivos, 'banco/portal.sqlite')) throw new FalhaBackup('Manifesto do backup invalido.');
@@ -95,9 +111,7 @@ export function extrairPacote(arquivo, pasta, executavel, senha, { executar } = 
 export function exigirDestinoSeguro(nome, raiz = privado) {
   if (!configuracaoPermitida(nome)) throw new FalhaBackup('Destino de configuracao invalido.');
   const alvo = path.join(raiz, nome);
-  for (let atual = alvo; atual !== path.dirname(raiz); atual = path.dirname(atual)) {
-    if (fs.existsSync(atual) && fs.lstatSync(atual).isSymbolicLink()) throw new FalhaBackup('Link recusado no destino da configuracao.');
-  }
+  exigirCaminhoFisico(alvo);
   return alvo;
 }
 

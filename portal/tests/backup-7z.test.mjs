@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
 import { executar7z, exigirNomesCriptografados, FalhaBackup } from '../scripts/backup-7z.mjs';
-import { compactarPacote, extrairPacote } from '../scripts/backup-pacote.mjs';
+import { compactarPacote, extrairPacote, listarConfiguracao, exigirDestinoSeguro } from '../scripts/backup-pacote.mjs';
 import { criarTemporarioTeste } from './apoio/ambiente.mjs';
 
 const eol = process.platform === 'win32' ? '\r\n' : '\n';
@@ -12,6 +12,19 @@ const prompt = `${eol}Enter password (will not be echoed):${eol}`;
 const lista = `Path = banco/portal.sqlite${eol}Encrypted = +${eol}${eol}`;
 const senhaTeste = () => `Ficticia ç !"${randomBytes(18).toString('hex')}`;
 const eofCriptografado = () => Object.assign(new Error('saida nativa'), { status: 255, stdout: Buffer.from(prompt) });
+
+void test('pacote: recusa junction intermediaria na configuracao e ancestral da raiz privada', t => {
+  const dir = criarTemporarioTeste('sv-pacote-ancestral-');
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const raiz = path.join(dir, 'privado'), fora = path.join(dir, 'fora');
+  fs.mkdirSync(raiz); fs.mkdirSync(path.join(fora, 'config'), { recursive: true });
+  fs.writeFileSync(path.join(fora, 'config/fixture.env'), 'FICTICIO=1');
+  fs.symlinkSync(fora, path.join(raiz, 'alertas'), process.platform === 'win32' ? 'junction' : 'dir');
+  fs.mkdirSync(path.join(fora, 'privado/comum'), { recursive: true });
+  fs.symlinkSync(fora, path.join(dir, 'atalho'), process.platform === 'win32' ? 'junction' : 'dir');
+  assert.throws(() => exigirDestinoSeguro('comum/novo.env', path.join(dir, 'atalho/privado')), /Link|fora/);
+  assert.throws(() => listarConfiguracao(raiz), /Link|fora/);
+});
 
 void test('7z: argumentos e stdin por comando, sem senha na linha de comando', async t => {
   for (const comando of ['a', 't', 'l', 'x']) await t.test(comando, () => {

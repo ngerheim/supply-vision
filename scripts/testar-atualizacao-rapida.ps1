@@ -4,6 +4,28 @@ $ErrorActionPreference='Stop'
 $base=Join-Path ([IO.Path]::GetTempPath()) ('sv-h1-'+[guid]::NewGuid().ToString('N'))
 $raiz=Join-Path $base 'instalacao'
 function Exigir($Condicao,[string]$Mensagem){if(!$Condicao){throw $Mensagem}}
+& {
+ $fixture=Join-Path $base 'ancestrais';$modulos=Join-Path $fixture 'portal/node_modules';$vendor=Join-Path $fixture 'portal/vendor';$fora=Join-Path $fixture 'fora'
+ try{
+  New-Item -ItemType Directory -Force $modulos,$vendor,(Join-Path $fora 'pacote')|Out-Null
+  [IO.File]::WriteAllText((Join-Path $fora 'pacote/sentinela'),'fora')
+  New-Item -ItemType Junction -Path (Join-Path $vendor 'intermediario') -Target $fora|Out-Null
+  New-Item -ItemType Junction -Path (Join-Path $modulos 'link') -Target (Join-Path $vendor 'intermediario/pacote')|Out-Null
+  $falhas=@()
+  foreach($origem in @((Join-Path $modulos 'link'),(Join-Path $vendor 'intermediario/pacote'))){
+   $recusou=$false
+   try{Copiar-ArvoreDependencias $origem (Join-Path $fixture 'copia') @(($modulos+'\'),($vendor+'\'))}catch{$recusou=$true}
+   if(!$recusou){$falhas+='origem atravessou ancestral'}
+  }
+  New-Item -ItemType Junction -Path (Join-Path $fixture 'saida') -Target $fora|Out-Null
+  [IO.File]::WriteAllText((Join-Path $modulos 'arquivo'),'interno')
+  $recusou=$false
+  try{Copiar-ArvoreDependencias (Join-Path $modulos 'arquivo') (Join-Path $fixture 'saida/arquivo') @(($modulos+'\'),($vendor+'\'))}catch{$recusou=$true}
+  if(!$recusou){$falhas+='destino atravessou ancestral'}
+  if($falhas.Count){throw ($falhas-join'; ')}
+  Write-Host '[OK] Copia recusa junction intermediaria na origem, alvo e destino.'
+ }finally{if(Test-Path $fixture){Remover-ArvorePreparo $fixture}}
+}
 try{
  New-Item -ItemType Directory -Force $raiz|Out-Null
  foreach($caso in @('sucesso','falha-parcial','dependencias')){
