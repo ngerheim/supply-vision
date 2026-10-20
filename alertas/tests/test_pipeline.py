@@ -1,7 +1,9 @@
 import importlib.util
 import json
+import queue
 import subprocess
 import sys
+import threading
 import types
 from pathlib import Path
 
@@ -165,6 +167,7 @@ def test_slot_e_lido_da_linha_de_comando(monkeypatch, tmp_path):
 def test_saida_antecipada_tem_log_e_motivo(monkeypatch, tmp_path, caplog, estado, codigo):
     import logging
     mod = carregar_pipeline(monkeypatch, tmp_path)
+    monkeypatch.setenv("MODO_ENSAIO", "0")  # Nenhum subprocesso de envio e permitido.
     monkeypatch.delenv("SUPPLY_VISION_SEM_ENVIO", raising=False)
     monkeypatch.setattr(sys, "argv", ["pipeline.py"])
     eventos = []
@@ -190,7 +193,9 @@ def test_probe_detecta_lock_sobrevivente_sem_executar_pipeline():
     codigo = "import pipeline,sys; pipeline.adquirir_lock(); print('pronto',flush=True); sys.stdin.read()"
     filho = subprocess.Popen([sys.executable, "-c", codigo], cwd=ROOT / "processo", stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     try:
-        assert filho.stdout.readline().strip() == "pronto"
+        pronto = queue.Queue()
+        threading.Thread(target=lambda: pronto.put(filho.stdout.readline()), daemon=True).start()
+        assert pronto.get(timeout=15).strip() == "pronto"
         probe = subprocess.run([sys.executable, str(ROOT / "processo/pipeline.py"), "--verificar-lock"], stdin=subprocess.DEVNULL, capture_output=True, timeout=15)
         assert probe.returncode == 2
     finally:
@@ -205,6 +210,7 @@ def test_falha_apos_envio_respeita_estado_persistido(monkeypatch, tmp_path, capl
 
     caplog.set_level(logging.INFO)
     mod = carregar_pipeline(monkeypatch, tmp_path)
+    monkeypatch.setenv("MODO_ENSAIO", "0")  # rodar_script e consultar_entrega sao doubles.
     monkeypatch.delenv("SUPPLY_VISION_SEM_ENVIO", raising=False)
     monkeypatch.setattr(sys, "argv", ["pipeline.py"])
     monkeypatch.setattr(mod, "adquirir_lock", lambda: None)

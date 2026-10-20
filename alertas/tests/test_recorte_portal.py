@@ -38,7 +38,7 @@ def test_recorte_gera_arquivo_sem_email_mesmo_com_destinatario_antigo(monkeypatc
 def test_recorte_sem_dados_arquivo_ou_destinatario_nao_envia(monkeypatch, tmp_path, linhas, arquivo, destinatario):
     mod, chamadas, _ = carregar_recorte(monkeypatch, tmp_path, linhas=linhas, arquivo=arquivo, destinatario=destinatario)
     mod.main()
-    assert not any(isinstance(c, tuple) for c in chamadas)
+    assert chamadas == (['lock', 'baixar'] if linhas == 0 else ['lock', 'baixar', 'gerar'])
 
 
 @pytest.mark.parametrize('destinatario', ['', 'a@example.com;b@example.com', 'a@example.com\r\nBcc:b@example.com'])
@@ -58,6 +58,7 @@ def test_recorte_lock_ocupado_aborta_antes_do_download(monkeypatch, tmp_path):
 
 
 def test_smtp_historico_nao_acrescenta_copia_oculta_diaria(monkeypatch, tmp_path):
+    monkeypatch.setenv('MODO_ENSAIO', '0')  # SMTP substituido abaixo.
     mod = carregar_email(monkeypatch, tmp_path)
     entregas = []
     class SMTP:

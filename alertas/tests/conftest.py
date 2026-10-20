@@ -1,4 +1,6 @@
 import importlib.util
+import os
+import socket
 import sys
 import types
 from datetime import date
@@ -13,14 +15,7 @@ sys.path.insert(0, str(ROOT / "processo"))
 
 
 def pytest_configure(config):
-    """Evita o TEMP do perfil, que pode ser somente leitura no servidor.
-
-    A pasta era fixa, e o pytest apaga a basetemp inteira ao comecar: bastou
-    um diretorio remanescente sem permissao para a suite inteira passar a dar
-    erro de setup em todos os testes. Agora cada execucao tem a sua, e se a
-    area nao estiver utilizavel o pytest volta ao comportamento padrao.
-    """
-    import os
+    """Configura exemplos isolados antes da coleta, sem rede nem TEMP do perfil."""
     import shutil
     import tempfile
 
@@ -29,13 +24,21 @@ def pytest_configure(config):
     raiz.mkdir(parents=True, exist_ok=True)
     pasta = Path(tempfile.mkdtemp(prefix="sv-pytest-", dir=raiz))
     config._sv_pasta = pasta
-    config._sv_ambiente = {k: os.environ.get(k) for k in
-                          ("SUPPLY_VISION_PRIVADO", "SUPPLY_VISION_PARAMETROS_DIR", "MODO_ENSAIO")}
-    os.environ["SUPPLY_VISION_PRIVADO"] = str(pasta / "privado")
-    os.environ.pop("SUPPLY_VISION_PARAMETROS_DIR", None)
-    # Fixtures de envio usam SMTP falso e precisam verificar confirmacao/TLS.
-    # Os testes de ensaio definem o proprio modo por monkeypatch.
-    os.environ["MODO_ENSAIO"] = "0"
+    protecao = config._sv_protecao = pytest.MonkeyPatch()
+    protecao.setenv("SUPPLY_VISION_PRIVADO", str(pasta / "privado"))
+    protecao.delenv("SUPPLY_VISION_PARAMETROS_DIR", raising=False)
+    protecao.setenv("MODO_ENSAIO", "1")
+    for chave in ("SUPPLY_VISION_RUN_ID", "SUPPLY_VISION_SEM_ENVIO",
+                  "SV_ALERTA_SLOT", "SV_ALERTA_DATA"):
+        protecao.delenv(chave, raising=False)
+    # Ativo tambem durante a coleta. Os doubles substituem os clientes, nunca
+    # esta barreira; uma fixture incompleta falha antes de DNS/TCP/UDP reais.
+    def sem_rede(*args, **kwargs):
+        raise AssertionError("Rede bloqueada na suite de Alertas; use um double")
+    for nome in ("connect", "connect_ex", "sendto"):
+        protecao.setattr(socket.socket, nome, sem_rede)
+    protecao.setattr(socket, "create_connection", sem_rede)
+    protecao.setattr(socket, "getaddrinfo", sem_rede)
     privado = pasta / "privado"
     for origem, destino in [
         (RAIZ / "compartilhado/smtp.env.example", privado / "comum/smtp.env"),
@@ -51,15 +54,43 @@ def pytest_configure(config):
 
 
 def pytest_unconfigure(config):
-    import os
     import shutil
-    for chave, valor in getattr(config, "_sv_ambiente", {}).items():
-        if valor is None:
-            os.environ.pop(chave, None)
-        else:
-            os.environ[chave] = valor
+    if hasattr(config, "_sv_protecao"):
+        config._sv_protecao.undo()
     if hasattr(config, "_sv_pasta"):
         shutil.rmtree(config._sv_pasta, ignore_errors=True)
+
+
+@pytest.fixture(autouse=True)
+def isolar_execucao(monkeypatch):
+    """Restaura inclusive alteracoes diretas feitas por pipeline/imports."""
+    ambiente = os.environ.copy()
+    nomes = {p.stem for pasta in (ROOT / "processo", ROOT / "panorama")
+             for p in pasta.glob("*.py")} | {"parametros", "parametros._dados"}
+    modulos = {nome: sys.modules[nome] for nome in nomes if nome in sys.modules}
+    monkeypatch.setattr(sys, "path", sys.path.copy())
+    monkeypatch.setattr(sys, "dont_write_bytecode", sys.dont_write_bytecode)
+    monkeypatch.setattr(sys, "argv", ["pytest"])
+    try:
+        yield
+    finally:
+        for nome in nomes:
+            if nome in modulos:
+                sys.modules[nome] = modulos[nome]
+            else:
+                sys.modules.pop(nome, None)
+        os.environ.clear()
+        os.environ.update(ambiente)
+
+
+@pytest.fixture
+def abrir_planilha(request):
+    from openpyxl import load_workbook
+    def abrir(*args, **kwargs):
+        wb = load_workbook(*args, **kwargs)
+        request.addfinalizer(wb.close)
+        return wb
+    return abrir
 
 
 @pytest.fixture
