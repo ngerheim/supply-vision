@@ -26,6 +26,45 @@ try{
  if(!$texto.Contains('existe=True')-or!$texto.Contains('existe=False')){throw 'Existencia das travas nao informada'}
  Remove-Item $instancias[1].manifesto
  if(!(Formatar-DiagnosticoTravaTeste $instancias).Contains('nao registrado')){throw 'Inicio atrasado sem manifesto nao diagnosticado'}
+ # Cada caso H2 tem stdout novo, mas compartilha o JSON da instalacao.
+ $andamento=Join-Path $dir 'atualizacao-andamento.json';$saida=Join-Path $dir 'atualizador.log'
+ $inicio=[datetime]::UtcNow
+ $semFase='sem fase publicada na execucao atual'
+ if((Ler-FaseAtualizadorTeste $andamento $saida $inicio)-ne$semFase){throw 'Arquivos ausentes inventaram fase.'}
+ $a=@{inicioGeral=$inicio.AddMinutes(-1).ToString('o');nome='Atualizacao concluida';estado='concluido'}
+ $a|ConvertTo-Json|Set-Content -LiteralPath $andamento -Encoding UTF8
+ if((Ler-FaseAtualizadorTeste $andamento $saida $inicio)-ne$semFase){throw 'H2 reutilizou andamento do caso anterior.'}
+ [IO.File]::WriteAllText($saida,"== Conferindo ambiente de atualizacao ==`n")
+ if((Ler-FaseAtualizadorTeste $andamento $saida $inicio)-ne'Conferindo ambiente de atualizacao'){throw 'Fase do stdout exclusivo nao observada.'}
+ $a.inicioGeral=$inicio.AddSeconds(1).ToString('o');$a.nome='PREPARAR / Consulta CI'
+ $a.esperaCI=@{mensagem='Aguardando CI da main (1234567): 4 de 5 checks concluidos, 0 min'}
+ $a|ConvertTo-Json -Depth 4|Set-Content -LiteralPath $andamento -Encoding UTF8
+ if((Ler-FaseAtualizadorTeste $andamento $saida $inicio)-ne($a.nome+'; '+$a.esperaCI.mensagem)){throw 'Fase atual ou motivo da espera CI ausente.'}
+ [IO.File]::WriteAllText($andamento,'{incompleto')
+ if((Ler-FaseAtualizadorTeste $andamento $saida $inicio)-ne'Conferindo ambiente de atualizacao'){throw 'JSON ilegivel impediu fallback do stdout.'}
+ # Diagnostico do timeout le so a lista explicita; nunca configs ou bancos.
+ [IO.File]::WriteAllText((Join-Path $dir 'portal.env'),'SEGREDO_NAO_PUBLICAR')
+ [IO.File]::WriteAllText((Join-Path $dir 'atualizador-erro.log'),'stderr-ficticio-h2')
+ [IO.File]::WriteAllText((Join-Path $dir 'limpeza-preparo.lock'),'identidade-ficticia-h2')
+ $texto=& {
+  function Get-CimInstance {
+   param($ClassName,$OperationTimeoutSec,$ErrorAction)
+   if($ClassName-ne'Win32_Process'-or$OperationTimeoutSec-ne3){throw 'Consulta de processos sem prazo.'}
+   foreach($p in @(@(101,1,'pai'),@(202,101,'filho'),@(303,202,'neto'),@(404,1,'alheio'))){
+    [pscustomobject]@{ProcessId=$p[0];ParentProcessId=$p[1];Name=$p[2];CreationDate='fixture';CommandLine='SEGREDO_NAO_PUBLICAR'}
+   }
+  }
+  $p=[pscustomobject]@{Id=101;StartTime=$inicio;HasExited=$false}
+  $p|Add-Member -MemberType ScriptMethod -Name Refresh -Value {}
+  @(Mostrar-DiagnosticoAtualizadorTeste $p $dir $dir 6>&1)-join"`n"
+ }
+ foreach($trecho in @('PID=101','stderr-ficticio-h2','identidade-ficticia-h2','arquivo ausente ou indisponivel')){if(!$texto.Contains($trecho)){throw "Diagnostico H2 perdeu evidencia: $trecho"}}
+ if($env:OS-eq'Windows_NT'){
+  foreach($trecho in @('PID=202','PID=303')){if(!$texto.Contains($trecho)){throw "Arvore H2 incompleta: $trecho"}}
+  if($texto.Contains('PID=404')){throw 'Diagnostico incluiu processo alheio.'}
+ }
+ if($texto.Contains('SEGREDO_NAO_PUBLICAR')){throw 'Diagnostico publicou configuracao ou linha de comando.'}
+ Write-Host '[OK] H2: andamento antigo recusado, fase/CI atuais, fallback e diagnostico limitado a logs e descendentes.'
  Write-Host 'PASSOU: convergencia apos 8 s, timeout de 60 s, polling 500 ms e diagnostico por instancia.'
 }finally{Remove-Item -LiteralPath $dir -Recurse -Force}
 
@@ -166,6 +205,13 @@ filho.once('message',msg=>{
  if($esperaMs-lt1000-or$esperaMs-gt3000){throw "Espera provocada fora do intervalo de 1000 a 3000 ms: $esperaMs ms."}
  $travado.Refresh();$descendente.Refresh()
  if($travado.HasExited-or$descendente.HasExited){throw 'Pai/descendente sairam espontaneamente antes de o prazo encerrar a arvore.'}
+ # Cenario adicional: conserva o ensaio real acima com arquivo de fase e
+ # exercita o novo observador contra a mesma arvore ainda viva.
+ $relogio.Restart()
+ $resultado=@(Esperar-ProcessoTeste $travado 1 -LerFase {'fase-observada-h2'} 6>&1)
+ if($resultado[-1]-isnot[bool]-or$resultado[-1]){throw 'Observador aprovou cenario travado.'}
+ if(($resultado-join"`n")-notlike'*fase=fase-observada-h2*'){throw 'Polling nao publicou a fase fornecida pelo observador H2.'}
+ if($relogio.ElapsedMilliseconds-lt1000-or$relogio.ElapsedMilliseconds-gt3000){throw 'Observador alterou o prazo externo de 1 s.'}
  Encerrar-ArvoreTeste $travado
  if(!$travado.WaitForExit(5000)){throw 'Watchdog deixou o pai travado vivo.'}
  if(!(Esperar-CondicaoTeste {Testar-ProcessoEncerradoFixture $descendente} -Segundos 5)){throw 'Watchdog encerrou o pai mas deixou o descendente vivo.'}
@@ -174,6 +220,16 @@ filho.once('message',msg=>{
  $restante=Get-Process -Id $descendente.Id -ErrorAction SilentlyContinue
  if($restante){try{if(!(Testar-ProcessoEncerradoFixture $restante)){throw 'Descendente continua ativo apos encerramento pelo prazo.'}}finally{$restante.Dispose()}}
  Write-Host "[OK] Espera provocada durou $esperaMs ms; pai e descendente encerrados pelo prazo."
+
+ # Leitor indisponivel e arquivo de fase legado preservam o prazo externo.
+ $p=[pscustomobject]@{Id=505}
+ $p|Add-Member -MemberType ScriptMethod -Name WaitForExit -Value {param($Ms) return $false}
+ $resultado=@(Esperar-ProcessoTeste $p 0 -LerFase {throw 'leitura ficticia indisponivel'} 6>&1)
+ if($resultado[-1]-isnot[bool]-or$resultado[-1]-or($resultado-join"`n")-notlike'*fase=progresso indisponivel*'){throw 'Erro do observador substituiu o prazo.'}
+ $resultado=@(Esperar-ProcessoTeste $p 0 $fase 6>&1)
+ if($resultado[-1]-isnot[bool]-or$resultado[-1]-or($resultado-join"`n")-notlike'*fase=espera-provocada*'){throw 'Arquivo de fase legado perdeu acompanhamento.'}
+ $resultado=@(Esperar-ProcessoTeste $p 0 6>&1)
+ if(($resultado-join"`n")-notlike'*fase=nao informada*'){throw 'Espera sem observador inventou fase iniciando.'}
 
  # Caso separado: EOF herdado, sem depender de uma corrida pai -> filho.
  # O pai aguarda liberacao explicita e o escritor tem console independente.

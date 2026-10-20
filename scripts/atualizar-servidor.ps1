@@ -232,7 +232,6 @@ if(!$Simular-and(Test-Path $logicaInicializacao)){Instalar-ComandoSupv $Raiz}
 $Node = Localizar-NodeMaquina
 # Scripts npm tambem resolvem node pelo PATH; a maquina tem prioridade.
 if([IO.Path]::IsPathRooted($Node)){$env:Path=(Split-Path $Node)+';'+$env:Path}
-$Npm = if([IO.Path]::IsPathRooted($Node)){Join-Path (Split-Path $Node) 'npm.cmd'}else{'npm.cmd'}
 Set-Location $Raiz
 $Portal = Join-Path $Raiz 'portal'
 $Alertas = Join-Path $Raiz 'alertas'
@@ -286,13 +285,10 @@ function Reparar-ConfiguracaoPrivada {
 
 $ContextoArquivo = Join-Path (Obter-PastaPrivada $Raiz) 'operacao/atualizacao.json'
 $Recuperando = $false
-$OperacaoParada = $false
 $script:ParadaSolicitada = $false
 $CodigoTrocado = $false
 $NovaVersaoIniciada = $false
 $OperacaoEstavaAtiva = $false
-$mexeuNode = $true
-$mexeuPython = $true
 $anterior = $VersaoAnterior
 $script:PastaPreparo=''
 $script:ArtefatosPreparados=$false
@@ -400,7 +396,6 @@ try {
     $script:PastaPreparo=$contexto.preparo
     $script:ArtefatosPreparados=$true
     $CodigoTrocado = $true
-    $OperacaoParada = $true
     try{Inicializar-MedicaoAtualizacao;$script:MedicaoAtualizacao.paradaDesconhecida=!$script:MedicaoAtualizacao.parada}catch{}
   }
 Etapa 'Conferindo o repositorio'
@@ -527,7 +522,6 @@ if (-not $JaAtualizado) {
   $OperacaoEstavaAtiva = !(Testar-SupervisorEncerrado (Obter-PastaPrivada $Raiz))
   Etapa 'TROCAR: parando a operacao'
   Parar-OperacaoAtualizacao $PrazoParadaSegundos
-  $OperacaoParada = $true
   Ok 'operacao parada'
 
   Etapa 'Backup do banco antes de trocar a versao'

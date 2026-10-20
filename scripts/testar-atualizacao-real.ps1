@@ -249,7 +249,10 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
    $reversao=Start-Process powershell.exe -ArgumentList (@($argsReversao|ForEach-Object{Proteger-ArgumentoAtualizacao $_})-join' ') -WorkingDirectory $raiz -PassThru -WindowStyle Hidden -RedirectStandardOutput (Join-Path $logs 'atualizador.log') -RedirectStandardError (Join-Path $logs 'atualizador-erro.log')
    [void]$reversao.Handle
    $processos+=$reversao
-   if(!(Esperar-ProcessoTeste $reversao 900)){throw 'Reversao excedeu 900 s.'}
+   if(!(Esperar-ProcessoTeste $reversao 900 -LerFase {Ler-FaseAtualizadorTeste (Join-Path $privado 'operacao/atualizacao-andamento.json') (Join-Path $logs 'atualizador.log') $reversao.StartTime})){
+    Mostrar-DiagnosticoAtualizadorTeste $reversao $logs (Join-Path $privado 'operacao')
+    throw 'Reversao excedeu 900 s; diagnostico H2 registrado no log do cenario.'
+   }
    $saidaReversao=(Get-Content (Join-Path $logs 'atualizador.log') -Raw)+(Get-Content (Join-Path $logs 'atualizador-erro.log') -Raw)
    $contextoReversao=Get-Content (Join-Path $privado 'operacao/atualizacao.json') -Raw|ConvertFrom-Json
    $marcadorReversao=$saidaReversao-match'H2_FALHA_CONCLUIR_INTENCIONAL'
@@ -311,7 +314,10 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
   $atualizador=Start-Process powershell.exe -ArgumentList (@($argsAtualizador|ForEach-Object{Proteger-ArgumentoAtualizacao $_})-join' ') -WorkingDirectory $raiz -PassThru -WindowStyle Hidden -RedirectStandardOutput (Join-Path $logs 'atualizador.log') -RedirectStandardError (Join-Path $logs 'atualizador-erro.log')
   [void]$atualizador.Handle
   $processos+=$atualizador
-  if(!(Esperar-ProcessoTeste $atualizador 900)){throw 'Atualizador excedeu 900 s; veja log da fase.'}
+  if(!(Esperar-ProcessoTeste $atualizador 900 -LerFase {Ler-FaseAtualizadorTeste (Join-Path $privado 'operacao/atualizacao-andamento.json') (Join-Path $logs 'atualizador.log') $atualizador.StartTime})){
+   Mostrar-DiagnosticoAtualizadorTeste $atualizador $logs (Join-Path $privado 'operacao')
+   throw 'Atualizador excedeu 900 s; diagnostico H2 registrado no log do cenario.'
+  }
   [IO.File]::WriteAllText((Join-Path $logs 'monitor-parar'),'ok')
   if(!(Esperar-ProcessoTeste $monitor 15)){throw 'Monitor nao encerrou em 15 s.'}
   foreach($p in @('atualizador.log','atualizador-erro.log','monitor.log','monitor-erro.log')){Get-Content (Join-Path $logs $p)|Write-Host}

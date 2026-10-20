@@ -224,7 +224,7 @@ try{
   Write-Host '[OK] Reserva: handle exclusivo real do Windows.'
  }
 
- # Destino de publicacao ocupado: nao aparece reserva parcial. nao ha reserva parcial.
+ # Destino de publicacao ocupado: nao aparece reserva parcial.
  $p=Nova-PastaPreparo $r;New-Item -ItemType Directory -Force $p|Out-Null
  foreach($rel in @('portal/node_modules','alertas/.venv')){New-Item -ItemType Directory -Force (Join-Path $p ('anteriores/'+$rel))|Out-Null;[IO.File]::WriteAllText((Join-Path $p ('anteriores/'+$rel+'/pacote')),'ficticio')}
  [IO.File]::WriteAllText((Join-Path $p 'dependencias-origem.json'),($assinatura|ConvertTo-Json -Depth 6))
