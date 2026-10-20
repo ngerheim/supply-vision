@@ -1,5 +1,35 @@
 ﻿# Somente Git, arquivos e processos descartaveis; nenhum dado de producao.
 $ErrorActionPreference='Stop'
+# Faxina real apenas em fixture; a raiz privada alternativa e estrutural.
+& {
+ $baseFaxina=Join-Path (Resolve-Path (Join-Path $PSScriptRoot '..')).Path ('.cache/faxina-'+[guid]::NewGuid().ToString('N'))
+ $antesFaxina=$env:SUPPLY_VISION_PRIVADO
+ try{
+  $projeto=Join-Path $baseFaxina 'projeto';$fora=Join-Path $baseFaxina 'fora'
+  New-Item -ItemType Directory -Force (Join-Path $projeto 'dados/alertas/relatorios/diarios'),(Join-Path $fora '__pycache__')|Out-Null
+  [IO.File]::WriteAllText((Join-Path $fora '__pycache__/sentinela'),'preservar')
+  New-Item -ItemType Junction -Path (Join-Path $projeto 'atalho') -Target $fora|Out-Null
+  $env:SUPPLY_VISION_PRIVADO=Join-Path $projeto 'dados'
+  New-Item -ItemType Directory (Join-Path $projeto 'scripts')|Out-Null
+  foreach($nome in @('faxina.ps1','operacao-logica.ps1')){Copy-Item (Join-Path $PSScriptRoot $nome) (Join-Path $projeto 'scripts')}
+  Add-Content (Join-Path $projeto 'scripts/faxina.ps1') ("`nRemover '"+(Join-Path $projeto 'atalho/__pycache__')+"' 'ancestral fixture'")
+  & (Join-Path $projeto 'scripts/faxina.ps1') -Executar
+  $falhas=@()
+  if(!(Test-Path (Join-Path $projeto 'dados/alertas/relatorios/diarios'))){$falhas+='raiz privada alternativa apagada'}
+  $env:SUPPLY_VISION_PRIVADO=Join-Path $projeto '__pycache__'
+  New-Item -ItemType Directory $env:SUPPLY_VISION_PRIVADO|Out-Null
+  & (Join-Path $projeto 'scripts/faxina.ps1') -Executar
+  if(!(Test-Path (Join-Path $fora '__pycache__/sentinela'))){$falhas+='faxina atravessou junction ancestral'}
+  if(!(Test-Path $env:SUPPLY_VISION_PRIVADO)){$falhas+='raiz privada com nome de cache apagada'}
+  if($falhas.Count){throw ($falhas-join'; ')}
+  Write-Host '[OK] Faxina preserva raiz privada alternativa e recusa junction ancestral.'
+ }finally{
+  $env:SUPPLY_VISION_PRIVADO=$antesFaxina
+  $link=Join-Path $baseFaxina 'projeto/atalho'
+  if(Test-Path -LiteralPath $link){[IO.Directory]::Delete($link,$false)}
+  if(Test-Path -LiteralPath $baseFaxina){Remove-Item -LiteralPath $baseFaxina -Recurse -Force}
+ }
+}
 . (Join-Path $PSScriptRoot 'atualizacao-preparo.ps1')
 $base=Join-Path ([IO.Path]::GetTempPath()) ('sv-limpeza-'+[guid]::NewGuid().ToString('N'))
 $raiz=Join-Path $base 'instalacao';$processoProducao=$null

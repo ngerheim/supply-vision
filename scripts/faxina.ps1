@@ -18,9 +18,14 @@ function Remover([string]$caminho, [string]$motivo) {
   if (-not $caminho.StartsWith($Raiz + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase) -and -not $caminho.StartsWith([IO.Path]::GetFullPath($Privado).TrimEnd('\') + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) {
     throw "Alvo de limpeza fora do projeto: $caminho"
   }
-  if ((Get-Item -LiteralPath $caminho -Force).Attributes -band [IO.FileAttributes]::ReparsePoint) {
-    Write-Host "  [PULADO] link de diretorio: $caminho" -ForegroundColor Yellow
-    return
+  $raizPrivada = [IO.Path]::GetFullPath($Privado).TrimEnd('\','/')
+  if ($caminho -eq $raizPrivada -or ($motivo -eq 'pasta vazia' -and $caminho.StartsWith($raizPrivada + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase))) { return }
+  for ($atual = $caminho; $atual; $atual = Split-Path $atual -Parent) {
+    if ((Get-Item -LiteralPath $atual -Force).Attributes -band [IO.FileAttributes]::ReparsePoint) {
+      Write-Host "  [PULADO] link no caminho: $atual" -ForegroundColor Yellow
+      return
+    }
+    if ($atual -eq $Raiz) { break }
   }
   if (-not $script:jaListados.Add($caminho)) { return }
   $bytes = 0
@@ -46,7 +51,7 @@ Get-ChildItem -LiteralPath $Raiz -Directory -Recurse -Force -Filter '__pycache__
   ForEach-Object { Remover $_.FullName 'bytecode Python' }
 
 Write-Host "`n-- Pastas vazias remanescentes --" -ForegroundColor Yellow
-# privado\ fica de fora: as pastas de saida sao estruturais e nascem vazias.
+# A raiz privada configurada fica de fora: suas pastas estruturais nascem vazias.
 # Apaga-las faria a faxina desfazer o que o instalador acabou de criar.
 for ($passada = 1; $passada -le 3; $passada++) {
   Get-ChildItem -LiteralPath $Raiz -Directory -Recurse -Force -ErrorAction SilentlyContinue |
