@@ -8,17 +8,37 @@ function Validar-PastaPreparo([string]$Raiz,[string]$Preparo) {
  if((Split-Path $p -Parent)-ne(Split-Path $r -Parent)-or(Split-Path $p -Leaf)-notmatch('^'+[regex]::Escape($prefixo)+'[0-9a-f]{32}$')){throw 'Pasta de preparo fora do local autorizado.'}
  if((Test-Path $p)-and((Get-Item -LiteralPath $p -Force).Attributes-band[IO.FileAttributes]::ReparsePoint)){throw 'Preparo nao pode ser um link.'}
 }
+function Resolver-CaminhoDependencia([string]$Caminho,[int]$Saltos=0) {
+ if($Saltos-gt64){throw 'Ciclo no caminho de dependencia.'}
+ $completo=[IO.Path]::GetFullPath($Caminho);$atual=[IO.Path]::GetPathRoot($completo)
+ $partes=@($completo.Substring($atual.Length)-split'[\\/]'|Where-Object {$_})
+ for($i=0;$i-lt$partes.Count;$i++){
+  $atual=Join-Path $atual $partes[$i]
+  if(!(Test-Path -LiteralPath $atual)){continue}
+  $item=Get-Item -LiteralPath $atual -Force
+  if($item.Attributes-band[IO.FileAttributes]::ReparsePoint){
+   $alvo=@($item.Target)[0]
+   if(!$alvo){throw 'Link de dependencia sem destino verificavel.'}
+   if(![IO.Path]::IsPathRooted($alvo)){$alvo=Join-Path (Split-Path $atual -Parent) $alvo}
+   for($j=$i+1;$j-lt$partes.Count;$j++){$alvo=Join-Path $alvo $partes[$j]}
+   return Resolver-CaminhoDependencia $alvo ($Saltos+1)
+  }
+ }
+ return $atual
+}
 function Copiar-ArvoreDependencias([string]$Origem,[string]$Destino,[string[]]$Bases,[int]$Profundidade=0) {
  if($Profundidade-gt64){throw 'Ciclo ou profundidade excessiva nas dependencias.'}
+ $real=Resolver-CaminhoDependencia $Origem
+ $seguro=$false
+ foreach($base in $Bases){
+  $limite=[IO.Path]::GetFullPath($base).TrimEnd('\','/')
+  if($real-eq$limite-or$real.StartsWith($limite+[IO.Path]::DirectorySeparatorChar,[StringComparison]::OrdinalIgnoreCase)){$seguro=$true}
+ }
+ if(!$seguro){throw 'Link de dependencia fora de node_modules/venv/vendor; preparo cancelado.'}
+ if((Resolver-CaminhoDependencia $Destino)-ne[IO.Path]::GetFullPath($Destino)){throw 'Link no destino de dependencia; preparo cancelado.'}
  $item=Get-Item -LiteralPath $Origem -Force
  if($item.Attributes-band[IO.FileAttributes]::ReparsePoint){
-  $alvo=@($item.Target)[0]
-  if(!$alvo){throw 'Link de dependencia sem destino verificavel.'}
-  if(![IO.Path]::IsPathRooted($alvo)){$alvo=Join-Path (Split-Path $Origem -Parent) $alvo}
-  $alvo=[IO.Path]::GetFullPath($alvo)
-  $seguro=$false
-  foreach($base in $Bases){if($alvo.StartsWith($base,[StringComparison]::OrdinalIgnoreCase)){$seguro=$true}}
-  if(!$seguro){throw 'Link de dependencia fora de node_modules/venv/vendor; preparo cancelado.'}
+  $alvo=$real
   # Materializa o destino. Nenhum link para instalacao/preparo sobrevive a troca.
   $medirLink=!!(Get-Command Iniciar-PassoPreparo -ErrorAction SilentlyContinue)
   if($medirLink){Iniciar-PassoPreparo ('Materializacao de junction: '+$item.Name)}
