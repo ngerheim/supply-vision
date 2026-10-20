@@ -7,7 +7,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { SCHEMA_RELATORIOS } from '../lib/relatorios.ts';
 import { prepararRestauracao } from '../scripts/restauracao-segura.mjs';
 
-for (const falha of [null, 'email_notifications', 'daily_report_deliveries']) {
+for (const falha of [null, 'email_notifications', 'daily_report_deliveries', 'report_jobs']) {
   void test(`restauracao prepara ambas as filas sem tocar origem/alvo: ${falha || 'sucesso'}`, () => {
     const dir = criarTemporarioTeste('sv-restauracao-');
     const origem = path.join(dir, 'origem.sqlite'), temporario = path.join(dir, 'novo.sqlite');
