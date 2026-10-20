@@ -16,7 +16,10 @@ $antes=$env:SUPPLY_VISION_PRIVADO
  $alternativo=Join-Path $pasta 'dados alternativos'
  try{
   $env:SUPPLY_VISION_PRIVADO=$alternativo
-  $credencial=[pscredential]::new('DOMINIO\ficticio',(ConvertTo-SecureString 'ficticia' -AsPlainText -Force))
+  $senha=New-Object Security.SecureString
+  foreach($caractere in 'ficticia'.ToCharArray()){$senha.AppendChar($caractere)}
+  $senha.MakeReadOnly()
+  $credencial=[pscredential]::new('DOMINIO\ficticio',$senha)
   & ([scriptblock]::Create($codigo)) -CredencialTarefa $credencial
   if($script:acaoVigilancia.Arguments-notlike('*-PastaPrivada "'+$alternativo+'"')){throw 'Vigilancia nao transporta raiz privada alternativa.'}
   if(!(Testar-IdentidadeTarefa @{Actions=$script:acaoVigilancia} (Split-Path $PSScriptRoot) 'vigiar-operacao.ps1')){throw 'Acao nova nao reconhecida.'}
