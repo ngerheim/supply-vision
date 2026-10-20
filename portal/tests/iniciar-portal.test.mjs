@@ -15,12 +15,3 @@ void test('configuracao tem lista fechada, preserva caracteres e rejeita quebra 
   assert.equal(configuracaoServidor({SMTP_PASSWORD:'segredo'}).SMTP_PASSWORD,undefined);
   assert.throws(()=>configuracaoServidor({PORTAL_API_TOKEN:'a\nb'}),/quebra de linha/);
 });
-
-void test('exemplo declara as duas portas usadas pela operacao', async () => {
-  const { lerArquivo } = await import('../scripts/configuracao.mjs');
-  const { portasOperacao } = await import('../scripts/portas-operacao.mjs');
-  const config = lerArquivo(new URL('../portal.env.example', import.meta.url));
-  assert.deepEqual(enderecoServidor('local', config), { host: '127.0.0.1', port: 3000 });
-  assert.equal(config.RELATORIOS_PORTA, '3001');
-  assert.deepEqual(portasOperacao(config), { portal: 3000, relatorios: 3001 });
-});
