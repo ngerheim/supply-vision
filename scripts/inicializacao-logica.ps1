@@ -3,10 +3,22 @@
 function Testar-Elevacao {
  return ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 }
+function Testar-IdentidadeTarefa($Tarefa,[string]$Raiz,[string]$Script='supervisor.ps1') {
+ $acoes=@($Tarefa.Actions)
+ if(!$Tarefa-or$acoes.Count-ne1){return $false}
+ $acao=$acoes[0];$raizCompleta=[IO.Path]::GetFullPath($Raiz).TrimEnd('\','/')
+ $exe="$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe"
+ if([string]$acao.Execute-ne$exe-or[string]$acao.WorkingDirectory-ne$raizCompleta){return $false}
+ $arquivo=Join-Path $raizCompleta ('scripts\'+$Script)
+ $padrao='^-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "'+[regex]::Escape($arquivo)+'"'
+ if($Script-eq'supervisor.ps1'){$padrao+=' -SemLogin -NodeExecutavel "(?:[A-Za-z]:\\|\\\\)[^"]+" -PastaPrivada "(?:[A-Za-z]:\\|\\\\)[^"]+"'}
+ if($Script-eq'vigiar-operacao.ps1'){$padrao+='(?: -PastaPrivada "(?:[A-Za-z]:\\|\\\\)[^"]+")?'}
+ return [string]$acao.Arguments-match($padrao+'$')
+}
 function Obter-TarefaSupplyVision([string]$Raiz) {
  if(!(Get-Command Get-ScheduledTask -ErrorAction SilentlyContinue)){return $null}
  $t=Get-ScheduledTask -TaskName 'Supply Vision' -TaskPath '\' -ErrorAction SilentlyContinue
- if($t-and([string]$t.Actions.Arguments).Contains((Join-Path $Raiz 'scripts\supervisor.ps1'))){return $t}
+ if(Testar-IdentidadeTarefa $t $Raiz){return $t}
  return $null
 }
 function Obter-ModoInicializacao([string]$Raiz) {
@@ -101,7 +113,7 @@ function Definir-ModoInicializacao([string]$Raiz,[string]$Privado,[ValidateSet('
   if(!(Testar-SupervisorEncerrado $Privado)){throw 'Pare a operacao e aguarde seu encerramento antes de mudar o modo.'}
  }
  $t=Get-ScheduledTask -TaskName 'Supply Vision' -TaskPath '\' -ErrorAction SilentlyContinue
- if($t-and!(Obter-TarefaSupplyVision $Raiz)){throw 'Ja existe uma tarefa Supply Vision de outra instalacao. Nao foi alterada.'}
+ if($t-and!(Testar-IdentidadeTarefa $t $Raiz)){throw 'Ja existe uma tarefa Supply Vision de outra instalacao. Nao foi alterada.'}
  $plano=Plano-Inicializacao $Modo
  if($plano.CriarTarefa){
   if(!$Credencial){throw 'O modo computador exige a credencial da conta do dono (ContaPersonalizada).'}
@@ -124,7 +136,7 @@ function Definir-ModoInicializacao([string]$Raiz,[string]$Privado,[ValidateSet('
   $tarefa.SetSecurityDescriptor(($sddl+'(A;;GRGX;;;'+$sid+')'),0)
   }catch{
    # Remove somente a tarefa criada nesta tentativa se a ativacao falhar.
-   if(!$t){Unregister-ScheduledTask -TaskName 'Supply Vision' -TaskPath '\' -Confirm:$false -ErrorAction SilentlyContinue}
+   if(!$t-and(Obter-TarefaSupplyVision $Raiz)){Unregister-ScheduledTask -TaskName 'Supply Vision' -TaskPath '\' -Confirm:$false -ErrorAction SilentlyContinue}
    throw
   }
  }
