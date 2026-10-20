@@ -46,11 +46,9 @@ export function ChangeHistory({ users }: JsonData) {
     setPage(1);
   };
   useEffect(() => {
-    // Flag local por execucao do efeito. Trocar de pagina rapido dispara varias
-    // consultas: sem isto, uma resposta lenta sobrescreveria outra mais nova.
-    // O cleanup desliga a flag, o que tambem cobre o componente sair da tela
-    // antes de a resposta chegar.
+    // O cancelamento descarta respostas superadas e interrompe a leitura HTTP.
     let ativa = true;
+    const controller = new AbortController();
     // setState direto no corpo do efeito dispara renderizacao em cascata; o
     // microtask adia para depois do efeito e mantem o indicador de carregando.
     queueMicrotask(() => {
@@ -62,34 +60,37 @@ export function ChangeHistory({ users }: JsonData) {
     const p = new URLSearchParams(Object.entries(f).filter(([, v]) => v));
     p.set('page', String(page));
     p.set('pageSize', '50');
-    void api(`/api/audit?${p}`)
-      .then((result: AnyRow) => {
-        if (!ativa) return; // resposta superada: descarta
-        setLogs(result.logs);
-        setMeta({
-          page: result.page,
-          pageCount: result.pageCount,
-          total: result.total,
-          pageSize: result.pageSize,
+    const timer = setTimeout(() => {
+      void api(`/api/audit?${p}`, { signal: controller.signal })
+        .then((result: AnyRow) => {
+          if (!ativa) return; // resposta superada: descarta
+          setLogs(result.logs);
+          setMeta({
+            page: result.page,
+            pageCount: result.pageCount,
+            total: result.total,
+            pageSize: result.pageSize,
+          });
+        })
+        .catch((e: unknown) => {
+          // Sem este catch, uma indisponibilidade momentanea do servidor virava
+          // rejeicao sem tratamento e a tela ficava carregando para sempre.
+          if (!ativa) return;
+          setErro(
+            e instanceof Error
+              ? e.message
+              : 'Não foi possível carregar o histórico.',
+          );
+          setLogs([]);
+        })
+        .finally(() => {
+          if (ativa) setLoading(false);
         });
-      })
-      .catch((e: unknown) => {
-        // Sem este catch, uma indisponibilidade momentanea do servidor virava
-        // rejeicao sem tratamento e a tela ficava carregando para sempre.
-        if (!ativa) return;
-        setErro(
-          e instanceof Error
-            ? e.message
-            : 'Não foi possível carregar o histórico.',
-        );
-        setLogs([]);
-      })
-      .finally(() => {
-        if (ativa) setLoading(false);
-      });
-    // Invalida esta consulta se o componente sair da tela antes da resposta.
+    }, 250);
     return () => {
       ativa = false;
+      clearTimeout(timer);
+      controller.abort();
     };
   }, [f, page, recarregar]);
   const load = () => setRecarregar((n) => n + 1);
@@ -213,6 +214,11 @@ export function ChangeHistory({ users }: JsonData) {
               ))}
             </TableBody>
           </Table>
+          {loading && (
+            <output className="block p-8 text-sm text-muted-foreground">
+              Carregando histórico…
+            </output>
+          )}
           {!loading && erro && (
             <div className="p-8">
               <Alert variant="destructive">

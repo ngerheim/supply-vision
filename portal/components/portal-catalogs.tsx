@@ -21,6 +21,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { SearchSelect } from '@/components/search-select';
 import {
   Table,
   TableBody,
@@ -28,13 +29,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import {
-  type JsonData,
-  type AnyRow,
-  cnpj,
-  Field,
-  SelectField,
-} from './portal-presentation';
+import { type JsonData, type AnyRow, cnpj, Field } from './portal-presentation';
 import { useOrdenacao, CabecalhoOrdenavel } from './portal-table';
 
 export function CatalogPage({ type, rows, onAdd, onEdit, onDelete }: JsonData) {
@@ -198,7 +193,6 @@ function catalogHeaders(type: string) {
   if (type === 'suppliers') return ['Nome', 'CNPJ', 'Cidade', 'UF'];
   if (type === 'locations') return ['UF', 'Cidade'];
   if (type === 'units') return ['Unidade'];
-  if (type === 'items') return ['Nome'];
   return ['Nome'];
 }
 function catalogCells(type: string, r: AnyRow) {
@@ -206,7 +200,6 @@ function catalogCells(type: string, r: AnyRow) {
     return [r.tradeName, cnpj(r.cnpj), r.city || '—', r.state || '—'];
   if (type === 'locations') return [r.state, r.city];
   if (type === 'units') return [r.code];
-  if (type === 'items') return [r.name];
   return [r.name];
 }
 export function CatalogDialog({
@@ -219,15 +212,15 @@ export function CatalogDialog({
   const [form, setForm] = useState<AnyRow>(value || {});
   const t = form.type;
   return (
-    <Dialog open={open} onOpenChange={(x) => !x && onClose()}>
-      <DialogContent>
+    <Dialog open={open} onOpenChange={(x) => !x && !busy && onClose()}>
+      <DialogContent showCloseButton={!busy}>
         <DialogHeader>
           <DialogTitle>{form.id ? 'Editar' : 'Novo'} cadastro</DialogTitle>
           <DialogDescription>
             Os dados ficarão disponíveis para acordos e importações.
           </DialogDescription>
         </DialogHeader>
-        <div className="space-y-4">
+        <fieldset disabled={busy} className="space-y-4">
           {t === 'suppliers' && (
             <>
               <Field label="Nome do fornecedor *">
@@ -287,11 +280,13 @@ export function CatalogDialog({
           )}
           {t === 'locations' && (
             <>
-              <SelectField
+              <SearchSelect
+                disabled={busy}
+                searchable={false}
                 label="UF *"
                 value={form.state || ''}
                 onChange={(state: string) => setForm({ ...form, state })}
-                rows={BRAZILIAN_STATES.map((state) => ({
+                options={BRAZILIAN_STATES.map((state) => ({
                   id: state,
                   name: state,
                 }))}
@@ -304,12 +299,12 @@ export function CatalogDialog({
               </Field>
             </>
           )}
-        </div>
+        </fieldset>
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>
+          <Button variant="outline" disabled={busy} onClick={onClose}>
             Cancelar
           </Button>
-          <Button disabled={busy} onClick={() => onSave(form)}>
+          <Button disabled={busy} onClick={() => !busy && onSave(form)}>
             {busy ? (
               <LoaderCircle className="animate-spin" />
             ) : (

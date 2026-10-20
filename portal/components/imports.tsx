@@ -1,6 +1,12 @@
 'use client';
 import { useRef, useState } from 'react';
-import { AlertTriangle, CheckCircle2, Download, LoaderCircle, Upload } from 'lucide-react';
+import {
+  AlertTriangle,
+  CheckCircle2,
+  Download,
+  LoaderCircle,
+  Upload,
+} from 'lucide-react';
 import { api, ApiError, errorText } from '@/lib/api';
 import { MAX_IMPORT_BYTES, normalizeImportText } from '@/lib/domain';
 import { SearchSelect } from '@/components/search-select';
@@ -33,12 +39,15 @@ export function Imports({
     [error, setError] = useState('');
   const [published, setPublished] = useState<AnyRow | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
+  const busyRef = useRef(false);
   const reset = () => {
     setResult(null);
     setPublished(null);
     setError('');
   };
   const choose = (candidate?: File) => {
+    if (busyRef.current) return;
+    if (fileInput.current) fileInput.current.value = '';
     reset();
     setFile(null);
     if (!candidate) return;
@@ -53,14 +62,16 @@ export function Imports({
     setFile(candidate);
   };
   const request = async (preview: boolean) => {
-    if (!file) return null;
+    if (!file || !agreement)
+      throw new Error('Selecione o acordo e a planilha antes de conferir.');
     const body = new FormData();
     body.set('file', file);
     const path = `/api/imports/agreement/${agreement}`;
     return api(path + (preview ? '?preview=1' : ''), { method: 'POST', body });
   };
   const analyze = async () => {
-    if (busy) return;
+    if (busyRef.current || !file || !agreement) return;
+    busyRef.current = true;
     setBusy(true);
     setError('');
     setPublished(null);
@@ -71,11 +82,20 @@ export function Imports({
       setError(errorText(cause));
       setResult(null);
     } finally {
+      busyRef.current = false;
       setBusy(false);
     }
   };
   const publish = async () => {
-    if (busy || !result?.valid || checkedCatalogs !== data.catalogs) return;
+    if (
+      busyRef.current ||
+      !file ||
+      !agreement ||
+      !result?.valid ||
+      checkedCatalogs !== data.catalogs
+    )
+      return;
+    busyRef.current = true;
     setBusy(true);
     setError('');
     try {
@@ -84,15 +104,24 @@ export function Imports({
       setResult(null);
       setFile(null);
       if (fileInput.current) fileInput.current.value = '';
-      await onUpdated();
+      try {
+        await onUpdated();
+      } catch {
+        setError(
+          'Importação publicada, mas não foi possível atualizar a tela. Atualize os dados para conferir o histórico.',
+        );
+      }
     } catch (cause) {
       setError(errorText(cause));
       setResult(cause instanceof ApiError ? cause.details : null);
     } finally {
+      busyRef.current = false;
       setBusy(false);
     }
   };
   const save = async (issue: AnyRow, targetId: string) => {
+    if (busyRef.current || !canManageMappings || !targetId) return;
+    busyRef.current = true;
     setBusy(true);
     setError('');
     try {
@@ -106,7 +135,12 @@ export function Imports({
         {
           method: existing ? 'PUT' : 'POST',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ expectedRevision: existing?.revision, source: issue.valor, targetId, active: true }),
+          body: JSON.stringify({
+            expectedRevision: existing?.revision,
+            source: issue.valor,
+            targetId,
+            active: true,
+          }),
         },
       );
       setResult(await request(true));
@@ -114,6 +148,7 @@ export function Imports({
     } catch (cause) {
       setError(errorText(cause));
     } finally {
+      busyRef.current = false;
       setBusy(false);
     }
   };
@@ -145,6 +180,7 @@ export function Imports({
         <CardContent className="space-y-5">
           <fieldset disabled={busy} className="space-y-4">
             <SearchSelect
+              disabled={busy}
               label="Acordo de destino"
               value={agreement}
               onChange={(value) => {
@@ -205,7 +241,16 @@ export function Imports({
               <AlertDescription>{error}</AlertDescription>
             </Alert>
           )}
-          <ImportPreview result={result} catalogs={data.catalogs} canManageMappings={canManageMappings} busy={busy} onSave={save} onCatalog={onCatalog} ready={ready} publish={publish}/>
+          <ImportPreview
+            result={result}
+            catalogs={data.catalogs}
+            canManageMappings={canManageMappings}
+            busy={busy}
+            onSave={save}
+            onCatalog={onCatalog}
+            ready={ready}
+            publish={publish}
+          />
           {published && (
             <Alert>
               <CheckCircle2 />
@@ -218,7 +263,11 @@ export function Imports({
           )}
         </CardContent>
       </Card>
-      {Number(data.totalImports)>data.imports.length&&<output>Mostrando as 100 importações mais recentes de {data.totalImports}.</output>}
+      {Number(data.totalImports) > data.imports.length && (
+        <output>
+          Mostrando as 100 importações mais recentes de {data.totalImports}.
+        </output>
+      )}
       <ImportHistory rows={data.imports} total={data.totalImports} />
     </div>
   );

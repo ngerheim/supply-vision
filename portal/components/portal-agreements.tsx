@@ -2,7 +2,7 @@
 import { correspondeSituacaoAcordo } from '@/lib/situacao-acordos';
 import { api, errorText } from '@/lib/api';
 import { correspondeBusca } from '@/lib/busca';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Download, Pencil, Plus, Search, Trash2, Upload } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -50,6 +50,7 @@ export function Agreements({ data, onOpen, onNew, canWrite }: JsonData) {
           <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             className="pl-9"
+            aria-label="Pesquisar acordos"
             placeholder="Número, fornecedor, CNPJ ou cidade"
             value={q}
             onChange={(e) => setQ(e.target.value)}
@@ -57,6 +58,7 @@ export function Agreements({ data, onOpen, onNew, canWrite }: JsonData) {
         </div>
         <NativeSelect
           className="w-48"
+          aria-label="Situação do acordo"
           value={status}
           onChange={(e) => setStatus(e.target.value)}
         >
@@ -99,13 +101,12 @@ function AgreementTable({ rows, onOpen, title }: JsonData) {
   const pageCount = Math.max(1, Math.ceil(rows.length / 50)),
     currentPage = Math.min(page, pageCount);
   const { ordem, alternar, ordenar } = useOrdenacao('agreements');
-  /* Itens e vigencia sao numero e data: ordenar pelo texto exibido poria "10" antes de "9" e 01/12 antes de 02/01, entao ordena-se pelo valor de origem. */ const ordenadas =
-    ordenar(rows, (r: AnyRow) => [
-      r.number,
-      r.supplier,
-      r.locations,
-      r.effectiveStatus || r.status,
-    ]);
+  const ordenadas = ordenar(rows, (r: AnyRow) => [
+    r.number,
+    r.supplier,
+    r.locations,
+    r.effectiveStatus || r.status,
+  ]);
   return (
     <Card>
       <CardHeader className="border-b">
@@ -171,52 +172,90 @@ export function AgreementDetail({
   onDelete,
   run,
 }: JsonData) {
-  const [detail, setDetail] = useState<AnyRow | null>(null),
+  const [snapshot, setSnapshot] = useState<{
+      key: string;
+      detail: AnyRow;
+    } | null>(null),
     [q, setQ] = useState(''),
     [loadError, setLoadError] = useState(''),
     [moreBusy, setMoreBusy] = useState(false),
     [ordem, setOrdem] = useState({ coluna: 0, direcao: 1 });
   const sortKeys = ['item', 'model', 'location', 'brands', 'unit', 'price'];
   const querySort = `sort=${sortKeys[ordem.coluna]}&direction=${ordem.direcao === 1 ? 'asc' : 'desc'}`;
+  const key = `${id}?${querySort}`;
+  const detail = snapshot?.key === key ? snapshot.detail : null;
+  const sequence = useRef(0);
+  const controller = useRef<AbortController | null>(null);
+  const moreRequest = useRef<number | null>(null);
+  const cancelLoad = useCallback(() => {
+    sequence.current++;
+    controller.current?.abort();
+  }, []);
   const alternar = (coluna: number) =>
     setOrdem((atual) => ({
       coluna,
       direcao: atual.coluna === coluna ? -atual.direcao : 1,
     }));
   const loadMore = async () => {
-    if (!detail || moreBusy) return;
+    if (!detail || moreRequest.current !== null) return;
+    const request = sequence.current;
+    moreRequest.current = request;
     setMoreBusy(true);
     try {
       const next = await api(
         `/api/agreements/${id}?${querySort}&offset=${detail.items.length}`,
+        { signal: controller.current?.signal },
       );
+      if (request !== sequence.current) return;
       if (
         next.version !== detail.version ||
         next.totalItems !== detail.totalItems
       ) {
-        setDetail(null);
+        setSnapshot(null);
         await load();
         return;
       }
-      setDetail({ ...next, items: [...detail.items, ...next.items] });
+      setSnapshot({
+        key,
+        detail: { ...next, items: [...detail.items, ...next.items] },
+      });
     } catch (error) {
-      setLoadError(errorText(error));
+      if (request === sequence.current) setLoadError(errorText(error));
     } finally {
-      setMoreBusy(false);
+      if (request === sequence.current) {
+        moreRequest.current = null;
+        setMoreBusy(false);
+      }
     }
   };
   const load = useCallback(async () => {
+    const request = ++sequence.current;
+    controller.current?.abort();
+    const pending = new AbortController();
+    controller.current = pending;
+    moreRequest.current = null;
+    setMoreBusy(false);
+    setLoadError('');
     try {
-      const next = await api(`/api/agreements/${id}?${querySort}`);
-      setDetail(next);
-      setLoadError('');
+      const next = await api(`/api/agreements/${key}`, {
+        signal: pending.signal,
+      });
+      if (request !== sequence.current) return;
+      setSnapshot({ key, detail: next });
     } catch (error) {
-      setLoadError(errorText(error));
+      if (request === sequence.current) setLoadError(errorText(error));
     }
-  }, [id, querySort]);
+  }, [key]);
   useEffect(() => {
-    void load();
-  }, [load, revision]);
+    let active = true;
+    queueMicrotask(() => {
+      if (active) void load();
+    });
+    return () => {
+      active = false;
+      cancelLoad();
+    };
+  }, [load, revision, cancelLoad]);
   if (loadError)
     return (
       <div className="space-y-4">
@@ -386,11 +425,12 @@ export function AgreementDetail({
                           onClick={() =>
                             confirm('Remover esta condição?') &&
                             run(async () => {
+                              const request = sequence.current;
                               await api(
                                 `/api/items/${r.id}?expectedRevision=${encodeURIComponent(String(r.revision))}`,
                                 { method: 'DELETE' },
                               );
-                              await load();
+                              if (request === sequence.current) await load();
                             }, 'Condição removida.')
                           }
                         >
@@ -429,6 +469,11 @@ function Status({ value }: JsonData) {
     active: [
       'Vigente',
       'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200',
+    ],
+    scheduled: ['Agendado', 'bg-sky-50 text-sky-700 ring-1 ring-sky-200'],
+    expiring: [
+      'Vence em até 60 dias',
+      'bg-amber-50 text-amber-700 ring-1 ring-amber-200',
     ],
     expired: ['Expirado', 'bg-red-50 text-red-700 ring-1 ring-red-200'],
     suspended: ['Suspenso', 'bg-amber-50 text-amber-700 ring-1 ring-amber-200'],

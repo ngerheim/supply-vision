@@ -69,9 +69,15 @@ export function AgreementDialog({
     form.number?.trim() && form.supplierId && form.startDate && selected.length;
   return (
     <Dialog open={open} onOpenChange={(next) => !next && !busy && onClose()}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
+      <DialogContent
+        showCloseButton={!busy}
+        className="max-h-[90vh] overflow-y-auto sm:max-w-3xl"
+      >
         <DialogHeader>
           <DialogTitle>{form.id ? 'Editar acordo' : 'Novo acordo'}</DialogTitle>
+          <DialogDescription>
+            Informe o fornecedor, a vigência e as localidades do acordo.
+          </DialogDescription>
         </DialogHeader>
         <form
           onSubmit={(event) => {
@@ -92,6 +98,7 @@ export function AgreementDialog({
                 />
               </Field>
               <SearchSelect
+                disabled={busy}
                 label="Fornecedor / CNPJ *"
                 value={form.supplierId || ''}
                 onChange={(supplierId) => setForm({ ...form, supplierId })}
@@ -125,6 +132,7 @@ export function AgreementDialog({
                 />
               </Field>
               <SearchSelect
+                disabled={busy}
                 label="Situação"
                 value={form.status || 'active'}
                 onChange={(status) => setForm({ ...form, status })}
@@ -137,6 +145,7 @@ export function AgreementDialog({
             <div className="space-y-2">
               <div className="grid gap-3 sm:grid-cols-2">
                 <SearchSelect
+                  disabled={busy}
                   searchable={false}
                   label="Filtrar por UF"
                   value={state}
@@ -165,7 +174,7 @@ export function AgreementDialog({
                       onCheckedChange={() => toggle(row.id)}
                     />
                     <span>
-                      {row.city}
+                      {row.city} / {row.state}
                     </span>
                   </label>
                 ))}
@@ -255,7 +264,10 @@ export function ItemDialog({
     Number(form.price) >= 0;
   return (
     <Dialog open={open} onOpenChange={(next) => !next && !busy && onClose()}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
+      <DialogContent
+        showCloseButton={!busy}
+        className="max-h-[90vh] overflow-y-auto sm:max-w-3xl"
+      >
         <DialogHeader>
           <DialogTitle>
             {editing ? 'Editar condição' : 'Nova condição acordada'}
@@ -274,6 +286,7 @@ export function ItemDialog({
           <fieldset disabled={busy} className="space-y-4">
             <div className="grid gap-4 sm:grid-cols-2">
               <SearchSelect
+                disabled={busy}
                 label="Peça ou serviço *"
                 value={form.catalogItemId || ''}
                 onChange={(catalogItemId) =>
@@ -282,6 +295,7 @@ export function ItemDialog({
                 options={options('items')}
               />
               <SearchSelect
+                disabled={busy}
                 label="Localidade do acordo *"
                 value={form.locationId || ''}
                 onChange={(locationId) => setForm({ ...form, locationId })}
@@ -306,6 +320,7 @@ export function ItemDialog({
                 </span>
               </Field>
               <SearchSelect
+                disabled={busy}
                 label="Unidade *"
                 value={form.unitId || ''}
                 onChange={(unitId) => setForm({ ...form, unitId })}
@@ -314,6 +329,7 @@ export function ItemDialog({
             </div>
             {editing ? (
               <SearchSelect
+                disabled={busy}
                 label="Modelo *"
                 value={form.modelId || ''}
                 onChange={(modelId) => setForm({ ...form, modelId })}

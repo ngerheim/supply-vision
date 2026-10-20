@@ -9,7 +9,7 @@ import {
   filtrosVazios,
   parametrosBusca,
 } from '@/lib/filtros-busca';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { AlertTriangle, LoaderCircle, Search } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
@@ -42,6 +42,8 @@ export function SearchPage({
     [searched, setSearched] = useState(false),
     [searchError, setSearchError] = useState('');
   const [searchedQuery, setSearchedQuery] = useState('');
+  const searchSequence = useRef(0);
+  const searchController = useRef<AbortController | null>(null);
   type Options = Record<(typeof CAMPOS_BUSCA)[number], SearchOption[]>;
   const [optionResult, setOptionResult] = useState<{
     query: string;
@@ -51,6 +53,20 @@ export function SearchPage({
     [optionRevision, setOptionRevision] = useState(0);
   const query = parametrosBusca(filters).toString();
   const loadingOptions = optionResult?.query !== query || !!optionError;
+  const cancelSearch = () => {
+    searchSequence.current++;
+    searchController.current?.abort();
+    setLoading(false);
+    setSearchError('');
+    setSearched(false);
+  };
+  useEffect(
+    () => () => {
+      searchSequence.current++;
+      searchController.current?.abort();
+    },
+    [],
+  );
   useEffect(() => {
     const controller = new AbortController();
     const timer = setTimeout(() => {
@@ -96,21 +112,27 @@ export function SearchPage({
     })),
   };
   const search = async () => {
+    const request = ++searchSequence.current;
+    searchController.current?.abort();
+    const pending = new AbortController();
+    searchController.current = pending;
     setLoading(true);
     setSearchError('');
     try {
       const p = parametrosBusca(filters);
-      const x = await api(`/api/search?${p}`);
+      const x = await api(`/api/search?${p}`, { signal: pending.signal });
+      if (request !== searchSequence.current) return;
       setRows(x.rows);
       setMeta({ total: x.total, truncated: x.truncated, limit: x.limit });
       setSearched(true);
       setSearchedQuery(query);
     } catch (error) {
+      if (request !== searchSequence.current) return;
       setSearchError(errorText(error));
       setSearched(false);
       setRows([]);
     } finally {
-      setLoading(false);
+      if (request === searchSequence.current) setLoading(false);
     }
   };
   return (
@@ -123,9 +145,10 @@ export function SearchPage({
                 key={campo}
                 label={labels[campo]}
                 value={filters[campo]}
-                onChange={(v: string[]) =>
-                  setFilters({ ...filters, [campo]: v })
-                }
+                onChange={(v: string[]) => {
+                  cancelSearch();
+                  setFilters({ ...filters, [campo]: v });
+                }}
                 options={optionResult?.options[campo] || []}
                 selectedOptions={selectedOptions[campo]}
                 loading={loadingOptions}
@@ -137,6 +160,7 @@ export function SearchPage({
               variant="ghost"
               className="text-muted-foreground"
               onClick={() => {
+                cancelSearch();
                 setFilters(filtrosVazios());
                 setSearched(false);
                 setRows([]);
