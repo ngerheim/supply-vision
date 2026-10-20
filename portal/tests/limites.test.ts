@@ -10,6 +10,8 @@
 
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { acordosApi } from '../lib/acordos-api.ts';
+import type { ContextoApi, User } from '../lib/api-compartilhada.ts';
 
 // Importa os valores REAIS de produção. Antes eles eram copiados à mão aqui,
 // e a cópia batia consigo mesma: mudar o limite de verdade não quebrava teste
@@ -21,7 +23,10 @@ import {
 
 const cabe = (texto: string, maximo: number) => {
   try { exigeTexto(texto, maximo, 'campo'); return true; }
-  catch { return false; }
+  catch (erro) {
+    if (!(erro instanceof EntradaInvalida)) throw erro;
+    return false;
+  }
 };
 
 void test('texto exatamente no limite é aceito', () => {
@@ -45,10 +50,33 @@ void test('espaços em volta não consomem o limite', () => {
   assert.equal(cabe('  ' + 'A'.repeat(LIMITES_CAMPO.nome) + '  ', LIMITES_CAMPO.nome), true);
 });
 
-void test('lista no limite passa e acima não', () => {
+void test('handlers aceitam lista no limite e recusam acima antes de consultar o banco', async () => {
   const lista = (n: number) => Array.from({ length: n }, (_, i) => `id-${i}`);
-  assert.equal(lista(LIMITE_LISTA).length <= LIMITE_LISTA, true);
-  assert.equal(lista(LIMITE_LISTA + 1).length <= LIMITE_LISTA, false);
+  const chegouAoBanco = new Error('validacao concluida');
+  // Substitui so a persistencia: os handlers e seus validadores sao reais.
+  const contexto = {
+    jsonBody: (request: Request) => request.json(),
+    first: async () => { throw chegouAoBanco; },
+    fail: (error: string, status = 400) => Response.json({ error }, { status }),
+  } as unknown as ContextoApi;
+  const api = acordosApi(contexto);
+  const user: User = { id: 'fixture', name: 'Pessoa Ficticia', email: 'fixture@example.com', role: 'admin' };
+  const pedido = (body: object) => new Request('http://portal.test/api/agreements', { method: 'POST', body: JSON.stringify(body) });
+  for (const quantidade of [LIMITE_LISTA, LIMITE_LISTA + 1]) {
+    const acordo = pedido({ number: 'FICTICIO', supplierId: 'fixture', startDate: '2026-01-01', locationIds: lista(quantidade) });
+    const condicao = pedido({ catalogItemId: 'fixture', locationId: 'fixture', unitId: 'fixture', modelIds: lista(quantidade), price: 10 });
+    if (quantidade === LIMITE_LISTA) {
+      await assert.rejects(api.createAgreement(acordo, user), erro => erro === chegouAoBanco);
+      await assert.rejects(api.addAgreementItems(condicao, user, 'fixture'), erro => erro === chegouAoBanco);
+    } else {
+      const respostaAcordo = await api.createAgreement(acordo, user);
+      assert.equal(respostaAcordo.status, 400);
+      assert.match((await respostaAcordo.json()).error, /acima do limite/);
+      const respostaCondicao = await api.addAgreementItems(condicao, user, 'fixture');
+      assert.equal(respostaCondicao.status, 400);
+      assert.match((await respostaCondicao.json()).error, /no máximo/);
+    }
+  }
 });
 
 void test('login tem teto menor que o das demais rotas JSON', () => {
@@ -79,7 +107,7 @@ void test('exigeTexto lança EntradaInvalida, que a API traduz em 400', () => {
 
 void test('mensagem de erro diz qual campo e qual limite', () => {
   try {
-    exigeTexto('A'.repeat(200), LIMITES_CAMPO.nome, 'fornecedor');
+    exigeTexto('A'.repeat(LIMITES_CAMPO.nome + 1), LIMITES_CAMPO.nome, 'fornecedor');
     assert.fail('deveria ter recusado');
   } catch (erro) {
     assert.ok(erro instanceof EntradaInvalida);

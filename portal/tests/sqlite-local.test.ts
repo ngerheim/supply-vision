@@ -23,8 +23,8 @@ void test('leitura durante reserva de escritor externo funciona sem bookmark, in
   const {arquivo, db} = await fixture(t);
   await db.prepare("INSERT INTO dados VALUES (1,'antes')").run();
   const controle = new Int32Array(new SharedArrayBuffer(4));
-  const escritor = new Worker(`const {workerData,parentPort}=require('node:worker_threads');const {DatabaseSync}=require('node:sqlite');const db=new DatabaseSync(workerData.arquivo);db.exec("BEGIN IMMEDIATE; UPDATE dados SET valor='depois' WHERE id=1");parentPort.postMessage('ocupado');Atomics.wait(new Int32Array(workerData.controle),0,0,2000);db.exec('COMMIT');db.close();`, {eval:true,workerData:{arquivo,controle:controle.buffer}});
-  const fim = new Promise<void>((r,j) => { escritor.once('exit',()=>r());escritor.once('error',j); });
+  const escritor = new Worker(`const {workerData,parentPort}=require('node:worker_threads');const {DatabaseSync}=require('node:sqlite');const db=new DatabaseSync(workerData.arquivo);db.exec("BEGIN IMMEDIATE; UPDATE dados SET valor='depois' WHERE id=1");parentPort.postMessage('ocupado');Atomics.wait(new Int32Array(workerData.controle),0,0,30000);if(Atomics.load(new Int32Array(workerData.controle),0)!==1)throw new Error('reserva sem liberacao');db.exec('COMMIT');db.close();`, {eval:true,workerData:{arquivo,controle:controle.buffer}});
+  const fim = new Promise<void>((r,j) => { escritor.once('exit',codigo=>codigo===0?r():j(new Error(`Escritor encerrou com codigo ${codigo}`)));escritor.once('error',j); });
   await new Promise<void>((r,j) => { escritor.once('message',()=>r());escritor.once('error',j); });
   try {
     const rs = await Promise.all(Array.from({length:20},()=>db.prepare('SELECT valor FROM dados WHERE id=1').first<{valor:string}>()));
@@ -72,7 +72,7 @@ void test('batch de escrita aguarda reserva externa sem reenviar ou confirmar pa
   const {arquivo,db}=await fixture(t);
   await db.prepare("INSERT INTO dados VALUES (1,'antes')").run();
   const escritor=new Worker(`const {workerData,parentPort}=require('node:worker_threads');const {DatabaseSync}=require('node:sqlite');const db=new DatabaseSync(workerData);db.exec("BEGIN IMMEDIATE; UPDATE dados SET valor='externo' WHERE id=1");parentPort.postMessage('ocupado');Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,150);db.exec('COMMIT');db.close();`,{eval:true,workerData:arquivo});
-  const fim=new Promise<void>((r,j)=>{escritor.once('exit',()=>r());escritor.once('error',j);});
+  const fim=new Promise<void>((r,j)=>{escritor.once('exit',codigo=>codigo===0?r():j(new Error(`Escritor encerrou com codigo ${codigo}`)));escritor.once('error',j);});
   await new Promise<void>((r,j)=>{escritor.once('message',()=>r());escritor.once('error',j);});
   try {
     await db.batch([db.prepare("INSERT INTO dados VALUES (2,'local')"),db.prepare("UPDATE dados SET valor='confirmado' WHERE id=1")]);

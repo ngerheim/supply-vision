@@ -198,9 +198,12 @@ void test('recusa entrada acima do teto de expansão', async () => {
 
 void test('recusa DEFLATE corrompido', async () => {
   const zip = montarZip(base());
-  // Estraga bytes no meio dos dados comprimidos da primeira entrada.
+  assert.equal((await inspecionarXlsxZip(zip)).ok, true);
+  // BTYPE=3 e reservado no DEFLATE. Altera somente o conteudo comprimido,
+  // preservando nomes, tamanhos e assinaturas dos cabecalhos ZIP.
   const copia = zip.slice();
-  for (let i = 60; i < 70 && i < copia.length; i++) copia[i] = 0xff;
+  const inicioDados = 30 + new DataView(zip.buffer).getUint16(26, true);
+  copia[inicioDados] = 0x07;
   const r = await inspecionarXlsxZip(copia);
   assert.equal(r.ok, false);
 });
@@ -302,7 +305,9 @@ void test('ignora assinatura falsa de EOCD dentro do comentário', async () => {
   // Um ZIP legítimo pode ter, no comentário, bytes iguais a 0x06054b50. A
   // busca precisa continuar para trás até achar o EOCD verdadeiro.
   const zip = montarZip(base());
-  const falso = new Uint8Array([0x50, 0x4b, 0x05, 0x06, 0, 0, 0, 0, 0, 0]);
+  // Ao menos 22 bytes: a assinatura falsa precisa entrar na janela de busca.
+  const falso = new Uint8Array(30);
+  new DataView(falso.buffer).setUint32(0, 0x06054b50, true);
   const comComentario = new Uint8Array(zip.length + falso.length);
   comComentario.set(zip, 0);
   comComentario.set(falso, zip.length);
