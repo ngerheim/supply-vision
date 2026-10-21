@@ -9,9 +9,9 @@ import { arquivosTesteCI, verificarTestesCI } from '../../scripts/ci/verificar-t
 void test('guarda do CI recusa arquivo ausente, inclusive nome construido em laco', t => {
   const raiz = fs.mkdtempSync(path.join(os.tmpdir(), 'sv-ci-referencias-'));
   t.after(() => fs.rmSync(raiz, { recursive: true, force: true }));
-  const workflow = `run: node --test tests/sessao.test.mjs\nrun: ./portal/scripts/teste-instalacao-nova.ps1\nforeach ($teste in @('testar-operacao')) { & ./scripts/$teste.ps1 }`;
+  const workflow = `run: node --test tests/sessao.test.mjs\nrun: ./portal/scripts/teste-portal-ponta-a-ponta.ps1\nforeach ($teste in @('testar-operacao')) { & ./scripts/$teste.ps1 }`;
   const arquivos = arquivosTesteCI(workflow);
-  assert.deepEqual(arquivos, ['portal/scripts/teste-instalacao-nova.ps1', 'portal/tests/sessao.test.mjs', 'scripts/testar-operacao.ps1']);
+  assert.deepEqual(arquivos, ['portal/scripts/teste-portal-ponta-a-ponta.ps1', 'portal/tests/sessao.test.mjs', 'scripts/testar-operacao.ps1']);
   for (const arquivo of arquivos) {
     fs.mkdirSync(path.dirname(path.join(raiz, arquivo)), { recursive: true });
     fs.writeFileSync(path.join(raiz, arquivo), '');

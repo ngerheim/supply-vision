@@ -1,5 +1,5 @@
 // Testes HTTP de baixo nivel: cookies e limites de corpo em fluxo. So rodam contra a
-// instalacao descartavel criada por teste-instalacao-nova.ps1.
+// instancia descartavel criada por teste-portal-ponta-a-ponta.ps1.
 import { requisitar } from './cliente-http.mjs';
 
 const cookie = process.env.PORTAL_TESTE_COOKIE;

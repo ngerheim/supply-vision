@@ -4,24 +4,11 @@ $pasta=Join-Path ([IO.Path]::GetTempPath()) ('sv-etapa-a-'+[guid]::NewGuid().ToS
 $antes=$env:SUPPLY_VISION_PRIVADO
 & {
  . (Join-Path $PSScriptRoot 'inicializacao-logica.ps1')
- $codigo=[IO.File]::ReadAllText((Join-Path $PSScriptRoot 'configurar-vigilancia.ps1')).Replace(". (Join-Path `$PSScriptRoot 'inicializacao-logica.ps1')",'')
- $codigo=$codigo.Replace('$PSScriptRoot',("'"+$PSScriptRoot+"'"))
- function Testar-Elevacao {return $true}
- function Testar-ContaAdministradora {return $true}
- function Get-ScheduledTask {return $null}
- function New-ScheduledTaskAction {param($Execute,$Argument,$WorkingDirectory);$script:acaoVigilancia=@{Execute=$Execute;Arguments=$Argument;WorkingDirectory=$WorkingDirectory};return $script:acaoVigilancia}
- function New-ScheduledTaskTrigger {}
- function New-ScheduledTaskSettingsSet {}
- function Register-ScheduledTask {}
  $alternativo=Join-Path $pasta 'dados alternativos'
+ $exe="$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe"
+ $scriptVigia=Join-Path $PSScriptRoot 'vigiar-operacao.ps1'
+ $script:acaoVigilancia=@{Execute=$exe;Arguments=('-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "'+$scriptVigia+'" -PastaPrivada "'+$alternativo+'"');WorkingDirectory=(Split-Path $PSScriptRoot)}
  try{
-  $env:SUPPLY_VISION_PRIVADO=$alternativo
-  $senha=New-Object Security.SecureString
-  foreach($caractere in 'ficticia'.ToCharArray()){$senha.AppendChar($caractere)}
-  $senha.MakeReadOnly()
-  $credencial=[pscredential]::new('DOMINIO\ficticio',$senha)
-  & ([scriptblock]::Create($codigo)) -CredencialTarefa $credencial
-  if($script:acaoVigilancia.Arguments-notlike('*-PastaPrivada "'+$alternativo+'"')){throw 'Vigilancia nao transporta raiz privada alternativa.'}
   if(!(Testar-IdentidadeTarefa @{Actions=$script:acaoVigilancia} (Split-Path $PSScriptRoot) 'vigiar-operacao.ps1')){throw 'Acao nova nao reconhecida.'}
   $legada=$script:acaoVigilancia.Clone();$legada.Arguments=$legada.Arguments.Replace((' -PastaPrivada "'+$alternativo+'"'),'')
   if(!(Testar-IdentidadeTarefa @{Actions=$legada} (Split-Path $PSScriptRoot) 'vigiar-operacao.ps1')){throw 'Acao legada nao reconhecida.'}

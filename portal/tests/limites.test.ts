@@ -6,7 +6,7 @@
 // nada, e o invariante de datas que nunca encontrava nada.
 //
 // Aqui ficam as regras puras (contagem, fronteiras, listas). O comportamento
-// HTTP — 413, 400, 500 — é coberto por scripts/teste-instalacao-nova.ps1.
+// HTTP — 413, 400, 500 — é coberto por scripts/teste-portal-ponta-a-ponta.ps1.
 
 import assert from 'node:assert/strict';
 import test from 'node:test';

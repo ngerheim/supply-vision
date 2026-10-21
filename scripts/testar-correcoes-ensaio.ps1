@@ -1,6 +1,5 @@
 ﻿$ErrorActionPreference='Stop'
 $raizReal=(Resolve-Path (Join-Path $PSScriptRoot '..')).Path
-. (Join-Path $PSScriptRoot 'instalacao-requisitos.ps1')
 . (Join-Path $PSScriptRoot 'operacao-logica.ps1')
 $pasta=Join-Path ([IO.Path]::GetTempPath()) ('sv-correcoes-'+[guid]::NewGuid().ToString('N'))
 $privadoAnterior=$env:SUPPLY_VISION_PRIVADO;$tempAnterior=$env:TEMP
@@ -9,31 +8,6 @@ function Exigir-Correcao([bool]$Ok,[string]$Nome){if(!$Ok){throw "Falhou: $Nome"
 try{
  New-Item -ItemType Directory -Force $pasta|Out-Null
  $env:TEMP=$pasta
- # Runtime ausente/presente; winget apenas simulado.
- $script:runtime=$false;$script:instalacoes=0
- function Get-ItemProperty {param($Path,$ErrorAction);if($Path-like'*VC\Runtimes*'){@{Installed=[int]$script:runtime;Major=14}}}
- function Get-Command {param($Name,$ErrorAction);if($Name-eq'winget.exe'){@{Source='winget-simulado'}}else{Microsoft.PowerShell.Core\Get-Command $Name -ErrorAction $ErrorAction}}
- function winget-simulado {$script:instalacoes++;Exigir-Correcao ($args-contains'Microsoft.VCRedist.2015+.x64') 'pacote VC++ x64';$script:runtime=$true;$global:LASTEXITCODE=0}
- $falhou=$false;try{Garantir-VisualCpp -SomenteVerificar}catch{$falhou=$_.Exception.Message.Contains('Visual C++')}
- Exigir-Correcao $falhou 'verificacao sem escrita alerta runtime ausente'
- Garantir-VisualCpp;Garantir-VisualCpp
- Exigir-Correcao ($script:instalacoes-eq1) 'instala runtime somente quando ausente'
- # Deteccao de antivirus, sem consultar nem alterar a protecao real.
- # Captura explicita: Write-Host/InformationRecord varia entre PowerShell 5.1 e 7.
- function Write-Host {param($Object,$ForegroundColor);$script:mensagemAv+=[string]$Object}
- function Get-CimInstance {param($ClassName,$Namespace,$ErrorAction);[pscustomobject]@{displayName='Bitdefender ficticio'}}
- $script:mensagemAv='';Avisar-Bitdefender
- Exigir-Correcao ($script:mensagemAv.Contains('controle avancado de ameacas')) 'avisa exclusao Bitdefender'
-
- function Get-CimInstance {param($ClassName,$Namespace,$ErrorAction);if($ClassName-eq'Win32_Service'){[pscustomobject]@{PathName='C:\Program Files\Bitdefender\ficticio.exe'}}}
- function Get-Service {}
- $script:mensagemAv='';Avisar-Bitdefender
- Exigir-Correcao ($script:mensagemAv.Contains('BITDEFENDER detectado')) 'detecta Endpoint pelo caminho do servico'
- function Get-CimInstance {}
- $script:mensagemAv='';Avisar-Bitdefender
- Exigir-Correcao (!$script:mensagemAv.Contains('BITDEFENDER detectado')) 'sem antivirus nao mostra aviso indevido'
- Remove-Item Function:\Write-Host
-
  # Seleciona somente processos com caminhos desta instalacao; evita prefixos semelhantes.
  $root='C:\Supply Vision'
  foreach($cmd in @('node "C:\Supply Vision\portal\scripts\processar-relatorios.mjs"','node npm-cli.js --prefix "C:\Supply Vision\portal" run email:watch')){

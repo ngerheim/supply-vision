@@ -282,7 +282,7 @@ export async function audit(userId: string | null, action: string, entity: strin
 // Trava de exclusao mutua garantida pelo banco.
 //
 // O portal permite uma importacao por vez, porque cada uma custa ~96 MB de
-// RSS (medido em scripts/medir-concorrencia-importacao.mjs) e o teto de
+// RSS (medido em teste de concorrencia de importacao) e o teto de
 // expansao limita cada requisicao, nao a soma delas.
 //
 // A versao anterior consultava "existe alguma em processing?" e so entao

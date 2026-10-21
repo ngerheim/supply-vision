@@ -56,7 +56,7 @@ param($Fonte,$Instalacao,$Preparo,$Arquivo)
 $ErrorActionPreference='Stop'
 . (Join-Path $Fonte 'atualizacao-preparo.ps1')
 function Obter-ChecksCIPreparo($Sha){
- foreach($nome in @('Portal','Portal - instalacao nova e autenticacao real','PowerShell','Alertas','Atualizacao real')){
+ foreach($nome in @('Portal','Portal - ponta a ponta e autenticacao real','PowerShell','Alertas','Atualizacao real')){
   @{name=$nome;head_sha=$Sha;status='queued';conclusion=$null;app=@{slug='github-actions';id=15368}}
  }
 }

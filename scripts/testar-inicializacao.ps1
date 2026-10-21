@@ -64,34 +64,20 @@ if((Consultar-TarefaAdministrada $raizTeste).modo-ne'computador'){throw 'Consult
   if($falhas.Count){throw ($falhas-join'; ')}
  }finally{$script:tarefaExistente=$legitima}
 }
-& {
- $codigo=[IO.File]::ReadAllText((Join-Path $PSScriptRoot 'configurar-vigilancia.ps1')).Replace(". (Join-Path `$PSScriptRoot 'inicializacao-logica.ps1')",'')
- $codigo=$codigo.Replace('$PSScriptRoot',("'"+$PSScriptRoot+"'"))
- function Testar-Elevacao {return $true}
- function Testar-ContaAdministradora {return $true}
- $script:tarefaVigilanciaTeste=@{Actions=@{Execute='alheio';Arguments='alheio';WorkingDirectory='C:\alheio'}}
- function Get-ScheduledTask {return $script:tarefaVigilanciaTeste}
- function Unregister-ScheduledTask {$script:mutouVigilancia=$true}
- function Register-ScheduledTask {$script:mutouVigilancia=$true}
- function New-ScheduledTaskAction {}
- function New-ScheduledTaskTrigger {}
- function New-ScheduledTaskSettingsSet {}
- $senha=New-Object Security.SecureString
- foreach($caractere in 'ficticia'.ToCharArray()){$senha.AppendChar($caractere)}
- $senha.MakeReadOnly()
- $credencial=[pscredential]::new('DOMINIO\ficticio',$senha)
- foreach($desligar in @($true,$false)){
-  $script:mutouVigilancia=$false;$recusou=$false
-  try{& ([scriptblock]::Create($codigo)) -Desligar:$desligar -CredencialTarefa $credencial}catch{$recusou=$_.Exception.Message-like'*outra instalacao*'}
-  if(!$recusou-or$script:mutouVigilancia){throw 'Vigilancia alterou tarefa homonima alheia.'}
+# A vigilancia existente continua usando o mesmo contrato de identidade.
+$acaoVigia=@{Execute="$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe";Arguments=('-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "'+(Join-Path $PSScriptRoot 'vigiar-operacao.ps1')+'"');WorkingDirectory=(Split-Path $PSScriptRoot)}
+if(!(Testar-IdentidadeTarefa @{Actions=$acaoVigia} (Split-Path $PSScriptRoot) 'vigiar-operacao.ps1')){throw 'Vigilancia legitima recusada.'}
+foreach($caso in @('executavel','sufixo','argumento','raiz','multiplas')){
+ $acao=$acaoVigia.Clone()
+ switch($caso){
+  'executavel' {$acao.Execute='C:\alheio\powershell.exe'}
+  'sufixo' {$acao.Arguments=$acao.Arguments.Replace('vigiar-operacao.ps1','vigiar-operacao.ps1.alheio')}
+  'argumento' {$acao.Arguments='-Command Write-Output "'+(Join-Path $PSScriptRoot 'vigiar-operacao.ps1')+'"'}
+  'raiz' {$acao.WorkingDirectory='C:\alheio'}
  }
- # Acao da versao atual, anterior ao transporte explicito de PastaPrivada.
- $script:tarefaVigilanciaTeste=@{Actions=@{Execute="$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe";Arguments=('-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "'+(Join-Path $PSScriptRoot 'vigiar-operacao.ps1')+'"');WorkingDirectory=(Split-Path $PSScriptRoot)}}
- foreach($desligar in @($true,$false)){
-  $script:mutouVigilancia=$false
-  & ([scriptblock]::Create($codigo)) -Desligar:$desligar -CredencialTarefa $credencial
-  if(!$script:mutouVigilancia){throw 'Vigilancia nao operou sobre a acao legada da instalacao.'}
- }
+ $tarefa=@{Actions=@($acao)}
+ if($caso-eq'multiplas'){$tarefa.Actions+=@{Execute='alheio';Arguments='';WorkingDirectory=(Split-Path $PSScriptRoot)}}
+ if(Testar-IdentidadeTarefa $tarefa (Split-Path $PSScriptRoot) 'vigiar-operacao.ps1'){throw "Vigilancia alheia reconhecida: $caso"}
 }
 $script:tarefaExistente.Actions.Arguments='-File outra-instalacao.ps1'
 if(Obter-TarefaSupplyVision $raizTeste){throw 'Tarefa de outra instalacao reconhecida.'}
