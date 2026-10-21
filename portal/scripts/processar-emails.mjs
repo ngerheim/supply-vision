@@ -136,7 +136,7 @@ const fimLegado=(data,agora)=>new Date(Math.min(agora.getTime(),Date.parse(inici
 // antes dele numa base antiga.
 function garantirPeriodoRelatorio(db){
   const colunas=new Set(db.prepare('PRAGMA table_info(daily_report_deliveries)').all().map((c)=>c.name));
-  for(const coluna of ['period_start','period_end'])if(!colunas.has(coluna)){
+  for(const coluna of ['period_start','period_end','payload_json'])if(!colunas.has(coluna)){
     try{db.exec(`ALTER TABLE daily_report_deliveries ADD COLUMN ${coluna} TEXT`)}
     catch(erro){if(!String(erro?.message||'').toLowerCase().includes('duplicate column'))throw erro}
   }
@@ -148,7 +148,11 @@ function garantirPeriodoRelatorio(db){
 export function prepararRelatoriosDiarios(db,agora=new Date()){
   garantirPeriodoRelatorio(db);
   const local=horarioSaoPaulo(agora),agoraIso=agora.toISOString();
-  const usuarios=db.prepare("SELECT id FROM users u WHERE active=1 AND role IN ('admin','editor') AND daily_report_enabled=1 AND daily_report_time<=? AND NOT EXISTS (SELECT 1 FROM daily_report_deliveries d WHERE d.user_id=u.id AND d.report_date=?)").all(local.horario,local.data);
+  const consultarUsuarios=db.prepare("SELECT id FROM users u WHERE active=1 AND role IN ('admin','editor') AND daily_report_enabled=1 AND daily_report_time<=? AND NOT EXISTS (SELECT 1 FROM daily_report_deliveries d WHERE d.user_id=u.id AND d.report_date=?)");
+  if(!consultarUsuarios.get(local.horario,local.data)&&!db.prepare("SELECT 1 FROM daily_report_deliveries WHERE status='pending' AND payload_json IS NULL LIMIT 1").get())return local.data;
+  db.exec('BEGIN IMMEDIATE');
+  try {
+  const usuarios=consultarUsuarios.all(local.horario,local.data);
   const ultimo=db.prepare("SELECT report_date,period_end,sent_at,created_at FROM daily_report_deliveries WHERE user_id=? AND report_date<? ORDER BY report_date DESC LIMIT 1");
   const inserir=db.prepare("INSERT OR IGNORE INTO daily_report_deliveries (id,user_id,report_date,status,attempts,next_attempt_at,created_at,updated_at,period_start,period_end) VALUES (?,?,?,'pending',0,?,?,?,?,?)");
   for(const usuario of usuarios){
@@ -158,7 +162,15 @@ export function prepararRelatoriosDiarios(db,agora=new Date()){
     if(inicio>agoraIso)inicio=agoraIso;
     inserir.run(`rpt_${crypto.randomUUID().replaceAll('-','')}`,usuario.id,local.data,agoraIso,agoraIso,agoraIso,inicio,agoraIso);
   }
+  // Congela tambem pendencias legadas, uma unica vez, antes do primeiro envio.
+  const congelar=db.prepare('UPDATE daily_report_deliveries SET payload_json=? WHERE id=? AND payload_json IS NULL');
+  for(const item of db.prepare("SELECT * FROM daily_report_deliveries WHERE status='pending' AND payload_json IS NULL").all()){
+    const periodo=item.period_start&&item.period_end?{inicio:item.period_start,fim:item.period_end}:null;
+    congelar.run(JSON.stringify(dadosRelatorioDiario(db,item.report_date,agora,periodo)),item.id);
+  }
+  db.exec('COMMIT');
   return local.data;
+  } catch(erro) { db.exec('ROLLBACK'); throw erro; }
 }
 
 export function reservarRelatoriosDiarios(db,agora=new Date()){
@@ -209,7 +221,7 @@ export async function processarRelatoriosDiarios(db,config,transportador,{conclu
         continue;
       }
       const periodo=item.period_start&&item.period_end?{inicio:item.period_start,fim:item.period_end}:null;
-      const dados=dadosRelatorioDiario(db,item.report_date,new Date(),periodo),email=montarEmailRelatorioDiario(item.report_date,dados.totais,dados.chamados,config.PORTAL_URL,dados.periodo);
+      const dados=item.payload_json?JSON.parse(item.payload_json):dadosRelatorioDiario(db,item.report_date,new Date(),periodo),email=montarEmailRelatorioDiario(item.report_date,dados.totais,dados.chamados,config.PORTAL_URL,dados.periodo);
       await transportador.sendMail({from:{name:config.EMAIL_FROM_NAME,address:config.SMTP_USER},to:{name:item.recipient_name,address:item.recipient_email},subject:email.assunto,text:email.texto,html:email.html});
     }catch(erro){
       try{falharRelatorio(db,item,erro)}catch(erroBanco){registrar(`${item.id} falha nao registrada: ${erroBanco instanceof Error?erroBanco.message:'erro desconhecido'}.`)}

@@ -53,10 +53,11 @@ export async function requisitar({ metodo = 'POST', caminho, cabecalhos = {}, co
   return aberta.resposta;
 }
 
-export function multipart(nomeArquivo, bytes) {
+export function multipart(nomeArquivo, bytes, campos = {}) {
   const limite = '----portal' + Math.random().toString(36).slice(2);
+  const extras = Object.entries(campos).map(([nome, valor]) => `--${limite}\r\nContent-Disposition: form-data; name="${nome}"\r\n\r\n${valor}\r\n`).join('');
   const cabecalho = Buffer.from(
-    `--${limite}\r\nContent-Disposition: form-data; name="file"; filename="${nomeArquivo}"\r\n` +
+    extras + `--${limite}\r\nContent-Disposition: form-data; name="file"; filename="${nomeArquivo}"\r\n` +
     'Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet\r\n\r\n',
   );
   const rodape = Buffer.from(`\r\n--${limite}--\r\n`);

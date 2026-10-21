@@ -27,3 +27,20 @@ export function revisaoDaQuery(request: Request): number | null {
   const valor = new URL(request.url).searchParams.get('expectedRevision');
   return valor !== null && /^\d+$/.test(valor) ? Number(valor) : null;
 }
+
+// A revisao existente do acordo tambem identifica mudancas na lista vigente.
+// Versoes em preparo ou historicas nao invalidam paginas da versao publicada.
+export const TRIGGERS_REVISAO_LISTA_ACORDO = [
+  `CREATE TRIGGER IF NOT EXISTS acordo_lista_insert AFTER INSERT ON agreement_items BEGIN
+    UPDATE agreements SET revision=revision+1 WHERE current_version_id=NEW.version_id;
+  END`,
+  `CREATE TRIGGER IF NOT EXISTS acordo_lista_delete AFTER DELETE ON agreement_items BEGIN
+    UPDATE agreements SET revision=revision+1 WHERE current_version_id=OLD.version_id;
+  END`,
+  `CREATE TRIGGER IF NOT EXISTS acordo_lista_update AFTER UPDATE ON agreement_items
+   WHEN (NEW.version_id,NEW.location_id,NEW.catalog_item_id,NEW.vehicle_model_id,NEW.unit_id,NEW.price,NEW.courtesy,NEW.brands_text,NEW.notes)
+     IS NOT (OLD.version_id,OLD.location_id,OLD.catalog_item_id,OLD.vehicle_model_id,OLD.unit_id,OLD.price,OLD.courtesy,OLD.brands_text,OLD.notes)
+   BEGIN
+    UPDATE agreements SET revision=revision+1 WHERE current_version_id IN (OLD.version_id,NEW.version_id);
+   END`,
+];

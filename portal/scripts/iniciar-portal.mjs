@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { validarVersaoNode } from './versao-node.mjs';
 import { pathToFileURL } from 'node:url';
-import { lerConfigBruta, portalPrivado, privado } from './configuracao.mjs';
+import { lerConfigEfetiva, portalPrivado, privado } from './configuracao.mjs';
 import { configuracaoServidor } from './configuracao-servidor.mjs';
 import { portasOperacao } from './portas-operacao.mjs';
 
@@ -11,7 +11,7 @@ export function enderecoServidor(modo, config = {}) {
 }
 export async function iniciarPortal(modo = '') {
   validarVersaoNode();
-  const config = { ...lerConfigBruta(), ...process.env };
+  const config = lerConfigEfetiva();
   process.env.SUPPLY_VISION_PRIVADO = privado;
   Object.assign(process.env, configuracaoServidor(config));
   if (config.PORTAL_CRIAR_BANCO === '1' && (config.MODO_ENSAIO === '1' || process.env.CI === 'true')) process.env.PORTAL_CRIAR_BANCO = '1';

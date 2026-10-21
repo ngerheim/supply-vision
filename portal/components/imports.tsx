@@ -66,6 +66,7 @@ export function Imports({
       throw new Error('Selecione o acordo e a planilha antes de conferir.');
     const body = new FormData();
     body.set('file', file);
+    if (!preview) body.set('expectedRevision', String(result?.agreementRevision));
     const path = `/api/imports/agreement/${agreement}`;
     return api(path + (preview ? '?preview=1' : ''), { method: 'POST', body });
   };

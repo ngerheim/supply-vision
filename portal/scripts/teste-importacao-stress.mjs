@@ -89,6 +89,9 @@ function file(rows, { name = 'teste', format = 'xlsx', aoa, range, extraSheet } 
 }
 async function upload(document, route = `/api/imports/agreement/${agreementId}`, session = cookie) {
   const form = new FormData(); form.set('file', new Blob([document.bytes]), document.filename);
+  const destino = route.split('?')[0].split('/').at(-1);
+  const revisao = destino && reader.prepare('SELECT revision FROM agreements WHERE id=?').get(destino)?.revision;
+  if (!route.includes('preview=1') && revisao !== undefined) form.set('expectedRevision', String(revisao));
   const start = performance.now();
   const result = await request(route, { method: 'POST', body: form, session });
   metrics.push({ file: document.filename, bytes: document.bytes.length, status: result.status, ms: Math.round(performance.now() - start), summary: result.data.summary });
@@ -172,7 +175,10 @@ try {
     for (const rota of ['/', '/api/health', '/package.json', '/vite.config.ts', '/AGENTS.md', '/.env', '/.git/config', '/scripts/iniciar-portal.mjs', '/privado/portal/banco/estado/state/base.sqlite', '/%2e%2e/package.json', '/%5cprivado/base.sqlite']) {
       const r=await fetch(base+rota);
       assert.equal(r.status, ['/', '/api/health'].includes(rota)?200:404,rota);
-      for(const [nome,valor] of Object.entries(CABECALHOS_SEGURANCA)) assert.equal(r.headers.get(nome),valor,rota+' '+nome);
+      for(const [nome,valor] of Object.entries(CABECALHOS_SEGURANCA)) {
+        const recebido = r.headers.get(nome);
+        assert.equal(nome === 'Content-Security-Policy' ? recebido?.replace(/ 'nonce-[^']+'/g, '') : recebido, valor, rota+' '+nome);
+      }
       await r.arrayBuffer();
     }
   });
@@ -341,6 +347,21 @@ try {
     }
   });
   const replace = `/api/imports/agreement/${agreementId}`;
+  await check('Publicacao exige revisao da previa e recusa acordo alterado com 409', async () => {
+    const doc = file([row()], {name:'previa-revisao'});
+    const previa = await upload(doc, replace+'?preview=1');
+    assert.equal(previa.status,200);assert.equal(previa.data.valid,true);
+    assert.equal(typeof previa.data.agreementRevision,'number');
+    const db = new DatabaseSync(sqlitePath);
+    try{db.prepare('UPDATE agreements SET notes=notes WHERE id=?').run(agreementId);}finally{db.close();}
+    const antes = businessSnapshot(), form = new FormData();
+    form.set('file',new Blob([doc.bytes]),doc.filename);
+    assert.equal((await request(replace,{method:'POST',body:form})).status,409);
+    form.set('expectedRevision',String(previa.data.agreementRevision));
+    const obsoleta=await request(replace,{method:'POST',body:form});
+    assert.equal(obsoleta.status,409);assert.match(obsoleta.data.error,/conferência|confira/i);
+    assert.deepEqual(businessSnapshot(),antes);
+  });
   await check('Upload excedido mantido aberto libera reserva em prazo limitado', async () => {
     const antes=businessSnapshot(), inicio=performance.now();
     const aberto=abrirRequisicao({porta:port,caminho:replace,timeoutMs:20000,cabecalhos:{cookie,'content-type':'multipart/form-data; boundary=aberto','transfer-encoding':'chunked'}});
@@ -363,7 +384,7 @@ try {
     } finally { aberto.destruir(); }
   });
   await check('Upload que perdeu dono da reserva nao prepara nem publica dados', async () => {
-    const antes=businessSnapshot(), doc=file([row()],{name:'reserva-perdida'}), m=multipart(doc.filename,doc.bytes);
+    const antes=businessSnapshot(), doc=file([row()],{name:'reserva-perdida'}), m=multipart(doc.filename,doc.bytes,{expectedRevision:query('SELECT revision FROM agreements WHERE id=?',agreementId)[0].revision});
     const aberto=abrirRequisicao({porta:port,caminho:replace,timeoutMs:15000,cabecalhos:{cookie,'content-type':m.tipo,'transfer-encoding':'chunked'}});
     const db=new DatabaseSync(sqlitePath);
     try {
@@ -680,7 +701,7 @@ try {
   await verificarFiltrosBusca({ request, good, check, query });
   await verificarAcessoConsulta({ request, good, check, senha, agreementId, metrics });
   await check('20 concorrentes recebem 409 enquanto uma importação segura a trava', async () => {
-    const doc = file([row()], { name: 'concorrencia' }), m = multipart(doc.filename, doc.bytes);
+    const doc = file([row()], { name: 'concorrencia' }), m = multipart(doc.filename, doc.bytes, {expectedRevision:query('SELECT revision FROM agreements WHERE id=?',agreementId)[0].revision});
     const first = abrirRequisicao({ porta: port, caminho: replace, timeoutMs: 60000, cabecalhos: { cookie, 'content-type': m.tipo, 'transfer-encoding': 'chunked' } });
     await first.escrever(m.corpo.subarray(0, m.corpo.length - 20));
     try {
@@ -910,7 +931,7 @@ try {
     reader.close(); reader = null; await stopServer();
     assert.ok(sqlitePath.startsWith(state + path.sep), 'Só permite alterar o banco desta execução');
     const migracao = new DatabaseSync(sqlitePath);
-    try { migracao.exec('DROP TABLE import_item_mappings; DROP TABLE import_model_mappings; DROP TRIGGER agreements_revision; DROP TRIGGER agreement_items_revision; DROP INDEX idx_tickets_request_key; ALTER TABLE agreements DROP COLUMN revision; ALTER TABLE agreement_items DROP COLUMN revision; ALTER TABLE tickets DROP COLUMN request_key; ALTER TABLE tickets DROP COLUMN request_hash;'); }
+    try { migracao.exec('DROP TABLE import_item_mappings; DROP TABLE import_model_mappings; DROP TRIGGER agreements_revision; DROP TRIGGER agreement_items_revision; DROP TRIGGER acordo_lista_insert; DROP TRIGGER acordo_lista_delete; DROP TRIGGER acordo_lista_update; DROP INDEX idx_tickets_request_key; ALTER TABLE agreements DROP COLUMN revision; ALTER TABLE agreement_items DROP COLUMN revision; ALTER TABLE tickets DROP COLUMN request_key; ALTER TABLE tickets DROP COLUMN request_hash;'); }
     finally { migracao.close(); }
     await startServer(); reader = new DatabaseSync(sqlitePath, { readOnly: true });
     const after = await good('/api/mappings');
@@ -919,6 +940,7 @@ try {
     assert.ok(query('PRAGMA table_info(tickets)').some(column=>column.name==='request_key'));
     assert.equal(query("SELECT COUNT(*) n FROM sqlite_master WHERE type='trigger' AND name IN ('agreements_revision','agreement_items_revision')")[0].n,2);
     assert.equal(query("SELECT COUNT(*) n FROM sqlite_master WHERE type='index' AND name='idx_tickets_request_key'")[0].n,1);
+    assert.equal(query("SELECT COUNT(*) n FROM sqlite_master WHERE type='trigger' AND name IN ('acordo_lista_insert','acordo_lista_delete','acordo_lista_update')")[0].n,3);
     assert.deepEqual(businessSnapshot(), before);
   });
   await check('Integridade final: sem órfãos, versões pendentes ou travas', async () => {

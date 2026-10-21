@@ -164,6 +164,7 @@ export function AgreementDetail({
   id,
   revision,
   canWrite,
+  busy,
   isAdmin,
   onBack,
   onEdit,
@@ -174,6 +175,7 @@ export function AgreementDetail({
 }: JsonData) {
   const [snapshot, setSnapshot] = useState<{
       key: string;
+      revision: unknown;
       detail: AnyRow;
     } | null>(null),
     [q, setQ] = useState(''),
@@ -183,7 +185,9 @@ export function AgreementDetail({
   const sortKeys = ['item', 'model', 'location', 'brands', 'unit', 'price'];
   const querySort = `sort=${sortKeys[ordem.coluna]}&direction=${ordem.direcao === 1 ? 'asc' : 'desc'}`;
   const key = `${id}?${querySort}`;
-  const detail = snapshot?.key === key ? snapshot.detail : null;
+  // O bootstrap mudou: o detalhe anterior pode ter uma revisao ja consumida
+  // pela edicao de uma condicao. Aguarde a nova leitura antes de abrir formularios.
+  const detail = snapshot?.key === key && snapshot.revision === revision ? snapshot.detail : null;
   const sequence = useRef(0);
   const controller = useRef<AbortController | null>(null);
   const moreRequest = useRef<number | null>(null);
@@ -209,6 +213,7 @@ export function AgreementDetail({
       if (request !== sequence.current) return;
       if (
         next.version !== detail.version ||
+        next.revision !== detail.revision ||
         next.totalItems !== detail.totalItems
       ) {
         setSnapshot(null);
@@ -217,6 +222,7 @@ export function AgreementDetail({
       }
       setSnapshot({
         key,
+        revision,
         detail: { ...next, items: [...detail.items, ...next.items] },
       });
     } catch (error) {
@@ -241,11 +247,11 @@ export function AgreementDetail({
         signal: pending.signal,
       });
       if (request !== sequence.current) return;
-      setSnapshot({ key, detail: next });
+      setSnapshot({ key, revision, detail: next });
     } catch (error) {
       if (request === sequence.current) setLoadError(errorText(error));
     }
-  }, [key]);
+  }, [key, revision]);
   useEffect(() => {
     let active = true;
     queueMicrotask(() => {
@@ -291,6 +297,7 @@ export function AgreementDetail({
           <>
             <Button
               variant="outline"
+              disabled={busy}
               onClick={() =>
                 onEdit({
                   ...a,

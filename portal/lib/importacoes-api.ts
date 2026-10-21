@@ -5,7 +5,7 @@ import { corpoBinarioLimitado } from './corpo-limitado.ts';
 import { CORPO_MAX_UPLOAD, EntradaInvalida } from './limites-entrada.ts';
 import { errorMessage, MAX_IMPORT_BYTES, safeFilename, normalizeImportText } from './domain.ts';
 import { type ContextoApi, type User, type Row } from './api-compartilhada.ts';
-import { TravaPerdida } from './controle-escrita.ts';
+import { TravaPerdida, revisaoConfere } from './controle-escrita.ts';
 
 export function importacoesApi(contexto: ContextoApi, acordos: Pick<ReturnType<typeof import('./acordos-api.ts').acordosApi>, 'travarAcordo' | 'soltarAcordo'>) {
   const { id, now, rawDb, TRAVA_IMPORTACAO, adquirirTrava, renovarTrava, liberarTrava, ok, fail, CorpoGrandeDemais, all, first } = contexto;
@@ -64,8 +64,13 @@ export function importacoesApi(contexto: ContextoApi, acordos: Pick<ReturnType<t
     if (!/\.(xlsx|xls)$/i.test(file.name)) return fail('Use uma planilha com extensão .xlsx ou .xls.');
     if (file.size <= 0) return fail('A planilha está vazia.');
     if (file.size > MAX_IMPORT_BYTES) return fail('A planilha ultrapassa o limite de 2 MB.');
-    if (!await first('SELECT 1 ok FROM agreements WHERE id=?', [agreementId])) return fail('Acordo de destino não encontrado.', 404);
+    const acordo = await first<{revision:number}>('SELECT revision FROM agreements WHERE id=?', [agreementId]);
+    if (!acordo) return fail('Acordo de destino não encontrado.', 404);
     const preview = new URL(request.url).searchParams.get('preview') === '1';
+    const informada = form.get('expectedRevision');
+    const expectedRevision = typeof informada === 'string' && /^\d+$/.test(informada) ? Number(informada) : null;
+    const conflito = 'O acordo mudou desde a conferência ou a revisão está ausente. Confira a planilha novamente antes de publicar.';
+    if (!preview && !revisaoConfere(expectedRevision, Number(acordo.revision))) return fail(conflito, 409);
     const importId = id('imp'), timestamp = now();
     if (!preview) await rawDb().prepare(`INSERT INTO imports (id,agreement_id,filename,mode,status,created_by,created_at) VALUES (?,?,?,?,?,?,?)`).bind(importId, agreementId, safeFilename(file.name), 'replace', 'processing', user.id, timestamp).run();
     try {
@@ -83,13 +88,13 @@ export function importacoesApi(contexto: ContextoApi, acordos: Pick<ReturnType<t
       const errors = parsed.filter((r) => r.error);
       if (errors.length) {
         const summary = summarizeImportErrors(parsed, leitura.aba);
-        if (preview) return ok({ preview: true, valid: false, totalRows: parsed.length, ...summary });
+        if (preview) return ok({ preview: true, agreementRevision: Number(acordo.revision), valid: false, totalRows: parsed.length, ...summary });
         await rawDb().prepare('UPDATE imports SET status=?,total_rows=?,valid_rows=?,error_rows=?,summary_json=?,completed_at=? WHERE id=?').bind('error', parsed.length, parsed.length-errors.length, errors.length, JSON.stringify(summary), now(), importId).run();
         return ok({ error: `A planilha possui ${errors.length} linha(s) inválida(s). Nenhum dado foi publicado.`, importId, ...summary }, { status: 400 });
       }
       const prepared = deduplicateImportRows(parsed);
       const baseSummary = prepared.summary;
-      if (preview) return ok({ preview: true, valid: true, sheet: leitura.aba, totalRows: parsed.length, summary: baseSummary, sample: prepared.rows.slice(0, 20).map(row => ({ linha: row.rowNumber, fornecedor: row.supplier, cidade: row.city, uf: row.state, item: row.item, modelo: row.model, unidade: row.unit, preco: row.price })) });
+      if (preview) return ok({ preview: true, agreementRevision: Number(acordo.revision), valid: true, sheet: leitura.aba, totalRows: parsed.length, summary: baseSummary, sample: prepared.rows.slice(0, 20).map(row => ({ linha: row.rowNumber, fornecedor: row.supplier, cidade: row.city, uf: row.state, item: row.item, modelo: row.model, unidade: row.unit, preco: row.price })) });
       const publish: PublishImport = async (statements, details) => {
         const summary = { ...details, ...baseSummary }, db = rawDb(), timestamp = now();
         await renovarTrava(TRAVA_IMPORTACAO, donoTrava);
@@ -105,7 +110,10 @@ export function importacoesApi(contexto: ContextoApi, acordos: Pick<ReturnType<t
       const donoAcordo = await travarAcordo(agreementId);
       if (!donoAcordo) throw new ConflitoImportacao('outro usuário está alterando este acordo neste momento. Tente de novo em instantes');
       let summary: Record<string, unknown>;
-      try { await renovarTrava(TRAVA_IMPORTACAO, donoTrava); summary = await processAgreementImport(prepared.rows, user, importId, agreementId, publish); }
+      try {
+        const atual = await first<{revision:number}>('SELECT revision FROM agreements WHERE id=?', [agreementId]);
+        if (!atual || !revisaoConfere(expectedRevision, Number(atual.revision))) throw new ConflitoImportacao(conflito);
+        await renovarTrava(TRAVA_IMPORTACAO, donoTrava); summary = await processAgreementImport(prepared.rows, user, importId, agreementId, publish); }
       finally { await soltarAcordo(agreementId, donoAcordo); }
       return ok({ success: true, summary });
     } catch (error: unknown) {
@@ -115,7 +123,7 @@ export function importacoesApi(contexto: ContextoApi, acordos: Pick<ReturnType<t
       const conhecido = error instanceof EntradaInvalida || reservaPerdida;
       if (!conhecido) console.error('[portal] falha inesperada na importacao:', error);
       const message = conhecido ? errorMessage(error, 'arquivo inválido') : 'erro interno ao processar a planilha. Tente de novo; se persistir, avise o administrador.';
-      if (preview) return ok({ preview: true, valid: false, error: conhecido ? message : `Não foi possível conferir: ${message}` }, reservaPerdida ? { status: 409 } : conhecido ? undefined : { status: 500 });
+      if (preview) return ok({ preview: true, agreementRevision: Number(acordo.revision), valid: false, error: conhecido ? message : `Não foi possível conferir: ${message}` }, reservaPerdida ? { status: 409 } : conhecido ? undefined : { status: 500 });
       await cleanupFailedImport(importId);
       await rawDb().prepare('UPDATE imports SET status=?,summary_json=?,completed_at=? WHERE id=?').bind(error instanceof ConflitoImportacao ? 'conflict' : 'error', JSON.stringify({ error: message }), now(), importId).run();
       return ok({ error: `Não foi possível importar: ${message}`, importId }, { status: reservaPerdida ? 409 : conhecido ? 400 : 500 });

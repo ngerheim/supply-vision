@@ -7,7 +7,6 @@ import test from 'node:test';
 import { DatabaseSync } from 'node:sqlite';
 import { iniciarServidorNode } from '../scripts/servidor-node.mjs';
 import { bancoSqliteLocal } from '../lib/sqlite-local.ts';
-import { reservarPortaLoopback } from '../scripts/porta-teste.mjs';
 import { conexao } from '../scripts/ip-conexao.mjs';
 
 for (const motivo of ['explicito', 'sinal', 'pai']) {
@@ -18,8 +17,9 @@ for (const motivo of ['explicito', 'sinal', 'pai']) {
     const banco=bancoSqliteLocal({pastaPrivada:path.join(projeto,'state'),criar:true});
     await banco.exec("CREATE TABLE prova(valor TEXT);INSERT INTO prova VALUES('preservado')");
     globalThis[Symbol.for('supply-vision:banco')]=banco;
-    const port=await reservarPortaLoopback(),pararArquivo=path.join(projeto,'parar');
-    const runtime=await iniciarServidorNode({outDir:projeto,port,pararArquivo:motivo==='sinal'?pararArquivo:null,pai:motivo==='pai'?2147483647:null});
+    const pararArquivo=path.join(projeto,'parar');
+    const runtime=await iniciarServidorNode({outDir:projeto,port:0,pararArquivo:motivo==='sinal'?pararArquivo:null,pai:motivo==='pai'?2147483647:null});
+    const port=runtime.server.address().port;
     const socket=new net.Socket();
     t.after(async()=>{socket?.destroy();await runtime.encerrar();fs.rmSync(projeto,{recursive:true,force:true});});
     let recebido;

@@ -18,6 +18,7 @@ const chave = Symbol.for('sv-lote07:api-teste');
 globalThis[chave] = estado;
 const bancoUrl = `data:text/javascript,${encodeURIComponent(`
   const estado = globalThis[Symbol.for('sv-lote07:api-teste')];
+  export const parseCookies = () => ({});
   export const currentUser = async () => estado.user;
   export const ensureDatabase = async () => {};
   export const id = () => crypto.randomUUID();
@@ -172,7 +173,10 @@ void test('cadastros e De/Para recusam chaves herdadas antes de consultar ou esc
 
 void test('ordenacao de acordo usa somente colunas proprias da lista fechada', async () => {
   const consultas = [];
-  const api = acordosApi(contexto({ first: async () => ({ id: 'outro', totalItems: 0 }), all: async sql => { consultas.push(sql); return []; } }));
+  const api = acordosApi(contexto({ rawDb: () => ({
+    prepare(sql) { consultas.push(sql); return { bind() { return this; } }; },
+    async batch() { return [{ results: [{ id: 'outro', totalItems: 0 }] }, ...Array.from({ length: 3 }, () => ({ results: [] }))]; },
+  }) }));
   for (const sort of ['constructor', 'toString', '__proto__', 'inexistente', 'price']) {
     consultas.length = 0;
     const response = await api.agreementDetail('outro', usuario('viewer'), new URLSearchParams({ sort, direction: 'desc' }));

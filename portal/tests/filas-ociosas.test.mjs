@@ -8,7 +8,7 @@ import path from 'node:path';
 import test from 'node:test';
 import { DatabaseSync } from 'node:sqlite';
 import { SCHEMA_RELATORIOS } from '../lib/relatorios.ts';
-import { reservar, reservarRelatoriosDiarios } from '../scripts/processar-emails.mjs';
+import { reservar, reservarRelatoriosDiarios, prepararRelatoriosDiarios } from '../scripts/processar-emails.mjs';
 import { reservarRelatorio } from '../scripts/processar-relatorios.mjs';
 
 function comBanco(sql, fn) {
@@ -49,5 +49,11 @@ void test('relatorio diario sem entrega devida nao abre escrita', () => comBanco
 
 void test('fila de relatorios sem pedido aguardando nao abre escrita', () => comBanco(SCHEMA_RELATORIOS.join(';'), (db, escritas) => {
   assert.equal(reservarRelatorio(db), null);
+  assert.deepEqual(escritas, []);
+}));
+
+void test('preparacao diaria sem novos usuarios nem conteudo legado nao reserva escritor', () => comBanco(DIARIOS, (db, escritas) => {
+  db.exec("ALTER TABLE users ADD COLUMN daily_report_time TEXT; ALTER TABLE daily_report_deliveries ADD COLUMN period_start TEXT; ALTER TABLE daily_report_deliveries ADD COLUMN period_end TEXT; ALTER TABLE daily_report_deliveries ADD COLUMN payload_json TEXT");
+  prepararRelatoriosDiarios(db);
   assert.deepEqual(escritas, []);
 }));

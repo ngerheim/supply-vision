@@ -12,6 +12,8 @@ export async function iniciarServidorNode({ outDir = path.resolve(import.meta.di
   server.emit = function(evento, ...args) {
     if (evento !== 'request') return emitir(evento, ...args);
     const [req, res] = args;
+    delete req.headers['content-security-policy'];
+    delete req.headers['content-security-policy-report-only'];
     for (const [nome, valor] of Object.entries(CABECALHOS_SEGURANCA)) res.setHeader(nome, valor);
     let alvo;
     try {

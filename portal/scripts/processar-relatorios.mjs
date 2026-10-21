@@ -1,3 +1,4 @@
+import { portaRelatorios } from './portas-operacao.mjs';
 import { revisarPedidosInterrompidos } from './pedidos-interrompidos.mjs';
 import { travarRestauracao } from './trava-restauracao.mjs';
 import { validacaoAtiva } from './operacao-validacao.mjs';
@@ -9,9 +10,9 @@ import { spawn, execFile } from 'node:child_process';
 import { timingSafeEqual } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 import { abrirBancoLocal } from './banco-local.mjs';
-import { privado, lerConfigBruta } from './configuracao.mjs';
+import { privado, lerConfigEfetiva } from './configuracao.mjs';
 import { validarPedidoRelatorio } from '../lib/relatorios.ts';
-import { VALIDADE_HISTORICO_MS, arquivoHistoricoExpirado } from '../lib/retencao-relatorios.ts';
+import { VALIDADE_HISTORICO_MS, prazoArquivoHistorico, arquivoHistoricoExpirado } from '../lib/retencao-relatorios.ts';
 
 export function redigirLog(texto, segredos = []) {
   let seguro = String(texto);
@@ -186,14 +187,26 @@ export function limparHistoricosExpirados(db, raiz = privado, agora = Date.now()
     try { db.exec('ALTER TABLE report_jobs ADD COLUMN artifacts_cleaned_at TEXT'); }
     catch (erro) { if (!String(erro.message).includes('duplicate column')) throw erro; }
   }
-  db.exec("CREATE INDEX IF NOT EXISTS idx_report_jobs_cleanup ON report_jobs(completed_at) WHERE action='recorte' AND completed_at IS NOT NULL AND status IN ('done','failed') AND artifacts_json!='[]' AND artifacts_cleaned_at IS NULL");
+  db.exec("CREATE INDEX IF NOT EXISTS idx_report_jobs_cleanup_v2 ON report_jobs(completed_at) WHERE action='recorte' AND status IN ('done','failed') AND artifacts_json!='[]' AND artifacts_cleaned_at IS NULL");
+  db.exec('DROP INDEX IF EXISTS idx_report_jobs_cleanup');
   let removidos = 0;
-  const jobs = db.prepare("SELECT id,action,completed_at,artifacts_json FROM report_jobs WHERE action='recorte' AND completed_at IS NOT NULL AND status IN ('done','failed') AND artifacts_json!='[]' AND artifacts_cleaned_at IS NULL").all();
+  const jobs = db.prepare("SELECT id,action,completed_at,artifacts_json FROM report_jobs WHERE action='recorte' AND status IN ('done','failed') AND artifacts_json!='[]' AND artifacts_cleaned_at IS NULL").all();
   const marcar = db.prepare('UPDATE report_jobs SET artifacts_cleaned_at=? WHERE id=? AND artifacts_json=?');
   for (const job of jobs) {
     let pendente = false;
     for (const artifact of JSON.parse(job.artifacts_json)) {
-      if (!arquivoHistoricoExpirado(job, artifact, agora)) { pendente = true; continue; }
+      let prazo = prazoArquivoHistorico(job, artifact);
+      if (prazo === null) {
+        const permitido = arquivoPermitido(job, artifact.name, raiz);
+        let mtime;
+        try { if (permitido) mtime = fs.statSync(permitido).mtimeMs; } catch { /* Sem referencia: manter e avisar. */ }
+        prazo = prazoArquivoHistorico(job, artifact, mtime, agora);
+        if (prazo === null) {
+          console.warn(`AVISO: historico ${job.id} mantido sem referencia temporal valida.`);
+          pendente = true; continue;
+        }
+      }
+      if (agora < Date.parse(prazo)) { pendente = true; continue; }
       const candidato = path.resolve(raiz, artifact.relativePath);
       const pastaHistoricos = path.resolve(raiz, 'alertas', 'relatorios', 'historicos');
       const relativa = path.relative(pastaHistoricos, candidato);
@@ -361,14 +374,12 @@ async function principal() {
   const liberarRestauracao = travarRestauracao();
   // Mantem a trava durante toda a vida do runner, incluindo downloads e filas.
   process.once('exit', liberarRestauracao);
-  const config = lerConfigBruta();
+  const config = lerConfigEfetiva();
   if (!config.PORTAL_API_TOKEN)
     throw new Error(
       'Configure PORTAL_API_TOKEN para habilitar relatórios no portal.',
     );
-  const porta = Number(config.RELATORIOS_PORTA || 3001);
-  if (!Number.isInteger(porta) || porta < 1024 || porta > 65535)
-    throw new Error('RELATORIOS_PORTA deve ser uma porta entre 1024 e 65535.');
+  const porta = portaRelatorios(config);
   const abrir = abrirBancoRelatorios;
   const servidor = criarServidorArquivos({
     token: config.PORTAL_API_TOKEN,

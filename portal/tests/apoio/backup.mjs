@@ -9,6 +9,7 @@ export function ferramenta7z(t) {
   const config = { BACKUP_7ZIP_EXE: process.env.SV_TEST_7ZIP };
   try { return localizar7zip(config); }
   catch (erro) {
+    if (process.env.SV_TESTES_INTEGRACAO_WINDOWS === '1') throw erro;
     if (!(erro instanceof FalhaBackup) || !erro.message.startsWith('7-Zip ausente ou indisponivel.')) throw erro;
     t.skip('Integracao 7z pulada: executavel ausente ou indisponivel. Instale o 7-Zip oficial >=24.09 ou configure SV_TEST_7ZIP.');
     return null;

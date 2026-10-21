@@ -44,6 +44,10 @@ export function lerConfigBruta() {
   return { ...lerArquivo(comum), ...lerArquivo(especifica) };
 }
 
+export function lerConfigEfetiva(config = lerConfigBruta(), ambiente = process.env) {
+  return { ...config, ...ambiente };
+}
+
 export function criarTransportador(config) {
   return nodemailer.createTransport({
     host: config.SMTP_HOST,

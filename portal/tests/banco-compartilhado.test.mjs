@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { execFileSync, spawn } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { DatabaseSync } from 'node:sqlite';
 import { setTimeout as esperar } from 'node:timers/promises';
 import test from 'node:test';
 import { criarTemporarioTeste } from './apoio/ambiente.mjs';
-import { reservarPortaLoopback } from '../scripts/porta-teste.mjs';
+import { portaSemServico, iniciarServidorFixture } from '../scripts/porta-teste.mjs';
 import { localizarBanco } from '../scripts/banco-local.mjs';
 
 const portal=path.resolve(import.meta.dirname,'..');
@@ -14,9 +14,10 @@ void test('Portal, consumidores, backup, expurgo, restauracao e semente comparti
   skip:!fs.existsSync(path.join(portal,'dist/server/index.js')),timeout:90000,
 }, async t=>{
   const raiz=criarTemporarioTeste('sv-banco-compartilhado-'), pastaPortal=path.join(raiz,'portal');
-  const port=await reservarPortaLoopback(),relatorios=await reservarPortaLoopback(),url=`http://127.0.0.1:${port}`;
+  const relatorios=await portaSemServico();
+  let port, url;
   const tokenA='a'.repeat(64),tokenB='b'.repeat(64), senha='senha-ficticia-banco-123';
-  const env={...process.env,SUPPLY_VISION_PRIVADO:raiz,MODO_ENSAIO:'1',PORTAL_CRIAR_BANCO:'1',PORTAL_PORTA:String(port),RELATORIOS_PORTA:String(relatorios),INITIAL_ADMIN_PASSWORD:senha};
+  const env={...process.env,SUPPLY_VISION_PRIVADO:raiz,MODO_ENSAIO:'1',PORTAL_CRIAR_BANCO:'1',RELATORIOS_PORTA:String(relatorios),INITIAL_ADMIN_PASSWORD:senha};
   delete env.PORTAL_API_TOKEN;
   for(const dir of ['portal/configuracao','comum','operacao','alertas/config','alertas/parametros'])fs.mkdirSync(path.join(raiz,dir),{recursive:true});
   fs.writeFileSync(path.join(raiz,'comum/operacao.env'),'MODO_ENSAIO=1\nEXPURGO_HABILITADO=1\nEXPURGO_EMAILS_DIAS=0\nEXPURGO_RELATORIOS_DIAS=0\nEXPURGO_IMPORTACOES_DIAS=1\n');
@@ -35,10 +36,13 @@ void test('Portal, consumidores, backup, expurgo, restauracao e semente comparti
   t.after(async()=>{try{await parar();}finally{if(filho?.exitCode===null)filho.kill();fs.rmSync(raiz,{recursive:true,force:true});}});
   async function iniciar(token){
     fs.rmSync(path.join(raiz,'operacao/parar.sinal'),{force:true});
-    // A restauracao CLI le as portas do arquivo, sem sobrepor process.env.
-    fs.writeFileSync(path.join(pastaPortal,'configuracao/portal.env'),`PORTAL_URL=${url}\nPORTAL_PORTA=${port}\nRELATORIOS_PORTA=${relatorios}\nPORTAL_API_TOKEN=${token}\n`);
-    filho=spawn(process.execPath,['scripts/iniciar-portal.mjs','local'],{cwd:portal,env,stdio:['ignore','pipe','pipe']});
+    const configPortal=path.join(pastaPortal,'configuracao/portal.env');
+    fs.writeFileSync(configPortal,`RELATORIOS_PORTA=${relatorios}\nPORTAL_API_TOKEN=${token}\n`);
+    const iniciado=await iniciarServidorFixture(path.join(portal,'dist'),env,path.join(raiz,'operacao/parar.sinal'));
+    filho=iniciado.filho;port=iniciado.porta;url=`http://127.0.0.1:${port}`;
     filho.stdout.on('data',d=>log+=d);filho.stderr.on('data',d=>log+=d);
+    env.PORTAL_PORTA=String(port);
+    fs.writeFileSync(configPortal,`PORTAL_URL=${url}\nPORTAL_PORTA=${port}\nRELATORIOS_PORTA=${relatorios}\nPORTAL_API_TOKEN=${token}\n`);
     for(let n=0;n<100;n++){
       assert.equal(filho.exitCode,null,log);
       try{const r=await fetch(url+'/api/health',{signal:AbortSignal.timeout(1000)});if(r.ok){await r.arrayBuffer();return;}}catch{}

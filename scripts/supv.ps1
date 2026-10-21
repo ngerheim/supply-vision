@@ -78,6 +78,7 @@ function Ajuda-Supv([string]$Comando){
   homologar='supv homologar [--copiar] [--destino arquivo.txt] | Mostra e salva relatorio mascarado. Ex.: supv homologar --copiar --destino "C:\Temp\homologacao.txt"'
   saude='supv saude [--desde "yyyy-MM-dd HH:mm"] | Padrao: ultimas 24 h. Falhas por motivo, partida e reinicios; Portal desde o ultimo reinicio.'
   logs='supv logs <supervisor|portal|atualizacao|emails|relatorios> [-n 80] [--bruto] | Atualizacao sem progresso git e diagnosticos de build; --bruto mostra todas as linhas. Dados sensiveis continuam mascarados. Ex.: supv logs portal -n 120'
+  usuarios='supv usuarios legados | Somente leitura: nome, perfil, ativo e ultimo acesso conhecido dos usuarios com senha legada.'
   config='supv config validar | Executa validar-operacao.ps1.'
   backup='supv backup senha | supv backup testar | supv backup restaurar [--data AAAA-MM-DD_HHMM | --anterior] [--configuracao] [--sim] | Lista a rede; padrao mais recente. Restaurar para a operacao e exige RESTAURAR, ou --sim.'
   modo='supv modo <desligado|computador> | Exige operacao parada e terminal como administrador. Ex.: supv modo computador'
@@ -86,7 +87,7 @@ function Ajuda-Supv([string]$Comando){
  }
  if($Comando){if(!$ajudas.ContainsKey($Comando)){throw "Comando desconhecido: $Comando"};Escrever-Supv $ajudas[$Comando];return}
  Escrever-Supv 'Supply Vision - supv <comando> [opcoes]'
- foreach($chave in @('status','iniciar','parar','atualizar','acompanhar','homologar','saude','logs','config','backup','modo','manutencao','firewall')){Escrever-Supv $ajudas[$chave]}
+ foreach($chave in @('status','iniciar','parar','atualizar','acompanhar','homologar','saude','logs','usuarios','config','backup','modo','manutencao','firewall')){Escrever-Supv $ajudas[$chave]}
  Escrever-Supv 'Ajuda: supv help | supv <comando> --help | supv help <comando>'
 }
 function Ler-ComandoSupv([object[]]$Argumentos){
@@ -314,7 +315,7 @@ function Mostrar-SaudeSupv([datetime]$Desde){
 }
 function Executar-ComandoSupv($c){
  $p=@($c.posicionais);$o=$c.opcoes;$comando=$c.comando
- $quantidade=switch($comando){'help'{-1} 'logs'{1} 'config'{1} 'backup'{1} 'modo'{1} 'manutencao'{1} 'firewall'{1} default{0}}
+ $quantidade=switch($comando){'help'{-1} 'logs'{1} 'usuarios'{1} 'config'{1} 'backup'{1} 'modo'{1} 'manutencao'{1} 'firewall'{1} default{0}}
  if($quantidade-ge0-and$p.Count-ne$quantidade){throw "Argumentos invalidos. Use supv $comando --help."}
  switch($comando){
   'help' {if($p.Count-gt1){throw 'Use supv help [comando].'};Ajuda-Supv ($p|Select-Object -First 1);return 0}
@@ -381,6 +382,11 @@ function Executar-ComandoSupv($c){
     }else{Get-Content -LiteralPath $arquivo.FullName -Tail $n -Encoding UTF8|ForEach-Object {Escrever-Supv $_}}
    }
    return 0
+  }
+  'usuarios' {
+   if($p[0]-ne'legados'){throw 'Use supv usuarios legados.'}
+   $r=Executar-NativoOperacao 'node' @('--experimental-strip-types',(Join-Path $script:supvRaiz 'portal/scripts/usuarios-legados.mjs')) -AoReceber {param($linha) Escrever-Supv $linha}
+   if($r.codigo-ne0){throw 'Nao foi possivel consultar usuarios legados.'};return 0
   }
   'config' {if($p[0]-ne'validar'){throw 'Use supv config validar.'};[void](Executar-AcaoSupv 'validar');return 0}
   'backup' {

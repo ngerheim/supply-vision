@@ -157,30 +157,34 @@ export function acordosApi(contexto: ContextoApi) {
     const sort = params.get('sort') || 'item';
     const sortColumn = Object.hasOwn(sortColumns, sort) ? sortColumns[sort] : sortColumns.item;
     const sortDirection = params.get('direction') === 'desc' ? 'DESC' : 'ASC';
-    const agreement = await first(`SELECT a.*,
+    // Metadados e pagina sao lidos no mesmo snapshot SQLite.
+    const db = rawDb();
+    const [cabecalho, locais, condicoes, historico] = await db.batch([
+      db.prepare(`SELECT a.*,
     (SELECT COUNT(*) FROM agreement_items ai WHERE ai.version_id=a.current_version_id) AS totalItems,
     ${SITUACAO_EFETIVA_SQL} AS effectiveStatus,
     s.trade_name AS supplier,s.legal_name AS legalName,s.cnpj,u.name AS owner
-    FROM agreements a JOIN suppliers s ON s.id=a.supplier_id LEFT JOIN users u ON u.id=a.owner_user_id WHERE a.id=?2`, [dataDeNegocio(), agreementId]);
-    if (!agreement) return fail('Acordo não encontrado.', 404);
-    const [locations, rows, versions] = await Promise.all([
-      all(`SELECT l.id,l.city,l.state FROM agreement_locations al JOIN locations l ON l.id=al.location_id WHERE al.agreement_id=? ORDER BY l.state,l.city`, [agreementId]),
-      all(`SELECT ai.id,ai.revision,ai.price,ai.courtesy,ai.brands_text AS brands,ai.notes,ci.id AS catalogItemId,ci.name AS item,
+    FROM agreements a JOIN suppliers s ON s.id=a.supplier_id LEFT JOIN users u ON u.id=a.owner_user_id WHERE a.id=?2`).bind(dataDeNegocio(), agreementId),
+      db.prepare(`SELECT l.id,l.city,l.state FROM agreement_locations al JOIN locations l ON l.id=al.location_id WHERE al.agreement_id=? ORDER BY l.state,l.city`).bind(agreementId),
+      db.prepare(`SELECT ai.id,ai.revision,ai.price,ai.courtesy,ai.brands_text AS brands,ai.notes,ci.id AS catalogItemId,ci.name AS item,
       vm.id AS modelId,vm.name AS model,un.id AS unitId,un.code AS unit,l.id AS locationId,l.city,l.state
       FROM agreements a JOIN agreement_items ai ON ai.version_id=a.current_version_id JOIN catalog_items ci ON ci.id=ai.catalog_item_id
       JOIN vehicle_models vm ON vm.id=ai.vehicle_model_id JOIN units un ON un.id=ai.unit_id JOIN locations l ON l.id=ai.location_id
-      WHERE a.id=? ORDER BY ${sortColumn} ${sortDirection},ai.id ASC LIMIT ? OFFSET ?`, [agreementId, limit, offset]),
-      all(`SELECT version_number AS versionNumber,status,published_at AS publishedAt,created_at AS createdAt FROM agreement_versions WHERE agreement_id=? AND status='published' ORDER BY version_number DESC`, [agreementId]),
+      WHERE a.id=? ORDER BY ${sortColumn} ${sortDirection},ai.id ASC LIMIT ? OFFSET ?`).bind(agreementId, limit, offset),
+      db.prepare(`SELECT version_number AS versionNumber,status,published_at AS publishedAt,created_at AS createdAt FROM agreement_versions WHERE agreement_id=? AND status='published' ORDER BY version_number DESC`).bind(agreementId),
     ]);
+    const agreement = cabecalho.results[0] as Row | undefined;
+    if (!agreement) return fail('Acordo não encontrado.', 404);
+    const locations = locais.results as Row[], rows = condicoes.results as Row[], versions = historico.results as Row[];
     if (!canWrite(user)) {
       const { id, number, status, start_date, end_date, effectiveStatus, supplier, cnpj } = agreement;
       return ok({ agreement: { id, number, status, start_date, end_date, effectiveStatus, supplier, cnpj }, locations,
-        totalItems: agreement.totalItems, offset, limit, version: agreement.current_version_id,
+        totalItems: agreement.totalItems, offset, limit, revision: agreement.revision, version: agreement.current_version_id,
         items: rows.map(({ notes: _notes, ...item }) => item),
         versions: versions.map(({ versionNumber }) => ({ versionNumber })),
       });
     }
-    return ok({ agreement, locations, items: rows, versions, totalItems: agreement.totalItems, offset, limit, version: agreement.current_version_id });
+    return ok({ agreement, locations, items: rows, versions, totalItems: agreement.totalItems, offset, limit, revision: agreement.revision, version: agreement.current_version_id });
   }
 
   async function createAgreement(request: Request, user: User) {

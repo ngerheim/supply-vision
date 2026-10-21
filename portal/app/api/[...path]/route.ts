@@ -1,3 +1,5 @@
+import { comContextoEscrita, definirAutorEscrita, SessaoRevogada } from '@/lib/autor-escrita';
+import { tokenHash } from '@/lib/criptografia';
 import { NextRequest, NextResponse } from 'next/server';
 import { env } from '../../../scripts/configuracao-servidor.mjs';
 import * as banco from '@/lib/database';
@@ -41,6 +43,7 @@ const partsOf = (request: Request) => new URL(request.url).pathname.replace(/^\/
 
 async function requireUser(request: Request) {
   const user = await currentUser(request);
+  if (user && request.method !== 'GET') definirAutorEscrita({ id: user.id, role: user.role, token: await tokenHash(banco.parseCookies(request).acordos_session || '') });
   return user;
 }
 
@@ -190,6 +193,7 @@ async function GETInterno(request: NextRequest) {
 // Traduz a excecao em resposta. So mensagens de erros conhecidos chegam ao
 // cliente; o resto vira 500 generico e fica registrado no log do servidor.
 function respostaDeErro(erro: unknown) {
+  if (erro instanceof SessaoRevogada) return fail(erro.message, 403);
   if (erro instanceof CorpoExpirado) return fail(erro.message, 408);
   if (erro instanceof TravaPerdida) return fail(erro.message, 409);
   if (erro instanceof CorpoGrandeDemais) return fail(erro.message, 413);
@@ -199,7 +203,7 @@ function respostaDeErro(erro: unknown) {
 }
 
 export async function POST(request: NextRequest) {
-  try { return await POSTInterno(request); }
+  try { return await comContextoEscrita(() => POSTInterno(request)); }
   catch (erro: unknown) { return respostaDeErro(erro); }
 }
 
@@ -230,7 +234,7 @@ async function POSTInterno(request: NextRequest) {
 }
 
 export async function PUT(request: NextRequest) {
-  try { return await PUTInterno(request); }
+  try { return await comContextoEscrita(() => PUTInterno(request)); }
   catch (erro: unknown) { return respostaDeErro(erro); }
 }
 
@@ -253,7 +257,7 @@ async function PUTInterno(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
-  try { return await DELETEInterno(request); }
+  try { return await comContextoEscrita(() => DELETEInterno(request)); }
   catch (erro: unknown) { return respostaDeErro(erro); }
 }
 

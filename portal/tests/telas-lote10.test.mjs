@@ -197,6 +197,43 @@ const detail = (id, items = [], totalItems = items.length) => ({
   version: 'v1',
 });
 
+void test('acordo recarrega ao mudar revisao entre paginas da mesma versao', async t => {
+  const h = await mount('portal-agreements', 'AgreementDetail', { id: 'a', revision: 1, canWrite: false });
+  t.after(() => h.unmount());
+  await setImmediate();
+  h.requests[0].resolve({ ...detail('a', [{ id: 'i1', item: 'Antes' }], 2), revision: 1 });
+  await setImmediate(); h.render();
+  h.one('Button', p => Array.isArray(p.children) ? p.children.includes('Carregar mais condições') : p.children === 'Carregar mais condições').onClick();
+  h.requests[1].resolve({ ...detail('a', [{ id: 'i2', item: 'Depois' }], 2), revision: 2 });
+  await setImmediate(); h.render();
+  assert.equal(h.requests.length, 3, 'Deve descartar paginas e recarregar do inicio');
+  assert.doesNotMatch(h.requests[2].path, /offset=/);
+  h.requests[2].resolve({ ...detail('a', [{ id: 'i1', item: 'Atual' }], 2), revision: 2 });
+  await setImmediate(); h.render();
+  assert.equal(h.find(n => n.props?.children === 'Antes').length, 0);
+});
+
+for (const origem of ['edicao de item', 'importacao']) {
+  void test(`cabecalho usa revisao atualizada pela API apos ${origem}, sem remontar tela`, async t => {
+    let formulario;
+    const props = {id: 'a', revision: {}, canWrite: true, onEdit: a => { formulario = a; }};
+    const h = await mount('portal-agreements', 'AgreementDetail', props);
+    t.after(() => h.unmount());
+    const resposta = revision => ({...detail('a'), revision, agreement: {...detail('a').agreement, revision}});
+    await setImmediate(); h.requests[0].resolve(resposta(2));
+    await setImmediate(); h.render();
+    h.render({...props, busy: true});
+    assert.equal(h.one('Button', p => p.children?.includes?.(' Editar acordo')).disabled, true, 'Escrita e bootstrap em curso bloqueiam abrir o cabecalho');
+    h.render({...props, revision: {atualizado: origem}});
+    await setImmediate(); h.render();
+    assert.equal(h.find(n => n.type === 'Button' && n.props.children?.includes?.(' Editar acordo')).length, 0, 'Nao pode editar cabecalho com o detalhe anterior enquanto a API atualiza');
+    h.requests[1].resolve(resposta(5));
+    await setImmediate(); h.render();
+    h.one('Button', p => p.children?.includes?.(' Editar acordo')).onClick();
+    assert.equal(formulario.revision, 5);
+  });
+}
+
 void test('acordo descarta resposta de outro id e pagina antiga apos mudar ordenacao', async (t) => {
   const props = { id: 'a', revision: 1, canWrite: false };
   const h = await mount('portal-agreements', 'AgreementDetail', props);
@@ -525,7 +562,7 @@ void test('publicacao exige previa valida e clique; clique duplicado nao reenvia
   h.render();
   h.one('Button', (p) => p.children?.includes('Conferir arquivo')).onClick();
   assert.match(h.requests[0].path, /\?preview=1$/);
-  h.requests[0].resolve({ valid: true, preview: true, summary: { items: 1 } });
+  h.requests[0].resolve({ valid: true, preview: true, agreementRevision: 7, summary: { items: 1 } });
   await setImmediate();
   h.render();
   assert.equal(h.requests.length, 1);
@@ -534,6 +571,7 @@ void test('publicacao exige previa valida e clique; clique duplicado nao reenvia
     second = publish();
   assert.equal(h.requests.length, 2);
   assert.doesNotMatch(h.requests[1].path, /preview/);
+  assert.equal(h.requests[1].options.body.get('expectedRevision'), '7');
   h.requests[1].resolve({ summary: { items: 1 } });
   await Promise.all([first, second]);
   h.render();
