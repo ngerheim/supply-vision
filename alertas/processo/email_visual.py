@@ -50,7 +50,7 @@ def montar_html(titulo, linhas, rodape="Mensagem automática do Supply Vision.")
         f'color:{DESTAQUE}">Ambiente corporativo</div>'
         '<div style="margin-top:5px;font-size:20px;font-weight:700">Supply Vision</div>'
         '</td></tr>'
-        f'<tr><td style="padding:28px"><h1 style="margin:0 0 18px;font-size:20px">'
+        f'<tr><td style="padding:28px"><h1 style="margin:0 0 8px;font-size:22px">'
         f'{escapar(titulo)}</h1>{paragrafos}</td></tr>'
         f'<tr><td style="padding:18px 28px;background:{RODAPE_FUNDO};'
         f'color:{RODAPE_TEXTO};font-size:12px">{escapar(rodape)}</td></tr>'

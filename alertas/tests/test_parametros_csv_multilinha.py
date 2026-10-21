@@ -27,8 +27,9 @@ def test_csv_preserva_quebras_comentarios_e_aspas(tmp_path, monkeypatch):
 def test_falha_ao_gravar_contagem_interrompe_carga(tmp_path, monkeypatch):
     mod = carregar(tmp_path, monkeypatch)
     (tmp_path / 'itens.csv').write_text('de;para\na;b\n', encoding='utf-8')
-    # Um diretório no destino temporário reproduz falha real de escrita.
-    (tmp_path / '.contagens.json.tmp').mkdir()
+    def falhar(*args):
+        raise OSError('fixture sem permissao para publicar')
+    monkeypatch.setattr(Path, 'replace', falhar)
     with pytest.raises(mod.ParametroInvalido, match='registrar contagens'):
         mod.carregar_de_para('itens.csv', 'de', 'para')
     assert not mod.CONTAGENS.exists()

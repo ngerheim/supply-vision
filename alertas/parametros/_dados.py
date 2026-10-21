@@ -14,6 +14,9 @@ import os
 import json
 import re
 import unicodedata
+import tempfile
+import time
+from contextlib import contextmanager
 from pathlib import Path
 
 CODIGO = Path(__file__).resolve().parent
@@ -110,7 +113,46 @@ def _linhas_uteis(caminho, csv_multilinha=False):
     return linhas
 
 
+@contextmanager
+def _travar_contagens():
+    with open(CONTAGENS.with_suffix('.lock'), 'a+b') as trava:
+        trava.seek(0, os.SEEK_END)
+        if trava.tell() == 0:
+            trava.write(b'0')
+            trava.flush()
+        prazo = time.monotonic() + 10
+        while True:
+            try:
+                trava.seek(0)
+                if os.name == 'nt':
+                    import msvcrt
+                    msvcrt.locking(trava.fileno(), msvcrt.LK_NBLCK, 1)
+                else:
+                    import fcntl
+                    fcntl.flock(trava, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except OSError as erro:
+                if time.monotonic() >= prazo:
+                    raise ParametroInvalido('Timeout ao travar historico de contagens.') from erro
+                time.sleep(0.05)
+        try:
+            yield
+        finally:
+            if os.name == 'nt':
+                trava.seek(0)
+                msvcrt.locking(trava.fileno(), msvcrt.LK_UNLCK, 1)
+            else:
+                fcntl.flock(trava, fcntl.LOCK_UN)
+
+
 def _checar_queda(nome, quantidade, registrar=True):
+    if not registrar:
+        return _checar_queda_travada(nome, quantidade, registrar=False)
+    with _travar_contagens():
+        return _checar_queda_travada(nome, quantidade)
+
+
+def _checar_queda_travada(nome, quantidade, registrar=True):
     """Bloqueia lista vazia e queda brusca; registra a contagem em disco.
 
     Na primeira carga não há com o que comparar: apenas registra.
@@ -119,14 +161,14 @@ def _checar_queda(nome, quantidade, registrar=True):
     if CONTAGENS.is_file():
         try:
             hist = json.loads(CONTAGENS.read_text(encoding='utf-8'))
-        except (OSError, ValueError) as e:
-            raise ParametroInvalido(
-                f'{CONTAGENS.name} ilegível ({e}).\n'
-                f'   Sem ele não dá para detectar queda anormal de parâmetro.\n'
-                f'   Apague o arquivo para recomeçar o registro do zero — a\n'
-                f'   próxima carga passa sem comparação, então confira os\n'
-                f'   tamanhos antes.'
-            ) from e
+            if not isinstance(hist, dict) or any(
+                    not isinstance(v, int) or isinstance(v, bool) or v < 0 for v in hist.values()):
+                raise ValueError('estrutura de contagens invalida')
+        except ValueError:
+            print(f'AVISO: {CONTAGENS.name} invalido; recriando historico de contagens.')
+            hist = {}
+        except OSError as erro:
+            raise ParametroInvalido(f'Historico de contagens ilegivel: {erro}') from erro
 
     anterior = hist.get(nome)
     if anterior and quantidade < anterior * (1 - TOLERANCIA_QUEDA):
@@ -146,14 +188,20 @@ def _checar_queda(nome, quantidade, registrar=True):
 
     if registrar and hist.get(nome) != quantidade:
         hist[nome] = quantidade
-        tmp = CONTAGENS.with_suffix('.json.tmp')
+        tmp = None
         try:
-            tmp.write_text(json.dumps(hist, indent=2, ensure_ascii=False),
-                           encoding='utf-8')
+            with tempfile.NamedTemporaryFile(mode='w', encoding='utf-8',
+                                             dir=CONTAGENS.parent, prefix='.contagens-',
+                                             suffix='.tmp', delete=False) as arquivo:
+                tmp = Path(arquivo.name)
+                json.dump(hist, arquivo, indent=2, ensure_ascii=False)
+                arquivo.flush()
+                os.fsync(arquivo.fileno())
             tmp.replace(CONTAGENS)
         except OSError as erro:
             try:
-                tmp.unlink(missing_ok=True)
+                if tmp is not None:
+                    tmp.unlink(missing_ok=True)
             except OSError:
                 pass
             raise ParametroInvalido(

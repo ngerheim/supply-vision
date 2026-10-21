@@ -112,4 +112,6 @@ def baixar():
 
 
 if __name__ == '__main__':
+    from pipeline import garantir_lock_entrada
+    garantir_lock_entrada()
     baixar()

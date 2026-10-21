@@ -71,6 +71,8 @@ OUTPUT_DIR = str(sv_paths.RELATORIOS_DIARIOS)
 
 
 if __name__ == "__main__":
+    from pipeline import garantir_lock_entrada
+    garantir_lock_entrada()
     print("Carregando base...")
     df_base   = carregar_base(BASE_PATH)
 
