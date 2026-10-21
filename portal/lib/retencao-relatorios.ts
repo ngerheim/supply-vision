@@ -1,12 +1,15 @@
 export const VALIDADE_HISTORICO_MS = 24 * 60 * 60 * 1000;
 type Execucao = { action?: unknown; completed_at?: unknown; completedAt?: unknown };
 type Arquivo = { expiresAt?: unknown; [key: string]: unknown };
-export function prazoArquivoHistorico(job: Execucao, arquivo: Arquivo): string | null {
+export function prazoArquivoHistorico(job: Execucao, arquivo: Arquivo, mtimeMs?: number, agora = Date.now()): string | null {
   if (job.action !== 'recorte') return null;
   if (typeof arquivo.expiresAt === 'string' && Number.isFinite(Date.parse(arquivo.expiresAt))) return arquivo.expiresAt;
   // Pedidos anteriores à atualização não tinham validade salva por arquivo.
   const conclusao = job.completed_at ?? job.completedAt;
-  if (typeof conclusao !== 'string' || !Number.isFinite(Date.parse(conclusao))) return null;
+  if (typeof conclusao !== 'string' || !Number.isFinite(Date.parse(conclusao))) {
+    return typeof mtimeMs === 'number' && Number.isFinite(mtimeMs) && mtimeMs > 0 && mtimeMs <= agora
+      ? new Date(mtimeMs + VALIDADE_HISTORICO_MS).toISOString() : null;
+  }
   return new Date(Date.parse(conclusao) + VALIDADE_HISTORICO_MS).toISOString();
 }
 export function arquivoHistoricoExpirado(job: Execucao, arquivo: Arquivo, agora = Date.now()): boolean {

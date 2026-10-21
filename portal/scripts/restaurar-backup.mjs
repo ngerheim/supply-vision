@@ -4,7 +4,7 @@ import path from 'node:path';
 import readline from 'node:readline/promises';
 import { pathToFileURL } from 'node:url';
 import { portasOperacao } from './portas-operacao.mjs';
-import { lerConfigBruta, lerArquivo } from './configuracao.mjs';
+import { lerConfigEfetiva, lerArquivo } from './configuracao.mjs';
 import { privado, portalPrivado } from './caminhos.mjs';
 import { validarBanco } from './validar-banco.mjs';
 import { criarSnapshot } from './snapshot-banco.mjs';
@@ -24,7 +24,7 @@ function portalRespondendo(porta) {
     conexao.once('connect', () => fim(true)); conexao.once('error', () => fim(false));
   });
 }
-export async function exigirOperacaoParada(raiz = privado, config = lerConfigBruta()) {
+export async function exigirOperacaoParada(raiz = privado, config = lerConfigEfetiva()) {
   const lock = path.join(raiz, 'operacao/supervisor.lock');
   if (fs.existsSync(lock)) {
     try { const fd = fs.openSync(lock, 'r+'); fs.closeSync(fd); }
@@ -122,7 +122,7 @@ export async function executarRestauracao(args = process.argv.slice(2)) {
   let data = args.includes('--data') ? args[args.indexOf('--data') + 1] : undefined;
   if (args.includes('--data') && !data) throw new FalhaBackup('Use --data AAAA-MM-DD_HHMM.');
   if (args.includes('--listar') || args.includes('--anterior')) {
-    const config = lerConfigBruta();
+    const config = lerConfigEfetiva();
     if (!config.BACKUP_NETWORK_DIR?.trim()) throw new FalhaBackup('BACKUP_NETWORK_DIR nao configurado.');
     const lista = listarHistorico(config.BACKUP_NETWORK_DIR.trim());
     console.log(lista.map(item => path.basename(item.arquivo)).join('\n') || 'Nenhum backup na rede.');

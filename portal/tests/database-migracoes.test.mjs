@@ -18,6 +18,31 @@ async function carregar(sufixo) {
   finally { hooks.deregister(); }
 }
 
+void test('marcador inserido por concorrente entre consulta e migracao nao conflita', async t => {
+  const pasta = fs.mkdtempSync(path.join(os.tmpdir(), 'sv-migracao-corrida-'));
+  const db = bancoSqliteLocal({ pastaPrivada: pasta, criar: true });
+  const chave = Symbol.for('supply-vision:banco'), anterior = globalThis[chave], senha = env.INITIAL_ADMIN_PASSWORD;
+  const disputadas = [];
+  globalThis[chave] = { ...db, prepare(sql) {
+    const stmt = db.prepare(sql);
+    const versao = sql.match(/^SELECT 1 ok FROM schema_migrations WHERE version=([2-5])$/)?.[1];
+    if (!versao) return stmt;
+    return { ...stmt, async first() {
+      if (!await stmt.first()) {
+        await db.prepare('INSERT INTO schema_migrations(version,applied_at) VALUES(?,?)').bind(Number(versao), 'concorrente').run();
+        disputadas.push(Number(versao));
+        return null;
+      }
+      return stmt.first();
+    } };
+  } };
+  env.INITIAL_ADMIN_PASSWORD = 'senha-ficticia-concorrente';
+  t.after(() => { globalThis[chave] = anterior; env.INITIAL_ADMIN_PASSWORD = senha; db.fechar(); fs.rmSync(pasta, { recursive: true, force: true }); });
+  await (await carregar('corrida')).ensureDatabase();
+  assert.deepEqual(disputadas, [2, 3, 4, 5]);
+  assert.deepEqual((await db.prepare('SELECT applied_at FROM schema_migrations WHERE version BETWEEN 2 AND 5').all()).results.map(r => r.applied_at), Array(4).fill('concorrente'));
+});
+
 void test('falha ao inspecionar colunas bloqueia inicializacao e retomada migra em ordem sem regravar', async t => {
   const pasta = fs.mkdtempSync(path.join(os.tmpdir(), 'sv-lote08-migracoes-'));
   const db = bancoSqliteLocal({ pastaPrivada: pasta, criar: true });

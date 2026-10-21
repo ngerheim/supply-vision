@@ -265,6 +265,7 @@ function Remover-ArquivosIntroduzidos([string]$Raiz,[string[]]$Arquivos){
 function Obter-PortaPortalLocal([hashtable]$Config) {
  $porta=3000
  if($Config['PORTAL_PORTA']){$porta=[int]$Config['PORTAL_PORTA']}
+ if(Test-Path Env:PORTAL_PORTA){$porta=if($env:PORTAL_PORTA){[int]$env:PORTAL_PORTA}else{3000}}
  if($porta-lt1-or$porta-gt65535){throw 'PORTAL_PORTA invalida.'}
  return $porta
 }
@@ -275,7 +276,11 @@ function Parar-Operacao([string]$Raiz,[int]$Limite=60) {
  $op=Join-Path $privado 'operacao'
  $porta=3001;$portaPortal=3000
  $arquivo=Join-Path $privado 'portal/configuracao/portal.env'
- if(Test-Path -LiteralPath $arquivo){$cfg=Ler-ConfigOperacao $arquivo;if($cfg['RELATORIOS_PORTA']){$porta=[int]$cfg['RELATORIOS_PORTA']};$portaPortal=Obter-PortaPortalLocal $cfg}
+ $cfg=@{}
+ if(Test-Path -LiteralPath $arquivo){$cfg=Ler-ConfigOperacao $arquivo;if($cfg['RELATORIOS_PORTA']){$porta=[int]$cfg['RELATORIOS_PORTA']}}
+ $portaPortal=Obter-PortaPortalLocal $cfg
+ if(Test-Path Env:RELATORIOS_PORTA){$porta=if($env:RELATORIOS_PORTA){[int]$env:RELATORIOS_PORTA}else{3001}}
+ if($porta-lt1024-or$porta-gt65535-or$porta-eq$portaPortal){throw 'RELATORIOS_PORTA invalida.'}
  if(!(Testar-SupervisorEncerrado $privado)){
   [IO.File]::WriteAllText((Join-Path $op 'parar.sinal'),'parar')
  }

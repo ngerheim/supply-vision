@@ -7,7 +7,7 @@ import test from 'node:test';
 import { criarTemporarioTeste } from './apoio/ambiente.mjs';
 import { ferramenta7z, senhaFicticia, bancoFicticio } from './apoio/backup.mjs';
 import { destinoBanco } from '../scripts/banco-local.mjs';
-import { reservarPortaLoopback } from '../scripts/porta-teste.mjs';
+import { portaSemServico } from '../scripts/porta-teste.mjs';
 import { montarPacote, compactarPacote, comBackupDaRede, extrairPacote, validarPacote } from '../scripts/backup-pacote.mjs';
 import { replicarNaRede } from '../scripts/backup.mjs';
 import { restaurarCopia } from '../scripts/restaurar-backup.mjs';
@@ -26,7 +26,7 @@ void test('7z real: banco WAL consistente, configuracao da semente, rede, senha,
   const raiz = path.join(dir, 'privado-ficticio'), banco = destinoBanco('fixture.sqlite', path.join(raiz, 'portal'));
   const db = bancoFicticio(banco); fixture.db = db;
   db.exec('PRAGMA journal_mode=WAL');
-  const configPortal = `PORTAL_PORTA=${await reservarPortaLoopback()}\nRELATORIOS_PORTA=${await reservarPortaLoopback()}\n`;
+  const configPortal = `PORTAL_PORTA=${await portaSemServico()}\nRELATORIOS_PORTA=${await portaSemServico()}\n`;
   const arquivos = { 'comum/smtp.env': 'SMTP_USER=ficticio@example.com', 'portal/configuracao/portal.env': configPortal,
     'alertas/config/qlik.env': 'TOKEN=ficticio', 'alertas/parametros/de_para/mapa.txt': 'ficticio',
     'alertas/estado-envios/slot.json': '{"enviado":true}', 'operacao/estado.json': '{"slot":"concluido"}' };

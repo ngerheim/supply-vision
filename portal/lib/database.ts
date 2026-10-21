@@ -1,5 +1,7 @@
 import { portalPrivado } from '../scripts/configuracao.mjs';
 import { bancoSqliteLocal } from './sqlite-local.ts';
+import { SESSAO_INATIVIDADE_MS } from './politica-sessao.ts';
+export { SESSAO_INATIVIDADE_MS } from './politica-sessao.ts';
 import { CRIAR_CONTADOR_CHAMADOS_SQL, MIGRAR_CONTADOR_CHAMADOS_SQL, migrarBuscaChamados, migrarIndicesListasGlobais } from './operacao-dados.ts';
 import { SCHEMA_VALIDACAO } from './operacao-validacao.ts';
 import { SCHEMA_RELATORIOS } from './relatorios.ts';
@@ -8,7 +10,7 @@ export { passwordHash, tokenHash, PBKDF2_ITERACOES_ATUAL, PBKDF2_ITERACOES_LEGAD
 import { registraAtividade } from './atualizacao-periodica.ts';
 import { LIMPAR_TRAVAS_VENCIDAS_SQL, RENOVAR_TRAVA_SQL, TravaPerdida, TRAVA_VALIDADE_MS } from './controle-escrita.ts';
 import { MIGRAR_FORNECEDORES_CHAMADOS_SQL } from './chamados.ts';
-import { TRIGGERS_REVISAO, TABELAS_CADASTRO } from './controle-escrita.ts';
+import { TRIGGERS_REVISAO, TRIGGERS_REVISAO_LISTA_ACORDO, TABELAS_CADASTRO } from './controle-escrita.ts';
 import { env } from '../scripts/configuracao-servidor.mjs';
 import { type Role, validatePassword } from '@/lib/domain';
 
@@ -25,9 +27,6 @@ export function parseCookies(request: Request): Record<string, string> {
   }
   return cookies;
 }
-
-// Duas horas parado encerra a sessao, mesmo dentro das 12h de validade.
-export const SESSAO_INATIVIDADE_MS = 2 * 60 * 60 * 1000;
 
 export { normalizeCnpj, normalizeText } from '@/lib/domain';
 
@@ -111,6 +110,7 @@ const columnMigrations: Array<[string, string, string]> = [
   // anterior, para nao haver lacuna nem sobreposicao entre envios.
   ['daily_report_deliveries', 'period_start', 'TEXT'],
   ['daily_report_deliveries', 'period_end', 'TEXT'],
+  ['daily_report_deliveries', 'payload_json', 'TEXT'],
 ];
 
 async function applyColumnMigrations() {
@@ -167,6 +167,7 @@ async function initialize() {
   await db.batch(schema.map((sql) => db.prepare(sql)));
   await applyColumnMigrations();
   await db.batch([
+    ...TRIGGERS_REVISAO_LISTA_ACORDO.map((sql) => db.prepare(sql)),
     ...TRIGGERS_REVISAO.map((sql) => db.prepare(sql)),
     db.prepare('CREATE UNIQUE INDEX IF NOT EXISTS idx_tickets_request_key ON tickets(requested_by,request_key)'),
     db.prepare('CREATE UNIQUE INDEX IF NOT EXISTS idx_ticket_events_request_key ON ticket_events(ticket_id,user_id,request_key)'),
@@ -206,13 +207,13 @@ async function initialize() {
   if (!prefixoMigrado) {
     await db.batch([
       db.prepare("UPDATE tickets SET code='SUP-' || substr(code,4) WHERE code LIKE 'CH-%'"),
-      db.prepare('INSERT INTO schema_migrations (version,applied_at) VALUES (2,?)').bind(now()),
+      db.prepare('INSERT OR IGNORE INTO schema_migrations (version,applied_at) VALUES (2,?)').bind(now()),
     ]);
   }
   const relatorioConfigurado = await db.prepare('SELECT 1 ok FROM schema_migrations WHERE version=3').first();
   if (!relatorioConfigurado) {
     await db.batch([
-      db.prepare('INSERT INTO schema_migrations (version,applied_at) VALUES (3,?)').bind(now()),
+      db.prepare('INSERT OR IGNORE INTO schema_migrations (version,applied_at) VALUES (3,?)').bind(now()),
     ]);
   }
   // Versao 4: localidade deixou de ter De/Para (a cidade se cadastra), e a
@@ -221,7 +222,7 @@ async function initialize() {
   if (!semDeParaDeLocalidade) {
     await db.batch([
       db.prepare('DROP TABLE IF EXISTS import_location_mappings'),
-      db.prepare('INSERT INTO schema_migrations (version,applied_at) VALUES (4,?)').bind(now()),
+      db.prepare('INSERT OR IGNORE INTO schema_migrations (version,applied_at) VALUES (4,?)').bind(now()),
     ]);
   }
   // Versao 5: o cadastro de marcas saiu. "Marcas aceitas" das condicoes
@@ -231,7 +232,7 @@ async function initialize() {
   if (!semCadastroDeMarcas) {
     await db.batch([
       db.prepare('DROP TABLE IF EXISTS brands'),
-      db.prepare('INSERT INTO schema_migrations (version,applied_at) VALUES (5,?)').bind(now()),
+      db.prepare('INSERT OR IGNORE INTO schema_migrations (version,applied_at) VALUES (5,?)').bind(now()),
     ]);
   }
   // Depois das migracoes que alteram codigo e fornecedor, normaliza o legado.

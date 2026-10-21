@@ -6,14 +6,14 @@
 # Sobe uma instancia descartavel em outra porta, com banco vazio, e exercita o
 # caminho real. Nao encosta no banco de producao.
 
-param([switch]$UsarBuildExistente, [string]$Relatorio, [ValidateRange(1024,65535)][int]$Porta = 3199)
+param([switch]$UsarBuildExistente, [string]$Relatorio, [ValidateRange(1024,65534)][int]$Porta = 3199)
 
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot '../../scripts/operacao-logica.ps1')
 $projeto = Split-Path -Parent $PSScriptRoot
 $env:PORTAL_TESTE_PORTA = [string]$Porta
 $baseUrl = "http://127.0.0.1:$porta"
-$temp = Join-Path $env:TEMP "portal-teste-$(Get-Random)"
+$temp = Join-Path $env:TEMP "portal-teste-$([guid]::NewGuid().ToString('N'))"
 $senhaTeste = 'senha-de-teste-do-ci-1234'
 $logServidor = Join-Path $temp 'servidor.log'
 $logBuild = Join-Path $temp 'build.log'
@@ -42,7 +42,10 @@ function Encerrar {
   $ErrorActionPreference = 'SilentlyContinue'
   if ($script:processoServidor) {
     # /T encerra toda a arvore iniciada pelo teste.
-    [void](Executar-NativoOperacao 'taskkill.exe' @('/PID',[string]$script:processoServidor,'/T','/F'))
+    if(!$script:processoServidor.HasExited){
+      [void](Executar-NativoOperacao 'taskkill.exe' @('/PID',[string]$script:processoServidor.Id,'/T','/F'))
+    }
+    $script:processoServidor.Dispose()
     $script:processoServidor = $null
   }
   # Rede de seguranca restrita a esta execucao: so processos cuja linha de
@@ -119,7 +122,8 @@ try {
   foreach ($nome in $ambienteServidor.Keys) {
     [Environment]::SetEnvironmentVariable($nome, $ambienteServidor[$nome], 'Process')
   }
-  $script:processoServidor = (Start-Process powershell.exe -ArgumentList '-NoProfile', '-Command', "node scripts/iniciar-portal.mjs local *> '$logServidor'" -WorkingDirectory $projeto -NoNewWindow -PassThru).Id
+  $script:processoServidor = Start-Process powershell.exe -ArgumentList '-NoProfile', '-Command', "node scripts/iniciar-portal.mjs local *> '$logServidor'" -WorkingDirectory $projeto -NoNewWindow -PassThru
+  [void]$script:processoServidor.Handle
 } finally {
   foreach ($nome in $ambienteAnterior.Keys) {
     [Environment]::SetEnvironmentVariable($nome, $ambienteAnterior[$nome], 'Process')
@@ -281,7 +285,7 @@ console.log(JSON.stringify({
 }));
 db.close();
 '@
-  $arqTmp = Join-Path $env:TEMP 'consulta-teste.cjs'
+  $arqTmp = Join-Path $temp ('consulta-'+[guid]::NewGuid().ToString('N')+'.cjs')
   Set-Content -LiteralPath $arqTmp -Value $consulta -Encoding UTF8
   $dados = & node $arqTmp $arquivoBanco | ConvertFrom-Json
   Remove-Item $arqTmp -Force

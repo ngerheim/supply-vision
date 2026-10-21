@@ -12,7 +12,7 @@ const nextConfig: NextConfig = {
   async headers() {
     return [{
       source: '/:path*',
-      headers: Object.entries(CABECALHOS_SEGURANCA).map(([key, value]) => ({ key, value })),
+      headers: Object.entries(CABECALHOS_SEGURANCA).filter(([key]) => key !== 'Content-Security-Policy').map(([key, value]) => ({ key, value })),
     }];
   },
 };

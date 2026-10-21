@@ -10,7 +10,7 @@ import { spawnSync } from 'node:child_process';
 import { DatabaseSync } from 'node:sqlite';
 import { modoEnsaio } from '../scripts/modo-ensaio.mjs';
 import { processarNotificacoes, processarRelatoriosDiarios } from '../scripts/processar-emails.mjs';
-import { reservarPortaLoopback } from '../scripts/porta-teste.mjs';
+import { portaSemServico } from '../scripts/porta-teste.mjs';
 
 void test('somente MODO_ENSAIO=1 ativa o ensaio; as duas filas ficam intactas sem SMTP', async (t) => {
   const anterior=process.env.MODO_ENSAIO;
@@ -24,9 +24,9 @@ void test('somente MODO_ENSAIO=1 ativa o ensaio; as duas filas ficam intactas se
   t.after(()=>db.close());
   db.exec(`CREATE TABLE email_notifications(id TEXT,status TEXT,attempts INTEGER,locked_at TEXT,updated_at TEXT);
     CREATE TABLE users(id TEXT,active INTEGER,role TEXT,daily_report_enabled INTEGER,daily_report_time TEXT);
-    CREATE TABLE daily_report_deliveries(id TEXT,user_id TEXT,report_date TEXT,status TEXT,attempts INTEGER,locked_at TEXT,updated_at TEXT,period_start TEXT,period_end TEXT,sent_at TEXT,created_at TEXT,next_attempt_at TEXT);
+    CREATE TABLE daily_report_deliveries(id TEXT,user_id TEXT,report_date TEXT,status TEXT,attempts INTEGER,locked_at TEXT,updated_at TEXT,period_start TEXT,period_end TEXT,sent_at TEXT,created_at TEXT,next_attempt_at TEXT,payload_json TEXT);
     INSERT INTO email_notifications VALUES('chamado','pending',0,NULL,'original');
-    INSERT INTO daily_report_deliveries(id,status,attempts,updated_at) VALUES('diario','pending',0,'original');`);
+    INSERT INTO daily_report_deliveries(id,status,attempts,updated_at,payload_json) VALUES('diario','pending',0,'original','{}');`);
   const antes= ['email_notifications','daily_report_deliveries'].map(tabela=>db.prepare(`SELECT * FROM ${tabela}`).all());
   const transporte={sendMail(){assert.fail('SMTP nao pode ser chamado em ensaio');}};
   const logs=[],original=console.log;console.log=(linha)=>logs.push(linha);
@@ -46,7 +46,7 @@ for(const existente of [true,false])void test(`backup em ensaio valida copia loc
   const db=bancoFicticio(arquivo);db.close();
   const rede=path.join(dir,'rede'),config=path.join(dir,'portal/configuracao');
   fs.mkdirSync(config,{recursive:true});
-  fs.writeFileSync(path.join(config,'portal.env'),`PORTAL_PORTA=${await reservarPortaLoopback()}\nRELATORIOS_PORTA=${await reservarPortaLoopback()}\nBACKUP_NETWORK_DIR=${rede}\n`);
+  fs.writeFileSync(path.join(config,'portal.env'),`PORTAL_PORTA=${await portaSemServico()}\nRELATORIOS_PORTA=${await portaSemServico()}\nBACKUP_NETWORK_DIR=${rede}\n`);
   if(existente){fs.mkdirSync(rede);fs.writeFileSync(path.join(rede,'portal-atual.sqlite'),'backup do notebook');}
   const resultado=spawnSync(process.execPath,['--experimental-strip-types','scripts/backup.mjs'],{
     cwd:path.resolve(import.meta.dirname,'..'),env:{...process.env,SUPPLY_VISION_PRIVADO:dir,MODO_ENSAIO:'1'},encoding:'utf8',timeout:15_000,
@@ -64,7 +64,7 @@ void test('processador CLI em ensaio nao exige SMTP nem tenta verificar conexao'
   t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
   fs.mkdirSync(path.join(dir,'portal/configuracao'),{recursive:true});
   fs.mkdirSync(path.join(dir,'portal/logs'),{recursive:true});
-  fs.writeFileSync(path.join(dir,'portal/configuracao/portal.env'),`PORTAL_PORTA=${await reservarPortaLoopback()}\nRELATORIOS_PORTA=${await reservarPortaLoopback()}\n`);
+  fs.writeFileSync(path.join(dir,'portal/configuracao/portal.env'),`PORTAL_PORTA=${await portaSemServico()}\nRELATORIOS_PORTA=${await portaSemServico()}\n`);
   for(const args of [[],['--test-connection']]){
     const resultado=spawnSync(process.execPath,['--experimental-strip-types','scripts/processar-emails.mjs',...args],{
       cwd:path.resolve(import.meta.dirname,'..'),env:{...process.env,SUPPLY_VISION_PRIVADO:dir,MODO_ENSAIO:'1'},encoding:'utf8',timeout:15_000,
@@ -83,7 +83,8 @@ void test('relatorio diario e preparado em ensaio e permanece pendente sem tenta
   const db=new DatabaseSync(':memory:');t.after(()=>db.close());
   db.exec(`CREATE TABLE users(id TEXT,active INTEGER,role TEXT,daily_report_enabled INTEGER,daily_report_time TEXT);
     INSERT INTO users VALUES('u',1,'admin',1,'00:00');
-    CREATE TABLE daily_report_deliveries(id TEXT,user_id TEXT,report_date TEXT,status TEXT,attempts INTEGER,locked_at TEXT,updated_at TEXT,period_start TEXT,period_end TEXT,sent_at TEXT,created_at TEXT,next_attempt_at TEXT);`);
+    CREATE TABLE daily_report_deliveries(id TEXT,user_id TEXT,report_date TEXT,status TEXT,attempts INTEGER,locked_at TEXT,updated_at TEXT,period_start TEXT,period_end TEXT,sent_at TEXT,created_at TEXT,next_attempt_at TEXT,payload_json TEXT);`);
+  db.exec(`CREATE TABLE tickets(id TEXT,code TEXT,supplier_name TEXT,status TEXT,created_at TEXT,updated_at TEXT); CREATE TABLE ticket_events(ticket_id TEXT,user_id TEXT,kind TEXT,from_status TEXT,to_status TEXT,message TEXT,created_at TEXT);`);
   const transporte={sendMail(){assert.fail('SMTP nao pode ser chamado');}};
   await processarRelatoriosDiarios(db,{},transporte);
   const item=db.prepare('SELECT * FROM daily_report_deliveries').get();

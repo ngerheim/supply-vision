@@ -19,6 +19,36 @@ import {
 } from '../scripts/processar-relatorios.mjs';
 import { VALIDADE_HISTORICO_MS } from '../lib/retencao-relatorios.ts';
 
+void test('limpeza migra o indice legado para v2 de forma idempotente', t => {
+  const ctx = preparar();
+  t.after(() => ctx.close());
+  ctx.db.exec('CREATE INDEX idx_report_jobs_cleanup ON report_jobs(completed_at)');
+  for (let i = 0; i < 2; i++) {
+    limparHistoricosExpirados(ctx.db, ctx.pasta);
+    const indices = ctx.db.prepare("SELECT name FROM sqlite_master WHERE type='index' AND name LIKE 'idx_report_jobs_cleanup%'").all();
+    assert.deepEqual(indices.map(i => i.name), ['idx_report_jobs_cleanup_v2']);
+  }
+});
+
+void test('metadados legados invalidos usam mtime plausivel; sem referencia mantem e avisa', t => {
+  const ctx = preparar(), agora = Date.now();
+  t.after(() => ctx.close());
+  const pasta = path.join(ctx.pasta, 'alertas/relatorios/historicos');
+  fs.mkdirSync(pasta, { recursive: true });
+  const arquivo = path.join(pasta, 'recorte_rptteste.xlsx');
+  fs.writeFileSync(arquivo, 'fixture');
+  const antigo = new Date(agora - 2 * VALIDADE_HISTORICO_MS);
+  fs.utimesSync(arquivo, antigo, antigo);
+  ctx.db.prepare("UPDATE report_jobs SET action='recorte',status='done',completed_at=NULL,artifacts_json=?").run(JSON.stringify([{ name: path.basename(arquivo), relativePath: path.relative(ctx.pasta, arquivo), expiresAt: 'invalido' }]));
+  assert.equal(limparHistoricosExpirados(ctx.db, ctx.pasta, agora), 1);
+  ctx.db.exec('UPDATE report_jobs SET artifacts_cleaned_at=NULL');
+  const avisos = [];
+  t.mock.method(console, 'warn', mensagem => avisos.push(mensagem));
+  assert.equal(limparHistoricosExpirados(ctx.db, ctx.pasta, agora), 0);
+  assert.equal(ctx.db.prepare('SELECT artifacts_cleaned_at FROM report_jobs').get().artifacts_cleaned_at, null);
+  assert.match(avisos.join(' '), /referencia|referência/);
+});
+
 void test('histórico expirado retorna 410 e limpeza exclui só seus arquivos mantendo registros', async () => {
   const ctx = preparar();
   const pasta = path.join(ctx.pasta, 'alertas/relatorios/historicos');

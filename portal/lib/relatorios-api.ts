@@ -1,3 +1,4 @@
+import { portaRelatorios } from '../scripts/portas-operacao.mjs';
 import { env } from '../scripts/configuracao-servidor.mjs';
 import { id, now, rawDb } from './database';
 import { validarPedidoRelatorio } from './relatorios.ts';
@@ -42,10 +43,10 @@ export async function consultarRelatorios(jobId?: string, arquivo?: string) {
     PORTAL_API_TOKEN?: string;
     RELATORIOS_PORTA?: string;
   };
-  const token = vars.PORTAL_API_TOKEN,
-    porta = Number(vars.RELATORIOS_PORTA || 3001);
-  if (!Number.isInteger(porta) || porta < 1024 || porta > 65535)
-    return resposta({ error: 'Porta do serviço de relatórios inválida.' }, 503);
+  const token = vars.PORTAL_API_TOKEN;
+  let porta: number;
+  try { porta = portaRelatorios(vars); }
+  catch { return resposta({ error: 'Porta do serviço de relatórios inválida.' }, 503); }
   if (!/^[a-zA-Z0-9_.-]+$/.test(arquivo) || !token)
     return resposta({ error: 'Arquivo não encontrado.' }, 404);
   const controller = new AbortController(),
@@ -60,8 +61,8 @@ export async function consultarRelatorios(jobId?: string, arquivo?: string) {
         signal: controller.signal,
       },
     );
-    clearTimeout(timeout);
-    if (!download.ok)
+    if (!download.ok) {
+      await download.body?.cancel();
       return resposta(
         {
           error:
@@ -73,7 +74,10 @@ export async function consultarRelatorios(jobId?: string, arquivo?: string) {
         },
         download.status === 410 ? 410 : download.status === 404 ? 404 : 503,
       );
-    return new Response(download.body, {
+    }
+    // O prazo inclui o corpo; so anuncia sucesso quando o arquivo terminou.
+    const corpo = await download.arrayBuffer();
+    return new Response(corpo, {
       headers: {
         'cache-control': 'no-store',
         'content-type':
@@ -87,7 +91,9 @@ export async function consultarRelatorios(jobId?: string, arquivo?: string) {
     return resposta(
       {
         error:
-          'Serviço de relatórios indisponível. Confira se a operação está iniciada.',
+          controller.signal.aborted
+            ? 'O download excedeu o prazo de 30 segundos. Tente baixar o arquivo novamente.'
+            : 'Serviço de relatórios indisponível. Confira se a operação está iniciada.',
       },
       503,
     );

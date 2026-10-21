@@ -122,6 +122,15 @@ Igual 3000 (Obter-PortaPortalLocal @{PORTAL_URL='https://portal.empresa.test'}) 
 Igual 42345 (Obter-PortaPortalLocal @{PORTAL_PORTA='42345'}) 'porta de fixture configurada'
 $portaRecusada=$false;try{Obter-PortaPortalLocal @{PORTAL_PORTA='0'}}catch{$portaRecusada=$true};Igual $true $portaRecusada 'porta invalida recusada'
 
+$portaAmbienteAntes=$env:PORTAL_PORTA
+try {
+ $env:PORTAL_PORTA='42346'
+ Igual 42346 (Obter-PortaPortalLocal @{PORTAL_PORTA='42345'}) 'ambiente sobrepoe arquivo como a partida Node'
+ $env:PORTAL_PORTA='0';$recusada=$false
+ try{Obter-PortaPortalLocal @{PORTAL_PORTA='42345'}}catch{$recusada=$true}
+ Igual $true $recusada 'porta invalida no ambiente nao usa arquivo silenciosamente'
+}finally{$env:PORTAL_PORTA=$portaAmbienteAntes}
+
 # Exercita o leitor real do supervisor sem iniciar a operacao.
 $errosSupervisor=$null
 $astSupervisor=[Management.Automation.Language.Parser]::ParseFile((Join-Path $PSScriptRoot 'supervisor.ps1'),[ref]$null,[ref]$errosSupervisor)

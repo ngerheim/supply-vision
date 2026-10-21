@@ -1,9 +1,9 @@
 import { portasOperacao } from './portas-operacao.mjs';
-import { lerConfigBruta } from './configuracao.mjs';
+import { lerConfigEfetiva } from './configuracao.mjs';
 import { pathToFileURL } from 'node:url';
 
 export async function verificarSaude(base) {
-  base ||= `http://127.0.0.1:${portasOperacao(lerConfigBruta()).portal}`;
+  base ||= `http://127.0.0.1:${portasOperacao(lerConfigEfetiva()).portal}`;
   const origem = new URL(base).origin;
   // Logo apos a partida o servidor ainda compila e migra sob demanda; um
   // primeiro pedido lento nao e defeito. Tenta de novo antes de reprovar.
@@ -41,7 +41,7 @@ export async function verificarSaude(base) {
   });
   const respostaLogin = await login.json();
   if (login.status !== 401 || !respostaLogin.error) throw new Error('Login indisponivel ou resposta invalida.');
-  const config = lerConfigBruta();
+  const config = lerConfigEfetiva();
   const aviso = !config.BACKUP_NETWORK_DIR?.trim()
     ? '; AVISO: BACKUP_NETWORK_DIR ausente; backup indisponivel' : '';
   return `${urls.length} arquivos CSS/JavaScript e API saudaveis${aviso}`;

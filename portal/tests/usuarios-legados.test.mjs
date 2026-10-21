@@ -1,0 +1,31 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
+import { PBKDF2_ITERACOES_ATUAL, PBKDF2_ITERACOES_LEGADO } from '../lib/criptografia.ts';
+
+void test('usuarios legados e somente leitura e nao divulga credenciais nem emails', async t => {
+  const pasta = fs.mkdtempSync(path.join(os.tmpdir(), 'sv-usuarios-legados-'));
+  t.after(() => fs.rmSync(pasta, { recursive: true, force: true }));
+  const arquivo = path.join(pasta, 'fixture.sqlite'), db = new DatabaseSync(arquivo);
+  db.exec(`CREATE TABLE users(id TEXT,name TEXT,email TEXT,role TEXT,active INTEGER,password_hash TEXT,password_salt TEXT,password_iterations INTEGER);
+    CREATE TABLE sessions(user_id TEXT,last_seen_at TEXT);
+    CREATE TABLE login_attempts(email TEXT,success INTEGER,created_at TEXT);`);
+  const inserir = db.prepare('INSERT INTO users VALUES(?,?,?,?,?,?,?,?)');
+  inserir.run('a', 'Fixture a@example.com', 'a@example.com', 'editor', 0, 'hash-secreto', 'salt-secreto', PBKDF2_ITERACOES_LEGADO);
+  inserir.run('b', 'Atual', 'b@example.com', 'admin', 1, 'h', 's', PBKDF2_ITERACOES_ATUAL);
+  db.exec("INSERT INTO sessions VALUES('a','2026-10-19T10:00:00Z'); INSERT INTO login_attempts VALUES('a@example.com',1,'2026-10-18T10:00:00Z')");
+  db.close();
+  const antes = fs.readFileSync(arquivo), mtime = fs.statSync(arquivo).mtimeMs;
+  const { listarUsuariosLegados } = await import('../scripts/usuarios-legados.mjs');
+  const usuarios = listarUsuariosLegados(arquivo);
+  assert.equal(usuarios.length, 1);
+  assert.equal(usuarios[0].perfil, 'editor');
+  assert.equal(usuarios[0].ativo, false);
+  assert.equal(usuarios[0].ultimoAcesso, '2026-10-19T10:00:00Z');
+  assert.doesNotMatch(JSON.stringify(usuarios), /a@example.com|hash-secreto|salt-secreto/);
+  assert.deepEqual(fs.readFileSync(arquivo), antes);
+  assert.equal(fs.statSync(arquivo).mtimeMs, mtime);
+});

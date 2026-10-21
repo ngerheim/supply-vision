@@ -111,6 +111,23 @@ try{
   Exigir-Supv ($r.codigo-eq0-and($r.saida-join' ')-like'*Supply Vision - supv <comando>*') 'powershell.exe resolve supv help pelo PATH e retorna 0'
  }else{Write-Host 'PULADO: resolucao de supv.cmd pelo powershell.exe exige Windows.'}
 
+ # Comando de consulta preserva o dispatcher e o filtro de saida.
+ & {
+  $segredosAntes=$script:supvSegredos
+  $script:supvSegredos=@('credencial-ficticia-legado')
+  try {
+   function Executar-NativoOperacao($Executavel,$Argumentos,[scriptblock]$AoReceber) {
+    Exigir-Supv ($Executavel-eq'node'-and$Argumentos[0]-eq'--experimental-strip-types'-and[IO.Path]::GetFileName($Argumentos[1])-eq'usuarios-legados.mjs') 'usuarios legados chama apenas o leitor Node'
+    & $AoReceber 'Fixture | editor | Sim | credencial-ficticia-legado'
+    return @{codigo=0;saida=@()}
+   }
+   $texto=Capturar-Supv {Executar-ComandoSupv (Ler-ComandoSupv @('usuarios','legados'))}
+   Exigir-Supv ($texto-like'*Fixture | editor*'-and$texto-notlike'*credencial-ficticia-legado*') 'usuarios legados preserva mascaramento'
+   $ajuda=Capturar-Supv {Ajuda-Supv 'usuarios'}
+   Exigir-Supv ($ajuda-like'*usuarios legados*'-and$ajuda-like'*Somente leitura*') 'usuarios legados tem ajuda explicita'
+  }finally{$script:supvSegredos=$segredosAntes}
+ }
+
  # Acompanhamento restaura o guard em sucesso, erro e interrupcao da pipeline.
  Add-Type -TypeDefinition 'public sealed class SupvGuardTeste : System.IDisposable { public bool Disposed; public void Dispose(){Disposed=true;} }'
  $suspenderReal=(Get-Command Suspender-QuickEditSupv).ScriptBlock

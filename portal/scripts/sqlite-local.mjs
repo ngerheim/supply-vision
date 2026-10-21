@@ -31,11 +31,12 @@ export function abrirSqliteLocal({ pastaPrivada = portalPrivado, pastaRestauraca
   }
   return {
     arquivo, consultar,
-    /** @param {{ sql: string, values: unknown[] }[] } consultas */
-    batch(consultas) {
+    /** @param {{ sql: string, values: unknown[] }[] } consultas
+     * @param {(executar: typeof consultar) => void} [antesEscrita] */
+    batch(consultas, antesEscrita) {
       // Leitores compartilham snapshot sem reservar antecipadamente o escritor.
-      db.exec(consultas.every(c => /^\s*SELECT\b/i.test(c.sql)) ? 'BEGIN' : 'BEGIN IMMEDIATE');
-      try { const results = consultas.map(consultar); db.exec('COMMIT'); return results; }
+      db.exec(!antesEscrita && consultas.every(c => /^\s*SELECT\b/i.test(c.sql)) ? 'BEGIN' : 'BEGIN IMMEDIATE');
+      try { antesEscrita?.(consultar); const results = consultas.map(consultar); db.exec('COMMIT'); return results; }
       catch (erro) { db.exec('ROLLBACK'); throw erro; }
     },
     exec(sql) { db.exec(sql); },
