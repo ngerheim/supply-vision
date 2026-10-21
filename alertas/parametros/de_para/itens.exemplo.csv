@@ -1,0 +1,4 @@
+# Modelo fictício. Copie para itens.csv e substitua os valores.
+descricao_qlik;item_acordo;ativo;observacao
+ITEM_ORIGEM_EXEMPLO;ITEM_DESTINO_EXEMPLO;Sim;exemplo
+ITEM_SEM_EQUIVALENTE;;Sim;exemplo

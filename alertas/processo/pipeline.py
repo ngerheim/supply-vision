@@ -1,0 +1,322 @@
+import subprocess
+import pathlib
+import sys
+import re
+import logging
+import os
+import secrets
+from datetime import datetime
+
+
+import sv_paths
+import estado_entrega
+from resumo_saida import ler_resumo
+from segredos import mascarar
+
+LOG_DIR = str(sv_paths.LOG_DIR)
+PIPELINE_TIMEOUT_S = sv_paths.PIPELINE_TIMEOUT_S
+RUN_ID = os.environ.get("SUPPLY_VISION_RUN_ID",
+                        f"{datetime.now():%Y%m%d_%H%M%S}_{secrets.token_hex(3)}")
+if not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", RUN_ID):
+    raise ValueError("SUPPLY_VISION_RUN_ID deve conter de 1 a 64 letras, numeros, _ ou -.")
+LOCK_PATH = sv_paths.LOG_DIR / "pipeline.lock"
+_lock_handle = None
+_lock_token = None
+
+PYTHON = sys.executable.lower().replace("pythonw.exe", "python.exe")
+
+SCRIPT_BAIXAR = str(sv_paths.SCRIPT_BAIXAR)
+SCRIPT_RODAR  = str(sv_paths.SCRIPT_RODAR)
+SCRIPT_EMAIL  = str(sv_paths.SCRIPT_EMAIL)
+
+
+def configurar_log():
+    pathlib.Path(LOG_DIR).mkdir(parents=True, exist_ok=True)
+    log_path = str(pathlib.Path(LOG_DIR) / f"pipeline_{RUN_ID}.log")
+
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
+    handlers = [logging.FileHandler(log_path, encoding="utf-8")]
+    if sys.stdout is not None:
+        handlers.append(logging.StreamHandler(sys.stdout))
+
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s  %(message)s",
+        datefmt="%H:%M:%S",
+        handlers=handlers
+    )
+    return log_path
+
+
+def rodar_script(caminho, nome, args=None):
+    logging.info(f"{'='*50}")
+    logging.info(f"INICIANDO: {nome}")
+    logging.info(f"{'='*50}")
+
+    cmd = [PYTHON, caminho] + (args or [])
+    env_filho = {**os.environ, "PYTHONUTF8": "1", "PYTHONDONTWRITEBYTECODE": "1",
+                 "SUPPLY_VISION_RUN_ID": RUN_ID}
+    env_filho.pop('SV_PIPELINE_LOCK_PAI', None)
+    if _lock_handle is not None and not _lock_handle.closed and _lock_token:
+        env_filho['SV_PIPELINE_LOCK_PAI'] = _lock_token
+    try:
+        resultado = subprocess.run(
+            cmd, capture_output=True, text=True, encoding="utf-8", errors="replace",
+            env=env_filho,
+            creationflags=0x08000000 if os.name == "nt" else 0, timeout=PIPELINE_TIMEOUT_S
+        )
+    except subprocess.TimeoutExpired as e:
+        logging.error(f"ERRO em '{nome}': excedeu o timeout de {PIPELINE_TIMEOUT_S}s")
+        stdout = e.stdout.decode('utf-8', errors='replace') if isinstance(e.stdout, bytes) else (e.stdout or '')
+        stderr = e.stderr.decode('utf-8', errors='replace') if isinstance(e.stderr, bytes) else (e.stderr or '')
+        for linha in stdout.strip().splitlines():
+            logging.info(f"  {mascarar(linha, getattr(sv_paths, "SMTP_SENHA", ""), getattr(sv_paths, "PORTAL_API_TOKEN", ""))}")
+        for linha in stderr.strip().splitlines():
+            logging.error(f"  {mascarar(linha, getattr(sv_paths, "SMTP_SENHA", ""), getattr(sv_paths, "PORTAL_API_TOKEN", ""))}")
+        return False, stdout
+
+    if resultado.stdout:
+        for linha in resultado.stdout.strip().splitlines():
+            logging.info(f"  {mascarar(linha, getattr(sv_paths, "SMTP_SENHA", ""), getattr(sv_paths, "PORTAL_API_TOKEN", ""))}")
+
+    if resultado.returncode != 0:
+        logging.error(f"ERRO em '{nome}' (código {resultado.returncode})")
+        if resultado.stderr:
+            for linha in resultado.stderr.strip().splitlines():
+                logging.error(f"  {mascarar(linha, getattr(sv_paths, "SMTP_SENHA", ""), getattr(sv_paths, "PORTAL_API_TOKEN", ""))}")
+        return False, resultado.stdout
+
+    logging.info(f"CONCLUÍDO: {nome}")
+    return True, resultado.stdout
+
+
+def extrair_contexto(output):
+    contexto = "parcial"
+    datas    = [datetime.now().strftime("%d/%m/%Y")]
+
+    m_ctx   = re.search(r"CONTEXTO_EMAIL=(\w+)", output)
+    m_datas = re.search(r"DATAS_EMAIL=(.+)", output)
+
+    if m_ctx:
+        contexto = m_ctx.group(1)
+    if m_datas:
+        datas = m_datas.group(1).strip().split(",")
+
+    return contexto, datas
+
+
+def extrair_resultado(output):
+    """Lê o marcador RESULTADO=... emitido por baixar_base.py / rodar.py."""
+    m = re.search(r"RESULTADO=(\w+)", output)
+    return m.group(1) if m else ""
+
+
+def extrair_resumo(output):
+    """Lê o resumo estruturado emitido por rodar.py."""
+    return ler_resumo(output)
+
+
+def extrair_relatorio(output):
+    """Lê o anexo de divergências gerado NESTA execução."""
+    com = re.search(r"RELATORIO_COM_ACORDO=(.+)", output)
+    return com.group(1).strip() if com else ""
+
+
+def extrair_qualidade(output):
+    """Lê o CSV de qualidade dos acordos desta execução.
+
+    O rodar.py só emite este marcador quando há pendências para alguém
+    corrigir; sem pendências o arquivo existe como registro, mas não vira
+    anexo."""
+    m = re.search(r"RELATORIO_QUALIDADE_ACORDOS=(.+)", output)
+    return m.group(1).strip() if m else ""
+
+
+def adquirir_lock():
+    """Mantém um lock exclusivo do Windows até o processo terminar."""
+    import msvcrt
+
+    global _lock_handle, _lock_token
+    if _lock_handle is not None and not _lock_handle.closed:
+        return
+    sv_paths.LOG_DIR.mkdir(parents=True, exist_ok=True)
+    # Cria sem truncar o lock de outro processo; r+b permite atualizar a
+    # identidade depois de adquirir o byte exclusivo.
+    with open(LOCK_PATH, "a+b"):
+        pass
+    _lock_handle = open(LOCK_PATH, "r+b")
+    _lock_handle.seek(0, os.SEEK_END)
+    if _lock_handle.tell() == 0:
+        _lock_handle.write(b"0")
+        _lock_handle.flush()
+    _lock_handle.seek(0)
+    try:
+        msvcrt.locking(_lock_handle.fileno(), msvcrt.LK_NBLCK, 1)
+    except OSError:
+        _lock_handle.close()
+        _lock_handle = None
+        raise RuntimeError("já existe uma execução do Supply Vision em andamento")
+
+    _lock_token = f'{os.getpid()}:{secrets.token_hex(16)}'
+    _lock_handle.seek(1)
+    _lock_handle.write(_lock_token.encode('ascii'))
+    _lock_handle.truncate()
+    _lock_handle.flush()
+
+
+def garantir_lock_entrada():
+    """Entrada direta trava; filho usa a identidade da reserva ainda ocupada.
+
+    O redirector do venv Windows intercala outro PID: getppid nao identifica
+    o orquestrador. A identidade aleatoria so e passada por rodar_script com
+    lock adquirido, e e conferida no arquivo protegido pelo mesmo lock.
+    """
+    try:
+        adquirir_lock()
+        return
+    except RuntimeError as erro:
+        herdado = os.environ.get('SV_PIPELINE_LOCK_PAI', '')
+        if re.fullmatch(r'[0-9]+:[0-9a-f]{32}', herdado):
+            try:
+                with open(LOCK_PATH, 'rb') as arquivo:
+                    arquivo.seek(1)
+                    if arquivo.read(128).decode('ascii') == herdado:
+                        return
+            except (OSError, UnicodeError):
+                pass
+        print(f'ERRO: {erro}.')
+        raise SystemExit(2) from erro
+
+
+def concluir_sem_envio(situacao):
+    """Ausência de linhas é resultado normal e nunca deve abrir o SMTP."""
+    logging.info(f"  Situação detectada: {situacao} — nenhum e-mail será enviado.")
+    logging.info("="*50)
+    logging.info(f"PIPELINE CONCLUÍDO COM SUCESSO — SEM ENVIO ({situacao})")
+    logging.info("="*50)
+    sys.exit(0)
+
+
+def ler_slot_argv(argv):
+    """Devolve o valor de --slot HH:MM (ou --slot=HH:MM), se informado."""
+    for i, arg in enumerate(argv):
+        if arg == '--slot' and i + 1 == len(argv):
+            raise ValueError('Informe o horário após --slot.')
+        if arg == "--slot" and i + 1 < len(argv):
+            return argv[i + 1]
+        if arg.startswith("--slot="):
+            return arg.split("=", 1)[1]
+    return ""
+
+
+def main():
+    if "--verificar-lock" in sys.argv:
+        try:
+            adquirir_lock()
+        except RuntimeError:
+            sys.exit(2)
+        sys.exit(0)
+    os.environ['SUPPLY_VISION_RUN_ID'] = RUN_ID
+    if "--sem-envio" in sys.argv or os.environ.get("MODO_ENSAIO") == "1":
+        os.environ["SUPPLY_VISION_SEM_ENVIO"] = "1"
+    # Horário agendado do disparo: o baixar_base.py calcula datas e contexto
+    # a partir dele, não do relógio. Vai pelo ambiente, que os scripts filhos
+    # herdam em rodar_script().
+    slot = estado_entrega.normalizar_slot(ler_slot_argv(sys.argv[1:]) or os.environ.get('SV_ALERTA_SLOT', ''))
+    if slot:
+        os.environ["SV_ALERTA_SLOT"] = slot
+        os.environ.setdefault('SV_ALERTA_DATA', datetime.now().strftime('%Y-%m-%d'))
+    log_path = configurar_log()
+    logging.info(f"Run ID: {RUN_ID}")
+    logging.info(f"Pipeline iniciado — {datetime.now().strftime('%d/%m/%Y %H:%M')}")
+    logging.info(f"Log: {log_path}")
+    if os.environ.get("SV_ALERTA_SLOT"):
+        logging.info(f"Slot agendado: {os.environ['SV_ALERTA_SLOT']}")
+
+    try:
+        adquirir_lock()
+    except RuntimeError as e:
+        logging.error(f"ERRO: {e}.")
+        sys.exit(2)
+    if os.environ.get('SUPPLY_VISION_SEM_ENVIO') != '1':
+        try:
+            entrega = estado_entrega.consultar_entrega()
+            if entrega:
+                if entrega['estado'] == 'enviado':
+                    logging.info('Entrega deste slot ja confirmada; nenhuma nova execucao necessaria.')
+                    logging.info('PIPELINE CONCLUÍDO COM SUCESSO — ENTREGA JÁ CONFIRMADA')
+                    sys.exit(0)
+                raise estado_entrega.EntregaEmRevisao('Entrega parcial/incerta do slot: revisao manual obrigatoria.')
+        except estado_entrega.EntregaEmRevisao as exc:
+            logging.error(f'ERRO: {exc}')
+            sys.exit(3)
+
+    ok, output_baixar = rodar_script(SCRIPT_BAIXAR, "Download Qlik (filtrado)")
+    if not ok:
+        logging.error("Pipeline interrompido em: Download Qlik")
+        sys.exit(1)
+
+    contexto, datas = extrair_contexto(output_baixar)
+    logging.info(f"  Contexto detectado: {contexto} | Datas: {', '.join(datas)}")
+
+    if extrair_resultado(output_baixar) == "SEM_DADOS_QLIK":
+        concluir_sem_envio("SEM_DADOS_QLIK")
+
+    ok, output_rodar = rodar_script(SCRIPT_RODAR, "Geração de relatórios")
+    if not ok:
+        logging.error("Pipeline interrompido em: Geração de relatórios")
+        sys.exit(1)
+
+    if extrair_resultado(output_rodar) == "SEM_DADOS_FILTRO":
+        concluir_sem_envio("SEM_DADOS_FILTRO")
+
+    resumo = extrair_resumo(output_rodar)
+    if resumo["total_elegivel"] == 0 and not resumo.get("alerta_pendencias"):
+        concluir_sem_envio("SEM_LINHAS_COMPARAVEIS")
+
+    contagens = resumo["contagens"]
+    if contagens["ACIMA DO ACORDO"] + contagens["ABAIXO DO ACORDO"] == 0 and not resumo.get("alerta_pendencias"):
+        concluir_sem_envio("SEM_DIVERGENCIAS")
+
+    caminho_com = extrair_relatorio(output_rodar)
+    caminho_qualidade = extrair_qualidade(output_rodar)
+    logging.info(f"  Anexos desta execução: divergencias={caminho_com or '(não gerado)'} | qualidade={caminho_qualidade or '(sem pendencias)'}")
+
+    # A saída do rodar.py ia inteira como argumento de linha de comando. O
+    # Windows corta a linha em ~32 mil caracteres: num dia com muitos avisos
+    # de sinônimo ou chave divergente, o envio falharia justamente quando há
+    # mais o que relatar. Agora vai por arquivo, e o caminho é o argumento.
+    arquivo_saida = sv_paths.LOG_DIR / f"saida_rodar_{RUN_ID}.txt"
+    arquivo_saida.write_text(output_rodar, encoding="utf-8")
+
+    ok, _ = rodar_script(
+        SCRIPT_EMAIL,
+        "Envio de e-mail",
+        args=[contexto, ",".join(datas), f"@{arquivo_saida}", "", caminho_com, caminho_qualidade]
+    )
+    if not ok:
+        try:
+            entrega = estado_entrega.consultar_entrega()
+            if entrega and entrega.get("estado") == "enviado":
+                logging.warning("Entrega confirmada; falha posterior ao envio nao exige reenvio ou revisao da entrega.")
+                logging.info("PIPELINE CONCLUÍDO COM SUCESSO — ENTREGA JÁ CONFIRMADA")
+                return
+            if entrega:
+                sys.exit(3)
+        except estado_entrega.EntregaEmRevisao:
+            sys.exit(3)
+        logging.error("Pipeline interrompido em: Envio de e-mail")
+        sys.exit(1)
+
+    logging.info("="*50)
+    logging.info("PIPELINE CONCLUÍDO COM SUCESSO")
+    logging.info("="*50)
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,434 @@
+﻿# PS5.1 converte stderr nativo redirecionado em ErrorRecord. Captura como texto,
+# sem deixar Stop interromper o chamador, e decide somente pelo codigo de saida.
+function Executar-NativoOperacao([string]$Executavel,[string[]]$Argumentos=@(),[scriptblock]$AoReceber) {
+ $preferencia=$ErrorActionPreference
+ $codigoAntes=Get-Variable LASTEXITCODE -ValueOnly -ErrorAction SilentlyContinue
+ $codigo=1;$saida=@();$stdout=New-Object 'Collections.Generic.List[string]'
+ try{
+  $ErrorActionPreference='Continue'
+  $PSNativeCommandUseErrorActionPreference=$false
+  [void](Get-Command $Executavel -ErrorAction Stop)
+  $global:LASTEXITCODE=0
+  $saida=@(& $Executavel @Argumentos 2>&1|ForEach-Object {
+   $texto=[string]$_
+   if($_-isnot[Management.Automation.ErrorRecord]){$stdout.Add($texto)}
+   if($AoReceber){& $AoReceber $texto|Out-Null}
+   $texto
+  })
+  $codigo=$LASTEXITCODE
+  if($null-eq$codigo){$codigo=1}
+ }catch{$saida+=([string]$_);$codigo=1}
+ finally{$ErrorActionPreference=$preferencia;$global:LASTEXITCODE=$codigoAntes}
+ return @{codigo=[int]$codigo;saida=@($saida);stdout=@($stdout.ToArray())}
+}
+
+function Obter-PastaPrivada([string]$Raiz) {
+  if ($env:SUPPLY_VISION_PRIVADO) {
+    $env:SUPPLY_VISION_PRIVADO = [IO.Path]::GetFullPath($env:SUPPLY_VISION_PRIVADO)
+    return $env:SUPPLY_VISION_PRIVADO
+  }
+  return Join-Path $Raiz 'privado'
+}
+
+function Obter-SlotDoDia([string]$Tipo, [hashtable]$Config, [string]$Prefixo, [hashtable]$Estado, [datetime]$Agora) {
+  return Obter-SlotDevido $Tipo (Obter-HorariosDoDia $Config $Prefixo $Agora) $Estado $Agora
+}
+
+function Argumentos-ReexecucaoAtualizador([string]$Script, [string]$Anterior, [bool]$Reaplicar) {
+  $argumentos = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $Script, '-JaAtualizado', '-VersaoAnterior', $Anterior)
+  if ($Reaplicar) { $argumentos += '-Reaplicar' }
+  return $argumentos
+}
+
+function Ler-ConfigOperacao([string]$Caminho) {
+  $config = @{}
+  if (!(Test-Path -LiteralPath $Caminho)) { throw "Configuracao operacional ausente: $Caminho" }
+  foreach ($linha in Get-Content -LiteralPath $Caminho -Encoding UTF8) {
+    $texto = $linha.Trim()
+    if (!$texto -or $texto.StartsWith('#')) { continue }
+    if (!$texto.Contains('=')) { throw "Linha invalida em operacao.env: $texto" }
+    $chave, $valor = $texto.Split('=', 2)
+    if (!$chave.Trim()) { throw 'Chave vazia na configuracao.' }
+    $config[$chave.Trim()] = $valor.Trim()
+  }
+  return $config
+}
+
+# A configuracao do supervisor prevalece sobre um ambiente herdado antigo.
+function Aplicar-ModoEnsaio([hashtable]$Config) {
+  $ativo = $Config['MODO_ENSAIO'] -eq '1'
+  $env:MODO_ENSAIO = if ($ativo) { '1' } else { '0' }
+  return $ativo
+}
+
+function Argumentos-Pipeline([string]$Slot, [bool]$Ensaio) {
+  $argumentos = @('processo\pipeline.py', '--slot', $Slot)
+  if ($Ensaio) { $argumentos += '--sem-envio' }
+  return $argumentos
+}
+
+function Obter-AvisoEnsaio([bool]$Ensaio) {
+  if ($Ensaio) { return 'MODO ENSAIO — nenhum e-mail ou backup em rede' }
+  return ''
+}
+
+function Obter-ProcessoRegistrado([string]$CaminhoPid) {
+  if (!(Test-Path -LiteralPath $CaminhoPid)) { return $null }
+  try {
+    $registro = Get-Content -LiteralPath $CaminhoPid -Raw | ConvertFrom-Json
+    $processo = Get-Process -Id ([int]$registro.pid) -ErrorAction Stop
+    $inicioRegistrado = [datetime]::Parse([string]$registro.inicio).ToUniversalTime()
+    # O Windows reutiliza numeros de PID. Conferir tambem o instante de inicio
+    # impede que um processo alheio seja confundido com o antigo supervisor.
+    if ([math]::Abs(($processo.StartTime.ToUniversalTime() - $inicioRegistrado).TotalSeconds) -gt 2) { return $null }
+    return $processo
+  } catch { return $null }
+}
+
+$script:DiasSemana = @('DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SAB')
+
+function Obter-HorariosDoDia([hashtable]$Config, [string]$Prefixo, [datetime]$Dia) {
+  # Uma chave por dia (ALERTAS_HORARIOS_SEX) tem prioridade sobre a chave
+  # geral (ALERTAS_HORARIOS). Valor vazio significa "nao executa neste dia".
+  $chave = $Prefixo + '_' + $script:DiasSemana[[int]$Dia.DayOfWeek]
+  if ($Config.ContainsKey($chave)) { return $Config[$chave] }
+  return $Config[$Prefixo]
+}
+
+function Validar-Horarios([hashtable]$Config) {
+  $regras = @{ ALERTAS_HORARIOS = $true; BACKUP_HORARIOS = $true; LIMPEZA_HORARIO = $false }
+  foreach ($chave in $regras.Keys) {
+    if (!$Config.ContainsKey($chave) -or !$Config[$chave]) { throw "Configuracao obrigatoria ausente: $chave" }
+    $valores = if ($regras[$chave]) { $Config[$chave].Split(',') } else { @($Config[$chave]) }
+    foreach ($valor in $valores) {
+      $hora = [datetime]::MinValue
+      if (![datetime]::TryParseExact($valor.Trim(), 'HH:mm', [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::None, [ref]$hora)) {
+        throw "Horario invalido em ${chave}: '$valor'. Use HH:MM."
+      }
+    }
+  }
+  # Chaves por dia: opcionais, podem ser vazias (dia sem execucao), mas se
+  # tiverem conteudo precisam ser horarios validos.
+  foreach ($chave in @($Config.Keys)) {
+    if ($chave -notmatch '^(ALERTAS_HORARIOS|BACKUP_HORARIOS)_(DOM|SEG|TER|QUA|QUI|SEX|SAB)$') { continue }
+    if (!$Config[$chave]) { continue }
+    foreach ($valor in $Config[$chave].Split(',')) {
+      $hora = [datetime]::MinValue
+      if (![datetime]::TryParseExact($valor.Trim(), 'HH:mm', [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::None, [ref]$hora)) {
+        throw "Horario invalido em ${chave}: '$valor'. Use HH:MM."
+      }
+    }
+  }
+}
+
+function Obter-SituacaoBackupLocal([string]$Pasta,[hashtable]$Config,[datetime]$Inicio,[datetime]$Agora){
+ $arquivos=@();if(Test-Path -LiteralPath $Pasta){$arquivos=@(Get-ChildItem -LiteralPath $Pasta -File -ErrorAction Stop|Sort-Object LastWriteTime -Descending)}
+ if($arquivos){return @{nivel='ok';mensagem="$($arquivos.Count) arquivos; mais recente $($arquivos[0].LastWriteTime) (nao valida integridade)"}}
+ # A agenda se repete a cada semana; oito dias cobrem inclusive a virada do dia.
+ for($dias=0;$dias-lt8;$dias++){
+  $dia=$Agora.Date.AddDays(-$dias)
+  if($dia.AddDays(1)-le$Inicio){break}
+  $horarios=[string](Obter-HorariosDoDia $Config 'BACKUP_HORARIOS' $dia)
+  foreach($h in @($horarios.Split(',')|ForEach-Object {$_.Trim()}|Where-Object {$_})){
+   $alvo=[datetime]::ParseExact(($dia.ToString('yyyy-MM-dd')+' '+$h),'yyyy-MM-dd HH:mm',[Globalization.CultureInfo]::InvariantCulture)
+   if($alvo-ge$Inicio-and$alvo-lt$Agora){return @{nivel='erro';mensagem='backup local agendado vencido sem arquivo; confira supv logs supervisor e execute supv backup testar; consulte supv help.'}}
+  }
+ }
+ return @{nivel='aviso';mensagem='nenhum backup local ainda; o primeiro ocorre no próximo horário agendado'}
+}
+function Obter-SlotDevido([string]$Tipo, [string]$Lista, [hashtable]$Estado, [datetime]$Agora) {
+  # Lista vazia = dia sem execucao (ex.: sabado e domingo para alertas).
+  if (!$Lista -or !$Lista.Trim()) { return $null }
+  $data = $Agora.ToString('yyyy-MM-dd'); $devidos = @()
+  foreach ($texto in $Lista.Split(',') | ForEach-Object { $_.Trim() } | Where-Object { $_ }) {
+    $alvo = [datetime]::ParseExact("$data $texto", 'yyyy-MM-dd HH:mm', [Globalization.CultureInfo]::InvariantCulture)
+    $chave = "$Tipo-$data-$texto"
+    if ($Agora -ge $alvo -and !$Estado.ContainsKey($chave)) { $devidos += @{ chave=$chave; hora=$texto; alvo=$alvo } }
+  }
+  if (!$devidos) { return $null }
+  # A manha (<10h) cobre datas que os slots do dia corrente nao consultam.
+  # Recupera essa cobertura primeiro; a proxima chamada pega o ultimo slot
+  # do dia. Horarios personalizados da manha compartilham a mesma cobertura.
+  if ($Tipo -eq 'alertas') {
+    $manha = $devidos | Where-Object { $_.alvo.Hour -lt 10 } | Sort-Object { $_.alvo } | Select-Object -Last 1
+    if ($manha) {
+      foreach ($item in $devidos) {
+        if ($item.alvo.Hour -lt 10 -and $item.chave -ne $manha.chave) { $Estado[$item.chave] = 'recuperado-pelo-slot-da-manha' }
+      }
+      return $manha
+    }
+  }
+  $ultimo = $devidos | Sort-Object { $_.alvo } | Select-Object -Last 1
+  foreach ($item in $devidos) { if ($item.chave -ne $ultimo.chave) { $Estado[$item.chave] = 'recuperado-pelo-slot-mais-recente' } }
+  return $ultimo
+}
+
+function Ler-EstadoOperacao([string]$Caminho) {
+  $estado = @{}
+  if (!(Test-Path -LiteralPath $Caminho)) { return $estado }
+  try {
+    $objeto = Get-Content -LiteralPath $Caminho -Raw | ConvertFrom-Json -ErrorAction Stop
+    if ($null -eq $objeto -or $objeto -isnot [System.Management.Automation.PSCustomObject]) { throw 'Esperado objeto JSON.' }
+    foreach ($propriedade in $objeto.psobject.Properties) { $estado[$propriedade.Name] = $propriedade.Value }
+    return $estado
+  } catch { throw "Estado operacional invalido em $Caminho. Operacao bloqueada para evitar reenvios; confira estado.json e estado.json.anterior antes de recuperar. $($_.Exception.Message)" }
+}
+
+function Validar-PythonAlertas([string]$Executavel) {
+  # Le a saida inteira. Select-Object -First 1 interromperia o python.exe ao
+  # receber a primeira linha, e o Windows PowerShell 5.1 registra entao
+  # $LASTEXITCODE = -1 mesmo com a versao lida corretamente.
+  $r=Executar-NativoOperacao $Executavel @('--version')
+  $saida=($r.saida-join"`n").Trim()
+  if ($r.codigo -ne 0 -or $saida -notmatch 'Python (\d+\.\d+\.\d+)') { throw 'Nao foi possivel verificar o Python dos Alertas.' }
+  if ([version]$Matches[1] -lt [version]'3.12.0') {
+    throw 'Alertas exigem Python 3.12 ou superior. Instale-o e recrie alertas/.venv com a operacao parada antes de atualizar; preserve privado/.'
+  }
+}
+
+function Gravar-EstadoOperacao([string]$Caminho, [hashtable]$Estado) {
+  $temporario = $Caminho + '.' + [guid]::NewGuid().ToString('N') + '.tmp'
+  $bytes = (New-Object Text.UTF8Encoding($false)).GetBytes(($Estado | ConvertTo-Json -Depth 10))
+  try {
+    $arquivo = [IO.File]::Open($temporario, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write, [IO.FileShare]::None)
+    try { $arquivo.Write($bytes, 0, $bytes.Length); $arquivo.Flush($true) } finally { $arquivo.Dispose() }
+    if (Test-Path -LiteralPath $Caminho) { [IO.File]::Replace($temporario, $Caminho, ($Caminho + '.anterior')) }
+    else { [IO.File]::Move($temporario, $Caminho) }
+  } finally { if (Test-Path -LiteralPath $temporario) { Remove-Item -LiteralPath $temporario -Force } }
+}
+
+function Obter-AvisoBackup([string]$Privado) {
+  $arquivo = Join-Path $Privado 'portal\configuracao\portal.env'
+  try {
+    $config = Ler-ConfigOperacao $arquivo
+    if (!$config['BACKUP_NETWORK_DIR']) { return 'BACKUP_NETWORK_DIR ausente: backup indisponivel.' }
+    if (!(Test-Path -LiteralPath $config['BACKUP_NETWORK_DIR'] -PathType Container)) { return 'Pasta de backup de rede indisponivel. Confira o ultimo backup.' }
+    if (!(Test-Path -LiteralPath (Join-Path $Privado 'comum/backup-senha.dpapi') -PathType Leaf)) { return 'Senha de backup ausente. Execute supv backup senha com a conta do dono.' }
+    return ''
+  } catch { return 'Nao foi possivel conferir a configuracao de backup.' }
+}
+
+function Testar-SupervisorEncerrado([string]$Privado) {
+  $pasta = Join-Path $Privado 'operacao'
+  if (Obter-ProcessoRegistrado (Join-Path $pasta 'supervisor.pid.json')) { return $false }
+  $arquivo = Join-Path $pasta 'supervisor.lock'
+  if (!(Test-Path -LiteralPath $arquivo)) { return $true }
+  try {
+    $trava = [IO.File]::Open($arquivo, [IO.FileMode]::Open, [IO.FileAccess]::ReadWrite, [IO.FileShare]::None)
+    $trava.Dispose()
+    return $true
+  } catch { return $false }
+}
+
+
+function Processo-OrfaoDestaInstalacao($Processo,[string]$Raiz){
+ if($Processo.Name-notin@('node.exe')){return $false}
+ $p=[regex]::Escape($Raiz.TrimEnd('\'))
+ $cmd=[string]$Processo.CommandLine
+ $script=('(?i)(?:^|[\s"'']){0}\\portal\\scripts\\(?:iniciar-portal|processar-emails|processar-relatorios|aviso-admin)\.mjs(?:["'']|\s|$)' -f $p)
+ $npm=('(?i)--prefix\s+["'']?{0}\\portal["'']?\s+run\s+(?:start:lan|email:watch)(?:\s|$)' -f $p)
+ return $cmd-match$script-or$cmd-match$npm
+}
+function Avisar-FalhaOrfaos {
+ if(Get-Command Log -ErrorAction SilentlyContinue){Log 'Nao foi possivel ler ou encerrar processo orfao; confira conta administradora local e permissoes.'}
+ if((Get-Command Avisar-Administrador -ErrorAction SilentlyContinue)-and$avisosAdmin){Avisar-Administrador $avisosAdmin 'orfaos-falharam'}
+}
+function Encerrar-OrfaosInstalacao([string]$Raiz){
+ try{$processos=@(Get-CimInstance Win32_Process -ErrorAction Stop)}catch{Avisar-FalhaOrfaos;return}
+ foreach($p in $processos){
+  if($p.Name-in@('node.exe')-and!$p.CommandLine){Avisar-FalhaOrfaos;continue}
+  if(!(Processo-OrfaoDestaInstalacao $p $Raiz)){continue}
+  try{
+   $atual=Get-CimInstance Win32_Process -Filter "ProcessId=$($p.ProcessId)" -ErrorAction Stop
+   if(!$atual-or$atual.CreationDate-ne$p.CreationDate-or!(Processo-OrfaoDestaInstalacao $atual $Raiz)){continue}
+   if(Get-Command Log -ErrorAction SilentlyContinue){Log "Encerrando processo orfao desta instalacao: PID $($p.ProcessId)."}
+   $r=Executar-NativoOperacao 'taskkill.exe' @('/PID',[string]$p.ProcessId,'/T','/F')
+   if($r.codigo-ne0){Avisar-FalhaOrfaos;continue}
+   if(Get-Process -Id $p.ProcessId -ErrorAction SilentlyContinue){Avisar-FalhaOrfaos}
+  }catch{Avisar-FalhaOrfaos}
+ }
+}
+function Remover-ArquivosIntroduzidos([string]$Raiz,[string[]]$Arquivos){
+ foreach($relativo in $Arquivos){
+  if(!$relativo-or$relativo-match '^(?i:privado)(?:[\\/]|$)'){continue}
+  $alvo=[IO.Path]::GetFullPath((Join-Path $Raiz $relativo));$base=[IO.Path]::GetFullPath($Raiz).TrimEnd([IO.Path]::DirectorySeparatorChar)+[IO.Path]::DirectorySeparatorChar
+  if(!$alvo.StartsWith($base,[StringComparison]::OrdinalIgnoreCase)){throw 'Caminho de recuperacao fora da instalacao.'}
+  $r=Executar-NativoOperacao 'git' @('-C',$Raiz,'check-ignore','-q','--',$relativo)
+  if($r.codigo-eq0){continue};if($r.codigo-ne1){throw 'Nao foi possivel conferir arquivos ignorados antes da recuperacao.'}
+  $parent=Split-Path $alvo -Parent;$link=$false
+  while($parent-and$parent.StartsWith($base,[StringComparison]::OrdinalIgnoreCase)){if((Get-Item -LiteralPath $parent -ErrorAction SilentlyContinue).Attributes-band[IO.FileAttributes]::ReparsePoint){$link=$true;break};$parent=Split-Path $parent -Parent}
+  if($link){continue}
+  if(Test-Path -LiteralPath $alvo -PathType Leaf){Remove-Item -LiteralPath $alvo -Force}
+ }
+}
+
+function Obter-PortaPortalLocal([hashtable]$Config) {
+ $porta=3000
+ if($Config['PORTAL_PORTA']){$porta=[int]$Config['PORTAL_PORTA']}
+ if(Test-Path Env:PORTAL_PORTA){$porta=if($env:PORTAL_PORTA){[int]$env:PORTAL_PORTA}else{3000}}
+ if($porta-lt1-or$porta-gt65535){throw 'PORTAL_PORTA invalida.'}
+ return $porta
+}
+
+# A mesma barreira protege o supv e o atualizador: PID/trava E portas.
+function Parar-Operacao([string]$Raiz,[int]$Limite=60) {
+ $privado=Obter-PastaPrivada $Raiz
+ $op=Join-Path $privado 'operacao'
+ $porta=3001;$portaPortal=3000
+ $arquivo=Join-Path $privado 'portal/configuracao/portal.env'
+ $cfg=@{}
+ if(Test-Path -LiteralPath $arquivo){$cfg=Ler-ConfigOperacao $arquivo;if($cfg['RELATORIOS_PORTA']){$porta=[int]$cfg['RELATORIOS_PORTA']}}
+ $portaPortal=Obter-PortaPortalLocal $cfg
+ if(Test-Path Env:RELATORIOS_PORTA){$porta=if($env:RELATORIOS_PORTA){[int]$env:RELATORIOS_PORTA}else{3001}}
+ if($porta-lt1024-or$porta-gt65535-or$porta-eq$portaPortal){throw 'RELATORIOS_PORTA invalida.'}
+ if(!(Testar-SupervisorEncerrado $privado)){
+  [IO.File]::WriteAllText((Join-Path $op 'parar.sinal'),'parar')
+ }
+ $prazo=[Diagnostics.Stopwatch]::StartNew()
+ do {
+  $encerrado=Testar-SupervisorEncerrado $privado
+  $portas=@(Get-NetTCPConnection -LocalPort $portaPortal,$porta -State Listen -ErrorAction SilentlyContinue)
+  if($encerrado-and!$portas){return $true}
+  if($prazo.Elapsed.TotalSeconds-ge$Limite){return $false}
+  Start-Sleep -Milliseconds 500
+ }while($true)
+}
+function Recuperar-OperacaoAntesDaTroca([string]$Raiz,[bool]$Tarefa,[bool]$EstavaAtiva,[int]$Limite=60) {
+ if($Tarefa){Enable-ScheduledTask -TaskName 'Supply Vision' -TaskPath '\'|Out-Null}
+ if($EstavaAtiva){
+  # Nao remova a trava: a tarefa ignora nova instancia; o sinal cancelado
+  # permite ao supervisor ainda ativo continuar, ou a tarefa iniciar outro.
+  $sinal=Join-Path (Obter-PastaPrivada $Raiz) 'operacao/parar.sinal'
+  Remove-Item -LiteralPath $sinal -Force -ErrorAction SilentlyContinue
+  if($Tarefa){
+   $anterior=Obter-ProcessoRegistrado (Join-Path (Obter-PastaPrivada $Raiz) 'operacao/supervisor.pid.json')
+   Start-ScheduledTask -TaskName 'Supply Vision' -TaskPath '\'
+   # IgnoreNew pode ter recusado a partida enquanto a instancia antiga encerra.
+   # Se o processo antigo sair nesta janela, solicite a tarefa novamente.
+   if($anterior){$prazo=[Diagnostics.Stopwatch]::StartNew();while($prazo.Elapsed.TotalSeconds-lt$Limite){if($anterior.HasExited){Start-ScheduledTask -TaskName 'Supply Vision' -TaskPath '\';break};Start-Sleep -Milliseconds 500}}
+  }
+  elseif(Testar-SupervisorEncerrado (Obter-PastaPrivada $Raiz)){Iniciar-OperacaoConfigurada $Raiz;if($LASTEXITCODE-ne0){throw 'Falha na partida original.'}}
+ }
+ $global:LASTEXITCODE=0
+}
+function Obter-FalhaLogonTarefa([long]$Resultado) {
+ $codigo=$Resultado-band4294967295L
+ $motivo=switch($codigo){2147943726{'usuario ou senha invalidos'} 2147943785{'conta sem direito de executar tarefas em lote'} 2147943730{'senha da conta expirada'}}
+ if($motivo){return "A conta da tarefa nao conseguiu entrar: $motivo. Execute como administrador: .\scripts\configurar-inicializacao.ps1 -Modo computador -ContaPersonalizada"}
+ return ''
+}
+function Obter-AvisoContaTarefa([string]$Raiz) {
+ $t=Obter-TarefaSupplyVision $Raiz
+ if(!$t){return ''}
+ $info=Get-ScheduledTaskInfo -TaskName 'Supply Vision' -TaskPath '\' -ErrorAction Stop
+ return Obter-FalhaLogonTarefa ([long]$info.LastTaskResult)
+}
+function Obter-EventoVigilancia([bool]$FalhaTarefa,[bool]$Saudavel) {
+ if($FalhaTarefa){return 'tarefa-falhou'}
+ if(!$Saudavel){return 'vigilancia-health'}
+ return ''
+}
+
+# Cliente exclusivo do health local: sem DNS, proxy, credenciais ou redirecionamento.
+function Novo-ClienteHealth([ValidateRange(100,30000)][int]$TimeoutMs=5000){
+ Add-Type -AssemblyName System.Net.Http
+ $handler=New-Object Net.Http.HttpClientHandler
+ $handler.UseDefaultCredentials=$false;$handler.UseProxy=$false;$handler.AllowAutoRedirect=$false;$handler.UseCookies=$false
+ $cliente=New-Object Net.Http.HttpClient($handler)
+ $cliente.Timeout=[timespan]::FromMilliseconds($TimeoutMs)
+ $cliente.MaxResponseContentBufferSize=8192
+ return @{cliente=$cliente;handler=$handler;prazoMs=$TimeoutMs}
+}
+# Percorre toda a cadeia: .NET Framework pode envolver SocketException em WebException.
+function Classificar-ErroHealth([Exception]$Erro){
+ $timeout=$false;$recusada=$false;$conexao=$false
+ while($Erro){
+  if($Erro-is[OperationCanceledException]-or$Erro-is[TimeoutException]){$timeout=$true}
+  if($Erro-is[Net.Sockets.SocketException]){
+   $conexao=$true
+   if($Erro.SocketErrorCode-eq[Net.Sockets.SocketError]::ConnectionRefused){$recusada=$true}
+   if($Erro.SocketErrorCode-eq[Net.Sockets.SocketError]::TimedOut){$timeout=$true}
+  }
+  if($Erro-is[Net.WebException]){
+   if($Erro.Status-eq[Net.WebExceptionStatus]::Timeout){$timeout=$true}
+   if($Erro.Status-eq[Net.WebExceptionStatus]::ConnectFailure){$recusada=$true}
+  }
+  if($Erro-is[Net.Http.HttpRequestException]){$conexao=$true}
+  $Erro=$Erro.InnerException
+ }
+ # Cancelamento/prazo vencido nao prova recusa, mesmo com erro de conexao interno.
+ if($timeout){return 'timeout'}
+ if($recusada){return 'conexao-recusada'}
+ if($conexao){return 'falha-conexao'}
+ return 'erro-cliente'
+}
+function Consultar-HealthLocal($Controle,[uri]$Endereco='http://127.0.0.1:3000/api/health'){
+ if(!$Endereco.IsAbsoluteUri-or$Endereco.Scheme-ne'http'-or$Endereco.Host-ne'127.0.0.1'-or$Endereco.UserInfo){throw 'Health exige HTTP local sem credenciais.'}
+ $tempo=[Diagnostics.Stopwatch]::StartNew();$resposta=$null;$codigo=0;$motivo='erro-cliente';$saudavel=$false
+ try{
+  # GetAsync padrao inclui o corpo no prazo total, limitado a 8 KiB.
+  $pedido=$Controle.cliente.GetAsync($Endereco)
+  $prazo=if($Controle.prazoMs){[int]$Controle.prazoMs}else{5000}
+  # HttpClient.Timeout cancela por timer/ThreadPool. A espera local tambem
+  # precisa de prazo, mesmo se a continuacao do cancelamento estiver atrasada.
+  if(!$pedido.Wait($prazo)){
+   $Controle.cliente.CancelPendingRequests()
+   throw (New-Object TimeoutException 'Prazo local do health vencido.')
+  }
+  $resposta=$pedido.GetAwaiter().GetResult()
+  $codigo=[int]$resposta.StatusCode
+  if($codigo-ne200){$motivo='status-http'}
+  else{
+   try{
+    $texto=$resposta.Content.ReadAsStringAsync().GetAwaiter().GetResult()
+    if(!$texto.TrimStart().StartsWith('{')){throw 'Objeto JSON esperado.'}
+    $corpo=$texto|ConvertFrom-Json -ErrorAction Stop
+    $saudavel=$null-ne$corpo-and$corpo-isnot[array]-and$corpo-isnot[string]-and$corpo-isnot[ValueType]-and$corpo.status-is[string]-and$corpo.status-eq'ok'
+   }catch{$saudavel=$false}
+   $motivo=if($saudavel){'ok'}else{'corpo-invalido'}
+  }
+ }catch{
+  # Nunca registra Message/URL/corpo: somente categorias conhecidas.
+  $motivo=Classificar-ErroHealth $_.Exception
+ }finally{if($resposta){$resposta.Dispose()};$tempo.Stop()}
+ return @{saudavel=$saudavel;motivo=$motivo;http=$codigo;duracaoMs=[int]$tempo.ElapsedMilliseconds}
+}
+function Formatar-FalhaHealth($Resultado,[int]$FalhasSeguidas){
+ $motivo=if($Resultado.motivo-in@('timeout','conexao-recusada','falha-conexao','status-http','corpo-invalido','erro-cliente')){$Resultado.motivo}else{'erro-cliente'}
+ return "Health falhou: motivo=$motivo; duracao_ms=$([int]$Resultado.duracaoMs); http=$([int]$Resultado.http); falhas_seguidas=$FalhasSeguidas."
+}
+
+function Garantir-CredencialPortal([string]$portalEnv) {
+  $alterada = $false
+  if (-not (Test-Path -LiteralPath $portalEnv -PathType Leaf)) { throw "Configuracao do Portal ausente: $portalEnv" }
+  $linha = @(Get-Content -LiteralPath $portalEnv -Encoding UTF8) | Where-Object { $_ -match '^\s*PORTAL_API_TOKEN\s*=\s*(\S+)\s*$' } | Select-Object -Last 1
+  $tokenAtual = if ($linha) { ($linha -split '=', 2)[1].Trim() } else { '' }
+  if ($tokenAtual -notmatch '^[0-9a-fA-F]{64}$') {
+    $bytes = New-Object byte[] 32
+    $gerador = [Security.Cryptography.RandomNumberGenerator]::Create()
+    try { $gerador.GetBytes($bytes) } finally { $gerador.Dispose() }
+    $tokenAtual = ($bytes | ForEach-Object { $_.ToString('x2') }) -join ''
+    $conteudo = Get-Content -LiteralPath $portalEnv -Raw -Encoding UTF8
+    if ($conteudo -match '(?m)^\s*PORTAL_API_TOKEN\s*=') {
+      $conteudo = [regex]::Replace($conteudo, '(?m)^\s*PORTAL_API_TOKEN\s*=.*$', "PORTAL_API_TOKEN=$tokenAtual")
+    } else { $conteudo += "`r`nPORTAL_API_TOKEN=$tokenAtual`r`n" }
+    [IO.File]::WriteAllText($portalEnv, $conteudo, (New-Object Text.UTF8Encoding($false)))
+    $alterada = $true
+  }
+  $confirmacao = @(Get-Content -LiteralPath $portalEnv -Encoding UTF8) | Where-Object { $_ -match '^\s*PORTAL_API_TOKEN\s*=\s*[0-9a-fA-F]{64}\s*$' }
+  if (-not $confirmacao) { throw 'A credencial interna do Portal nao foi gravada corretamente.' }
+  return $alterada
+}
+
+# Ponte de argumentos apenas: todo calculo e descoberta pertence ao localizador Node.
+function Localizar-BancoPortal([string]$Raiz,[string]$Privado,[switch]$Obrigatorio,[string]$NomeDestino) {
+ $argumentos=@((Join-Path $Raiz 'portal/scripts/banco-local.mjs'),'--pasta-portal',(Join-Path $Privado 'portal'))
+ if($Obrigatorio){$argumentos+='--exigir'}
+ if($NomeDestino){$argumentos+=@('--destino',$NomeDestino)}
+ $resultado=Executar-NativoOperacao 'node' $argumentos
+ if($resultado.codigo){throw 'Nao foi possivel localizar um unico banco do Portal.'}
+ $linhas=@($resultado.stdout|Where-Object {![string]::IsNullOrWhiteSpace($_)})
+ if($linhas.Count-gt1){throw 'Resposta invalida do localizador do banco.'}
+ if($linhas.Count){return $linhas[0].Trim()}
+ return $null
+}

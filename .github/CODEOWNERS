@@ -1,0 +1,3 @@
+# Responsavel pela revisao, inclusive de PRs de dependencias.
+# Exigir aprovacao depende de Require review from Code Owners na protecao da branch.
+* @ngerheim

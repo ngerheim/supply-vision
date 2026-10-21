@@ -1,0 +1,469 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  # Semanal mesmo sem commits: npm audit e pip-audit acusam vulnerabilidades
+  # novas em dependencias que ja estao em uso.
+  schedule:
+    - cron: '17 10 * * 1'   # segunda, 07:17 em Brasilia
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  powershell-inicializacao:
+    name: PowerShell - inicializacao e atualizacao
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: portal/package.json
+      - name: Alinhar Node da maquina com o servidor
+        shell: powershell
+        run: ./scripts/ci/fixar-node-runner.ps1
+      # Windows PowerShell 5.1, o mesmo do servidor. Um erro de sintaxe no
+      # atualizador ou no supervisor so apareceria no servidor.
+      - name: Analise sintatica dos scripts
+        shell: powershell
+        run: |
+          $falhas = 0
+          Get-ChildItem -Recurse -Filter *.ps1 -File | Where-Object { $_.FullName -notmatch '\\node_modules\\' } | ForEach-Object {
+            $erros = $null
+            [void][System.Management.Automation.Language.Parser]::ParseFile($_.FullName, [ref]$null, [ref]$erros)
+            foreach ($e in $erros) { Write-Host "::error file=$($_.FullName),line=$($e.Extent.StartLineNumber)::$($e.Message)"; $falhas++ }
+          }
+          if ($falhas) { exit 1 }
+      - name: Impedir capturas nativas fora do auxiliar PS5.1
+        shell: powershell
+        run: ./scripts/ci/testar-chamadas-nativas.ps1
+      - name: Conferir diagnostico e manifesto da fixture do Portal
+        shell: powershell
+        run: ./scripts/ci/testar-diagnostico-portal.ps1
+      - name: Cache PSScriptAnalyzer 1.25.0
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/pssa/PSScriptAnalyzer/1.25.0
+          key: pssa-${{ runner.os }}-1.25.0-v2
+      - name: Instalar PSScriptAnalyzer 1.25.0
+        shell: powershell
+        run: |
+          $base = Join-Path $env:RUNNER_TEMP 'pssa'
+          $destino = Join-Path $base 'PSScriptAnalyzer/1.25.0'
+          if (!(Test-Path (Join-Path $destino 'PSScriptAnalyzer.psd1'))) {
+            $existente = Get-Module -ListAvailable PSScriptAnalyzer | Where-Object Version -EQ '1.25.0' | Select-Object -First 1
+            if ($existente) {
+              New-Item -ItemType Directory -Force $destino | Out-Null
+              Copy-Item (Join-Path $existente.ModuleBase '*') $destino -Recurse -Force
+            } else {
+              Save-Module PSScriptAnalyzer -RequiredVersion 1.25.0 -Path $base -Force
+            }
+          }
+          if ((Test-ModuleManifest (Join-Path $destino 'PSScriptAnalyzer.psd1')).Version -ne '1.25.0') { throw 'Versao do analisador incorreta.' }
+      - name: PSScriptAnalyzer (erros)
+        shell: powershell
+        run: |
+          Import-Module (Join-Path $env:RUNNER_TEMP 'pssa/PSScriptAnalyzer/1.25.0/PSScriptAnalyzer.psd1')
+          $achados = @(Invoke-ScriptAnalyzer -Path . -Recurse -Severity Error)
+          $achados | Format-Table -AutoSize RuleName, ScriptName, Line, Message | Out-String -Width 300 | Write-Host
+          if ($achados.Count) { exit 1 }
+
+      - name: Validar inicializacao com conta e atualizacao
+        shell: powershell
+        env:
+          SV_TESTES_INTEGRACAO_WINDOWS: '1'
+        run: |
+          ./scripts/testar-medicao-tolerante.ps1
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          ./scripts/testar-atualizacao-rapida.ps1
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          ./scripts/testar-limpeza-preparo.ps1
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          ./scripts/testar-fases-atualizacao.ps1
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          ./scripts/testar-espera-ci.ps1
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          ./scripts/testar-dependencias-preparo.ps1
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          ./scripts/testar-checkpoint-alertas.ps1
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          ./scripts/testar-etapa-b.ps1
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          ./scripts/testar-etapa-a.ps1
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          ./scripts/testar-espera-testes.ps1
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          ./scripts/testar-correcoes-ensaio.ps1
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          ./scripts/testar-reversao-arquivos.ps1
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          ./scripts/testar-inicializacao.ps1
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          node --test portal/tests/orfaos-windows.test.mjs
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+
+  powershell-protecoes:
+    name: PowerShell - protecoes e agenda
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: portal/package.json
+      - name: Alinhar Node da maquina com o servidor
+        shell: powershell
+        run: ./scripts/ci/fixar-node-runner.ps1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12'
+      - name: Validar protecoes da atualizacao e agenda
+        shell: powershell
+        run: |
+          foreach ($teste in @('testar-atualizacao-segura', 'testar-reparo-configuracao', 'testar-credencial-portal', 'testar-operacao', 'testar-health-local', 'testar-supv', 'testar-modo-ensaio', 'testar-avisos-admin', 'testar-estado-operacao', 'testar-python-minimo', 'testar-parada-supervisor', 'testar-recuperacao-atualizacao')) {
+            & powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./scripts/$teste.ps1
+            if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          }
+
+          # Interativo sem destinatario e timeout de aviso cobrem ramos distintos.
+          # SemLogin + falha sem PortalReal repete a integracao do Portal.
+          foreach ($argumentos in @(@(), @('-AvisoAdminTeste', 'lento'))) {
+            & powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./scripts/testar-supervisor-isolado.ps1 @argumentos
+            if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          }
+
+  powershell-ensaio:
+    name: PowerShell - ensaio e firewall
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: portal/package.json
+      - name: Alinhar Node da maquina com o servidor
+        shell: powershell
+        run: ./scripts/ci/fixar-node-runner.ps1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12'
+      - name: Validar restricao de firewall sem alterar regras reais
+        shell: powershell
+        run: ./portal/scripts/testar-restricao-firewall.ps1
+
+      - name: Validar ensaio sem login e supressao de avisos
+        timeout-minutes: 11
+        shell: powershell
+        run: |
+          & powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./scripts/testar-supervisor-isolado.ps1 -SemLogin -Ensaio -AvisoAdminTeste falha
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+
+  powershell:
+    permissions: {}
+    name: PowerShell
+    needs: [powershell-inicializacao, powershell-protecoes, powershell-ensaio]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Exigir sucesso dos tres grupos
+        env:
+          INICIALIZACAO: ${{ needs.powershell-inicializacao.result }}
+          PROTECOES: ${{ needs.powershell-protecoes.result }}
+          ENSAIO: ${{ needs.powershell-ensaio.result }}
+        run: |
+          if [ "$INICIALIZACAO" != success ] || [ "$PROTECOES" != success ] || [ "$ENSAIO" != success ]; then
+            echo "::error::PowerShell reprovado: inicializacao=$INICIALIZACAO, protecoes=$PROTECOES, ensaio=$ENSAIO (exige todos com sucesso)."
+            exit 1
+          fi
+
+  portal:
+    name: Portal
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: portal
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: portal/package.json
+          cache: npm
+          cache-dependency-path: portal/package-lock.json
+      - name: Conferir arquivos de teste citados no CI
+        working-directory: .
+        run: node scripts/ci/verificar-testes.mjs
+      - name: Conferir pacote SheetJS contra o oficial
+        working-directory: .
+        run: curl --fail --location --retry 3 --max-time 120 https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz --output "$RUNNER_TEMP/xlsx-oficial.tgz"
+      - name: Impedir dados de infraestrutura interna no repositorio publico
+        working-directory: .
+        env:
+          SV_BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || '' }}
+          SV_XLSX_OFICIAL: ${{ runner.temp }}/xlsx-oficial.tgz
+        run: node scripts/verificar-infra-publica.mjs
+      # Arquivo gravado com CRLF no indice aparece como alterado no checkout
+      # do Windows e trava o atualizar-servidor.ps1 ("alteracoes locais").
+      - name: Conferir fim de linha no repositorio
+        working-directory: .
+        run: |
+          ruins=$(git ls-files --eol | grep -E '^i/(crlf|mixed)' || true)
+          if [ -n "$ruins" ]; then
+            echo "$ruins"
+            echo "::error::Arquivos com CRLF no indice. Rode: git add --renormalize ."
+            exit 1
+          fi
+      - run: npm ci
+      - run: npm test
+      - name: Avisos SMTP com terminal colorido
+        env:
+          FORCE_COLOR: '1'
+        run: node --test tests/aviso-admin.test.mjs
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run build
+        env:
+          PORTAL_API_TOKEN: token-ficticio-build-proibido-170
+      - name: Conferir credencial ausente do build
+        working-directory: .
+        shell: pwsh
+        run: ./scripts/testar-credencial-portal.ps1 -ExigirBuild
+      # Auditar runtime e ferramentas no PR e na execucao semanal.
+      - run: npm audit
+
+  portal-integracao:
+    name: Portal - instalacao nova e autenticacao real
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: portal/package.json
+          cache: npm
+          cache-dependency-path: portal/package-lock.json
+      - name: Alinhar Node da maquina com o servidor
+        shell: powershell
+        run: |
+          ./scripts/ci/fixar-node-runner.ps1
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          node -v
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - name: Preparar Python e configuracao ficticia operacional
+        shell: pwsh
+        run: |
+          python -m venv alertas/.venv
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          & ./alertas/.venv/Scripts/python.exe -m pip install -r alertas/config/requirements.txt -r alertas/config/requirements-dev.txt
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          $pastaTeste = Join-Path $env:RUNNER_TEMP ('sv-private-' + [guid]::NewGuid().ToString('N'))
+          ./scripts/preparar-configuracao-teste.ps1 -Destino $pastaTeste
+          "SUPPLY_VISION_PRIVADO=$pastaTeste" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+      - run: npm ci
+        working-directory: portal
+      - name: Validar senha 7-Zip via stdin e restauracao ficticia
+        shell: powershell
+        run: |
+          node --experimental-strip-types --test portal/tests/backup-7z.test.mjs portal/tests/backup-7z-integracao.test.mjs portal/tests/backup-restauracao-e2e.test.mjs
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+      - name: npm com conta de usuario e TEMP curto 8.3
+        shell: powershell
+        env:
+          SV_TESTES_INTEGRACAO_WINDOWS: '1'
+        run: ./scripts/testar-windows-temporario-curto.ps1
+      - name: Validar Portal ponta a ponta com banco descartavel
+        shell: powershell
+        run: ./portal/scripts/teste-portal-ponta-a-ponta.ps1
+
+      - name: Validar parada do supervisor com Portal real e SQLite
+        timeout-minutes: 11
+        shell: powershell
+        run: |
+          node --test portal/tests/runtime-local.test.mjs
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          & powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./scripts/testar-supervisor-isolado.ps1 -SemLogin -AvisoAdminTeste falha -PortalReal -DiagnosticoDestino (Join-Path $env:RUNNER_TEMP 'sv-supervisor-evidencias')
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+
+      - name: Guardar logs ficticios da partida do Portal em falha
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: portal-supervisor-partida
+          retention-days: 7
+          if-no-files-found: ignore
+          path: |
+            ${{ runner.temp }}/sv-supervisor-evidencias/*/portal-saida.log
+            ${{ runner.temp }}/sv-supervisor-evidencias/*/portal-erro.log
+            ${{ runner.temp }}/sv-supervisor-evidencias/*/supervisor.log
+
+      - name: Validar operacao e persistencia dos alertas
+        shell: powershell
+        # Driver conserva os cinco slots de scripts/testar-persistencia-alertas.ps1.
+        run: ./scripts/ci/testar-operacao-persistencia.ps1 -Evento '${{ github.event_name }}'
+      - name: Validar importacoes e falhas HTTP no portal compilado
+        working-directory: portal
+        run: npm run test:imports
+      - name: Ensaiar restauracao de backup ficticio
+        working-directory: portal
+        run: npm run test:restore -- --fixture
+      - name: Guardar evidencias das importacoes em falha
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: portal-importacoes-diagnostico
+          retention-days: 7
+          if-no-files-found: ignore
+          # Apenas logs da instancia descartavel; nunca bancos, configs ou snapshots.
+          path: |
+            portal/work/import-stress-*/servidor.log
+            portal/work/import-stress-*/resultado.json
+            portal/work/import-stress-*/http-error-*.txt
+
+  atualizacao-real-cenarios:
+    name: Atualizacao real - ${{ matrix.grupo }}
+    strategy:
+      fail-fast: false
+      matrix:
+        grupo: [atualizacao, reversao]
+    if: github.event_name == 'pull_request'
+    runs-on: windows-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+      - name: Obter main para calcular merge-base
+        shell: powershell
+        run: |
+          git fetch origin main
+          if ($LASTEXITCODE) { throw 'Nao foi possivel obter main para Atualizacao real.' }
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: portal/package.json
+          cache: npm
+          cache-dependency-path: portal/package-lock.json
+      - name: Alinhar Node da maquina com o servidor
+        shell: powershell
+        run: ./scripts/ci/fixar-node-runner.ps1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: |
+            alertas/config/requirements.txt
+            alertas/config/requirements-dev.txt
+            alertas/config/requirements-ci.txt
+      - name: Executar grupo de atualizacao real
+        timeout-minutes: 37
+        shell: powershell
+        env:
+          SV_TESTES_INTEGRACAO_WINDOWS: '1'
+          SV_PREPARO_COMPLETO: '1'
+          TEMP: ${{ runner.temp }}
+          TMP: ${{ runner.temp }}
+        run: ./scripts/testar-atualizacao-real.ps1 -BaseRef origin/main -DestinoRef HEAD -LimiteSegundos 1800 -Grupo ${{ matrix.grupo }}
+      - name: Guardar diagnostico da atualizacao (inclusive em falha)
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: atualizacao-real-${{ matrix.grupo }}
+          retention-days: 7
+          if-no-files-found: ignore
+          path: |
+            ${{ runner.temp }}/sv-h2-*/fase.txt
+            ${{ runner.temp }}/sv-h2-*/*.log
+            ${{ runner.temp }}/sv-h2-*/reversao/*.log
+            ${{ runner.temp }}/sv-h2-*/sucesso-*/*.log
+            ${{ runner.temp }}/sv-h2-*/sucesso-*/*.jsonl
+            ${{ runner.temp }}/sv-h2-*/sucesso-*/*.json
+            ${{ runner.temp }}/sv-h2-*/negativo/*.log
+            ${{ runner.temp }}/sv-h2-*/negativo/*.jsonl
+            ${{ runner.temp }}/sv-h2-*/negativo/consumidores-*.json
+            ${{ runner.temp }}/sv-h2-*/negativo/continuidade-preparar.json
+            ${{ runner.temp }}/sv-h2-*/negativo-final/*.log
+            ${{ runner.temp }}/sv-h2-*/negativo-final/*.jsonl
+            ${{ runner.temp }}/sv-h2-*/negativo-final/*.json
+            ${{ runner.temp }}/sv-h2-*/sucesso/*.log
+            ${{ runner.temp }}/sv-h2-*/sucesso/*.jsonl
+            ${{ runner.temp }}/sv-h2-*/sucesso/consumidores-*.json
+            ${{ runner.temp }}/sv-h2-*/sucesso/continuidade-preparar.json
+            ${{ runner.temp }}/sv-h2-*/sucesso-reserva/*.log
+            ${{ runner.temp }}/sv-h2-*/sucesso-reserva/*.jsonl
+            ${{ runner.temp }}/sv-h2-*/sucesso-reserva/*.json
+            ${{ runner.temp }}/sv-h2-*/instalacao/privado/operacao/atualizacao-tempos.log
+            ${{ runner.temp }}/sv-h2-*/instalacao/privado/operacao/atualizacao.json
+            ${{ runner.temp }}/sv-h2-*/instalacao/privado/operacao/supervisor.log
+            ${{ runner.temp }}/sv-h2-*/instalacao/privado/operacao/portal-*.log
+            ${{ runner.temp }}/sv-h2-*/instalacao/privado/operacao/emails-*.log
+            ${{ runner.temp }}/sv-h2-*/instalacao/privado/operacao/relatorios-*.log
+
+  atualizacao-real:
+    permissions: {}
+    name: Atualizacao real
+    needs: [atualizacao-real-cenarios]
+    if: always() && github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Exigir sucesso dos dois grupos
+        env:
+          RESULTADO: ${{ needs.atualizacao-real-cenarios.result }}
+        run: |
+          if [ "$RESULTADO" != success ]; then
+            echo "::error::Atualizacao real reprovada: resultado dos grupos=$RESULTADO (exige ambos com sucesso)."
+            exit 1
+          fi
+
+  alertas:
+    name: Alertas
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            alertas/config/requirements.txt
+            alertas/config/requirements-dev.txt
+            alertas/config/requirements-ci.txt
+      - run: pip install -r alertas/config/requirements.txt -r alertas/config/requirements-dev.txt
+      - name: Auditar dependencias Python
+        run: |
+          pip install -r alertas/config/requirements-ci.txt
+          pip-audit -r alertas/config/requirements.txt
+      - name: Lint Python (ruff)
+        run: ruff check alertas
+      - name: Preparar configuração fictícia
+        shell: pwsh
+        run: |
+          @('privado/comum', 'privado/alertas/config',
+            'privado/alertas/parametros/de_para',
+            'privado/alertas/parametros/filtros') |
+            ForEach-Object { New-Item -ItemType Directory -Path $_ -Force | Out-Null }
+          Copy-Item compartilhado/smtp.env.example privado/comum/smtp.env
+          Copy-Item alertas/config/cfg_ambiente.exemplo.txt privado/alertas/config/cfg_ambiente.txt
+          Copy-Item alertas/config/cfg_qlik.exemplo.txt privado/alertas/config/cfg_qlik.txt
+          Copy-Item alertas/config/destinatarios.exemplo.txt privado/alertas/config/destinatarios.txt
+          Get-ChildItem alertas/parametros/de_para/*.exemplo.csv | ForEach-Object {
+            Copy-Item $_.FullName (Join-Path 'privado/alertas/parametros/de_para' ($_.Name -replace '\.exemplo\.csv$', '.csv'))
+          }
+          Get-ChildItem alertas/parametros/filtros/*.exemplo.txt | ForEach-Object {
+            Copy-Item $_.FullName (Join-Path 'privado/alertas/parametros/filtros' ($_.Name -replace '\.exemplo\.txt$', '.txt'))
+          }
+      - run: python -m pytest alertas/tests -q

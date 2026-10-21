@@ -1,0 +1,964 @@
+import { localizarBanco } from './banco-local.mjs';
+// Teste HTTP real, sempre em um banco novo e local. Nunca aceita URL/banco externo.
+// npm run test:imports (requer npm run build). Evidências ficam em work/.
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { spawn, execFileSync } from 'node:child_process';
+import { createServer } from 'node:net';
+import { DatabaseSync } from 'node:sqlite';
+import * as XLSX from 'xlsx';
+import { abrirRequisicao, multipart } from './cliente-http.mjs';
+import { verificarAcessoConsulta } from './verificar-acesso-consulta.mjs';
+import { LIMITE_LISTA } from '../lib/limites-entrada.ts';
+import { verificarFiltrosBusca } from './verificar-filtros-busca.mjs';
+import { CABECALHOS_SEGURANCA } from '../lib/cabecalhos-seguranca.ts';
+import { passwordHash, PBKDF2_ITERACOES_LEGADO } from '../lib/criptografia.ts';
+
+const portal = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+fs.mkdirSync(path.join(portal, 'work'), { recursive: true });
+const output = fs.mkdtempSync(path.join(fs.realpathSync.native(path.join(portal, 'work')), 'import-stress-'));
+const privadoFixture = path.join(output, 'privado');
+const state = path.join(privadoFixture, 'portal/banco/estado/state');
+const runtime = path.join(output, 'runtime');
+fs.cpSync(path.join(portal, 'dist'), runtime, { recursive: true });
+const serverLog = fs.openSync(path.join(output, 'servidor.log'), 'a');
+const senha = '12345';
+const checks = [], metrics = [];
+let child, cookie = '', sqlitePath, reader, agreementId = '';
+let seed = 20260916;
+const random = () => { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; return seed / 2 ** 32; };
+const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
+const socket = createServer();
+await new Promise(resolve => socket.listen(0, '127.0.0.1', resolve));
+const port = socket.address().port;
+await new Promise(resolve => socket.close(resolve));
+const base = `http://127.0.0.1:${port}`;
+
+async function request(url, { method = 'GET', body, session = cookie, headers = {} } = {}) {
+  if (method === 'PUT' && /^\/api\/agreements\/[^/]+$/.test(url) && body && body.expectedRevision === undefined) {
+    const detail = await request(url, { session });
+    if (detail.status === 200) body = { ...body, expectedRevision: detail.data.agreement.revision };
+  }
+  const cadastro=url.match(/^\/api\/(catalogs|mappings)\/(suppliers|locations|items|models|units)\/([^/?]+)$/);
+  if(cadastro && ['PUT','DELETE'].includes(method) && reader && body?.expectedRevision===undefined){
+    const tabelas=cadastro[1]==='mappings'?{items:'import_item_mappings',models:'import_model_mappings',units:'import_unit_mappings'}:{suppliers:'suppliers',locations:'locations',items:'catalog_items',models:'vehicle_models',units:'units'};
+    const tabela=tabelas[cadastro[2]],registro=tabela?reader.prepare(`SELECT revision FROM ${tabela} WHERE id=?`).get(cadastro[3]):null;
+    if(registro){if(method==='PUT')body={...body,expectedRevision:registro.revision};else url+=`?expectedRevision=${registro.revision}`;}
+  }
+  const response = await fetch(base + url, {
+    method, headers: { connection: 'close', ...(session ? { cookie: session } : {}), ...(body && !(body instanceof FormData) ? { 'content-type': 'application/json' } : {}), ...headers },
+    ...(body === undefined ? {} : { body: body instanceof FormData ? body : JSON.stringify(body) }),
+    signal: AbortSignal.timeout(180000),
+  });
+  const text = await response.text();
+  if (response.status >= 500) fs.writeFileSync(path.join(output, `http-error-${method}-${Date.now()}.txt`), text);
+  let data; try { data = JSON.parse(text); } catch { data = text; }
+  return { status: response.status, data, cookie: response.headers.get('set-cookie')?.split(';')[0] };
+}
+async function good(url, options, expected = 200) {
+  const result = await request(url, options);
+  assert.equal(result.status, expected, `${url}: ${JSON.stringify(result.data)}`);
+  return result.data;
+}
+async function check(name, fn) {
+  const start = performance.now();
+  try { await fn(); checks.push({ name, ok: true, ms: Math.round(performance.now() - start) }); console.log(`OK ${name}`); }
+  catch (error) { checks.push({ name, ok: false, error: error.message }); console.log(`FALHOU ${name}: ${error.message}`); }
+}
+function query(sql, ...args) { return reader.prepare(sql).all(...args); }
+function businessSnapshot() {
+  return Object.fromEntries(['suppliers', 'locations', 'catalog_items', 'vehicle_models', 'units', 'agreements', 'agreement_locations', 'agreement_versions', 'agreement_items'].map(table => [table, query(`SELECT * FROM ${table} ORDER BY rowid`)]));
+}
+
+// Gerado para esta fixture, com digitos verificadores validos e diferente do acordo.
+const cnpjFornecedorB = '90.000.004/0001-62';
+const headers = ['CIDADE', 'UF', 'MODELO', 'PECA_SERVICO', 'PRECO', 'MEDIDA', 'MARCAS', 'CNPJ', 'FORNECEDOR'];
+const row = (changes = {}) => ({ CIDADE: 'GOIANIA', UF: 'GO', MODELO: 'Hilux teste', PECA_SERVICO: 'Óleo teste', PRECO: 42.5, MEDIDA: 'litro', MARCAS: 'MARCA TESTE', CNPJ: '11.222.333/0001-81', FORNECEDOR: 'FORNECEDOR TESTE', ...changes });
+function file(rows, { name = 'teste', format = 'xlsx', aoa, range, extraSheet } = {}) {
+  const book = XLSX.utils.book_new();
+  const sheet = aoa ? XLSX.utils.aoa_to_sheet(aoa) : XLSX.utils.json_to_sheet(rows);
+  if (range) sheet['!ref'] = range;
+  XLSX.utils.book_append_sheet(book, sheet, 'Acordos teste');
+  if (extraSheet) XLSX.utils.book_append_sheet(book, XLSX.utils.json_to_sheet(extraSheet), 'Ignorada');
+  const bytes = XLSX.write(book, { type: 'buffer', bookType: format === 'xls' ? 'biff8' : 'xlsx', compression: true, bookSST: true });
+  const filename = `${name}.${format}`;
+  fs.writeFileSync(path.join(output, filename), bytes);
+  return { bytes, filename };
+}
+async function upload(document, route = `/api/imports/agreement/${agreementId}`, session = cookie) {
+  const form = new FormData(); form.set('file', new Blob([document.bytes]), document.filename);
+  const destino = route.split('?')[0].split('/').at(-1);
+  const revisao = destino && reader.prepare('SELECT revision FROM agreements WHERE id=?').get(destino)?.revision;
+  if (!route.includes('preview=1') && revisao !== undefined) form.set('expectedRevision', String(revisao));
+  const start = performance.now();
+  const result = await request(route, { method: 'POST', body: form, session });
+  metrics.push({ file: document.filename, bytes: document.bytes.length, status: result.status, ms: Math.round(performance.now() - start), summary: result.data.summary });
+  return result;
+}
+async function rejected(document, route, expected = 400, verify) {
+  const before = businessSnapshot();
+  const result = await upload(document, route);
+  assert.equal(result.status, expected, JSON.stringify(result.data));
+  assert.deepEqual(businessSnapshot(), before, 'Falha de importação alterou dados de negócio');
+  assert.equal(query('SELECT COUNT(*) n FROM travas')[0].n, 0, 'Trava ficou presa');
+  if (verify) await verify(result.data);
+  return result;
+}
+// O erro de nomenclatura vira registro agrupado (sem numero de linha proprio,
+// so a primeira ocorrencia); o de dado continua linha a linha.
+function erroDaLinha(data, linha) {
+  const agrupado = (data.nomenclaturas || []).find(n => n.primeiraLinha === linha);
+  if (agrupado) return agrupado.erro;
+  return (data.outrosErros || []).find(e => e.linha === linha)?.erro ?? '';
+}
+async function catalog(type, data) { return good(`/api/catalogs/${type}`, { method: 'POST', body: data }, 201); }
+// Fixture de volume no banco descartavel desta execucao. O cadastro HTTP e
+// validado separadamente; 10 mil POSTs mediam cadastro, nao importacao.
+async function localidades(nomes, uf = 'GO') {
+  assert.ok(sqlitePath.startsWith(state + path.sep));
+  const fixture = new DatabaseSync(sqlitePath);
+  try {
+    fixture.exec('PRAGMA busy_timeout=999; BEGIN IMMEDIATE');
+    const insert = fixture.prepare('INSERT INTO locations (id,city,state) VALUES (?,?,?)');
+    for (const city of nomes) insert.run(`fixture-${uf}-${city}`, city, uf);
+    fixture.exec('COMMIT');
+  } finally { fixture.close(); }
+}
+const serie = (prefixo, total) => Array.from({ length: total }, (_, indice) => `${prefixo} ${indice}`);
+async function mapping(type, source, targetId, extra = {}) { return good(`/api/mappings/${type}`, { method: 'POST', body: { source, targetId, ...extra } }, 201); }
+function noise(text) {
+  const gaps = [' ', '  ', '\t', '\n', '\u00a0', '\u202f'];
+  return '\ufeff  ' + [...text.normalize(random() < .5 ? 'NFD' : 'NFC')].map(c => c === ' ' ? gaps[Math.floor(random() * gaps.length)] : random() < .5 ? c.toLowerCase() : c.toUpperCase()).join('') + '\u200b ';
+}
+
+async function stopServer() {
+  if (child?.pid && child.exitCode === null) {
+    if (process.platform === 'win32') { try { execFileSync('taskkill.exe', ['/PID', String(child.pid), '/T', '/F'], { windowsHide: true, stdio: 'ignore' }); } catch { /* processo já encerrado */ } }
+    else child.kill('SIGTERM');
+    if (child.exitCode === null) await new Promise(resolve => child.once('exit', resolve));
+    await pause(300);
+  }
+}
+async function startServer(initialPassword = senha) {
+  child = spawn(process.execPath, [path.join(portal, 'tests/apoio/servidor.mjs'), runtime, String(port)], {
+    cwd: portal, windowsHide: true, stdio: ['ignore', serverLog, serverLog],
+    env: { ...process.env, SUPPLY_VISION_PRIVADO:privadoFixture, MODO_ENSAIO:'1', PORTAL_CRIAR_BANCO:'1',
+      INITIAL_ADMIN_PASSWORD:initialPassword ?? '', PORTAL_API_TOKEN:'relatorios-token-ci', RELATORIOS_PORTA:String(port+1), NODE_ENV:'production' },
+  });
+  console.log(`Instância descartável: ${base}; evidências: ${output}`);
+  let ready = false;
+  for (let i = 0; i < 90; i++) {
+    if (child.exitCode !== null) throw new Error(`Servidor encerrou: ${child.exitCode}`);
+    try { const res = await fetch(base + '/api/health', { signal: AbortSignal.timeout(2000) }); if (res.ok) { ready = true; break; } } catch { /* aguardando apenas a instância criada */ }
+    await pause(500);
+  }
+  assert.ok(ready, 'Servidor não iniciou. Veja servidor.log.');
+}
+try {
+  await startServer();
+  // Email reservado somente na base nova desta fixture; hash/iteracoes reais.
+  sqlitePath=localizarBanco(null, path.join(privadoFixture, 'portal'));assert.ok(sqlitePath&&sqlitePath.startsWith(state+path.sep));
+  const fixtureAdmin=new DatabaseSync(sqlitePath);
+  try{
+    fixtureAdmin.exec('PRAGMA busy_timeout=5000');
+    assert.equal(fixtureAdmin.prepare('SELECT COUNT(*) n FROM users').get().n,1);
+    fixtureAdmin.prepare("UPDATE users SET email=? WHERE role='admin'").run('admin@portal.test');
+  }finally{fixtureAdmin.close();}
+  const login = await request('/api/login', { method: 'POST', body: { email: 'admin@portal.test', password: senha } });
+  assert.equal(login.status, 200); cookie = login.cookie;
+  sqlitePath = localizarBanco(null, path.join(privadoFixture, 'portal')); assert.ok(sqlitePath);
+  reader = new DatabaseSync(sqlitePath, { readOnly: true });
+
+  await check('Servidor Node serve somente o build e mantem cabecalhos de seguranca', async () => {
+    for (const rota of ['/', '/api/health', '/package.json', '/vite.config.ts', '/AGENTS.md', '/.env', '/.git/config', '/scripts/iniciar-portal.mjs', '/privado/portal/banco/estado/state/base.sqlite', '/%2e%2e/package.json', '/%5cprivado/base.sqlite']) {
+      const r=await fetch(base+rota);
+      assert.equal(r.status, ['/', '/api/health'].includes(rota)?200:404,rota);
+      for(const [nome,valor] of Object.entries(CABECALHOS_SEGURANCA)) {
+        const recebido = r.headers.get(nome);
+        assert.equal(nome === 'Content-Security-Policy' ? recebido?.replace(/ 'nonce-[^']+'/g, '') : recebido, valor, rota+' '+nome);
+      }
+      await r.arrayBuffer();
+    }
+  });
+  await check('Login usa IP do socket e ignora cabecalhos de origem forjados', async () => {
+    const email='ip-fixture@teste.test';
+    const r=await request('/api/login',{method:'POST',session:'',body:{email,password:'incorreta'},headers:{'cf-connecting-ip':'forjado','cf-ray':'forjado','x-forwarded-for':'forjado','x-sv-client-ip':'forjado','x-sv-client-proof':'a'.repeat(64)}});
+    assert.equal(r.status,401);
+    const tentativas=query('SELECT ip FROM login_attempts WHERE email=?',email);
+    assert.equal(tentativas.length,1);assert.equal(tentativas[0].ip,'127.0.0.1');
+  });
+
+  await check('Cadastro recusa 4 caracteres e aceita 5 pela API', async () => {
+    const body = { name: 'Limite senha', email: 'limite-senha@teste.test', role: 'viewer', password: '1234' };
+    const recusado = await request('/api/users', { method: 'POST', body });
+    assert.equal(recusado.status, 400);
+    assert.equal(recusado.data.error, 'A senha deve ter pelo menos 5 caracteres.');
+    assert.equal(query('SELECT id FROM users WHERE email=?', body.email).length, 0);
+    await good('/api/users', { method: 'POST', body: { ...body, password: '12345' } }, 201);
+    assert.equal((await request('/api/login', { method: 'POST', session: '', body: { email: body.email, password: '12345' } })).status, 200);
+  });
+
+  for (const propria of [false, true]) {
+    await check(`${propria ? 'Troca da propria senha' : 'Redefinicao pelo admin'} recusa 4 e aceita 5 caracteres`, async () => {
+      const email = `${propria ? 'propria' : 'admin-reset'}-senha@teste.test`;
+      const criado = await good('/api/users', { method: 'POST', body: { name: 'Limite troca', email, password: senha, role: propria ? 'admin' : 'viewer' } }, 201);
+      const login = await request('/api/login', { method: 'POST', session: '', body: { email, password: senha } });
+      assert.equal(login.status, 200);
+      const session = propria ? login.cookie : cookie;
+      const antes = query('SELECT * FROM users WHERE id=?', criado.id)[0];
+      const body = { expectedRevision: antes.revision, password: '1234' };
+      const recusado = await request(`/api/users/${criado.id}`, { method: 'PUT', session, body });
+      assert.equal(recusado.status, 400);
+      assert.equal(recusado.data.error, 'A senha deve ter pelo menos 5 caracteres.');
+      assert.deepEqual(query('SELECT * FROM users WHERE id=?', criado.id)[0], antes);
+      assert.equal((await request('/api/session', { session: login.cookie })).data.user.id, criado.id);
+      // Campo vazio altera apenas o cadastro e preserva a senha atual.
+      await good(`/api/users/${criado.id}`, { method: 'PUT', session, body: { ...body, password: '' } });
+      const atual = query('SELECT * FROM users WHERE id=?', criado.id)[0];
+      assert.equal(atual.password_hash, antes.password_hash);
+      await good(`/api/users/${criado.id}`, { method: 'PUT', session, body: { expectedRevision: atual.revision, password: '12345' } });
+      assert.equal((await request('/api/session', { session: login.cookie })).data.user, null);
+      assert.equal((await request('/api/login', { method: 'POST', session: '', body: { email, password: '12345' } })).status, 200);
+    });
+  }
+
+  await check('Usuario existente com senha de 6 caracteres continua entrando', async () => {
+    const salt = 'sal-legado-ficticio', password = 'antiga';
+    const hash = await passwordHash(password, salt, PBKDF2_ITERACOES_LEGADO);
+    const db = new DatabaseSync(sqlitePath);
+    try {
+      db.prepare('INSERT INTO users(id,name,email,password_salt,password_hash,password_iterations,role,active,created_at) VALUES(?,?,?,?,?,?,?,?,?)')
+        .run('senha-legada-fixture', 'Legado ficticio', 'senha-legada@teste.test', salt, hash, PBKDF2_ITERACOES_LEGADO, 'viewer', 1, new Date().toISOString());
+    } finally { db.close(); }
+    const login = await request('/api/login', { method: 'POST', session: '', body: { email: 'senha-legada@teste.test', password } });
+    assert.equal(login.status, 200);
+    assert.equal(login.data.user.id, 'senha-legada-fixture');
+    assert.equal((await request('/api/bootstrap', { session: login.cookie })).status, 200);
+    assert.equal((await request('/api/login', { method: 'POST', session: '', body: { email: 'senha-legada@teste.test', password } })).status, 200);
+  });
+
+  await check('Validacao de atualizacao permite consulta e bloqueia gravacoes HTTP', async()=>{
+    const db=new DatabaseSync(sqlitePath),antes=businessSnapshot();
+    try{
+      db.exec('INSERT INTO operacao_validacao(id,ativa) VALUES(1,1) ON CONFLICT(id) DO UPDATE SET ativa=1');
+      assert.equal((await request('/api/bootstrap')).status,200);
+      for(const method of ['POST','PUT','DELETE'])assert.equal((await request('/api/catalogs/items/inexistente',{method,body:method==='DELETE'?undefined:{name:'NAO GRAVAR'}})).status,503);
+      assert.deepEqual(businessSnapshot(),antes);
+    }finally{db.exec('UPDATE operacao_validacao SET ativa=0');db.close();}
+    assert.equal((await request('/api/bootstrap')).status,200);
+  });
+
+  await check('Entrega diaria aparece na tela e reenvio exige POST autorizado', async()=>{
+    const db=new DatabaseSync(sqlitePath),usuario=query("SELECT id FROM users WHERE role='admin' LIMIT 1")[0].id;
+    try{
+      db.prepare("INSERT INTO daily_report_deliveries(id,user_id,report_date,status,attempts,next_attempt_at,created_at,updated_at,period_start,period_end) VALUES('diario-http',?,'2026-10-06','failed',5,'x','2026-10-06','antes','2026-10-05T20:45:00Z','2026-10-06T20:45:00Z')").run(usuario);
+      const lista=await good('/api/email-notifications?type=relatorio_diario&status=failed');
+      assert.ok(lista.notifications.some(n=>n.id==='diario-http'&&n.deliveryKind==='diario'));
+      assert.equal((await request('/api/daily-report-deliveries/diario-http/retry')).status,404);
+      assert.equal(query("SELECT status FROM daily_report_deliveries WHERE id='diario-http'")[0].status,'failed');
+      assert.equal((await request('/api/daily-report-deliveries/diario-http/retry',{method:'POST',session:''})).status,401);
+      await good('/api/daily-report-deliveries/diario-http/retry',{method:'POST'});
+      assert.equal((await request('/api/daily-report-deliveries/diario-http/retry',{method:'POST'})).status,409);
+      const entrega=query("SELECT status,period_start FROM daily_report_deliveries WHERE id='diario-http'")[0];
+      assert.equal(entrega.status,'pending');assert.equal(entrega.period_start,'2026-10-05T20:45:00Z');
+    }finally{db.exec("DELETE FROM daily_report_deliveries WHERE id='diario-http'");db.close();}
+  });
+
+  await check('Edicao antiga de usuario nao restaura permissao revogada', async () => {
+    const criado = await good('/api/users', { method: 'POST', body: { name: 'Administrador concorrente', email: 'concorrente@teste.test', password: senha, role: 'admin' } }, 201);
+    const antigo = (await good('/api/users')).users.find(u => u.id === criado.id);
+    assert.ok(Number.isSafeInteger(antigo.revision));
+    await good(`/api/users/${criado.id}`, { method: 'PUT', body: { role: 'viewer', expectedRevision: antigo.revision } });
+    assert.equal((await request(`/api/users/${criado.id}`, { method: 'PUT', body: { ...antigo, dailyReportTime: '18:00', expectedRevision: antigo.revision } })).status, 409);
+    const atual = (await good('/api/users')).users.find(u => u.id === criado.id);
+    assert.equal(atual.role, 'viewer');assert.equal(atual.dailyReportTime, antigo.dailyReportTime);
+    assert.ok(atual.revision > antigo.revision);
+  });
+
+  await check('De/Para inicia vazio', async () => assert.deepEqual(await good('/api/mappings'), { items: [], models: [], units: [] }));
+  await check('Falha na auditoria reverte edicao de usuario e suas sessoes', async () => {
+    const criado = await good('/api/users', { method: 'POST', body: { name: 'Usuario auditado', email: 'auditado@teste.test', password: senha, role: 'editor' } }, 201);
+    await good('/api/login', { method: 'POST', session: '', body: { email: 'auditado@teste.test', password: senha } });
+    const antigo = (await good('/api/users')).users.find(u => u.id === criado.id);
+    const antes = query('SELECT * FROM users WHERE id=?', criado.id), sessoes = query('SELECT * FROM sessions WHERE user_id=?', criado.id);
+    const db = new DatabaseSync(sqlitePath);
+    try {
+      db.exec("CREATE TRIGGER falha_auditoria_usuario BEFORE INSERT ON audit_logs WHEN NEW.entity='user' AND NEW.action='UPDATE' BEGIN SELECT RAISE(ABORT,'falha auditoria usuario'); END");
+      assert.equal((await request(`/api/users/${criado.id}`, { method: 'PUT', body: { role: 'viewer', expectedRevision: antigo.revision } })).status, 500);
+      assert.deepEqual(query('SELECT * FROM users WHERE id=?', criado.id), antes);
+      assert.deepEqual(query('SELECT * FROM sessions WHERE user_id=?', criado.id), sessoes);
+    } finally { db.exec('DROP TRIGGER IF EXISTS falha_auditoria_usuario'); db.close(); }
+  });
+  // Nomes homonimos ficticios para conferir a separacao por UF.
+  const location = await catalog('locations', { city: 'GOIANIA', state: 'GO' });
+  await catalog('locations', { city: 'GOIANIA', state: 'MG' });
+  await catalog('locations', { city: 'SAO PAULO', state: 'SP' });
+  const supplier = await catalog('suppliers', { tradeName: 'FORNECEDOR TESTE', cnpj: row().CNPJ });
+  await check('UF inexistente e recusada ao criar ou editar cadastros e chamados', async () => {
+    const before = businessSnapshot();
+    const location = query("SELECT id FROM locations WHERE city='GOIANIA' AND state='GO'")[0];
+    for (const [url, method, body] of [
+      ['/api/catalogs/locations', 'POST', { city: 'ALMAS', state: 'TI' }],
+      [`/api/catalogs/locations/${location.id}`, 'PUT', { city: 'GOIANIA', state: 'TI' }],
+      ['/api/catalogs/suppliers', 'POST', { tradeName: 'TESTE', cnpj: cnpjFornecedorB, state: 'TI' }],
+      [`/api/catalogs/suppliers/${supplier.id}`, 'PUT', { tradeName: 'FORNECEDOR TESTE', cnpj: row().CNPJ, state: 'TI' }],
+      ['/api/tickets', 'POST', { supplierName: 'TESTE', state: 'TI' }],
+    ]) assert.equal((await request(url, { method, body })).status, 400, url);
+    assert.deepEqual(businessSnapshot(), before);
+  });
+  const item = await catalog('items', { name: 'OLEO DE MOTOR TESTE' });
+  const model = await catalog('models', { name: 'HILUX 2.8 TESTE' });
+  const itemMap = await mapping('items', 'Óleo teste', item.id);
+  await check('Cadastro e De/Para rejeitam edicao e exclusao com revisao obsoleta', async()=>{
+    const antigo=(await good('/api/bootstrap')).catalogs.suppliers.find(r=>r.id===supplier.id);
+    await good(`/api/catalogs/suppliers/${supplier.id}`,{method:'PUT',body:{...antigo,expectedRevision:antigo.revision,tradeName:'CORRIGIDO'}});
+    assert.equal((await request(`/api/catalogs/suppliers/${supplier.id}`,{method:'PUT',body:{...antigo,expectedRevision:antigo.revision}})).status,409);
+    assert.equal(query('SELECT trade_name FROM suppliers WHERE id=?',supplier.id)[0].trade_name,'CORRIGIDO');
+    await good(`/api/catalogs/suppliers/${supplier.id}`,{method:'PUT',body:{...antigo}});
+    const mapa=(await good('/api/mappings')).items.find(r=>r.id===itemMap.id);
+    await good(`/api/mappings/items/${itemMap.id}`,{method:'PUT',body:{...mapa,expectedRevision:mapa.revision,notes:'CORRIGIDO'}});
+    assert.equal((await request(`/api/mappings/items/${itemMap.id}`,{method:'PUT',body:{...mapa,expectedRevision:mapa.revision}})).status,409);
+    assert.equal((await request(`/api/mappings/items/${itemMap.id}?expectedRevision=${mapa.revision}`,{method:'DELETE'})).status,409);
+    assert.equal(query('SELECT notes FROM import_item_mappings WHERE id=?',itemMap.id)[0].notes,'CORRIGIDO');
+  });
+
+  await mapping('models', 'Hilux teste', model.id);
+  const unit = query("SELECT * FROM units WHERE code='LITRO'")[0];
+  agreementId=(await good('/api/agreements',{method:'POST',body:{number:'STRESS-IMPORTACAO',supplierId:supplier.id,status:'active',startDate:'2026-01-01',locationIds:[location.id]}},201)).id;
+  await check('Observacoes do acordo preservam antes e depois no historico', async () => {
+    const detalhe = await good(`/api/agreements/${agreementId}`), a = detalhe.agreement;
+    await good(`/api/agreements/${agreementId}`, { method: 'PUT', body: { number:a.number,supplierId:a.supplier_id,status:a.status,startDate:a.start_date,endDate:a.end_date,notes:'Observacao revisada',locationIds:detalhe.locations.map(l=>l.id),expectedRevision:a.revision } });
+    const registro = query("SELECT details FROM audit_logs WHERE entity='agreement' AND entity_id=? AND action='UPDATE' ORDER BY rowid DESC LIMIT 1",agreementId)[0];
+    const dados=JSON.parse(registro.details);
+    assert.equal(dados.antes.notes,a.notes);assert.equal(dados.depois.notes,'Observacao revisada');
+    assert.equal((await good(`/api/agreements/${agreementId}`)).agreement.notes,'Observacao revisada');
+  });
+  await check('Limites de listas sao conferidos pelas rotas reais antes do banco', async () => {
+    for (const quantidade of [LIMITE_LISTA, LIMITE_LISTA + 1]) {
+      const ids=Array.from({length:quantidade},(_,i)=>`inexistente-${i}`);
+      const acordo=await request('/api/agreements',{method:'POST',body:{number:'LIMITE-TESTE',supplierId:supplier.id,startDate:'2026-01-01',locationIds:ids}});
+      assert.equal(acordo.status,400);
+      assert.equal(/acima do limite/.test(acordo.data.error),quantidade>LIMITE_LISTA);
+      const condicao=await request(`/api/agreements/${agreementId}/items`,{method:'POST',body:{catalogItemId:item.id,locationId:location.id,unitId:unit.id,price:10,modelIds:ids}});
+      assert.equal(condicao.status,400);
+      assert.equal(/no máximo/.test(condicao.data.error),quantidade>LIMITE_LISTA);
+    }
+  });
+  const replace = `/api/imports/agreement/${agreementId}`;
+  await check('Publicacao exige revisao da previa e recusa acordo alterado com 409', async () => {
+    const doc = file([row()], {name:'previa-revisao'});
+    const previa = await upload(doc, replace+'?preview=1');
+    assert.equal(previa.status,200);assert.equal(previa.data.valid,true);
+    assert.equal(typeof previa.data.agreementRevision,'number');
+    const db = new DatabaseSync(sqlitePath);
+    try{db.prepare('UPDATE agreements SET notes=notes WHERE id=?').run(agreementId);}finally{db.close();}
+    const antes = businessSnapshot(), form = new FormData();
+    form.set('file',new Blob([doc.bytes]),doc.filename);
+    assert.equal((await request(replace,{method:'POST',body:form})).status,409);
+    form.set('expectedRevision',String(previa.data.agreementRevision));
+    const obsoleta=await request(replace,{method:'POST',body:form});
+    assert.equal(obsoleta.status,409);assert.match(obsoleta.data.error,/conferência|confira/i);
+    assert.deepEqual(businessSnapshot(),antes);
+  });
+  await check('Upload excedido mantido aberto libera reserva em prazo limitado', async () => {
+    const antes=businessSnapshot(), inicio=performance.now();
+    const aberto=abrirRequisicao({porta:port,caminho:replace,timeoutMs:20000,cabecalhos:{cookie,'content-type':'multipart/form-data; boundary=aberto','transfer-encoding':'chunked'}});
+    try {
+      await aberto.escrever(Buffer.alloc(3*1024*1024,65));
+      for(let i=0;i<50&&!query('SELECT COUNT(*) n FROM travas')[0].n;i++)await pause(100);
+      assert.equal(query('SELECT COUNT(*) n FROM travas')[0].n,1,'Reserva nunca foi adquirida');
+      for(let i=0;i<100&&query('SELECT COUNT(*) n FROM travas')[0].n;i++)await pause(100);
+      assert.equal(query('SELECT COUNT(*) n FROM travas')[0].n,0,'Reserva nao foi liberada no prazo');
+      assert.ok(performance.now()-inicio<12000,'Leitura dependeu do timeout do cliente');
+      aberto.terminar();
+      const resultado=await aberto.resposta;
+      // Cancelar um fluxo que nao termina pode fechar a conexao no proxy.
+      assert.ok([0,408].includes(resultado.status),JSON.stringify(resultado));
+
+      for(let i=0;i<30&&query('SELECT COUNT(*) n FROM travas')[0].n;i++)await pause(100);
+      assert.equal(query('SELECT COUNT(*) n FROM travas')[0].n,0);
+      assert.deepEqual(businessSnapshot(),antes);
+      assert.equal((await request('/api/health')).status,200);
+    } finally { aberto.destruir(); }
+  });
+  await check('Upload que perdeu dono da reserva nao prepara nem publica dados', async () => {
+    const antes=businessSnapshot(), doc=file([row()],{name:'reserva-perdida'}), m=multipart(doc.filename,doc.bytes,{expectedRevision:query('SELECT revision FROM agreements WHERE id=?',agreementId)[0].revision});
+    const aberto=abrirRequisicao({porta:port,caminho:replace,timeoutMs:15000,cabecalhos:{cookie,'content-type':m.tipo,'transfer-encoding':'chunked'}});
+    const db=new DatabaseSync(sqlitePath);
+    try {
+      const meio=Math.floor(m.corpo.length/2);
+      await aberto.escrever(m.corpo.subarray(0,meio));
+      for(let i=0;i<50&&!query("SELECT dono FROM travas WHERE chave='importacao'").length;i++)await pause(100);
+      assert.equal(query("SELECT COUNT(*) n FROM travas WHERE chave='importacao'")[0].n,1);
+      db.exec("UPDATE travas SET dono='outro-dono' WHERE chave='importacao'");
+      aberto.terminar(m.corpo.subarray(meio));
+      assert.equal((await aberto.resposta).status,409);
+      assert.deepEqual(businessSnapshot(),antes);
+      assert.equal(query("SELECT dono FROM travas WHERE chave='importacao'")[0].dono,'outro-dono');
+    } finally { aberto.destruir();db.exec("DELETE FROM travas WHERE dono='outro-dono'");db.close(); }
+  });
+  const mode = 'substituir';
+  const invalidCases = /** @type {Array<[string, Record<string, unknown>, RegExp]>} */ ([
+    ['item-desconhecido', { PECA_SERVICO: 'PEÇA inexistente' }, /PECA_SERVICO.*PEÇA inexistente/],
+    ['modelo-desconhecido', { MODELO: 'MODELO inexistente' }, /MODELO.*MODELO inexistente/],
+    ['lirto', { MEDIDA: 'lirto' }, /UNIDADE.*lirto/],
+    ['unidade-vazia', { MEDIDA: '' }, /MEDIDA|UNIDADE/],
+    ['preco-vazio', { PRECO: '' }, /PRECO/],
+    ['preco-negativo', { PRECO: -10 }, /negativo/i],
+    ['preco-texto', { PRECO: 'a combinar' }, /Preço/],
+    ['preco-malformado', { PRECO: '12.34,56' }, /Preço/],
+    ['uf-invalida', { UF: 'XX' }, /UF/],
+  ]);
+  for (const [label, changes, match] of invalidCases) await check(`${mode}: ${label} aborta tudo e localiza linha`, () => rejected(file([row(), row(changes)], { name: `${mode}-${label}` }), replace, 400, data => {
+    assert.match(erroDaLinha(data, 3), match);
+  }));
+  await check('Linha real após vazios e cabeçalho deslocado', () => rejected(file([], { name: 'linha-real', aoa: [[], [], headers, Object.values(row()), [], Object.values(row({ MEDIDA: 'lirto' }))] }), replace, 400, data => assert.match(erroDaLinha(data, 6), /UNIDADE/)));
+  await check('Nomenclatura repetida vira um registro agrupado, nao um por linha', () => rejected(file(Array.from({ length: 120 }, (_, index) => row(index % 2 ? { PECA_SERVICO: 'ITEM FANTASMA A' } : { PECA_SERVICO: 'ITEM FANTASMA B' })), { name: 'nomenclatura-agrupada' }), replace, 400, data => {
+    assert.equal(data.totalErros, 120);
+    assert.equal(data.nomenclaturas.length, 2, JSON.stringify(data.nomenclaturas));
+    assert.equal(data.nomenclaturas[0].linhas, 60); assert.equal(data.nomenclaturas[1].linhas, 60);
+    assert.deepEqual(data.nomenclaturas.map(n => n.valor).sort(), ['ITEM FANTASMA A', 'ITEM FANTASMA B']);
+    assert.equal(data.outrosErros.length, 0);
+  }));
+  await check('Coluna ausente é uma mensagem só, não um erro por linha', () => rejected(file([], { name: 'coluna-ausente', aoa: [headers.filter(h => h !== 'CIDADE'), Object.values(row()).filter((_, i) => headers[i] !== 'CIDADE')] }), replace, 400, data => {
+    assert.match(String(data.error), /não tem a coluna CIDADE/);
+    assert.ok(!data.outrosErros?.length, 'coluna ausente nao deve virar erro por linha');
+  }));
+  await check('Cabeçalhos equivalentes duplicados são rejeitados', () => rejected(file([], { name: 'cabecalhos-duplicados', aoa: [[...headers, ' Peça/Serviço '], [...Object.values(row()), 'OUTRO ITEM']] }), replace));
+  await check('500 ruídos aleatórios reproduzíveis mantêm nomenclaturas e valores', async () => {
+    await localidades(serie('CIDADE', 500));
+    const noisyHeaders = headers.map(noise);
+    const rows = Array.from({ length: 500 }, (_, index) => headers.map(key => { const value = row({ CIDADE: `CIDADE ${index}` })[key]; return typeof value === 'string' && key !== 'CNPJ' ? noise(value) : value; }));
+    const result = await upload(file([], { name: 'ruidos-semente-20260916', aoa: [noisyHeaders, ...rows] }), replace);
+    assert.equal(result.status, 200, JSON.stringify(result.data));
+    const actual = query('SELECT ai.*,l.city FROM agreement_items ai JOIN agreements a ON a.current_version_id=ai.version_id JOIN locations l ON l.id=ai.location_id WHERE a.id=?', agreementId);
+    assert.equal(actual.length, 500);
+    for (const r of actual) { assert.equal(r.catalog_item_id, item.id); assert.equal(r.vehicle_model_id, model.id); assert.equal(r.unit_id, unit.id); assert.equal(r.price, 42.5); assert.match(r.city, /^CIDADE \d+$/); }
+  });
+  await check('Cabeçalhos com acentos, barra e espaços são aceitos', async () => {
+    const result = await upload(file([], { name: 'cabecalhos', aoa: [[' cidade ', 'uf', 'modélo', 'Peça/Serviço', 'Preço', 'Unidade'], ['São Paulo', 'sp', 'hilux teste', 'óleo teste', 'R$ 1.234,56', 'LITRO']] }), replace);
+    assert.equal(result.status, 200, JSON.stringify(result.data));
+    assert.equal(query('SELECT price FROM agreement_items WHERE version_id=(SELECT current_version_id FROM agreements WHERE id=?)', agreementId)[0].price, 1234.56);
+  });
+  await check('XLS legado também passa pela validação', async () => assert.equal((await upload(file([row()], { name: 'legado', format: 'xls' }), replace)).status, 200));
+  await check('Cortesia explícita zero é preservada', async () => {
+    assert.equal((await upload(file([row({ PRECO: 0 })], { name: 'cortesia' }), replace)).status, 200);
+    const actual = query('SELECT price,courtesy FROM agreement_items WHERE version_id=(SELECT current_version_id FROM agreements WHERE id=?)', agreementId)[0];
+    assert.equal(actual.price, 0); assert.equal(actual.courtesy, 1);
+  });
+  await check('Mapeamento inativo bloqueia', async () => {
+    await good(`/api/mappings/items/${itemMap.id}`, { method: 'PUT', body: { source: 'Óleo teste', targetId: item.id, active: false } });
+    try { await rejected(file([row()], { name: 'de-para-inativo' }), replace); }
+    finally { await good(`/api/mappings/items/${itemMap.id}`, { method: 'PUT', body: { source: 'Óleo teste', targetId: item.id, active: true } }); }
+  });
+  for (const [type, target, values] of [['items', item, { name: 'OLEO DE MOTOR TESTE' }], ['models', model, { name: 'HILUX 2.8 TESTE' }], ['units', unit, { code: 'LITRO', name: 'Litro' }]]) {
+    await check(`Destino ${type} inativo bloqueia`, async () => {
+      await good(`/api/catalogs/${type}/${target.id}`, { method: 'PUT', body: { ...values, active: false } });
+      try { await rejected(file([row()], { name: `${type}-inativo` }), replace); }
+      finally { await good(`/api/catalogs/${type}/${target.id}`, { method: 'PUT', body: { ...values, active: true } }); }
+    });
+  }
+  await check('Duplicidade de origem após normalização é rejeitada', async () => {
+    assert.equal((await request('/api/mappings/items', { method: 'POST', body: { source: 'oLEO\u00a0 TESTE', targetId: item.id } })).status, 400);
+  });
+  await check('Editar origem para chave existente é recusado', async () => {
+    const temporary = await mapping('items', 'OUTRA ORIGEM', item.id);
+    try { assert.equal((await request(`/api/mappings/items/${temporary.id}`, { method: 'PUT', body: { source: 'Óleo teste', targetId: item.id } })).status, 400); }
+    finally { await good(`/api/mappings/items/${temporary.id}`, { method: 'DELETE' }); }
+  });
+  await check('Editar observação de De/Para inativo conserva inatividade', async () => {
+    const inactive = await mapping('items', 'INATIVO', item.id, { active: false });
+    try {
+      const entry = (await good('/api/mappings')).items.find(r => r.id === inactive.id);
+      await good(`/api/mappings/items/${inactive.id}`, { method: 'PUT', body: { ...entry, notes: 'ALTERADA' } });
+      assert.equal((await good('/api/mappings')).items.find(r => r.id === inactive.id).active, 0);
+    } finally { await good(`/api/mappings/items/${inactive.id}`, { method: 'DELETE' }); }
+  });
+  await check('Excluir De/Para elimina aceitação da origem sem alterar acordos', async () => {
+    const temporary = await mapping('items', 'ORIGEM TEMPORARIA', item.id);
+    await good(`/api/mappings/items/${temporary.id}`, { method: 'DELETE' });
+    await rejected(file([row({ PECA_SERVICO: 'ORIGEM TEMPORARIA' })], { name: 'origem-excluida' }), replace);
+  });
+  await check('Nome canônico também exige De/Para explícito', () => rejected(file([row({ PECA_SERVICO: 'OLEO DE MOTOR TESTE' })], { name: 'nome-sem-de-para' }), replace));
+  await check('Mesmo nome normalizado em dois cadastros não troca destino do De/Para', async () => {
+    const targetA = await catalog('items', { name: 'PEÇA COLISAO' });
+    const targetB = await catalog('items', { name: 'PECA COLISAO' });
+    await mapping('items', 'ALIAS COLISAO A', targetA.id); await mapping('items', 'ALIAS COLISAO B', targetB.id);
+    const result = await upload(file([row({ PECA_SERVICO: 'ALIAS COLISAO A' }), row({ PECA_SERVICO: 'ALIAS COLISAO B' })], { name: 'colisao-destinos' }), replace);
+    assert.equal(result.status, 200, JSON.stringify(result.data));
+    const ids = query('SELECT catalog_item_id FROM agreement_items WHERE version_id=(SELECT current_version_id FROM agreements WHERE id=?)', agreementId).map(r => r.catalog_item_id).sort();
+    assert.deepEqual(ids, [targetA.id, targetB.id].sort((a,b) => a.localeCompare(b)));
+  });
+  // A unidade passou a ter uma grafia so: o cadastro grava a descricao igual ao
+  // codigo, entao nao ha como criar duas unidades em que o nome de uma bata com
+  // o codigo da outra. A ambiguidade deixou de ser alcancavel pela interface; a
+  // defesa continua no importador para o caso de dado antigo no banco.
+  await check('Unidade nova não cria ambiguidade: o código é a única grafia', async () => {
+    const nova = await catalog('units', { code: 'L2', name: 'Litro' });
+    try {
+      assert.equal(query("SELECT name FROM units WHERE code='L2'")[0].name, 'L2', 'descrição enviada deveria ser ignorada');
+      const result = await upload(file([row()], { name: 'unidade-sem-ambiguidade' }), replace);
+      assert.equal(result.status, 200, JSON.stringify(result.data));
+    }
+    finally { await good(`/api/catalogs/units/${nova.id}`, { method: 'PUT', body: { code: 'L2', active: false } }); }
+  });
+  // A tela do De/Para de unidades passou a dizer que a unidade ativa escrita com
+  // a nomenclatura correta e aceita direto, sem correspondencia. Este teste
+  // guarda essa afirmacao: se ela deixar de ser verdade, o texto vira mentira.
+  await check('Unidade ativa com a grafia correta e aceita sem De/Para', async () => {
+    const mapeamentos = await good('/api/mappings');
+    const temDePara = (mapeamentos.units || []).some(m => m.sourceKey === 'LITRO' || m.source === 'LITRO');
+    assert.ok(!temDePara, 'o teste precisa valer sem De/Para para LITRO');
+    for (const grafia of ['LITRO', 'litro', ' Litro ']) {
+      const resultado = await upload(file([row({ MEDIDA: grafia })], { name: 'unidade-canonica' }), replace);
+      assert.equal(resultado.status, 200, `grafia ${JSON.stringify(grafia)}: ${JSON.stringify(resultado.data)}`);
+    }
+  });
+  await check('Destino usado por De/Para tem exclusão bloqueada com 409', async () => {
+    const target = await catalog('models', { name: 'DESTINO PROTEGIDO' });
+    await mapping('models', 'ORIGEM PROTEGIDA', target.id);
+    assert.equal((await request(`/api/catalogs/models/${target.id}`, { method: 'DELETE' })).status, 409);
+  });
+  for (const role of ['editor', 'viewer']) {
+    await good('/api/users', { method: 'POST', body: { name: role, email: `${role}@teste.test`, password: senha, role } }, 201);
+    const session = (await request('/api/login', { method: 'POST', body: { email: `${role}@teste.test`, password: senha } })).cookie;
+    let permissionMappingId = itemMap.id;
+    for (const method of ['GET', 'POST', 'PUT', 'DELETE']) await check(`${role}: ${method} De/Para respeita perfil`, async () => {
+      const url = method === 'GET' ? '/api/mappings' : '/api/mappings/items' + (['PUT', 'DELETE'].includes(method) ? `/${permissionMappingId}` : '');
+      const result = await request(url, { method, session, ...(method === 'POST' || method === 'PUT' ? { body: { source: 'X', targetId: item.id } } : {}) });
+      assert.equal(result.status, role === 'editor' ? (method === 'POST' ? 201 : 200) : 403, String(JSON.stringify(result.data)).slice(0, 500));
+      if (role === 'editor' && method === 'POST') permissionMappingId = result.data.id;
+    });
+    await check(`${role}: permissão de importar respeitada`, async () => assert.equal((await upload(file([row()], { name: `perfil-${role}` }), replace, session)).status, role === 'editor' ? 200 : 403));
+  }
+  await check('Linha repetida é descartada e reportada, mantendo a primeira', async () => {
+    const result = await upload(file([row({ MARCAS: 'A' }), row({ MARCAS: 'B' })], { name: 'duplicatas-iguais' }), replace);
+    assert.equal(result.status, 200); assert.equal(result.data.summary.items, 1);
+    assert.equal(result.data.summary.duplicatas, 1);
+    const [duplicata] = result.data.summary.amostraDuplicatas;
+    assert.equal(duplicata.motivo, 'linha repetida');
+    assert.equal(duplicata.linhaMantida, 2); assert.equal(duplicata.linhaDescartada, 3);
+    // Sem uniao de marcas: sobrevive a marca da linha mantida.
+    assert.equal(query('SELECT brands_text FROM agreement_items WHERE version_id=(SELECT current_version_id FROM agreements WHERE id=?)', agreementId)[0].brands_text, 'A');
+  });
+  await check('Preço maior é descartado e reportado na substituição', async () => {
+    const result = await upload(file([row({ PRECO: 120 }), row({ PRECO: 90 })], { name: 'preco-maior-substituição' }), replace);
+    assert.equal(result.status, 200, JSON.stringify(result.data));
+    assert.equal(result.data.summary.duplicatas, 1);
+    const [duplicata] = result.data.summary.amostraDuplicatas;
+    assert.equal(duplicata.motivo, 'preço maior');
+    assert.equal(duplicata.precoMantido, 90);
+    assert.equal(duplicata.precoDescartado, 120);
+    assert.equal(duplicata.linhaMantida, 3);
+    assert.equal(duplicata.linhaDescartada, 2);
+  });
+  await check('Importação sem duplicatas não reporta nenhuma', async () => {
+    const result = await upload(file([row()], { name: 'sem-duplicatas' }), replace);
+    assert.equal(result.status, 200); assert.equal(result.data.summary.duplicatas, 0);
+    assert.deepEqual(result.data.summary.amostraDuplicatas, []);
+  });
+  await check('Medidas diferentes para o mesmo item são rejeitadas na substituição', () => rejected(file([row(), row({ MEDIDA: 'par' })], { name: 'medidas-divergentes' }), replace, 400, data => {
+    assert.match(String(data.error), /[Mm]edidas diferentes/);
+    assert.match(String(data.error), /"litro"|"par"/);
+  }));
+  await check('Mesma medida escrita de outro jeito continua sendo duplicata', async () => {
+    const result = await upload(file([row({ MARCAS: 'C' }), row({ MEDIDA: ' LITRO ', MARCAS: 'D' })], { name: 'medida-grafia' }), replace);
+    assert.equal(result.status, 200); assert.equal(result.data.summary.items, 1);
+  });
+  await check('Cidades homonimas em UFs diferentes preservam ambas as condicoes na substituicao', async () => {
+    const result = await upload(file([row(), row({ UF: 'MG', PRECO: 90 })], { name: 'homonimos-por-uf' }), replace);
+    assert.equal(result.status, 200); assert.equal(result.data.summary.items, 2);
+    assert.equal(result.data.summary.duplicatas, 0);
+    const items = query('SELECT l.state,ai.price FROM agreement_items ai JOIN locations l ON l.id=ai.location_id WHERE ai.version_id=(SELECT current_version_id FROM agreements WHERE id=?) ORDER BY l.state', agreementId);
+    assert.deepEqual(items.map(x => [x.state, x.price]), [['GO', 42.5], ['MG', 90]]);
+  });
+  await check('Substituicao rejeita fornecedor divergente sem publicar', async () => {
+    const before = query('SELECT * FROM suppliers');
+    await rejected(file([row({ CNPJ: cnpjFornecedorB, FORNECEDOR: 'FORNECEDOR FICTICIO B' })], { name: 'fornecedor-do-acordo' }), replace, 400, data => assert.match(erroDaLinha(data, 2), /CNPJ.*não corresponde/));
+    assert.deepEqual(query('SELECT * FROM suppliers'), before);
+    assert.equal(query('SELECT supplier_id FROM agreements WHERE id=?', agreementId)[0].supplier_id, supplier.id);
+  });
+  await check('Importação inteira aborta se a segunda linha contiver erro', () => rejected(file([row(), row({ MEDIDA: 'lirto' })], { name: 'segunda-linha-falha' })));
+  await check('Falha na auditoria nao publica nem deixa historico concluido', async () => {
+    assert.ok(sqlitePath.startsWith(state + path.sep));
+    const fixture = new DatabaseSync(sqlitePath);
+    try {
+      fixture.exec(`CREATE TRIGGER teste_falha_auditoria BEFORE INSERT ON audit_logs WHEN NEW.action='IMPORT'
+        BEGIN SELECT RAISE(ABORT, 'falha sintetica na auditoria'); END`);
+      const result = await rejected(file([row({ PRECO: 999 })], { name: 'falha-auditoria' }), replace, 500);
+      assert.equal(query('SELECT status FROM imports WHERE id=?', result.data.importId)[0].status, 'error');
+    } finally {
+      fixture.exec('DROP TRIGGER IF EXISTS teste_falha_auditoria');
+      fixture.close();
+    }
+  });
+  await check('Cidade sem cadastro trava a importação e não cria localidade', () => rejected(file([row(), row({ CIDADE: 'BEOL HORIZONTE', UF: 'MG' })], { name: 'cidade-sem-cadastro' }), replace, 400, data => {
+    assert.equal(data.nomenclaturas.length, 1, JSON.stringify(data.nomenclaturas));
+    assert.equal(data.nomenclaturas[0].campo, 'CIDADE');
+    assert.equal(data.nomenclaturas[0].valor, 'BEOL HORIZONTE/MG');
+    assert.equal(query("SELECT COUNT(*) n FROM locations WHERE city='BEOL HORIZONTE'")[0].n, 0);
+  }));
+  await check('Erro de grafia repetido em muitas linhas vira um registro só', () => rejected(file(Array.from({ length: 40 }, () => row({ CIDADE: 'BEOL HORIZONTE', UF: 'MG' })), { name: 'cidade-errada-repetida' }), replace, 400, data => {
+    assert.equal(data.totalErros, 40);
+    assert.equal(data.nomenclaturas.length, 1);
+    assert.equal(data.nomenclaturas[0].linhas, 40);
+  }));
+  await check('Cidade cadastrada com acento é alcançada pela planilha sem acento', async () => {
+    const acentuada = await catalog('locations', { city: 'Belém', state: 'PA' });
+    try {
+      assert.equal(query("SELECT city FROM locations WHERE id=?", acentuada.id)[0].city, 'BELEM', 'cadastro deveria normalizar');
+      const result = await upload(file([row({ CIDADE: 'Belém', UF: 'PA' })], { name: 'cidade-acentuada' }), replace);
+      assert.equal(result.status, 200, JSON.stringify(result.data));
+    } finally { await upload(file([row()], { name: 'restaura-apos-acento' }), replace); }
+  });
+  await check('100 erros preservam contagem e amostra', () => rejected(file(Array.from({ length: 100 }, () => row({ PRECO: '' })), { name: 'cem-erros' }), replace, 400, async data => {
+    assert.equal(data.totalErros, 100); assert.equal(data.outrosErros.length, 50); assert.equal(data.outrosErrosOmitidos, 50);
+    const detail = await good(`/api/imports/${data.importId}`); assert.equal(detail.errorRows, 100); assert.equal(detail.totalRows, 100);
+  }));
+  await check('Conferencia valida nao publica nem cria historico de importacao', async () => {
+    const before = businessSnapshot(), count = query('SELECT COUNT(*) n FROM imports')[0].n;
+    const result = await upload(file([row({ PRECO: 120 }), row({ PRECO: 90 })], { name: 'previa-valida' }), replace + '?preview=1');
+    assert.equal(result.status, 200); assert.equal(result.data.valid, true);
+    assert.equal(result.data.summary.items, 1); assert.equal(result.data.summary.duplicatas, 1);
+    assert.equal(result.data.sample[0].preco, 90);
+    assert.deepEqual(businessSnapshot(), before); assert.equal(query('SELECT COUNT(*) n FROM imports')[0].n, count);
+  });
+  await check('Conferencia mostra todas as pendencias sem alterar a base', async () => {
+    const before = businessSnapshot();
+    const result = await upload(file([row({ MODELO: 'Hlux', PECA_SERVICO: 'BILETA', CIDADE: 'ALMS', UF: 'TI', MEDIDA: 'litroo', PRECO: '' })], { name: 'previa-pendencias' }), replace + '?preview=1');
+    assert.equal(result.status, 200); assert.equal(result.data.valid, false);
+    assert.equal(result.data.totalErros, 1); assert.equal(result.data.nomenclaturas.length, 4); assert.equal(result.data.outrosErros.length, 1);
+    assert.deepEqual(businessSnapshot(), before);
+  });
+  await check('Localidade se cadastra, não se traduz por De/Para', async () => {
+    const location = await catalog('locations', { city: 'ALMAS', state: 'TO' });
+    // Cidade escrita errada continua sendo erro: nao existe correspondencia de
+    // localidade para apontar uma cidade para outra.
+    assert.equal((await request('/api/mappings/locations', { method: 'POST', body: { source: 'ALMS / TI', targetId: location.id } })).status, 400);
+    await rejected(file([row({ CIDADE: 'ALMS', UF: 'TI' })], { name: 'cidade-errada-sem-alias' }), replace);
+    // Escrita certa passa sem correspondencia nenhuma.
+    assert.equal((await upload(file([row({ CIDADE: 'ALMAS', UF: 'TO' })], { name: 'cidade-cadastrada' }), replace)).status, 200);
+    const mappings = await good('/api/mappings');
+    assert.equal(mappings.locations, undefined, 'De/Para de localidade não deve mais existir');
+  });
+  await check('Correspondencia de medida confirmada resolve e persiste', async () => {
+    const doc = file([row({ MEDIDA: 'litroo' })], { name: 'alias-medida' });
+    await rejected(doc, replace);
+    const unitMap = await mapping('units', 'litroo', unit.id);
+    assert.equal((await upload(doc, replace)).status, 200);
+    await good(`/api/mappings/units/${unitMap.id}`, { method: 'PUT', body: { source: 'litroo', targetId: unit.id, active: false } });
+    await rejected(doc, replace);
+    await good(`/api/mappings/units/${unitMap.id}`, { method: 'PUT', body: { source: 'litroo', targetId: unit.id, active: true } });
+    assert.ok((await good('/api/mappings')).units.some(row => row.id === unitMap.id));
+  });
+  await check('Medida cadastrada não pode ser redirecionada, ativa ou inativa', async () => {
+    assert.equal((await request('/api/mappings/units', { method: 'POST', body: { source: 'PAR', targetId: unit.id } })).status, 400);
+    const jogo = query("SELECT id FROM units WHERE code='JOGO'")[0];
+    await good(`/api/catalogs/units/${jogo.id}`, { method: 'PUT', body: { code: 'JOGO', active: false } });
+    try { assert.equal((await request('/api/mappings/units', { method: 'POST', body: { source: 'JOGO', targetId: unit.id } })).status, 400, 'medida inativa continua sendo medida'); }
+    finally { await good(`/api/catalogs/units/${jogo.id}`, { method: 'PUT', body: { code: 'JOGO', active: true } }); }
+  });
+  await check('Medidas padrão são recriadas ao iniciar', () => {
+    const codigos = query("SELECT code FROM units ORDER BY code").map(linha => linha.code);
+    for (const padrao of ['HORA', 'JOGO', 'LITRO', 'PAR', 'UNIDADE']) assert.ok(codigos.includes(padrao), `${padrao} deveria existir: ${codigos}`);
+  });
+  await check('Atualização aceita planilha sem coluna FORNECEDOR', async () => {
+    const data = row(); delete data.FORNECEDOR;
+    assert.equal((await upload(file([data], { name: 'cnpj-suficiente' }))).status, 200);
+  });
+  await check('100 erros aleatórios de nomenclatura são todos rejeitados', () => rejected(file(Array.from({ length: 100 }, () => {
+    const field = ['MODELO', 'PECA_SERVICO', 'MEDIDA'][Math.floor(random() * 3)];
+    return row({ [field]: `${row()[field]} ERRO-${Math.floor(random() * 999999)}` });
+  }), { name: 'cem-erros-aleatorios' }), replace, 400, async data => assert.equal((await good(`/api/imports/${data.importId}`)).errorRows, 100)));
+  const invalidFiles = /** @type {Array<[string, {filename: string, bytes: Buffer}]>} */ ([
+    ['arquivo-falso', { filename: 'falso.xlsx', bytes: Buffer.from('isto nao e excel') }],
+    ['arquivo-vazio', { filename: 'vazio.xlsx', bytes: Buffer.alloc(0) }],
+    ['extensao-invalida', { ...file([row()], { name: 'extensao' }), filename: 'tabela.csv' }],
+    ['zip-truncado', { ...file([row()], { name: 'antes-truncar' }), bytes: file([row()], { name: 'truncar' }).bytes.subarray(0, 100) }],
+    ['2mb-excedido', { filename: 'excessivo.xlsx', bytes: Buffer.alloc(2 * 1024 * 1024 + 1, 65) }],
+    ['linhas-excedidas', file([row()], { name: 'linhas-excedidas', range: 'A1:I1001' })],
+    ['colunas-excedidas', file([row()], { name: 'colunas-excedidas', range: 'A1:CW2' })],
+    ['area-excedida', file([row()], { name: 'area-excedida', range: 'A1:U50000' })],
+  ]);
+  for (const [name, document] of invalidFiles) await check(`${name}: rejeição preserva banco e libera trava`, () => rejected(document, replace));
+  await check('Primeira aba é a única importada', async () => {
+    const result = await upload(file([row()], { name: 'duas-abas', extraSheet: [row({ MEDIDA: 'lirto' })] }), replace);
+    assert.equal(result.status, 200); assert.equal(result.data.summary.items, 1);
+  });
+  await check('Limite real: 999 registros + cabeçalho passam', async () => {
+    const large = file(Array.from({ length: 999 }, () => row()), { name: 'limite-1000-linhas' });
+    const result = await upload(large, replace); assert.equal(result.status, 200, JSON.stringify(result.data)); assert.equal(result.data.summary.items, 1);
+  });
+  await check('Erro na última das 999 linhas aborta a carga inteira', () => rejected(file(Array.from({ length: 999 }, (_, index) => row(index === 998 ? { MEDIDA: 'lirto' } : {})), { name: 'erro-no-fim-1000' }), replace, 400, data => assert.equal(data.nomenclaturas[0].primeiraLinha, 1000)));
+  await check('Carga de 999 condições distintas publica todas', async () => {
+    await localidades(serie('STRESS', 999));
+    const large = file(Array.from({ length: 999 }, (_, index) => row({ CIDADE: `STRESS ${index}`, PRECO: index / 100 })), { name: 'novecentas-condicoes' });
+    const result = await upload(large, replace); assert.equal(result.status, 200, JSON.stringify(result.data)); assert.equal(result.data.summary.items, 999);
+    assert.equal(query('SELECT COUNT(*) n FROM agreement_items WHERE version_id=(SELECT current_version_id FROM agreements WHERE id=?)', agreementId)[0].n, 999);
+  });
+  await verificarFiltrosBusca({ request, good, check, query });
+  await verificarAcessoConsulta({ request, good, check, senha, agreementId, metrics });
+  await check('20 concorrentes recebem 409 enquanto uma importação segura a trava', async () => {
+    const doc = file([row()], { name: 'concorrencia' }), m = multipart(doc.filename, doc.bytes, {expectedRevision:query('SELECT revision FROM agreements WHERE id=?',agreementId)[0].revision});
+    const first = abrirRequisicao({ porta: port, caminho: replace, timeoutMs: 60000, cabecalhos: { cookie, 'content-type': m.tipo, 'transfer-encoding': 'chunked' } });
+    await first.escrever(m.corpo.subarray(0, m.corpo.length - 20));
+    try {
+      for (let i = 0; i < 100 && !query('SELECT COUNT(*) n FROM travas')[0].n; i++) await pause(50);
+      assert.equal(query('SELECT COUNT(*) n FROM travas')[0].n, 1);
+      const results = await Promise.allSettled(Array.from({ length: 20 }, () => upload(doc, replace)));
+      assert.ok(results.every(r => r.status === 'fulfilled' && r.value.status === 409), JSON.stringify(results));
+    } finally {
+      first.terminar(m.corpo.subarray(m.corpo.length - 20));
+      assert.equal((await first.resposta).status, 200);
+    }
+    assert.equal(query('SELECT COUNT(*) n FROM travas')[0].n, 0);
+  });
+  await check('Depois do estresse uma nova importação funciona', async () => assert.equal((await upload(file([row()], { name: 'apos-estresse' }), replace)).status, 200));
+  await check('Importação interrompida no meio é limpa pela próxima', async () => {
+    // Reproduz o que sobra quando o processo morre durante a gravacao: a
+    // importacao em 'processing', uma versao em preparo e condicoes nela.
+    assert.ok(sqlitePath.startsWith(state + path.sep));
+    const modelo = query(`SELECT i.location_id,i.catalog_item_id,i.vehicle_model_id,i.unit_id FROM agreement_items i JOIN agreements a ON a.current_version_id=i.version_id WHERE a.id=? LIMIT 1`, agreementId)[0];
+    const usuario = query('SELECT id FROM users LIMIT 1')[0].id;
+    const versao = query('SELECT COALESCE(MAX(version_number),0)+1 n FROM agreement_versions WHERE agreement_id=?', agreementId)[0].n;
+    const agora = new Date().toISOString();
+    const fixture = new DatabaseSync(sqlitePath);
+    try {
+      fixture.exec('PRAGMA busy_timeout=999; BEGIN IMMEDIATE');
+      fixture.prepare(`INSERT INTO imports (id,agreement_id,filename,mode,status,created_by,created_at) VALUES ('imp-interrompida',?,'interrompida.xlsx','replace','processing',?,?)`).run(agreementId, usuario, agora);
+      fixture.prepare(`INSERT INTO agreement_versions (id,agreement_id,version_number,import_id,status,published_at,created_by,created_at) VALUES ('ver-interrompida',?,?,'imp-interrompida','processing',NULL,?,?)`).run(agreementId, versao, usuario, agora);
+      fixture.prepare(`INSERT INTO agreement_items (id,version_id,location_id,catalog_item_id,vehicle_model_id,unit_id,price,created_at,updated_at) VALUES ('itm-interrompida','ver-interrompida',?,?,?,?,1,?,?)`).run(modelo.location_id, modelo.catalog_item_id, modelo.vehicle_model_id, modelo.unit_id, agora, agora);
+      fixture.exec('COMMIT');
+    } finally { fixture.close(); }
+    assert.equal((await upload(file([row()], { name: 'apos-interrupcao' }), replace)).status, 200);
+    assert.equal(query(`SELECT status FROM imports WHERE id='imp-interrompida'`)[0].status, 'error');
+    assert.equal(query(`SELECT COUNT(*) n FROM agreement_versions WHERE id='ver-interrompida'`)[0].n, 0);
+    assert.equal(query(`SELECT COUNT(*) n FROM agreement_items WHERE id='itm-interrompida'`)[0].n, 0);
+  });
+  await check('Localidade com condições vigentes não sai da abrangência do acordo', async () => {
+    const detalhe = await good(`/api/agreements/${agreementId}`);
+    const a = detalhe.agreement;
+    const corpo = (locationIds) => ({ number: a.number, supplierId: a.supplier_id, status: a.status, startDate: a.start_date, endDate: a.end_date, notes: a.notes, locationIds });
+    const abrangencia = () => query('SELECT location_id FROM agreement_locations WHERE agreement_id=? ORDER BY location_id', agreementId).map((linha) => linha.location_id);
+    const atuais = detalhe.locations.map((local) => local.id), comPreco = detalhe.items[0].locationId;
+    // Localidade sem condicoes entra livremente...
+    const nova = await catalog('locations', { city: 'ABRANGENCIA TESTE', state: 'GO' });
+    await good(`/api/agreements/${agreementId}`, { method: 'PUT', body: corpo([...atuais, nova.id]) });
+    const antes = abrangencia();
+    // ...mas a que tem preco vigente nao sai, e nada muda.
+    const recusa = await request(`/api/agreements/${agreementId}`, { method: 'PUT', body: corpo([nova.id, ...atuais.filter((id) => id !== comPreco)]) });
+    assert.equal(recusa.status, 409, JSON.stringify(recusa.data));
+    assert.match(recusa.data.error, /condições vigentes/);
+    assert.deepEqual(abrangencia(), antes);
+    // ...e a sem condicoes sai livremente.
+    await good(`/api/agreements/${agreementId}`, { method: 'PUT', body: corpo(atuais) });
+    assert.deepEqual(abrangencia(), [...atuais].sort((x, y) => x.localeCompare(y)));
+  });
+  await check('Edições simultâneas no mesmo acordo não deixam condição fora da abrangência', async () => {
+    const detalhe = await good(`/api/agreements/${agreementId}`);
+    const a = detalhe.agreement, modelo = detalhe.items[0];
+    const corpo = (locationIds) => ({ number: a.number, supplierId: a.supplier_id, status: a.status, startDate: a.start_date, endDate: a.end_date, notes: a.notes, locationIds });
+    const atuais = detalhe.locations.map((local) => local.id);
+    const extra = await catalog('locations', { city: 'CONCORRENCIA TESTE', state: 'GO' });
+    const condicao = { catalogItemId: modelo.catalogItemId, modelIds: [modelo.modelId], unitId: modelo.unitId, locationId: extra.id, price: 1 };
+    const naCidadeExtra = () => query('SELECT ai.id,ai.revision FROM agreement_items ai JOIN agreements ag ON ag.current_version_id=ai.version_id WHERE ag.id=? AND ai.location_id=?', agreementId, extra.id);
+    const status = { retirar: new Set(), incluir: new Set() };
+    for (let rodada = 0; rodada < 15; rodada++) {
+      for (const item of naCidadeExtra()) await good(`/api/items/${item.id}?expectedRevision=${item.revision}`, { method: 'DELETE' });
+      await good(`/api/agreements/${agreementId}`, { method: 'PUT', body: corpo([...atuais, extra.id]) });
+      // Uma requisicao retira a cidade enquanto a outra inclui preco nela.
+      const [retirar, incluir] = await Promise.all([
+        request(`/api/agreements/${agreementId}`, { method: 'PUT', body: corpo(atuais) }),
+        request(`/api/agreements/${agreementId}/items`, { method: 'POST', body: condicao }),
+      ]);
+      status.retirar.add(retirar.status); status.incluir.add(incluir.status);
+      assert.ok([200, 409].includes(retirar.status), JSON.stringify(retirar.data));
+      assert.ok([200, 409].includes(incluir.status) || (incluir.status === 400 && /abrangência/.test(incluir.data.error)), JSON.stringify(incluir.data));
+      const fora = query(`SELECT COUNT(*) n FROM agreement_items ai JOIN agreements ag ON ag.current_version_id=ai.version_id
+        WHERE ag.id=? AND ai.location_id NOT IN (SELECT location_id FROM agreement_locations WHERE agreement_id=ag.id)`, agreementId)[0].n;
+      assert.equal(fora, 0, `rodada ${rodada}: condição ficou fora da abrangência`);
+    }
+    for (const item of naCidadeExtra()) await good(`/api/items/${item.id}?expectedRevision=${item.revision}`, { method: 'DELETE' });
+    await good(`/api/agreements/${agreementId}`, { method: 'PUT', body: corpo([...atuais, extra.id]) });
+    // A disputa acima depende do acaso; esta parte nao. Com o acordo travado
+    // por outra operacao, editar e incluir condicao recebem 409 e nada muda.
+    assert.ok(sqlitePath.startsWith(state + path.sep));
+    const fixture = new DatabaseSync(sqlitePath);
+    try {
+      fixture.exec('PRAGMA busy_timeout=999');
+      fixture.prepare('INSERT INTO travas (chave,dono,adquirida_em) VALUES (?,?,?)').run(`acordo:${agreementId}`, 'outra-operacao', new Date().toISOString());
+    } finally { fixture.close(); }
+    const abrangenciaTravada = query('SELECT COUNT(*) n FROM agreement_locations WHERE agreement_id=?', agreementId)[0].n;
+    const editar = await request(`/api/agreements/${agreementId}`, { method: 'PUT', body: corpo(atuais) });
+    const incluirTravado = await request(`/api/agreements/${agreementId}/items`, { method: 'POST', body: condicao });
+    for (const r of [editar, incluirTravado]) { assert.equal(r.status, 409, JSON.stringify(r.data)); assert.match(r.data.error, /Outro usuário/); }
+    assert.equal(query('SELECT COUNT(*) n FROM agreement_locations WHERE agreement_id=?', agreementId)[0].n, abrangenciaTravada);
+    assert.equal(naCidadeExtra().length, 0);
+    const soltar = new DatabaseSync(sqlitePath);
+    try { soltar.exec('PRAGMA busy_timeout=999'); soltar.prepare('DELETE FROM travas WHERE chave=?').run(`acordo:${agreementId}`); } finally { soltar.close(); }
+    await good(`/api/agreements/${agreementId}`, { method: 'PUT', body: corpo(atuais) });
+    assert.equal(query("SELECT COUNT(*) n FROM travas WHERE chave LIKE 'acordo:%'")[0].n, 0, 'Trava de acordo ficou presa');
+    metrics.push({ concorrenciaAbrangencia: { retirar: [...status.retirar], incluir: [...status.incluir] } });
+  });
+  await check('Histórico identifica o acordo da condição excluída e preserva seu número', async () => {
+    const acordo = query('SELECT number FROM agreements WHERE id=?', agreementId)[0];
+    const item = query('SELECT id,revision FROM agreement_items WHERE version_id=(SELECT current_version_id FROM agreements WHERE id=?) LIMIT 1', agreementId)[0];
+    await good(`/api/items/${item.id}?expectedRevision=${item.revision}`, { method: 'DELETE' });
+    const registro = (await good(`/api/audit?q=${item.id}`)).logs.find(log => log.action === 'DELETE');
+    assert.ok(registro);
+    assert.ok(registro.detailsText.includes(`Acordo: ${acordo.number}`));
+    assert.equal(JSON.parse(registro.details).antes.agreementNumber, acordo.number);
+    const fixture = new DatabaseSync(sqlitePath);
+    try {
+      fixture.prepare('UPDATE agreements SET number=? WHERE id=?').run('NUMERO ALTERADO', agreementId);
+      const atualizado = (await good(`/api/audit?q=${item.id}`)).logs.find(log => log.id === registro.id);
+      assert.ok(atualizado.detailsText.includes(`Acordo: ${acordo.number}`));
+      assert.ok(!atualizado.detailsText.includes('NUMERO ALTERADO'));
+      // Simula o formato anterior, que guardava somente a versão da condição.
+      const legado = JSON.parse(registro.details);
+      delete legado.antes.agreementId; delete legado.antes.agreementNumber;
+      fixture.prepare('UPDATE audit_logs SET details=? WHERE id=?').run(JSON.stringify(legado), registro.id);
+      const antigo = (await good(`/api/audit?q=${item.id}`)).logs.find(log => log.id === registro.id);
+      assert.ok(antigo.detailsText.includes('Acordo: NUMERO ALTERADO'));
+    } finally {
+      fixture.prepare('UPDATE agreements SET number=? WHERE id=?').run(acordo.number, agreementId);
+      fixture.prepare('UPDATE audit_logs SET details=? WHERE id=?').run(registro.details, registro.id);
+      fixture.close();
+    }
+  });
+  await check('Exportação conserva os De/Para', async () => {
+    const exported = await good('/api/export');
+    assert.equal(exported.tables.importItemMappings.length, query('SELECT COUNT(*) n FROM import_item_mappings')[0].n);
+    assert.equal(exported.tables.importModelMappings.length, query('SELECT COUNT(*) n FROM import_model_mappings')[0].n);
+    assert.equal(exported.tables.importUnitMappings.length, query('SELECT COUNT(*) n FROM import_unit_mappings')[0].n);
+    assert.equal(exported.tables.importLocationMappings, undefined);
+  });
+  await check('Login paralelo por alvo preserva acesso de outro usuario', async () => {
+    const alvo='alvo-inexistente@example.invalid';
+    for(let i=0;i<5;i++)assert.equal((await request('/api/login',{method:'POST',body:{email:alvo,password:'senha-incorreta'}})).status,401);
+    const inicio=performance.now();
+    const tentar=()=>request('/api/login',{method:'POST',body:{email:alvo,password:'senha-incorreta'}});
+    const tentativasAntes=query('SELECT COUNT(*) n FROM login_attempts WHERE email=?',alvo)[0].n;
+    let concluida=false, duracaoPrimeira;
+    const primeira=Promise.allSettled([tentar()]).then(resultados=>{concluida=true;duracaoPrimeira=performance.now()-inicio;return resultados[0];});
+    try {
+      // A insercao acontece depois da reserva por alvo. Aguarda esse efeito real,
+      // em vez de presumir que o primeiro fetch ja entrou no servidor.
+      const prazo=performance.now()+5000;
+      while(query('SELECT COUNT(*) n FROM login_attempts WHERE email=?',alvo)[0].n===tentativasAntes){
+        assert.equal(concluida,false,'Primeira tentativa encerrou antes de registrar a reserva');
+        assert.ok(performance.now()<prazo,'Primeira tentativa nao registrou a reserva');
+        await pause(10);
+      }
+      const duplicada=()=>{
+        assert.equal(concluida,false,'Tentativas precisam se sobrepor a reserva do alvo');
+        return tentar();
+      };
+      // O burst de 20 tentativas contra o alvo soma a primeira em andamento e as 19 duplicadas.
+      const [legitimo, duplicadas]=await Promise.all([
+        request('/api/login',{method:'POST',body:{email:'admin@portal.test',password:senha}}).then(resultado=>{
+          assert.equal(resultado.status,200,JSON.stringify(resultado.data));
+          assert.equal(concluida,false,'Outro usuario deve entrar durante a reserva do alvo');
+          return resultado;
+        }),
+        Promise.allSettled(Array.from({length:19},duplicada)),
+      ]);
+      assert.equal(legitimo.status,200,JSON.stringify(legitimo.data));
+      const resultados=[await primeira,...duplicadas];
+      const lote=resultados.filter(r=>r.status==='fulfilled').map(r=>r.value);
+      const distribuicao=new Map();
+      for(const r of resultados){
+        const status=r.status==='fulfilled'?r.value.status:'sem-status';
+        distribuicao.set(status,(distribuicao.get(status)||0)+1);
+      }
+      console.log(`Login paralelo por alvo - status: ${[...distribuicao].sort(([a],[b])=>String(a).localeCompare(String(b))).map(([status,n])=>`${status}x${n}`).join(', ')}`);
+      for(const [indice,r] of resultados.entries()){
+        if(r.status==='rejected'){
+          const erro=r.reason;
+          console.log(`Login paralelo por alvo - requisicao ${indice+1} sem status: ${JSON.stringify({erro:erro?.message||String(erro),codigo:erro?.code,causa:erro?.cause?.message,codigoCausa:erro?.cause?.code})}`);
+        }else if(![401,429].includes(r.value.status)){
+          const corpo=typeof r.value.data==='string'?r.value.data:JSON.stringify(r.value.data);
+          console.log(`Login paralelo por alvo - requisicao ${indice+1} HTTP ${r.value.status}: ${corpo.slice(0,500)}`);
+        }
+      }
+      assert.equal(lote.filter(r=>r.status===401).length,1);
+      assert.equal(lote.filter(r=>r.status===429).length,19);
+      assert.ok(duracaoPrimeira>=750,'Atraso progressivo foi contornado');
+      assert.equal(query('SELECT COUNT(*) n FROM login_attempts WHERE email=?',alvo)[0].n,tentativasAntes+1,'Duplicadas nao podem entrar na autenticacao');
+      const falha=await tentar();
+      assert.equal(falha.status,401,'Reserva deve ser liberada depois da tentativa');
+    } finally { await primeira; }
+  });
+  await check('Importacao com acordo ocupado retorna conflito e nao publica', async () => {
+    const db=new DatabaseSync(sqlitePath);
+    try{db.prepare('INSERT INTO travas(chave,dono,adquirida_em) VALUES(?,?,?)').run(`acordo:${agreementId}`,'teste-conflito',new Date().toISOString());}
+    finally{db.close()}
+    const antes=businessSnapshot();
+    try{
+      const r=await upload(file([row()],{name:'conflito-acordo'}),replace);
+      assert.equal(r.status,409,JSON.stringify(r.data));
+      assert.deepEqual(businessSnapshot(),antes);
+      assert.equal(query('SELECT status FROM imports WHERE id=?',r.data.importId)[0].status,'conflict');
+    }finally{const db=new DatabaseSync(sqlitePath);try{db.prepare('DELETE FROM travas WHERE chave=?').run(`acordo:${agreementId}`);}finally{db.close()}}
+  });
+  await check('Reinicialização conserva acordos e correspondências', async () => {
+    const before = businessSnapshot(), mappings = await good('/api/mappings');
+    reader.close(); reader = null; await stopServer(); await startServer(); reader = new DatabaseSync(sqlitePath, { readOnly: true });
+    assert.deepEqual(businessSnapshot(), before); assert.deepEqual(await good('/api/mappings'), mappings);
+  });
+  for (const initialPassword of ['123456', null]) {
+    await check(`Administrador existente: initialize conclui com INITIAL_ADMIN_PASSWORD ${initialPassword === null ? 'ausente' : 'de 6 caracteres'}`, async () => {
+      assert.ok(query("SELECT id FROM users WHERE role='admin'").length > 0);
+      const before = query('SELECT * FROM users ORDER BY id');
+      const logOffset = fs.statSync(path.join(output, 'servidor.log')).size;
+      reader.close(); reader = null; await stopServer(); await startServer(initialPassword);
+      reader = new DatabaseSync(sqlitePath, { readOnly: true });
+      // Nova instancia executa initialize antes de responder a estas rotas.
+      const bootstrap = await good('/api/bootstrap');
+      assert.equal(bootstrap.user.role, 'admin');
+      assert.deepEqual(query('SELECT * FROM users ORDER BY id'), before);
+      const login = await request('/api/login', { method: 'POST', session: '', body: { email: 'admin@portal.test', password: senha } });
+      assert.equal(login.status, 200);
+      const startupLog = fs.readFileSync(path.join(output, 'servidor.log')).subarray(logOffset).toString();
+      assert.doesNotMatch(startupLog, /Base vazia: defina INITIAL_ADMIN_PASSWORD/);
+    });
+  }
+  await check('Atualização de banco anterior cria tabelas vazias e preserva dados', async () => {
+    const before = businessSnapshot();
+    for (const table of ['agreements','agreement_items']) for (const row of before[table]) row.revision=0;
+    reader.close(); reader = null; await stopServer();
+    assert.ok(sqlitePath.startsWith(state + path.sep), 'Só permite alterar o banco desta execução');
+    const migracao = new DatabaseSync(sqlitePath);
+    try { migracao.exec('DROP TABLE import_item_mappings; DROP TABLE import_model_mappings; DROP TRIGGER agreements_revision; DROP TRIGGER agreement_items_revision; DROP TRIGGER acordo_lista_insert; DROP TRIGGER acordo_lista_delete; DROP TRIGGER acordo_lista_update; DROP INDEX idx_tickets_request_key; ALTER TABLE agreements DROP COLUMN revision; ALTER TABLE agreement_items DROP COLUMN revision; ALTER TABLE tickets DROP COLUMN request_key; ALTER TABLE tickets DROP COLUMN request_hash;'); }
+    finally { migracao.close(); }
+    await startServer(); reader = new DatabaseSync(sqlitePath, { readOnly: true });
+    const after = await good('/api/mappings');
+    assert.deepEqual(after.items, []); assert.deepEqual(after.models, []);
+    for(const table of ['agreements','agreement_items']) assert.ok(query(`PRAGMA table_info(${table})`).some(column=>column.name==='revision'));
+    assert.ok(query('PRAGMA table_info(tickets)').some(column=>column.name==='request_key'));
+    assert.equal(query("SELECT COUNT(*) n FROM sqlite_master WHERE type='trigger' AND name IN ('agreements_revision','agreement_items_revision')")[0].n,2);
+    assert.equal(query("SELECT COUNT(*) n FROM sqlite_master WHERE type='index' AND name='idx_tickets_request_key'")[0].n,1);
+    assert.equal(query("SELECT COUNT(*) n FROM sqlite_master WHERE type='trigger' AND name IN ('acordo_lista_insert','acordo_lista_delete','acordo_lista_update')")[0].n,3);
+    assert.deepEqual(businessSnapshot(), before);
+  });
+  await check('Integridade final: sem órfãos, versões pendentes ou travas', async () => {
+    assert.deepEqual(query('PRAGMA foreign_key_check'), []);
+    assert.equal(query('PRAGMA integrity_check')[0].integrity_check, 'ok');
+    assert.equal(query("SELECT COUNT(*) n FROM agreement_versions WHERE status='processing'")[0].n, 0);
+    assert.equal(query('SELECT COUNT(*) n FROM travas')[0].n, 0);
+    assert.equal(query("SELECT COUNT(*) n FROM imports WHERE status='processing'")[0].n, 0);
+  });
+} catch (error) {
+  checks.push({ name: 'Infraestrutura/pré-condições', ok: false, error: error.stack });
+  console.error(error);
+} finally {
+  reader?.close();
+  await stopServer();
+  fs.closeSync(serverLog);
+  const report = { bancoLocal:'sqlite', seed: 20260916, timestamp: new Date().toISOString(), output, passed: checks.filter(c => c.ok).length, failed: checks.filter(c => !c.ok).length, checks, metrics };
+  fs.writeFileSync(path.join(output, 'resultado.json'), JSON.stringify(report, null, 2));
+  console.log(`RESULTADO: ${report.passed} passaram; ${report.failed} falharam. ${path.join(output, 'resultado.json')}`);
+  process.exitCode = report.failed ? 1 : 0;
+}

@@ -1,0 +1,268 @@
+"""Leitura dos parâmetros privados de filtros e de-para.
+
+Formato:
+  .txt  um valor por linha; linhas vazias e iniciadas com # são ignoradas.
+  .csv  delimitador ';', UTF-8 com BOM (abre no Excel com duplo clique).
+        Colunas: <de>;<para>;ativo;observacao
+        'para' vazio  = revisado, sem equivalente no acordo.
+        ativo != Sim  = linha desligada, mantida como registro da decisão.
+
+Arquivos ausentes, vazios, inconsistentes ou com queda brusca são recusados.
+"""
+import csv
+import os
+import json
+import re
+import unicodedata
+import tempfile
+import time
+from contextlib import contextmanager
+from pathlib import Path
+
+CODIGO = Path(__file__).resolve().parent
+PRODUTO = CODIGO.parents[1]
+PRIVADO = Path(os.environ.get('SUPPLY_VISION_PRIVADO', PRODUTO / 'privado')).resolve()
+BASE = Path(os.environ.get('SUPPLY_VISION_PARAMETROS_DIR',
+                            PRIVADO / 'alertas' / 'parametros')).resolve()
+FILTROS = BASE / 'filtros'
+DE_PARA = BASE / 'de_para'
+CONTAGENS = BASE / '.contagens.json'
+
+ENC = 'utf-8-sig'
+TOLERANCIA_QUEDA = 0.20
+
+_NULOS = {'', '-', 'NONE', 'NAN', 'NULL', '<NA>', 'NAT'}
+
+_IRREDUTIVEIS = str.maketrans({'Ø': 'O', 'Đ': 'D', 'Ð': 'D', 'Ł': 'L',
+                               'Þ': 'TH', 'ß': 'SS', 'Æ': 'AE', 'Œ': 'OE'})
+
+
+def _e_nulo(valor):
+    """True para None, NaN e os marcadores de ausência do pandas.
+
+    NaN e pd.NA não podem ser testados do mesmo jeito: `pd.NA != pd.NA` não
+    devolve booleano, devolve pd.NA, e usar isso num `if` levanta TypeError.
+    Comparar o nome do tipo evita importar pandas aqui — este módulo carrega
+    os parâmetros e não deveria depender dele.
+    """
+    if valor is None:
+        return True
+    if type(valor).__name__ in ('NAType', 'NaTType'):
+        return True
+    try:
+        return valor != valor
+    except (TypeError, ValueError):
+        return False
+
+
+def normalizar(texto):
+    """Forma canônica de comparação de texto, usada em todo o projeto.
+
+    Maiúsculas, sem acento, espaços colapsados. O NBSP (\\xa0) que aparece nas
+    descrições vindas do Qlik entra no \\s+ e vira espaço simples.
+
+    Os acentos saem por decomposição Unicode, não por tabela: uma tabela só
+    cobre o que alguém lembrou de listar, e `Š` de ŠKODA ou `Ø` já passavam
+    direto.
+
+    Marcadores de ausência viram string vazia. A base traz '-', 'nan', vazio e
+    os nulos do pandas para o mesmo conceito, e tratá-los como texto faria '-'
+    casar com '-' no cruzamento.
+
+    As chaves do de-para passam por aqui na carga porque a comparação é contra
+    a descrição já normalizada. Sem isso, chave acentuada nunca casa:
+    'REVISÃO 50000 KM' no CSV jamais encontraria 'REVISAO 50000 KM' vindo da
+    base, e o sinônimo virava letra morta sem nenhum aviso.
+    """
+    if _e_nulo(texto):
+        return ''
+    s = str(texto).strip().upper()
+    s = ''.join(c for c in unicodedata.normalize('NFD', s)
+                if not unicodedata.combining(c))
+    s = s.translate(_IRREDUTIVEIS)
+    s = re.sub(r'\s+', ' ', s).strip()
+    return '' if s in _NULOS else s
+
+
+class ParametroInvalido(RuntimeError):
+    """Parâmetro ausente, vazio ou com queda suspeita de tamanho."""
+
+
+def _linhas_uteis(caminho, csv_multilinha=False):
+    if not caminho.is_file():
+        raise ParametroInvalido(
+            f'Parâmetro ausente: {caminho}\n'
+            f'   O pipeline não roda sem ele. Copie o modelo .exemplo ao lado\n'
+            f'   e preencha, ou restaure a partir do seu backup.'
+        )
+    try:
+        bruto = caminho.read_text(encoding=ENC)
+    except (OSError, UnicodeDecodeError) as e:
+        raise ParametroInvalido(f'Parâmetro ilegível: {caminho}: {e}') from e
+    if not csv_multilinha:
+        return [ln for ln in bruto.splitlines()
+                if ln.strip() and not ln.lstrip().startswith('#')]
+    # Quebras e linhas de comentário dentro de campos entre aspas são dados.
+    linhas, entre_aspas = [], False
+    for linha in bruto.splitlines(keepends=True):
+        if not entre_aspas and (not linha.strip() or linha.lstrip().startswith('#')):
+            continue
+        linhas.append(linha)
+        if linha.count('"') % 2:
+            entre_aspas = not entre_aspas
+    return linhas
+
+
+@contextmanager
+def _travar_contagens():
+    with open(CONTAGENS.with_suffix('.lock'), 'a+b') as trava:
+        trava.seek(0, os.SEEK_END)
+        if trava.tell() == 0:
+            trava.write(b'0')
+            trava.flush()
+        prazo = time.monotonic() + 10
+        while True:
+            try:
+                trava.seek(0)
+                if os.name == 'nt':
+                    import msvcrt
+                    msvcrt.locking(trava.fileno(), msvcrt.LK_NBLCK, 1)
+                else:
+                    import fcntl
+                    fcntl.flock(trava, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except OSError as erro:
+                if time.monotonic() >= prazo:
+                    raise ParametroInvalido('Timeout ao travar historico de contagens.') from erro
+                time.sleep(0.05)
+        try:
+            yield
+        finally:
+            if os.name == 'nt':
+                trava.seek(0)
+                msvcrt.locking(trava.fileno(), msvcrt.LK_UNLCK, 1)
+            else:
+                fcntl.flock(trava, fcntl.LOCK_UN)
+
+
+def _checar_queda(nome, quantidade, registrar=True):
+    if not registrar:
+        return _checar_queda_travada(nome, quantidade, registrar=False)
+    with _travar_contagens():
+        return _checar_queda_travada(nome, quantidade)
+
+
+def _checar_queda_travada(nome, quantidade, registrar=True):
+    """Bloqueia lista vazia e queda brusca; registra a contagem em disco.
+
+    Na primeira carga não há com o que comparar: apenas registra.
+    """
+    hist = {}
+    if CONTAGENS.is_file():
+        try:
+            hist = json.loads(CONTAGENS.read_text(encoding='utf-8'))
+            if not isinstance(hist, dict) or any(
+                    not isinstance(v, int) or isinstance(v, bool) or v < 0 for v in hist.values()):
+                raise ValueError('estrutura de contagens invalida')
+        except ValueError:
+            print(f'AVISO: {CONTAGENS.name} invalido; recriando historico de contagens.')
+            hist = {}
+        except OSError as erro:
+            raise ParametroInvalido(f'Historico de contagens ilegivel: {erro}') from erro
+
+    anterior = hist.get(nome)
+    if anterior and quantidade < anterior * (1 - TOLERANCIA_QUEDA):
+        raise ParametroInvalido(
+            f'{nome}: caiu de {anterior} para {quantidade} entradas '
+            f'({100 * (1 - quantidade / anterior):.0f}% a menos).\n'
+            f'   Queda acima de {TOLERANCIA_QUEDA:.0%} é tratada como suspeita de\n'
+            f'   sobrescrita. Se a redução for intencional, apague a chave\n'
+            f'   {nome!r} de {CONTAGENS} e rode de novo.'
+        )
+
+    if quantidade == 0:
+        raise ParametroInvalido(
+            f'{nome}: nenhuma entrada válida.\n'
+            f'   Uma lista de filtro vazia deixaria passar tudo, em silêncio.'
+        )
+
+    if registrar and hist.get(nome) != quantidade:
+        hist[nome] = quantidade
+        tmp = None
+        try:
+            with tempfile.NamedTemporaryFile(mode='w', encoding='utf-8',
+                                             dir=CONTAGENS.parent, prefix='.contagens-',
+                                             suffix='.tmp', delete=False) as arquivo:
+                tmp = Path(arquivo.name)
+                json.dump(hist, arquivo, indent=2, ensure_ascii=False)
+                arquivo.flush()
+                os.fsync(arquivo.fileno())
+            tmp.replace(CONTAGENS)
+        except OSError as erro:
+            try:
+                if tmp is not None:
+                    tmp.unlink(missing_ok=True)
+            except OSError:
+                pass
+            raise ParametroInvalido(
+                f'Não foi possível registrar contagens em {CONTAGENS}: {erro}. '
+                'Verifique as permissões e o espaço em disco antes de executar.'
+            ) from erro
+    return quantidade
+
+
+def carregar_lista(nome, registrar=True):
+    """Lê um .txt de filtros e devolve um set de strings."""
+    valores = {ln.strip() for ln in _linhas_uteis(FILTROS / nome)}
+    _checar_queda(nome, len(valores), registrar=registrar)
+    return valores
+
+
+def carregar_de_para(nome, col_de, col_para, normalizar_chave=True, registrar=True):
+    """Lê um .csv de de-para e devolve {chave: destino ou None}.
+
+    As chaves são normalizadas por padrão, porque quem consome compara contra
+    texto já normalizado. Colisão criada pela normalização — duas grafias que
+    viram a mesma chave apontando para destinos diferentes — aborta a carga:
+    a última venceria em silêncio.
+
+    Modelos e itens sao consultados pelo consumidor com a chave normalizada.
+
+    Destino vazio vira None, que o rodar.py usa para marcar 'Item não
+    comparável' — revisado, sem equivalente no acordo.
+    """
+    linhas = _linhas_uteis(DE_PARA / nome, csv_multilinha=True)
+    leitor = csv.DictReader(linhas, delimiter=';')
+
+    faltando = {col_de, col_para} - set(leitor.fieldnames or [])
+    if faltando:
+        raise ParametroInvalido(
+            f'{nome}: colunas ausentes {sorted(faltando)}. '
+            f'Encontradas: {leitor.fieldnames}'
+        )
+
+    mapa, origem, duplicadas = {}, {}, []
+    for linha in leitor:
+        bruta = (linha.get(col_de) or '').strip()
+        if not bruta:
+            continue
+        if (linha.get('ativo') or 'Sim').strip().lower() not in ('sim', 's', '1', 'true'):
+            continue
+        chave = normalizar(bruta) if normalizar_chave else bruta
+        destino = (linha.get(col_para) or '').strip() or None
+        if chave in mapa and mapa[chave] != destino:
+            duplicadas.append((origem[chave], bruta, mapa[chave], destino))
+        mapa[chave] = destino
+        origem[chave] = bruta
+
+    if duplicadas:
+        det = '\n'.join(f'     {a!r} -> {va!r}\n     {b!r} -> {vb!r}'
+                        for a, b, va, vb in duplicadas[:5])
+        raise ParametroInvalido(
+            f'{nome}: {len(duplicadas)} par(es) de chaves que colidem depois da '
+            f'normalização, com destinos diferentes.\n'
+            f'   A última venceria em silêncio, então o carregamento para aqui.\n{det}'
+        )
+
+    _checar_queda(nome, len(mapa), registrar=registrar)
+    return mapa

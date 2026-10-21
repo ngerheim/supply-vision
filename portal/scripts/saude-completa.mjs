@@ -1,0 +1,53 @@
+import { portasOperacao } from './portas-operacao.mjs';
+import { lerConfigEfetiva } from './configuracao.mjs';
+import { pathToFileURL } from 'node:url';
+
+export async function verificarSaude(base) {
+  base ||= `http://127.0.0.1:${portasOperacao(lerConfigEfetiva()).portal}`;
+  const origem = new URL(base).origin;
+  // Logo apos a partida o servidor ainda compila e migra sob demanda; um
+  // primeiro pedido lento nao e defeito. Tenta de novo antes de reprovar.
+  const obter = async (url) => {
+    for (let tentativa = 1; ; tentativa++) {
+      try {
+        const r = await fetch(url, { signal: AbortSignal.timeout(15000), redirect: 'error', cache: 'no-store' });
+        if (r.status !== 200) throw new Error(`${new URL(url).pathname}: HTTP ${r.status}`);
+        return r;
+      } catch (erro) {
+        if (tentativa >= 3) throw erro;
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+      }
+    }
+  };
+  const health = await (await obter(`${origem}/api/health`)).json();
+  if (health.app !== 'portal-suprimentos' || health.status !== 'ok') throw new Error('Identidade ou saude da API invalida');
+  const pagina = await obter(`${origem}/`);
+  if (!pagina.headers.get('content-type')?.includes('text/html')) throw new Error('Pagina nao e HTML');
+  const html = await pagina.text();
+  const urls = [...new Set([...html.matchAll(/(?:src|href)=["']([^"']+\.(?:js|css)(?:\?[^"']*)?)["']/g)].map(m => new URL(m[1], origem).href))];
+  if (!urls.some(u => new URL(u).pathname.endsWith('.css')) || !urls.some(u => new URL(u).pathname.endsWith('.js'))) throw new Error('Pagina sem referencias a CSS/JavaScript');
+  await Promise.all(urls.map(async url => {
+    if (new URL(url).origin !== origem) throw new Error('Arquivo essencial fora do portal');
+    const r = await obter(url);
+    const tipo = r.headers.get('content-type') || '';
+    if (new URL(url).pathname.endsWith('.css') ? !tipo.includes('text/css') : !/(javascript|ecmascript)/i.test(tipo)) throw new Error(`Tipo invalido: ${url}`);
+    if (!(await r.arrayBuffer()).byteLength) throw new Error(`Arquivo vazio: ${url}`);
+  }));
+  // JSON nulo percorre a partida/migracoes e a rota de login sem criar
+  // sessao, tentativa de senha ou auditoria para um usuario de producao.
+  const login = await fetch(`${origem}/api/login`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', Origin: origem },
+    body: 'null', redirect: 'error', signal: AbortSignal.timeout(15000),
+  });
+  const respostaLogin = await login.json();
+  if (login.status !== 401 || !respostaLogin.error) throw new Error('Login indisponivel ou resposta invalida.');
+  const config = lerConfigEfetiva();
+  const aviso = !config.BACKUP_NETWORK_DIR?.trim()
+    ? '; AVISO: BACKUP_NETWORK_DIR ausente; backup indisponivel' : '';
+  return `${urls.length} arquivos CSS/JavaScript e API saudaveis${aviso}`;
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  try { console.log(await verificarSaude(process.argv[2])); }
+  catch (erro) { console.error(erro.message); process.exitCode = 1; }
+}

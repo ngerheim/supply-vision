@@ -1,0 +1,116 @@
+﻿# Executa o script inteiro em raiz descartavel; Git, processos, banco e rede
+# sao simulados. Nenhum checkout/servico real participa deste ensaio de fases.
+$ErrorActionPreference='Stop'
+. (Join-Path $PSScriptRoot 'operacao-logica.ps1')
+$raizReal=(Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+$pasta=Join-Path ([IO.Path]::GetTempPath()) ('sv-recuperacao-'+[guid]::NewGuid().ToString('N'))
+$privadoAnterior=$env:SUPPLY_VISION_PRIVADO
+try {
+  foreach($caso in @('prevoo','configuracao','credencial','partida','health','filho','restauracao','saude-completa','consumidor','python')) {
+    $raiz=Join-Path $pasta $caso
+    foreach($dir in @('scripts','portal/scripts','alertas','compartilhado','privado/operacao','privado/portal/backups','privado/portal/configuracao','privado/comum')) { New-Item -ItemType Directory -Force (Join-Path $raiz $dir)|Out-Null }
+    Copy-Item (Join-Path $raizReal 'scripts/operacao-logica.ps1') (Join-Path $raiz 'scripts')
+    Copy-Item (Join-Path $raizReal 'scripts/atualizacao-preparo.ps1') (Join-Path $raiz 'scripts')
+  Add-Content (Join-Path $raiz 'scripts/atualizacao-preparo.ps1') 'function Executar-PowerShellOculto($Argumentos){ & powershell.exe @Argumentos }'
+    $fonte=Get-Content (Join-Path $raizReal 'scripts/atualizar-servidor.ps1') -Raw -Encoding UTF8
+    # Injeta somente o executavel Python; o fluxo do atualizador e preservado.
+    $fonte=$fonte.Replace("`$Python = Join-Path `$Alertas '.venv\Scripts\python.exe'", "`$Python = 'pythonmock'")
+    # Mantem a espera real por condicao; fixture negativa usa prazo de 1 s.
+    $fonte=$fonte.Replace('$noAr = Esperar-PortalAtualizado $url', '$noAr = Esperar-PortalAtualizado $url 1')
+    [IO.File]::WriteAllText((Join-Path $raiz 'scripts/atualizar-servidor.ps1'),$fonte,(New-Object Text.UTF8Encoding($true)))
+    foreach($arq in @('portal/portal.env.example','compartilhado/smtp.env.example','compartilhado/operacao.env.example')) { Set-Content (Join-Path $raiz $arq) '' }
+    foreach($arq in @('privado/comum/smtp.env','privado/comum/operacao.env')) { Set-Content (Join-Path $raiz $arq) '' }
+    $env:SUPPLY_VISION_PRIVADO=Join-Path $raiz 'privado'
+    . (Join-Path $raiz 'scripts/operacao-logica.ps1')
+    . (Join-Path $raiz 'scripts/atualizacao-preparo.ps1')
+    $preparo=Nova-PastaPreparo $raiz
+    foreach($rel in @('portal/dist','portal/node_modules','alertas/.venv')){
+      New-Item -ItemType Directory -Force (Join-Path $raiz $rel),(Join-Path $preparo $rel)|Out-Null
+      [IO.File]::WriteAllText((Join-Path $raiz "$rel/versao"),'anterior')
+      [IO.File]::WriteAllText((Join-Path $preparo "$rel/versao"),'nova')
+    }
+    if($caso-ne'filho'){Trocar-ArtefatosPreparo $raiz $preparo}
+    Gravar-EstadoOperacao (Join-Path $env:SUPPLY_VISION_PRIVADO 'operacao/atualizacao.json') @{anterior=('1'*40);remoto=('2'*40);fase='codigo';preparo=$preparo;artefatos=$true}
+    Set-Content (Join-Path $raiz 'privado/portal/backups/portal-atual.sqlite') 'snapshot ficticio'
+    Set-Content (Join-Path $raiz 'privado/portal/backups/pre-atualizacao.sqlite') 'snapshot ficticio'
+    if($caso -ne 'configuracao') { Set-Content (Join-Path $raiz 'privado/portal/configuracao/portal.env') ('PORTAL_API_TOKEN='+('a'*64)) }
+    if($caso -eq 'credencial') { Set-Content (Join-Path $raiz 'privado/portal/configuracao/portal.env') ''; Set-ItemProperty (Join-Path $raiz 'privado/portal/configuracao/portal.env') -Name IsReadOnly -Value $true }
+    $runner=@'
+param($Caso,$Raiz)
+$ErrorActionPreference='Stop'
+$global:resetou=$false
+function git {
+  $global:LASTEXITCODE=0
+  switch($args[0]) {
+    'status' { if($Caso -eq 'prevoo'){ ' M arquivo' } }
+    'branch' { 'main' }
+    'rev-parse' { if($Caso -eq 'filho' -and !$global:novo -and $args[-1] -eq 'HEAD'){'1'*40}else{'2'*40} }
+    'log' { 'Sintetico' }
+    'reset' { $global:resetou=$true; Add-Content (Join-Path $Raiz 'reset.log') "reset $($args[2])" }
+    'merge' { $global:novo=$true }
+    'worktree' {
+      if($args[1]-eq'add'){
+        $global:preparo=$args[3]
+        foreach($rel in @('portal/dist','portal/node_modules','alertas/.venv')){New-Item -ItemType Directory -Force (Join-Path $global:preparo $rel)|Out-Null}
+        [IO.File]::WriteAllText((Join-Path $global:preparo 'preparo-aprovado'),('2'*40))
+      }
+    }
+    '-C' {if($args[2]-eq'worktree'-and(Test-Path $global:preparo)){Remove-Item -LiteralPath $global:preparo -Recurse -Force}}
+
+  }
+}
+function Start-Process {
+ param($FilePath,$WindowStyle,$ArgumentList,$ErrorAction)
+ Add-Content (Join-Path $Raiz 'inicio.log') 'iniciou'
+ if($Caso-eq'partida'-and!(Test-Path (Join-Path $Raiz 'falhou.log'))){Set-Content (Join-Path $Raiz 'falhou.log') 'falha';throw 'partida ficticia falhou'}
+}
+function Localizar-NodeMaquina {return 'node'}
+function Get-NetTCPConnection {}
+function Start-Sleep {}
+function Invoke-RestMethod { if($Caso -in @('saude-completa','consumidor')) { @{status='ok'} } else { throw 'health indisponivel' } }
+function node {
+  $global:LASTEXITCODE=0
+  $arquivo=@($args|Where-Object {$_-like '*.mjs'})|Select-Object -First 1
+  if(!$global:resetou -and $arquivo -like '*saude-operacao*' -and $Caso -in @('saude-completa','consumidor')){$global:LASTEXITCODE=1}
+  if($arquivo -like '*restaurar-backup*') { Add-Content (Join-Path $Raiz 'restore.log') 'restore'; if($Caso -eq 'restauracao'){$global:LASTEXITCODE=1} }
+}
+function npm.cmd {throw 'Build/instalacao/testes nao podem rodar durante TROCAR.'}
+# Caso python: a versao e lida, mas o codigo de saida vem -1, como o Windows
+# PowerShell registra para um processo nativo interrompido.
+function pythonmock { $global:LASTEXITCODE=0; if($args[0] -eq '--version'){'Python 3.12.0'; if($Caso -eq 'python'){$global:LASTEXITCODE=-1}} }
+function powershell.exe {
+  $global:LASTEXITCODE=0
+  if($args -contains '-Instalacao'){return}
+  if($Caso -eq 'filho') {
+    Gravar-EstadoOperacao (Join-Path $env:SUPPLY_VISION_PRIVADO 'operacao/atualizacao.json') @{anterior=('1'*40);remoto=('2'*40);fase='iniciada'}
+    $global:LASTEXITCODE=1
+  }
+}
+. (Join-Path $Raiz 'scripts/operacao-logica.ps1')
+if($Caso -eq 'filho') { & (Join-Path $Raiz 'scripts/atualizar-servidor.ps1') }
+else { & (Join-Path $Raiz 'scripts/atualizar-servidor.ps1') -JaAtualizado -VersaoAnterior ('1'*40) -Reaplicar }
+exit $LASTEXITCODE
+'@
+    [IO.File]::WriteAllText((Join-Path $raiz 'runner.ps1'),$runner)
+    $resultadoRunner=Executar-NativoOperacao 'powershell.exe' @('-NoProfile','-ExecutionPolicy','Bypass','-File',(Join-Path $raiz 'runner.ps1'),$caso,$raiz)
+    $saida=$resultadoRunner.saida;$rc=$resultadoRunner.codigo
+    if($rc -eq 0) { throw "Falha $caso foi declarada sucesso: $saida" }
+    $resets=@(Get-Content (Join-Path $raiz 'reset.log') -ErrorAction SilentlyContinue)
+    if($resets.Count -ne $(if($caso -eq 'restauracao'){0}else{1})) { throw "Caso $caso nao reverteu exatamente uma vez: $saida" }
+    # A reversao precisa voltar ao commit anterior, nunca ao proprio commit novo.
+    if($resets.Count -and $resets[0] -ne "reset $('1'*40)") { throw "Caso $caso reverteu para o commit errado ($($resets[0])): $saida" }
+    $restaurou=Test-Path (Join-Path $raiz 'restore.log')
+    if($restaurou -ne ($caso -in @('partida','health','filho','restauracao','saude-completa','consumidor'))) { throw "Restauracao incorreta em ${caso}: $saida" }
+    $fase=(Ler-EstadoOperacao (Join-Path $env:SUPPLY_VISION_PRIVADO 'operacao/atualizacao.json')).fase
+    if($fase -ne $(if($caso -eq 'restauracao'){'recuperando'}else{'revertido'})) { throw "Recuperacao incompleta em ${caso}: $saida" }
+    if($caso -eq 'restauracao' -and @(Get-Content (Join-Path $raiz 'inicio.log')).Count -ne 1) { throw 'Banco inseguro foi religado.' }
+    foreach($rel in @('portal/dist','portal/node_modules','alertas/.venv')){
+      $esperado=if($caso-eq'restauracao'){'nova'}else{'anterior'}
+      if((Get-Content (Join-Path $raiz "$rel/versao"))-ne$esperado){throw "Artefato incorreto em $caso / $rel"}
+    }
+    Write-Host "[OK] Recuperacao: $caso"
+  }
+} finally {
+  $env:SUPPLY_VISION_PRIVADO=$privadoAnterior
+  if(Test-Path -LiteralPath $pasta){Get-ChildItem -LiteralPath $pasta -Recurse -File | ForEach-Object { $_.IsReadOnly=$false };Remove-Item -LiteralPath $pasta -Recurse -Force}
+}

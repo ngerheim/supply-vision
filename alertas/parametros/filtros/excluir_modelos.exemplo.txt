@@ -1,0 +1,2 @@
+# Modelo fictício. Copie para excluir_modelos.txt, um valor por linha.
+MODELO_EXCLUIDO_EXEMPLO

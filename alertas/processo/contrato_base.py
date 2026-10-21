@@ -1,0 +1,73 @@
+"""
+Contrato da base extraída do Qlik: o que ela precisa ter, e o tratamento
+comum ao pipeline diário e ao recorte histórico.
+
+COLUNAS é também a resposta para "o que preciso produzir se a fonte não for
+o Qlik".
+
+O descarte de colunas acontece aqui, e não no hipercubo, de propósito:
+reduzir o cubo no Qlik faz linhas distintas colapsarem, porque ele devolve
+uma linha por combinação de dimensões. Aqui é projeção pura.
+
+A projeção pode criar duplicatas antes ausentes na base completa. A contagem
+removida precisa ser registrada: mudanças na fonte não podem alterar a regra
+silenciosamente ou esconder multiplicação de linhas na extração.
+"""
+
+
+class BaseInvalida(RuntimeError):
+    """A base não cumpre o contrato: falta coluna obrigatória."""
+
+
+COLUNAS = [
+    'Grupo Despesa',
+    'Modelo',
+    'Codigo OS',
+    'Data Abertura',
+    'Descrição',
+    'OS Quantidade',
+    'Valor Unitario',
+    'Fornecedor',
+    'Forncedor por Cidade',
+    'Fornecedor CNPJ',
+    'Criado Por',
+]
+
+COLUNAS_OPCIONAIS = ['Fornecedor por Estado', 'UF', 'MEDIDA']
+
+COLUNAS_NUMERICAS = {'Valor Unitario', 'OS Quantidade'}
+
+
+def validar(cabecalhos, origem):
+    """Confere os cabeçalhos contra o contrato. Aborta nomeando o que falta.
+
+    Chamado antes de baixar: sem isso o pipeline traria a base inteira para
+    descobrir o problema depois — ou não descobrir.
+    """
+    faltando = [c for c in COLUNAS if c not in cabecalhos]
+    if faltando:
+        raise BaseInvalida(
+            f'{origem}: faltam colunas obrigatórias: {", ".join(faltando)}\n'
+            f'   Encontradas: {", ".join(cabecalhos)}\n'
+            f'   A coluna pode ter sido renomeada ou removida no Qlik. Ajuste\n'
+            f'   COLUNAS em processo/contrato_base.py e confira o rodar.py.'
+        )
+
+
+def tratar(df):
+    """Descarta as colunas não usadas e remove linhas exatamente iguais.
+
+    Devolve (df, colunas_descartadas, linhas_duplicadas). Não imprime nada:
+    quem chama decide como registrar.
+    """
+    faltando = [c for c in COLUNAS if c not in df.columns]
+    if faltando:
+        raise BaseInvalida(f'base sem as colunas: {", ".join(faltando)}')
+
+    utilizadas = COLUNAS + [c for c in COLUNAS_OPCIONAIS if c in df.columns]
+    descartadas = len(df.columns) - len(utilizadas)
+    df = df[utilizadas]
+
+    antes = len(df)
+    df = df.drop_duplicates().reset_index(drop=True)
+    return df, descartadas, antes - len(df)

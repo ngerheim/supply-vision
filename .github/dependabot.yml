@@ -1,0 +1,64 @@
+# Atualizacao de dependencias por PR, para o CI provar cada uma antes de
+# qualquer coisa chegar ao servidor.
+# Cooldown de 14 dias adia versoes novas para permitir avaliacao antes da adocao.
+#
+# Grupos separam React, Tailwind e ferramental para localizar falhas e reverter
+# cada conjunto. Pacotes fora dos grupos recebem PRs individuais.
+#
+# Majors ficam fora dos grupos de proposito: cada uma merece ser lida sozinha.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /portal
+    cooldown:
+      default-days: 14
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      react:
+        patterns:
+          - react
+          - react-dom
+          - react-server-dom-webpack
+          - '@types/react'
+          - '@types/react-dom'
+        update-types: [minor, patch]
+      tailwind:
+        patterns:
+          - tailwindcss
+          - '@tailwindcss/*'
+          - tailwind-merge
+          - tw-animate-css
+        update-types: [minor, patch]
+      ferramental:
+        patterns:
+          - oxlint
+          - oxlint-*
+          - oxfmt
+          - typescript
+          - vite
+          - '@vitejs/*'
+        update-types: [minor, patch]
+
+  - package-ecosystem: pip
+    directory: /alertas/config
+    cooldown:
+      default-days: 14
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 3
+    groups:
+      alertas:
+        patterns: ['*']
+        update-types: [minor, patch]
+
+  - package-ecosystem: github-actions
+    directory: /
+    cooldown:
+      default-days: 14
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 2

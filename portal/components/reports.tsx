@@ -1,0 +1,418 @@
+'use client';
+
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Download, FileText, LoaderCircle, RefreshCw } from 'lucide-react';
+import { api, errorText } from '@/lib/api';
+import { CABECALHO_ATUALIZACAO_AUTOMATICA, iniciarAtualizacaoPeriodica } from '@/lib/atualizacao-periodica';
+import {
+  NOMES_ACAO,
+  validarPedidoRelatorio,
+  gerarChaveRelatorio,
+  type AcaoRelatorio,
+} from '@/lib/relatorios';
+import { dataDeNegocio } from '@/lib/data-negocio';
+import { dataBrasileiraParaIso, exibirDataBrasileira, mascararDataBrasileira } from '@/lib/data-brasileira';
+import { Button } from './ui/button';
+import { Card, CardContent } from './ui/card';
+import { Input } from './ui/input';
+import { Badge } from './ui/badge';
+
+type Job = {
+  id: string;
+  action: AcaoRelatorio;
+  from: string | null;
+  to: string | null;
+  recipient: string | null;
+  dryRun: number;
+  status: string;
+  createdAt: string;
+  requestedBy: string;
+  artifactsJson: string;
+};
+const statusName: Record<string, string> = {
+  queued: 'Na fila',
+  review: 'Revisão necessária',
+  running: 'Executando',
+  done: 'Concluído',
+  failed: 'Falhou',
+  cancelled: 'Cancelado',
+};
+type AcaoDisponivel = Extract<AcaoRelatorio, 'relatorio' | 'recorte'>;
+const descricao: Record<AcaoDisponivel, string> = {
+  relatorio:
+    'Baixa o histórico de compras do Qlik, compara com os acordos vigentes e envia aos destinatários configurados. Conclui sem e-mail caso não haja dados elegíveis.',
+  recorte:
+    'Analisa um período com ambas as datas inclusas. O relatório fica disponível para download no Portal, sem envio de e-mail.',
+};
+const horario = (valor: string) =>
+  new Date(valor).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+
+export function Reports() {
+  const [action, setAction] = useState<AcaoDisponivel>('relatorio');
+  const [from, setFrom] = useState(() => exibirDataBrasileira(dataDeNegocio())),
+    [to, setTo] = useState(() => exibirDataBrasileira(dataDeNegocio()));
+  const [busy, setBusy] = useState(false),
+    [error, setError] = useState(''),
+    [notice, setNotice] = useState('');
+  const [total,setTotal]=useState(0);
+  const [jobs, setJobs] = useState<Job[]>([]),
+    [online, setOnline] = useState(false),
+    [loaded, setLoaded] = useState(false);
+  const [selected, setSelected] = useState<string | null>(null),
+    [log, setLog] = useState(''),
+    [loadError, setLoadError] = useState(''),
+    [logError, setLogError] = useState('');
+  const key = useRef<string | null>(null),
+    sending = useRef(false),
+    mounted = useRef(false);
+  const loadSequence = useRef({ value: 0 });
+  const load = useCallback(async (signal?: AbortSignal, automatica = false) => {
+    const sequence = ++loadSequence.current.value;
+    let data;
+    try {
+      data = await api('/api/reports', automatica ? { signal, headers: CABECALHO_ATUALIZACAO_AUTOMATICA } : { signal });
+    } catch (error) {
+      if (mounted.current && sequence === loadSequence.current.value) throw error;
+      return;
+    }
+    if (!mounted.current || sequence !== loadSequence.current.value) return;
+    setJobs(data.jobs);
+    setTotal(data.total);
+    setOnline(data.runnerOnline);
+    setLoaded(true);
+    setLoadError('');
+  }, []);
+  useEffect(() => {
+    const sequence = loadSequence.current;
+    mounted.current = true;
+    const parar = iniciarAtualizacaoPeriodica((signal) => load(signal, true), (e) => {
+      setLoadError(errorText(e));
+      setOnline(false);
+    }, () => document.visibilityState !== 'hidden');
+    return () => {
+      mounted.current = false;
+      sequence.value++;
+      parar();
+    };
+  }, [load]);
+  const selectedStatus = jobs.find((job) => job.id === selected)?.status;
+  useEffect(() => {
+    if (!selected) return;
+    let active = true;
+    const controller = new AbortController();
+    const update = async (signal: AbortSignal, automatica = true) => {
+      const data = await api(`/api/reports/${selected}`, automatica ? { signal, headers: CABECALHO_ATUALIZACAO_AUTOMATICA } : { signal });
+      if (active) { setLog(data.job.log); setLogError(''); }
+    };
+    const falhou = (e: unknown) => { if (active) setLogError(errorText(e)); };
+    const parar = selectedStatus === 'queued' || selectedStatus === 'running'
+      ? iniciarAtualizacaoPeriodica(update, falhou, () => document.visibilityState !== 'hidden')
+      : (() => { void update(controller.signal, false).catch(falhou); return () => controller.abort(); })();
+    return () => {
+      active = false;
+      parar();
+    };
+  }, [selected, selectedStatus]);
+  const changed = () => {
+    key.current = null;
+    setNotice('');
+  };
+  const submit = async () => {
+    if (sending.current) return;
+    setError('');
+    setNotice('');
+    try {
+      const pedido = validarPedidoRelatorio({
+        action,
+        from: action === 'recorte' ? dataBrasileiraParaIso(from) : undefined,
+        to: action === 'recorte' ? dataBrasileiraParaIso(to) : undefined,
+        requestKey: (key.current ??= gerarChaveRelatorio()),
+      });
+      const mensagem =
+        action === 'recorte'
+            ? `Gerar o recorte de ${from} a ${to} para download no Portal?`
+            : action === 'relatorio'
+              ? 'Executar agora e enviar aos destinatários configurados quando houver divergências ou pendências?'
+              : null;
+      if (mensagem && !confirm(mensagem)) return;
+      sending.current = true;
+      setBusy(true);
+      const result = await api('/api/reports', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(pedido),
+      });
+      key.current = null;
+      setLog('');
+      setLogError('');
+      setSelected(result.id);
+      setNotice(
+        'Solicitação registrada. Você pode sair desta aba, pois a execução continua no servidor.',
+      );
+      await load().catch(e => setLoadError(`Solicitação registrada, mas não foi possível atualizar a lista: ${errorText(e)}`));
+    } catch (e) {
+      setError(errorText(e));
+    } finally {
+      sending.current = false;
+      setBusy(false);
+    }
+  };
+  const cancel = async (id: string) => {
+    try {
+      await api(`/api/reports/${id}`, { method: 'DELETE' });
+      await load();
+    } catch (e) {
+      setError(errorText(e));
+    }
+  };
+  const download = async (job: Job, name: string) => {
+    try {
+      const res = await fetch(
+        `/api/reports/${job.id}/${encodeURIComponent(name)}`,
+      );
+      if (!res.ok) {
+        if (res.status === 401)
+          window.dispatchEvent(new Event('portal:session-expired'));
+        const body = (await res.json()) as { error?: string };
+        throw new Error(body.error || 'Não foi possível baixar o arquivo.');
+      }
+      const url = URL.createObjectURL(await res.blob()),
+        link = document.createElement('a');
+      link.href = url;
+      link.download = name;
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 30_000);
+    } catch (e) {
+      setError(errorText(e));
+    }
+  };
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-2xl font-semibold">Relatórios</h1>
+        <Badge variant={online ? 'default' : 'secondary'} title="Indica se o executor de relatórios respondeu nos últimos 30 segundos. Não valida a conexão com Qlik ou e-mail.">
+          {loaded
+            ? online
+              ? 'Pronto para executar'
+              : 'Executor indisponível'
+            : 'Verificando serviço…'}
+        </Badge>
+      </div>
+      {total>jobs.length&&<output>Mostrando os 100 relatórios mais recentes de {total}.</output>}
+      {!online && loaded && !loadError && (
+        <output className="block rounded-lg border p-3 text-sm">
+          Inicie a operação na central Supply Vision para habilitar as execuções
+          e os downloads.
+        </output>
+      )}
+      {(error || loadError || logError) && (
+        <p
+          role="alert"
+          className="rounded-lg border border-destructive p-3 text-sm text-destructive"
+        >
+          {error || loadError || logError}
+        </p>
+      )}
+      {notice && (
+        <output className="block rounded-lg border border-emerald-500 p-3 text-sm">
+          {notice}
+        </output>
+      )}
+      <Card>
+        <CardContent className="space-y-4">
+          <label className="block space-y-2 text-sm font-medium">
+            Operação
+            <select
+              aria-label="Operação"
+              value={action}
+              disabled={busy}
+              onChange={(e) => {
+                setAction(e.target.value as AcaoDisponivel);
+                changed();
+              }}
+              className="w-full rounded-md border bg-background px-3 py-2"
+            >
+              {(['relatorio', 'recorte'] as const).map((a) => (
+                <option key={a} value={a}>
+                  {NOMES_ACAO[a]}
+                </option>
+              ))}
+            </select>
+          </label>
+          <p className="text-sm text-muted-foreground">{descricao[action]}</p>
+          {action === 'recorte' && (
+            <>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <label htmlFor="report-from" className="space-y-2 text-sm">
+                  Data inicial
+                  <Input
+                    id="report-from"
+                    type="text"
+                    inputMode="numeric"
+                    placeholder="DD/MM/AAAA"
+                    maxLength={10}
+                    value={from}
+                    disabled={busy}
+                    onChange={(e) => {
+                      setFrom(mascararDataBrasileira(e.target.value));
+                      changed();
+                    }}
+                  />
+                </label>
+                <label htmlFor="report-to" className="space-y-2 text-sm">
+                  Data final
+                  <Input
+                    id="report-to"
+                    type="text"
+                    inputMode="numeric"
+                    placeholder="DD/MM/AAAA"
+                    maxLength={10}
+                    value={to}
+                    disabled={busy}
+                    onChange={(e) => {
+                      setTo(mascararDataBrasileira(e.target.value));
+                      changed();
+                    }}
+                  />
+                </label>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                A comparação usa os acordos disponíveis hoje e suas vigências.
+                {' '}Os arquivos históricos ficam disponíveis por 24 horas após a geração.
+                Depois desse prazo, expiram e são excluídos automaticamente. Baixe antes de expirar.
+              </p>
+            </>
+          )}
+          <p className="text-xs text-muted-foreground">
+            As nomenclaturas de itens e modelos extraídas do Qlik são padronizadas
+            conforme o De/Para para reduzir ruídos na comparação.
+          </p>
+          <Button disabled={busy || !online} onClick={() => void submit()}>
+            {busy ? <LoaderCircle className="animate-spin" /> : <FileText />}
+            {busy ? 'Registrando…' : 'Solicitar execução'}
+          </Button>
+        </CardContent>
+      </Card>
+      <div className="flex items-center justify-between">
+        <h2 className="text-lg font-semibold">Últimas execuções</h2>
+        <Button
+          variant="outline"
+          onClick={() => void load().catch((e) => setLoadError(errorText(e)))}
+        >
+          <RefreshCw />
+          Atualizar
+        </Button>
+      </div>
+      <p className="text-xs text-muted-foreground">
+        Uma execução por vez, com até cinco aguardando na fila. Sem dados
+        elegíveis, nenhum relatório ou e-mail é gerado. Períodos longos podem
+        levar mais tempo para processar.
+      </p>
+      {!loaded && !loadError && <output className="block text-sm text-muted-foreground">Carregando execuções…</output>}
+      {loaded && !loadError && !jobs.length && (
+        <p className="text-sm text-muted-foreground">
+          Nenhuma execução solicitada pelo portal.
+        </p>
+      )}
+      {jobs.map((job) => (
+        <Card key={job.id}>
+          <CardContent className="space-y-3 pt-5">
+            <div className="flex flex-wrap justify-between gap-2">
+              <div>
+                <p className="font-medium">
+                  {NOMES_ACAO[job.action]}
+                  {job.dryRun ? ' · simulação' : ''}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {horario(job.createdAt)} · {job.requestedBy}
+                </p>
+                {job.action === 'recorte' && (
+                  <p className="mt-1 text-sm">
+                    {job.from?.split('-').reverse().join('/')} a{' '}
+                    {job.to?.split('-').reverse().join('/')}
+                  </p>
+                )}
+              </div>
+              <Badge
+                variant={job.status === 'failed' ? 'destructive' : 'secondary'}
+              >
+                {statusName[job.status] || job.status}
+              </Badge>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  setLog('');
+                  setLogError('');
+                  setSelected(selected === job.id ? null : job.id);
+                }}
+              >
+                Ver registros
+              </Button>
+              {(job.status === 'queued' || job.status === 'review') && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => void cancel(job.id)}
+                >
+                  Cancelar pedido
+                </Button>
+              )}
+              {(job.status === 'review' || job.status === 'failed') &&
+                (job.action === 'relatorio' || job.action === 'recorte') && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={busy}
+                  onClick={() => {
+                    if (job.action !== 'relatorio' && job.action !== 'recorte') return;
+                    setAction(job.action);
+                    setFrom(exibirDataBrasileira(job.from || dataDeNegocio()));
+                    setTo(exibirDataBrasileira(job.to || dataDeNegocio()));
+                    key.current = null;
+                    setNotice(
+                      'Parâmetros copiados. Confira os registros e a entrega anterior antes de solicitar uma nova execução.',
+                    );
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                  }}
+                >
+                  Usar estes parâmetros
+                </Button>
+              )}
+              {(JSON.parse(job.artifactsJson) as Array<{ name: string; expiresAt?: string | null; expired?: boolean }>).map(
+                (file) => {
+                  const expirou = file.expired || (!!file.expiresAt && Date.now() >= Date.parse(file.expiresAt));
+                  return <div key={file.name} className="max-w-full space-y-1">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={!online || expirou}
+                    className="max-w-full"
+                    onClick={() => void download(job, file.name)}
+                  >
+                    <Download />
+                    <span className="truncate">{file.name}</span>
+                  </Button>
+                  {file.expiresAt && <p className={`text-xs ${expirou ? 'text-destructive' : 'text-muted-foreground'}`}>
+                    {expirou ? 'Arquivo expirado. Gere um novo recorte para baixar.' : `Disponível até ${horario(file.expiresAt)} (horário de Brasília).`}
+                  </p>}
+                  </div>;
+                },
+              )}
+            </div>
+            {selected === job.id && (
+              <pre
+                className="max-h-80 overflow-auto whitespace-pre-wrap rounded-lg bg-muted p-3 text-xs"
+                aria-label="Registros da execução"
+              >
+                {log || 'Aguardando o início da execução…'}
+              </pre>
+            )}
+          </CardContent>
+        </Card>
+      ))}
+    </div>
+  );
+}

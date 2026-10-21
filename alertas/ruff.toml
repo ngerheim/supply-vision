@@ -1,0 +1,4 @@
+# So erros reais: nomes indefinidos, imports e variaveis sem uso, sintaxe.
+# Estilo e formatacao ficam fora de proposito.
+[lint]
+select = ["F", "E9"]

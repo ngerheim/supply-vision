@@ -1,0 +1,397 @@
+import numpy as np
+import pandas as pd
+
+
+KEY = ["_fornec_norm", "_cidade_norm", "_modelo_norm", "_peca_norm"]
+# Gerados de raizes ficticias com os dois digitos verificadores calculados.
+CNPJ = "02424242000138"
+CNPJ_OUTRO = "02424242000219"
+# Chave sem o zero inicial preserva a regressao de padding na exportacao.
+CHAVE_CNPJ = CNPJ.lstrip("0")
+
+
+def acordo(precos):
+    linhas = []
+    for preco in precos:
+        linhas.append({
+            "_fornec_norm": CHAVE_CNPJ, "_cidade_norm": "X", "_modelo_norm": "M",
+            "_peca_norm": "ITEM", "PECA_SERVICO": "ITEM", "FORNECEDOR": "F",
+            "PRECO": preco, "_preco_original": str(preco),
+            "_preco_valido": bool(pd.notna(preco) and np.isfinite(preco) and preco >= 0),
+        })
+    return pd.DataFrame(linhas)
+
+
+def base(qtd=1, preco=100):
+    return pd.DataFrame({
+        "Modelo": ["M"] * qtd, "_desc_norm": ["ITEM"] * qtd,
+        "_cidade_norm": ["X"] * qtd, "_fornec_norm": [CHAVE_CNPJ] * qtd,
+        "Valor Unitario": [preco] * qtd, "OS Quantidade": [1] * qtd,
+        "Data Abertura": ["01/08/2026"] * qtd, "Codigo OS": range(1, qtd + 1),
+        "Forncedor por Cidade": ["X"] * qtd, "Fornecedor": ["F"] * qtd,
+        "Descrição": ["ITEM"] * qtd, "Criado Por": ["T"] * qtd,
+        "Grupo Despesa": ["G"] * qtd,
+    })
+
+
+def com_vigencia(df, inicio="18/09/2026", fim=None, status="active"):
+    df = df.copy()
+    df["INICIO_VIGENCIA"] = inicio
+    df["FIM_VIGENCIA"] = fim
+    df["STATUS_ACORDO"] = status
+    return df
+
+
+def test_preco_compra_nao_finito_em_excel_vai_para_quarentena(rodar, tmp_path):
+    compras = base(qtd=6, preco=10)
+    compras['Fornecedor CNPJ'] = CNPJ
+    compras['Valor Unitario'] = ['inf', '-inf', '1e309', 'ilegivel', '', '10']
+    arquivo = tmp_path / 'precos.xlsx'
+    compras.to_excel(arquivo, index=False)
+    carregada = rodar.carregar_base(arquivo)
+    assert len(carregada) == 6
+    acordos = acordo([10])
+    acordos['_fornec_norm'] = carregada['_fornec_norm'].iloc[0]
+    resultado = rodar.processar(carregada, acordos)
+    assert resultado['Status'].tolist() == [rodar.STATUS_PRECO_COMPRA_INVALIDO] * 5 + ['CONFORME']
+    assert resultado.loc[0, 'Motivo Sem Acordo'] == rodar.MOTIVO_PRECO_COMPRA_INVALIDO
+    assert rodar.resumir_status(resultado)['total_quarentena'] == 5
+    for coluna in resultado.select_dtypes(include='number'):
+        assert not np.isinf(resultado[coluna]).any(), coluna
+
+
+def test_antes_do_corte_vale_a_tabela_atual_so_com_ativos(rodar):
+    compras = base(preco=10)
+    compras["Data Abertura"] = "17/09/2026"
+    futuro_ativo = com_vigencia(acordo([10]), inicio="01/12/2026", status="active")
+    assert rodar.processar(compras, futuro_ativo).loc[0, "Status"] == "CONFORME"
+    suspenso = com_vigencia(acordo([10]), inicio="01/12/2026", status="suspended")
+    assert rodar.processar(compras, suspenso).loc[0, "Status"] == "SEM ACORDO"
+
+
+def test_a_partir_do_corte_respeita_status_e_inicio_da_vigencia(rodar):
+    compras = base(qtd=3, preco=10)
+    compras["Data Abertura"] = ["18/09/2026", "30/09/2026", "01/10/2026"]
+    vigente = com_vigencia(acordo([10]), inicio="30/09/2026", status="active")
+    resultado = rodar.processar(compras, vigente)
+    assert resultado["Status"].tolist() == ["SEM ACORDO", "CONFORME", "CONFORME"]
+
+
+def test_data_de_abertura_invalida_vai_para_quarentena(rodar):
+    compras = base(qtd=3, preco=10)
+    compras["Data Abertura"] = ["17/09/2026", "", "31/02/2026"]
+    resultado = rodar.processar(compras, com_vigencia(acordo([10])))
+    assert resultado["Status"].tolist() == ["CONFORME", rodar.STATUS_DATA_INVALIDA, rodar.STATUS_DATA_INVALIDA]
+    assert resultado.loc[1, "Motivo Sem Acordo"] == rodar.MOTIVO_DATA_INVALIDA
+    resumo = rodar.resumir_status(resultado)
+    assert resumo["total_quarentena"] == 2
+    assert resumo["contagens"][rodar.STATUS_DATA_INVALIDA] == 2
+
+
+def test_fim_da_vigencia_e_inclusivo(rodar):
+    compras = base(qtd=2, preco=10)
+    compras["Data Abertura"] = ["30/09/2026", "01/10/2026"]
+    vigente = com_vigencia(acordo([10]), inicio="18/09/2026", fim="30/09/2026")
+    resultado = rodar.processar(compras, vigente)
+    assert resultado["Status"].tolist() == ["CONFORME", "SEM ACORDO"]
+
+
+def test_precos_iguais_na_precisao_monetaria(rodar):
+    ac = acordo([10.0, 10.0000000001])
+    ac["PRECO"] = pd.to_numeric(ac["PRECO"]).round(2)
+    resultado = rodar.processar(base(preco=10), ac)
+    assert resultado.loc[0, "Status"] == "CONFORME"
+
+
+def test_carregamento_arredonda_e_rejeita_preco_nao_finito(rodar):
+    bruto = pd.DataFrame({
+        "MODELO": ["M"] * 6, "PECA_SERVICO": ["ITEM"] * 6,
+        "CIDADE": ["X"] * 6, "CNPJ": [CNPJ] * 6,
+        "PRECO": [10, 10.0000000001, 0, -1, np.inf, 1e308], "FORNECEDOR": ["F"] * 6,
+    })
+    with np.errstate(over="ignore"):
+        carregado = rodar._preparar_acordos(bruto)
+    assert carregado.loc[0, "PRECO"] == carregado.loc[1, "PRECO"] == 10.0
+    assert carregado["_preco_valido"].tolist() == [True, True, True, False, False, False]
+
+
+def test_celula_vazia_de_preco_nao_vira_cortesia(rodar):
+    bruto = pd.DataFrame({
+        "MODELO": ["M"], "PECA_SERVICO": ["ITEM"], "CIDADE": ["X"],
+        "CNPJ": [CNPJ], "PRECO": [""], "FORNECEDOR": ["F"],
+    })
+    carregado = rodar._preparar_acordos(bruto)
+    assert not bool(carregado.loc[0, "_preco_valido"])
+
+
+def test_preco_negativo_subcentavo_nao_vira_cortesia(rodar, tmp_path):
+    bruto = pd.DataFrame({
+        "MODELO": ["M"], "PECA_SERVICO": ["ITEM"], "CIDADE": ["X"],
+        "CNPJ": [CNPJ], "PRECO": [-0.001], "FORNECEDOR": ["F"],
+    })
+    carregado = rodar._preparar_acordos(bruto)
+    assert not bool(carregado.loc[0, "_preco_valido"])
+    compra = base(preco=10)
+    compra["_fornec_norm"] = carregado.loc[0, "_fornec_norm"]
+    resultado = rodar.processar(compra, carregado)
+    assert resultado.loc[0, "Status"] == rodar.STATUS_PRECO_INVALIDO
+    assert pd.isna(resultado.loc[0, "Preco Acordo"])
+    assert pd.isna(resultado.loc[0, "Diferenca Total"])
+    assert rodar.resumir_status(resultado)["total_quarentena"] == 1
+    assert rodar.gerar_qualidade_acordos(carregado, tmp_path / 'qualidade.csv') == 1
+
+
+def test_ambiguo_nao_expoe_nenhuma_referencia(rodar):
+    resultado = rodar.processar(base(), acordo([10.0, 20.0]))
+    assert resultado.loc[0, "Status"] == rodar.STATUS_AMBIGUO
+    for coluna in ("Preco Acordo", "Preco Total Acordo", "Diferenca Unit.",
+                   "Diferenca Total", "Menor Preco Acordo", "Dif. p/ Menor Acordo"):
+        assert pd.isna(resultado.loc[0, coluna])
+    assert resultado.loc[0, "Fornecedor do Acordo"] == ""
+    assert resultado.loc[0, "Tinha acordo?"] == ""
+
+
+def test_preco_nulo_negativo_ou_infinito_gera_pendencia(rodar):
+    for preco in (np.nan, -1, np.inf):
+        resultado = rodar.processar(base(), acordo([preco]))
+        assert resultado.loc[0, "Status"] == rodar.STATUS_PRECO_INVALIDO
+
+
+def test_cortesia_cobrada_sai_como_acima_do_acordo(rodar):
+    """Acordo com preço 0 é cortesia: compra cobrada é desvio, não pendência."""
+    resultado = rodar.processar(base(preco=30), acordo([0.0]))
+    assert resultado.loc[0, "Status"] == "ACIMA DO ACORDO"
+    assert resultado.loc[0, "Preco Acordo"] == 0.0
+    assert resultado.loc[0, "Diferenca Unit."] == 30.0
+    assert resultado.loc[0, "Diferenca Total"] == 30.0
+    assert resultado.loc[0, "Menor Preco Acordo"] == 0.0
+
+
+def test_cortesia_ao_lado_de_preco_positivo_e_ambigua(rodar):
+    """Mesma chave com 0 e preço positivo: qual vale é indeterminado."""
+    resultado = rodar.processar(base(), acordo([0.0, 50.0]))
+    assert resultado.loc[0, "Status"] == rodar.STATUS_AMBIGUO
+
+
+def test_denominador_exclui_quarentena(rodar):
+    df = pd.DataFrame({"Status": ["CONFORME"] * 10 + [rodar.STATUS_AMBIGUO] * 90,
+                       "Motivo Sem Acordo": [""] * 100})
+    resumo = rodar.resumir_status(df)
+    assert resumo["total_bruto"] == 100
+    assert resumo["total_elegivel"] == 10
+    assert resumo["percentuais_elegiveis"]["CONFORME"] == 100.0
+    assert sum(resumo["contagens"].values()) == 100
+
+
+def test_tres_grupos_sao_mutuamente_exclusivos(rodar):
+    statuses = pd.Series(["CONFORME", "ACIMA DO ACORDO", "ABAIXO DO ACORDO",
+                          "SEM ACORDO", rodar.STATUS_AMBIGUO, rodar.STATUS_PRECO_INVALIDO])
+    grupos = [statuses.isin(rodar.STATUS_COM_ACORDO), statuses == "SEM ACORDO",
+              statuses.isin(rodar.STATUS_QUARENTENA)]
+    assert sum(int(g.sum()) for g in grupos) == len(statuses)
+    assert all(sum(bool(g.iloc[i]) for g in grupos) == 1 for i in range(len(statuses)))
+
+
+def test_nomes_de_modelo_e_item_sao_traduzidos_com_fallback(rodar, monkeypatch):
+    import regras_comparacao
+
+    monkeypatch.setitem(regras_comparacao.MODELOS, "M", "MODELO PADRONIZADO")
+    monkeypatch.setitem(regras_comparacao.SINONIMOS, "ITEM", "ITEM PADRONIZADO")
+    resultado = rodar.processar(base(qtd=2), acordo([90]))
+    assert resultado.loc[0, "Modelo"] == "MODELO PADRONIZADO"
+    assert resultado.loc[0, "Item"] == "ITEM PADRONIZADO"
+
+    original = base()
+    original["Modelo"] = "SEM DE-PARA"
+    original["Descrição"] = "DESCRICAO ORIGINAL"
+    original["_desc_norm"] = "DESCRICAO ORIGINAL"
+    sem_mapa = rodar.processar(original, acordo([90]))
+    assert sem_mapa.loc[0, "Modelo"] == "SEM DE-PARA"
+    assert sem_mapa.loc[0, "Item"] == "DESCRICAO ORIGINAL"
+
+
+def test_anexo_diario_reproduz_layout_classico_sem_verde(rodar, tmp_path, abrir_planilha):
+    dados = rodar.processar(base(preco=100), acordo([90]))
+    destino = tmp_path / "divergencias.xlsx"
+    rodar.gerar_alerta_acordo(dados, destino)
+
+    wb = abrir_planilha(destino)
+    ws = wb["Relatório"]
+    cabecalhos = [celula.value for celula in ws[1]]
+    coluna_cnpj = cabecalhos.index("CNPJ") + 1
+    letra_cnpj = ws.cell(1, coluna_cnpj).column_letter
+    assert ws.column_dimensions[letra_cnpj].hidden is not True
+    assert ws.cell(2, coluna_cnpj).value == CNPJ
+    assert len(ws.conditional_formatting) == 4
+    formulas = {
+        formula
+        for regras in ws.conditional_formatting._cf_rules.values()
+        for regra in regras
+        if regra.type == "expression"
+        for formula in regra.formula
+    }
+    assert formulas == {
+        '$O2="ACIMA DO ACORDO"',
+        '$O2="ABAIXO DO ACORDO"',
+    }
+    cores_linhas = {
+        regra.dxf.fill.bgColor.rgb
+        for regras in ws.conditional_formatting._cf_rules.values()
+        for regra in regras
+        if regra.type == "expression"
+    }
+    assert cores_linhas == {"FFFDEAEA", "FFEAF1FB"}
+    assert not any("CONFORME" in formula for formula in formulas)
+    assert ws.cell(2, cabecalhos.index("Item") + 1).alignment.wrap_text is True
+    assert ws.cell(1, 1).fill.fgColor.rgb == "FF52606E"
+    assert ws.cell(1, cabecalhos.index("Item") + 1).fill.fgColor.rgb == "FF4C5578"
+    assert ws.cell(1, cabecalhos.index("Preco OS") + 1).fill.fgColor.rgb == "FF3F6B6B"
+    tabela = next(iter(ws.tables.values()))
+    assert tabela.tableStyleInfo.showRowStripes is False
+    assert tabela.tableStyleInfo.name == "TableStyleLight1"
+
+
+def test_filtro_do_alerta_exclui_conformes(rodar):
+    statuses = pd.Series(["CONFORME", "ACIMA DO ACORDO", "ABAIXO DO ACORDO", "SEM ACORDO"])
+    assert statuses[statuses.isin(rodar.STATUS_DIVERGENCIA)].tolist() == [
+        "ACIMA DO ACORDO", "ABAIXO DO ACORDO"
+    ]
+
+
+def test_recorte_historico_reune_quatro_estados_e_indica_acordo(rodar):
+    entrada = pd.DataFrame({
+        "Status": ["CONFORME", "ACIMA DO ACORDO", "ABAIXO DO ACORDO",
+                   "SEM ACORDO", rodar.STATUS_AMBIGUO],
+        "Item": ["A", "B", "C", "D", "E"],
+    })
+    dados = rodar.preparar_recorte_historico(entrada)
+    assert dados["Status"].tolist() == [
+        "CONFORME", "ACIMA DO ACORDO", "ABAIXO DO ACORDO", "SEM ACORDO"
+    ]
+    assert dados["Com acordo"].tolist() == ["SIM", "SIM", "SIM", "NÃO"]
+
+
+def test_planilha_historica_e_unica_e_contem_coluna_com_acordo(rodar, tmp_path, abrir_planilha):
+    partes = [
+        rodar.processar(base(preco=90), acordo([90])),
+        rodar.processar(base(preco=100), acordo([90])),
+        rodar.processar(base(preco=80), acordo([90])),
+        rodar.processar(base(preco=90), acordo([90]).assign(_fornec_norm="OUTRO")),
+    ]
+    destino = tmp_path / "recorte.xlsx"
+    assert rodar.gerar_recorte_historico(pd.concat(partes, ignore_index=True), destino)
+    wb = abrir_planilha(destino)
+    assert wb.sheetnames == ["Relatório"]
+    ws = wb.active
+    cabecalhos = [celula.value for celula in ws[1]]
+    assert "Com acordo" in cabecalhos
+    coluna = cabecalhos.index("Com acordo") + 1
+    assert [ws.cell(r, coluna).value for r in range(2, 6)] == ["SIM", "SIM", "SIM", "NÃO"]
+    assert len(ws.conditional_formatting) == 0
+    assert all(celula.alignment.wrap_text is not True for linha in ws for celula in linha)
+    tabela = next(iter(ws.tables.values()))
+    assert tabela.tableStyleInfo.showRowStripes is True
+    assert tabela.tableStyleInfo.name == "TableStyleMedium15"
+    coluna_cnpj = cabecalhos.index("CNPJ") + 1
+    assert ws.cell(2, coluna_cnpj).value == CNPJ
+    assert ws.row_dimensions[1].height == 20
+    assert ws.sheet_format.defaultRowHeight == 18
+    coluna_item = ws.cell(1, cabecalhos.index("Item") + 1).column_letter
+    coluna_fornecedor = ws.cell(1, cabecalhos.index("Fornecedor") + 1).column_letter
+    assert ws.column_dimensions[coluna_item].width >= 42
+    assert ws.column_dimensions[coluna_fornecedor].width >= 26
+
+
+def test_vigencia_iso_do_portal_nao_inverte_dia_mes(rodar):
+    compras = base(qtd=4, preco=10)
+    compras["Data Abertura"] = ["30/09/2026", "01/10/2026", "05/11/2026", "06/11/2026"]
+    vigente = com_vigencia(acordo([10]), inicio="2026-10-01", fim="2026-11-05")
+    assert rodar.processar(compras, vigente)["Status"].tolist() == ["SEM ACORDO", "CONFORME", "CONFORME", "SEM ACORDO"]
+
+
+def test_comparacao_distingue_uf_mas_ignora_medida(rodar):
+    compras = base(qtd=3, preco=100)
+    compras["Fornecedor por Estado"] = ["SP", "MG", "São Paulo"]
+    compras["MEDIDA"] = ["PAR", "LITRO", "OUTRA"]
+    ac = acordo([50, 80]); ac["UF"] = ["SP", "MG"]; ac["MEDIDA"] = ["UNIDADE", "PAR"]
+    resultado = rodar.processar(compras, ac)
+    assert resultado["Preco Acordo"].tolist() == [50, 80, 50]
+    assert resultado["Menor Preco Acordo"].tolist() == [50, 80, 50]
+
+
+def test_medida_ausente_nao_impede_comparacao(rodar):
+    compras = base(preco=100); compras["Fornecedor por Estado"] = "SP"
+    ac = acordo([50]); ac["UF"] = "SP"; ac["MEDIDA"] = "UNIDADE"
+    resultado = rodar.processar(compras, ac)
+    assert resultado.loc[0, "Status"] == "ACIMA DO ACORDO"
+    assert resultado.loc[0, "Menor Preco Acordo"] == 50
+    assert rodar.resumir_status(resultado)["total_quarentena"] == 0
+
+
+def test_medidas_distintas_nao_afetam_referencia(rodar):
+    compras = base(preco=100); compras["Fornecedor por Estado"] = "SP"
+    ac = acordo([50, 30]); ac["UF"] = "SP"; ac["MEDIDA"] = ["UNIDADE", "PAR"]
+    ac.loc[1, "_fornec_norm"] = CNPJ_OUTRO.lstrip("0"); ac.loc[1, "FORNECEDOR"] = "G"
+    resultado = rodar.processar(compras, ac)
+    assert resultado.loc[0, "Preco Acordo"] == 50
+    assert resultado.loc[0, "Menor Preco Acordo"] == 30
+
+
+def test_uf_ausente_ou_invalida_tem_planilha_de_conferencia(rodar, tmp_path, abrir_planilha):
+    compras = base(qtd=2); compras["Fornecedor por Estado"] = ["", "TI"]
+    ac = acordo([50]); ac["UF"] = "SP"; ac["MEDIDA"] = "UNIDADE"
+    resultado = rodar.processar(compras, ac)
+    assert resultado["Status"].tolist() == [rodar.STATUS_DIMENSAO_PENDENTE] * 2
+    destino = tmp_path / "pendencias.xlsx"
+    assert rodar.gerar_pendencias_comparacao(resultado, destino)
+    wb = abrir_planilha(destino)
+    assert wb.active.max_row == 3
+
+
+def test_alerta_pendencias_apenas_acima_de_metade(rodar):
+    for faltantes in (1, 2, 3, 4):
+        compras = base(qtd=4, preco=50)
+        compras["Fornecedor por Estado"] = [""] * faltantes + ["SP"] * (4-faltantes)
+        ac = acordo([50]); ac["UF"] = "SP"
+        resumo = rodar.resumir_status(rodar.processar(compras, ac))
+        assert resumo["alerta_pendencias"] == (faltantes > 2)
+
+
+def test_fim_ilegivel_nao_vira_acordo_eterno(rodar):
+    compras = base(preco=10); compras["Data Abertura"] = "01/10/2026"
+    ac = com_vigencia(acordo([10]), inicio="2026-09-18", fim="31/13/2026")
+    assert rodar.processar(compras, ac).loc[0, "Status"] == "SEM ACORDO"
+    for fim in (None, "", "  "):
+        ac = com_vigencia(acordo([10]), inicio="2026-09-18", fim=fim)
+        assert rodar.processar(compras, ac).loc[0, "Status"] == "CONFORME"
+
+
+def test_vigencia_brasileira_aceita_hora(rodar):
+    valores = pd.Series(["18/09/2026", "18/09/2026 10:30", "18/09/2026 10:30:15", "2026-09-18", "lixo"])
+    datas = rodar._data_vigencia(valores)
+    assert datas[:4].tolist() == [pd.Timestamp(2026, 9, 18)] * 4
+    assert pd.isna(datas[4])
+
+
+def test_listas_de_exclusao_comparam_texto_normalizado(rodar, monkeypatch, tmp_path):
+    import leitura_dados
+
+    compras = pd.DataFrame({
+        "Grupo Despesa": ["Pneus", "PEÇAS"], "Modelo": ["Gol", " onix  "],
+        "Codigo OS": ["1", "2"], "Data Abertura": ["01/10/2026"] * 2,
+        "Descrição": ["ITEM"] * 2, "OS Quantidade": ["1"] * 2,
+        "Valor Unitario": ["10"] * 2, "Fornecedor": ["Oficina São José", "Outra"],
+        "Forncedor por Cidade": ["X"] * 2, "Fornecedor CNPJ": [CNPJ, CNPJ_OUTRO],
+        "Criado Por": ["T"] * 2,
+    })
+    caminho = tmp_path / "base.xlsx"
+    compras.to_excel(caminho, index=False)
+
+    monkeypatch.setattr(leitura_dados, "GRUPOS_EXCLUIR", {"pneus"})
+    assert rodar.carregar_base(caminho)["Codigo OS"].tolist() == ["2"]
+    monkeypatch.setattr(leitura_dados, "GRUPOS_EXCLUIR", set())
+    monkeypatch.setattr(leitura_dados, "MODELOS_EXCLUIR", {"ONIX"})
+    assert rodar.carregar_base(caminho)["Codigo OS"].tolist() == ["1"]
+    monkeypatch.setattr(leitura_dados, "MODELOS_EXCLUIR", set())
+    monkeypatch.setattr(leitura_dados, "FORNECEDORES_EXCLUIR", {"OFICINA SAO  JOSE"})
+    assert rodar.carregar_base(caminho)["Codigo OS"].tolist() == ["2"]

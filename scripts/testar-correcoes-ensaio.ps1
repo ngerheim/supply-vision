@@ -1,0 +1,67 @@
+﻿$ErrorActionPreference='Stop'
+$raizReal=(Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+. (Join-Path $PSScriptRoot 'operacao-logica.ps1')
+$pasta=Join-Path ([IO.Path]::GetTempPath()) ('sv-correcoes-'+[guid]::NewGuid().ToString('N'))
+$privadoAnterior=$env:SUPPLY_VISION_PRIVADO;$tempAnterior=$env:TEMP
+$script:passaram=0
+function Exigir-Correcao([bool]$Ok,[string]$Nome){if(!$Ok){throw "Falhou: $Nome"};$script:passaram++;Write-Host "OK: $Nome"}
+try{
+ New-Item -ItemType Directory -Force $pasta|Out-Null
+ $env:TEMP=$pasta
+ # Seleciona somente processos com caminhos desta instalacao; evita prefixos semelhantes.
+ $root='C:\Supply Vision'
+ foreach($cmd in @('node "C:\Supply Vision\portal\scripts\processar-relatorios.mjs"','node npm-cli.js --prefix "C:\Supply Vision\portal" run email:watch')){
+  Exigir-Correcao (Processo-OrfaoDestaInstalacao @{Name='node.exe';CommandLine=$cmd} $root) 'orfao desta instalacao selecionado'
+ }
+ foreach($cmd in @('node "C:\Supply Vision\portal\scripts\processar-emails.mjs" --watch','node "C:\Supply Vision\portal\scripts\iniciar-portal.mjs" lan')){
+  Exigir-Correcao (Processo-OrfaoDestaInstalacao @{Name='node.exe';CommandLine=$cmd} $root) 'servico sem pai npm tambem selecionado'
+ }
+ foreach($cmd in @('node "C:\Outra\portal\scripts\processar-relatorios.mjs"','node "C:\Supply Vision extra\portal\scripts\processar-relatorios.mjs"','node app.js')){
+  Exigir-Correcao (!(Processo-OrfaoDestaInstalacao @{Name='node.exe';CommandLine=$cmd} $root)) 'outro Node preservado'
+ }
+ $preparo='C:\.Supply Vision-preparo-'+('a'*32)
+ foreach($nome in @('processar-emails','processar-relatorios','iniciar-portal')){
+  $cmd='node "'+$root+'\portal\scripts\'+$nome+'.mjs"'
+  Exigir-Correcao (!(Processo-OrfaoDestaInstalacao @{Name='node.exe';CommandLine=$cmd} $preparo)) 'limpeza do worktree nao seleciona consumidor/Portal da producao'
+  $cmd='node "'+$preparo+'\portal\scripts\'+$nome+'.mjs"'
+  Exigir-Correcao (!(Processo-OrfaoDestaInstalacao @{Name='node.exe';CommandLine=$cmd} $root)) 'limpeza da producao nao seleciona processo do worktree'
+ }
+ $script:processos=@([pscustomobject]@{Name='node.exe';CommandLine='node "C:\Supply Vision\portal\scripts\processar-relatorios.mjs"';ProcessId=123;CreationDate='inicio'},[pscustomobject]@{Name='node.exe';CommandLine='node outra.js';ProcessId=456;CreationDate='inicio'})
+ function Get-CimInstance {param($ClassName,$Filter,$ErrorAction);if($Filter){$script:processos|Where-Object ProcessId -EQ 123}else{$script:processos}}
+ function Get-Process {}
+ function taskkill.exe {$script:terminados+=@($args[1])}
+ $script:terminados=@();Encerrar-OrfaosInstalacao $root
+ Exigir-Correcao (($script:terminados-join',')-eq'123') 'limpeza nao encerra outro Node'
+ # JSON reais do supervisor, tanto UTF8 sem BOM quanto com BOM do PS5.1.
+ $falso=Join-Path $pasta 'homologacao';$priv=Join-Path $falso 'dados-ficticios'
+ New-Item -ItemType Directory -Force (Join-Path $falso 'scripts'),(Join-Path $priv 'operacao')|Out-Null
+ foreach($arq in @('diagnostico-logica.ps1','homologar.ps1','operacao-logica.ps1','inicializacao-logica.ps1')){Copy-Item (Join-Path $PSScriptRoot $arq) (Join-Path $falso 'scripts')}
+ $env:SUPPLY_VISION_PRIVADO=$priv
+ # Homologacao le somente a fixture; nao sonda HTTP nem tarefas do notebook.
+ function Invoke-RestMethod {throw 'HTTP indisponivel na fixture'}
+ function Get-ScheduledTask {return $null}
+ foreach($bom in @($false,$true)){
+  [IO.File]::WriteAllText((Join-Path $priv 'operacao/status.json'),(@{ensaio=$true;portal=$true;emails=$true;relatorios=$true;atualizado=(Get-Date).ToString('o')}|ConvertTo-Json -Compress),(New-Object Text.UTF8Encoding($bom)))
+  [IO.File]::WriteAllText((Join-Path $priv 'operacao/estado.json'),(@{'alertas-2026-10-09-08:00'='ok'}|ConvertTo-Json -Compress),(New-Object Text.UTF8Encoding($bom)))
+  $rel=Join-Path $pasta ('homologacao-'+$bom+'.txt')
+  & (Join-Path $falso 'scripts/homologar.ps1') -Destino $rel
+  $texto=Get-Content $rel -Raw -Encoding UTF8
+  Exigir-Correcao ($texto.Contains('✅ status.json')-and$texto.Contains('✅ estado.json')) "homologacao JSON reais BOM=$bom"
+ }
+ $manual=Get-Content (Join-Path $raizReal 'AGENTS.md') -Raw -Encoding UTF8
+ Exigir-Correcao ($manual.Contains('Bitdefender')-and$manual.Contains('controle avançado de ameaças')-and$manual.Contains('unable to unlink')-and$manual-match 'reinici') 'contrato de diagnostico antivirus no mapa IA'
+ $inicializacao=Get-Content (Join-Path $PSScriptRoot 'inicializacao-logica.ps1') -Raw -Encoding UTF8
+ $configurar=Get-Content (Join-Path $PSScriptRoot 'configurar-inicializacao.ps1') -Raw -Encoding UTF8
+ Exigir-Correcao ($inicializacao.Contains('Write-Progress')-and$configurar.Contains('configurada com sucesso')) 'progresso das permissoes e confirmacao de sucesso'
+
+ # Nenhuma chamada PowerShell direta resolve npm.ps1.
+ foreach($arq in @(Get-ChildItem (Join-Path $raizReal 'scripts'),(Join-Path $raizReal 'portal/scripts') -Filter '*.ps1' -File)){
+  $ast=[Management.Automation.Language.Parser]::ParseFile($arq.FullName,[ref]$null,[ref]$null)
+  $ruins=@($ast.FindAll({param($n)$n-is[Management.Automation.Language.CommandAst]-and$n.GetCommandName()-eq'npm'},$true))
+  # Somente o mock da suite chama sua propria funcao npm.
+  if($arq.Name-ne'testar-recuperacao-atualizacao.ps1'){Exigir-Correcao (!$ruins.Count) "npm.cmd em $($arq.Name)"}
+ }
+ Write-Host "PASSOU: $script:passaram verificacoes de correcoes do ensaio."
+}finally{$env:TEMP=$tempAnterior;$env:SUPPLY_VISION_PRIVADO=$privadoAnterior;if(Test-Path $pasta){Remove-Item -LiteralPath $pasta -Recurse -Force}}
+
+$global:LASTEXITCODE=0

@@ -1,0 +1,25 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { montarEmailRelatorioDiario } from '../lib/email-relatorio-diario.ts';
+
+void test('relatório resume quantidades e atualizações sem expor HTML',()=>{
+  const email=montarEmailRelatorioDiario('09/09/2026',{aberto:3,aguardando:5,fechado:1,cancelado:0},[{id:'t1',codigo:'SUP-0012',fornecedor:'Oficina Ficticia <Teste>',situacao:'aberto',atualizacoes:[{horario:'14:30',autor:'Pessoa Ficticia',descricao:'Nova <mensagem>'}]}],'http://portal.test');
+  assert.match(email.texto,/3 aberto\(s\), 5 aguardando, 1 fechado\(s\)/);
+  assert.match(email.texto,/SUP-0012/);
+  assert.doesNotMatch(email.html,/Oficina Ficticia <Teste>/);
+  assert.match(email.html,/Oficina Ficticia &lt;Teste&gt;/);
+  assert.match(email.html,/Nova &lt;mensagem&gt;/);
+  assert.doesNotMatch(email.html,/<mensagem>/);
+});
+
+void test('relatório informa quando não houve atualização',()=>{
+  const email=montarEmailRelatorioDiario('09/09/2026',{aberto:0,aguardando:0,fechado:0,cancelado:0},[],'http://portal.test');
+  assert.match(email.texto,/Nenhum chamado foi atualizado hoje/);
+});
+
+void test('relatorio identifica pelo titulo um chamado sem fornecedor',()=>{
+  const email=montarEmailRelatorioDiario('2026-10-02',{aberto:1,aguardando:0,fechado:0,cancelado:0},[{id:'t1',codigo:'SUP-0012',titulo:'Negociar <pneus>',fornecedor:'',situacao:'aberto',atualizacoes:[]}],'http://portal.test');
+  assert.match(email.texto,/SUP-0012 · Negociar <pneus>/);
+  assert.match(email.html,/Negociar &lt;pneus&gt;/);
+  assert.doesNotMatch(email.html,/<pneus>/);
+});
