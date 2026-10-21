@@ -781,7 +781,7 @@ function Consultar-CIPreparo([string]$Sha,[switch]$ForcarCompleto,$Andamento=$nu
  $completo=@{rapido=$false;sha=$Sha;motivo='resposta inesperada da API'}
  if($ForcarCompleto){$completo.motivo='preparo completo forcado';return $completo}
  if($Sha-notmatch'^[0-9a-f]{40}$'){$completo.motivo='SHA invalido';return $completo}
- $obrigatorios=@('Portal','Portal - ponta a ponta e autenticacao real','PowerShell','Alertas','Atualizacao real')
+ $obrigatorios=@('Portal','Portal - instalacao nova e autenticacao real','PowerShell','Alertas','Atualizacao real')
  $motivoPrazo='Prazo de 30 min aguardando CI da main esgotado; modo completo'
  $inicio=& $Agora;$id=[guid]::NewGuid().ToString('N');$prConsultada=$false;$aguardou=$false;$motivoPR=''
  try{

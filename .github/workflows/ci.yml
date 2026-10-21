@@ -243,7 +243,7 @@ jobs:
       - run: npm audit
 
   portal-integracao:
-    name: Portal - ponta a ponta e autenticacao real
+    name: Portal - instalacao nova e autenticacao real
     runs-on: windows-latest
     timeout-minutes: 30
     steps:
