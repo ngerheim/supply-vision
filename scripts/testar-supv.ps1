@@ -350,6 +350,41 @@ try{
  $statusSemGit=$r.saida-join"`n"
  Exigir-Supv ($r.codigo-eq0-and$statusSemGit-like'*Versao: versao indisponivel*'-and$statusSemGit-notmatch'fatal:|NativeCommandError') 'supv status sem .git retorna 0 e versao indisponivel sem stderr'
 
+ # O manifesto da instalacao compoe o mesmo texto no status e no fim da atualizacao.
+ $manifestoVersao=Join-Path $script:supvRaiz 'portal/package.json'
+ function git {Write-Output '42e09a3  21/10/2026';$global:LASTEXITCODE=0}
+ try{
+  Exigir-Supv ((Obter-VersaoAdministrada $script:supvRaiz)-ceq'42e09a3  21/10/2026') 'manifesto ausente preserva formato anterior'
+  foreach($conteudo in @('{invalido','{}','{"version":42}','{"version":""}')){
+   Set-Content $manifestoVersao $conteudo -Encoding UTF8
+   Exigir-Supv ((Obter-VersaoAdministrada $script:supvRaiz)-ceq'42e09a3  21/10/2026') 'manifesto invalido preserva commit sem erro'
+  }
+  Set-Content $manifestoVersao '{"version":"2.9.0"}' -Encoding UTF8
+  Exigir-Supv ((Obter-VersaoAdministrada $script:supvRaiz)-ceq'2.9.0 | 42e09a3  21/10/2026') 'versao e commit no formato novo'
+  $texto=Capturar-Supv {Mostrar-StatusSupv}
+  Exigir-Supv ($texto-like'*Versao: 2.9.0 | 42e09a3  21/10/2026*') 'status mostra versao da instalacao e commit'
+  Set-Content (Join-Path $op 'atualizacao-processo-saida.log') '=== Atualizado: 1234567 -> abcdef0 ==='
+  $fim=Executar-AcaoAdministrada $script:supvRaiz $script:supvPrivado 'fim-atualizacao' @{codigo=0}
+  Exigir-Supv ($fim.ok-and$fim.versao-ceq'2.9.0 | 42e09a3  21/10/2026') 'resultado da atualizacao conserva versao composta'
+  Set-Content $manifestoVersao '{"version":"2.9.1"}' -Encoding UTF8
+  Exigir-Supv ((Obter-VersaoAdministrada $script:supvRaiz)-ceq'2.9.1 | 42e09a3  21/10/2026') 'mudanca do manifesto e lida sem versao fixa no script'
+  $bloqueio=[IO.File]::Open($manifestoVersao,[IO.FileMode]::Open,[IO.FileAccess]::ReadWrite,[IO.FileShare]::None)
+  try{Exigir-Supv ((Obter-VersaoAdministrada $script:supvRaiz)-ceq'42e09a3  21/10/2026') 'manifesto ilegivel preserva commit sem erro'}finally{$bloqueio.Dispose()}
+ }finally{Remove-Item Function:git}
+ foreach($casoManifesto in @('valido','invalido','bloqueado','ausente')){
+  $bloqueio=$null
+  try{
+   if($casoManifesto-eq'ausente'){Remove-Item $manifestoVersao}else{
+    $conteudo=if($casoManifesto-eq'invalido'){'{invalido'}else{'{"version":"2.9.0"}'}
+    Set-Content $manifestoVersao $conteudo -Encoding UTF8
+    if($casoManifesto-eq'bloqueado'){$bloqueio=[IO.File]::Open($manifestoVersao,[IO.FileMode]::Open,[IO.FileAccess]::ReadWrite,[IO.FileShare]::None)}
+   }
+   $r=Executar-NativoOperacao $hostTeste @('-NoProfile','-File',(Join-Path $script:supvRaiz 'scripts/supv.ps1'),'status')
+   $esperado=if($casoManifesto-eq'valido'){'2.9.0 | versao indisponivel'}else{'versao indisponivel'}
+   Exigir-Supv ($r.codigo-eq0-and($r.stdout-join"`n")-like"*Versao: $esperado*"-and($r.saida-join"`n")-ceq($r.stdout-join"`n")) "status sem .git e manifesto $casoManifesto retorna 0 sem stderr"
+  }finally{if($bloqueio){$bloqueio.Dispose()}}
+ }
+
  $pathFicticio=Acrescentar-ComandoSupvAoPath $script:supvRaiz 'primeiro;segundo'
  Exigir-Supv ($pathFicticio-eq('primeiro;segundo;'+$script:supvRaiz)) 'PATH preserva entradas existentes'
  Exigir-Supv ((Acrescentar-ComandoSupvAoPath $script:supvRaiz $pathFicticio)-ceq$pathFicticio) 'PATH idempotente'

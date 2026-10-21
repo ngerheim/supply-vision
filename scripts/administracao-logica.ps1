@@ -1,12 +1,19 @@
 ﻿. (Join-Path $PSScriptRoot 'atualizacao-preparo.ps1')
 if(!(Get-Command Testar-IdentidadeTarefa -ErrorAction SilentlyContinue)){. (Join-Path $PSScriptRoot 'inicializacao-logica.ps1')}
 function Obter-VersaoAdministrada([string]$Raiz) {
+ $pacote=$null
+ try{
+  $manifesto=Get-Content -LiteralPath (Join-Path $Raiz 'portal/package.json') -Raw -Encoding UTF8 -ErrorAction Stop|ConvertFrom-Json -ErrorAction Stop
+  if($manifesto.version-is[string]-and$manifesto.version-match'^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$'){$pacote=$manifesto.version}
+ }catch{}
+ $commit='versao indisponivel'
  $r=Executar-NativoOperacao 'git' @('-C',$Raiz,'log','-1','--date=format:%d/%m/%Y','--pretty=format:%h  %ad')
  if($r.codigo-eq0){
   $versao=@($r.stdout|Where-Object {$_-match'^[0-9a-f]{7,40}\s+\d{2}/\d{2}/\d{4}$'}|Select-Object -First 1)
-  if($versao.Count){return $versao[0]}
+  if($versao.Count){$commit=$versao[0]}
  }
- return 'versao indisponivel'
+ if($pacote){return "$pacote | $commit"}
+ return $commit
 }
 function Testar-ConclusaoAtualizacao($Codigo,[string]$Saida){
  $marcador=($Saida-match'(?m)^=== Atualizado: [0-9a-f]{7} -> [0-9a-f]{7} ===\s*$')-or($Saida-like'*Nada a fazer*')
