@@ -1,4 +1,6 @@
 import net from 'node:net';
+import fs from 'node:fs';
+import path from 'node:path';
 import { fork } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 export async function reservarPortaLoopback() {
@@ -29,6 +31,12 @@ export async function iniciarServidorFixture(outDir, env, pararArquivo) {
       filho.once('error', erro => { clearTimeout(prazo); reject(erro); });
       filho.once('exit', codigo => { clearTimeout(prazo); reject(new Error(`Servidor encerrou (${codigo}): ${log}`)); });
     });
+    if (process.env.SV_PREPARO_RAIZ) {
+      // O pai ainda precisa conferir a parada/restauracao depois que o filho
+      // encerra. A porta descoberta por IPC pertence a fixture ate o pai sair.
+      const registro = path.join(process.env.SV_PREPARO_RAIZ, '.cache/preparo-portas', `${process.pid}-filho-${filho.pid}.json`);
+      fs.writeFileSync(registro, JSON.stringify({ pid: process.pid, portas: [porta] }));
+    }
     return { filho, porta, get log() { return log; } };
   } catch (erro) { filho.kill(); throw erro; }
 }

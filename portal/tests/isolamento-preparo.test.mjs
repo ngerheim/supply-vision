@@ -7,6 +7,25 @@ import { spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import test from 'node:test';
 
+void test('pai da fixture conserva a porta descoberta no filho apos sua parada', () => {
+  const pasta = fs.mkdtempSync(path.join(os.tmpdir(), 'sv-isolamento-porta-'));
+  const raiz = path.join(pasta, `.fixture-preparo-${randomBytes(16).toString('hex')}`);
+  const scripts = path.join(raiz, 'portal/scripts');
+  fs.mkdirSync(scripts, { recursive: true }); fs.mkdirSync(path.join(raiz, '.cache')); fs.mkdirSync(path.join(raiz, 'privado'));
+  for (const nome of ['isolamento-preparo.mjs', 'isolamento-sqlite-hooks.mjs', 'porta-teste.mjs']) fs.copyFileSync(new URL(`../scripts/${nome}`, import.meta.url), path.join(scripts,nome));
+  const apoio = path.join(raiz, 'portal/tests/apoio'); fs.mkdirSync(apoio,{recursive:true});
+  fs.writeFileSync(path.join(apoio,'servidor.mjs'), `import net from 'node:net';const s=net.createServer();s.listen(0,'127.0.0.1',()=>process.send({porta:s.address().port}));process.on('message',()=>s.close(()=>{process.disconnect()}));`);
+  const codigo = `import assert from 'node:assert/strict';import net from 'node:net';import {iniciarServidorFixture} from './portal/scripts/porta-teste.mjs';
+    const r=await iniciarServidorFixture('.',process.env,'');const fim=new Promise(resolve=>r.filho.once('exit',resolve));r.filho.send('parar');await fim;
+    const c=net.connect({host:'127.0.0.1',port:r.porta});const erro=await new Promise(resolve=>c.once('error',resolve));assert.equal(erro.code,'ECONNREFUSED');console.log('porta da fixture parada conferida');`;
+  const env = {...process.env, NODE_OPTIONS:'', SV_PREPARO_RAIZ:raiz, SUPPLY_VISION_PRIVADO:path.join(raiz,'privado')};
+  for (const k of ['TEMP','TMP','TMPDIR','XDG_CONFIG_HOME','XDG_CACHE_HOME']) env[k]=path.join(raiz,'.cache');
+  try {
+    const r=spawnSync(process.execPath,['--import',pathToFileURL(path.join(scripts,'isolamento-preparo.mjs')).href,'--input-type=module','-e',codigo],{cwd:raiz,env,encoding:'utf8',timeout:20000});
+    assert.equal(r.status,0,r.stderr);assert.match(r.stdout,/porta da fixture parada conferida/);
+  } finally { fs.rmSync(pasta,{recursive:true,force:true}); }
+});
+
 void test('preload bloqueia arquivos, SQLite, PID/trava e qualquer porta alheia ao preparo', () => {
   const pasta = fs.mkdtempSync(path.join(os.tmpdir(), 'sv-isolamento-'));
   const raiz = path.join(pasta, `.fixture-preparo-${randomBytes(16).toString('hex')}`);
