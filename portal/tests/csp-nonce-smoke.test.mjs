@@ -9,10 +9,17 @@ import { verificarSaude } from '../scripts/saude-completa.mjs';
 import { cabecalhosComNonce } from '../lib/cabecalhos-seguranca.ts';
 
 const outDir = path.resolve(import.meta.dirname, '../dist');
+// Varredura por indice, sem regex de HTML: o teste so precisa achar cada
+// abertura <script ...> com corpo nao vazio e conferir o nonce dela.
 function conferirScriptsInline(html, nonce) {
-  const scripts = [...html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)];
-  assert.ok(scripts.some(s => s[2].trim()), 'A pagina deve conter scripts inline do runtime');
-  for (const script of scripts.filter(s => s[2].trim())) assert.match(script[1], new RegExp(`nonce="${nonce}"`));
+  const minusculo = html.toLowerCase(), inline = [];
+  for (let i = minusculo.indexOf('<script'); i !== -1; i = minusculo.indexOf('<script', i + 1)) {
+    const fimAbertura = html.indexOf('>', i), fechamento = minusculo.indexOf('</script', fimAbertura + 1);
+    if (fimAbertura === -1 || fechamento === -1) continue;
+    if (html.slice(fimAbertura + 1, fechamento).trim()) inline.push(html.slice(i, fimAbertura + 1));
+  }
+  assert.ok(inline.length, 'A pagina deve conter scripts inline do runtime');
+  for (const abertura of inline) assert.ok(abertura.includes(`nonce="${nonce}"`), `Script inline sem nonce: ${abertura}`);
 }
 
 void test('verificacao de nonce inclui SCRIPT maiusculo e caixa mista, sem ignorar inline sem nonce', () => {
