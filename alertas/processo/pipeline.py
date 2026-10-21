@@ -11,13 +11,17 @@ from datetime import datetime
 import sv_paths
 import estado_entrega
 from resumo_saida import ler_resumo
+from segredos import mascarar
 
 LOG_DIR = str(sv_paths.LOG_DIR)
 PIPELINE_TIMEOUT_S = sv_paths.PIPELINE_TIMEOUT_S
-RUN_ID = os.environ.get("SUPPLY_VISION_RUN_ID") or \
-         f"{datetime.now():%Y%m%d_%H%M%S}_{secrets.token_hex(3)}"
+RUN_ID = os.environ.get("SUPPLY_VISION_RUN_ID",
+                        f"{datetime.now():%Y%m%d_%H%M%S}_{secrets.token_hex(3)}")
+if not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", RUN_ID):
+    raise ValueError("SUPPLY_VISION_RUN_ID deve conter de 1 a 64 letras, numeros, _ ou -.")
 LOCK_PATH = sv_paths.LOG_DIR / "pipeline.lock"
 _lock_handle = None
+_lock_token = None
 
 PYTHON = sys.executable.lower().replace("pythonw.exe", "python.exe")
 
@@ -55,11 +59,15 @@ def rodar_script(caminho, nome, args=None):
     logging.info(f"{'='*50}")
 
     cmd = [PYTHON, caminho] + (args or [])
+    env_filho = {**os.environ, "PYTHONUTF8": "1", "PYTHONDONTWRITEBYTECODE": "1",
+                 "SUPPLY_VISION_RUN_ID": RUN_ID}
+    env_filho.pop('SV_PIPELINE_LOCK_PAI', None)
+    if _lock_handle is not None and not _lock_handle.closed and _lock_token:
+        env_filho['SV_PIPELINE_LOCK_PAI'] = _lock_token
     try:
         resultado = subprocess.run(
             cmd, capture_output=True, text=True, encoding="utf-8", errors="replace",
-            env={**os.environ, "PYTHONUTF8": "1", "PYTHONDONTWRITEBYTECODE": "1",
-                 "SUPPLY_VISION_RUN_ID": RUN_ID},
+            env=env_filho,
             creationflags=0x08000000 if os.name == "nt" else 0, timeout=PIPELINE_TIMEOUT_S
         )
     except subprocess.TimeoutExpired as e:
@@ -67,20 +75,20 @@ def rodar_script(caminho, nome, args=None):
         stdout = e.stdout.decode('utf-8', errors='replace') if isinstance(e.stdout, bytes) else (e.stdout or '')
         stderr = e.stderr.decode('utf-8', errors='replace') if isinstance(e.stderr, bytes) else (e.stderr or '')
         for linha in stdout.strip().splitlines():
-            logging.info(f"  {linha}")
+            logging.info(f"  {mascarar(linha, getattr(sv_paths, "SMTP_SENHA", ""), getattr(sv_paths, "PORTAL_API_TOKEN", ""))}")
         for linha in stderr.strip().splitlines():
-            logging.error(f"  {linha}")
+            logging.error(f"  {mascarar(linha, getattr(sv_paths, "SMTP_SENHA", ""), getattr(sv_paths, "PORTAL_API_TOKEN", ""))}")
         return False, stdout
 
     if resultado.stdout:
         for linha in resultado.stdout.strip().splitlines():
-            logging.info(f"  {linha}")
+            logging.info(f"  {mascarar(linha, getattr(sv_paths, "SMTP_SENHA", ""), getattr(sv_paths, "PORTAL_API_TOKEN", ""))}")
 
     if resultado.returncode != 0:
         logging.error(f"ERRO em '{nome}' (código {resultado.returncode})")
         if resultado.stderr:
             for linha in resultado.stderr.strip().splitlines():
-                logging.error(f"  {linha}")
+                logging.error(f"  {mascarar(linha, getattr(sv_paths, "SMTP_SENHA", ""), getattr(sv_paths, "PORTAL_API_TOKEN", ""))}")
         return False, resultado.stdout
 
     logging.info(f"CONCLUÍDO: {nome}")
@@ -133,9 +141,15 @@ def adquirir_lock():
     """Mantém um lock exclusivo do Windows até o processo terminar."""
     import msvcrt
 
-    global _lock_handle
+    global _lock_handle, _lock_token
+    if _lock_handle is not None and not _lock_handle.closed:
+        return
     sv_paths.LOG_DIR.mkdir(parents=True, exist_ok=True)
-    _lock_handle = open(LOCK_PATH, "a+b")
+    # Cria sem truncar o lock de outro processo; r+b permite atualizar a
+    # identidade depois de adquirir o byte exclusivo.
+    with open(LOCK_PATH, "a+b"):
+        pass
+    _lock_handle = open(LOCK_PATH, "r+b")
     _lock_handle.seek(0, os.SEEK_END)
     if _lock_handle.tell() == 0:
         _lock_handle.write(b"0")
@@ -147,6 +161,36 @@ def adquirir_lock():
         _lock_handle.close()
         _lock_handle = None
         raise RuntimeError("já existe uma execução do Supply Vision em andamento")
+
+    _lock_token = f'{os.getpid()}:{secrets.token_hex(16)}'
+    _lock_handle.seek(1)
+    _lock_handle.write(_lock_token.encode('ascii'))
+    _lock_handle.truncate()
+    _lock_handle.flush()
+
+
+def garantir_lock_entrada():
+    """Entrada direta trava; filho usa a identidade da reserva ainda ocupada.
+
+    O redirector do venv Windows intercala outro PID: getppid nao identifica
+    o orquestrador. A identidade aleatoria so e passada por rodar_script com
+    lock adquirido, e e conferida no arquivo protegido pelo mesmo lock.
+    """
+    try:
+        adquirir_lock()
+        return
+    except RuntimeError as erro:
+        herdado = os.environ.get('SV_PIPELINE_LOCK_PAI', '')
+        if re.fullmatch(r'[0-9]+:[0-9a-f]{32}', herdado):
+            try:
+                with open(LOCK_PATH, 'rb') as arquivo:
+                    arquivo.seek(1)
+                    if arquivo.read(128).decode('ascii') == herdado:
+                        return
+            except (OSError, UnicodeError):
+                pass
+        print(f'ERRO: {erro}.')
+        raise SystemExit(2) from erro
 
 
 def concluir_sem_envio(situacao):

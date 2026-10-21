@@ -96,9 +96,7 @@ def test_rejeicao_explicita_cancela_reserva_e_permite_nova_tentativa(email, monk
     assert email.estado_entrega.consultar_entrega()['estado'] == 'enviado'
 
 
-@pytest.mark.parametrize('campo', ['assunto', 'para', pytest.param('cco', marks=pytest.mark.xfail(
-    strict=True, raises=pytest.fail.Exception,
-    reason='enviar_email valida To/Subject via EmailMessage, mas CCO vai ao envelope sem validar CR/LF'))])
+@pytest.mark.parametrize('campo', ['assunto', 'para', 'cco'])
 @pytest.mark.parametrize('quebra', ['\r', '\n', '\r\n'])
 def test_injecao_de_cabecalho_aborta_antes_de_smtp(email, monkeypatch, campo, quebra):
     conexoes = []

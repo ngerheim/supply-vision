@@ -110,8 +110,6 @@ def test_estrutura_e_conteudo_iguais_exceto_estilo_conhecido_do_h1(espelho_porta
         assert normalizar(html_python) == normalizar(html_portal)
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError,
-                   reason='H1 Python usa margem 18px/fonte 20px; Portal usa margem 8px/fonte 22px')
 def test_estilo_h1_tambem_tem_paridade(espelho_portal):
     casos, portal = espelho_portal
     caso = casos[0]

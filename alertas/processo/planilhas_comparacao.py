@@ -92,6 +92,7 @@ def _gerar_aba(wb, df, drop, nome_tabela, status_cores=None,
         return hdr_band.get(s[3], hdr_def) if s else hdr_def
 
     col_fmt  = {c: fmt_corpo(c) for c in cols}
+    qty_fracionaria = fmt(num_format="#,##0.##", align="center", valign="top")
     chip_fmt = {st: fmt(bg_color=CHIP[st], bold=True, align="center", valign="vcenter") for st in CHIP}
     has_status = "Status" in idx
 
@@ -111,6 +112,8 @@ def _gerar_aba(wb, df, drop, nome_tabela, status_cores=None,
             if pd.isna(v): v = ""
             elif c == "CNPJ": v = _normcnpj(v)
             f_ = chip_fmt.get(st, col_fmt[c]) if (has_status and c == "Status") else col_fmt[c]
+            if c == "Qtd" and isinstance(v, (int, float)) and np.isfinite(v) and v % 1:
+                f_ = qty_fracionaria
             ws.write(r, idx[c], v, f_)
 
     if nrow:

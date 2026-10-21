@@ -221,6 +221,11 @@ class DestinatariosRecusados(estado_entrega.EntregaEmRevisao):
 
 def enviar_email(assunto, corpo, anexos, destinatarios, html=None, copia_oculta=None):
     senha = SMTP_SENHA
+    if copia_oculta is None:
+        copia_oculta = obter_destinatarios()[1]
+    for valor in [assunto, NOME_REMETENTE, REMETENTE, *destinatarios, *copia_oculta]:
+        if "\r" in str(valor) or "\n" in str(valor):
+            raise ValueError("Cabecalho de e-mail invalido: CR/LF nao permitido.")
 
     msg = EmailMessage()
     msg["From"]    = f"{NOME_REMETENTE} <{REMETENTE}>"
@@ -251,8 +256,6 @@ def enviar_email(assunto, corpo, anexos, destinatarios, html=None, copia_oculta=
             )
             print(f"  Anexo adicionado: {caminho.name}")
 
-    if copia_oculta is None:
-        copia_oculta = obter_destinatarios()[1]
     entrega = list(destinatarios) + list(copia_oculta)
 
     if os.environ.get("SUPPLY_VISION_SEM_ENVIO") == "1" or os.environ.get("MODO_ENSAIO") == "1":
@@ -297,6 +300,8 @@ def enviar_email(assunto, corpo, anexos, destinatarios, html=None, copia_oculta=
 
 
 if __name__ == "__main__":
+    from pipeline import garantir_lock_entrada
+    garantir_lock_entrada()
     # A lista e lida aqui, no inicio da execucao de verdade: faltando o
     # arquivo, o erro aparece antes de qualquer trabalho.
     destinatarios_para, _ = obter_destinatarios()

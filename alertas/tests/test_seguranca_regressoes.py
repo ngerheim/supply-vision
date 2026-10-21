@@ -22,8 +22,6 @@ def test_barreira_de_rede_falha_antes_de_io(operacao):
                     sock.sendto(b'fixture', ('127.0.0.1', 9))
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError,
-                   reason='qlik.Sessao.abrir imprime str(exc) de create_connection sem mascarar a chave')
 def test_falha_de_conexao_qlik_nao_expoe_bearer(monkeypatch, tmp_path, capsys):
     segredo = 'eyJ-segredo-ficticio-qlik'
     chave = tmp_path / 'chave.txt'
@@ -32,15 +30,14 @@ def test_falha_de_conexao_qlik_nao_expoe_bearer(monkeypatch, tmp_path, capsys):
         raise OSError(f'Authorization: Bearer {segredo}')
     monkeypatch.setattr(qlik.websocket, 'create_connection', falhar)
     monkeypatch.setattr(qlik.time, 'sleep', lambda s: None)
-    with pytest.raises(OSError):
+    with pytest.raises(OSError) as erro:
         qlik.Sessao('tenant.example.com', 'app-ficticio', chave).abrir()
+    assert segredo not in str(erro.value)
     saida = capsys.readouterr().out
     assert 'ERRO: conexão' in saida
     assert segredo not in saida
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError,
-                   reason='verificar_saude._enviar_email grava str(exc) SMTP sem mascarar SMTP_SENHA')
 def test_falha_smtp_da_saude_nao_expoe_senha(monkeypatch, tmp_path):
     mod = carregar_verificador(monkeypatch, tmp_path)
     monkeypatch.setenv('MODO_ENSAIO', '0')  # Conexao falsa falha antes de qualquer transporte.
@@ -53,8 +50,6 @@ def test_falha_smtp_da_saude_nao_expoe_senha(monkeypatch, tmp_path):
     assert mod.SMTP_SENHA not in log
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError,
-                   reason='pipeline.rodar_script registra stderr de timeout sem mascarar credenciais')
 def test_timeout_do_filho_nao_expoe_segredo(monkeypatch, tmp_path, caplog):
     mod = carregar_pipeline(monkeypatch, tmp_path)
     segredo = 'segredo-ficticio-do-filho'
@@ -67,10 +62,14 @@ def test_timeout_do_filho_nao_expoe_segredo(monkeypatch, tmp_path, caplog):
     assert segredo not in caplog.text
 
 
-@pytest.mark.parametrize('run_id', ['../fora', '..\\fora', 'a/b', 'a\\b'])
-@pytest.mark.xfail(strict=True, raises=pytest.fail.Exception,
-                   reason='pipeline aceita SUPPLY_VISION_RUN_ID com separadores na importacao e o interpola em caminhos')
+@pytest.mark.parametrize('run_id', ['../fora', '..\\fora', 'a/b', 'a\\b', '', 'a' * 65, 'a.b', 'a\n'])
 def test_identificador_com_separador_e_recusado_na_entrada(monkeypatch, tmp_path, run_id):
     monkeypatch.setenv('SUPPLY_VISION_RUN_ID', run_id)
     with pytest.raises(ValueError):
         carregar_pipeline(monkeypatch, tmp_path)
+
+
+@pytest.mark.parametrize('run_id', ['a', 'a' * 64, '20261020_080000_ab12cd', 'run-A_1'])
+def test_identificador_valido_preservado(monkeypatch, tmp_path, run_id):
+    monkeypatch.setenv('SUPPLY_VISION_RUN_ID', run_id)
+    assert carregar_pipeline(monkeypatch, tmp_path).RUN_ID == run_id

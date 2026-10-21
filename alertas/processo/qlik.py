@@ -14,6 +14,7 @@ import time
 from datetime import date
 
 import websocket
+from segredos import mascarar
 
 TENTATIVAS_CONEXAO = 3
 INTERVALO_RETRY_S  = 45
@@ -68,8 +69,9 @@ class Sessao:
                 print(f'Tentativa {n}/{TENTATIVAS_CONEXAO}: conectado.')
                 break
             except Exception as e:
+                e.args = tuple(mascarar(arg, chave) if isinstance(arg, str) else arg for arg in e.args)
                 ultimo = e
-                print(f'Tentativa {n}/{TENTATIVAS_CONEXAO}: falhou ({type(e).__name__}: {e})')
+                print(f'Tentativa {n}/{TENTATIVAS_CONEXAO}: falhou ({type(e).__name__}: {mascarar(e, chave)})')
                 if n < TENTATIVAS_CONEXAO:
                     print(f'  Aguardando {INTERVALO_RETRY_S}s antes da próxima tentativa...')
                     time.sleep(INTERVALO_RETRY_S)

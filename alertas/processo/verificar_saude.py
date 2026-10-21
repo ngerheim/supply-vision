@@ -32,6 +32,7 @@ from datetime import datetime, date
 
 import sv_paths
 from smtp_conexao import conectar
+from segredos import mascarar
 
 LOG_DIR      = str(sv_paths.LOG_DIR)
 LOG_VERIF    = str(pathlib.Path(LOG_DIR) / f"verificacao_{datetime.now().strftime('%Y%m%d_%H%M')}.log")
@@ -52,6 +53,7 @@ DIAS_AVISO_CHAVE  = {30, 15, 7, 3, 1}
 
 
 def registrar(msg):
+    msg = mascarar(msg, SMTP_SENHA)
     linha = f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}  {msg}"
     print(linha)
     pathlib.Path(LOG_DIR).mkdir(parents=True, exist_ok=True)
