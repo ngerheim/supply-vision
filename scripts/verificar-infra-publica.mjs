@@ -150,8 +150,18 @@ export function arquivosComInfraInterna(raiz) {
 export function commitsComInfraInterna(raiz, base) {
   if (!/^[a-f0-9]{40}$/i.test(base)) throw new Error('Base dos commits deve ser SHA completo.');
   exigirRaizGit(raiz);
-  const patch = git(raiz, ['log', '-p', '--format=mensagem %s%n%b', '--no-ext-diff', '--no-textconv', '--unified=0', `${base}..HEAD`]);
   const termos = lerTermosProibidos(raiz);
+  // NUL separa os seis campos e os registros; mensagens nao entram no parser do patch.
+  const metadados = git(raiz, ['log', '-z', '--format=%H%x00%an%x00%ae%x00%cn%x00%ce%x00%B', `${base}..HEAD`]);
+  const campos = metadados.split('\0');
+  if (campos.pop() !== '' || campos.length % 6 !== 0) throw new Error('Metadados dos commits invalidos.');
+  for (let i = 0; i < campos.length; i += 6) {
+    for (const campo of campos.slice(i + 1, i + 6)) {
+      for (const linha of campo.split('\n')) if (contemInfra(linha, { termos })) return true;
+    }
+  }
+  // -m inclui as adicoes dos merges em relacao a cada pai.
+  const patch = git(raiz, ['log', '-m', '-p', '--format=', '--no-ext-diff', '--no-textconv', '--unified=0', `${base}..HEAD`]);
   let arquivo = '';
   for (const linha of patch.split('\n')) {
     if (linha.startsWith('diff --git ')) arquivo = '';
@@ -159,7 +169,6 @@ export function commitsComInfraInterna(raiz, base) {
     // Remocoes nao podem impedir a limpeza de um identificador ja publicado.
     // Adicoes de commits intermediarios continuam verificadas mesmo se revertidas.
     else if (linha.startsWith('+') && !linha.startsWith('+++') && contemInfra(linha.slice(1), { arquivo, termos })) return true;
-    else if (linha.startsWith('mensagem ') && contemInfra(linha.slice(9), { termos })) return true;
   }
   return false;
 }

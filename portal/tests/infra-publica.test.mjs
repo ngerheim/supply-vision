@@ -33,24 +33,50 @@ void test('noreply exatos passam em arquivos e mensagens; variantes proximas rep
   assert.equal(contemInfra(usuarioComHifen + ' ZZ-4321'), true);
 });
 
-void test('noreply no assunto dos commits respeita a lista exata no parser real', () => {
+void test('mensagens completas e identidades dos commits respeitam termos privados e noreply', () => {
   const raiz = fs.mkdtempSync(path.join(os.tmpdir(), 'sv-noreply-parser-'));
-  let mensagem = '';
+  const limpos = ['a'.repeat(40), 'Teste', 'teste@example.com', 'Teste', 'teste@example.com', 'fix: fixture'];
+  let campos = [...limpos];
   // Exercita o parser real sem criar commits; somente a saida do Git e simulada.
   const git = mock.method(childProcess, 'spawnSync', (executavel, argumentos) => {
     assert.equal(executavel, 'git');
     if (argumentos[0] === 'rev-parse') return { status: 0, stdout: raiz + '\n' };
     assert.equal(argumentos[0], 'log');
-    return { status: 0, stdout: 'mensagem ' + mensagem + '\n' };
+    if (argumentos.includes('-p')) {
+      assert.ok(argumentos.includes('--format='));
+      assert.ok(argumentos.includes('-m'));
+      return { status: 0, stdout: 'diff --git a/texto.txt b/texto.txt\n+++ b/texto.txt\n@@ -0,0 +1 @@\n+limpo\n' };
+    }
+    assert.ok(argumentos.includes('-z'));
+    assert.ok(argumentos.includes('--format=%H%x00%an%x00%ae%x00%cn%x00%ce%x00%B'));
+    return { status: 0, stdout: campos.join('\0') + '\0' };
   });
   syncBuiltinESMExports();
   try {
     for (const [enderecos, esperado] of [[noreplyPermitidos, false], [noreplyRecusados, true]]) {
       for (const endereco of enderecos) for (const email of [endereco, endereco.toUpperCase()]) {
-        mensagem = `fix: fixture <${email}>`;
-        assert.equal(commitsComInfraInterna(raiz, 'a'.repeat(40)), esperado, email);
+        for (const indice of [2, 4, 5]) {
+          campos = [...limpos];
+          campos[indice] = indice === 5 ? `fix: fixture\n\nCo-Authored-By: Bot <${email}>` : email;
+          assert.equal(commitsComInfraInterna(raiz, 'a'.repeat(40)), esperado, email);
+        }
       }
     }
+    fs.mkdirSync(path.join(raiz, 'privado'));
+    fs.writeFileSync(path.join(raiz, 'privado/termos-proibidos.txt'), 'termo-privado-fixture');
+    for (const proibido of ['TERMO-PRIVADO-FIXTURE', fixtureProibida, 'pessoa.ficticia']) {
+      for (const indice of [1, 2, 3, 4, 5]) {
+        for (const valor of indice === 5
+          ? [`fix: fixture\n\n${proibido}`, `fix: fixture\n\nTrailer: ${proibido}`, `fix: fixture\n\n+ ${proibido}`]
+          : [proibido]) {
+          campos = [...limpos]; campos[indice] = valor;
+          assert.equal(commitsComInfraInterna(raiz, 'a'.repeat(40)), true, `${indice}: ${valor}`);
+        }
+      }
+    }
+    campos = [...limpos];
+    campos[5] = 'fix: fixture\n\ndiff --git a/limpo b/limpo\n+linha limpa\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_fixture';
+    assert.equal(commitsComInfraInterna(raiz, 'a'.repeat(40)), false);
   } finally {
     git.mock.restore(); syncBuiltinESMExports();
     fs.rmSync(raiz, { recursive: true, force: true });
@@ -148,6 +174,25 @@ void test('commit intermediario removido do checkout ainda e detectado; base exc
     assert.equal(commitsComInfraInterna(raiz,base),true);
     assert.equal(commitsComInfraInterna(raiz,git(['rev-parse','HEAD'])),false);
     assert.throws(()=>commitsComInfraInterna(raiz,'main'));
+  });
+});
+void test('Git real separa corpo e trailers do patch e confere resolucao de merge', () => {
+  comRepositorio((raiz, gravar) => {
+    const git = args => execFileSync('git', ['-c', 'user.name=Teste', '-c', 'user.email=12345+fixture-user@users.noreply.github.com', ...args], { cwd: raiz, encoding: 'utf8', stdio: 'pipe' }).trim();
+    gravar('texto.txt', 'base\n'); git(['commit', '-m', 'base']);
+    const base = git(['rev-parse', 'HEAD']);
+    git(['commit', '--allow-empty', '-m', 'fixture', '-m', 'diff --git a/limpo b/limpo\n+linha limpa\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_fixture']);
+    assert.equal(commitsComInfraInterna(raiz, base), false);
+    git(['commit', '--allow-empty', '-m', 'fixture', '-m', `+${fixtureProibida}`]);
+    assert.equal(commitsComInfraInterna(raiz, base), true);
+    const antesMerge = git(['rev-parse', 'HEAD']);
+    git(['checkout', '-b', 'lado']);
+    gravar('lado.txt', 'limpo\n'); git(['commit', '-m', 'lado']);
+    git(['checkout', 'main']);
+    gravar('principal.txt', 'limpo\n'); git(['commit', '-m', 'principal']);
+    git(['merge', '--no-ff', '--no-commit', 'lado']);
+    gravar('texto.txt', fixtureProibida); git(['commit', '-m', 'merge']);
+    assert.equal(commitsComInfraInterna(raiz, antesMerge), true);
   });
 });
 void test('SheetJS: hash fixado, comparacao com oficial e adulteracao bloqueada', () => {

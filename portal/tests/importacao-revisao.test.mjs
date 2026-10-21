@@ -30,7 +30,11 @@ void test('previa informa revisao; publicacao ausente ou obsoleta retorna 409 se
       TRAVA_IMPORTACAO: 'importacao', adquirirTrava: async () => true, renovarTrava: async () => {}, liberarTrava: async () => {},
       all: async (sql, values = []) => db.prepare(sql).all(...values), first: async (sql, values = []) => db.prepare(sql).get(...values),
       ok: (v, init) => Response.json(v, init), fail: (error, status = 400) => Response.json({ error }, { status }) };
-    const api = importacoesApi(contexto, { travarAcordo: async () => 'dono', soltarAcordo: async () => {} });
+    let alterarNaTrava = false;
+    const api = importacoesApi(contexto, { travarAcordo: async () => {
+      if (alterarNaTrava) db.exec('UPDATE agreements SET revision=revision+1');
+      return 'dono';
+    }, soltarAcordo: async () => {} });
     const book = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(book, XLSX.utils.json_to_sheet([{ CIDADE: 'CIDADE', UF: 'SP', MODELO: 'MODELO', PECA_SERVICO: 'ITEM', PRECO: 10, MEDIDA: 'UN' }]), 'Fixture');
     const bytes = XLSX.write(book, { type: 'buffer', bookType: 'xlsx' });
@@ -43,15 +47,26 @@ void test('previa informa revisao; publicacao ausente ou obsoleta retorna 409 se
     const previa = await (await api.importWorkbook(request(true), user, 'a')).json();
     assert.equal(previa.valid, true, JSON.stringify(previa));
     assert.equal(previa.agreementRevision, 0);
-    for (const revision of [undefined, -1, 'x', 1]) {
+    const desatualizada = 'A tela está desatualizada. Recarregue a página (Ctrl+F5) e confira a planilha novamente.';
+    const conflito = 'O acordo mudou desde a conferência. Confira a planilha novamente antes de publicar.';
+    for (const revision of [undefined, -1, 'x', '', '1.5', '9007199254740992', '9'.repeat(400)]) {
       const r = await api.importWorkbook(request(false, revision), user, 'a');
       assert.equal(r.status, 409);
-      assert.match((await r.json()).error, /confira|conferência|conferencia/i);
+      assert.equal((await r.json()).error, desatualizada);
     }
+    assert.equal(db.prepare('SELECT COUNT(*) n FROM imports').get().n, 0);
     db.exec('UPDATE agreements SET revision=1');
-    assert.equal((await api.importWorkbook(request(false, previa.agreementRevision), user, 'a')).status, 409);
+    const obsoleta = await api.importWorkbook(request(false, previa.agreementRevision), user, 'a');
+    assert.equal(obsoleta.status, 409);
+    assert.equal((await obsoleta.json()).error, conflito);
+    alterarNaTrava = true;
+    const depoisDaTrava = await api.importWorkbook(request(false, 1), user, 'a');
+    assert.equal(depoisDaTrava.status, 409);
+    assert.equal((await depoisDaTrava.json()).error, `Não foi possível importar: ${conflito}`);
+    assert.equal(db.prepare('SELECT status FROM imports').get().status, 'conflict');
     assert.equal(db.prepare('SELECT COUNT(*) n FROM agreement_versions').get().n, 0);
-    assert.equal((await api.importWorkbook(request(false, 1), user, 'a')).status, 200);
+    alterarNaTrava = false;
+    assert.equal((await api.importWorkbook(request(false, 2), user, 'a')).status, 200);
     assert.equal(db.prepare('SELECT COUNT(*) n FROM agreement_versions').get().n, 1);
   } finally { db.close(); }
 });

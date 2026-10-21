@@ -69,7 +69,8 @@ export function importacoesApi(contexto: ContextoApi, acordos: Pick<ReturnType<t
     const preview = new URL(request.url).searchParams.get('preview') === '1';
     const informada = form.get('expectedRevision');
     const expectedRevision = typeof informada === 'string' && /^\d+$/.test(informada) ? Number(informada) : null;
-    const conflito = 'O acordo mudou desde a conferência ou a revisão está ausente. Confira a planilha novamente antes de publicar.';
+    const conflito = 'O acordo mudou desde a conferência. Confira a planilha novamente antes de publicar.';
+    if (!preview && (expectedRevision === null || !Number.isSafeInteger(expectedRevision))) return fail('A tela está desatualizada. Recarregue a página (Ctrl+F5) e confira a planilha novamente.', 409);
     if (!preview && !revisaoConfere(expectedRevision, Number(acordo.revision))) return fail(conflito, 409);
     const importId = id('imp'), timestamp = now();
     if (!preview) await rawDb().prepare(`INSERT INTO imports (id,agreement_id,filename,mode,status,created_by,created_at) VALUES (?,?,?,?,?,?,?)`).bind(importId, agreementId, safeFilename(file.name), 'replace', 'processing', user.id, timestamp).run();
