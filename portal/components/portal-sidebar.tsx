@@ -1,4 +1,5 @@
 'use client';
+import packageInfo from '../package.json' with { type: 'json' };
 import { GRUPOS_NAVEGACAO, podeAcessarAba, type Nav } from '@/lib/navegacao';
 import {
   Database,
@@ -17,6 +18,8 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { type JsonData, roleName } from './portal-presentation';
+
+const { version } = packageInfo;
 
 const navItems: Record<Nav, { label: string; icon: typeof PackageSearch }> = {
   search: { label: 'Buscar', icon: PackageSearch },
@@ -94,10 +97,18 @@ export function Sidebar({
           </fieldset>
         ))}
       </nav>
-      <div className="border-t border-sidebar-border p-3">
+      <div
+        className="border-t border-sidebar-border p-3"
+        title={`v${version}`}
+      >
         {!collapsed && (
           <p className="mb-2 hidden truncate text-xs opacity-60 lg:block">
             {roleName(user.role)}
+          </p>
+        )}
+        {!collapsed && (
+          <p className="mb-2 hidden text-[10px] opacity-45 lg:block">
+            v{version}
           </p>
         )}
         <Button

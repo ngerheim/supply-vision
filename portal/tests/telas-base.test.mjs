@@ -52,6 +52,15 @@ for (const [role, allowed, forbidden] of [
   });
 }
 
+void test('versao do pacote aparece no rodape e apenas no title quando recolhido', () => {
+  const { version } = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
+  for (const collapsed of [false, true]) {
+    const html = renderToStaticMarkup(h(Sidebar, { user: { role: 'viewer' }, nav: 'search', collapsed }));
+    assert.ok(html.includes(`title="v${version}"`));
+    assert.equal(html.includes(`>v${version}</p>`), !collapsed);
+  }
+});
+
 void test('cabecalho anuncia a coluna e o sentido e escapa o titulo', () => {
   for (const [direcao, expected] of [[1, 'ascending'], [-1, 'descending']]) {
     const html = renderToStaticMarkup(h('table', null, h('thead', null, h(CabecalhoOrdenavel, {

@@ -50,6 +50,9 @@ Caminhos abreviados nas células mantêm o diretório do primeiro arquivo.
 - Antivírus: em falhas `write EOF`/`unable to unlink`, conferir locks e Bitdefender, inclusive controle avançado de ameaças; liberar a pasta pode não bastar. Após corrigir proteção ou instalar Visual C++ x64, reiniciar e validar a partida.
 - SheetJS vendorizado: preservar licença, hash oficial e integrity do lock; atualização exige revisão explícita.
 
+## Versionamento
+- 3.0 = módulo novo ou mudança no modo de uso; 2.x = conjunto fechado de melhorias; 2.9.x = correção que mereça registro. Atualizações do dia a dia não ganham número. A versão muda em `portal/package.json` no mesmo PR que fecha a versão; a tag `vX.Y.Z` vai no commit da `main` que estiver no servidor.
+
 ## Validação e fluxo
 - Codex implementa; uma PR por etapa, commit/push sem esperar CI e encerrar após abrir a PR. Integração por **rebase and merge**. Instalação em uso só recebe código por `supv atualizar`; não deixar alterações locais nela.
 - Executar checks relevantes com fixtures fictícias descartáveis; Linux não substitui PowerShell 5.1, tarefa, firewall ou console Windows. Não copiar SQL/limites da implementação para testes.
