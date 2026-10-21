@@ -142,7 +142,24 @@ export async function executarRestauracao(args = process.argv.slice(2)) {
     configuracao: args.includes('--configuracao'), pasta, meta,
   }));
 }
+export function mensagemErroRestauracao(erro, config) {
+  if (!config) { try { config = lerConfigEfetiva(); } catch { config = process.env; } }
+  // Erros nativos podem carregar comando, argumentos e stdout/stderr secretos.
+  const nativo = erro && typeof erro === 'object' && ('stdout' in erro || 'stderr' in erro || 'spawnargs' in erro);
+  const codigo = /^[A-Z][A-Z0-9_]{1,63}$/.test(erro?.code) ? `${erro.code}: ` : '';
+  let motivo = nativo ? `processo auxiliar falhou (codigo ${Number.isInteger(erro.status) ? erro.status : 'indisponivel'})`
+    : `${codigo}${erro instanceof Error ? erro.message : 'falha desconhecida'}`;
+  for (const [chave, valor] of Object.entries({...process.env, ...config})) {
+    if (/TOKEN|PASSWORD|SENHA|SECRET|SMTP_USER/i.test(chave) && typeof valor === 'string' && valor) motivo = motivo.split(valor).join('[MASCARADO]');
+  }
+  motivo = motivo.replace(/(\b[a-z][a-z0-9+.-]*:\/\/)[^\s/@]+:[^\s/@]+@/gi, '$1[MASCARADO]@')
+    .replace(/\bBearer\s+[^\s,;]+/gi, 'Bearer [MASCARADO]')
+    .replace(/\b(password|senha|token|secret|authorization)\s*[:=]\s*(?:"[^"]*"|'[^']*'|[^\s,;]+)/gi, '$1=[MASCARADO]')
+    .replace(/\p{Cc}+/gu, ' ').slice(0, 600);
+  return erro instanceof FalhaBackup ? motivo : `Restauracao falhou: ${motivo}`;
+}
+
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
   try { await executarRestauracao(); }
-  catch (erro) { console.error(erro instanceof FalhaBackup ? erro.message : 'Restauracao falhou; confira arquivo, banco, configuracao e operacao parada.'); process.exitCode = 1; }
+  catch (erro) { console.error(mensagemErroRestauracao(erro)); process.exitCode = 1; }
 }

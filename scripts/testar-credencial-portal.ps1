@@ -40,9 +40,28 @@ try {
 $configuracao = Get-Content -LiteralPath (Join-Path $PSScriptRoot '../portal/scripts/configuracao-servidor.mjs') -Raw
 $iniciar = Get-Content -LiteralPath (Join-Path $PSScriptRoot '../portal/scripts/iniciar-portal.mjs') -Raw
 $rota = Get-Content -LiteralPath (Join-Path $PSScriptRoot '../portal/app/api/[...path]/route.ts') -Raw
-if ($configuracao -notmatch "'PORTAL_API_TOKEN'" -or $configuracao -notmatch 'process.env' -or $iniciar -notmatch 'configuracaoServidor\(config\)') {
+$leitor = Get-Content -LiteralPath (Join-Path $PSScriptRoot '../portal/scripts/configuracao.mjs') -Raw
+function Testar-CadeiaCredencial([string]$Servidor,[string]$Leitor,[string]$Inicio) {
+  return ($Servidor -match "'PORTAL_API_TOKEN'" -and
+    $Servidor -match "import\s*\{\s*lerConfigEfetiva\s*\}\s*from\s*'\./configuracao\.mjs'" -and
+    $Servidor -match 'config\s*=\s*lerConfigEfetiva\(\)' -and
+    $Servidor -match 'export const env\s*=\s*configuracaoServidor\(\)' -and
+    $Leitor -match 'function lerConfigEfetiva\(config\s*=\s*lerConfigBruta\(\),\s*ambiente\s*=\s*process\.env\)\s*\{\s*return\s*\{\s*\.\.\.config,\s*\.\.\.ambiente\s*\}' -and
+    $Inicio -match 'configuracaoServidor\(config\)')
+}
+if (!(Testar-CadeiaCredencial $configuracao $leitor $iniciar)) {
   throw 'O servidor nao resolve a credencial em tempo de execucao.'
 }
+# A guarda tambem deve reprovar a retirada do ambiente ou de qualquer chamada.
+foreach($caso in @(
+  @($configuracao.Replace('config = lerConfigEfetiva()', 'config = {}'), $leitor, $iniciar),
+  @($configuracao, $leitor.Replace('process.env', '{}'), $iniciar),
+  @($configuracao, $leitor.Replace('...config, ...ambiente', '...config'), $iniciar),
+  @($configuracao, $leitor, $iniciar.Replace('configuracaoServidor(config)', 'configuracaoServidor({})'))
+)) {
+  if(Testar-CadeiaCredencial $caso[0] $caso[1] $caso[2]) { throw 'A guarda aceitou uma cadeia sem credencial de tempo de execucao.' }
+}
+Write-Host '[OK] guarda recusa cadeia sem leitor efetivo, ambiente, mesclagem ou chamada da partida'
 if ($rota -notmatch 'configuracao-servidor.mjs' -or $rota -notmatch 'PORTAL_API_TOKEN' -or $rota -match '__PORTAL_API_TOKEN__') {
   throw 'A rota interna deixou de usar a configuracao do servidor.'
 }
