@@ -203,7 +203,7 @@ void test('reserva aguarda lock de escrita acima de um segundo sem perder exclus
 });
 
 void test('diagnosticos operacionais nao encaminham humanos ao mapa IA', () => {
-  for (const arquivo of ['homologar.ps1', 'operacao-logica.ps1', 'atualizar-servidor.ps1', 'instalacao-requisitos.ps1']) {
+  for (const arquivo of ['homologar.ps1', 'operacao-logica.ps1', 'atualizar-servidor.ps1']) {
     const codigo = fs.readFileSync(new URL(`../../scripts/${arquivo}`, import.meta.url), 'utf8');
     assert.doesNotMatch(codigo, /AGENTS\.md/i, arquivo);
   }

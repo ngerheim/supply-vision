@@ -112,7 +112,7 @@ function Invoke-RestMethod {
  }
 
  Registrar 'api-checks'
- $nomes=@('Portal','Portal - instalacao nova e autenticacao real','PowerShell','Alertas','Atualizacao real')
+ $nomes=@('Portal','Portal - ponta a ponta e autenticacao real','PowerShell','Alertas','Atualizacao real')
  # Os grupos sao checks extras: exigem success na main e cobertura unica na PR.
  if($Caso-like'*powershell*'){$nomes+=@('PowerShell - inicializacao e atualizacao','PowerShell - protecoes e agenda','PowerShell - ensaio e firewall')}
  if($Caso-like'ci-espera-*'){

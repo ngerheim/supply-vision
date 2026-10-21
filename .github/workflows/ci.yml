@@ -243,7 +243,7 @@ jobs:
       - run: npm audit
 
   portal-integracao:
-    name: Portal - instalacao nova e autenticacao real
+    name: Portal - ponta a ponta e autenticacao real
     runs-on: windows-latest
     timeout-minutes: 30
     steps:
@@ -284,9 +284,9 @@ jobs:
         env:
           SV_TESTES_INTEGRACAO_WINDOWS: '1'
         run: ./scripts/testar-windows-temporario-curto.ps1
-      - name: Validar portal compilado com banco descartavel
+      - name: Validar Portal ponta a ponta com banco descartavel
         shell: powershell
-        run: ./portal/scripts/teste-instalacao-nova.ps1
+        run: ./portal/scripts/teste-portal-ponta-a-ponta.ps1
 
       - name: Validar parada do supervisor com Portal real e SQLite
         timeout-minutes: 11
