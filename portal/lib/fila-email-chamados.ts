@@ -1,4 +1,5 @@
 import { id, now, rawDb } from './database.ts';
+import { prepararNotificacaoUsuario } from './central-notificacoes.ts';
 import { planejarNotificacoesChamado, type DestinatarioChamado, type EstadoNotificacaoChamado, type MudancaChamado } from './notificacoes-chamados.ts';
 import { type DadosEmailChamado } from './email-chamados.ts';
 
@@ -49,13 +50,13 @@ export function prepararNotificacoesChamado({
   anterior: ContextoNotificacaoChamado | null;
   atual: ContextoNotificacaoChamado;
   mudanca?: MudancaChamado;
-  autor: { name: string };
+  autor: { id: string; name: string };
   alteracoes: string[];
   mensagem?: string | null;
   timestamp?: string;
 }) {
   const planejadas = planejarNotificacoesChamado(anterior, atual, mudanca);
-  return planejadas.map(({ tipo, destinatario }) => {
+  return planejadas.flatMap(({ tipo, destinatario }) => {
     const payload: DadosEmailChamado = {
       ticketId: atual.id, codigo: atual.codigo, titulo: atual.titulo, fornecedor: atual.fornecedor,
       prioridade: atual.prioridade, situacao: atual.status,
@@ -63,9 +64,13 @@ export function prepararNotificacoesChamado({
       autor: autor.name, resumo: resumoPorTipo[tipo], alteracoes, mensagem,
     };
     const dedupe = `${eventId}:${tipo}:${destinatario.email.trim().toLocaleLowerCase('pt-BR')}`;
-    return rawDb().prepare(`INSERT OR IGNORE INTO email_notifications
+    const email = rawDb().prepare(`INSERT OR IGNORE INTO email_notifications
       (id,ticket_id,event_id,type,recipient_user_id,recipient_name,recipient_email,payload_json,status,attempts,next_attempt_at,dedupe_key,created_at,updated_at)
       VALUES (?,?,?,?,?,?,?,?,'pending',0,?,?,?,?)`)
       .bind(id('eml'), atual.id, eventId, tipo, destinatario.id, destinatario.nome, destinatario.email.trim(), JSON.stringify(payload), timestamp, dedupe, timestamp, timestamp);
+    return [email, ...(destinatario.id === autor.id ? [] : [prepararNotificacaoUsuario({
+      destinatario: destinatario.id, tipo: `chamado_${tipo}`, texto: `${atual.codigo}: ${resumoPorTipo[tipo]}`,
+      link: `/?chamado=${encodeURIComponent(atual.id)}`, timestamp,
+    })])];
   });
 }

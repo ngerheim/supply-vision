@@ -20,10 +20,10 @@ export function detectarEstadoPortal(estado: EstadoPortal, sinal: SinalPortal, c
   return indisponivel === estado.indisponivel && versaoNova === estado.versaoNova ? estado : { indisponivel, versaoNova };
 }
 
-// null suspende consultas de abas ocultas enquanto o Portal esta disponivel.
+// Abas ocultas nao consultam; ao reaparecer, o agendador consulta imediatamente.
 export function proximoIntervalo(estado: EstadoPortal, oculta: boolean): number | null {
-  if (estado.indisponivel) return 5000;
-  return oculta ? null : 15000;
+  if (oculta) return null;
+  return estado.indisponivel ? 5000 : 15000;
 }
 
 let estado = ESTADO_INICIAL;

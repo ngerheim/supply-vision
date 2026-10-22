@@ -1,16 +1,19 @@
 'use client';
 import { useEffect, useRef, useSyncExternalStore } from 'react';
-import { api } from '@/lib/api';
-import { CABECALHO_ATUALIZACAO_AUTOMATICA } from '@/lib/atualizacao-periodica';
-import { iniciarPollingDisponibilidade } from '@/lib/polling-disponibilidade';
+import { iniciarPollingDisponibilidade, consultarDisponibilidade } from '@/lib/polling-disponibilidade';
+import { assinarCentral, obterCentral, centralInicial, definirUsuarioCentral } from '@/lib/central-estado';
 import { assinarEstadoPortal, obterEstadoPortal, ESTADO_INICIAL, AVISO_INDISPONIVEL, AVISO_VERSAO } from '@/lib/estado-portal';
 
 export function PortalAvailability() {
   const estado = useSyncExternalStore(assinarEstadoPortal, obterEstadoPortal, () => ESTADO_INICIAL);
   const janela = useRef<HTMLDialogElement>(null);
-  useEffect(() => iniciarPollingDisponibilidade(async signal => {
-    await api('/api/health', { headers: CABECALHO_ATUALIZACAO_AUTOMATICA, signal });
-  }, document), []);
+  const { usuario } = useSyncExternalStore(assinarCentral, obterCentral, centralInicial);
+  useEffect(() => {
+    const expirar = () => definirUsuarioCentral(null);
+    window.addEventListener('portal:session-expired', expirar);
+    const parar = iniciarPollingDisponibilidade(signal => consultarDisponibilidade(usuario, signal), document);
+    return () => { parar(); window.removeEventListener('portal:session-expired', expirar); };
+  }, [usuario]);
   useEffect(() => {
     if (estado.versaoNova && !janela.current?.open) janela.current?.showModal();
   }, [estado.versaoNova]);

@@ -30,7 +30,7 @@ void test('intervalo de disponibilidade respeita estado e visibilidade', () => {
   assert.equal(proximoIntervalo(ESTADO_INICIAL, true), null);
   const indisponivel = {...ESTADO_INICIAL, indisponivel:true};
   assert.equal(proximoIntervalo(indisponivel, false), 5000);
-  assert.equal(proximoIntervalo(indisponivel, true), 5000);
+  assert.equal(proximoIntervalo(indisponivel, true), null);
 });
 
 void test('polling usa 15s/5s, suspende aba oculta e consulta ao voltar a visibilidade', async t => {
@@ -48,8 +48,12 @@ void test('polling usa 15s/5s, suspende aba oculta e consulta ao voltar a visibi
   t.mock.timers.tick(30000); await setImmediate(); assert.equal(chamadas,2);
   estado = {...estado, indisponivel:true}; avisar();
   t.mock.timers.tick(4999); assert.equal(chamadas,2);
-  t.mock.timers.tick(1); await setImmediate(); assert.equal(chamadas,3);
+  t.mock.timers.tick(1); await setImmediate(); assert.equal(chamadas,2);
+  t.mock.timers.tick(5000); await setImmediate(); assert.equal(chamadas,2);
+  documento.hidden = false; documento.dispatchEvent(new Event('visibilitychange'));
+  await setImmediate(); assert.equal(chamadas,3);
   t.mock.timers.tick(5000); await setImmediate(); assert.equal(chamadas,4);
+  documento.hidden = true; documento.dispatchEvent(new Event('visibilitychange'));
   estado = ESTADO_INICIAL; avisar();
   t.mock.timers.tick(30000); await setImmediate(); assert.equal(chamadas,4);
   documento.hidden = false; documento.dispatchEvent(new Event('visibilitychange'));

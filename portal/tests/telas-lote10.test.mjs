@@ -44,6 +44,7 @@ async function mount(file, name, props, overrides = {}) {
   const same = (a, b) =>
     a && b && a.length === b.length && a.every((v, i) => Object.is(v, b[i]));
   const hooks = {
+    useSyncExternalStore(_assinar, obter) { return obter(); },
     useState(initial) {
       const index = cursor++;
       if (!(index in slots))
@@ -177,6 +178,65 @@ async function mount(file, name, props, overrides = {}) {
   harness.render();
   return harness;
 }
+void test('Central: sino 99+, lista acessivel, marcacao antes da navegacao e clique duplicado bloqueado', async t => {
+  const estado = {usuario:'pessoa',naoLidas:103}, navegacoes = [];
+  const tela = await mount('central-notificacoes','CentralNotificacoes',{navegar:link => navegacoes.push(link)},{
+    '@/lib/central-estado': {
+      obterCentral:() => estado, centralInicial:() => estado, assinarCentral:() => () => {},
+      atualizarContagemCentral:(_usuario,n) => { estado.naoLidas=n; },
+    },
+  });
+  t.after(() => tela.unmount());
+  assert.equal(tela.requests.length,0,'O sino nao cria outro polling');
+  const sino = tela.one('button',p => p['aria-controls']==='central-notificacoes');
+  assert.equal(sino['aria-label'],'Notificações: 103 não lidas');
+  assert.equal(tela.one('span').children,'99+');
+  sino.onClick(); tela.render();
+  assert.equal(tela.requests[0].path,'/api/central');
+  tela.requests[0].resolve({notificacoes:[{id:'n',tipo:'teste',texto:'Texto ficticio',link:'/?chamado=t',criada_em:'2026-10-22T12:00:00Z',lida_em:null}]});
+  await setImmediate(); tela.render();
+  assert.equal(tela.one('dialog')['aria-label'],'Central de notificações');
+  assert.equal(tela.one('time').dateTime,'2026-10-22T12:00:00Z');
+  const item = tela.one('a');
+  const clique = () => item.onClick({button:0,preventDefault(){}});
+  clique(); clique(); tela.render();
+  assert.equal(tela.requests.length,2);
+  assert.equal(tela.requests[1].path,'/api/central/n/lida');
+  assert.equal(tela.requests[1].options.method,'POST');
+  assert.deepEqual(navegacoes,[]);
+  tela.requests[1].resolve({success:true}); await setImmediate();
+  assert.equal(tela.requests[2].path,'/api/central/nao-lidas');
+  tela.requests[2].resolve({naoLidas:102}); await setImmediate(); tela.render();
+  assert.deepEqual(navegacoes,['/?chamado=t']);
+  assert.equal(estado.naoLidas,102);
+  assert.equal(tela.find(n => n.type==='dialog').length,0);
+});
+
+void test('Central: marcar todas atualiza lista, erro permanece acessivel e Escape fecha painel', async t => {
+  const estado = {usuario:'pessoa',naoLidas:2};
+  const tela = await mount('central-notificacoes','CentralNotificacoes',{navegar(){}},{
+    '@/lib/central-estado': {
+      obterCentral:() => estado, centralInicial:() => estado, assinarCentral:() => () => {},
+      atualizarContagemCentral:(_usuario,n) => { estado.naoLidas=n; },
+    },
+  });
+  t.after(() => tela.unmount());
+  tela.one('button',p => p['aria-controls']).onClick(); tela.render();
+  tela.requests[0].resolve({notificacoes:[{id:'n',texto:'Texto',link:'/',criada_em:'2026-10-22T12:00:00Z',lida_em:null}]});
+  await setImmediate(); tela.render();
+  tela.one('button',p => p.children==='Marcar todas como lidas').onClick(); tela.render();
+  assert.equal(tela.requests[1].path,'/api/central/lidas');
+  tela.requests[1].reject(new Error('Falha ficticia')); await setImmediate(); tela.render();
+  assert.equal(tela.one('p',p => p.role==='alert').children,'Falha ficticia');
+  tela.one('button',p => p.children==='Marcar todas como lidas').onClick();
+  tela.requests[2].resolve({success:true}); await setImmediate();
+  tela.requests[3].resolve({naoLidas:0}); await setImmediate(); tela.render();
+  assert.equal(tela.one('button',p => p.children==='Marcar todas como lidas').disabled,true);
+  assert.equal(tela.find(n => n.type==='span' && String(n.props.children).includes('Não lida')).length,0);
+  tela.one('dialog').onKeyDown({key:'Escape',preventDefault(){}}); tela.render();
+  assert.equal(tela.find(n => n.type==='dialog').length,0);
+});
+
 const catalogs = {
   suppliers: [],
   locations: [],
