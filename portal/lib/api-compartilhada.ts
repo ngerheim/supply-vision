@@ -1,3 +1,4 @@
+import { pode } from './permissoes.ts';
 import type * as Banco from './database.ts';
 import type { NextResponse } from 'next/server';
 import { errorMessage, type Role } from './domain.ts';
@@ -23,7 +24,7 @@ export type ContextoApi = Pick<typeof Banco,
   first: <T = Row>(sql: string, values?: unknown[]) => Promise<T | null>;
 };
 
-export const canWrite = (user: User) => user.role === 'admin' || user.role === 'editor';
+export const canWrite = (user: User) => pode(user, 'portal:escrever');
 
 export const textValue = (value: unknown) => (typeof value === 'string' ? value.trim() : '');
 

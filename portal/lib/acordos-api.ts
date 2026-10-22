@@ -1,10 +1,11 @@
+import { pode } from './permissoes.ts';
 import { consultaBusca, consultasOpcoesBusca } from './consulta-busca.ts';
 import { dataDeNegocio } from './data-negocio.ts';
 import { SITUACAO_EFETIVA_SQL } from './situacao-acordos.ts';
 import { corpoBinarioLimitado } from './corpo-limitado.ts';
 import { CORPO_MAX_JSON, LIMITES_CAMPO, LIMITE_LISTA, exigeTexto } from './limites-entrada.ts';
 import { AGREEMENT_STATUSES, errorMessage, isOneOf, isValidDateRange, toNonNegativeMoney } from './domain.ts';
-import { type ContextoApi, type User, type Row, canWrite, textValue, nullableText, stringList } from './api-compartilhada.ts';
+import { type ContextoApi, type User, type Row, textValue, nullableText, stringList } from './api-compartilhada.ts';
 import { revisaoConfere } from './controle-escrita.ts';
 import { auditoriaNoLote } from './auditoria-api.ts';
 
@@ -95,7 +96,7 @@ export function acordosApi(contexto: ContextoApi) {
   // Para as independentes a referencia e apenas anulada. Apagar um chamado
   // porque o acordo saiu seria destruir informacao que nao pertence ao acordo.
   async function deleteAgreement(user: User, agreementId: string, expectedRevision: number | null) {
-    if (user.role !== 'admin') {
+    if (!pode(user, 'acordo:excluir')) {
       return fail('Somente administradores podem excluir um acordo. Um acordo apagado leva consigo os preços e todo o histórico de versões.', 403);
     }
 
@@ -176,7 +177,7 @@ export function acordosApi(contexto: ContextoApi) {
     const agreement = cabecalho.results[0] as Row | undefined;
     if (!agreement) return fail('Acordo não encontrado.', 404);
     const locations = locais.results as Row[], rows = condicoes.results as Row[], versions = historico.results as Row[];
-    if (!canWrite(user)) {
+    if (!pode(user, 'acordo:consultar-completo')) {
       const { id, number, status, start_date, end_date, effectiveStatus, supplier, cnpj } = agreement;
       return ok({ agreement: { id, number, status, start_date, end_date, effectiveStatus, supplier, cnpj }, locations,
         totalItems: agreement.totalItems, offset, limit, revision: agreement.revision, version: agreement.current_version_id,

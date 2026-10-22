@@ -1,5 +1,6 @@
+import { pode } from './permissoes.ts';
 import { montarPowerBiUrl } from './powerbi.ts';
-import { type ContextoApi, type User, canWrite } from './api-compartilhada.ts';
+import { type ContextoApi, type User } from './api-compartilhada.ts';
 
 export function bootstrapApi(contexto: ContextoApi, acordos: Pick<ReturnType<typeof import('./acordos-api.ts').acordosApi>, 'agreementList'>, importacoes: Pick<ReturnType<typeof import('./importacoes-api.ts').importacoesApi>, 'importList' | 'totalImportacoes'>) {
   const { env, ok, all } = contexto;
@@ -14,7 +15,7 @@ export function bootstrapApi(contexto: ContextoApi, acordos: Pick<ReturnType<typ
   }
 
   async function bootstrap(user: User) {
-    if (!canWrite(user)) {
+    if (!pode(user, 'portal:consultar-gestao')) {
       const [suppliers, items, models, locations] = await Promise.all([
         all('SELECT id,trade_name AS tradeName FROM suppliers ORDER BY trade_name'),
         all('SELECT id,name FROM catalog_items ORDER BY name'),
@@ -27,9 +28,9 @@ export function bootstrapApi(contexto: ContextoApi, acordos: Pick<ReturnType<typ
       agreementList(), all('SELECT id,revision,legal_name AS legalName,trade_name AS tradeName,cnpj,city,state,active FROM suppliers ORDER BY trade_name'),
       all('SELECT id,revision,name,active FROM catalog_items ORDER BY name'), all('SELECT id,revision,name,active FROM vehicle_models ORDER BY name'),
       all('SELECT id,revision,code,name,active FROM units ORDER BY code'),
-      all('SELECT id,revision,city,state FROM locations ORDER BY state,city'), canWrite(user) ? importList() : Promise.resolve([]),
+      all('SELECT id,revision,city,state FROM locations ORDER BY state,city'), pode(user, 'importacao:consultar') ? importList() : Promise.resolve([]),
     ]);
-    return ok({ user, agreements, totalAcordos: agreements.length, catalogs: { suppliers, items, models, units, locations }, imports, totalImports: canWrite(user) ? await totalImportacoes() : 0, manutencao: relatorioManutencao() });
+    return ok({ user, agreements, totalAcordos: agreements.length, catalogs: { suppliers, items, models, units, locations }, imports, totalImports: pode(user, 'importacao:consultar') ? await totalImportacoes() : 0, manutencao: relatorioManutencao() });
   }
 
   return { bootstrap };

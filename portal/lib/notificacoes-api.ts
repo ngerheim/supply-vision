@@ -1,3 +1,4 @@
+import { pode } from './permissoes.ts';
 import { AUDITAR_REENVIO_SQL } from './auditoria-api.ts';
 import { paginaSolicitada } from './paginacao.ts';
 import { intervaloDatasNegocio } from './periodo-auditoria.ts';
@@ -56,7 +57,7 @@ export function notificacoesApi(contexto: ContextoApi) {
 
   async function retryEmailNotification(user:User,notificationId:string,kind:'notificacao'|'diario'='notificacao'){
     const tabela=kind==='diario'?'daily_report_deliveries':'email_notifications';
-    if(user.role!=='admin') return fail('Somente administradores podem reenviar notificações.',403);
+    if(!pode(user, 'email:reenviar')) return fail('Somente administradores podem reenviar notificações.',403);
     const notification=await first<{id:string;status:string;updated_at:string;attempts:number}>(`SELECT id,status,updated_at,attempts FROM ${tabela} WHERE id=?`,[notificationId]);
     if(!notification) return fail('Notificação não encontrada.',404);
     if(notification.status==='sent') return fail('Esta notificação já foi enviada.',409);

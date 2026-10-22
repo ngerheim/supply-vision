@@ -228,7 +228,7 @@ jobs:
       - run: npm test
         # Inclui tests/portal-build.test.mjs, tests/portal-build-api.test.mjs,
         # tests/estado-portal.test.ts, tests/portal-build-cliente.test.ts e
-        # tests/api.test.ts; tambem no PREPARAR.
+        # tests/api.test.ts, tests/permissoes.test.ts e tests/permissoes-guarda.test.mjs; tambem no PREPARAR.
       - name: Avisos SMTP com terminal colorido
         env:
           FORCE_COLOR: '1'

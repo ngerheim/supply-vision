@@ -28,16 +28,16 @@ void test('perfis herdam exatamente os três conjuntos solicitados', () => {
   for (const grupo of GRUPOS_NAVEGACAO)
     for (const aba of grupo.abas) {
       assert.equal(
-        podeAcessarAba('viewer', aba),
+        podeAcessarAba({ role: 'viewer' }, aba),
         grupo.perfil === 'viewer',
         aba,
       );
       assert.equal(
-        podeAcessarAba('editor', aba),
+        podeAcessarAba({ role: 'editor' }, aba),
         grupo.perfil !== 'admin',
         aba,
       );
-      assert.equal(podeAcessarAba('admin', aba), true, aba);
+      assert.equal(podeAcessarAba({ role: 'admin' }, aba), true, aba);
     }
   assert.equal(NOMES_PERFIL.editor, 'Suprimentos');
   assert.equal(new Set(GRUPOS_NAVEGACAO.flatMap((g) => [...g.abas])).size, 12);

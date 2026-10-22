@@ -1,3 +1,4 @@
+import { pode, type UsuarioPermissao } from './permissoes.ts';
 import type { Role } from './domain.ts';
 
 export const GRUPOS_NAVEGACAO = [
@@ -21,16 +22,8 @@ export const GRUPOS_NAVEGACAO = [
   },
 ] as const;
 export type Nav = (typeof GRUPOS_NAVEGACAO)[number]['abas'][number];
-export function podeAcessarAba(perfil: Role, aba: Nav): boolean {
-  const grupo = GRUPOS_NAVEGACAO.find((g) =>
-    (g.abas as readonly string[]).includes(aba),
-  );
-  return (
-    !!grupo &&
-    (grupo.perfil === 'viewer' ||
-      perfil === 'admin' ||
-      (grupo.perfil === 'editor' && perfil === 'editor'))
-  );
+export function podeAcessarAba(usuario: UsuarioPermissao, aba: Nav): boolean {
+  return pode(usuario, `aba:${aba}`);
 }
 export const NOMES_PERFIL: Record<Role, string> = {
   viewer: 'Consulta',
