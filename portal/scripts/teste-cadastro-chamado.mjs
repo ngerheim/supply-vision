@@ -98,7 +98,8 @@ assert.equal((await pedir(`tickets/${ticketId}`,'PUT',{scope:'formulario antigo'
 assert.equal((await pedir(`tickets/${ticketId}`)).data.ticket.scope,'edicao confirmada');
 console.log('[OK] Formulario antigo nao sobrescreve edicao confirmada.');
 
-const usuario=await pedir('users','POST',{name:'Usuario teste inativo',email:'inativo-'+Date.now()+'@example.com',role:'viewer',password:'Senha-de-teste-123456'});
+// A atribuicao inicial exige um editor ativo; a desativacao abaixo cria o legado.
+const usuario=await pedir('users','POST',{name:'Usuario teste inativo',email:'inativo-'+Date.now()+'@example.com',role:'editor',password:'Senha-de-teste-123456'});
 assert.equal(usuario.status,201);
 assert.equal((await pedir(`tickets/${ticketId}`,'PUT',{assignedTo:usuario.data.id})).status,200);
 for(const body of [{active:false},{active:0,name:'Usuario renomeado'},{name:'Usuario sem situacao'}]){
