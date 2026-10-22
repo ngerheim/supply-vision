@@ -3,7 +3,7 @@ import {
   rotuloAcaoHistorico,
   rotuloEntidadeHistorico,
 } from '@/lib/historico-legivel';
-import { api } from '@/lib/api';
+import { api, baixarArquivo, errorText } from '@/lib/api';
 import { useEffect, useState } from 'react';
 import { AlertTriangle, Download, RefreshCw } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -162,11 +162,9 @@ export function ChangeHistory({ users }: JsonData) {
             <Button
               variant="outline"
               onClick={() =>
-                window.open(
+                void baixarArquivo(
                   `/api/audit/export?${new URLSearchParams(Object.entries(f).filter(([, v]) => v))}`,
-                  '_blank',
-                  'noopener,noreferrer',
-                )
+                ).catch(error => alert(errorText(error)))
               }
             >
               <Download /> Exportar Excel

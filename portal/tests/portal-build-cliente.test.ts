@@ -1,0 +1,41 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { api, ApiError } from '../lib/api.ts';
+import { obterEstadoPortal } from '../lib/estado-portal.ts';
+import { PORTAL_BUILD } from '../lib/portal-build.ts';
+
+void test('helper bloqueia escritas sem reenviar, recupera polling e exige recarga sem encerrar sessao', async t => {
+  const original = Object.getOwnPropertyDescriptor(globalThis, 'window');
+  const janela = new EventTarget();
+  Object.defineProperty(globalThis, 'window', {configurable:true, value:janela});
+  t.after(() => { if (original) Object.defineProperty(globalThis, 'window', original); else Reflect.deleteProperty(globalThis, 'window'); });
+  let chamadas = 0, expiradas = 0;
+  janela.addEventListener('portal:session-expired', () => expiradas++);
+  let resposta = () => new Response('indisponivel', {status:502});
+  t.mock.method(globalThis, 'fetch', async () => { chamadas++; return resposta(); });
+  const poll = () => api('/api/health', {headers:{'x-portal-poll':'1'}});
+  await assert.rejects(poll(), ApiError);
+  assert.equal(obterEstadoPortal().indisponivel,true);
+  const antes = chamadas;
+  for (const method of ['POST','PUT','PATCH','DELETE']) await assert.rejects(api('/api/test', {method}), /Não é possível salvar agora/);
+  assert.equal(chamadas,antes);
+  resposta = () => new Response('{}', {headers:{'content-type':'application/json','x-portal-build':PORTAL_BUILD}});
+  await poll();
+  assert.equal(obterEstadoPortal().indisponivel,false);
+  await api('/api/test', {method:'POST'});
+  resposta = () => { throw new TypeError('rede interrompida'); };
+  await assert.rejects(poll(), ApiError);
+  assert.equal(obterEstadoPortal().indisponivel,true);
+  // Um corpo interrompido tambem e falha do polling.
+  resposta = () => new Response('{', {headers:{'content-type':'application/json'}});
+  await assert.rejects(poll(), ApiError);
+  assert.equal(obterEstadoPortal().indisponivel,true);
+  resposta = () => new Response('{}', {headers:{'content-type':'application/json','x-portal-build':'build-novo'}});
+  await poll();
+  assert.equal(obterEstadoPortal().indisponivel,false);
+  assert.equal(obterEstadoPortal().versaoNova,true);
+  const depois = chamadas;
+  await assert.rejects(api('/api/test', {method:'POST'}), /Recarregue para continuar/);
+  assert.equal(chamadas,depois);
+  assert.equal(expiradas,0);
+});

@@ -5,6 +5,7 @@ import { CABECALHOS_SEGURANCA } from '../lib/cabecalhos-seguranca.ts';
 import { conexao } from './ip-conexao.mjs';
 
 export async function iniciarServidorNode({ outDir = path.resolve(import.meta.dirname, '../dist'), host = '127.0.0.1', port = 3000, pararArquivo = null, pai = null } = {}) {
+  const { build } = JSON.parse(fs.readFileSync(path.join(outDir, 'portal-build.json'), 'utf8'));
   const { server } = await startProdServer({ outDir, host, port });
   const emitir = server.emit.bind(server);
   const cliente = fs.realpathSync(path.join(outDir, 'client'));
@@ -12,6 +13,7 @@ export async function iniciarServidorNode({ outDir = path.resolve(import.meta.di
   server.emit = function(evento, ...args) {
     if (evento !== 'request') return emitir(evento, ...args);
     const [req, res] = args;
+    if (/^\/api(?:\/|$)/.test(new URL(req.url, 'http://localhost').pathname)) res.setHeader('x-portal-build', build);
     delete req.headers['content-security-policy'];
     delete req.headers['content-security-policy-report-only'];
     for (const [nome, valor] of Object.entries(CABECALHOS_SEGURANCA)) res.setHeader(nome, valor);

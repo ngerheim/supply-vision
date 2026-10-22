@@ -1,5 +1,5 @@
 'use client';
-import { api, errorText } from '@/lib/api';
+import { api, errorText, baixarArquivo } from '@/lib/api';
 import { MIN_PASSWORD_LENGTH, validatePassword } from '@/lib/domain';
 import { useCallback, useEffect, useState } from 'react';
 import { CheckCircle2, Download, Pencil, Plus } from 'lucide-react';
@@ -64,7 +64,7 @@ export function Administration({ user, busy, run }: JsonData) {
           <Button
             variant="outline"
             onClick={() =>
-              window.open('/api/export', '_blank', 'noopener,noreferrer')
+              void baixarArquivo('/api/export').catch(error => setLoadError(errorText(error)))
             }
           >
             <Download /> Exportar dados
