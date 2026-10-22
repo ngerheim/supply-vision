@@ -170,3 +170,75 @@ Write-Host 'OK: detalhes de falha do supervisor.'
  }
 }
 Write-Host 'OK: configuracao ausente preserva a lista de falhas.'
+# Diagnostico M5: rede ficticia, Node real e instante explicito (sem mock de Get-Date/AST).
+& {
+ . (Join-Path $PSScriptRoot 'inicializacao-logica.ps1')
+ . (Join-Path $PSScriptRoot 'diagnostico-logica.ps1')
+ $fixture=Join-Path ([IO.Path]::GetTempPath()) ('sv-diagnostico-backup com espaco-'+[guid]::NewGuid().ToString('N'))
+ $pastaRede=Join-Path $fixture 'rede'
+ $local=Join-Path $fixture 'portal/backups'
+ $agora=[datetime]'2026-10-22 15:00:00'
+ $inicio=[datetime]'2026-10-22 12:00:00'
+ $config=@{BACKUP_HORARIOS='13:30,20:59';MODO_ENSAIO='0'}
+ New-Item -ItemType Directory -Force $local,$pastaRede|Out-Null
+ try{
+  $r=Obter-SituacaoBackupRede $pastaRede $config ([datetime]'2026-10-22 12:30') $inicio
+  Igual 'aviso' $r.nivel 'M5: rede vazia antes do primeiro horario nunca aprova'
+  $r=Obter-SituacaoBackupRede $pastaRede $config $agora $inicio
+  Igual 'erro' $r.nivel 'M5: rede vazia com horario vencido reprova'
+  [IO.File]::WriteAllText((Join-Path $pastaRede 'backup.lock.sqlite'),'trava ficticia')
+  $r=Obter-SituacaoBackupRede $pastaRede $config $agora $inicio
+  Igual 'erro' $r.nivel 'M5: somente trava na rede nao aprova'
+  foreach($nome in @('supply-vision-2026-10-22_1430.7z.tmp','supply-vision-2026-10-22_1430.zip','supply-vision-2026-10-22_14300.7z','SUPPLY-VISION-2026-10-22_1430.7z')){
+   [IO.File]::WriteAllText((Join-Path $pastaRede $nome),'nome parecido ficticio')
+  }
+  New-Item -ItemType Directory (Join-Path $pastaRede 'supply-vision-2026-10-22_1431.7z'),(Join-Path $pastaRede 'historico')|Out-Null
+  [IO.File]::WriteAllText((Join-Path $pastaRede 'historico/supply-vision-2026-10-22_1432.7z'),'pacote na subpasta errada')
+  $r=Obter-SituacaoBackupRede $pastaRede $config $agora $inicio
+  Igual 'erro' $r.nivel 'M5: nomes parecidos, diretorio e subpasta historico ignorados'
+  $pacote=Join-Path $pastaRede 'supply-vision-2026-10-22_1330.7z'
+  # Conteudo propositalmente sem integridade: este diagnostico so reconhece o pacote.
+  [IO.File]::WriteAllText($pacote,'pacote ficticio sem integridade')
+  (Get-Item -LiteralPath $pacote).LastWriteTime=[datetime]'2020-01-01'
+  $r=Obter-SituacaoBackupRede $pastaRede $config $agora $inicio
+  Igual 'ok' $r.nivel 'M5: pacote recente cobre horario igual ao nome, independente de mtime'
+  Igual $true ($r.mensagem-like'1 pacotes; mais recente 2026-10-22 13:30*nao valida integridade*') 'M5: somente pacote reconhecido contado e integridade nao validada explicitada'
+  $config.BACKUP_HORARIOS='13:30,14:00,20:59'
+  $r=Obter-SituacaoBackupRede $pastaRede $config $agora $inicio
+  Igual 'erro' $r.nivel 'M5: horario vencido depois do ultimo pacote'
+  $config.BACKUP_HORARIOS='13:30,15:00,20:59'
+  $r=Obter-SituacaoBackupRede $pastaRede $config $agora $inicio
+  Igual 'ok' $r.nivel 'M5: horario atual ainda nao passou'
+  $config.MODO_ENSAIO='1'
+  $ausente=Join-Path $fixture 'rede-ausente'
+  $r=Obter-SituacaoBackupRede $ausente $config $agora $inicio
+  Igual 'info' $r.nivel 'M5: ensaio informativo mesmo com rede ausente'
+  Igual $true ($r.mensagem-like'*backup de rede desligado*') 'M5: ensaio informa backup desligado'
+  $config.MODO_ENSAIO='0'
+  $r=Obter-SituacaoBackupRede $ausente $config $agora $inicio
+  Igual 'erro' $r.nivel 'M5: rede indisponivel fora do ensaio reprova'
+  [IO.File]::WriteAllText((Join-Path $local 'backup.lock.sqlite'),'trava ficticia')
+  $r=Obter-SituacaoBackupLocal $local
+  Igual 'info' $r.nivel 'M5: local somente trava e informativo'
+  Igual $true ($r.mensagem-like'nenhum snapshot*') 'M5: trava nao e snapshot'
+  [IO.File]::WriteAllText((Join-Path $local 'pre-atualizacao.sqlite'),'snapshot ficticio')
+  [IO.File]::WriteAllText((Join-Path $local 'pre-atualizacao.sqlite.tmp'),'temporario ficticio')
+  $r=Obter-SituacaoBackupLocal $local
+  Igual 'info' $r.nivel 'M5: snapshot publicado continua informativo'
+  Igual $true ($r.mensagem-like'1 snapshot; mais recente*') 'M5: somente snapshot publicado conta'
+  $config.BACKUP_HORARIOS='13:30,20:59'
+  Move-Item -LiteralPath $pacote -Destination (Join-Path $pastaRede 'supply-vision-2026-10-21_2059.7z')
+  $config.BACKUP_HORARIOS_QUI=''
+  $r=Obter-SituacaoBackupRede $pastaRede $config $agora $inicio
+  Igual 'ok' $r.nivel 'M5: dia sem agenda respeitado'
+  $config.Remove('BACKUP_HORARIOS_QUI')
+  $r=Obter-SituacaoBackupRede $pastaRede $config $agora $inicio
+  Igual 'erro' $r.nivel 'M5: pacote antigo com horario de hoje vencido'
+  Write-Host '[OK] M5: 17 verificacoes de backup de rede e snapshot local, com Node real e dados ficticios.'
+ }finally{
+  $resolvido=[IO.Path]::GetFullPath($fixture)
+  $raizTemporaria=[IO.Path]::GetFullPath([IO.Path]::GetTempPath()).TrimEnd('\','/')+[IO.Path]::DirectorySeparatorChar
+  if(!$resolvido.StartsWith($raizTemporaria,[StringComparison]::OrdinalIgnoreCase)){throw 'Fixture fora da pasta temporaria'}
+  Remove-Item -LiteralPath $resolvido -Recurse -Force
+ }
+}
