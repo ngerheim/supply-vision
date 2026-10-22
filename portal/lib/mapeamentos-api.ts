@@ -1,11 +1,11 @@
 import { LIMITES_CAMPO, exigeTexto } from './limites-entrada.ts';
 import { errorMessage, normalizeImportText } from './domain.ts';
 import { type ContextoApi, type User, canWrite, textValue, nullableText } from './api-compartilhada.ts';
-import { revisaoConfere } from './controle-escrita.ts';
+import { comTravaImportacao, revisaoConfere } from './controle-escrita.ts';
 import { auditoriaNoLote, AUDITAR_REENVIO_SQL } from './auditoria-api.ts';
 
 export function mapeamentosApi(contexto: ContextoApi) {
-  const { id, now, rawDb, ok, fail, denyWrite, jsonBody, all, first } = contexto;
+  const { id, now, rawDb, renovarTrava, TRAVA_IMPORTACAO, ok, fail, denyWrite, jsonBody, all, first } = contexto;
 
   type MappingInput = { expectedRevision?: unknown; source?: unknown; targetId?: unknown; active?: unknown; notes?: unknown };
 
@@ -49,12 +49,13 @@ export function mapeamentosApi(contexto: ContextoApi) {
     return { cfg, body, source: source.trim(), sourceKey, targetId, notes: nullableText(body.notes), active: body.active === false || body.active === 0 ? 0 : 1 };
   }
 
-  async function createMapping(request: Request, user: User, type: string) {
+  async function createMapping(request: Request, user: User, type: string, donoTrava: string) {
     if (!canWrite(user)) return denyWrite(request, 'Seu perfil não permite gerenciar o De/Para.');
     const value = await validateMappingInput(request, type);
     if ('error' in value) return fail(value.error || 'De/Para inválido.');
     const recordId=id('map'), timestamp=now();
     try {
+      await renovarTrava(TRAVA_IMPORTACAO, donoTrava);
       await rawDb().batch([
         rawDb().prepare(`INSERT INTO ${value.cfg.table} (id,source_text,source_key,target_id,active,notes,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?)`)
           .bind(recordId,value.source,value.sourceKey,value.targetId,value.active,value.notes,timestamp,timestamp),
@@ -66,7 +67,7 @@ export function mapeamentosApi(contexto: ContextoApi) {
     }
   }
 
-  async function updateMapping(request: Request, user: User, type: string, recordId: string) {
+  async function updateMapping(request: Request, user: User, type: string, recordId: string, donoTrava: string) {
     if (!canWrite(user)) return denyWrite(request, 'Seu perfil não permite gerenciar o De/Para.');
     const value = await validateMappingInput(request, type);
     if ('error' in value) return fail(value.error || 'De/Para inválido.');
@@ -74,6 +75,7 @@ export function mapeamentosApi(contexto: ContextoApi) {
     if(!existing) return fail('Correspondência não encontrada.',404);
     if(!revisaoConfere(value.body.expectedRevision,Number(existing.revision)))return fail('Correspondência alterada. Atualize a lista antes de salvar.',409);
     try {
+      await renovarTrava(TRAVA_IMPORTACAO, donoTrava);
       const [alterado]=await rawDb().batch([
         rawDb().prepare(`UPDATE ${value.cfg.table} SET source_text=?,source_key=?,target_id=?,active=?,notes=?,updated_at=? WHERE id=? AND revision=?`)
           .bind(value.source,value.sourceKey,value.targetId,value.active,value.notes,now(),recordId,existing.revision),
@@ -86,12 +88,13 @@ export function mapeamentosApi(contexto: ContextoApi) {
     }
   }
 
-  async function deleteMapping(user: User, type: string, recordId: string, expectedRevision: number | null) {
+  async function deleteMapping(user: User, type: string, recordId: string, expectedRevision: number | null, donoTrava: string) {
     if (!canWrite(user)) return fail('Seu perfil não permite gerenciar o De/Para.', 403);
     const cfg=Object.hasOwn(mappingConfig,type)?mappingConfig[type]:null; if(!cfg) return fail('Tipo de De/Para inválido.');
     const existing=await first<{sourceKey:string;revision:number}>(`SELECT revision,source_key AS sourceKey FROM ${cfg.table} WHERE id=?`,[recordId]);
     if(!existing) return fail('Correspondência não encontrada.',404);
     if(!revisaoConfere(expectedRevision,existing.revision))return fail('Registro alterado. Atualize a lista antes de excluir.',409);
+    await renovarTrava(TRAVA_IMPORTACAO, donoTrava);
     const [excluido]=await rawDb().batch([
       rawDb().prepare(`DELETE FROM ${cfg.table} WHERE id=? AND revision=?`).bind(recordId,existing.revision),
       rawDb().prepare(AUDITAR_REENVIO_SQL).bind(id('aud'),user.id,'DELETE','import_mapping',recordId,`De/Para de ${cfg.label} excluído: ${existing.sourceKey}`,now()),
@@ -100,5 +103,15 @@ export function mapeamentosApi(contexto: ContextoApi) {
     return ok({success:true});
   }
 
-  return { mappingList, createMapping, updateMapping, deleteMapping };
+  // Tipos invalidos sao recusados sem acessar o banco, como os demais validadores.
+  function reservar<T>(type: string, executar: (dono: string) => Promise<T>) {
+    return Object.hasOwn(mappingConfig, type) ? comTravaImportacao(contexto, executar) : executar('');
+  }
+
+  return {
+    mappingList,
+    createMapping: (request: Request, user: User, type: string) => reservar(type, dono => createMapping(request, user, type, dono)),
+    updateMapping: (request: Request, user: User, type: string, recordId: string) => reservar(type, dono => updateMapping(request, user, type, recordId, dono)),
+    deleteMapping: (user: User, type: string, recordId: string, expectedRevision: number | null) => reservar(type, dono => deleteMapping(user, type, recordId, expectedRevision, dono)),
+  };
 }

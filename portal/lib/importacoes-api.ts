@@ -6,6 +6,7 @@ import { CORPO_MAX_UPLOAD, EntradaInvalida } from './limites-entrada.ts';
 import { errorMessage, MAX_IMPORT_BYTES, safeFilename, normalizeImportText } from './domain.ts';
 import { type ContextoApi, type User, type Row } from './api-compartilhada.ts';
 import { TravaPerdida, revisaoConfere } from './controle-escrita.ts';
+import { impressaoPlanoImportacao, valoresItemImportado } from './plano-importacao.ts';
 
 export function importacoesApi(contexto: ContextoApi, acordos: Pick<ReturnType<typeof import('./acordos-api.ts').acordosApi>, 'travarAcordo' | 'soltarAcordo'>) {
   const { id, now, rawDb, TRAVA_IMPORTACAO, adquirirTrava, renovarTrava, liberarTrava, ok, fail, CorpoGrandeDemais, all, first } = contexto;
@@ -69,8 +70,10 @@ export function importacoesApi(contexto: ContextoApi, acordos: Pick<ReturnType<t
     const preview = new URL(request.url).searchParams.get('preview') === '1';
     const informada = form.get('expectedRevision');
     const expectedRevision = typeof informada === 'string' && /^\d+$/.test(informada) ? Number(informada) : null;
+    const expectedPlanFingerprint = form.get('expectedPlanFingerprint');
     const conflito = 'O acordo mudou desde a conferência. Confira a planilha novamente antes de publicar.';
-    if (!preview && (expectedRevision === null || !Number.isSafeInteger(expectedRevision))) return fail('A tela está desatualizada. Recarregue a página (Ctrl+F5) e confira a planilha novamente.', 409);
+    const conflitoPlano = 'Os De/Para ou cadastros mudaram desde a conferência. Confira a planilha novamente antes de publicar.';
+    if (!preview && (expectedRevision === null || !Number.isSafeInteger(expectedRevision) || typeof expectedPlanFingerprint !== 'string' || !/^[a-f0-9]{64}$/.test(expectedPlanFingerprint))) return fail('A tela está desatualizada. Recarregue a página (Ctrl+F5) e confira a planilha novamente.', 409);
     if (!preview && !revisaoConfere(expectedRevision, Number(acordo.revision))) return fail(conflito, 409);
     const importId = id('imp'), timestamp = now();
     if (!preview) await rawDb().prepare(`INSERT INTO imports (id,agreement_id,filename,mode,status,created_by,created_at) VALUES (?,?,?,?,?,?,?)`).bind(importId, agreementId, safeFilename(file.name), 'replace', 'processing', user.id, timestamp).run();
@@ -85,17 +88,30 @@ export function importacoesApi(contexto: ContextoApi, acordos: Pick<ReturnType<t
       const fornecedor=await first<{cnpj:string;tradeName:string;legalName:string}>('SELECT s.cnpj,s.trade_name AS tradeName,s.legal_name AS legalName FROM agreements a JOIN suppliers s ON s.id=a.supplier_id WHERE a.id=?',[agreementId]);
       if(!fornecedor)throw new EntradaInvalida('Acordo de destino não encontrado.');
       validarFornecedorImportacao(parsed,fornecedor);
+      const sourceErrors = parsed.some(row => row.error);
       await applyImportMappings(parsed);
       const errors = parsed.filter((r) => r.error);
       if (errors.length) {
         const summary = summarizeImportErrors(parsed, leitura.aba);
         if (preview) return ok({ preview: true, agreementRevision: Number(acordo.revision), valid: false, totalRows: parsed.length, ...summary });
-        await rawDb().prepare('UPDATE imports SET status=?,total_rows=?,valid_rows=?,error_rows=?,summary_json=?,completed_at=? WHERE id=?').bind('error', parsed.length, parsed.length-errors.length, errors.length, JSON.stringify(summary), now(), importId).run();
-        return ok({ error: `A planilha possui ${errors.length} linha(s) inválida(s). Nenhum dado foi publicado.`, importId, ...summary }, { status: 400 });
+        // Erros do arquivo continuam sendo 400; perder uma referencia de um
+        // plano antes valido e conflito, mesmo quando ja nao ha plano completo.
+        const conflict = !sourceErrors;
+        await rawDb().prepare('UPDATE imports SET status=?,total_rows=?,valid_rows=?,error_rows=?,summary_json=?,completed_at=? WHERE id=?').bind(conflict ? 'conflict' : 'error', parsed.length, parsed.length-errors.length, errors.length, JSON.stringify(conflict ? { error: conflitoPlano, ...summary } : summary), now(), importId).run();
+        return ok({ error: conflict ? conflitoPlano : `A planilha possui ${errors.length} linha(s) inválida(s). Nenhum dado foi publicado.`, importId, ...summary }, { status: conflict ? 409 : 400 });
       }
-      const prepared = deduplicateImportRows(parsed);
+      let prepared: ReturnType<typeof deduplicateImportRows>;
+      try { prepared = deduplicateImportRows(parsed); }
+      catch (error) {
+        if (!preview && error instanceof EntradaInvalida) throw new ConflitoImportacao(conflitoPlano);
+        throw error;
+      }
       const baseSummary = prepared.summary;
-      if (preview) return ok({ preview: true, agreementRevision: Number(acordo.revision), valid: true, sheet: leitura.aba, totalRows: parsed.length, summary: baseSummary, sample: prepared.rows.slice(0, 20).map(row => ({ linha: row.rowNumber, fornecedor: row.supplier, cidade: row.city, uf: row.state, item: row.item, modelo: row.model, unidade: row.unit, preco: row.price })) });
+      const planFingerprint = impressaoPlanoImportacao(agreementId, prepared.rows);
+      if (preview) return ok({ preview: true, agreementRevision: Number(acordo.revision), planFingerprint, valid: true, sheet: leitura.aba, totalRows: parsed.length, summary: baseSummary, sample: prepared.rows.slice(0, 20).map(row => ({ linha: row.rowNumber, fornecedor: row.supplier, cidade: row.city, uf: row.state, item: row.item, modelo: row.model, unidade: row.unit, preco: row.price })) });
+      // De/Para e cadastros compartilham a TRAVA_IMPORTACAO desde antes da
+      // resolucao ate o fim da publicacao, inclusive os lotes intermediarios.
+      if (expectedPlanFingerprint !== planFingerprint) throw new ConflitoImportacao(conflitoPlano);
       const publish: PublishImport = async (statements, details) => {
         const summary = { ...details, ...baseSummary }, db = rawDb(), timestamp = now();
         await renovarTrava(TRAVA_IMPORTACAO, donoTrava);
@@ -127,7 +143,7 @@ export function importacoesApi(contexto: ContextoApi, acordos: Pick<ReturnType<t
       if (preview) return ok({ preview: true, agreementRevision: Number(acordo.revision), valid: false, error: conhecido ? message : `Não foi possível conferir: ${message}` }, reservaPerdida ? { status: 409 } : conhecido ? undefined : { status: 500 });
       await cleanupFailedImport(importId);
       await rawDb().prepare('UPDATE imports SET status=?,summary_json=?,completed_at=? WHERE id=?').bind(error instanceof ConflitoImportacao ? 'conflict' : 'error', JSON.stringify({ error: message }), now(), importId).run();
-      return ok({ error: `Não foi possível importar: ${message}`, importId }, { status: reservaPerdida ? 409 : conhecido ? 400 : 500 });
+      return ok({ error: message === conflitoPlano ? message : `Não foi possível importar: ${message}`, importId }, { status: reservaPerdida ? 409 : conhecido ? 400 : 500 });
     }
   }
 
@@ -163,7 +179,7 @@ export function importacoesApi(contexto: ContextoApi, acordos: Pick<ReturnType<t
     const versionId=id('ver'), versionNumber=Number(max?.n||0)+1;
     await db.prepare(`INSERT INTO agreement_versions (id,agreement_id,version_number,import_id,status,published_at,created_by,created_at) VALUES (?,?,?,?,'processing',NULL,?,?)`).bind(versionId,agreementId,versionNumber,importId,user.id,timestamp).run();
     const links=new Map<string,string>(), statements:ConsultaLocal[]=[];
-    for(const row of rows){ const locationId=row.locationId!; links.set(locationId,locationId); statements.push(db.prepare(`INSERT INTO agreement_items (id,version_id,location_id,catalog_item_id,vehicle_model_id,unit_id,price,courtesy,brands_text,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)`).bind(id('itm'),versionId,locationId,row.itemId,row.modelId,row.unitId,row.price,row.price===0?1:0,row.brands||null,timestamp,timestamp)); }
+    for(const row of rows){ const locationId=row.locationId!; links.set(locationId,locationId); statements.push(db.prepare(`INSERT INTO agreement_items (id,version_id,location_id,catalog_item_id,vehicle_model_id,unit_id,price,courtesy,brands_text,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)`).bind(id('itm'),versionId,...valoresItemImportado(row),timestamp,timestamp)); }
     await batch(statements,80);
     return publish([
       db.prepare('DELETE FROM agreement_locations WHERE agreement_id=?').bind(agreementId),

@@ -562,7 +562,7 @@ void test('publicacao exige previa valida e clique; clique duplicado nao reenvia
   h.render();
   h.one('Button', (p) => p.children?.includes('Conferir arquivo')).onClick();
   assert.match(h.requests[0].path, /\?preview=1$/);
-  h.requests[0].resolve({ valid: true, preview: true, agreementRevision: 7, summary: { items: 1 } });
+  h.requests[0].resolve({ valid: true, preview: true, agreementRevision: 7, planFingerprint: 'a'.repeat(64), summary: { items: 1 } });
   await setImmediate();
   h.render();
   assert.equal(h.requests.length, 1);
@@ -572,6 +572,7 @@ void test('publicacao exige previa valida e clique; clique duplicado nao reenvia
   assert.equal(h.requests.length, 2);
   assert.doesNotMatch(h.requests[1].path, /preview/);
   assert.equal(h.requests[1].options.body.get('expectedRevision'), '7');
+  assert.equal(h.requests[1].options.body.get('expectedPlanFingerprint'), 'a'.repeat(64));
   h.requests[1].resolve({ summary: { items: 1 } });
   await Promise.all([first, second]);
   h.render();

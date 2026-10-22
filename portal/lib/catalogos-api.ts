@@ -2,7 +2,7 @@ import type { ConsultaLocal } from './sqlite-local.ts';
 import { EntradaInvalida, LIMITES_CAMPO, exigeTexto } from './limites-entrada.ts';
 import { errorMessage, isValidCnpj, isValidState, situacaoAtiva, normalizeImportText } from './domain.ts';
 import { type ContextoApi, type User, textValue, nullableText } from './api-compartilhada.ts';
-import { revisaoConfere } from './controle-escrita.ts';
+import { comTravaImportacao, revisaoConfere } from './controle-escrita.ts';
 import { auditoriaNoLote, AUDITAR_REENVIO_SQL } from './auditoria-api.ts';
 
 // Condicoes no proprio UPDATE protegem inclusive uma referencia criada em paralelo.
@@ -14,7 +14,7 @@ export const ATUALIZAR_LOCALIDADE_SQL = `UPDATE locations SET city=?,state=? WHE
     AND NOT EXISTS (SELECT 1 FROM agreement_locations WHERE location_id=locations.id)))`;
 
 export function catalogosApi(contexto: ContextoApi) {
-  const { id, now, rawDb, normalizeCnpj, normalizeText, ok, fail, jsonBody, first } = contexto;
+  const { id, now, rawDb, renovarTrava, TRAVA_IMPORTACAO, normalizeCnpj, normalizeText, ok, fail, jsonBody, first } = contexto;
 
   type CatalogInput = Record<string, unknown>;
 
@@ -29,7 +29,7 @@ export function catalogosApi(contexto: ContextoApi) {
     locations: { table: 'locations', queries: [['condição(ões)', 'SELECT COUNT(*) n FROM agreement_items WHERE location_id=?'], ['acordo(s)', 'SELECT COUNT(*) n FROM agreement_locations WHERE location_id=?']] },
   };
 
-  async function deleteCatalog(user: User, type: string, recordId: string, expectedRevision: number | null) {
+  async function deleteCatalog(user: User, type: string, recordId: string, expectedRevision: number | null, donoTrava: string) {
     const cfg = Object.hasOwn(catalogConfig, type) ? catalogConfig[type] : null;
     if (!cfg) return fail('Cadastro inválido.');
     const existing = await first<{ id: string; active: number; revision: number }>(`SELECT * FROM ${cfg.table} WHERE id=?`, [recordId]);
@@ -53,6 +53,7 @@ export function catalogosApi(contexto: ContextoApi) {
 
     // A consulta acima melhora a mensagem; as FKs continuam sendo a garantia
     // final se outra requisicao criar uma referencia antes deste DELETE.
+    await renovarTrava(TRAVA_IMPORTACAO, donoTrava);
     const [excluido]=await rawDb().batch([
       rawDb().prepare(`DELETE FROM ${cfg.table} WHERE id=? AND revision=?`).bind(recordId,existing.revision),
       rawDb().prepare(AUDITAR_REENVIO_SQL).bind(id('aud'),user.id,'DELETE',type,recordId,`${label?.nome || recordId} excluído do cadastro`,now()),
@@ -70,7 +71,7 @@ export function catalogosApi(contexto: ContextoApi) {
     if (textValue(body.state) && !isValidState(body.state)) throw new EntradaInvalida('Selecione uma UF brasileira válida (ex.: GO).');
   }
 
-  async function createCatalog(request: Request, user: User, type: string) {
+  async function createCatalog(request: Request, user: User, type: string, donoTrava: string) {
     const cfg = Object.hasOwn(catalogConfig, type) ? catalogConfig[type] : null; if (!cfg) return fail('Cadastro inválido.');
     const body = await jsonBody<CatalogInput>(request), recordId = id(type.slice(0, 3)), timestamp = now();
     exigeCamposDeCatalogo(body);
@@ -99,11 +100,11 @@ export function catalogosApi(contexto: ContextoApi) {
       // planilha nunca encontraria.
       sql = 'INSERT INTO locations (id,city,state) VALUES (?,?,?)'; values = [recordId, normalizeImportText(body.city), state];
     }
-    try { await rawDb().batch([rawDb().prepare(sql).bind(...values), auditoriaNoLote(contexto, user.id, 'CREATE', type, recordId, 'Cadastro incluído')]); return ok({ id: recordId }, { status: 201 }); }
+    try { await renovarTrava(TRAVA_IMPORTACAO, donoTrava); await rawDb().batch([rawDb().prepare(sql).bind(...values), auditoriaNoLote(contexto, user.id, 'CREATE', type, recordId, 'Cadastro incluído')]); return ok({ id: recordId }, { status: 201 }); }
     catch (erro: unknown) { if(errorMessage(erro).includes('UNIQUE'))return fail('Já existe um cadastro com esses dados.'); throw erro; }
   }
 
-  async function updateCatalog(request: Request, user: User, type: string, recordId: string) {
+  async function updateCatalog(request: Request, user: User, type: string, recordId: string, donoTrava: string) {
     const cfg = Object.hasOwn(catalogConfig, type) ? catalogConfig[type] : null;
     if (!cfg) return fail('Cadastro inválido.');
     const body = await jsonBody<CatalogInput>(request);
@@ -131,6 +132,7 @@ export function catalogosApi(contexto: ContextoApi) {
         if (!normalizeImportText(body.city) || !isValidState(state)) return fail('Informe a cidade e selecione uma UF brasileira válida.');
         escrita = rawDb().prepare(ATUALIZAR_LOCALIDADE_SQL).bind(normalizeImportText(body.city), state, recordId,existing.revision,normalizeImportText(body.city),state);
       }
+      await renovarTrava(TRAVA_IMPORTACAO, donoTrava);
       const [alterado]=await rawDb().batch([escrita, rawDb().prepare(AUDITAR_REENVIO_SQL).bind(id('aud'),user.id,'UPDATE',type,recordId,'Cadastro atualizado',now())]);
       if(!alterado.meta.changes)return fail('Cadastro alterado ou código/localidade em uso. Preserve sua identidade e crie outro cadastro para uma unidade ou localidade diferente.',409);
       return ok({ success: true });
@@ -139,5 +141,14 @@ export function catalogosApi(contexto: ContextoApi) {
     }
   }
 
-  return { createCatalog, updateCatalog, deleteCatalog };
+  // Tipos invalidos sao recusados sem acessar o banco, como os demais validadores.
+  function reservar<T>(type: string, executar: (dono: string) => Promise<T>) {
+    return Object.hasOwn(catalogConfig, type) ? comTravaImportacao(contexto, executar) : executar('');
+  }
+
+  return {
+    createCatalog: (request: Request, user: User, type: string) => reservar(type, dono => createCatalog(request, user, type, dono)),
+    updateCatalog: (request: Request, user: User, type: string, recordId: string) => reservar(type, dono => updateCatalog(request, user, type, recordId, dono)),
+    deleteCatalog: (user: User, type: string, recordId: string, expectedRevision: number | null) => reservar(type, dono => deleteCatalog(user, type, recordId, expectedRevision, dono)),
+  };
 }

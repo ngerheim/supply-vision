@@ -91,7 +91,13 @@ async function upload(document, route = `/api/imports/agreement/${agreementId}`,
   const form = new FormData(); form.set('file', new Blob([document.bytes]), document.filename);
   const destino = route.split('?')[0].split('/').at(-1);
   const revisao = destino && reader.prepare('SELECT revision FROM agreements WHERE id=?').get(destino)?.revision;
-  if (!route.includes('preview=1') && revisao !== undefined) form.set('expectedRevision', String(revisao));
+  if (!route.includes('preview=1') && revisao !== undefined) {
+    const previa = await request(route + '?preview=1', { method: 'POST', body: form, session });
+    if (previa.status === 409) return previa;
+    form.set('expectedRevision', String(previa.data.agreementRevision ?? revisao));
+    // Casos negativos continuam exercitando a publicacao de arquivos invalidos.
+    form.set('expectedPlanFingerprint', previa.data.planFingerprint ?? '0'.repeat(64));
+  }
   const start = performance.now();
   const result = await request(route, { method: 'POST', body: form, session });
   metrics.push({ file: document.filename, bytes: document.bytes.length, status: result.status, ms: Math.round(performance.now() - start), summary: result.data.summary });
@@ -324,7 +330,7 @@ try {
     assert.equal(query('SELECT notes FROM import_item_mappings WHERE id=?',itemMap.id)[0].notes,'CORRIGIDO');
   });
 
-  await mapping('models', 'Hilux teste', model.id);
+  const modelMap = await mapping('models', 'Hilux teste', model.id);
   const unit = query("SELECT * FROM units WHERE code='LITRO'")[0];
   agreementId=(await good('/api/agreements',{method:'POST',body:{number:'STRESS-IMPORTACAO',supplierId:supplier.id,status:'active',startDate:'2026-01-01',locationIds:[location.id]}},201)).id;
   await check('Observacoes do acordo preservam antes e depois no historico', async () => {
@@ -358,9 +364,45 @@ try {
     form.set('file',new Blob([doc.bytes]),doc.filename);
     assert.equal((await request(replace,{method:'POST',body:form})).status,409);
     form.set('expectedRevision',String(previa.data.agreementRevision));
+    form.set('expectedPlanFingerprint',previa.data.planFingerprint);
     const obsoleta=await request(replace,{method:'POST',body:form});
     assert.equal(obsoleta.status,409);assert.match(obsoleta.data.error,/conferência|confira/i);
     assert.deepEqual(businessSnapshot(),antes);
+  });
+  await check('Plano conferido protege destinos, cadastros e abas antigas no HTTP real', async () => {
+    const doc = file([row()], { name: 'plano-conferido' });
+    const publicar = previa => {
+      const form = new FormData();
+      form.set('file', new Blob([doc.bytes]), doc.filename);
+      form.set('expectedRevision', String(previa.agreementRevision));
+      if (previa.planFingerprint) form.set('expectedPlanFingerprint', previa.planFingerprint);
+      return request(replace, { method: 'POST', body: form });
+    };
+    const previa = (await upload(doc, replace + '?preview=1')).data;
+    assert.match(previa.planFingerprint, /^[a-f0-9]{64}$/);
+    const semImpressao = await publicar({ agreementRevision: previa.agreementRevision });
+    assert.equal(semImpressao.status, 409);
+    assert.match(semImpressao.data.error, /tela está desatualizada/);
+    const outro = await catalog('items', { name: 'DESTINO ALTERNATIVO FICTICIO' });
+    const mensagem = 'Os De/Para ou cadastros mudaram desde a conferência. Confira a planilha novamente antes de publicar.';
+    await good(`/api/mappings/items/${itemMap.id}`, { method: 'PUT', body: { source: 'Óleo teste', targetId: outro.id } });
+    try {
+      const antes = businessSnapshot(), resposta = await publicar(previa);
+      assert.equal(resposta.status, 409); assert.equal(resposta.data.error, mensagem);
+      assert.deepEqual(businessSnapshot(), antes);
+      assert.equal((await good(`/api/imports/${resposta.data.importId}`)).status, 'conflict');
+    } finally { await good(`/api/mappings/items/${itemMap.id}`, { method: 'PUT', body: { source: 'Óleo teste', targetId: item.id } }); }
+    await good(`/api/catalogs/models/${model.id}`, { method: 'PUT', body: { name: 'HILUX 2.8 TESTE', active: false } });
+    try {
+      const antes = businessSnapshot(), resposta = await publicar(previa);
+      assert.equal(resposta.status, 409); assert.equal(resposta.data.error, mensagem);
+      assert.deepEqual(businessSnapshot(), antes);
+      assert.equal((await good(`/api/imports/${resposta.data.importId}`)).status, 'conflict');
+    } finally { await good(`/api/catalogs/models/${model.id}`, { method: 'PUT', body: { name: 'HILUX 2.8 TESTE', active: true } }); }
+    await good(`/api/mappings/items/${itemMap.id}`, { method: 'PUT', body: { source: 'Óleo teste', targetId: item.id, notes: 'OBSERVACAO SEM EFEITO NO PLANO' } });
+    assert.equal((await upload(doc, replace + '?preview=1')).data.planFingerprint, previa.planFingerprint);
+    assert.equal((await publicar(previa)).status, 200);
+    assert.equal(query('SELECT catalog_item_id FROM agreement_items WHERE version_id=(SELECT current_version_id FROM agreements WHERE id=?)', agreementId)[0].catalog_item_id, item.id);
   });
   await check('Upload excedido mantido aberto libera reserva em prazo limitado', async () => {
     const antes=businessSnapshot(), inicio=performance.now();
@@ -411,11 +453,11 @@ try {
     ['preco-malformado', { PRECO: '12.34,56' }, /Preço/],
     ['uf-invalida', { UF: 'XX' }, /UF/],
   ]);
-  for (const [label, changes, match] of invalidCases) await check(`${mode}: ${label} aborta tudo e localiza linha`, () => rejected(file([row(), row(changes)], { name: `${mode}-${label}` }), replace, 400, data => {
+  for (const [label, changes, match] of invalidCases) await check(`${mode}: ${label} aborta tudo e localiza linha`, () => rejected(file([row(), row(changes)], { name: `${mode}-${label}` }), replace, ['item-desconhecido', 'modelo-desconhecido', 'lirto', 'uf-invalida'].includes(label) ? 409 : 400, data => {
     assert.match(erroDaLinha(data, 3), match);
   }));
-  await check('Linha real após vazios e cabeçalho deslocado', () => rejected(file([], { name: 'linha-real', aoa: [[], [], headers, Object.values(row()), [], Object.values(row({ MEDIDA: 'lirto' }))] }), replace, 400, data => assert.match(erroDaLinha(data, 6), /UNIDADE/)));
-  await check('Nomenclatura repetida vira um registro agrupado, nao um por linha', () => rejected(file(Array.from({ length: 120 }, (_, index) => row(index % 2 ? { PECA_SERVICO: 'ITEM FANTASMA A' } : { PECA_SERVICO: 'ITEM FANTASMA B' })), { name: 'nomenclatura-agrupada' }), replace, 400, data => {
+  await check('Linha real após vazios e cabeçalho deslocado', () => rejected(file([], { name: 'linha-real', aoa: [[], [], headers, Object.values(row()), [], Object.values(row({ MEDIDA: 'lirto' }))] }), replace, 409, data => assert.match(erroDaLinha(data, 6), /UNIDADE/)));
+  await check('Nomenclatura repetida vira um registro agrupado, nao um por linha', () => rejected(file(Array.from({ length: 120 }, (_, index) => row(index % 2 ? { PECA_SERVICO: 'ITEM FANTASMA A' } : { PECA_SERVICO: 'ITEM FANTASMA B' })), { name: 'nomenclatura-agrupada' }), replace, 409, data => {
     assert.equal(data.totalErros, 120);
     assert.equal(data.nomenclaturas.length, 2, JSON.stringify(data.nomenclaturas));
     assert.equal(data.nomenclaturas[0].linhas, 60); assert.equal(data.nomenclaturas[1].linhas, 60);
@@ -450,13 +492,13 @@ try {
   });
   await check('Mapeamento inativo bloqueia', async () => {
     await good(`/api/mappings/items/${itemMap.id}`, { method: 'PUT', body: { source: 'Óleo teste', targetId: item.id, active: false } });
-    try { await rejected(file([row()], { name: 'de-para-inativo' }), replace); }
+    try { await rejected(file([row()], { name: 'de-para-inativo' }), replace, 409); }
     finally { await good(`/api/mappings/items/${itemMap.id}`, { method: 'PUT', body: { source: 'Óleo teste', targetId: item.id, active: true } }); }
   });
   for (const [type, target, values] of [['items', item, { name: 'OLEO DE MOTOR TESTE' }], ['models', model, { name: 'HILUX 2.8 TESTE' }], ['units', unit, { code: 'LITRO', name: 'Litro' }]]) {
     await check(`Destino ${type} inativo bloqueia`, async () => {
       await good(`/api/catalogs/${type}/${target.id}`, { method: 'PUT', body: { ...values, active: false } });
-      try { await rejected(file([row()], { name: `${type}-inativo` }), replace); }
+      try { await rejected(file([row()], { name: `${type}-inativo` }), replace, 409); }
       finally { await good(`/api/catalogs/${type}/${target.id}`, { method: 'PUT', body: { ...values, active: true } }); }
     });
   }
@@ -479,9 +521,9 @@ try {
   await check('Excluir De/Para elimina aceitação da origem sem alterar acordos', async () => {
     const temporary = await mapping('items', 'ORIGEM TEMPORARIA', item.id);
     await good(`/api/mappings/items/${temporary.id}`, { method: 'DELETE' });
-    await rejected(file([row({ PECA_SERVICO: 'ORIGEM TEMPORARIA' })], { name: 'origem-excluida' }), replace);
+    await rejected(file([row({ PECA_SERVICO: 'ORIGEM TEMPORARIA' })], { name: 'origem-excluida' }), replace, 409);
   });
-  await check('Nome canônico também exige De/Para explícito', () => rejected(file([row({ PECA_SERVICO: 'OLEO DE MOTOR TESTE' })], { name: 'nome-sem-de-para' }), replace));
+  await check('Nome canônico também exige De/Para explícito', () => rejected(file([row({ PECA_SERVICO: 'OLEO DE MOTOR TESTE' })], { name: 'nome-sem-de-para' }), replace, 409));
   await check('Mesmo nome normalizado em dois cadastros não troca destino do De/Para', async () => {
     const targetA = await catalog('items', { name: 'PEÇA COLISAO' });
     const targetB = await catalog('items', { name: 'PECA COLISAO' });
@@ -559,10 +601,14 @@ try {
     assert.equal(result.status, 200); assert.equal(result.data.summary.duplicatas, 0);
     assert.deepEqual(result.data.summary.amostraDuplicatas, []);
   });
-  await check('Medidas diferentes para o mesmo item são rejeitadas na substituição', () => rejected(file([row(), row({ MEDIDA: 'par' })], { name: 'medidas-divergentes' }), replace, 400, data => {
-    assert.match(String(data.error), /[Mm]edidas diferentes/);
-    assert.match(String(data.error), /"litro"|"par"/);
-  }));
+  await check('Medidas diferentes impedem conferir e publicar um plano', async () => {
+    const doc = file([row(), row({ MEDIDA: 'par' })], { name: 'medidas-divergentes' });
+    const previa = await upload(doc, replace + '?preview=1');
+    assert.equal(previa.data.valid, false);
+    assert.match(previa.data.error, /[Mm]edidas diferentes/);
+    assert.match(previa.data.error, /"litro"|"par"/);
+    await rejected(doc, replace, 409, data => assert.match(data.error, /De\/Para ou cadastros mudaram/));
+  });
   await check('Mesma medida escrita de outro jeito continua sendo duplicata', async () => {
     const result = await upload(file([row({ MARCAS: 'C' }), row({ MEDIDA: ' LITRO ', MARCAS: 'D' })], { name: 'medida-grafia' }), replace);
     assert.equal(result.status, 200); assert.equal(result.data.summary.items, 1);
@@ -580,7 +626,7 @@ try {
     assert.deepEqual(query('SELECT * FROM suppliers'), before);
     assert.equal(query('SELECT supplier_id FROM agreements WHERE id=?', agreementId)[0].supplier_id, supplier.id);
   });
-  await check('Importação inteira aborta se a segunda linha contiver erro', () => rejected(file([row(), row({ MEDIDA: 'lirto' })], { name: 'segunda-linha-falha' })));
+  await check('Importação inteira aborta se a segunda linha contiver erro', () => rejected(file([row(), row({ MEDIDA: 'lirto' })], { name: 'segunda-linha-falha' }), replace, 409));
   await check('Falha na auditoria nao publica nem deixa historico concluido', async () => {
     assert.ok(sqlitePath.startsWith(state + path.sep));
     const fixture = new DatabaseSync(sqlitePath);
@@ -594,13 +640,13 @@ try {
       fixture.close();
     }
   });
-  await check('Cidade sem cadastro trava a importação e não cria localidade', () => rejected(file([row(), row({ CIDADE: 'BEOL HORIZONTE', UF: 'MG' })], { name: 'cidade-sem-cadastro' }), replace, 400, data => {
+  await check('Cidade sem cadastro trava a importação e não cria localidade', () => rejected(file([row(), row({ CIDADE: 'BEOL HORIZONTE', UF: 'MG' })], { name: 'cidade-sem-cadastro' }), replace, 409, data => {
     assert.equal(data.nomenclaturas.length, 1, JSON.stringify(data.nomenclaturas));
     assert.equal(data.nomenclaturas[0].campo, 'CIDADE');
     assert.equal(data.nomenclaturas[0].valor, 'BEOL HORIZONTE/MG');
     assert.equal(query("SELECT COUNT(*) n FROM locations WHERE city='BEOL HORIZONTE'")[0].n, 0);
   }));
-  await check('Erro de grafia repetido em muitas linhas vira um registro só', () => rejected(file(Array.from({ length: 40 }, () => row({ CIDADE: 'BEOL HORIZONTE', UF: 'MG' })), { name: 'cidade-errada-repetida' }), replace, 400, data => {
+  await check('Erro de grafia repetido em muitas linhas vira um registro só', () => rejected(file(Array.from({ length: 40 }, () => row({ CIDADE: 'BEOL HORIZONTE', UF: 'MG' })), { name: 'cidade-errada-repetida' }), replace, 409, data => {
     assert.equal(data.totalErros, 40);
     assert.equal(data.nomenclaturas.length, 1);
     assert.equal(data.nomenclaturas[0].linhas, 40);
@@ -637,7 +683,7 @@ try {
     // Cidade escrita errada continua sendo erro: nao existe correspondencia de
     // localidade para apontar uma cidade para outra.
     assert.equal((await request('/api/mappings/locations', { method: 'POST', body: { source: 'ALMS / TI', targetId: location.id } })).status, 400);
-    await rejected(file([row({ CIDADE: 'ALMS', UF: 'TI' })], { name: 'cidade-errada-sem-alias' }), replace);
+    await rejected(file([row({ CIDADE: 'ALMS', UF: 'TI' })], { name: 'cidade-errada-sem-alias' }), replace, 409);
     // Escrita certa passa sem correspondencia nenhuma.
     assert.equal((await upload(file([row({ CIDADE: 'ALMAS', UF: 'TO' })], { name: 'cidade-cadastrada' }), replace)).status, 200);
     const mappings = await good('/api/mappings');
@@ -645,11 +691,11 @@ try {
   });
   await check('Correspondencia de medida confirmada resolve e persiste', async () => {
     const doc = file([row({ MEDIDA: 'litroo' })], { name: 'alias-medida' });
-    await rejected(doc, replace);
+    await rejected(doc, replace, 409);
     const unitMap = await mapping('units', 'litroo', unit.id);
     assert.equal((await upload(doc, replace)).status, 200);
     await good(`/api/mappings/units/${unitMap.id}`, { method: 'PUT', body: { source: 'litroo', targetId: unit.id, active: false } });
-    await rejected(doc, replace);
+    await rejected(doc, replace, 409);
     await good(`/api/mappings/units/${unitMap.id}`, { method: 'PUT', body: { source: 'litroo', targetId: unit.id, active: true } });
     assert.ok((await good('/api/mappings')).units.some(row => row.id === unitMap.id));
   });
@@ -671,7 +717,7 @@ try {
   await check('100 erros aleatórios de nomenclatura são todos rejeitados', () => rejected(file(Array.from({ length: 100 }, () => {
     const field = ['MODELO', 'PECA_SERVICO', 'MEDIDA'][Math.floor(random() * 3)];
     return row({ [field]: `${row()[field]} ERRO-${Math.floor(random() * 999999)}` });
-  }), { name: 'cem-erros-aleatorios' }), replace, 400, async data => assert.equal((await good(`/api/imports/${data.importId}`)).errorRows, 100)));
+  }), { name: 'cem-erros-aleatorios' }), replace, 409, async data => assert.equal((await good(`/api/imports/${data.importId}`)).errorRows, 100)));
   const invalidFiles = /** @type {Array<[string, {filename: string, bytes: Buffer}]>} */ ([
     ['arquivo-falso', { filename: 'falso.xlsx', bytes: Buffer.from('isto nao e excel') }],
     ['arquivo-vazio', { filename: 'vazio.xlsx', bytes: Buffer.alloc(0) }],
@@ -691,7 +737,7 @@ try {
     const large = file(Array.from({ length: 999 }, () => row()), { name: 'limite-1000-linhas' });
     const result = await upload(large, replace); assert.equal(result.status, 200, JSON.stringify(result.data)); assert.equal(result.data.summary.items, 1);
   });
-  await check('Erro na última das 999 linhas aborta a carga inteira', () => rejected(file(Array.from({ length: 999 }, (_, index) => row(index === 998 ? { MEDIDA: 'lirto' } : {})), { name: 'erro-no-fim-1000' }), replace, 400, data => assert.equal(data.nomenclaturas[0].primeiraLinha, 1000)));
+  await check('Erro na última das 999 linhas aborta a carga inteira', () => rejected(file(Array.from({ length: 999 }, (_, index) => row(index === 998 ? { MEDIDA: 'lirto' } : {})), { name: 'erro-no-fim-1000' }), replace, 409, data => assert.equal(data.nomenclaturas[0].primeiraLinha, 1000)));
   await check('Carga de 999 condições distintas publica todas', async () => {
     await localidades(serie('STRESS', 999));
     const large = file(Array.from({ length: 999 }, (_, index) => row({ CIDADE: `STRESS ${index}`, PRECO: index / 100 })), { name: 'novecentas-condicoes' });
@@ -701,12 +747,28 @@ try {
   await verificarFiltrosBusca({ request, good, check, query });
   await verificarAcessoConsulta({ request, good, check, senha, agreementId, metrics });
   await check('20 concorrentes recebem 409 enquanto uma importação segura a trava', async () => {
-    const doc = file([row()], { name: 'concorrencia' }), m = multipart(doc.filename, doc.bytes, {expectedRevision:query('SELECT revision FROM agreements WHERE id=?',agreementId)[0].revision});
+    const doc = file([row()], { name: 'concorrencia' });
+    const previa = await upload(doc, replace + '?preview=1');
+    const m = multipart(doc.filename, doc.bytes, {expectedRevision:previa.data.agreementRevision, expectedPlanFingerprint:previa.data.planFingerprint});
     const first = abrirRequisicao({ porta: port, caminho: replace, timeoutMs: 60000, cabecalhos: { cookie, 'content-type': m.tipo, 'transfer-encoding': 'chunked' } });
     await first.escrever(m.corpo.subarray(0, m.corpo.length - 20));
     try {
       for (let i = 0; i < 100 && !query('SELECT COUNT(*) n FROM travas')[0].n; i++) await pause(50);
       assert.equal(query('SELECT COUNT(*) n FROM travas')[0].n, 1);
+      const antes = businessSnapshot();
+      for (const [rota, method, body] of [
+        ['/api/catalogs/models', 'POST', { name: 'CADASTRO CONCORRENTE FICTICIO' }],
+        [`/api/catalogs/models/${model.id}`, 'PUT', { name: 'MODELO CONCORRENTE FICTICIO' }],
+        [`/api/catalogs/models/${model.id}`, 'DELETE'],
+        ['/api/mappings/models', 'POST', { source: 'ORIGEM CONCORRENTE FICTICIA', targetId: model.id }],
+        [`/api/mappings/models/${modelMap.id}`, 'PUT', { source: 'Hilux teste', targetId: model.id }],
+        [`/api/mappings/models/${modelMap.id}`, 'DELETE'],
+      ]) {
+        const resposta = await request(rota, { method, body });
+        assert.equal(resposta.status, 409);
+        assert.match(resposta.data.error, /em andamento/);
+      }
+      assert.deepEqual(businessSnapshot(), antes);
       const results = await Promise.allSettled(Array.from({ length: 20 }, () => upload(doc, replace)));
       assert.ok(results.every(r => r.status === 'fulfilled' && r.value.status === 409), JSON.stringify(results));
     } finally {

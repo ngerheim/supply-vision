@@ -38,19 +38,27 @@ void test('previa informa revisao; publicacao ausente ou obsoleta retorna 409 se
     const book = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(book, XLSX.utils.json_to_sheet([{ CIDADE: 'CIDADE', UF: 'SP', MODELO: 'MODELO', PECA_SERVICO: 'ITEM', PRECO: 10, MEDIDA: 'UN' }]), 'Fixture');
     const bytes = XLSX.write(book, { type: 'buffer', bookType: 'xlsx' });
-    const request = (preview, revision) => {
+    const request = (preview, revision, plan = preview ? undefined : fingerprint) => {
       const form = new FormData(); form.set('file', new Blob([bytes]), 'fixture.xlsx');
       if (revision !== undefined) form.set('expectedRevision', String(revision));
+      if (plan != null) form.set('expectedPlanFingerprint', plan);
       return new Request(`http://fixture/api/imports/agreement/a${preview ? '?preview=1' : ''}`, { method: 'POST', body: form });
     };
     const user = { id: 'u', role: 'admin' };
     const previa = await (await api.importWorkbook(request(true), user, 'a')).json();
     assert.equal(previa.valid, true, JSON.stringify(previa));
     assert.equal(previa.agreementRevision, 0);
+    assert.match(previa.planFingerprint, /^[a-f0-9]{64}$/);
+    const fingerprint = previa.planFingerprint;
     const desatualizada = 'A tela está desatualizada. Recarregue a página (Ctrl+F5) e confira a planilha novamente.';
     const conflito = 'O acordo mudou desde a conferência. Confira a planilha novamente antes de publicar.';
     for (const revision of [undefined, -1, 'x', '', '1.5', '9007199254740992', '9'.repeat(400)]) {
       const r = await api.importWorkbook(request(false, revision), user, 'a');
+      assert.equal(r.status, 409);
+      assert.equal((await r.json()).error, desatualizada);
+    }
+    for (const plan of [null, '', 'x', 'A'.repeat(64)]) {
+      const r = await api.importWorkbook(request(false, 0, plan), user, 'a');
       assert.equal(r.status, 409);
       assert.equal((await r.json()).error, desatualizada);
     }
