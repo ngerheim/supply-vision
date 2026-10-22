@@ -1,18 +1,14 @@
 'use client';
 import packageInfo from '../package.json' with { type: 'json' };
-import { GRUPOS_NAVEGACAO, podeAcessarAba, type Nav } from '@/lib/navegacao';
+import { abaDaChave, gruposVisiveis, type Aba, type Nav } from '@/lib/navegacao';
 import {
   Database,
-  Factory,
-  FileUp,
   Handshake,
-  History,
   LogOut,
   MessageSquare,
   PackageSearch,
   PanelLeftClose,
   PanelLeftOpen,
-  RefreshCw,
   Settings,
   Wrench,
 } from 'lucide-react';
@@ -21,19 +17,13 @@ import { type JsonData, roleName } from './portal-presentation';
 
 const { version } = packageInfo;
 
-const navItems: Record<Nav, { label: string; icon: typeof PackageSearch }> = {
-  search: { label: 'Buscar', icon: PackageSearch },
-  maintenance: { label: 'Manutenção', icon: Wrench },
-  tickets: { label: 'Chamados', icon: MessageSquare },
-  agreements: { label: 'Acordos', icon: Handshake },
-  suppliers: { label: 'Fornecedores', icon: Factory },
-  imports: { label: 'Importações', icon: FileUp },
-  catalogs: { label: 'Cadastros', icon: Database },
-  mappings: { label: 'De/Para', icon: RefreshCw },
-  reports: { label: 'Relatórios', icon: FileUp },
-  history: { label: 'Histórico', icon: History },
-  notifications: { label: 'E-mails', icon: MessageSquare },
-  admin: { label: 'Usuários', icon: Settings },
+const navItems: Record<Aba, { label: string; icon: typeof PackageSearch }> = {
+  buscar: { label: 'Buscar', icon: PackageSearch },
+  manutencao: { label: 'Manutenção', icon: Wrench },
+  chamados: { label: 'Chamados', icon: MessageSquare },
+  acordos: { label: 'Acordos', icon: Handshake },
+  cadastros: { label: 'Cadastros', icon: Database },
+  administracao: { label: 'Administração', icon: Settings },
 };
 export function Sidebar({
   nav,
@@ -72,9 +62,7 @@ export function Sidebar({
           )}
           {!collapsed && <span className="truncate">Recolher menu</span>}
         </button>
-        {GRUPOS_NAVEGACAO.filter((grupo) =>
-          podeAcessarAba(user, grupo.abas[0]),
-        ).map((grupo) => (
+        {gruposVisiveis(user).map((grupo) => (
           <fieldset
             key={grupo.nome}
             aria-label={grupo.nome}
@@ -87,10 +75,10 @@ export function Sidebar({
             )}
             {grupo.abas.map((aba) => (
               <NavButton
-                key={aba}
-                {...navItems[aba]}
-                active={nav === aba}
-                onClick={() => setNav(aba)}
+                key={aba.aba}
+                {...navItems[aba.aba]}
+                active={abaDaChave(nav as Nav).aba === aba.aba}
+                onClick={() => setNav(aba.subabas[0].chave)}
                 collapsed={collapsed}
               />
             ))}

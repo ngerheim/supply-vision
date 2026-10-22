@@ -1,7 +1,8 @@
 'use client';
 import { pode } from '@/lib/permissoes';
 import { Reports } from '@/components/reports';
-import { podeAcessarAba, type Nav } from '@/lib/navegacao';
+import { abaDaChave, podeAcessarAba, type Nav } from '@/lib/navegacao';
+import { iniciarNavegacao } from '@/lib/navegacao-historico';
 import { api, errorText } from '@/lib/api';
 import { EmailNotifications } from '@/components/email-notifications';
 import { Imports } from '@/components/imports';
@@ -26,6 +27,7 @@ import { Administration } from './portal-users';
 import { Mappings } from './portal-mappings';
 import { CentralNotificacoes } from './central-notificacoes';
 import { definirUsuarioCentral } from '@/lib/central-estado';
+import { Subabas } from './portal-subabas';
 
 export default function PortalApp() {
   const [session, setSession] = useState({ key: 0, message: '' });
@@ -45,7 +47,7 @@ function PortalSession({ message, endSession }: { message: string; endSession: (
   const [importAgreement,setImportAgreement]=useState('');
   const [sidebarCollapsed,setSidebarCollapsed]=useState(false);
   const intentionalLogout=useRef(false);
-  const ticketLinkHandled=useRef(false);
+  const navegacao=useRef<ReturnType<typeof iniciarNavegacao> | null>(null);
   const busyRef=useRef(false);
   const refreshSequence=useRef(0);
   const identity=useRef<string|null>(null);
@@ -74,7 +76,20 @@ function PortalSession({ message, endSession }: { message: string; endSession: (
   },[endSession]);
   const initialize=useCallback(async()=>{setLoadError('');try{const x=await api('/api/session');setUser(x.user);if(x.user)await refresh()}catch(error){setLoadError(errorText(error))}},[refresh]);
   useEffect(()=>{let active=true;queueMicrotask(()=>{if(active)void initialize()});return()=>{active=false}},[initialize]);
-  useEffect(()=>{if(!user)return;let active=true;const linked=new URLSearchParams(window.location.search).get('chamado');if(linked)queueMicrotask(()=>{if(active&&!ticketLinkHandled.current){ticketLinkHandled.current=true;if(pode(user, 'aba:tickets')){setTicketLink(linked);setNav('tickets')}else{setNav('search');setNotice({type:'error',text:'Seu perfil permite consultar preços e acordos. O acesso a chamados é restrito.'})}}});return()=>{active=false}},[user]);
+  const usuarioId=user?.id, usuarioPerfil=user?.role;
+  useEffect(()=>{
+    if(!usuarioId)return;
+    let active=true;
+    queueMicrotask(()=>{
+      if(!active)return;
+      navegacao.current=iniciarNavegacao({role:usuarioPerfil},rota=>{
+        setNav(rota.nav);setAgreementId(null);setImportAgreement('');setTicketLink(rota.chamado);
+        if(rota.chamado)setTicketLinkVersion(value=>value+1);
+        if(rota.aviso)setNotice({type:'error',text:rota.aviso});
+      },window);
+    });
+    return()=>{active=false;navegacao.current?.parar();navegacao.current=null};
+  },[usuarioId,usuarioPerfil]);
   useEffect(()=>{const expired=()=>{if(intentionalLogout.current)return;refreshSequence.current++;endSession('Sua sessão expirou. Entre novamente.')};window.addEventListener('portal:session-expired',expired);return()=>window.removeEventListener('portal:session-expired',expired)},[endSession]);
   const run=async(fn:()=>Promise<JsonData>,success?:string)=>{if(busyRef.current)return;busyRef.current=true;setBusy(true);try{return await salvarEAtualizar(fn,refresh,()=>{if(success)notify('ok',success)},()=>notify('error','Alteração salva, mas não foi possível atualizar a tela. Use Atualizar dados para conferir.'))}catch(error:unknown){notify('error',errorText(error))}finally{busyRef.current=false;setBusy(false)}};
 
@@ -84,8 +99,8 @@ function PortalSession({ message, endSession }: { message: string; endSession: (
   if(!data) return <Loading label="Carregando acordos…"/>;
   const catalogs=data.catalogs;
   const canWrite=pode(user, 'acordo:editar');
-  const navigate=(next:Nav)=>{if(!podeAcessarAba(user,next))return;setNav(next);setAgreementId(null);setImportAgreement('')};
-  const openAgreement=(id:string)=>{setAgreementId(id);setNav(canWrite?'agreements':'search')};
+  const navigate=(next:Nav)=>navegacao.current?.navegar(next);
+  const openAgreement=(id:string)=>{navigate(canWrite?'agreements':'search');setAgreementId(id)};
   const logout=()=>void (async()=>{if(busyRef.current)return;busyRef.current=true;intentionalLogout.current=true;setBusy(true);try{await api('/api/logout',{method:'POST'});refreshSequence.current++;endSession()}catch(error:unknown){intentionalLogout.current=false;notify('error',errorText(error))}finally{busyRef.current=false;setBusy(false)}})();
   const removerAcordo=(a:AnyRow,detalhe:AnyRow)=>{
     const condicoes=Number(detalhe?.totalItems??(detalhe?.items||[]).length), versoes=(detalhe?.versions||[]).length;
@@ -110,9 +125,11 @@ function PortalSession({ message, endSession }: { message: string; endSession: (
     <section className={`min-w-0 pl-16 transition-[padding] duration-300 ${sidebarCollapsed?'lg:pl-16':'lg:pl-44'}`}><div className="mx-auto max-w-[1550px] p-4 sm:p-8">
       <div className="mb-4 flex justify-end"><CentralNotificacoes navegar={link => {
         const chamado = new URL(link, window.location.origin).searchParams.get('chamado');
-        if (chamado && pode(user, 'aba:tickets')) { setTicketLink(chamado); setTicketLinkVersion(value => value + 1); navigate('tickets'); }
+        if (chamado) navegacao.current?.navegar('tickets',chamado);
         else window.location.assign(link);
       }}/></div>
+      <Subabas nav={nav} usuario={user} navegar={navigate}/>
+      <div id="portal-conteudo" role={abaDaChave(nav).subabas.length > 1 ? 'tabpanel' : undefined} aria-labelledby={abaDaChave(nav).subabas.length > 1 ? `subaba-${nav}` : undefined}>
       {nav==='search'&&(!agreementId||canWrite)&&<SearchPage catalogs={catalogs} openAgreement={openAgreement} filters={searchFilters} setFilters={setSearchFilters}/>}
       {((canWrite&&nav==='agreements')||(!canWrite&&nav==='search'&&agreementId))&&(agreementId?<AgreementDetail busy={busy} revision={data} id={agreementId} canWrite={canWrite} canDelete={pode(user, 'acordo:excluir')} onDelete={removerAcordo} onBack={()=>setAgreementId(null)} onEdit={(a:AnyRow)=>setAgreementModal({...a,expectedRevision:a.revision})} onItem={(i:AnyRow)=>setItemModal({...i,agreementId,expectedRevision:i.revision})} onImport={()=>{navigate('imports');setImportAgreement(agreementId)}} run={run}/>:<Agreements data={data} canWrite={canWrite} onOpen={setAgreementId} onNew={()=>setAgreementModal({locationIds:[],status:'active',startDate:dataDeNegocio()})}/>)}
       {nav==='maintenance'&&<Maintenance url={String(data.manutencao||'')}/>}
@@ -124,7 +141,8 @@ function PortalSession({ message, endSession }: { message: string; endSession: (
       {pode(user, 'aba:history')&&nav==='history'&&<ChangeHistory users={userList}/>}
       {pode(user, 'aba:admin')&&nav==='admin'&&<Administration user={user} busy={busy} run={run}/>}
       {pode(user, 'aba:reports')&&nav==='reports'&&<Reports/>}
-      {pode(user, 'aba:notifications')&&nav==='notifications'&&<EmailNotifications users={userList} run={run}/>}
+      {pode(user, 'aba:emails')&&nav==='emails'&&<EmailNotifications users={userList} run={run}/>}
+      </div>
     </div></section>
     {loadError&&data&&<div className="fixed bottom-20 right-5 z-[100] max-w-md rounded-xl border bg-card p-4 shadow-lg"><p role="alert" className="text-sm">Não foi possível atualizar os dados.</p><Button className="mt-2" variant="outline" onClick={()=>void refresh().catch(()=>{})}>Atualizar dados</Button></div>}
     {notice&&<output className={`fixed bottom-5 right-5 z-[100] flex max-w-md items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium text-white shadow-2xl ${notice.type==='ok'?'bg-emerald-700':'bg-red-700'}`}>{notice.type==='ok'?<CheckCircle2 className="size-5"/>:<AlertTriangle className="size-5"/>}{notice.text}</output>}

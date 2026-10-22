@@ -39,7 +39,7 @@ const { Input } = await import('../components/ui/input.tsx');
 for (const [role, allowed, forbidden] of [
   ['viewer', ['Buscar', 'Manutenção'], ['Chamados', 'Acordos', 'Relatórios', 'Usuários']],
   ['editor', ['Buscar', 'Manutenção', 'Chamados', 'Acordos', 'Cadastros'], ['Relatórios', 'Histórico', 'E-mails', 'Usuários']],
-  ['admin', ['Buscar', 'Chamados', 'Relatórios', 'Histórico', 'E-mails', 'Usuários'], []],
+  ['admin', ['Buscar', 'Manutenção', 'Chamados', 'Acordos', 'Cadastros', 'Administração'], ['Relatórios', 'Histórico', 'E-mails', 'Usuários']],
 ]) {
   void test(`menu ${String(role)} expoe apenas as acoes do perfil, inclusive recolhido`, () => {
     for (const collapsed of [false, true]) {
