@@ -127,6 +127,40 @@ function Obter-SituacaoBackupLocal([string]$Pasta){
  if($arquivos){return @{nivel='info';mensagem="$($arquivos.Count) snapshot; mais recente $($arquivos[0].LastWriteTime) (nao valida integridade; execute supv backup testar)"}}
  return @{nivel='info';mensagem='nenhum snapshot ainda (nao valida integridade; execute supv backup testar)'}
 }
+function Pular-AlertasRestaurados([string]$Operacao, [string]$Lista, [hashtable]$Estado, [datetime]$Agora, [scriptblock]$RegistrarAviso={param($Mensagem) Write-Warning $Mensagem}) {
+  $arquivo = Join-Path $Operacao 'restauracao.json'
+  try {
+    $registro = Get-Content -LiteralPath $arquivo -Raw -Encoding UTF8 -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
+    if ($registro.corte -isnot [string]) { throw 'Corte invalido.' }
+    $corte = [datetimeoffset]::Parse($registro.corte, [Globalization.CultureInfo]::InvariantCulture)
+  } catch {
+    if ($_.CategoryInfo.Category -eq 'ObjectNotFound') { return }
+    $corte = $null
+    try {
+      $item = Get-Item -LiteralPath $arquivo -Force -ErrorAction Stop
+      $corte = [datetimeoffset]$item.LastWriteTimeUtc
+      $mensagem = 'AVISO: restauracao.json invalido ou ilegivel; usando a data de modificacao como corte.'
+    } catch {
+      $mensagem = 'AVISO: restauracao.json invalido ou ilegivel; data de modificacao indisponivel, seguindo sem corte.'
+    }
+    try { & $RegistrarAviso $mensagem | Out-Null } catch { # O log nao pode interromper o supervisor.
+    }
+    if ($null -eq $corte) { return }
+  }
+  # Mesmo dia civil do Node; o registro antigo permanece apenas para diagnostico.
+  $zona = [TimeZoneInfo]::FindSystemTimeZoneById('E. South America Standard Time')
+  $local = [TimeZoneInfo]::ConvertTime($corte, $zona)
+  if ($local.Date -ne $Agora.Date) { return }
+  foreach ($hora in $Lista.Split(',') | ForEach-Object { $_.Trim() } | Where-Object { $_ }) {
+    $alvo = [datetime]::ParseExact(($Agora.ToString('yyyy-MM-dd') + ' ' + $hora), 'yyyy-MM-dd HH:mm', [Globalization.CultureInfo]::InvariantCulture)
+    $chave = 'alertas-' + $Agora.ToString('yyyy-MM-dd') + '-' + $hora
+    if ($alvo -le $local.DateTime -and !$Estado.ContainsKey($chave)) {
+      $Estado[$chave] = 'pulado-por-restauracao'
+      $chave
+    }
+  }
+}
+
 function Obter-SlotDevido([string]$Tipo, [string]$Lista, [hashtable]$Estado, [datetime]$Agora) {
   # Lista vazia = dia sem execucao (ex.: sabado e domingo para alertas).
   if (!$Lista -or !$Lista.Trim()) { return $null }

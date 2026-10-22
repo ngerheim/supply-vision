@@ -24,7 +24,7 @@ void test('somente MODO_ENSAIO=1 ativa o ensaio; as duas filas ficam intactas se
   t.after(()=>db.close());
   db.exec(`CREATE TABLE email_notifications(id TEXT,status TEXT,attempts INTEGER,locked_at TEXT,updated_at TEXT);
     CREATE TABLE users(id TEXT,active INTEGER,role TEXT,daily_report_enabled INTEGER,daily_report_time TEXT);
-    CREATE TABLE daily_report_deliveries(id TEXT,user_id TEXT,report_date TEXT,status TEXT,attempts INTEGER,locked_at TEXT,updated_at TEXT,period_start TEXT,period_end TEXT,sent_at TEXT,created_at TEXT,next_attempt_at TEXT,payload_json TEXT);
+    CREATE TABLE daily_report_deliveries(id TEXT,user_id TEXT,report_date TEXT,status TEXT,attempts INTEGER,locked_at TEXT,updated_at TEXT,period_start TEXT,period_end TEXT,sent_at TEXT,created_at TEXT,next_attempt_at TEXT,payload_json TEXT,last_error TEXT);
     INSERT INTO email_notifications VALUES('chamado','pending',0,NULL,'original');
     INSERT INTO daily_report_deliveries(id,status,attempts,updated_at,payload_json) VALUES('diario','pending',0,'original','{}');`);
   const antes= ['email_notifications','daily_report_deliveries'].map(tabela=>db.prepare(`SELECT * FROM ${tabela}`).all());
@@ -83,7 +83,7 @@ void test('relatorio diario e preparado em ensaio e permanece pendente sem tenta
   const db=new DatabaseSync(':memory:');t.after(()=>db.close());
   db.exec(`CREATE TABLE users(id TEXT,active INTEGER,role TEXT,daily_report_enabled INTEGER,daily_report_time TEXT);
     INSERT INTO users VALUES('u',1,'admin',1,'00:00');
-    CREATE TABLE daily_report_deliveries(id TEXT,user_id TEXT,report_date TEXT,status TEXT,attempts INTEGER,locked_at TEXT,updated_at TEXT,period_start TEXT,period_end TEXT,sent_at TEXT,created_at TEXT,next_attempt_at TEXT,payload_json TEXT);`);
+    CREATE TABLE daily_report_deliveries(id TEXT,user_id TEXT,report_date TEXT,status TEXT,attempts INTEGER,locked_at TEXT,updated_at TEXT,period_start TEXT,period_end TEXT,sent_at TEXT,created_at TEXT,next_attempt_at TEXT,payload_json TEXT,last_error TEXT);`);
   db.exec(`CREATE TABLE tickets(id TEXT,code TEXT,supplier_name TEXT,status TEXT,created_at TEXT,updated_at TEXT); CREATE TABLE ticket_events(ticket_id TEXT,user_id TEXT,kind TEXT,from_status TEXT,to_status TEXT,message TEXT,created_at TEXT);`);
   const transporte={sendMail(){assert.fail('SMTP nao pode ser chamado');}};
   await processarRelatoriosDiarios(db,{},transporte);

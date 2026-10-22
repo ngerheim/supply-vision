@@ -7,6 +7,7 @@ import { criarTransportador, lerConfigSmtp, privado } from './configuracao.mjs';
 import { modoEnsaio } from './modo-ensaio.mjs';
 
 export const EVENTOS_ADMIN = Object.freeze({
+  'alertas-restauracao': { nome: 'Alertas pulados por restauração', ocorrido: 'Slots anteriores ou iguais ao corte da restauração foram pulados para impedir reenvio automático.', acao: 'Confira os slots em supervisor.log e as entregas com os destinatários antes de decidir por um envio manual.' },
   'orfaos-falharam': { nome: 'Limpeza de processos órfãos incompleta', ocorrido: 'A partida não conseguiu verificar ou encerrar todos os processos órfãos.', acao: 'Confira se a conta da tarefa é administradora local e use supv parar em um terminal elevado.' },
   'tarefa-falhou': { nome: 'Tarefa principal falhou ao iniciar', ocorrido: 'A vigilância encontrou falha na partida da tarefa principal.', acao: 'Confira a conta e reconfigure a senha da tarefa pelo supv.' },
   'vigilancia-health': { nome: 'Vigilância: Portal indisponível', ocorrido: 'A verificação diária não recebeu uma resposta saudável do Portal.', acao: 'Use supv status e supv logs supervisor.' },

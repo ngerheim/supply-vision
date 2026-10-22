@@ -18,6 +18,7 @@ for (const falha of [null, 'email_notifications', 'daily_report_deliveries', 're
         INSERT INTO ${tabela} VALUES ('a','pending',NULL,NULL,'x')`);
     }
     db.exec("CREATE TABLE users(id TEXT PRIMARY KEY); INSERT INTO users VALUES('admin')");
+    db.exec("CREATE TABLE sessions(token TEXT,user_id TEXT); INSERT INTO sessions VALUES('cookie-antigo','admin')");
     db.exec('CREATE TABLE audit_logs(id TEXT,user_id TEXT,action TEXT,entity TEXT,entity_id TEXT,details TEXT,created_at TEXT)');
     for (const sql of SCHEMA_RELATORIOS) db.exec(sql);
     db.exec("INSERT INTO report_jobs(id,request_key,action,created_by,created_at) VALUES('fila','fila','paralelo','admin','2026-01-01')");
@@ -34,6 +35,7 @@ for (const falha of [null, 'email_notifications', 'daily_report_deliveries', 're
         try {
           assert.equal(copia.prepare('SELECT status FROM report_jobs').get().status, 'review');
           assert.equal(copia.prepare('SELECT ativa FROM operacao_validacao').get().ativa, 0);
+          assert.equal(copia.prepare('SELECT COUNT(*) n FROM sessions').get().n, 0);
           for (const tabela of ['email_notifications', 'daily_report_deliveries']) assert.equal(copia.prepare(`SELECT status FROM ${tabela}`).get().status, 'failed');
         } finally { copia.close(); }
       }
