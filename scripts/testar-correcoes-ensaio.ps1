@@ -49,7 +49,7 @@ try{
   Exigir-Correcao ($texto.Contains('✅ status.json')-and$texto.Contains('✅ estado.json')) "homologacao JSON reais BOM=$bom"
  }
  $manual=Get-Content (Join-Path $raizReal 'AGENTS.md') -Raw -Encoding UTF8
- Exigir-Correcao ($manual.Contains('Bitdefender')-and$manual.Contains('controle avançado de ameaças')-and$manual.Contains('unable to unlink')-and$manual-match 'reinici') 'contrato de diagnostico antivirus no mapa IA'
+ Exigir-Correcao ($manual.Contains('endpoint protection')-and$manual.Contains('behavior monitoring')-and$manual.Contains('unable to unlink')-and$manual-match 'restart') 'contrato de diagnostico antivirus no mapa IA'
  $inicializacao=Get-Content (Join-Path $PSScriptRoot 'inicializacao-logica.ps1') -Raw -Encoding UTF8
  $configurar=Get-Content (Join-Path $PSScriptRoot 'configurar-inicializacao.ps1') -Raw -Encoding UTF8
  Exigir-Correcao ($inicializacao.Contains('Write-Progress')-and$configurar.Contains('configurada com sucesso')) 'progresso das permissoes e confirmacao de sucesso'
