@@ -22,6 +22,7 @@ import { auditoriaApi } from '@/lib/auditoria-api';
 import { notificacoesApi } from '@/lib/notificacoes-api';
 import { exportacoesApi } from '@/lib/exportacoes-api';
 import { bootstrapApi } from '@/lib/bootstrap-api';
+import { PORTAL_BUILD, TELA_DESATUALIZADA, buildDivergente, ehEscrita } from '@/lib/portal-build';
 
 export const dynamic = 'force-dynamic';
 
@@ -134,8 +135,28 @@ const { downloadDatabase, downloadAgreements } = exportacoes;
 const { bootstrap } = inicializacao;
 
 export async function GET(request: NextRequest) {
-  try { return await GETInterno(request); }
-  catch (erro: unknown) { return respostaDeErro(erro); }
+  return responder(request, () => GETInterno(request));
+}
+
+// Antes de ensureDatabase/currentUser: ate migracoes e atividade de sessao
+// sao escritas. Downloads e erros tambem recebem o cabecalho comum.
+async function responder(request: NextRequest, executar: () => Promise<Response>) {
+  let resposta: Response;
+  try {
+    if (ehEscrita(request.method) && buildDivergente(request.headers.get('x-portal-build'), PORTAL_BUILD)) {
+      // Drenar e apenas higiene HTTP: um corpo interrompido nao muda a
+      // recusa de build nem permite chegar ao banco.
+      try { if (request.body) await corpoBinarioLimitado(request, CORPO_MAX_JSON); }
+      catch { /* A recusa de build permanece mesmo com corpo interrompido. */ }
+      resposta = ok({ error: TELA_DESATUALIZADA, codigo: 'build_desatualizado' }, { status: 409 });
+    } else resposta = await comContextoEscrita(executar);
+  } catch (erro: unknown) { resposta = respostaDeErro(erro); }
+  resposta.headers.set('x-portal-build', PORTAL_BUILD);
+  return resposta;
+}
+
+export async function PATCH(request: NextRequest) {
+  return responder(request, async () => fail('Método não permitido.', 405));
 }
 
 async function GETInterno(request: NextRequest) {
@@ -203,8 +224,7 @@ function respostaDeErro(erro: unknown) {
 }
 
 export async function POST(request: NextRequest) {
-  try { return await comContextoEscrita(() => POSTInterno(request)); }
-  catch (erro: unknown) { return respostaDeErro(erro); }
+  return responder(request, () => POSTInterno(request));
 }
 
 async function POSTInterno(request: NextRequest) {
@@ -234,8 +254,7 @@ async function POSTInterno(request: NextRequest) {
 }
 
 export async function PUT(request: NextRequest) {
-  try { return await comContextoEscrita(() => PUTInterno(request)); }
-  catch (erro: unknown) { return respostaDeErro(erro); }
+  return responder(request, () => PUTInterno(request));
 }
 
 async function PUTInterno(request: NextRequest) {
@@ -257,8 +276,7 @@ async function PUTInterno(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
-  try { return await comContextoEscrita(() => DELETEInterno(request)); }
-  catch (erro: unknown) { return respostaDeErro(erro); }
+  return responder(request, () => DELETEInterno(request));
 }
 
 async function DELETEInterno(request: NextRequest) {

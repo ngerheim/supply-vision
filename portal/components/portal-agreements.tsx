@@ -1,6 +1,6 @@
 'use client';
 import { correspondeSituacaoAcordo } from '@/lib/situacao-acordos';
-import { api, errorText } from '@/lib/api';
+import { api, errorText, baixarArquivo } from '@/lib/api';
 import { correspondeBusca } from '@/lib/busca';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Download, Pencil, Plus, Search, Trash2, Upload } from 'lucide-react';
@@ -75,7 +75,7 @@ export function Agreements({ data, onOpen, onNew, canWrite }: JsonData) {
           <Button
             variant="outline"
             onClick={() => {
-              window.location.href = '/api/export/agreements';
+              void baixarArquivo('/api/export/agreements').catch(error => alert(errorText(error)));
             }}
           >
             <Download /> Exportar acordos

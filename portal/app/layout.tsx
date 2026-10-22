@@ -4,6 +4,7 @@ import type { Metadata } from 'next';
 import '@fontsource-variable/plus-jakarta-sans';
 import '@fontsource-variable/jetbrains-mono';
 import './globals.css';
+import { PortalAvailability } from '@/components/portal-availability';
 
 export const metadata: Metadata = {
   title: 'Portal Suprimentos | Supply Vision',
@@ -11,5 +12,5 @@ export const metadata: Metadata = {
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return <html lang="pt-BR"><body className="antialiased">{children}</body></html>;
+  return <html lang="pt-BR"><body className="antialiased"><PortalAvailability/>{children}</body></html>;
 }

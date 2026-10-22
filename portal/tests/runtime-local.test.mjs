@@ -14,6 +14,7 @@ for (const motivo of ['explicito', 'sinal', 'pai']) {
     const projeto=fs.mkdtempSync(path.join(os.tmpdir(),'sv-node-parada-'));
     fs.mkdirSync(path.join(projeto,'server'),{recursive:true});fs.mkdirSync(path.join(projeto,'client'));
     fs.writeFileSync(path.join(projeto,'server/index.js'), `export default {fetch(){return new Response('fixture')}}`);
+    fs.writeFileSync(path.join(projeto,'portal-build.json'), JSON.stringify({build:'2.9.0+1234567'}));
     const banco=bancoSqliteLocal({pastaPrivada:path.join(projeto,'state'),criar:true});
     await banco.exec("CREATE TABLE prova(valor TEXT);INSERT INTO prova VALUES('preservado')");
     globalThis[Symbol.for('supply-vision:banco')]=banco;
@@ -25,7 +26,10 @@ for (const motivo of ['explicito', 'sinal', 'pai']) {
     let recebido;
     runtime.server.prependListener('request',()=>{recebido=conexao.getStore();});
     const r=await fetch(`http://127.0.0.1:${port}/api/health`,{headers:{'x-forwarded-for':'forjado','x-sv-client-ip':'forjado'}});
-    assert.equal(r.status,200);await r.text();assert.equal(recebido,'127.0.0.1');
+    assert.equal(r.status,200);assert.equal(r.headers.get('x-portal-build'),'2.9.0+1234567');await r.text();assert.equal(recebido,'127.0.0.1');
+    fs.writeFileSync(path.join(projeto,'portal-build.json'), JSON.stringify({build:'2.9.0+7654321'}));
+    const seguinte=await fetch(`http://127.0.0.1:${port}/api/health`);
+    assert.equal(seguinte.headers.get('x-portal-build'),'2.9.0+1234567','O processo fixa o build ao iniciar');await seguinte.text();
     socket.connect(port,'127.0.0.1');await new Promise((r,j)=>socket.once('connect',r).once('error',j));
     socket.write('POST /api/login HTTP/1.1\r\nHost: localhost\r\nContent-Length: 999\r\n\r\n{');
     const fim=new Promise(r=>runtime.server.once('close',r));

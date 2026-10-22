@@ -226,6 +226,9 @@ jobs:
           fi
       - run: npm ci
       - run: npm test
+        # Inclui tests/portal-build.test.mjs, tests/portal-build-api.test.mjs,
+        # tests/estado-portal.test.ts, tests/portal-build-cliente.test.ts e
+        # tests/api.test.ts; tambem no PREPARAR.
       - name: Avisos SMTP com terminal colorido
         env:
           FORCE_COLOR: '1'

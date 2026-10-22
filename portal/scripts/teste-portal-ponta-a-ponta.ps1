@@ -374,6 +374,21 @@ function CodigoDe([scriptblock]$chamada) {
   }
 }
 
+Verifica 'API entrega o build compilado' {
+  $script:buildPortal = [string](Invoke-WebRequest "$baseUrl/api/health" -UseBasicParsing -TimeoutSec 30).Headers['x-portal-build']
+  $script:buildPortal -match '^\d+\.\d+\.\d+\+[a-f0-9]{7,40}$'
+}
+Verifica 'Build errado recebe 409 e nao cria o item; sessao continua valida' {
+  $antes = (Invoke-WebRequest "$baseUrl/api/bootstrap" -WebSession $script:sessao -UseBasicParsing -TimeoutSec 30).Content | ConvertFrom-Json
+  $c = CodigoDe { Invoke-WebRequest "$baseUrl/api/catalogs/items" -Method POST -Body '{"name":"Item de build recusado"}' -ContentType 'application/json' -Headers @{'x-portal-build'='build-errado'} -WebSession $script:sessao -UseBasicParsing -TimeoutSec 30 }
+  $depois = (Invoke-WebRequest "$baseUrl/api/bootstrap" -WebSession $script:sessao -Headers @{'x-portal-build'='build-errado'} -UseBasicParsing -TimeoutSec 30).Content | ConvertFrom-Json
+  $c -eq 409 -and ($antes.catalogs.items | ConvertTo-Json -Depth 10 -Compress) -eq ($depois.catalogs.items | ConvertTo-Json -Depth 10 -Compress) -and $depois.user.id -eq $antes.user.id
+}
+Verifica 'Escrita com build igual funciona' {
+  $c = CodigoDe { Invoke-WebRequest "$baseUrl/api/catalogs/items" -Method POST -Body '{"name":"Item de build atual"}' -ContentType 'application/json' -Headers @{'x-portal-build'=$script:buildPortal} -WebSession $script:sessao -UseBasicParsing -TimeoutSec 30 }
+  $c -eq 201
+}
+
 Verifica 'Corpo JSON acima de 64 KB devolve 413' {
   $corpo = '{"name":"' + ('A' * 200000) + '"}'
   $c = CodigoDe { Invoke-WebRequest "$baseUrl/api/catalogs/models" -Method POST -Body $corpo -ContentType 'application/json' -WebSession $script:sessao -UseBasicParsing -TimeoutSec 60 }

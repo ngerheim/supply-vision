@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Download, FileText, LoaderCircle, RefreshCw } from 'lucide-react';
-import { api, errorText } from '@/lib/api';
+import { api, errorText, baixarArquivo } from '@/lib/api';
 import { CABECALHO_ATUALIZACAO_AUTOMATICA, iniciarAtualizacaoPeriodica } from '@/lib/atualizacao-periodica';
 import {
   NOMES_ACAO,
@@ -167,21 +167,10 @@ export function Reports() {
   };
   const download = async (job: Job, name: string) => {
     try {
-      const res = await fetch(
+      await baixarArquivo(
         `/api/reports/${job.id}/${encodeURIComponent(name)}`,
+        name,
       );
-      if (!res.ok) {
-        if (res.status === 401)
-          window.dispatchEvent(new Event('portal:session-expired'));
-        const body = (await res.json()) as { error?: string };
-        throw new Error(body.error || 'Não foi possível baixar o arquivo.');
-      }
-      const url = URL.createObjectURL(await res.blob()),
-        link = document.createElement('a');
-      link.href = url;
-      link.download = name;
-      link.click();
-      setTimeout(() => URL.revokeObjectURL(url), 30_000);
     } catch (e) {
       setError(errorText(e));
     }

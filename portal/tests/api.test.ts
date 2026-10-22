@@ -1,6 +1,21 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { api, ApiError } from '../lib/api.ts';
+import { PORTAL_BUILD } from '../lib/portal-build.ts';
+import { obterEstadoPortal } from '../lib/estado-portal.ts';
+
+void test('helper envia identificador em toda escrita preservando os demais cabecalhos', async t => {
+  for (const method of ['POST', 'PUT', 'PATCH', 'DELETE']) {
+    t.mock.method(globalThis, 'fetch', async (_path: string, options?: RequestInit) => {
+      const headers = new Headers(options?.headers);
+      assert.equal(headers.get('x-portal-build'), PORTAL_BUILD);
+      assert.equal(headers.get('content-type'), 'application/json');
+      return new Response('{}', {headers:{'content-type':'application/json'}});
+    });
+    await api('/api/test', {method, headers:{'content-type':'application/json'}});
+    t.mock.restoreAll();
+  }
+});
 
 void test('falha de conexão em escrita não provoca reenvio e orienta conferir resultado', async t => {
   let calls = 0;
@@ -63,4 +78,42 @@ void test('401 sinaliza sessão vencida mesmo quando o corpo é inválido', asyn
   t.mock.method(globalThis, 'fetch', async () => new Response('{', { status: 401, headers: { 'content-type': 'application/json' } }));
   await assert.rejects(api('/api/test'), ApiError);
   assert.equal(expired, 1);
+});
+
+void test('409 de importacao ou revisao continua erro normal sem exigir recarga', async t => {
+  const original = Object.getOwnPropertyDescriptor(globalThis, 'window');
+  Object.defineProperty(globalThis, 'window', {configurable:true, value:new EventTarget()});
+  t.after(() => { if (original) Object.defineProperty(globalThis, 'window', original); else Reflect.deleteProperty(globalThis, 'window'); });
+  for (const mensagem of [
+    'A tela está desatualizada. Recarregue a página (Ctrl+F5) e confira a planilha novamente.',
+    'A tela está desatualizada. Recarregue a página.',
+    'Este acordo foi alterado ou a tela está desatualizada. Reabra o acordo antes de salvar.',
+    'Esta condição foi alterada ou a tela está desatualizada. Reabra o acordo antes de salvar.',
+    'Este chamado foi alterado ou a tela está desatualizada. Atualize o chamado antes de salvar novamente.',
+  ]) {
+    t.mock.method(globalThis, 'fetch', async () => Response.json({error:mensagem}, {status:409}));
+    await assert.rejects(api('/api/test', {method:'POST'}), error => error instanceof ApiError && error.message === mensagem);
+    assert.equal(obterEstadoPortal().versaoNova,false);
+    t.mock.restoreAll();
+  }
+});
+
+void test('409 com codigo de build sem cabecalho exige recarga e preserva sessao', async t => {
+  const janela = new EventTarget();
+  const original = Object.getOwnPropertyDescriptor(globalThis, 'window');
+  Object.defineProperty(globalThis, 'window', {configurable:true, value:janela});
+  t.after(() => { if (original) Object.defineProperty(globalThis, 'window', original); else Reflect.deleteProperty(globalThis, 'window'); });
+  let expiradas = 0, chamadas = 0;
+  janela.addEventListener('portal:session-expired', () => expiradas++);
+  t.mock.method(globalThis, 'fetch', async () => {
+    chamadas++;
+    return Response.json({error:'Mensagem independente do protocolo.', codigo:'build_desatualizado'}, {status:409});
+  });
+  await assert.rejects(api('/api/test', {method:'POST'}), /Mensagem independente do protocolo/);
+  await assert.rejects(api('/api/test', {method:'POST'}), /Recarregue para continuar/);
+  assert.equal(chamadas,1);
+  assert.equal(expiradas,0);
+  t.mock.method(globalThis, 'fetch', async () => Response.json({error:'Sessão expirada.'}, {status:401, headers:{'x-portal-build':'outro-build'}}));
+  await assert.rejects(api('/api/test'), ApiError);
+  assert.equal(expiradas,0,'A recarga obrigatoria nao desmonta os formularios nem encerra a sessao');
 });
