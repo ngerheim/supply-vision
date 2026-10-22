@@ -1,6 +1,21 @@
 // Revisoes e reservas protegem a concorrencia das escritas. Este modulo e
 // independente de database.ts: o schema e a API compartilham as mesmas regras
 // sem que a inicializacao do banco importe seus proprios handlers.
+import type { ContextoApi } from './api-compartilhada.ts';
+
+// Reutiliza a reserva da importacao: nenhuma escrita de referencia pode entrar
+// entre a resolucao do plano e a conclusao dos lotes de publicacao.
+export async function comTravaImportacao<T>(contexto: ContextoApi, executar: (dono: string) => Promise<T>) {
+  const { id, TRAVA_IMPORTACAO, adquirirTrava, liberarTrava, fail } = contexto;
+  const dono = id('lck');
+  if (!await adquirirTrava(TRAVA_IMPORTACAO, dono)) return fail('Já existe uma importação ou alteração de cadastro/De/Para em andamento. Aguarde terminar e tente de novo.', 409);
+  try { return await executar(dono); }
+  finally {
+    try { await liberarTrava(TRAVA_IMPORTACAO, dono); }
+    catch (erro) { console.error('[portal] nao foi possivel liberar a trava de importacao:', erro); }
+  }
+}
+
 export const TABELAS_CADASTRO = ['suppliers','locations','catalog_items','vehicle_models','units','import_item_mappings','import_model_mappings','import_unit_mappings'] as const;
 // A revisão também avança em importações e UPSERTs, independentemente de quem
 // escreveu. O WHEN impede recursão se recursive_triggers estiver habilitado.
