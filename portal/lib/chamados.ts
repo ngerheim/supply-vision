@@ -1,8 +1,9 @@
+import { pode } from './permissoes.ts';
 import { EntradaInvalida, exigeTexto, LIMITES_CAMPO } from './limites-entrada.ts';
 import { normalizeText } from './domain.ts';
 
 export function responsavelElegivel(usuario: { role?: unknown; active?: unknown } | null | undefined) {
-  return usuario?.active === 1 && (usuario.role === 'admin' || usuario.role === 'editor');
+  return usuario?.active === 1 && pode(usuario, 'chamado:assumir');
 }
 
 export function opcoesResponsavelChamado(

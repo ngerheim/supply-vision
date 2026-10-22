@@ -1,6 +1,7 @@
+import { pode } from './permissoes.ts';
 import { LIMITES_CAMPO, exigeTexto } from './limites-entrada.ts';
 import { errorMessage, normalizeImportText } from './domain.ts';
-import { type ContextoApi, type User, canWrite, textValue, nullableText } from './api-compartilhada.ts';
+import { type ContextoApi, type User, textValue, nullableText } from './api-compartilhada.ts';
 import { comTravaImportacao, revisaoConfere } from './controle-escrita.ts';
 import { auditoriaNoLote, AUDITAR_REENVIO_SQL } from './auditoria-api.ts';
 
@@ -50,7 +51,7 @@ export function mapeamentosApi(contexto: ContextoApi) {
   }
 
   async function createMapping(request: Request, user: User, type: string, donoTrava: string) {
-    if (!canWrite(user)) return denyWrite(request, 'Seu perfil não permite gerenciar o De/Para.');
+    if (!pode(user, 'mapeamento:gerenciar')) return denyWrite(request, 'Seu perfil não permite gerenciar o De/Para.');
     const value = await validateMappingInput(request, type);
     if ('error' in value) return fail(value.error || 'De/Para inválido.');
     const recordId=id('map'), timestamp=now();
@@ -68,7 +69,7 @@ export function mapeamentosApi(contexto: ContextoApi) {
   }
 
   async function updateMapping(request: Request, user: User, type: string, recordId: string, donoTrava: string) {
-    if (!canWrite(user)) return denyWrite(request, 'Seu perfil não permite gerenciar o De/Para.');
+    if (!pode(user, 'mapeamento:gerenciar')) return denyWrite(request, 'Seu perfil não permite gerenciar o De/Para.');
     const value = await validateMappingInput(request, type);
     if ('error' in value) return fail(value.error || 'De/Para inválido.');
     const existing=await first(`SELECT revision FROM ${value.cfg.table} WHERE id=?`,[recordId]);
@@ -89,7 +90,7 @@ export function mapeamentosApi(contexto: ContextoApi) {
   }
 
   async function deleteMapping(user: User, type: string, recordId: string, expectedRevision: number | null, donoTrava: string) {
-    if (!canWrite(user)) return fail('Seu perfil não permite gerenciar o De/Para.', 403);
+    if (!pode(user, 'mapeamento:gerenciar')) return fail('Seu perfil não permite gerenciar o De/Para.', 403);
     const cfg=Object.hasOwn(mappingConfig,type)?mappingConfig[type]:null; if(!cfg) return fail('Tipo de De/Para inválido.');
     const existing=await first<{sourceKey:string;revision:number}>(`SELECT revision,source_key AS sourceKey FROM ${cfg.table} WHERE id=?`,[recordId]);
     if(!existing) return fail('Correspondência não encontrada.',404);

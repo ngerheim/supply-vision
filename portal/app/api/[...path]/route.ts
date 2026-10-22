@@ -4,7 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { env } from '../../../scripts/configuracao-servidor.mjs';
 import * as banco from '@/lib/database';
 import { currentUser, ensureDatabase, rawDb } from '@/lib/database';
-import { canWrite } from '@/lib/api-compartilhada';
+import { pode, type Acao } from '@/lib/permissoes';
 import { VALIDACAO_ATIVA_SQL } from '@/lib/operacao-validacao';
 import { consultarRelatorios, solicitarRelatorio, cancelarRelatorio } from '@/lib/relatorios-api';
 import { TravaPerdida, revisaoDaQuery } from '@/lib/controle-escrita';
@@ -159,6 +159,29 @@ export async function PATCH(request: NextRequest) {
   return responder(request, async () => fail('Método não permitido.', 405));
 }
 
+// Seleciona a operacao da rota, sem conhecer perfis. Os casos restritos
+// conservam a guarda geral antes da especifica para manter a mensagem HTTP.
+function acaoConsulta(parts: string[]): Acao {
+  switch (parts[0]) {
+    case 'imports': return 'importacao:consultar';
+    case 'mappings': return 'mapeamento:consultar';
+    case 'tickets': return 'chamado:consultar';
+    case 'users': return 'usuario:consultar';
+    case 'export': if (parts[1] === 'agreements') return 'acordo:exportar';
+  }
+  return 'portal:consultar-gestao';
+}
+function acaoEscrita(parts: string[]): Acao {
+  switch (parts[0]) {
+    case 'agreements': case 'items': return 'acordo:editar';
+    case 'catalogs': return 'catalogo:gerenciar';
+    case 'tickets': return 'chamado:editar';
+    case 'imports': return 'importacao:executar';
+    case 'mappings': return 'mapeamento:gerenciar';
+  }
+  return 'portal:escrever';
+}
+
 async function GETInterno(request: NextRequest) {
   await ensureDatabase();
   const parts = partsOf(request);
@@ -175,12 +198,12 @@ async function GETInterno(request: NextRequest) {
   if (parts[0] === 'search') return parts[1] === 'options' ? searchOptions(request.nextUrl.searchParams) : search(request.nextUrl.searchParams);
   if (parts[0] === 'agreements' && parts[1]) return agreementDetail(parts[1], user, request.nextUrl.searchParams);
 
-  // Daqui para baixo, somente quem tem perfil de escrita (admin/editor).
-  // O perfil de consulta enxerga apenas acordos e a busca de preços.
-  if (!canWrite(user)) return fail('Seu perfil permite apenas consultar acordos e preços.', 403);
+  // Guarda geral antes das permissoes especificas; preserva as respostas HTTP.
+  // Consulta simples permanece disponivel acima desta guarda.
+  if (!pode(user, acaoConsulta(parts))) return fail('Seu perfil permite apenas consultar acordos e preços.', 403);
 
   if (parts[0] === 'reports') {
-    if (user.role !== 'admin') return fail('Somente administradores podem executar e consultar relatórios.', 403);
+    if (!pode(user, 'relatorio:consultar')) return fail('Somente administradores podem executar e consultar relatórios.', 403);
     return consultarRelatorios(parts[1], parts[2]);
   }
   if (parts[0] === 'imports' && parts[1]) return importDetail(parts[1]);
@@ -189,12 +212,12 @@ async function GETInterno(request: NextRequest) {
     return mappingList();
   }
   if (parts[0] === 'audit') {
-    if (user.role !== 'admin') return fail('Somente administradores podem consultar a auditoria.', 403);
+    if (!pode(user, 'auditoria:consultar')) return fail('Somente administradores podem consultar a auditoria.', 403);
     if (parts[1] === 'export') return exportAudit(request.nextUrl.searchParams);
     return ok(await auditList(request.nextUrl.searchParams));
   }
   if (parts[0] === 'email-notifications') {
-    if (user.role !== 'admin') return fail('Somente administradores podem consultar os envios de e-mail.', 403);
+    if (!pode(user, 'email:consultar')) return fail('Somente administradores podem consultar os envios de e-mail.', 403);
     return ok(await emailNotificationList(request.nextUrl.searchParams));
   }
   if (parts[0] === 'users') return userList(user);
@@ -204,7 +227,7 @@ async function GETInterno(request: NextRequest) {
     return downloadAgreements(user);
   }
   if (parts[0] === 'export') {
-    if (user.role !== 'admin') return fail('Somente administradores podem exportar a base.', 403);
+    if (!pode(user, 'base:exportar')) return fail('Somente administradores podem exportar a base.', 403);
     return downloadDatabase(user);
   }
   return fail('Rota não encontrada.', 404);
@@ -237,7 +260,7 @@ async function POSTInterno(request: NextRequest) {
   const user = await requireUser(request);
   if (!user) return fail('Sessão expirada.', 401);
   if (await first(VALIDACAO_ATIVA_SQL)) return denyWrite(request, 'Atualização em validação. Aguarde para salvar ou executar.', 503);
-  if (!canWrite(user)) return denyWrite(request, 'Seu perfil permite somente consulta.');
+  if (!pode(user, acaoEscrita(partsOf(request)))) return denyWrite(request, 'Seu perfil permite somente consulta.');
 
   if (parts[0] === 'agreements' && parts.length === 1) return createAgreement(request, user);
   if (parts[0] === 'agreements' && parts[2] === 'items') return comTravaDoAcordo(request, parts[1], () => addAgreementItems(request, user, parts[1]));
@@ -248,7 +271,7 @@ async function POSTInterno(request: NextRequest) {
   if (parts[0] === 'daily-report-deliveries' && parts[1] && parts[2] === 'retry') return retryEmailNotification(user, parts[1], 'diario');
   if (parts[0] === 'email-notifications' && parts[1] && parts[2] === 'retry') return retryEmailNotification(user, parts[1]);
   if (parts[0] === 'imports' && parts[1] === 'agreement' && parts[2]) return importWorkbook(request, user, parts[2]);
-  if (parts[0] === 'reports') {if(user.role!=='admin')return denyWrite(request,'Somente administradores podem executar relatórios.');return solicitarRelatorio(await jsonBody(request),user.id);}
+  if (parts[0] === 'reports') {if(!pode(user, 'relatorio:executar'))return denyWrite(request,'Somente administradores podem executar relatórios.');return solicitarRelatorio(await jsonBody(request),user.id);}
   if (parts[0] === 'mappings' && parts[1]) return createMapping(request, user, parts[1]);
   return fail('Rota não encontrada.', 404);
 }
@@ -264,7 +287,7 @@ async function PUTInterno(request: NextRequest) {
   const user = await requireUser(request);
   if (!user) return fail('Sessão expirada.', 401);
   if (await first(VALIDACAO_ATIVA_SQL)) return denyWrite(request, 'Atualização em validação. Aguarde para salvar ou executar.', 503);
-  if (!canWrite(user)) return denyWrite(request, 'Seu perfil permite somente consulta.');
+  if (!pode(user, acaoEscrita(partsOf(request)))) return denyWrite(request, 'Seu perfil permite somente consulta.');
   const parts = partsOf(request);
   if (parts[0] === 'agreements' && parts[1] && parts.length === 2) return comTravaDoAcordo(request, parts[1], () => updateAgreement(request, user, parts[1]));
   if (parts[0] === 'items' && parts[1]) return comTravaDoAcordo(request, await acordoDaCondicao(parts[1]), () => updateItem(request, user, parts[1]));
@@ -286,17 +309,17 @@ async function DELETEInterno(request: NextRequest) {
   const user = await requireUser(request);
   if (!user) return fail('Sessão expirada.', 401);
   if (await first(VALIDACAO_ATIVA_SQL)) return denyWrite(request, 'Atualização em validação. Aguarde para salvar ou executar.', 503);
-  if (!canWrite(user)) return fail('Seu perfil permite somente consulta.', 403);
+  if (!pode(user, acaoEscrita(partsOf(request)))) return fail('Seu perfil permite somente consulta.', 403);
   const parts = partsOf(request);
   if (parts[0] === 'items' && parts[1]) {
     return comTravaDoAcordo(request, await acordoDaCondicao(parts[1]), () => deleteItem(user, parts[1], revisaoDaQuery(request)));
   }
   if (parts[0] === 'agreements' && parts[1] && parts.length === 2) {
-    if (user.role !== 'admin') return fail('Somente administradores podem excluir um acordo. Um acordo apagado leva consigo os preços e todo o histórico de versões.', 403);
+    if (!pode(user, 'acordo:excluir')) return fail('Somente administradores podem excluir um acordo. Um acordo apagado leva consigo os preços e todo o histórico de versões.', 403);
     return comTravaDoAcordo(request, parts[1], () => deleteAgreement(user, parts[1], revisaoDaQuery(request)));
   }
   if (parts[0] === 'catalogs' && parts[1] && parts[2]) return deleteCatalog(user, parts[1], parts[2], revisaoDaQuery(request));
-  if (parts[0] === 'reports' && parts[1]) {if(user.role!=='admin')return fail('Somente administradores podem cancelar relatórios.',403);return cancelarRelatorio(parts[1],user.id);}
+  if (parts[0] === 'reports' && parts[1]) {if(!pode(user, 'relatorio:cancelar'))return fail('Somente administradores podem cancelar relatórios.',403);return cancelarRelatorio(parts[1],user.id);}
   if (parts[0] === 'mappings' && parts[1] && parts[2]) return deleteMapping(user, parts[1], parts[2], revisaoDaQuery(request));
   return fail('Rota não encontrada.', 404);
 }

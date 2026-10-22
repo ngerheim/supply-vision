@@ -1,3 +1,4 @@
+import { pode } from './permissoes.ts';
 import { LIMITES_CAMPO, exigeTexto } from './limites-entrada.ts';
 import { isOneOf, ROLES, situacaoAtiva, validatePassword, type Role } from './domain.ts';
 import { type ContextoApi, type User, textValue, ehErroUnique } from './api-compartilhada.ts';
@@ -37,7 +38,7 @@ export function usuariosApi(contexto: ContextoApi) {
   type UserInput = { expectedRevision?: unknown; name?: unknown; email?: unknown; password?: unknown; role?: unknown; active?: unknown; dailyReportEnabled?: unknown; dailyReportTime?: unknown };
 
   async function createUser(request: Request, actor: User) {
-    if (actor.role !== 'admin') return fail('Somente administradores podem criar usuários.', 403);
+    if (!pode(actor, 'usuario:gerenciar')) return fail('Somente administradores podem criar usuários.', 403);
     const body = await jsonBody<UserInput>(request);
     const name = exigeTexto(body.name, LIMITES_CAMPO.nome, 'nome'), email = exigeTexto(body.email, LIMITES_CAMPO.email, 'e-mail').toLowerCase(), role = body.role ?? 'viewer';
     if (!name || !email || typeof body.password !== 'string') return fail('Nome, e-mail e senha são obrigatórios.');
@@ -60,7 +61,7 @@ export function usuariosApi(contexto: ContextoApi) {
   }
 
   async function updateUser(request:Request,actor:User,userId:string){
-    if(actor.role!=='admin') return fail('Somente administradores podem alterar usuários.',403);
+    if(!pode(actor, 'usuario:gerenciar')) return fail('Somente administradores podem alterar usuários.',403);
     const body=await jsonBody<UserInput>(request);
     const target=await first<{id:string;name:string;email:string;role:Role;active:number;revision:number;dailyReportEnabled:number;dailyReportTime:string}>('SELECT id,name,email,role,active,revision,daily_report_enabled AS dailyReportEnabled,daily_report_time AS dailyReportTime FROM users WHERE id=?',[userId]);
     if(!target) return fail('Usuário não encontrado.',404);
@@ -108,7 +109,7 @@ export function usuariosApi(contexto: ContextoApi) {
   }
 
   async function userList(user: User) {
-    return ok({ users: user.role === 'admin'
+    return ok({ users: pode(user, 'usuario:gerenciar')
       ? await all('SELECT id,name,email,role,active,revision,daily_report_enabled AS dailyReportEnabled,daily_report_time AS dailyReportTime,created_at AS createdAt FROM users ORDER BY name')
       : await all('SELECT id,name,role,active FROM users WHERE active=1 ORDER BY name') });
   }

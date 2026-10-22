@@ -1,4 +1,5 @@
 'use client';
+import { pode } from '@/lib/permissoes';
 import { Reports } from '@/components/reports';
 import { podeAcessarAba, type Nav } from '@/lib/navegacao';
 import { api, errorText } from '@/lib/api';
@@ -60,16 +61,16 @@ function PortalSession({ message, endSession }: { message: string; endSession: (
       const nextIdentity=`${next.user.id}:${next.user.role}`;
       if(identity.current!==null&&identity.current!==nextIdentity){endSession();return}
       identity.current=nextIdentity;
-      setUser(next.user);setData(next);setNav(atual=>podeAcessarAba(next.user.role,atual)?atual:'search');
+      setUser(next.user);setData(next);setNav(atual=>podeAcessarAba(next.user,atual)?atual:'search');
       setUserList([]);
-      if(next.user.role==='admin'||next.user.role==='editor')void api('/api/users')
+      if(pode(next.user, 'usuario:consultar'))void api('/api/users')
         .then(x=>{if(sequence===refreshSequence.current)setUserList(x.users||[])})
         .catch(()=>{if(sequence===refreshSequence.current)setUserList([])});
     }catch(error){if(sequence===refreshSequence.current)setLoadError(errorText(error));throw error}
   },[endSession]);
   const initialize=useCallback(async()=>{setLoadError('');try{const x=await api('/api/session');setUser(x.user);if(x.user)await refresh()}catch(error){setLoadError(errorText(error))}},[refresh]);
   useEffect(()=>{let active=true;queueMicrotask(()=>{if(active)void initialize()});return()=>{active=false}},[initialize]);
-  useEffect(()=>{if(!user)return;let active=true;const linked=new URLSearchParams(window.location.search).get('chamado');if(linked)queueMicrotask(()=>{if(active&&!ticketLinkHandled.current){ticketLinkHandled.current=true;if(user.role==='admin'||user.role==='editor'){setTicketLink(linked);setNav('tickets')}else{setNav('search');setNotice({type:'error',text:'Seu perfil permite consultar preços e acordos. O acesso a chamados é restrito.'})}}});return()=>{active=false}},[user]);
+  useEffect(()=>{if(!user)return;let active=true;const linked=new URLSearchParams(window.location.search).get('chamado');if(linked)queueMicrotask(()=>{if(active&&!ticketLinkHandled.current){ticketLinkHandled.current=true;if(pode(user, 'aba:tickets')){setTicketLink(linked);setNav('tickets')}else{setNav('search');setNotice({type:'error',text:'Seu perfil permite consultar preços e acordos. O acesso a chamados é restrito.'})}}});return()=>{active=false}},[user]);
   useEffect(()=>{const expired=()=>{if(intentionalLogout.current)return;refreshSequence.current++;endSession('Sua sessão expirou. Entre novamente.')};window.addEventListener('portal:session-expired',expired);return()=>window.removeEventListener('portal:session-expired',expired)},[endSession]);
   const run=async(fn:()=>Promise<JsonData>,success?:string)=>{if(busyRef.current)return;busyRef.current=true;setBusy(true);try{return await salvarEAtualizar(fn,refresh,()=>{if(success)notify('ok',success)},()=>notify('error','Alteração salva, mas não foi possível atualizar a tela. Use Atualizar dados para conferir.'))}catch(error:unknown){notify('error',errorText(error))}finally{busyRef.current=false;setBusy(false)}};
 
@@ -78,9 +79,8 @@ function PortalSession({ message, endSession }: { message: string; endSession: (
   if(!user) return <Login message={notice?.text} onLogin={(u)=>{intentionalLogout.current=false;setNotice(null);setUser(u);void refresh().catch(()=>{})}}/>;
   if(!data) return <Loading label="Carregando acordos…"/>;
   const catalogs=data.catalogs;
-  const canWrite=user.role==='admin'||user.role==='editor';
-  const isAdmin=user.role==='admin';
-  const navigate=(next:Nav)=>{if(!podeAcessarAba(user.role,next))return;setNav(next);setAgreementId(null);setImportAgreement('')};
+  const canWrite=pode(user, 'acordo:editar');
+  const navigate=(next:Nav)=>{if(!podeAcessarAba(user,next))return;setNav(next);setAgreementId(null);setImportAgreement('')};
   const openAgreement=(id:string)=>{setAgreementId(id);setNav(canWrite?'agreements':'search')};
   const logout=()=>void (async()=>{if(busyRef.current)return;busyRef.current=true;intentionalLogout.current=true;setBusy(true);try{await api('/api/logout',{method:'POST'});refreshSequence.current++;endSession()}catch(error:unknown){intentionalLogout.current=false;notify('error',errorText(error))}finally{busyRef.current=false;setBusy(false)}})();
   const removerAcordo=(a:AnyRow,detalhe:AnyRow)=>{
@@ -105,22 +105,22 @@ function PortalSession({ message, endSession }: { message: string; endSession: (
     <Sidebar nav={nav} setNav={navigate} user={user} busy={busy} onLogout={logout} collapsed={sidebarCollapsed} onToggle={()=>setSidebarCollapsed(value=>!value)}/>
     <section className={`min-w-0 pl-16 transition-[padding] duration-300 ${sidebarCollapsed?'lg:pl-16':'lg:pl-44'}`}><div className="mx-auto max-w-[1550px] p-4 sm:p-8">
       {nav==='search'&&(!agreementId||canWrite)&&<SearchPage catalogs={catalogs} openAgreement={openAgreement} filters={searchFilters} setFilters={setSearchFilters}/>}
-      {((canWrite&&nav==='agreements')||(!canWrite&&nav==='search'&&agreementId))&&(agreementId?<AgreementDetail busy={busy} revision={data} id={agreementId} canWrite={canWrite} isAdmin={isAdmin} onDelete={removerAcordo} onBack={()=>setAgreementId(null)} onEdit={(a:AnyRow)=>setAgreementModal({...a,expectedRevision:a.revision})} onItem={(i:AnyRow)=>setItemModal({...i,agreementId,expectedRevision:i.revision})} onImport={()=>{navigate('imports');setImportAgreement(agreementId)}} run={run}/>:<Agreements data={data} canWrite={canWrite} onOpen={setAgreementId} onNew={()=>setAgreementModal({locationIds:[],status:'active',startDate:dataDeNegocio()})}/>)}
+      {((canWrite&&nav==='agreements')||(!canWrite&&nav==='search'&&agreementId))&&(agreementId?<AgreementDetail busy={busy} revision={data} id={agreementId} canWrite={canWrite} canDelete={pode(user, 'acordo:excluir')} onDelete={removerAcordo} onBack={()=>setAgreementId(null)} onEdit={(a:AnyRow)=>setAgreementModal({...a,expectedRevision:a.revision})} onItem={(i:AnyRow)=>setItemModal({...i,agreementId,expectedRevision:i.revision})} onImport={()=>{navigate('imports');setImportAgreement(agreementId)}} run={run}/>:<Agreements data={data} canWrite={canWrite} onOpen={setAgreementId} onNew={()=>setAgreementModal({locationIds:[],status:'active',startDate:dataDeNegocio()})}/>)}
       {nav==='maintenance'&&<Maintenance url={String(data.manutencao||'')}/>}
-      {canWrite&&nav==='suppliers'&&<CatalogPage type="suppliers" rows={catalogs.suppliers} onAdd={()=>setCatalogModal({type:'suppliers'})} onEdit={(row:AnyRow)=>setCatalogModal({type:'suppliers',...row,expectedRevision:row.revision})} onDelete={(row:AnyRow)=>removeCatalog('suppliers',row)}/>}
-      {canWrite&&nav==='imports'&&<Imports data={data} canManageMappings={canWrite} initialAgreement={importAgreement} onUpdated={refresh} onCatalog={(type,values)=>setCatalogModal({type,...values})}/>}
-      {canWrite&&nav==='mappings'&&<Mappings catalogs={catalogs} run={run}/>}
-      {canWrite&&nav==='catalogs'&&<Catalogs data={data} onAdd={(type:string)=>setCatalogModal({type})} onEdit={(type:string,row:AnyRow)=>setCatalogModal({type,...row,expectedRevision:row.revision})} onDelete={removeCatalog}/>}
-      {canWrite&&nav==='tickets'&&<Tickets busy={busy} users={userList} run={run} initialDetail={ticketLink}/>}
-      {isAdmin&&nav==='history'&&<ChangeHistory users={userList}/>}
-      {isAdmin&&nav==='admin'&&<Administration user={user} busy={busy} run={run}/>}
-      {isAdmin&&nav==='reports'&&<Reports/>}
-      {isAdmin&&nav==='notifications'&&<EmailNotifications users={userList} run={run}/>}
+      {pode(user, 'aba:suppliers')&&nav==='suppliers'&&<CatalogPage type="suppliers" rows={catalogs.suppliers} onAdd={()=>setCatalogModal({type:'suppliers'})} onEdit={(row:AnyRow)=>setCatalogModal({type:'suppliers',...row,expectedRevision:row.revision})} onDelete={(row:AnyRow)=>removeCatalog('suppliers',row)}/>}
+      {pode(user, 'aba:imports')&&nav==='imports'&&<Imports data={data} canManageMappings={pode(user, 'mapeamento:gerenciar')} initialAgreement={importAgreement} onUpdated={refresh} onCatalog={(type,values)=>setCatalogModal({type,...values})}/>}
+      {pode(user, 'aba:mappings')&&nav==='mappings'&&<Mappings catalogs={catalogs} run={run}/>}
+      {pode(user, 'aba:catalogs')&&nav==='catalogs'&&<Catalogs data={data} onAdd={(type:string)=>setCatalogModal({type})} onEdit={(type:string,row:AnyRow)=>setCatalogModal({type,...row,expectedRevision:row.revision})} onDelete={removeCatalog}/>}
+      {pode(user, 'aba:tickets')&&nav==='tickets'&&<Tickets busy={busy} users={userList} run={run} initialDetail={ticketLink}/>}
+      {pode(user, 'aba:history')&&nav==='history'&&<ChangeHistory users={userList}/>}
+      {pode(user, 'aba:admin')&&nav==='admin'&&<Administration user={user} busy={busy} run={run}/>}
+      {pode(user, 'aba:reports')&&nav==='reports'&&<Reports/>}
+      {pode(user, 'aba:notifications')&&nav==='notifications'&&<EmailNotifications users={userList} run={run}/>}
     </div></section>
     {loadError&&data&&<div className="fixed bottom-20 right-5 z-[100] max-w-md rounded-xl border bg-card p-4 shadow-lg"><p role="alert" className="text-sm">Não foi possível atualizar os dados.</p><Button className="mt-2" variant="outline" onClick={()=>void refresh().catch(()=>{})}>Atualizar dados</Button></div>}
     {notice&&<output className={`fixed bottom-5 right-5 z-[100] flex max-w-md items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium text-white shadow-2xl ${notice.type==='ok'?'bg-emerald-700':'bg-red-700'}`}>{notice.type==='ok'?<CheckCircle2 className="size-5"/>:<AlertTriangle className="size-5"/>}{notice.text}</output>}
     {canWrite&&agreementModal&&<AgreementDialog open value={agreementModal} catalogs={catalogs} busy={busy} onClose={()=>setAgreementModal(null)} onSave={(body:AnyRow)=>run(async()=>{if(body.id)await api(`/api/agreements/${body.id}`,{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify(body)});else {const created=await api('/api/agreements',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});openAgreement(created.id)};setAgreementModal(null)},body.id?'Acordo atualizado.':'Acordo criado.')}/>}
     {canWrite&&itemModal&&<ItemDialog open value={itemModal} catalogs={catalogs} busy={busy} onClose={()=>setItemModal(null)} onSave={(body:AnyRow)=>run(async()=>{if(body.id)await api(`/api/items/${body.id}`,{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify(body)});else await api(`/api/agreements/${body.agreementId}/items`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});setItemModal(null)},'Condição salva.')}/>}
-    {canWrite&&catalogModal&&<CatalogDialog open value={catalogModal} busy={busy} onClose={()=>setCatalogModal(null)} onSave={(body:AnyRow)=>run(async()=>{const path=body.id?`/api/catalogs/${body.type}/${body.id}`:`/api/catalogs/${body.type}`;await api(path,{method:body.id?'PUT':'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});setCatalogModal(null)},'Cadastro salvo.')}/>}
+    {pode(user, 'catalogo:gerenciar')&&catalogModal&&<CatalogDialog open value={catalogModal} busy={busy} onClose={()=>setCatalogModal(null)} onSave={(body:AnyRow)=>run(async()=>{const path=body.id?`/api/catalogs/${body.type}/${body.id}`:`/api/catalogs/${body.type}`;await api(path,{method:body.id?'PUT':'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});setCatalogModal(null)},'Cadastro salvo.')}/>}
   </main>;
 }

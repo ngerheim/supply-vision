@@ -73,7 +73,7 @@ export function Sidebar({
           {!collapsed && <span className="truncate">Recolher menu</span>}
         </button>
         {GRUPOS_NAVEGACAO.filter((grupo) =>
-          podeAcessarAba(user.role, grupo.abas[0]),
+          podeAcessarAba(user, grupo.abas[0]),
         ).map((grupo) => (
           <fieldset
             key={grupo.nome}

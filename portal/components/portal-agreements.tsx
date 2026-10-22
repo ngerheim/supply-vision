@@ -165,7 +165,7 @@ export function AgreementDetail({
   revision,
   canWrite,
   busy,
-  isAdmin,
+  canDelete,
   onBack,
   onEdit,
   onItem,
@@ -313,7 +313,7 @@ export function AgreementDetail({
             <Button variant="outline" onClick={onImport}>
               <Upload /> Substituir tabela
             </Button>
-            {isAdmin && (
+            {canDelete && (
               <Button
                 variant="outline"
                 className="text-destructive hover:bg-destructive/10"

@@ -1,4 +1,5 @@
 'use client';
+import { pode } from '@/lib/permissoes';
 import { api, errorText, baixarArquivo } from '@/lib/api';
 import { MIN_PASSWORD_LENGTH, validatePassword } from '@/lib/domain';
 import { useCallback, useEffect, useState } from 'react';
@@ -54,7 +55,7 @@ export function Administration({ user, busy, run }: JsonData) {
     });
     return () => controller.abort();
   }, [load]);
-  const isAdmin = user.role === 'admin';
+  const podeGerenciar = pode(user, 'usuario:gerenciar');
   if (loadError) return <FalhaDeCarregamento erro={loadError} tentar={() => void load().catch(error => setLoadError(errorText(error)))}/>;
   if (!users) return <Loading label="Carregando usuários…"/>;
   return (
@@ -72,7 +73,7 @@ export function Administration({ user, busy, run }: JsonData) {
           <Button disabled={busy} variant="outline" onClick={() => void run(load)}>
             Atualizar lista
           </Button>
-          {isAdmin && (
+          {podeGerenciar && (
             <Button disabled={busy} onClick={() => setOpen(true)}>
               <Plus /> Novo usuário
             </Button>
@@ -140,7 +141,7 @@ export function Administration({ user, busy, run }: JsonData) {
                     </Badge>
                   </TableCell>
                   <TableCell className="text-right">
-                    {isAdmin && (
+                    {podeGerenciar && (
                       <Button
                         size="icon-sm"
                         variant="ghost"
