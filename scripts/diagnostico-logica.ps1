@@ -67,3 +67,35 @@ function Filtrar-LogsAtualizacao([string[]]$Linhas) {
   $linha
  }
 }
+
+function Obter-SituacaoBackupRede([string]$Pasta,[hashtable]$Config,[datetime]$Agora,[datetime]$Inicio=[datetime]::MinValue){
+ # Inicio limita a cobranca antes do primeiro pacote; o chamador usa a criacao da raiz privada.
+ try{
+ if($Config['MODO_ENSAIO']-eq'1'){return @{nivel='info';mensagem='MODO_ENSAIO=1: backup de rede desligado (nao valida integridade)'}}
+ if(!$Pasta-or!(Test-Path -LiteralPath $Pasta -PathType Container)){return @{nivel='erro';mensagem='pasta de backup de rede ausente ou indisponivel (nao valida integridade; execute supv backup testar)'}}
+ # O Node reconhece os pacotes com PADRAO_BACKUP e ordena pela data do nome.
+ # backup-rede.mjs publica diretamente nesta pasta, sem subpasta historico.
+ $modulo=([uri]([IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../portal/scripts/retencao-backup.mjs')))).AbsoluteUri
+ $r=Executar-NativoOperacao (Localizar-NodeMaquina) @('--input-type=module','-e','import(process.argv[1]).then(m=>console.log(JSON.stringify(m.listarHistorico(process.argv[2]))))',$modulo,$Pasta)
+ if($r.codigo-ne0){throw 'Consulta de pacotes indisponivel.'}
+ $historico=($r.stdout-join"`n")|ConvertFrom-Json
+ $pacotes=@($historico)
+ $ultimo=$null
+ if($pacotes.Count){
+  $ultimo=[datetime]::ParseExact($pacotes[0].data,'yyyy-MM-dd_HHmm',[Globalization.CultureInfo]::InvariantCulture)
+  $inicio=$ultimo
+ }
+ # A agenda semanal se repete; oito dias cobrem inclusive a virada do dia.
+ for($dias=0;$dias-lt8;$dias++){
+  $dia=$agora.Date.AddDays(-$dias)
+  if($dia.AddDays(1)-le$inicio){break}
+  $horarios=[string](Obter-HorariosDoDia $Config 'BACKUP_HORARIOS' $dia)
+  foreach($h in @($horarios.Split(',')|ForEach-Object {$_.Trim()}|Where-Object {$_})){
+   $alvo=[datetime]::ParseExact(($dia.ToString('yyyy-MM-dd')+' '+$h),'yyyy-MM-dd HH:mm',[Globalization.CultureInfo]::InvariantCulture)
+   if($alvo-lt$agora-and(($ultimo-and$alvo-gt$ultimo)-or(!$ultimo-and$alvo-ge$inicio))){return @{nivel='erro';mensagem='backup de rede agendado vencido sem pacote; confira supv logs supervisor (nao valida integridade; execute supv backup testar)'}}
+  }
+ }
+ if(!$pacotes.Count){return @{nivel='aviso';mensagem='nenhum pacote de backup de rede reconhecido ainda (nao valida integridade; execute supv backup testar)'}}
+ return @{nivel='ok';mensagem="$($pacotes.Count) pacotes; mais recente $($ultimo.ToString('yyyy-MM-dd HH:mm')) (nao valida integridade; execute supv backup testar)"}
+ }catch{return @{nivel='erro';mensagem='consulta de pacotes de backup de rede indisponivel (nao valida integridade; execute supv backup testar)'}}
+}

@@ -13,7 +13,7 @@ $linhas=New-Object 'Collections.Generic.List[string]'
 . (Join-Path $PSScriptRoot 'diagnostico-logica.ps1')
 $segredos=Obter-SegredosHomologacao $privado
 function Item-Homologacao([string]$Nome,[scriptblock]$Conferir,[switch]$Classificar){
- try{$detalhe=& $Conferir;$icone='✅';if($Classificar){$icone=switch($detalhe.nivel){'ok'{'✅'} 'aviso'{'⚠️'} 'erro'{'❌'}};$detalhe=$detalhe.mensagem};$linhas.Add($icone+' '+(Mascarar-Homologacao $Nome $segredos)+': '+(Mascarar-Homologacao ($detalhe-join' ') $segredos))}
+ try{$detalhe=& $Conferir;$icone='✅';if($Classificar){$icone=switch($detalhe.nivel){'ok'{'✅'} 'info'{'ℹ️'} 'aviso'{'⚠️'} 'erro'{'❌'}};$detalhe=$detalhe.mensagem};$linhas.Add($icone+' '+(Mascarar-Homologacao $Nome $segredos)+': '+(Mascarar-Homologacao ($detalhe-join' ') $segredos))}
  catch{$linhas.Add('❌ '+(Mascarar-Homologacao $Nome $segredos)+': nao aprovado/indisponivel. Confira supv status e supv logs supervisor; consulte supv help.')} # Nao publica excecoes que podem conter segredos.
 }
 $linhas.Add('Supply Vision — verificacao somente leitura — '+(Get-Date -Format 'yyyy-MM-dd HH:mm:ss'))
@@ -52,14 +52,12 @@ Item-Homologacao 'Parametros dos alertas' {
  $r=Executar-NativoOperacao $python @('-B','-X','utf8',(Join-Path $Raiz 'alertas/processo/validar_parametros.py'))
  if($r.codigo-ne0){throw 'parametros'};'carregados e validados (sem exibir conteudo)'
 }
-Item-Homologacao 'Backups locais' {
- $op=Ler-ConfigOperacao (Join-Path $privado 'comum\operacao.env')
- $inicio=(Get-Item -LiteralPath $privado).CreationTime
- Obter-SituacaoBackupLocal (Join-Path $privado 'portal\backups') $op $inicio (Get-Date)
+Item-Homologacao 'Snapshot pre-atualizacao' {
+ Obter-SituacaoBackupLocal (Join-Path $privado 'portal\backups')
 } -Classificar
-foreach($p in @($cfg['BACKUP_NETWORK_DIR'])){
- Item-Homologacao "Backups $p" {if(!$p-or!(Test-Path -LiteralPath $p)){throw 'pasta'};$arquivos=@(Get-ChildItem -LiteralPath $p -File|Sort-Object LastWriteTime -Descending);if(!$arquivos){throw 'vazio'};"$($arquivos.Count) arquivos; mais recente $($arquivos[0].LastWriteTime) (nao valida integridade)"}
-}
+Item-Homologacao 'Backup de rede' {
+ Obter-SituacaoBackupRede $cfg['BACKUP_NETWORK_DIR'] (Ler-ConfigOperacao (Join-Path $privado 'comum\operacao.env')) (Get-Date) (Get-Item -LiteralPath $privado).CreationTime
+} -Classificar
 Item-Homologacao 'Ultimas entregas' {
  $node=Localizar-NodeMaquina
  $r=Executar-NativoOperacao $node @((Join-Path $Raiz 'portal/scripts/ultimas-entregas.mjs'),'--privado',$privado)
