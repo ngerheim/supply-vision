@@ -1,6 +1,6 @@
 import { RESERVAR_CODIGO_CHAMADO_SQL, filtroChamados, dadosBuscaChamado, ordemChamados } from './operacao-dados.ts';
 import { paginaSolicitada } from './paginacao.ts';
-import { fornecedorChamado } from './chamados.ts';
+import { fornecedorChamado, responsavelElegivel } from './chamados.ts';
 import { chaveIdempotencia } from './limites-entrada.ts';
 import { contextoNotificacaoChamado, pessoaNotificacao, prepararNotificacoesChamado, type ContextoNotificacaoChamado } from './fila-email-chamados.ts';
 import { corpoBinarioLimitado } from './corpo-limitado.ts';
@@ -86,7 +86,7 @@ export function chamadosApi(contexto: ContextoApi) {
     const state=body.state ? normalizeText(body.state) : null;
     if(state && !isValidState(state)) return fail('Selecione uma UF brasileira válida.');
     const assignedTo=textValue(body.assignedTo) || null;
-    if(assignedTo && !await first('SELECT 1 ok FROM users WHERE id=? AND active=1',[assignedTo])) return fail('Responsável não encontrado ou inativo.');
+    if(assignedTo && !responsavelElegivel(await first('SELECT role,active FROM users WHERE id=?',[assignedTo]))) return fail('O responsável deve ser um usuário ativo com perfil editor ou administrador.',400);
     const responsavel=await pessoaNotificacao(assignedTo);
 
     // O codigo e sequencial e unico. Sob acesso simultaneo, duas pessoas podem
@@ -137,7 +137,7 @@ export function chamadosApi(contexto: ContextoApi) {
     const nextState=body.state === undefined ? current.state : textValue(body.state) ? normalizeText(body.state) : null;
     if(nextState && !isValidState(nextState)) return fail('Selecione uma UF brasileira válida.');
     const assignedTo=body.assignedTo === undefined ? current.assigned_to : textValue(body.assignedTo) || null;
-    if(assignedTo && assignedTo!==current.assigned_to && !await first('SELECT 1 ok FROM users WHERE id=? AND active=1',[assignedTo])) return fail('Responsável não encontrado ou inativo.');
+    if(assignedTo && assignedTo!==current.assigned_to && !responsavelElegivel(await first('SELECT role,active FROM users WHERE id=?',[assignedTo]))) return fail('O responsável deve ser um usuário ativo com perfil editor ou administrador.',400);
     const supplierName=fornecedorChamado(body.supplierName === undefined ? current.supplier_name : body.supplierName);
     exigeTexto(body.supplierName,LIMITES_CAMPO.nome,'fornecedor');
     exigeTexto(body.contact,LIMITES_CAMPO.contato,'contato');

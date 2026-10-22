@@ -1,7 +1,35 @@
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 import test from 'node:test';
-import { MIGRAR_FORNECEDORES_CHAMADOS_SQL, fornecedorChamado } from '../lib/chamados.ts';
+import { MIGRAR_FORNECEDORES_CHAMADOS_SQL, fornecedorChamado, responsavelElegivel, opcoesResponsavelChamado } from '../lib/chamados.ts';
+
+void test('seletor de responsaveis oferece somente editor e admin ativos', () => {
+  const usuarios = ['viewer','editor','admin','desconhecido'].flatMap(role => [0,1].map(active => ({role,active})));
+  assert.deepEqual(usuarios.filter(responsavelElegivel), [{role:'editor',active:1},{role:'admin',active:1}]);
+  assert.equal(responsavelElegivel(null),false);
+});
+
+void test('edicao conserva responsavel viewer ou inativo visivel sem oferecer outros inelegiveis', () => {
+  const usuarios = [
+    {id:'editor',name:'Editor',role:'editor',active:1},
+    {id:'admin',name:'Admin',role:'admin',active:1},
+    {id:'viewer',name:'Viewer atual',role:'viewer',active:1},
+    {id:'inativo',name:'Inativo atual',role:'editor',active:0},
+    {id:'outro-viewer',name:'Outro viewer',role:'viewer',active:1},
+  ];
+  for (const id of ['viewer','inativo']) {
+    const atual=usuarios.find(usuario=>usuario.id===id)!;
+    const opcoes=opcoesResponsavelChamado(usuarios,atual);
+    assert.deepEqual(opcoes.map(usuario=>usuario.id),['editor','admin',id]);
+    assert.equal(opcoes.find(usuario=>usuario.id===id)?.name,atual.name);
+  }
+  const inativo=usuarios.find(usuario=>usuario.id==='inativo')!;
+  const listaEditor=usuarios.filter(usuario=>usuario.active===1);
+  assert.deepEqual(opcoesResponsavelChamado(listaEditor,inativo).map(usuario=>usuario.id),['editor','admin','inativo']);
+  assert.equal(opcoesResponsavelChamado(listaEditor,inativo).at(-1)?.name,inativo.name);
+  assert.deepEqual(opcoesResponsavelChamado(usuarios,usuarios[0]).map(usuario=>usuario.id),['editor','admin']);
+  assert.deepEqual(opcoesResponsavelChamado(usuarios).map(usuario=>usuario.id),['editor','admin']);
+});
 
 void test('fornecedor e obrigatorio, normalizado e limitado a 120 caracteres', () => {
   for (const value of ['', '  ', null, undefined, 42, {}]) assert.throws(() => fornecedorChamado(value), /fornecedor/);

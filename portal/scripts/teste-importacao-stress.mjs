@@ -533,6 +533,53 @@ try {
     });
     await check(`${role}: permissão de importar respeitada`, async () => assert.equal((await upload(file([row()], { name: `perfil-${role}` }), replace, session)).status, role === 'editor' ? 200 : 403));
   }
+  await check('MARCAS aceita 500 caracteres e recusa 501 na previa e na publicacao', async () => {
+    for (const tamanho of [500,501]) {
+      const doc=file([row({MARCAS:'M'.repeat(tamanho)})],{name:`marcas-${tamanho}`});
+      const previa=await upload(doc,replace+'?preview=1');
+      assert.equal(previa.status,200);
+      assert.equal(previa.data.valid,tamanho===500,JSON.stringify(previa.data));
+      if(tamanho===500){
+        assert.equal((await upload(doc,replace)).status,200);
+        assert.equal(query('SELECT brands_text FROM agreement_items WHERE version_id=(SELECT current_version_id FROM agreements WHERE id=?)',agreementId)[0].brands_text,'M'.repeat(tamanho));
+      } else {
+        assert.match(erroDaLinha(previa.data,2),/MARCAS.*500 caracteres/);
+        const recusada=await rejected(doc,replace);
+        assert.match(erroDaLinha(recusada.data,2),/MARCAS.*500 caracteres/);
+      }
+    }
+  });
+  await check('Responsavel novo exige editor ou admin ativo; legado inelegivel pode permanecer', async () => {
+    const usuarios=(await good('/api/users')).users;
+    const editor=usuarios.find(u=>u.role==='editor'), viewer=usuarios.find(u=>u.role==='viewer'), admin=usuarios.find(u=>u.role==='admin');
+    const inativo=await good('/api/users',{method:'POST',body:{name:'Inativo teste',email:'inativo@teste.test',password:senha,role:'editor'}},201);
+    const cadastro=(await good('/api/users')).users.find(u=>u.id===inativo.id);
+    await good(`/api/users/${inativo.id}`,{method:'PUT',body:{active:false,expectedRevision:cadastro.revision}});
+    for(const alvo of [viewer,inativo,{id:'inexistente'}]){
+      const r=await request('/api/tickets',{method:'POST',body:{supplierName:'FORNECEDOR TESTE',assignedTo:alvo.id}});
+      assert.equal(r.status,400,JSON.stringify(r.data));assert.match(r.data.error,/ativo.*editor.*administrador/);
+    }
+    for(const alvo of [editor,admin]) await good('/api/tickets',{method:'POST',body:{supplierName:'FORNECEDOR TESTE',assignedTo:alvo.id}},201);
+    const chamado=await good('/api/tickets',{method:'POST',body:{supplierName:'FORNECEDOR TESTE'}},201);
+    const editar=async(body)=>{
+      const {ticket}=await good(`/api/tickets/${chamado.id}`);
+      return request(`/api/tickets/${chamado.id}`,{method:'PUT',body:{...body,expectedRevision:ticket.revision}});
+    };
+    for(const alvo of [viewer,inativo])assert.equal((await editar({assignedTo:alvo.id})).status,400);
+    for(const alvo of [editor,admin])assert.equal((await editar({assignedTo:alvo.id})).status,200);
+    const fixture=new DatabaseSync(sqlitePath);
+    try {
+      for(const alvo of [viewer,inativo]){
+        fixture.prepare('UPDATE tickets SET assigned_to=? WHERE id=?').run(alvo.id,chamado.id);
+        assert.equal((await editar({assignedTo:alvo.id,notes:`Mantido ${alvo.id}`})).status,200);
+        assert.equal((await editar({notes:`Omitido ${alvo.id}`})).status,200);
+        assert.equal(query('SELECT assigned_to FROM tickets WHERE id=?',chamado.id)[0].assigned_to,alvo.id);
+      }
+    } finally {fixture.close();}
+    const session=(await request('/api/login',{method:'POST',body:{email:editor.email,password:senha}})).cookie;
+    const lista=await good('/api/users',{session});
+    assert.ok(lista.users.every(u=>typeof u.role==='string' && u.active===1),'seletor do editor precisa receber perfil e situacao');
+  });
   await check('Linha repetida é descartada e reportada, mantendo a primeira', async () => {
     const result = await upload(file([row({ MARCAS: 'A' }), row({ MARCAS: 'B' })], { name: 'duplicatas-iguais' }), replace);
     assert.equal(result.status, 200); assert.equal(result.data.summary.items, 1);

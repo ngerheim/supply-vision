@@ -33,6 +33,17 @@ const resolved = (changes = {}) => {
   return row;
 };
 
+void test('MARCAS usa o limite da edicao manual e relata o erro por linha', () => {
+  assert.equal(resolved({MARCAS:'M'.repeat(500)}).error,'');
+  for (const marcas of ['M'.repeat(501), `M${' '.repeat(499)}M`]) {
+    const report=summarizeImportErrors([resolved({MARCAS:marcas})],'Acordos');
+    assert.equal(report.totalErros,1);
+    assert.equal(report.nomenclaturas.length,0);
+    assert.equal(report.outrosErros[0].linha,2);
+    assert.match(report.outrosErros[0].erro,/MARCAS.*500 caracteres/);
+  }
+});
+
 void test('substituicao exige so as colunas da tabela, sem CNPJ nem fornecedor', () => {
   assert.deepEqual(colunasAusentes(source), []);
   const { PRECO: _preco, ...semPreco } = source;

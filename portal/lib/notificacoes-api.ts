@@ -1,5 +1,6 @@
 import { AUDITAR_REENVIO_SQL } from './auditoria-api.ts';
 import { paginaSolicitada } from './paginacao.ts';
+import { intervaloDatasNegocio } from './periodo-auditoria.ts';
 import { EntradaInvalida, LIMITES_CAMPO } from './limites-entrada.ts';
 import { type ContextoApi, type User } from './api-compartilhada.ts';
 
@@ -29,7 +30,9 @@ export function filtrosNotificacoes(params: URLSearchParams) {
     if(q.length>LIMITES_CAMPO.busca)throw new EntradaInvalida(`O campo "busca" passa do limite de ${LIMITES_CAMPO.busca} caracteres.`);
     conditions.push('(e.ticket_code LIKE ? OR e.supplier_name LIKE ? OR e.recipient_name LIKE ? OR e.recipient_email LIKE ?)');values.push(...Array(4).fill(`%${q}%`));
   }
-  for(const [key,operator] of [['from','>='],['to','<=']] as const){const value=params.get(key);if(value){conditions.push(`date(e.created_at)${operator}date(?)`);values.push(value);}}
+  const periodo=intervaloDatasNegocio(params.get('from'),params.get('to'));
+  if(periodo.inicio){conditions.push('julianday(e.created_at)>=julianday(?)');values.push(periodo.inicio);}
+  if(periodo.fim){conditions.push('julianday(e.created_at)<julianday(?)');values.push(periodo.fim);}
   return {where:conditions.length?`WHERE ${conditions.join(' AND ')}`:'',values,...paginaSolicitada(params,25,100,1)};
 }
 
