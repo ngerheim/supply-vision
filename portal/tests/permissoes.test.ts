@@ -42,6 +42,11 @@ const equivalencia: Record<Acao, readonly boolean[]> = {
   'email:consultar': [false, false, true, false],
   'email:reenviar': [false, false, true, false],
   'base:exportar': [false, false, true, false],
+  'central:marcar': [true, true, true, false],
+  'solicitacao:abrir': [true, true, true, false],
+  'solicitacao:ver_todas': [false, true, true, false],
+  'solicitacao:atender': [false, true, true, false],
+  'categoria:gerenciar': [false, false, true, false],
 };
 
 void test('cada perfil e cada acao preservam o contrato inventariado', () => {

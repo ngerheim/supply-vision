@@ -228,6 +228,9 @@ jobs:
       - run: npm test
         # Navegacao: tests/navegacao.test.ts e tests/navegacao-telas.test.mjs;
         # enderecos, historico, teclado e equivalencia dos acessos por perfil.
+        # Cadastro API: tests/solicitacoes-api.test.mjs, tests/consultas-fornecedor.test.ts
+        # e tests/database-migracoes.test.mjs; incluidos tambem no PREPARAR.
+        # HTTP real: portal/scripts/teste-solicitacoes.mjs no portal/scripts/teste-portal-ponta-a-ponta.ps1.
         # Central: tests/central.test.mjs e tests/central-cliente.test.ts;
         # migracao, atomicidade, API, expurgo, backup/restauracao e polling.
         # Inclui tests/portal-build.test.mjs, tests/portal-build-api.test.mjs,

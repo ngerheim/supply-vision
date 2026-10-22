@@ -1,5 +1,6 @@
 import { abrirSqliteLocal } from '../scripts/sqlite-local.mjs';
-import { autorEscrita, escritaNotificacoesProprias, SessaoRevogada } from './autor-escrita.ts';
+import { autorEscrita, acaoEscritaAutorizada, SessaoRevogada } from './autor-escrita.ts';
+import { pode } from './permissoes.ts';
 import { SESSAO_INATIVIDADE_MS } from './politica-sessao.ts';
 
 export function bancoSqliteLocal(options: Parameters<typeof abrirSqliteLocal>[0]) {
@@ -10,11 +11,12 @@ export function bancoSqliteLocal(options: Parameters<typeof abrirSqliteLocal>[0]
     if (!autor) return undefined;
     return (consultar: (consulta: {sql: string; values: unknown[]}) => {results: unknown[]}) => {
       const agora = new Date().toISOString(), limite = new Date(Date.now() - SESSAO_INATIVIDADE_MS).toISOString();
+      const acao = acaoEscritaAutorizada();
       const r = consultar({ sql: `SELECT 1 FROM sessions s JOIN users u ON u.id=s.user_id
-        WHERE s.token=? AND u.id=? AND u.active=1 AND u.role=? ${escritaNotificacoesProprias() ? '' : "AND u.role IN ('admin','editor')"}
+        WHERE s.token=? AND u.id=? AND u.active=1 AND u.role=? ${acao ? '' : "AND u.role IN ('admin','editor')"}
         AND s.expires_at>? AND (s.last_seen_at IS NULL OR s.last_seen_at>=?)`,
         values: [autor.token, autor.id, autor.role, agora, limite] });
-      if (!r.results.length) throw new SessaoRevogada();
+      if (!r.results.length || (acao && !pode({ role: autor.role }, acao))) throw new SessaoRevogada();
     };
   }
   function consultar(sql: string, values: unknown[]) {

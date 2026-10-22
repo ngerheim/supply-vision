@@ -1,5 +1,5 @@
 import type { ContextoApi, User } from './api-compartilhada.ts';
-import { comEscritaNotificacoesProprias } from './autor-escrita.ts';
+import { comAcaoEscrita } from './autor-escrita.ts';
 
 export function centralApi({ rawDb, all, first, now, ok, fail }: ContextoApi) {
   const colunas = 'id,tipo,texto,link,criada_em,lida_em';
@@ -14,7 +14,7 @@ export function centralApi({ rawDb, all, first, now, ok, fail }: ContextoApi) {
     return notificacao ? ok({ notificacao }) : fail('Notificação não encontrada.', 404);
   }
   async function marcar(user: User, id?: string) {
-    const resultado = await comEscritaNotificacoesProprias(() => rawDb().prepare(
+    const resultado = await comAcaoEscrita('central:marcar', () => rawDb().prepare(
       `UPDATE notificacoes_usuario SET lida_em=COALESCE(lida_em,?) WHERE user_id=?${id ? ' AND id=?' : ' AND lida_em IS NULL'}`,
     ).bind(now(), user.id, ...(id ? [id] : [])).run());
     if (id && !resultado.meta.changes) return fail('Notificação não encontrada.', 404);

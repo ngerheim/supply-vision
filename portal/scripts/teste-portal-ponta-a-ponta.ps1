@@ -485,6 +485,10 @@ Verifica 'Relatorios e perfis respeitam fila, idempotencia e acesso' {
   if($codigoTeste-ne0){Start-Sleep -Seconds 2;Get-Content $logServidor | Select-String -Pattern 'download indisponivel' -Context 0,15 | Out-Host}
   $codigoTeste -eq 0
 }
+Verifica 'Cadastro de fornecedor usa consulta ficticia e respeita fluxo e posse do viewer' {
+  & node (Join-Path $PSScriptRoot 'teste-solicitacoes.mjs') $temp $arquivoBanco | Out-Host
+  $LASTEXITCODE -eq 0
+}
 & node (Join-Path $PSScriptRoot 'teste-http-fluxo.mjs')
 $codigoFluxo = $LASTEXITCODE
 Remove-Item Env:PORTAL_TESTE_COOKIE, Env:PORTAL_TESTE_PORTA, Env:PORTAL_TESTE_DESCARTAVEL -ErrorAction SilentlyContinue

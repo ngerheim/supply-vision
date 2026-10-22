@@ -18,6 +18,28 @@ async function carregar(sufixo) {
   finally { hooks.deregister(); }
 }
 
+void test('cadastro migra banco na versao 8 preservando legado e reaplica sem duplicar sementes', async t => {
+  const pasta = fs.mkdtempSync(path.join(os.tmpdir(), 'sv-cadastro-migracao-'));
+  const db = bancoSqliteLocal({ pastaPrivada: pasta, criar: true });
+  const chave = Symbol.for('supply-vision:banco'), anterior = globalThis[chave], senha = env.INITIAL_ADMIN_PASSWORD;
+  globalThis[chave] = db; env.INITIAL_ADMIN_PASSWORD = 'senha-ficticia-migracao-cadastro';
+  t.after(() => { globalThis[chave] = anterior; env.INITIAL_ADMIN_PASSWORD = senha; db.fechar(); fs.rmSync(pasta,{recursive:true,force:true}); });
+  await (await carregar('cadastro-novo')).ensureDatabase();
+  assert.equal(await db.prepare('SELECT COUNT(*) n FROM categorias_fornecedor').first('n'),3);
+  const usuarios = (await db.prepare('SELECT * FROM users').all()).results;
+  await db.exec('DROP TABLE consultas_cnpj; DROP TABLE solicitacao_categorias; DROP TABLE categorias_fornecedor; DROP TABLE solicitacao_andamentos; DROP TABLE solicitacoes; DELETE FROM schema_migrations WHERE version=9');
+  await (await carregar('cadastro-existente')).ensureDatabase();
+  assert.deepEqual((await db.prepare('SELECT * FROM users').all()).results,usuarios);
+  assert.equal(await db.prepare('SELECT COUNT(*) n FROM categorias_fornecedor').first('n'),3);
+  assert.equal(await db.prepare('SELECT COUNT(*) n FROM solicitacoes').first('n'),0);
+  const marcador = await db.prepare('SELECT * FROM schema_migrations WHERE version=9').first();
+  await db.prepare("UPDATE categorias_fornecedor SET ativo=0,revision=1 WHERE id='categoria_semente_1'").run();
+  await (await carregar('cadastro-reinicio')).ensureDatabase();
+  assert.deepEqual(await db.prepare('SELECT * FROM schema_migrations WHERE version=9').first(),marcador);
+  assert.equal(await db.prepare('SELECT COUNT(*) n FROM categorias_fornecedor').first('n'),3);
+  assert.equal(await db.prepare("SELECT ativo FROM categorias_fornecedor WHERE id='categoria_semente_1'").first('ativo'),0);
+});
+
 void test('Central migra banco existente sem alterar usuarios e reaplica sem duplicar', async t => {
   const pasta = fs.mkdtempSync(path.join(os.tmpdir(), 'sv-central-migracao-'));
   const db = bancoSqliteLocal({ pastaPrivada:pasta, criar:true });
@@ -93,13 +115,13 @@ void test('falha ao inspecionar colunas bloqueia inicializacao e retomada migra 
     END`);
   falhar = false;
   await ensureDatabase();
-  assert.deepEqual((await db.prepare('SELECT version FROM ordem_migracoes ORDER BY posicao').all()).results.map(r => r.version), [1,2,3,4,5,6,7,8]);
+  assert.deepEqual((await db.prepare('SELECT version FROM ordem_migracoes ORDER BY posicao').all()).results.map(r => r.version), [1,2,3,4,5,6,7,8,9]);
   const antes = (await db.prepare('SELECT * FROM schema_migrations ORDER BY version').all()).results;
   const usuarios = (await db.prepare('SELECT * FROM users ORDER BY id').all()).results;
   await (await carregar('reinicio')).ensureDatabase();
   assert.deepEqual((await db.prepare('SELECT * FROM schema_migrations ORDER BY version').all()).results, antes);
   assert.deepEqual((await db.prepare('SELECT * FROM users ORDER BY id').all()).results, usuarios);
-  assert.equal(await db.prepare('SELECT COUNT(*) FROM ordem_migracoes').first('COUNT(*)'), 8);
+  assert.equal(await db.prepare('SELECT COUNT(*) FROM ordem_migracoes').first('COUNT(*)'), 9);
   assert.deepEqual((await db.prepare('PRAGMA foreign_key_check').all()).results, []);
   assert.equal(await db.prepare('PRAGMA foreign_keys').first('foreign_keys'), 1);
 });

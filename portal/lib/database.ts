@@ -1,5 +1,6 @@
 import { portalPrivado } from '../scripts/configuracao.mjs';
 import { SCHEMA_CENTRAL } from './central-notificacoes.ts';
+import { SCHEMA_SOLICITACOES } from './solicitacoes-schema.ts';
 import { bancoSqliteLocal } from './sqlite-local.ts';
 import { SESSAO_INATIVIDADE_MS } from './politica-sessao.ts';
 export { SESSAO_INATIVIDADE_MS } from './politica-sessao.ts';
@@ -247,6 +248,12 @@ async function initialize() {
     await db.batch([
       ...SCHEMA_CENTRAL.map(sql => db.prepare(sql)),
       db.prepare('INSERT OR IGNORE INTO schema_migrations(version,applied_at) VALUES(8,?)').bind(now()),
+    ]);
+  }
+  if (!await db.prepare('SELECT 1 ok FROM schema_migrations WHERE version=9').first()) {
+    await db.batch([
+      ...SCHEMA_SOLICITACOES.map(sql => db.prepare(sql)),
+      db.prepare('INSERT OR IGNORE INTO schema_migrations(version,applied_at) VALUES(9,?)').bind(now()),
     ]);
   }
   await db.prepare('PRAGMA optimize').run();
