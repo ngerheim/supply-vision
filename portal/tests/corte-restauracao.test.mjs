@@ -102,6 +102,10 @@ void test('troca publica o corte antes do banco, inclusive com configuracao; fal
   const pasta = path.join(raiz, 'pacote');
   fs.mkdirSync(path.join(pasta, 'operacao'), { recursive: true });
   fs.writeFileSync(path.join(pasta, 'operacao/estado.json'), '{}');
+  // A restauracao de configuracao tambem substitui portal.env: conservar as
+  // portas da fixture para as proximas conferencias de operacao parada.
+  fs.mkdirSync(path.join(pasta, 'portal/configuracao'), { recursive: true });
+  fs.copyFileSync(config, path.join(pasta, 'portal/configuracao/portal.env'));
   const corte = arquivoCorteRestauracao(raiz), renomear = fs.renameSync;
   let trocas = 0, recusar = false, recusarCorte = false;
   t.mock.method(fs, 'renameSync', (de, para) => {
@@ -114,8 +118,9 @@ void test('troca publica o corte antes do banco, inclusive com configuracao; fal
     return renomear(de, para);
   });
   await restaurarCopia(origem, { raiz });
-  await restaurarCopia(origem, { raiz, configuracao: true, pasta, meta: { arquivos: { 'operacao/estado.json': {} } } });
+  await restaurarCopia(origem, { raiz, configuracao: true, pasta, meta: { arquivos: { 'operacao/estado.json': {}, 'portal/configuracao/portal.env': {} } } });
   assert.equal(trocas, 2);
+  assert.equal(fs.readFileSync(config, 'utf8'), fs.readFileSync(path.join(pasta, 'portal/configuracao/portal.env'), 'utf8'));
   assert.equal(fs.readFileSync(path.join(raiz, 'operacao/estado.json'), 'utf8'), '{}');
   const anterior = fs.readFileSync(corte, 'utf8');
   recusar = true;
