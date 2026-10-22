@@ -1,10 +1,11 @@
 # Dependencias de execução dos Alertas.
 #
-# Faixas com teto: o lado Node pina versao exata e tem lock, e o Python
-# aceitava qualquer versao futura. Uma major nova do pandas numa reinstalacao
-# quebraria o rodar.py sem ninguem ter mudado uma linha de codigo.
-websocket-client>=1.9.2,<2
-pandas>=3.0.6,<4
-numpy>=2.5.4,<3
-openpyxl>=3.1.5,<4
-xlsxwriter>=3.2.9,<4
+# Versoes exatas, como o lado Node (lock): faixas deixavam o preparo da
+# atualizacao instalar uma release nova no mesmo dia (ex.: XlsxWriter 3.3.0
+# mudou a altura das linhas). O Dependabot propoe as atualizacoes,
+# respeitando a carencia configurada.
+websocket-client==1.9.2
+pandas==3.0.6
+numpy==2.5.4
+openpyxl==3.1.5
+xlsxwriter==3.2.9
