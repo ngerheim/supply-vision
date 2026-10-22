@@ -6,6 +6,29 @@ import { ENTREGAS_EMAIL_SQL, REENVIAR_RELATORIO_DIARIO_SQL, filtrosNotificacoes 
 import { REENVIAR_NOTIFICACAO_SQL } from '../lib/notificacoes-api.ts';
 import { AUDITAR_REENVIO_SQL } from '../lib/auditoria-api.ts';
 
+void test('periodo das notificacoes acompanha o dia de Brasilia inclusive na virada UTC',()=>{
+  const db=new DatabaseSync(':memory:');
+  try {
+    db.exec(`CREATE TABLE entregas(id TEXT,created_at TEXT);
+      INSERT INTO entregas VALUES
+      ('antes','2026-10-21T02:59:59.999Z'),
+      ('inicio','2026-10-21T03:00:00.000Z'),
+      ('antes-utc','2026-10-21T23:59:59.999Z'),
+      ('meia-noite-utc','2026-10-22T00:00:00.000Z'),
+      ('22h','2026-10-22T01:00:00Z'),
+      ('fim','2026-10-22T02:59:59.999Z'),
+      ('seguinte','2026-10-22T03:00:00.000Z')`);
+    const filtrar=(params)=>{
+      const {where,values}=filtrosNotificacoes(new URLSearchParams(params));
+      return db.prepare(`SELECT id FROM entregas e ${where} ORDER BY created_at`).all(...values).map(r=>r.id);
+    };
+    assert.deepEqual(filtrar({from:'2026-10-21',to:'2026-10-21'}),['inicio','antes-utc','meia-noite-utc','22h','fim']);
+    assert.deepEqual(filtrar({from:'2026-10-22'}),['seguinte']);
+    assert.deepEqual(filtrar({to:'2026-10-20'}),['antes']);
+    assert.throws(()=>filtrar({from:'2026-10-22',to:'2026-10-21'}),/anterior/);
+  } finally {db.close();}
+});
+
 void test('falha diaria aparece nos filtros e reenvio preserva intervalo original',()=>{
   const db=new DatabaseSync(':memory:');
   try {

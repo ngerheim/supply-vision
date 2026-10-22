@@ -2,6 +2,7 @@
 import { COLUNAS_ORDENACAO_CHAMADOS } from '@/lib/operacao-dados';
 import { gerarChaveRelatorio } from '@/lib/relatorios';
 import { api, errorText } from '@/lib/api';
+import { opcoesResponsavelChamado } from '@/lib/chamados';
 import { criarConsultaDebounced } from '@/lib/atualizacao-periodica';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
@@ -642,6 +643,7 @@ function TicketDetail({ busy, id, users, onBack, run }: JsonData) {
             agreementId: t.agreement_id,
             notes: t.notes,
           }}
+          responsavelAtual={t.assigned_to ? { id: t.assigned_to, name: t.assignedTo || 'Responsável atual' } : null}
           users={users}
           onClose={() => setEditing(false)}
           onSave={(body: AnyRow) =>
@@ -661,7 +663,7 @@ function TicketDetail({ busy, id, users, onBack, run }: JsonData) {
   );
 }
 
-function TicketDialog({ busy, open, value, users, onClose, onSave }: JsonData) {
+function TicketDialog({ busy, open, value, users, responsavelAtual, onClose, onSave }: JsonData) {
   const [form, setForm] = useState<AnyRow>(value || { priority: 'media' }),
     editing = !!value?.id;
   const [submissionKey] = useState(() =>
@@ -720,7 +722,7 @@ function TicketDialog({ busy, open, value, users, onClose, onSave }: JsonData) {
             disabled={busy}
             value={form.assignedTo || ''}
             onChange={(v: string) => setForm({ ...form, assignedTo: v })}
-            rows={users || []}
+            rows={opcoesResponsavelChamado(users || [], editing ? responsavelAtual : null)}
           />
 
           <Field label="Escopo pretendido" className="sm:col-span-2">

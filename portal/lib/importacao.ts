@@ -6,7 +6,7 @@ import {
   normalizeImportText,
   normalizeText,
 } from './domain.ts';
-import { EntradaInvalida } from './limites-entrada.ts';
+import { EntradaInvalida, exigeTexto, LIMITES_CAMPO } from './limites-entrada.ts';
 
 export type MappingType = 'items' | 'models' | 'locations' | 'units';
 export type ImportIssue = {
@@ -68,6 +68,12 @@ export function parseImportRow(
       });
   }
   if (price.error) issues.push({ campo: '', valor: '', erro: price.error });
+  const brands = normalizeImportText(find('MARCAS'));
+  try { exigeTexto(textoSeguro(find('MARCAS')), LIMITES_CAMPO.marcas, 'MARCAS'); }
+  catch (erro) {
+    if (!(erro instanceof EntradaInvalida)) throw erro;
+    issues.push({ campo: '', valor: '', erro: erro.message });
+  }
   return {
     rowNumber,
     city,
@@ -80,7 +86,7 @@ export function parseImportRow(
     model: normalizeImportText(rawModel),
     item: normalizeImportText(rawItem),
     unit: normalizeImportText(rawUnit),
-    brands: normalizeImportText(find('MARCAS')),
+    brands,
     price: price.value,
     rawModel,
     rawItem,

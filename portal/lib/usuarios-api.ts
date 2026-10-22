@@ -110,7 +110,7 @@ export function usuariosApi(contexto: ContextoApi) {
   async function userList(user: User) {
     return ok({ users: user.role === 'admin'
       ? await all('SELECT id,name,email,role,active,revision,daily_report_enabled AS dailyReportEnabled,daily_report_time AS dailyReportTime,created_at AS createdAt FROM users ORDER BY name')
-      : await all('SELECT id,name FROM users WHERE active=1 ORDER BY name') });
+      : await all('SELECT id,name,role,active FROM users WHERE active=1 ORDER BY name') });
   }
 
   return { createUser, updateUser, userList };
