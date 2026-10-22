@@ -67,6 +67,94 @@ try{Validar-Horarios @{ALERTAS_HORARIOS='08:00';ALERTAS_HORARIOS_SEX='14:0';BACK
 
 Write-Host 'Logica operacional: 6 cenarios base + agenda semanal aprovados.' -ForegroundColor Green
 
+# Backup 13:30 restaura estado sem o envio das 14h; corte 15h impede repeti-lo.
+$pastaCorte=Join-Path ([IO.Path]::GetTempPath()) ('sv-corte-'+[guid]::NewGuid().ToString('N'))
+try {
+ New-Item -ItemType Directory -Path $pastaCorte|Out-Null
+ $arquivoCorte=Join-Path $pastaCorte 'restauracao.json'
+ $estado=@{}
+ Igual 0 @(Pular-AlertasRestaurados $pastaCorte '14:00,17:00' $estado ([datetime]'2026-10-05 15:00')).Count 'sem restauracao nao muda estado'
+ Igual '14:00' (Obter-SlotDevido 'alertas' '14:00,17:00' $estado ([datetime]'2026-10-05 15:00')).hora 'reinicio normal recupera slot devido'
+ '{"corte":"2026-10-05T18:00:00.000Z"}'|Set-Content -LiteralPath $arquivoCorte -Encoding UTF8
+ $estado=@{'alertas-2026-10-05-08:00'='enviado'}
+ $pulados=@(Pular-AlertasRestaurados $pastaCorte '08:00,14:00,15:00,17:00' $estado ([datetime]'2026-10-05 15:00'))
+ Igual 2 $pulados.Count 'slots anterior e igual ao corte pulados'
+ Igual 'enviado' $estado['alertas-2026-10-05-08:00'] 'preserva slot registrado'
+ Igual 'pulado-por-restauracao' $estado['alertas-2026-10-05-14:00'] '14h nao reenvia'
+ Gravar-EstadoOperacao (Join-Path $pastaCorte 'estado.json') $estado
+ $estado=Ler-EstadoOperacao (Join-Path $pastaCorte 'estado.json')
+ Igual 0 @(Pular-AlertasRestaurados $pastaCorte '08:00,14:00,15:00,17:00' $estado ([datetime]'2026-10-05 15:00')).Count 'reinicio conserva pulos sem novo aviso'
+ Igual $null (Obter-SlotDevido 'alertas' '14:00,15:00,17:00' $estado ([datetime]'2026-10-05 15:00')) 'nenhum envio automatico antes do corte'
+ Igual '17:00' (Obter-SlotDevido 'alertas' '14:00,17:00' $estado ([datetime]'2026-10-05 17:00')).hora '17h segue normal'
+ $estado=@{}
+ Igual 0 @(Pular-AlertasRestaurados $pastaCorte '00:00,14:00,17:00' $estado ([datetime]'2026-10-06 00:00')).Count 'corte expira a meia-noite'
+ Igual '14:00' (Obter-SlotDevido 'alertas' '14:00,17:00' $estado ([datetime]'2026-10-06 15:00')).hora 'corte antigo nao afeta dia seguinte'
+ # Executa o proprio bloco de agenda do supervisor com processos/avisos ficticios.
+ # A configuracao restaurada perdeu o slot 14h ja enviado; o corte e externo ao estado.
+ & {
+  $ast=[Management.Automation.Language.Parser]::ParseFile((Join-Path $PSScriptRoot 'supervisor.ps1'),[ref]$null,[ref]$null)
+  $bloco=$ast.Find({param($n) $n-is[Management.Automation.Language.IfStatementAst]-and$n.Clauses[0].Item1.Extent.Text-eq'!$manutencao-and!$alerta'},$true)
+  if(!$bloco){throw 'Bloco de agenda de Alertas nao encontrado.'}
+  $agenda=[scriptblock]::Create($bloco.Extent.Text)
+  $Operacao=$pastaCorte;$config=@{ALERTAS_HORARIOS='14:00,17:00'};$estado=@{}
+  $manutencao=$false;$alerta=$null;$ensaio=$true;$avisosAdmin=@{};$Python='python-ficticio';$Alertas='fixture'
+  $agoraTeste=[datetime]'2026-10-05 15:00';$avisos=New-Object 'Collections.Generic.List[string]';$logs=New-Object 'Collections.Generic.List[string]';$execucoes=New-Object 'Collections.Generic.List[string]'
+  function Get-Date { return $agoraTeste }
+  function Log([string]$Texto){$logs.Add($Texto)}
+  function Avisar-Administrador($Controle,[string]$Evento){$avisos.Add($Evento)}
+  function Salvar-Estado { Gravar-EstadoOperacao (Join-Path $Operacao 'estado.json') $estado }
+  function Pode-Tentar { return $true }
+  function Start-Process { param($FilePath,$ArgumentList,$WorkingDirectory,$WindowStyle,[switch]$PassThru);$execucoes.Add(($ArgumentList-join '|'));return @{Id=1;Handle=0} }
+  . $agenda
+  Igual 0 $execucoes.Count 'supervisor nao executa 14h depois de restaurar configuracao'
+  Igual 'alertas-restauracao' ($avisos-join ',') 'supervisor avisa administrador pelo mecanismo existente'
+  Igual $true (($logs-join ',').Contains('Alertas pulados por restauracao: alertas-2026-10-05-14:00.')) 'supervisor registra pulo no log'
+  $estado=Ler-EstadoOperacao (Join-Path $Operacao 'estado.json')
+  . $agenda
+  Igual 1 $avisos.Count 'reinicio nao repete aviso do slot ja registrado'
+  $agoraTeste=[datetime]'2026-10-05 17:00'
+  . $agenda
+  Igual 1 $execucoes.Count 'supervisor executa slot posterior'
+  Igual 'processo\pipeline.py|--slot|17:00|--sem-envio' $execucoes[0] 'execucao normal do slot 17h'
+  foreach($conteudo in @('{quebrado','{}','{"corte":"invalida"}','{"corte":null}')){
+   [IO.File]::WriteAllText($arquivoCorte,$conteudo)
+   [IO.File]::SetLastWriteTimeUtc($arquivoCorte,([datetime]'2026-10-05 18:00:00'))
+   $agoraTeste=[datetime]'2026-10-05 15:00';$estado=@{};$alerta=$null
+   $avisos.Clear();$logs.Clear();$execucoes.Clear()
+   foreach($volta in 1..3){
+    . $agenda
+    # Simula inclusive reinicio: o aviso diario precisa sobreviver em estado.json.
+    $estado=Ler-EstadoOperacao (Join-Path $Operacao 'estado.json')
+   }
+   Igual 'pulado-por-restauracao' $estado['alertas-2026-10-05-14:00'] "modificacao protege slot 14h: $conteudo"
+   Igual $false $estado.ContainsKey('alertas-2026-10-05-17:00') "modificacao nao bloqueia slot 17h: $conteudo"
+   Igual 0 $execucoes.Count "arquivo invalido nao reenvia: $conteudo"
+   Igual 'alertas-restauracao' ($avisos-join ',') "arquivo invalido avisa uma vez: $conteudo"
+   Igual 1 @($logs|Where-Object {$_-like 'AVISO:*data de modificacao como corte*'}).Count "aviso no log: $conteudo"
+   Igual 0 @(Pular-AlertasRestaurados $Operacao '00:00' @{} ([datetime]'2026-10-06 00:00') {param($m)}).Count "modificacao expira a meia-noite: $conteudo"
+   $agoraTeste=[datetime]'2026-10-06 15:00'
+   . $agenda
+   Igual 1 $execucoes.Count "modificacao expira no dia seguinte: $conteudo"
+   Igual 2 $avisos.Count "aviso de arquivo ainda invalido renova uma vez no novo dia: $conteudo"
+   $alerta=$null
+   . $agenda
+   Igual 2 $avisos.Count "novo dia tambem nao repete aviso: $conteudo"
+  }
+  & {
+   function Get-Content { [CmdletBinding()]param($LiteralPath,[switch]$Raw,$Encoding);throw [UnauthorizedAccessException]::new('leitura ficticia negada') }
+   $estado=@{};$mensagens=New-Object 'Collections.Generic.List[string]'
+   $resultado=@(Pular-AlertasRestaurados $Operacao '14:00,17:00' $estado ([datetime]'2026-10-05 15:00') {param($m) $mensagens.Add($m)})
+   Igual 'alertas-2026-10-05-14:00' ($resultado-join ',') 'leitura negada usa modificacao'
+   Igual 1 $mensagens.Count 'leitura negada registra aviso'
+   function Get-Item { [CmdletBinding()]param($LiteralPath,[switch]$Force);throw [UnauthorizedAccessException]::new('metadados ficticios negados') }
+   Igual 0 @(Pular-AlertasRestaurados $Operacao '14:00,17:00' @{} ([datetime]'2026-10-05 15:00') {param($m) $mensagens.Add($m)}).Count 'sem modificacao segue sem corte'
+   Igual $true $mensagens[1].Contains('modificacao indisponivel, seguindo sem corte') 'sem modificacao registra aviso'
+   Igual 0 @(Pular-AlertasRestaurados $Operacao '14:00' @{} ([datetime]'2026-10-05 15:00') {throw 'log ficticio indisponivel'}).Count 'falha no log nao lanca excecao'
+  }
+ }
+ Write-Host '[OK] Corte da restauracao: 14h pulado, 17h normal, reinicio e expiracao.'
+} finally { Remove-Item -LiteralPath $pastaCorte -Recurse -Force }
+
 # Exercita a mesma resolução diária que o supervisor usa para backups.
 $backupSemana=@{BACKUP_HORARIOS='18:00';BACKUP_HORARIOS_SEG='09:00';BACKUP_HORARIOS_DOM=''}
 Igual '09:00' (Obter-SlotDoDia 'backup' $backupSemana 'BACKUP_HORARIOS' @{} ([datetime]'2026-10-05 10:00')).hora 'backup usa horario proprio de segunda'

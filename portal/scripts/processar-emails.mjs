@@ -2,6 +2,8 @@ import { modoEnsaio } from './modo-ensaio.mjs';
 import { validacaoAtiva } from './operacao-validacao.mjs';
 import { abrirBancoLocal } from './banco-local.mjs';
 import { travarRestauracao } from './trava-restauracao.mjs';
+import { lerCorteRestauracao } from './corte-restauracao.mjs';
+import { MENSAGEM_RESTAURACAO } from './filas-restauradas.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
@@ -145,22 +147,27 @@ function garantirPeriodoRelatorio(db){
 // Cada relatorio cobre do fim do anterior (enviado ou nao) ate a preparacao
 // deste. Antes cobria so o dia D ate o horario do envio, e o que acontecia
 // depois disso nunca era relatado.
-export function prepararRelatoriosDiarios(db,agora=new Date()){
+export function prepararRelatoriosDiarios(db,agora=new Date(),raiz){
   garantirPeriodoRelatorio(db);
   const local=horarioSaoPaulo(agora),agoraIso=agora.toISOString();
-  const consultarUsuarios=db.prepare("SELECT id FROM users u WHERE active=1 AND role IN ('admin','editor') AND daily_report_enabled=1 AND daily_report_time<=? AND NOT EXISTS (SELECT 1 FROM daily_report_deliveries d WHERE d.user_id=u.id AND d.report_date=?)");
+  const corte=lerCorteRestauracao(agora,raiz);
+  const consultarUsuarios=db.prepare("SELECT id,daily_report_time FROM users u WHERE active=1 AND role IN ('admin','editor') AND daily_report_enabled=1 AND daily_report_time<=? AND NOT EXISTS (SELECT 1 FROM daily_report_deliveries d WHERE d.user_id=u.id AND d.report_date=?)");
   if(!consultarUsuarios.get(local.horario,local.data)&&!db.prepare("SELECT 1 FROM daily_report_deliveries WHERE status='pending' AND payload_json IS NULL LIMIT 1").get())return local.data;
   db.exec('BEGIN IMMEDIATE');
   try {
   const usuarios=consultarUsuarios.all(local.horario,local.data);
   const ultimo=db.prepare("SELECT report_date,period_end,sent_at,created_at FROM daily_report_deliveries WHERE user_id=? AND report_date<? ORDER BY report_date DESC LIMIT 1");
-  const inserir=db.prepare("INSERT OR IGNORE INTO daily_report_deliveries (id,user_id,report_date,status,attempts,next_attempt_at,created_at,updated_at,period_start,period_end) VALUES (?,?,?,'pending',0,?,?,?,?,?)");
+  const inserir=db.prepare("INSERT OR IGNORE INTO daily_report_deliveries (id,user_id,report_date,status,attempts,next_attempt_at,created_at,updated_at,period_start,period_end,last_error) VALUES (?,?,?,?,0,?,?,?,?,?,?)");
   for(const usuario of usuarios){
     const anterior=ultimo.get(usuario.id,local.data);
     // Linha antiga sem periodo: cobria o dia ate o envio (ou a preparacao).
     let inicio=anterior?(anterior.period_end||fimLegado(anterior.report_date,new Date(anterior.sent_at||anterior.created_at))):inicioDoDia(local.data);
     if(inicio>agoraIso)inicio=agoraIso;
-    inserir.run(`rpt_${crypto.randomUUID().replaceAll('-','')}`,usuario.id,local.data,agoraIso,agoraIso,agoraIso,inicio,agoraIso);
+    const previsto=new Date(`${local.data}T${usuario.daily_report_time}:00-03:00`);
+    // O periodo termina agora; o horario previsto protege tambem a entrega
+    // cujo consumidor so voltou depois do corte.
+    const restaurado=corte&&(previsto<=corte||agora<=corte);
+    inserir.run(`rpt_${crypto.randomUUID().replaceAll('-','')}`,usuario.id,local.data,restaurado?'failed':'pending',agoraIso,agoraIso,agoraIso,inicio,agoraIso,restaurado?MENSAGEM_RESTAURACAO:null);
   }
   // Congela tambem pendencias legadas, uma unica vez, antes do primeiro envio.
   const congelar=db.prepare('UPDATE daily_report_deliveries SET payload_json=? WHERE id=? AND payload_json IS NULL');

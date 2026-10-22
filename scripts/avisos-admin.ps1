@@ -15,6 +15,7 @@ function Nome-EventoAdmin([string]$Evento) {
     'backup-falhou'='Backup falhou'
     'alertas-falharam'='Alertas falharam'
     'alertas-revisao'='Alertas exigem revisão de entrega'
+    'alertas-restauracao'='Alertas pulados por restauração'
     'disco-baixo'='Espaço em disco baixo'
     'supervisor-iniciado'='Supervisor iniciado'
   }

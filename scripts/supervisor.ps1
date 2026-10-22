@@ -147,7 +147,23 @@ try{
   elseif(!$saudavel-and$portalPronto-and$falhasSaude-ge2){$portalPronto=$false;Log 'Portal deixou de responder.';[void](Notificar 'Supply Vision' 'O Portal parou de responder.');Avisar-Administrador $avisosAdmin 'portal-parou'}
   if($alerta-and$alerta.HasExited){if($alerta.ExitCode-eq0){$estado[$alertaChave]=(Get-Date).ToString('o');$estado.Remove('tentativa-alertas');Log "Alertas concluidos: $alertaChave."}elseif($alerta.ExitCode-eq3){$estado[$alertaChave]='revisao-entrega';$estado.Remove('tentativa-alertas');Log "ALERTA: $alertaChave exige revisao da entrega. Confira privado/alertas/estado-envios; nao sera reenviado automaticamente.";Avisar-Administrador $avisosAdmin 'alertas-revisao'}else{Log "Alertas falharam (codigo $($alerta.ExitCode)).";Avisar-Administrador $avisosAdmin 'alertas-falharam'};$alerta=$null;Salvar-Estado;try{if(!$verificacaoSaude){$inicioSaude=Get-Date;$verificacaoSaude=Start-Process $Python -ArgumentList 'processo\verificar_saude.py',$alertaHora.Replace(':',''),$alertaRunId -WorkingDirectory $Alertas -WindowStyle Hidden -PassThru;[void]$verificacaoSaude.Handle}}catch{Log "Verificacao de saude nao executada: $($_.Exception.Message)"}}
   $manutencao=(Test-Path $ManutencaoFile)-or(Test-Path (Join-Path $Operacao 'validacao-atualizacao.sinal'))
-  if(!$manutencao-and!$alerta){$agoraAlerta=Get-Date;$d=Obter-SlotDevido 'alertas' (Obter-HorariosDoDia $config 'ALERTAS_HORARIOS' $agoraAlerta) $estado $agoraAlerta;if($d-and(Pode-Tentar 'alertas')){$estado['tentativa-alertas']=(Get-Date).ToString('o');$alertaChave=$d.chave;$alertaHora=$d.hora;$alertaRunId=(Get-Date).ToString('yyyyMMdd_HHmmss')+'_'+[guid]::NewGuid().ToString('N').Substring(0,6);$env:SUPPLY_VISION_RUN_ID=$alertaRunId;try{$alerta=Start-Process $Python -ArgumentList (Argumentos-Pipeline $d.hora $ensaio) -WorkingDirectory $Alertas -WindowStyle Hidden -PassThru;[void]$alerta.Handle}finally{Remove-Item Env:SUPPLY_VISION_RUN_ID -ErrorAction SilentlyContinue};Log "Alertas iniciados para $($d.hora) (execucao $alertaRunId, PID $($alerta.Id)).";Salvar-Estado}}
+  if(!$manutencao-and!$alerta){
+   $agoraAlerta=Get-Date
+   $horariosAlerta=Obter-HorariosDoDia $config 'ALERTAS_HORARIOS' $agoraAlerta
+   $avisoCorte=@{mensagem=$null}
+   $pulados=@(Pular-AlertasRestaurados $Operacao $horariosAlerta $estado $agoraAlerta {param($mensagem) $avisoCorte.mensagem=$mensagem})
+   $avisarCorte=$pulados.Count-gt0
+   if($avisoCorte.mensagem){
+    $diaCorte=$agoraAlerta.ToString('yyyy-MM-dd')
+    $avisarCorte=$estado['aviso-corte-restauracao']-ne$diaCorte
+    if($avisarCorte){Log $avisoCorte.mensagem;$estado['aviso-corte-restauracao']=$diaCorte}
+   }
+   foreach($chave in $pulados){Log "Alertas pulados por restauracao: $chave."}
+   if($pulados.Count-or$avisarCorte){Salvar-Estado}
+   if($avisarCorte){Avisar-Administrador $avisosAdmin 'alertas-restauracao'}
+   $d=Obter-SlotDevido 'alertas' $horariosAlerta $estado $agoraAlerta
+   if($d-and(Pode-Tentar 'alertas')){$estado['tentativa-alertas']=(Get-Date).ToString('o');$alertaChave=$d.chave;$alertaHora=$d.hora;$alertaRunId=(Get-Date).ToString('yyyyMMdd_HHmmss')+'_'+[guid]::NewGuid().ToString('N').Substring(0,6);$env:SUPPLY_VISION_RUN_ID=$alertaRunId;try{$alerta=Start-Process $Python -ArgumentList (Argumentos-Pipeline $d.hora $ensaio) -WorkingDirectory $Alertas -WindowStyle Hidden -PassThru;[void]$alerta.Handle}finally{Remove-Item Env:SUPPLY_VISION_RUN_ID -ErrorAction SilentlyContinue};Log "Alertas iniciados para $($d.hora) (execucao $alertaRunId, PID $($alerta.Id)).";Salvar-Estado}
+  }
   if($backup-and$backup.HasExited){if($backup.ExitCode-eq0){$estado[$backupChave]=(Get-Date).ToString('o');Log "Backup concluido: $backupChave."}else{Log "Backup falhou (codigo $($backup.ExitCode)).$(Obter-DetalheFalha 'backup')";Avisar-Administrador $avisosAdmin 'backup-falhou'};$backup=$null;Salvar-Estado}
   if(!$manutencao-and!$backup){$d=Obter-SlotDoDia 'backup' $config 'BACKUP_HORARIOS' $estado (Get-Date);if($d-and(Pode-Tentar 'backup')){$estado['tentativa-backup']=(Get-Date).ToString('o');$backupChave=$d.chave;$backup=Start-Process $Node -ArgumentList @('--experimental-strip-types','scripts\backup.mjs') -WorkingDirectory $Portal -WindowStyle Hidden -PassThru -RedirectStandardOutput (Join-Path $Operacao 'backup-saida.log') -RedirectStandardError (Join-Path $Operacao 'backup-erro.log');[void]$backup.Handle;Log "Backup iniciado para $($d.hora) (PID $($backup.Id)).";Salvar-Estado}}
   if($limpeza-and$limpeza.HasExited){if($limpeza.ExitCode-eq0){$estado[$limpezaChave]=(Get-Date).ToString('o');Log 'Limpeza concluida.'}else{Log "Limpeza falhou (codigo $($limpeza.ExitCode)).$(Obter-DetalheFalha 'limpeza')"};$limpeza=$null;Salvar-Estado}

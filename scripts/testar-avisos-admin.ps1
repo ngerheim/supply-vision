@@ -12,7 +12,7 @@ function Start-Process {
  $p|Add-Member ScriptMethod Dispose {$this.Descartou=$true}
  return $p
 }
-$eventos=@('portal-parou','portal-reiniciado','backup-falhou','alertas-falharam','alertas-revisao','disco-baixo','supervisor-iniciado')
+$eventos=@('portal-parou','portal-reiniciado','backup-falhou','alertas-falharam','alertas-revisao','alertas-restauracao','disco-baixo','supervisor-iniciado')
 foreach($config in @(@{},@{ADMIN_ALERTA_EMAIL=''},@{ADMIN_ALERTA_EMAIL=' , '})){
  $controle=Novo-ControleAvisosAdmin $config $false 'node.exe' 'portal'
  foreach($evento in $eventos){Avisar-Administrador $controle $evento}
@@ -27,7 +27,7 @@ foreach($evento in $eventos){
  if(($ultima.Argumentos-join '|')-ne"scripts\aviso-admin.mjs|$evento"){throw "Despacho incorreto: $evento"}
  if($ultima.Email-ne'um@example.com,dois@example.com'){throw 'Destinatarios nao foram propagados.'}
 }
-if($script:chamadas.Count-ne7-or$controle.Pendentes.Count-ne7){throw 'Despacho por tipo duplicado ou faltando.'}
+if($script:chamadas.Count-ne$eventos.Count-or$controle.Pendentes.Count-ne$eventos.Count){throw 'Despacho por tipo duplicado ou faltando.'}
 $controle.Pendentes['backup-falhou'].Processo.HasExited=$true
 $controle.Pendentes['backup-falhou'].Processo.ExitCode=1
 Atualizar-AvisosAdmin $controle

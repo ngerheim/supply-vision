@@ -15,6 +15,7 @@ import { comBackupExclusivo } from './backup-exclusivo.mjs';
 import { comBackupDaRede, exigirDestinoSeguro, configuracaoPermitida, listarConfiguracao } from './backup-pacote.mjs';
 import { listarHistorico } from './retencao-backup.mjs';
 import { FalhaBackup } from './backup-7z.mjs';
+import { arquivoCorteRestauracao } from './corte-restauracao.mjs';
 
 function portalRespondendo(porta) {
   return new Promise(resolve => {
@@ -75,6 +76,9 @@ export async function restaurarCopia(origem, { raiz = privado, configuracao = fa
       }
       fs.writeFileSync(path.join(guardado, 'configuracao.json'), JSON.stringify(anteriores.map(({ nome, existe }) => ({ nome, existe }))));
       const escritos = [];
+      const arquivoCorte = arquivoCorteRestauracao(raiz);
+      const corteAnterior = fs.existsSync(arquivoCorte) ? fs.readFileSync(arquivoCorte) : null;
+      let corteGravado = false;
       try {
         for (const item of alvos) {
           escritos.push(item);
@@ -84,12 +88,25 @@ export async function restaurarCopia(origem, { raiz = privado, configuracao = fa
           fs.renameSync(`${item.alvo}.restaurando`, item.alvo);
         }
         for (const sufixo of ['-wal', '-shm']) fs.rmSync(alvo + sufixo, { force: true });
+        // Publicar ANTES do banco, sob a exclusao existente. Uma interrupcao
+        // entre os renames deixa um corte conservador, nunca banco sem corte.
+        fs.mkdirSync(path.dirname(arquivoCorte), { recursive: true });
+        fs.writeFileSync(`${arquivoCorte}.restaurando`, JSON.stringify({ corte: new Date().toISOString() }));
+        fs.renameSync(`${arquivoCorte}.restaurando`, arquivoCorte);
+        corteGravado = true;
         fs.renameSync(restaurando, alvo);
       } catch {
         // A troca pode falhar apos remover WAL/SHM; o snapshot consistente
         // anterior precisa sobreviver mesmo se a configuracao for recuperada.
         preservarRecuperacao = true;
         try {
+          fs.rmSync(`${arquivoCorte}.restaurando`, { force: true });
+          if (corteGravado) {
+            if (corteAnterior) {
+              fs.writeFileSync(`${arquivoCorte}.restaurando`, corteAnterior);
+              fs.renameSync(`${arquivoCorte}.restaurando`, arquivoCorte);
+            } else fs.rmSync(arquivoCorte, { force: true });
+          }
           for (const item of escritos.reverse()) {
             fs.rmSync(`${item.alvo}.restaurando`, { force: true });
             if (anteriores.find(a => a.nome === item.nome).existe) fs.copyFileSync(path.join(guardado, 'configuracao', item.nome), item.alvo);
