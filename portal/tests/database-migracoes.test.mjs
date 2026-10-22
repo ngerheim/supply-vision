@@ -18,6 +18,23 @@ async function carregar(sufixo) {
   finally { hooks.deregister(); }
 }
 
+void test('Central migra banco existente sem alterar usuarios e reaplica sem duplicar', async t => {
+  const pasta = fs.mkdtempSync(path.join(os.tmpdir(), 'sv-central-migracao-'));
+  const db = bancoSqliteLocal({ pastaPrivada:pasta, criar:true });
+  const chave = Symbol.for('supply-vision:banco'), anterior = globalThis[chave], senha = env.INITIAL_ADMIN_PASSWORD;
+  globalThis[chave] = db; env.INITIAL_ADMIN_PASSWORD = 'senha-ficticia-migracao-central';
+  t.after(() => { globalThis[chave] = anterior; env.INITIAL_ADMIN_PASSWORD = senha; db.fechar(); fs.rmSync(pasta,{recursive:true,force:true}); });
+  await (await carregar('central-novo')).ensureDatabase();
+  const usuarios = (await db.prepare('SELECT * FROM users').all()).results;
+  await db.exec('DROP TABLE notificacoes_usuario; DELETE FROM schema_migrations WHERE version=8');
+  await (await carregar('central-existente')).ensureDatabase();
+  assert.deepEqual((await db.prepare('SELECT * FROM users').all()).results,usuarios);
+  assert.equal(await db.prepare('SELECT COUNT(*) n FROM notificacoes_usuario').first('n'),0);
+  const marcador = await db.prepare('SELECT * FROM schema_migrations WHERE version=8').first();
+  await (await carregar('central-reinicio')).ensureDatabase();
+  assert.deepEqual(await db.prepare('SELECT * FROM schema_migrations WHERE version=8').first(),marcador);
+});
+
 void test('marcador inserido por concorrente entre consulta e migracao nao conflita', async t => {
   const pasta = fs.mkdtempSync(path.join(os.tmpdir(), 'sv-migracao-corrida-'));
   const db = bancoSqliteLocal({ pastaPrivada: pasta, criar: true });
@@ -76,13 +93,13 @@ void test('falha ao inspecionar colunas bloqueia inicializacao e retomada migra 
     END`);
   falhar = false;
   await ensureDatabase();
-  assert.deepEqual((await db.prepare('SELECT version FROM ordem_migracoes ORDER BY posicao').all()).results.map(r => r.version), [1,2,3,4,5,6,7]);
+  assert.deepEqual((await db.prepare('SELECT version FROM ordem_migracoes ORDER BY posicao').all()).results.map(r => r.version), [1,2,3,4,5,6,7,8]);
   const antes = (await db.prepare('SELECT * FROM schema_migrations ORDER BY version').all()).results;
   const usuarios = (await db.prepare('SELECT * FROM users ORDER BY id').all()).results;
   await (await carregar('reinicio')).ensureDatabase();
   assert.deepEqual((await db.prepare('SELECT * FROM schema_migrations ORDER BY version').all()).results, antes);
   assert.deepEqual((await db.prepare('SELECT * FROM users ORDER BY id').all()).results, usuarios);
-  assert.equal(await db.prepare('SELECT COUNT(*) FROM ordem_migracoes').first('COUNT(*)'), 7);
+  assert.equal(await db.prepare('SELECT COUNT(*) FROM ordem_migracoes').first('COUNT(*)'), 8);
   assert.deepEqual((await db.prepare('PRAGMA foreign_key_check').all()).results, []);
   assert.equal(await db.prepare('PRAGMA foreign_keys').first('foreign_keys'), 1);
 });

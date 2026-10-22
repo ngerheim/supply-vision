@@ -1,4 +1,5 @@
 import { portalPrivado } from '../scripts/configuracao.mjs';
+import { SCHEMA_CENTRAL } from './central-notificacoes.ts';
 import { bancoSqliteLocal } from './sqlite-local.ts';
 import { SESSAO_INATIVIDADE_MS } from './politica-sessao.ts';
 export { SESSAO_INATIVIDADE_MS } from './politica-sessao.ts';
@@ -242,6 +243,12 @@ async function initialize() {
   }
   await db.prepare('CREATE INDEX IF NOT EXISTS idx_tickets_supplier_sort ON tickets(supplier_sort,updated_at DESC,id DESC)').run();
   await migrarIndicesListasGlobais(db, now());
+  if (!await db.prepare('SELECT 1 ok FROM schema_migrations WHERE version=8').first()) {
+    await db.batch([
+      ...SCHEMA_CENTRAL.map(sql => db.prepare(sql)),
+      db.prepare('INSERT OR IGNORE INTO schema_migrations(version,applied_at) VALUES(8,?)').bind(now()),
+    ]);
+  }
   await db.prepare('PRAGMA optimize').run();
 }
 
@@ -263,7 +270,7 @@ export async function currentUser(request: Request) {
   // esquecida aberta numa maquina compartilhada deixa de valer sozinha.
   const visto = sessao.lastSeenAt ? Date.parse(sessao.lastSeenAt) : 0;
   if (visto && Date.now() - visto > SESSAO_INATIVIDADE_MS) {
-    await rawDb().prepare('DELETE FROM sessions WHERE token=?').bind(guardado).run();
+    if (request.headers.get('x-portal-poll') !== '1') await rawDb().prepare('DELETE FROM sessions WHERE token=?').bind(guardado).run();
     return null;
   }
 

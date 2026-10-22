@@ -20,6 +20,7 @@ import { chamadosApi } from '@/lib/chamados-api';
 import { usuariosApi } from '@/lib/usuarios-api';
 import { auditoriaApi } from '@/lib/auditoria-api';
 import { notificacoesApi } from '@/lib/notificacoes-api';
+import { centralApi } from '@/lib/central-api';
 import { exportacoesApi } from '@/lib/exportacoes-api';
 import { bootstrapApi } from '@/lib/bootstrap-api';
 import { PORTAL_BUILD, TELA_DESATUALIZADA, buildDivergente, ehEscrita } from '@/lib/portal-build';
@@ -119,6 +120,7 @@ const chamados = chamadosApi(contexto);
 const usuarios = usuariosApi(contexto);
 const auditoria = auditoriaApi(contexto);
 const notificacoes = notificacoesApi(contexto);
+const central = centralApi(contexto);
 const exportacoes = exportacoesApi(contexto);
 const inicializacao = bootstrapApi(contexto, acordos, importacoes);
 
@@ -194,6 +196,11 @@ async function GETInterno(request: NextRequest) {
   const user = await requireUser(request);
   if (!user) return fail('Sessão expirada.', 401);
 
+  if (parts[0] === 'central') {
+    if (parts.length === 1) return central.listar(user);
+    if (parts.length === 2) return parts[1] === 'nao-lidas' ? central.contar(user) : central.detalhe(user, parts[1]);
+    return fail('Rota não encontrada.', 404);
+  }
   if (parts[0] === 'bootstrap') return bootstrap(user);
   if (parts[0] === 'search') return parts[1] === 'options' ? searchOptions(request.nextUrl.searchParams) : search(request.nextUrl.searchParams);
   if (parts[0] === 'agreements' && parts[1]) return agreementDetail(parts[1], user, request.nextUrl.searchParams);
@@ -260,6 +267,12 @@ async function POSTInterno(request: NextRequest) {
   const user = await requireUser(request);
   if (!user) return fail('Sessão expirada.', 401);
   if (await first(VALIDACAO_ATIVA_SQL)) return denyWrite(request, 'Atualização em validação. Aguarde para salvar ou executar.', 503);
+  if (parts[0] === 'central') {
+    await jsonBody(request);
+    if (parts.length === 2 && parts[1] === 'lidas') return central.marcar(user);
+    if (parts.length === 3 && parts[2] === 'lida') return central.marcar(user, parts[1]);
+    return fail('Rota não encontrada.', 404);
+  }
   if (!pode(user, acaoEscrita(partsOf(request)))) return denyWrite(request, 'Seu perfil permite somente consulta.');
 
   if (parts[0] === 'agreements' && parts.length === 1) return createAgreement(request, user);

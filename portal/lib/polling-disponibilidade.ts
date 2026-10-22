@@ -1,4 +1,14 @@
 import { assinarEstadoPortal, obterEstadoPortal, proximoIntervalo } from './estado-portal.ts';
+import { api } from './api.ts';
+import { CABECALHO_ATUALIZACAO_AUTOMATICA } from './atualizacao-periodica.ts';
+import { atualizarContagemCentral } from './central-estado.ts';
+
+export async function consultarDisponibilidade(usuario: string | null, signal: AbortSignal) {
+  const dados = await api<{ naoLidas?: number }>(usuario ? '/api/central/nao-lidas' : '/api/health', {
+    headers: CABECALHO_ATUALIZACAO_AUTOMATICA, signal,
+  });
+  if (usuario && !signal.aborted && typeof dados.naoLidas === 'number') atualizarContagemCentral(usuario, dados.naoLidas);
+}
 
 // Agendamento exclusivo da disponibilidade; as consultas das outras telas
 // continuam com o contrato de iniciarAtualizacaoPeriodica intacto.

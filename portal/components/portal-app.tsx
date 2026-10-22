@@ -24,6 +24,8 @@ import { Tickets } from './portal-tickets';
 import { ChangeHistory } from './portal-history';
 import { Administration } from './portal-users';
 import { Mappings } from './portal-mappings';
+import { CentralNotificacoes } from './central-notificacoes';
+import { definirUsuarioCentral } from '@/lib/central-estado';
 
 export default function PortalApp() {
   const [session, setSession] = useState({ key: 0, message: '' });
@@ -39,6 +41,7 @@ function PortalSession({ message, endSession }: { message: string; endSession: (
   const [busy,setBusy]=useState(false), [notice,setNotice]=useState<{type:'ok'|'error';text:string}|null>(message ? { type: 'error', text: message } : null), [agreementId,setAgreementId]=useState<string|null>(null);
   const [agreementModal,setAgreementModal]=useState<AnyRow|null>(null), [itemModal,setItemModal]=useState<AnyRow|null>(null), [catalogModal,setCatalogModal]=useState<AnyRow|null>(null);
   const [userList,setUserList]=useState<AnyRow[]>([]), [ticketLink,setTicketLink]=useState<string|null>(null);
+  const [ticketLinkVersion,setTicketLinkVersion]=useState(0);
   const [importAgreement,setImportAgreement]=useState('');
   const [sidebarCollapsed,setSidebarCollapsed]=useState(false);
   const intentionalLogout=useRef(false);
@@ -49,6 +52,7 @@ function PortalSession({ message, endSession }: { message: string; endSession: (
   const noticeTimer=useRef<ReturnType<typeof setTimeout>|undefined>(undefined);
   const [loadError,setLoadError]=useState('');
   const [searchFilters,setSearchFilters]=useState(filtrosVazios);
+  useEffect(() => { definirUsuarioCentral(user?.id ? String(user.id) : null); return () => definirUsuarioCentral(null); }, [user?.id]);
 
   useEffect(()=>()=>{refreshSequence.current++;clearTimeout(noticeTimer.current)},[]);
   const notify=(type:'ok'|'error',text:string)=>{clearTimeout(noticeTimer.current);setNotice({type,text});noticeTimer.current=setTimeout(()=>setNotice(null),5000)};
@@ -104,6 +108,11 @@ function PortalSession({ message, endSession }: { message: string; endSession: (
   return <main className="min-h-screen bg-background text-foreground">
     <Sidebar nav={nav} setNav={navigate} user={user} busy={busy} onLogout={logout} collapsed={sidebarCollapsed} onToggle={()=>setSidebarCollapsed(value=>!value)}/>
     <section className={`min-w-0 pl-16 transition-[padding] duration-300 ${sidebarCollapsed?'lg:pl-16':'lg:pl-44'}`}><div className="mx-auto max-w-[1550px] p-4 sm:p-8">
+      <div className="mb-4 flex justify-end"><CentralNotificacoes navegar={link => {
+        const chamado = new URL(link, window.location.origin).searchParams.get('chamado');
+        if (chamado && pode(user, 'aba:tickets')) { setTicketLink(chamado); setTicketLinkVersion(value => value + 1); navigate('tickets'); }
+        else window.location.assign(link);
+      }}/></div>
       {nav==='search'&&(!agreementId||canWrite)&&<SearchPage catalogs={catalogs} openAgreement={openAgreement} filters={searchFilters} setFilters={setSearchFilters}/>}
       {((canWrite&&nav==='agreements')||(!canWrite&&nav==='search'&&agreementId))&&(agreementId?<AgreementDetail busy={busy} revision={data} id={agreementId} canWrite={canWrite} canDelete={pode(user, 'acordo:excluir')} onDelete={removerAcordo} onBack={()=>setAgreementId(null)} onEdit={(a:AnyRow)=>setAgreementModal({...a,expectedRevision:a.revision})} onItem={(i:AnyRow)=>setItemModal({...i,agreementId,expectedRevision:i.revision})} onImport={()=>{navigate('imports');setImportAgreement(agreementId)}} run={run}/>:<Agreements data={data} canWrite={canWrite} onOpen={setAgreementId} onNew={()=>setAgreementModal({locationIds:[],status:'active',startDate:dataDeNegocio()})}/>)}
       {nav==='maintenance'&&<Maintenance url={String(data.manutencao||'')}/>}
@@ -111,7 +120,7 @@ function PortalSession({ message, endSession }: { message: string; endSession: (
       {pode(user, 'aba:imports')&&nav==='imports'&&<Imports data={data} canManageMappings={pode(user, 'mapeamento:gerenciar')} initialAgreement={importAgreement} onUpdated={refresh} onCatalog={(type,values)=>setCatalogModal({type,...values})}/>}
       {pode(user, 'aba:mappings')&&nav==='mappings'&&<Mappings catalogs={catalogs} run={run}/>}
       {pode(user, 'aba:catalogs')&&nav==='catalogs'&&<Catalogs data={data} onAdd={(type:string)=>setCatalogModal({type})} onEdit={(type:string,row:AnyRow)=>setCatalogModal({type,...row,expectedRevision:row.revision})} onDelete={removeCatalog}/>}
-      {pode(user, 'aba:tickets')&&nav==='tickets'&&<Tickets busy={busy} users={userList} run={run} initialDetail={ticketLink}/>}
+      {pode(user, 'aba:tickets')&&nav==='tickets'&&<Tickets key={`${ticketLink}:${ticketLinkVersion}`} busy={busy} users={userList} run={run} initialDetail={ticketLink}/>}
       {pode(user, 'aba:history')&&nav==='history'&&<ChangeHistory users={userList}/>}
       {pode(user, 'aba:admin')&&nav==='admin'&&<Administration user={user} busy={busy} run={run}/>}
       {pode(user, 'aba:reports')&&nav==='reports'&&<Reports/>}

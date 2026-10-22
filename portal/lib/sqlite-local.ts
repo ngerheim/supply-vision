@@ -1,5 +1,5 @@
 import { abrirSqliteLocal } from '../scripts/sqlite-local.mjs';
-import { autorEscrita, SessaoRevogada } from './autor-escrita.ts';
+import { autorEscrita, escritaNotificacoesProprias, SessaoRevogada } from './autor-escrita.ts';
 import { SESSAO_INATIVIDADE_MS } from './politica-sessao.ts';
 
 export function bancoSqliteLocal(options: Parameters<typeof abrirSqliteLocal>[0]) {
@@ -11,7 +11,7 @@ export function bancoSqliteLocal(options: Parameters<typeof abrirSqliteLocal>[0]
     return (consultar: (consulta: {sql: string; values: unknown[]}) => {results: unknown[]}) => {
       const agora = new Date().toISOString(), limite = new Date(Date.now() - SESSAO_INATIVIDADE_MS).toISOString();
       const r = consultar({ sql: `SELECT 1 FROM sessions s JOIN users u ON u.id=s.user_id
-        WHERE s.token=? AND u.id=? AND u.active=1 AND u.role=? AND u.role IN ('admin','editor')
+        WHERE s.token=? AND u.id=? AND u.active=1 AND u.role=? ${escritaNotificacoesProprias() ? '' : "AND u.role IN ('admin','editor')"}
         AND s.expires_at>? AND (s.last_seen_at IS NULL OR s.last_seen_at>=?)`,
         values: [autor.token, autor.id, autor.role, agora, limite] });
       if (!r.results.length) throw new SessaoRevogada();

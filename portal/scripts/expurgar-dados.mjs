@@ -21,6 +21,8 @@ export function expurgar(db, config, agora = new Date()) {
   const resultados = {};
   db.exec('BEGIN IMMEDIATE');
   try {
+    if (db.prepare("SELECT 1 FROM sqlite_schema WHERE type='table' AND name='notificacoes_usuario'").get())
+      resultados.notificacoes_usuario = db.prepare('DELETE FROM notificacoes_usuario WHERE lida_em IS NOT NULL AND lida_em<?').run(limite(90)).changes;
     if (config.emails) for (const tabela of ['email_notifications', 'daily_report_deliveries']) {
       resultados[tabela] = db.prepare(`DELETE FROM ${tabela} WHERE status IN ('sent','failed') AND updated_at<?`).run(limite(config.emails)).changes;
     }
@@ -32,7 +34,7 @@ export function expurgar(db, config, agora = new Date()) {
 }
 export async function executarExpurgo({ config, arquivo, pasta, agora = new Date(), backup = async () => { if (await executarBackup() !== 0) throw new Error('Expurgo bloqueado: backup de rede nao confirmado.'); } } = {}) {
   const regras = configurarExpurgo(config);
-  if (!regras.ativo || ![regras.emails, regras.relatorios, regras.importacoes].some(Boolean)) return {};
+  if (!regras.ativo) return {};
   return comBackupExclusivo(pasta, async () => {
     // Sem historico local: o expurgo exige backup de rede confirmado antes de apagar.
     await backup(arquivo);

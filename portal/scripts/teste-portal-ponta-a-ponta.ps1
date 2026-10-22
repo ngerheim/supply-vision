@@ -216,6 +216,28 @@ $u2 = (Invoke-WebRequest "$baseUrl/api/users" -Method POST -WebSession $script:s
 $chamadoEmail = (Invoke-WebRequest "$baseUrl/api/tickets" -Method POST -WebSession $script:sessao -ContentType 'application/json' -UseBasicParsing -TimeoutSec 60 `
   -Body (@{supplierName='FORNECEDOR TESTE EMAIL';assignedTo=$u1.id;priority='alta';scope='Teste da fila'}|ConvertTo-Json)).Content|ConvertFrom-Json
 
+# Central usa a mesma atribuicao, com sessoes reais de dois usuarios.
+Verifica 'Central conta, lista, marca e isola notificacoes entre usuarios' {
+  Invoke-WebRequest "$baseUrl/api/login" -Method POST -Body (@{email=$usuarioEmail;password='senha-email-teste-123'}|ConvertTo-Json) -ContentType 'application/json' -SessionVariable centralSessao -UseBasicParsing -TimeoutSec 60 | Out-Null
+  $contagem=(Invoke-WebRequest "$baseUrl/api/central/nao-lidas" -WebSession $centralSessao -Headers @{'x-portal-poll'='1'} -UseBasicParsing -TimeoutSec 60).Content|ConvertFrom-Json
+  $lista=(Invoke-WebRequest "$baseUrl/api/central" -WebSession $centralSessao -UseBasicParsing -TimeoutSec 60).Content|ConvertFrom-Json
+  if($contagem.naoLidas -ne 1 -or @($lista.notificacoes).Count -ne 1){return 'contagem ou lista inesperada'}
+  $n=$lista.notificacoes[0]
+  if($n.link -ne "/?chamado=$($chamadoEmail.id)"){return 'link inesperado'}
+  $proprias=(Invoke-WebRequest "$baseUrl/api/central" -WebSession $script:sessao -UseBasicParsing -TimeoutSec 60).Content|ConvertFrom-Json
+  if(@($proprias.notificacoes).Count -ne 0){return 'autor recebeu notificacao propria'}
+  foreach($metodo in @('GET','POST')) {
+    $caminho="central/$($n.id)"
+    if($metodo -eq 'POST'){$caminho+='/lida'}
+    try { Invoke-WebRequest "$baseUrl/api/$caminho" -Method $metodo -WebSession $script:sessao -UseBasicParsing -TimeoutSec 60 | Out-Null; return 'outro usuario acessou notificacao' }
+    catch { if($_.Exception.Response.StatusCode.value__ -ne 404){return 'isolamento nao retornou 404'} }
+  }
+  Invoke-WebRequest "$baseUrl/api/central/$($n.id)/lida" -Method POST -WebSession $centralSessao -UseBasicParsing -TimeoutSec 60 | Out-Null
+  Invoke-WebRequest "$baseUrl/api/central/lidas" -Method POST -WebSession $centralSessao -UseBasicParsing -TimeoutSec 60 | Out-Null
+  $depois=(Invoke-WebRequest "$baseUrl/api/central/nao-lidas" -WebSession $centralSessao -UseBasicParsing -TimeoutSec 60).Content|ConvertFrom-Json
+  if($depois.naoLidas -eq 0){$true}else{'marcacao nao atualizou contagem'}
+}
+
 Verifica 'Primeiro chamado usa o codigo SUP-0001' {
   if ($chamadoEmail.code -eq 'SUP-0001') { $true } else { "codigo inesperado: $($chamadoEmail.code)" }
 }
