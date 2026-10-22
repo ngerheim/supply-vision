@@ -21,6 +21,7 @@ import { usuariosApi } from '@/lib/usuarios-api';
 import { auditoriaApi } from '@/lib/auditoria-api';
 import { notificacoesApi } from '@/lib/notificacoes-api';
 import { centralApi } from '@/lib/central-api';
+import { solicitacoesApi } from '@/lib/solicitacoes-api';
 import { exportacoesApi } from '@/lib/exportacoes-api';
 import { bootstrapApi } from '@/lib/bootstrap-api';
 import { PORTAL_BUILD, TELA_DESATUALIZADA, buildDivergente, ehEscrita } from '@/lib/portal-build';
@@ -121,6 +122,7 @@ const usuarios = usuariosApi(contexto);
 const auditoria = auditoriaApi(contexto);
 const notificacoes = notificacoesApi(contexto);
 const central = centralApi(contexto);
+const solicitacoes = solicitacoesApi(contexto);
 const exportacoes = exportacoesApi(contexto);
 const inicializacao = bootstrapApi(contexto, acordos, importacoes);
 
@@ -196,6 +198,23 @@ async function GETInterno(request: NextRequest) {
   const user = await requireUser(request);
   if (!user) return fail('Sessão expirada.', 401);
 
+  if (parts[0] === 'solicitacoes') {
+    if (!pode(user, 'solicitacao:abrir')) return fail('Seu perfil não permite consultar solicitações.', 403);
+    if (parts.length === 1) return solicitacoes.listar(user, request.nextUrl.searchParams);
+    if (parts.length === 3 && parts[1] === 'cnpj') {
+      if (await first(VALIDACAO_ATIVA_SQL)) return fail('Atualização em validação. Aguarde para consultar.', 503);
+      // Este GET persiste a consulta; o handler declara solicitacao:abrir.
+      definirAutorEscrita({ id: user.id, role: user.role, token: await tokenHash(banco.parseCookies(request).acordos_session || '') });
+      return solicitacoes.consultarCnpj(user, parts[2]);
+    }
+    if (parts.length === 3 && parts[1] === 'cep') return solicitacoes.consultarCep(parts[2]);
+    if (parts.length === 2) return solicitacoes.detalhe(user, parts[1]);
+    return fail('Rota não encontrada.', 404);
+  }
+  if (parts[0] === 'categorias-fornecedor') {
+    if (!pode(user, 'solicitacao:abrir')) return fail('Seu perfil não permite consultar categorias.', 403);
+    return parts.length === 1 ? solicitacoes.listarCategorias(user) : fail('Rota não encontrada.', 404);
+  }
   if (parts[0] === 'central') {
     if (parts.length === 1) return central.listar(user);
     if (parts.length === 2) return parts[1] === 'nao-lidas' ? central.contar(user) : central.detalhe(user, parts[1]);
@@ -267,6 +286,18 @@ async function POSTInterno(request: NextRequest) {
   const user = await requireUser(request);
   if (!user) return fail('Sessão expirada.', 401);
   if (await first(VALIDACAO_ATIVA_SQL)) return denyWrite(request, 'Atualização em validação. Aguarde para salvar ou executar.', 503);
+  if (parts[0] === 'solicitacoes') {
+    const acao = parts.length === 1 ? 'solicitacao:abrir' : 'solicitacao:atender';
+    if (!pode(user, acao)) return denyWrite(request, 'Seu perfil não permite esta operação.');
+    if (parts.length === 1) return solicitacoes.criar(request, user);
+    if (parts.length === 3 && parts[2] === 'transicao') return solicitacoes.transicionar(request, user, parts[1]);
+    if (parts.length === 3 && parts[2] === 'reconsultar') return solicitacoes.reconsultar(request, user, parts[1]);
+    return fail('Rota não encontrada.', 404);
+  }
+  if (parts[0] === 'categorias-fornecedor') {
+    if (!pode(user, 'categoria:gerenciar')) return denyWrite(request, 'Seu perfil não permite gerenciar categorias.');
+    return parts.length === 1 ? solicitacoes.gravarCategoria(request, user) : fail('Rota não encontrada.', 404);
+  }
   if (parts[0] === 'central') {
     await jsonBody(request);
     if (parts.length === 2 && parts[1] === 'lidas') return central.marcar(user);
@@ -300,6 +331,15 @@ async function PUTInterno(request: NextRequest) {
   const user = await requireUser(request);
   if (!user) return fail('Sessão expirada.', 401);
   if (await first(VALIDACAO_ATIVA_SQL)) return denyWrite(request, 'Atualização em validação. Aguarde para salvar ou executar.', 503);
+  const partesSolicitacao = partsOf(request);
+  if (partesSolicitacao[0] === 'solicitacoes') {
+    if (!pode(user, 'solicitacao:abrir')) return denyWrite(request, 'Seu perfil não permite corrigir solicitações.');
+    return partesSolicitacao.length === 2 ? solicitacoes.corrigir(request, user, partesSolicitacao[1]) : fail('Rota não encontrada.', 404);
+  }
+  if (partesSolicitacao[0] === 'categorias-fornecedor') {
+    if (!pode(user, 'categoria:gerenciar')) return denyWrite(request, 'Seu perfil não permite gerenciar categorias.');
+    return partesSolicitacao.length === 2 ? solicitacoes.gravarCategoria(request, user, partesSolicitacao[1]) : fail('Rota não encontrada.', 404);
+  }
   if (!pode(user, acaoEscrita(partsOf(request)))) return denyWrite(request, 'Seu perfil permite somente consulta.');
   const parts = partsOf(request);
   if (parts[0] === 'agreements' && parts[1] && parts.length === 2) return comTravaDoAcordo(request, parts[1], () => updateAgreement(request, user, parts[1]));

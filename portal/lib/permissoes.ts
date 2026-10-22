@@ -12,11 +12,13 @@ export const ACOES = [
   'usuario:consultar', 'usuario:gerenciar',
   'relatorio:consultar', 'relatorio:executar', 'relatorio:cancelar',
   'auditoria:consultar', 'email:consultar', 'email:reenviar', 'base:exportar',
+  'central:marcar', 'solicitacao:abrir', 'solicitacao:ver_todas',
+  'solicitacao:atender', 'categoria:gerenciar',
 ] as const;
 export type Acao = (typeof ACOES)[number];
 
 // Guardas gerais preservam a ordem e as mensagens do roteador, inclusive 404.
-const consulta: readonly Acao[] = ['aba:search', 'aba:maintenance'];
+const consulta: readonly Acao[] = ['aba:search', 'aba:maintenance', 'central:marcar', 'solicitacao:abrir'];
 const suprimentos: readonly Acao[] = [
   ...consulta, 'aba:tickets', 'aba:agreements', 'aba:suppliers', 'aba:imports',
   'aba:catalogs', 'aba:mappings', 'portal:consultar-gestao', 'portal:escrever',
@@ -24,6 +26,7 @@ const suprimentos: readonly Acao[] = [
   'importacao:consultar', 'importacao:executar', 'mapeamento:consultar',
   'chamado:consultar', 'chamado:editar', 'catalogo:gerenciar',
   'mapeamento:gerenciar', 'chamado:assumir', 'usuario:consultar',
+  'solicitacao:ver_todas', 'solicitacao:atender',
 ];
 const acoesPorPerfil: Record<Role, readonly Acao[]> = {
   viewer: consulta,
@@ -33,6 +36,7 @@ const acoesPorPerfil: Record<Role, readonly Acao[]> = {
     'acordo:excluir', 'usuario:gerenciar', 'relatorio:consultar',
     'relatorio:executar', 'relatorio:cancelar', 'auditoria:consultar',
     'email:consultar', 'email:reenviar', 'base:exportar',
+    'categoria:gerenciar',
   ],
 };
 

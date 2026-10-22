@@ -21,6 +21,8 @@ export function expurgar(db, config, agora = new Date()) {
   const resultados = {};
   db.exec('BEGIN IMMEDIATE');
   try {
+    if (db.prepare("SELECT 1 FROM sqlite_schema WHERE type='table' AND name='consultas_cnpj'").get())
+      resultados.consultas_cnpj = db.prepare('DELETE FROM consultas_cnpj WHERE consultada_em<?').run(limite(90)).changes;
     if (db.prepare("SELECT 1 FROM sqlite_schema WHERE type='table' AND name='notificacoes_usuario'").get())
       resultados.notificacoes_usuario = db.prepare('DELETE FROM notificacoes_usuario WHERE lida_em IS NOT NULL AND lida_em<?').run(limite(90)).changes;
     if (config.emails) for (const tabela of ['email_notifications', 'daily_report_deliveries']) {
