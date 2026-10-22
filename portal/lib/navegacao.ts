@@ -1,29 +1,88 @@
 import { pode, type UsuarioPermissao } from './permissoes.ts';
 import type { Role } from './domain.ts';
 
-export const GRUPOS_NAVEGACAO = [
-  { nome: 'Consulta', perfil: 'viewer', abas: ['search', 'maintenance'] },
-  {
-    nome: 'Suprimentos',
-    perfil: 'editor',
-    abas: [
-      'tickets',
-      'agreements',
-      'suppliers',
-      'imports',
-      'catalogs',
-      'mappings',
-    ],
-  },
-  {
-    nome: 'Administração',
-    perfil: 'admin',
-    abas: ['reports', 'history', 'notifications', 'admin'],
-  },
+export const ABAS_NAVEGACAO = [
+  { aba: 'buscar', label: 'Buscar', subabas: [{ chave: 'search', slug: null, label: 'Buscar' }] },
+  { aba: 'manutencao', label: 'Manutenção', subabas: [{ chave: 'maintenance', slug: null, label: 'Manutenção' }] },
+  { aba: 'chamados', label: 'Chamados', subabas: [{ chave: 'tickets', slug: null, label: 'Chamados' }] },
+  { aba: 'acordos', label: 'Acordos', subabas: [
+    { chave: 'agreements', slug: 'acordos', label: 'Acordos' },
+    { chave: 'imports', slug: 'importacoes', label: 'Importações' },
+  ] },
+  { aba: 'cadastros', label: 'Cadastros', subabas: [
+    { chave: 'suppliers', slug: 'fornecedores', label: 'Fornecedores' },
+    { chave: 'catalogs', slug: 'catalogos', label: 'Catálogos' },
+    { chave: 'mappings', slug: 'de-para', label: 'De/Para' },
+  ] },
+  { aba: 'administracao', label: 'Administração', subabas: [
+    { chave: 'reports', slug: 'relatorios', label: 'Relatórios' },
+    { chave: 'history', slug: 'historico', label: 'Histórico' },
+    { chave: 'emails', slug: 'emails', label: 'E-mails' },
+    { chave: 'admin', slug: 'usuarios', label: 'Usuários' },
+  ] },
 ] as const;
-export type Nav = (typeof GRUPOS_NAVEGACAO)[number]['abas'][number];
-export function podeAcessarAba(usuario: UsuarioPermissao, aba: Nav): boolean {
-  return pode(usuario, `aba:${aba}`);
+export type DefinicaoAba = (typeof ABAS_NAVEGACAO)[number];
+export type Aba = DefinicaoAba['aba'];
+export type DefinicaoSubaba = DefinicaoAba['subabas'][number];
+export type Nav = DefinicaoSubaba['chave'];
+export type EnderecoNavegacao = { aba: Aba; subaba: DefinicaoSubaba['slug'] };
+export const GRUPOS_NAVEGACAO = [
+  { nome: 'Consulta', abas: ['buscar', 'manutencao', 'chamados'] },
+  { nome: 'Suprimentos', abas: ['acordos', 'cadastros'] },
+  { nome: 'Administração', abas: ['administracao'] },
+] as const;
+export const AVISO_AREA_RESTRITA = 'Seu perfil não tem acesso a esta área.';
+export const AVISO_CHAMADO_RESTRITO = 'Seu perfil permite consultar preços e acordos. O acesso a chamados é restrito.';
+const BUSCAR: EnderecoNavegacao = { aba: 'buscar', subaba: null };
+
+export function podeAcessarAba(usuario: UsuarioPermissao, chave: Nav): boolean {
+  return pode(usuario, `aba:${chave}`);
+}
+export function abaDaChave(chave: Nav): DefinicaoAba {
+  return ABAS_NAVEGACAO.find(aba => aba.subabas.some(sub => sub.chave === chave))!;
+}
+export function enderecoDaChave(chave: Nav): EnderecoNavegacao {
+  const aba = abaDaChave(chave);
+  return { aba: aba.aba, subaba: aba.subabas.find(sub => sub.chave === chave)!.slug };
+}
+export function subabasPermitidas(usuario: UsuarioPermissao, aba: DefinicaoAba): DefinicaoSubaba[] {
+  return aba.subabas.filter(sub => podeAcessarAba(usuario, sub.chave));
+}
+export function gruposVisiveis(usuario: UsuarioPermissao) {
+  return GRUPOS_NAVEGACAO.map(grupo => ({ nome: grupo.nome, abas: grupo.abas.flatMap(slug => {
+    const aba = ABAS_NAVEGACAO.find(item => item.aba === slug)!;
+    const subabas = subabasPermitidas(usuario, aba);
+    return subabas.length ? [{ ...aba, subabas }] : [];
+  }) })).filter(grupo => grupo.abas.length > 0);
+}
+
+export function lerEndereco(busca: string): EnderecoNavegacao {
+  const params = new URLSearchParams(busca);
+  const aba = ABAS_NAVEGACAO.find(item => item.aba === params.get('aba'));
+  if (!aba) return { ...BUSCAR };
+  const subaba = params.get('sub');
+  if (subaba !== null && !aba.subabas.some(sub => sub.slug === subaba)) return { ...BUSCAR };
+  return { aba: aba.aba, subaba: subaba as EnderecoNavegacao['subaba'] };
+}
+export function enderecoParaBusca({ aba, subaba }: EnderecoNavegacao): string {
+  const params = new URLSearchParams({ aba });
+  if (subaba !== null) params.set('sub', subaba);
+  return `?${params}`;
+}
+export function resolverEndereco(usuario: UsuarioPermissao, busca: string) {
+  const chamado = new URLSearchParams(busca).get('chamado');
+  if (chamado) {
+    return podeAcessarAba(usuario, 'tickets')
+      ? { nav: 'tickets' as Nav, endereco: enderecoDaChave('tickets'), chamado, aviso: '' }
+      : { nav: 'search' as Nav, endereco: { ...BUSCAR }, chamado: null, aviso: AVISO_CHAMADO_RESTRITO };
+  }
+  const endereco = lerEndereco(busca);
+  const aba = ABAS_NAVEGACAO.find(item => item.aba === endereco.aba)!;
+  const permitidas = subabasPermitidas(usuario, aba);
+  const sub = endereco.subaba === null ? permitidas[0] : permitidas.find(item => item.slug === endereco.subaba);
+  return sub
+    ? { nav: sub.chave, endereco: enderecoDaChave(sub.chave), chamado: null, aviso: '' }
+    : { nav: 'search' as Nav, endereco: { ...BUSCAR }, chamado: null, aviso: AVISO_AREA_RESTRITA };
 }
 export const NOMES_PERFIL: Record<Role, string> = {
   viewer: 'Consulta',

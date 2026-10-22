@@ -3,7 +3,7 @@ import type { Role } from './domain.ts';
 export const ACOES = [
   'aba:search', 'aba:maintenance', 'aba:tickets', 'aba:agreements',
   'aba:suppliers', 'aba:imports', 'aba:catalogs', 'aba:mappings',
-  'aba:reports', 'aba:history', 'aba:notifications', 'aba:admin',
+  'aba:reports', 'aba:history', 'aba:emails', 'aba:admin',
   'portal:consultar-gestao', 'portal:escrever',
   'acordo:consultar-completo', 'acordo:editar', 'acordo:excluir',
   'importacao:consultar', 'importacao:executar', 'mapeamento:consultar',
@@ -29,7 +29,7 @@ const acoesPorPerfil: Record<Role, readonly Acao[]> = {
   viewer: consulta,
   editor: suprimentos,
   admin: [
-    ...suprimentos, 'aba:reports', 'aba:history', 'aba:notifications', 'aba:admin',
+    ...suprimentos, 'aba:reports', 'aba:history', 'aba:emails', 'aba:admin',
     'acordo:excluir', 'usuario:gerenciar', 'relatorio:consultar',
     'relatorio:executar', 'relatorio:cancelar', 'auditoria:consultar',
     'email:consultar', 'email:reenviar', 'base:exportar',

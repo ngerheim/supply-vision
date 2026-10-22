@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { ACOES, pode, type Acao } from '../lib/permissoes.ts';
-import { GRUPOS_NAVEGACAO, podeAcessarAba } from '../lib/navegacao.ts';
+import { ABAS_NAVEGACAO, podeAcessarAba } from '../lib/navegacao.ts';
 import { canWrite } from '../lib/api-compartilhada.ts';
 
 // Inventario manual do contrato anterior: [viewer, editor, admin, inativo].
@@ -17,7 +17,7 @@ const equivalencia: Record<Acao, readonly boolean[]> = {
   'aba:mappings': [false, true, true, false],
   'aba:reports': [false, false, true, false],
   'aba:history': [false, false, true, false],
-  'aba:notifications': [false, false, true, false],
+  'aba:emails': [false, false, true, false],
   'aba:admin': [false, false, true, false],
   'portal:consultar-gestao': [false, true, true, false],
   'portal:escrever': [false, true, true, false],
@@ -62,8 +62,8 @@ void test('cada perfil e cada acao preservam o contrato inventariado', () => {
 });
 
 void test('abas e adaptador de escrita respeitam usuario inativo', () => {
-  for (const grupo of GRUPOS_NAVEGACAO) for (const aba of grupo.abas) {
-    assert.equal(podeAcessarAba({ role: 'admin', active: 0 }, aba), false);
+  for (const aba of ABAS_NAVEGACAO) for (const sub of aba.subabas) {
+    assert.equal(podeAcessarAba({ role: 'admin', active: 0 }, sub.chave), false);
   }
   assert.equal(canWrite({ id: 'u', name: 'Fixture', email: 'u@example.com', role: 'viewer' }), false);
   assert.equal(canWrite({ id: 'u', name: 'Fixture', email: 'u@example.com', role: 'editor' }), true);

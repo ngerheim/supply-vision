@@ -226,6 +226,8 @@ jobs:
           fi
       - run: npm ci
       - run: npm test
+        # Navegacao: tests/navegacao.test.ts e tests/navegacao-telas.test.mjs;
+        # enderecos, historico, teclado e equivalencia dos acessos por perfil.
         # Central: tests/central.test.mjs e tests/central-cliente.test.ts;
         # migracao, atomicidade, API, expurgo, backup/restauracao e polling.
         # Inclui tests/portal-build.test.mjs, tests/portal-build-api.test.mjs,

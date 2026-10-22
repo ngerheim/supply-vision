@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { gerarChaveRelatorio, validarPedidoRelatorio } from '../lib/relatorios.ts';
 import {
-  GRUPOS_NAVEGACAO,
+  ABAS_NAVEGACAO,
   NOMES_PERFIL,
   podeAcessarAba,
 } from '../lib/navegacao.ts';
@@ -25,22 +25,24 @@ void test('solicitações funcionam em HTTP quando Crypto não oferece randomUUI
   assert.notEqual(gerarChaveRelatorio(fonte), requestKey);
 });
 void test('perfis herdam exatamente os três conjuntos solicitados', () => {
-  for (const grupo of GRUPOS_NAVEGACAO)
-    for (const aba of grupo.abas) {
+  const consulta = new Set(['search','maintenance']);
+  const administracao = new Set(['reports','history','emails','admin']);
+  for (const grupo of ABAS_NAVEGACAO)
+    for (const {chave:aba} of grupo.subabas) {
       assert.equal(
         podeAcessarAba({ role: 'viewer' }, aba),
-        grupo.perfil === 'viewer',
+        consulta.has(aba),
         aba,
       );
       assert.equal(
         podeAcessarAba({ role: 'editor' }, aba),
-        grupo.perfil !== 'admin',
+        !administracao.has(aba),
         aba,
       );
       assert.equal(podeAcessarAba({ role: 'admin' }, aba), true, aba);
     }
   assert.equal(NOMES_PERFIL.editor, 'Suprimentos');
-  assert.equal(new Set(GRUPOS_NAVEGACAO.flatMap((g) => [...g.abas])).size, 12);
+  assert.equal(new Set(ABAS_NAVEGACAO.flatMap(g => g.subabas.map(sub => sub.chave))).size, 12);
 });
 void test('recorte aceita datas inclusivas e nunca mantém destinatário', () => {
   assert.deepEqual(validarPedidoRelatorio(base, '2026-02-01'), {
