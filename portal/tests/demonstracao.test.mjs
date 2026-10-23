@@ -99,7 +99,7 @@ void test('semeadura usa API real, cria perfis/acordos/chamados/Central e preser
       const request = new NextRequest(`http://127.0.0.1${req.url}`, { method: req.method, headers: req.headers, ...(corpo ? { body: corpo } : {}) });
       const resposta = await rota[req.method](request);
       res.writeHead(resposta.status, Object.fromEntries(resposta.headers)); res.end(await resposta.text());
-    } catch (erro) { res.writeHead(500); res.end(JSON.stringify({ error: String(erro) })); }
+    } catch (erro) { console.error(erro); res.writeHead(500, { 'content-type': 'application/json; charset=utf-8' }); res.end(JSON.stringify({ error: 'internal_error' })); }
   });
   await new Promise(resolve => servidor.listen(0, '127.0.0.1', resolve));
   const base = `http://127.0.0.1:${servidor.address().port}`;
