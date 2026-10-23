@@ -15,7 +15,7 @@ import { dataBrasileiraParaIso, exibirDataBrasileira, mascararDataBrasileira } f
 import { Button } from './ui/button';
 import { Card, CardContent } from './ui/card';
 import { Input } from './ui/input';
-import { Badge } from './ui/badge';
+import { Status } from './status';
 
 type Job = {
   id: string;
@@ -179,13 +179,13 @@ export function Reports() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-semibold">Relatórios</h1>
-        <Badge variant={online ? 'default' : 'secondary'} title="Indica se o executor de relatórios respondeu nos últimos 30 segundos. Não valida a conexão com Qlik ou e-mail.">
+        <Status value={loaded ? online ? 'active' : 'failed' : 'pending'} title="Indica se o executor de relatórios respondeu nos últimos 30 segundos. Não valida a conexão com Qlik ou e-mail.">
           {loaded
             ? online
               ? 'Pronto para executar'
               : 'Executor indisponível'
             : 'Verificando serviço…'}
-        </Badge>
+        </Status>
       </div>
       {total>jobs.length&&<output>Mostrando os 100 relatórios mais recentes de {total}.</output>}
       {!online && loaded && !loadError && (
@@ -203,7 +203,7 @@ export function Reports() {
         </p>
       )}
       {notice && (
-        <output className="block rounded-lg border border-emerald-500 p-3 text-sm">
+        <output className="block rounded-lg border border-border p-3 text-sm">
           {notice}
         </output>
       )}
@@ -322,11 +322,9 @@ export function Reports() {
                   </p>
                 )}
               </div>
-              <Badge
-                variant={job.status === 'failed' ? 'destructive' : 'secondary'}
-              >
+              <Status value={job.status}>
                 {statusName[job.status] || job.status}
-              </Badge>
+              </Status>
             </div>
             <div className="flex flex-wrap gap-2">
               <Button

@@ -20,6 +20,7 @@ import { chamadosApi } from '@/lib/chamados-api';
 import { usuariosApi } from '@/lib/usuarios-api';
 import { auditoriaApi } from '@/lib/auditoria-api';
 import { notificacoesApi } from '@/lib/notificacoes-api';
+import { logoMarca } from '@/lib/marca-api';
 import { centralApi } from '@/lib/central-api';
 import { solicitacoesApi } from '@/lib/solicitacoes-api';
 import { exportacoesApi } from '@/lib/exportacoes-api';
@@ -187,8 +188,9 @@ function acaoEscrita(parts: string[]): Acao {
 }
 
 async function GETInterno(request: NextRequest) {
-  await ensureDatabase();
   const parts = partsOf(request);
+  if (parts.length === 2 && parts[0] === 'marca' && parts[1] === 'logo') return logoMarca();
+  await ensureDatabase();
   if (parts[0] === 'health') { await first('SELECT COUNT(*) n FROM schema_migrations'); return ok({ app: 'portal-suprimentos', status: 'ok' }); }
   if (parts[0] === 'session') return ok({ user: await currentUser(request) });
   if (parts[0] === 'internal' && parts[1] === 'agreements') {

@@ -1,4 +1,5 @@
 'use client';
+import { Plaquinha } from './plaquinha';
 import { api, errorText } from '@/lib/api';
 import {
   SearchMultiSelect,
@@ -138,7 +139,7 @@ export function SearchPage({
   return (
     <div className="space-y-5">
       <Card className="overflow-hidden">
-        <CardContent className="grid gap-3 pt-5 md:grid-cols-2 xl:grid-cols-[minmax(5rem,.45fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.15fr)_minmax(0,1.4fr)]">
+        <CardContent className="grid gap-3 pt-5 md:grid-cols-2 xl:grid-cols-[minmax(8rem,.6fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.15fr)_minmax(0,1.4fr)]">
           {(['state', 'location', 'model', 'item', 'supplier'] as const).map(
             (campo) => (
               <SearchMultiSelect
@@ -242,7 +243,7 @@ export function SearchPage({
                   <TableRow key={r.id}>
                     <TableCell className="font-medium">
                       <button
-                        className="text-left text-primary hover:underline"
+                        className="text-left text-link hover:underline"
                         onClick={() => openAgreement(r.agreementId)}
                       >
                         {r.item}
@@ -252,7 +253,7 @@ export function SearchPage({
                     <TableCell>
                       <p className="font-medium">{r.supplier}</p>
                       <p className="text-xs text-muted-foreground">
-                        {r.number}
+                        <Plaquinha>{r.number}</Plaquinha>
                       </p>
                     </TableCell>
                     <TableCell>
@@ -264,7 +265,7 @@ export function SearchPage({
                     <TableCell>{r.unit}</TableCell>
                     <TableCell className="text-right font-semibold tabular-nums">
                       {r.courtesy ? (
-                        <Badge className="bg-sky-50 text-sky-700">
+                        <Badge className="bg-muted text-muted-foreground">
                           Cortesia
                         </Badge>
                       ) : (

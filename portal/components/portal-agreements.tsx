@@ -1,9 +1,11 @@
 'use client';
+import { Plaquinha } from './plaquinha';
 import { correspondeSituacaoAcordo } from '@/lib/situacao-acordos';
 import { api, errorText, baixarArquivo } from '@/lib/api';
 import { correspondeBusca } from '@/lib/busca';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Download, Pencil, Plus, Search, Trash2, Upload } from 'lucide-react';
+import { Status as PatioStatus } from './status';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -82,7 +84,7 @@ export function Agreements({ data, onOpen, onNew, canWrite }: JsonData) {
           </Button>
         )}
         {canWrite && (
-          <Button onClick={onNew}>
+          <Button variant="create" onClick={onNew}>
             <Plus /> Novo
           </Button>
         )}
@@ -128,9 +130,9 @@ function AgreementTable({ rows, onOpen, title }: JsonData) {
               .map((r: AnyRow) => (
                 <TableRow key={r.id}>
                   <TableCell>
-                    <button className="text-left" onClick={() => onOpen(r.id)}>
-                      <span className="block font-mono text-xs font-semibold text-primary hover:underline">
-                        {r.number}
+                    <button className="text-left" aria-label={r.number} onClick={() => onOpen(r.id)}>
+                      <span className="block text-link hover:underline">
+                        <Plaquinha>{r.number}</Plaquinha>
                       </span>
                     </button>
                   </TableCell>
@@ -286,7 +288,7 @@ export function AgreementDetail({
         </Button>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <h2 className="truncate text-2xl font-semibold">{a.number}</h2>
+            <h2 className="truncate text-2xl font-semibold"><Plaquinha>{a.number}</Plaquinha></h2>
             <Status value={a.effectiveStatus || a.status} />
           </div>
           <p className="text-sm text-muted-foreground">
@@ -323,6 +325,7 @@ export function AgreementDetail({
               </Button>
             )}
             <Button
+              variant="create"
               onClick={() =>
                 onItem({
                   agreementId: id,
@@ -399,7 +402,7 @@ export function AgreementDetail({
                   <TableCell>{r.unit}</TableCell>
                   <TableCell className="text-right font-semibold">
                     {r.courtesy ? (
-                      <Badge className="bg-sky-50 text-sky-700">Cortesia</Badge>
+                      <Badge className="bg-muted text-muted-foreground">Cortesia</Badge>
                     ) : (
                       money(r.price)
                     )}
@@ -475,16 +478,16 @@ function Status({ value }: JsonData) {
   const map: AnyRow = {
     active: [
       'Vigente',
-      'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200',
+      'bg-muted text-muted-foreground ring-1 ring-border',
     ],
-    scheduled: ['Agendado', 'bg-sky-50 text-sky-700 ring-1 ring-sky-200'],
+    scheduled: ['Agendado', 'bg-muted text-muted-foreground ring-1 ring-border'],
     expiring: [
       'Vence em até 60 dias',
-      'bg-amber-50 text-amber-700 ring-1 ring-amber-200',
+      'bg-muted text-muted-foreground ring-1 ring-border',
     ],
-    expired: ['Expirado', 'bg-red-50 text-red-700 ring-1 ring-red-200'],
-    suspended: ['Suspenso', 'bg-amber-50 text-amber-700 ring-1 ring-amber-200'],
+    expired: ['Expirado', 'bg-muted text-muted-foreground ring-1 ring-border'],
+    suspended: ['Suspenso', 'bg-muted text-muted-foreground ring-1 ring-border'],
   };
-  const x = map[value] || [value, 'bg-slate-100'];
-  return <Badge className={x[1]}>{x[0]}</Badge>;
+  const x = map[value] || [value, 'bg-muted'];
+  return <PatioStatus value={value}>{x[0]}</PatioStatus>;
 }

@@ -35,6 +35,21 @@ const { CabecalhoOrdenavel } = await import('../components/portal-table.tsx');
 const { Field, Info, Loading, SelectField, money, date } = await import('../components/portal-presentation.tsx');
 const { Dialog, DialogFooter } = await import('../components/ui/dialog.tsx');
 const { Input } = await import('../components/ui/input.tsx');
+const { Status } = await import('../components/status.tsx');
+const { Plaquinha } = await import('../components/plaquinha.tsx');
+
+void test('status conserva texto e distingue estados por cor e forma; plaquinha e texto copiavel', () => {
+  for (const [value,tom,forma] of [['aberto','open','circle'],['em_analise','waiting','square'],['devolvido','returned','triangle'],['fechado','done','check'],['cancelado','cancelled','x']]) {
+    const html = renderToStaticMarkup(h(Status,{value},'Rótulo existente'));
+    assert.ok(html.includes(`patio-status-${tom}`));
+    assert.ok(html.includes(`lucide-${forma}`));
+    assert.ok(html.includes('Rótulo existente'));
+    assert.ok(html.includes('aria-hidden="true"'));
+  }
+  const placa = renderToStaticMarkup(h(Plaquinha,null,'SUP-123 <teste>'));
+  assert.ok(placa.includes('SUP-123 &lt;teste&gt;'));
+  assert.ok(!placa.includes('<img') && !placa.includes('<svg'));
+});
 
 for (const [role, allowed, forbidden] of [
   ['viewer', ['Buscar', 'Manutenção'], ['Chamados', 'Acordos', 'Relatórios', 'Usuários']],
