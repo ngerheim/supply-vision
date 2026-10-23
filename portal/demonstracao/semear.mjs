@@ -4,6 +4,7 @@ import { semearUsuarios } from './usuarios.mjs';
 import { semearCadastros } from './cadastros.mjs';
 import { semearAcordos } from './acordos.mjs';
 import { semearChamados } from './chamados.mjs';
+import { semearSolicitacoes } from './solicitacoes.mjs';
 
 export const exemplo = JSON.parse(fs.readFileSync(new URL('./usuarios.exemplo.json', import.meta.url), 'utf8'));
 export function clienteApi(base) {
@@ -24,7 +25,7 @@ export async function semear(base, pasta) {
   const estado = fs.existsSync(progresso) ? JSON.parse(fs.readFileSync(progresso, 'utf8')) : {};
   const salvar = () => { const tmp = `${progresso}.tmp`; fs.writeFileSync(tmp, JSON.stringify(estado)); fs.renameSync(tmp, progresso); };
   fs.writeFileSync(path.join(pasta, 'credenciais.json'), JSON.stringify(exemplo, null, 2));
-  if (estado.concluido) return;
+  if (estado.concluido && estado.solicitacoesConcluidas) return;
   const api = clienteApi(base);
   await api('/login', 'POST', exemplo.inicial);
   try {
@@ -32,6 +33,8 @@ export async function semear(base, pasta) {
     const cadastros = await semearCadastros(api);
     await semearAcordos(api, cadastros);
     await semearChamados(api, usuarios, estado, salvar);
+    await semearSolicitacoes(clienteApi, base, exemplo, estado, salvar);
+    estado.solicitacoesConcluidas = true;
     estado.concluido = true; salvar();
   } finally { await api('/logout', 'POST'); }
 }

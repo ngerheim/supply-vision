@@ -1,3 +1,4 @@
+import './apoio/logs-email.mjs';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import fs from 'node:fs';
@@ -15,6 +16,8 @@ import { criarCopiaIntegra } from '../scripts/backup.mjs';
 import { prepararRestauracao } from '../scripts/restauracao-segura.mjs';
 import { validarBanco } from '../scripts/validar-banco.mjs';
 import { expurgar, configurarExpurgo } from '../scripts/expurgar-dados.mjs';
+import { processarNotificacoes } from '../scripts/processar-emails.mjs';
+import { montarEmailSolicitacao } from '../lib/email-solicitacoes.ts';
 
 const hooks = registerHooks({ resolve(s, c, next) {
   if (s === 'next/server') return next('vinext/shims/server', c);
@@ -46,7 +49,7 @@ void test('Cadastro de fornecedor pelo roteador e SQLite reais', async t => {
   const abrir = async (body = manual(), user = 'viewer') => { const r = await post('solicitacoes', body, user); assert.equal(r.status, 201, JSON.stringify(r.data)); return r.data; };
   const registro = id => sql.prepare('SELECT * FROM solicitacoes WHERE id=?').get(id);
   const mover = (id, para, texto = '', user = 'editor') => post(`solicitacoes/${id}/transicao`, { para, texto, expectedRevision: registro(id).revision }, user);
-  const contagens = () => ['solicitacoes', 'solicitacao_andamentos', 'solicitacao_categorias', 'audit_logs', 'suppliers', 'email_notifications'].map(tabela => sql.prepare(`SELECT COUNT(*) n FROM ${tabela}`).get().n);
+  const contagens = () => ['solicitacoes', 'solicitacao_andamentos', 'solicitacao_categorias', 'audit_logs', 'suppliers', 'email_notifications', 'notificacoes_usuario'].map(tabela => sql.prepare(`SELECT COUNT(*) n FROM ${tabela}`).get().n);
 
   await t.test('GETs do viewer preservam leituras sem autor de escrita e atividade de sessao', async () => {
     const timestamp = banco.now();
@@ -134,7 +137,7 @@ void test('Cadastro de fornecedor pelo roteador e SQLite reais', async t => {
     assert.equal(detalhe.solicitacao.razao_social, 'FORNECEDOR FICTÍCIO'); assert.equal(detalhe.solicitacao.cnpj, CNPJS_ENSAIO.ativa);
     assert.equal(detalhe.solicitacao.nao_verificado, 0); assert.equal(detalhe.solicitacao.cidade, 'Cidade Ajustada'); assert.equal(detalhe.solicitacao.numero, '77');
     assert.equal(detalhe.categorias.length, 1); assert.equal(detalhe.andamentos[0].para_status, 'aberta'); assert.equal(detalhe.andamentos[0].user_id, 'viewer');
-    assert.deepEqual(contagens().slice(4), antes.slice(4));
+    assert.deepEqual(contagens().slice(4,6), antes.slice(4,6));
     const depois = contagens();
     const duplicada = await post('solicitacoes', { consultaId: consulta.consultaId }, 'viewer');
     assert.equal(duplicada.status, 409); assert.match(duplicada.data.error, new RegExp(`${verificada.codigo}.*aberta`)); assert.deepEqual(contagens(), depois);
@@ -237,6 +240,112 @@ void test('Cadastro de fornecedor pelo roteador e SQLite reais', async t => {
     assert.equal((await get('solicitacoes', 'viewer')).data.solicitacoes[0].id, s.id);
     assert.equal((await get('solicitacoes?status=invalido', 'viewer')).status, 400);
     assert.equal((await get('solicitacoes?de=2026-02-30', 'viewer')).status, 400);
+  });
+  await t.test('avisos por evento, destinatarios ativos, autor excluido e reenvio de devolvida', async () => {
+    sql.prepare('INSERT INTO users(id,name,email,password_salt,password_hash,role,active,created_at) VALUES(?,?,?,?,?,?,0,?)').run('inativo','Inativo','inativo@example.com','s','h','editor',banco.now());
+    const central = id => sql.prepare("SELECT user_id,texto,link FROM notificacoes_usuario WHERE tipo='solicitacao' AND link=? ORDER BY rowid").all(`/?aba=chamados&solicitacao=${id}`);
+    const emails = id => sql.prepare('SELECT * FROM email_notifications WHERE solicitacao_id=? ORDER BY rowid').all(id);
+    const normal = await abrir();
+    assert.deepEqual(central(normal.id).map(n => n.user_id).sort((a,b) => a.localeCompare(b)),[admin,'editor'].sort((a,b) => a.localeCompare(b)));
+    assert.equal(emails(normal.id).length,0);
+    const urgente = await abrir(manual({ urgencia: 'urgente' }));
+    assert.deepEqual(emails(urgente.id).map(n => n.recipient_user_id).sort((a,b) => String(a).localeCompare(String(b))),[admin,'editor'].sort((a,b) => a.localeCompare(b)));
+    assert.ok(central(urgente.id).every(n => n.texto === `Nova solicitação ${urgente.codigo} (urgente)`));
+    const propria = await abrir(manual({ urgencia: 'urgente' }), 'editor');
+    assert.deepEqual(central(propria.id).map(n => n.user_id),[admin]);
+    assert.deepEqual(emails(propria.id).map(n => n.recipient_user_id),[admin]);
+    await mover(propria.id,'em_analise','','editor');
+    assert.equal(emails(propria.id).length,1); assert.equal(central(propria.id).length,1);
+    for (const [para,texto] of [['em_analise',''],['devolvida','Corrigir <endereco> & cidade']]) {
+      await mover(normal.id,para,texto);
+      assert.equal(central(normal.id).length,para === 'em_analise' ? 3 : 4);
+      assert.equal(emails(normal.id).length,para === 'em_analise' ? 1 : 2);
+      assert.equal(central(normal.id).at(-1).user_id,'viewer');
+      assert.equal(emails(normal.id).at(-1).recipient_user_id,'viewer');
+      assert.equal(JSON.parse(emails(normal.id).at(-1).payload_json).mensagem,texto);
+    }
+    assert.equal(central(normal.id).at(-1).texto,`${normal.codigo}: devolvida para correção`);
+    // Quem devolve pode diferir de quem assumiu a analise.
+    const diferente = await abrir(); await mover(diferente.id,'em_analise'); await mover(diferente.id,'devolvida','Corrigir',admin);
+    const antesReconsulta = contagens();
+    assert.equal((await post(`solicitacoes/${diferente.id}/reconsultar`,{expectedRevision:2},'editor')).status,200);
+    assert.deepEqual(contagens().slice(5),antesReconsulta.slice(5));
+    await put(`solicitacoes/${diferente.id}`,{expectedRevision:3},'viewer');
+    assert.equal(central(diferente.id).at(-1).user_id,admin);
+    assert.equal(emails(diferente.id).length,2);
+    await put(`solicitacoes/${normal.id}`,{expectedRevision:2},'viewer');
+    assert.equal(central(normal.id).at(-1).user_id,'editor'); assert.equal(emails(normal.id).length,2);
+    await mover(normal.id,'em_analise'); await mover(normal.id,'devolvida','Corrigir novamente');
+    sql.prepare('UPDATE users SET active=0 WHERE id=?').run('editor');
+    await put(`solicitacoes/${normal.id}`,{expectedRevision:5},'viewer');
+    assert.equal(central(normal.id).at(-1).user_id,admin);
+    sql.prepare('UPDATE users SET active=1 WHERE id=?').run('editor');
+    for (const [final,texto] of [['cadastrado','Observação fictícia'],['cadastrado',''],['recusado','Motivo fictício']]) {
+      const s = await abrir(); await mover(s.id,'em_analise'); await mover(s.id,final,texto);
+      assert.deepEqual(emails(s.id).map(n => n.recipient_user_id),['viewer','viewer']);
+      assert.deepEqual(central(s.id).slice(2).map(n => n.user_id),['viewer','viewer']);
+      const dados = JSON.parse(emails(s.id).at(-1).payload_json), email = montarEmailSolicitacao(dados,'http://portal.test/');
+      assert.equal(email.assunto,`[Supply Vision] ${s.codigo}: ${final}`);
+      assert.ok(email.texto.includes(`Situação: ${final}`)); assert.ok(email.html.includes(texto));
+      assert.match(email.texto,/CNPJ: \d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}/);
+      assert.equal(email.url,`http://portal.test/?aba=chamados&solicitacao=${s.id}`);
+    }
+    const inativa = await abrir(); sql.prepare('UPDATE users SET active=0 WHERE id=?').run('viewer');
+    await mover(inativa.id,'em_analise'); assert.equal(emails(inativa.id).length,0); assert.equal(central(inativa.id).length,2);
+    sql.prepare('UPDATE users SET active=1 WHERE id=?').run('viewer');
+    assert.equal(sql.prepare("SELECT COUNT(*) n FROM notificacoes_usuario WHERE user_id='inativo'").get().n,0);
+    const antes = [central(urgente.id).length,emails(urgente.id).length];
+    await post(`solicitacoes/${urgente.id}/reconsultar`,{expectedRevision:0},'editor');
+    assert.deepEqual([central(urgente.id).length,emails(urgente.id).length],antes);
+    const dados = JSON.parse(emails(normal.id).find(e => JSON.parse(e.payload_json).situacao === 'devolvida').payload_json);
+    assert.ok(montarEmailSolicitacao(dados,'http://portal.test').html.includes('Corrigir &lt;endereco&gt; &amp; cidade'));
+  });
+  await t.test('fila de solicitacoes respeita ensaio, permissoes no consumo e reenvio manual', async () => {
+    const antes = sql.prepare('SELECT * FROM email_notifications ORDER BY id').all();
+    const enviados = [], config = { PORTAL_URL:'http://portal.test', EMAIL_FROM_NAME:'Portal', SMTP_USER:'portal@example.com' };
+    const transporte = { async sendMail(email) { enviados.push(email); } };
+    await processarNotificacoes(sql,config,transporte);
+    assert.equal(enviados.length,0); assert.deepEqual(sql.prepare('SELECT * FROM email_notifications ORDER BY id').all(),antes);
+    // Isola a entrega sob teste sem remover a fila dos outros cenarios.
+    sql.exec("UPDATE email_notifications SET status='sent'");
+    const s = await abrir(); await mover(s.id,'em_analise');
+    process.env.MODO_ENSAIO='0';
+    try {
+      await processarNotificacoes(sql,config,transporte);
+      assert.equal(enviados.length,1); assert.equal(enviados[0].subject,`[Supply Vision] ${s.codigo}: em análise`);
+      const u = await abrir(manual({urgencia:'urgente'}));
+      sql.prepare('UPDATE users SET active=0 WHERE id=?').run('editor');
+      await processarNotificacoes(sql,config,transporte);
+      assert.equal(enviados.length,2);
+      const falha = sql.prepare('SELECT * FROM email_notifications WHERE solicitacao_id=? AND recipient_user_id=?').get(u.id,'editor');
+      assert.equal(falha.status,'failed');
+      sql.prepare('UPDATE users SET active=1 WHERE id=?').run('editor');
+      assert.equal((await post(`email-notifications/${String(falha.id)}/retry`,{})).status,200);
+      await processarNotificacoes(sql,config,transporte); assert.equal(enviados.length,3);
+      const revogada = await abrir(manual({urgencia:'urgente'}));
+      sql.prepare('UPDATE users SET role=? WHERE id=?').run('viewer','editor');
+      await processarNotificacoes(sql,config,transporte);
+      assert.equal(enviados.length,4);
+      assert.equal(sql.prepare('SELECT status FROM email_notifications WHERE solicitacao_id=? AND recipient_user_id=?').get(revogada.id,'editor').status,'failed');
+      sql.prepare('UPDATE users SET role=? WHERE id=?').run('editor','editor');
+    } finally { process.env.MODO_ENSAIO='1'; sql.prepare('UPDATE users SET active=1,role=? WHERE id=?').run('editor','editor'); }
+  });
+  await t.test('falha ao inserir aviso desfaz solicitacao e andamento; categoria desativada nao avisa', async () => {
+    const s = await abrir(), antes = contagens(), log = console.error; console.error = () => {};
+    sql.exec("CREATE TRIGGER falha_aviso BEFORE INSERT ON notificacoes_usuario BEGIN SELECT RAISE(ABORT,'falha ficticia de aviso'); END");
+    try {
+      assert.equal((await post('solicitacoes',manual({urgencia:'urgente'}),'viewer')).status,500);
+      assert.equal((await mover(s.id,'em_analise')).status,500);
+      assert.deepEqual(contagens(),antes); assert.equal(registro(s.id).revision,0);
+    } finally { sql.exec('DROP TRIGGER falha_aviso'); console.error=log; }
+    globalThis[chave] = { ...db, async batch(instrucoes) {
+      sql.prepare("UPDATE categorias_fornecedor SET ativo=0 WHERE id='categoria_semente_2'").run();
+      return db.batch(instrucoes);
+    } };
+    try {
+      assert.equal((await post('solicitacoes',manual({categorias:['categoria_semente_2'],urgencia:'urgente'}),'viewer')).status,409);
+      assert.deepEqual(contagens(),antes);
+    } finally { globalThis[chave]=db; sql.prepare("UPDATE categorias_fornecedor SET ativo=1 WHERE id='categoria_semente_2'").run(); }
   });
   await t.test('build, validacao ativa, rollback do lote e sessao revogada barram escritas', async () => {
     const existente = await abrir(), body = manual(), antes = contagens();
