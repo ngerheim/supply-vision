@@ -205,7 +205,7 @@ export function Imports({
             />
             <button
               type="button"
-              className="w-full rounded-xl border-2 border-dashed p-7 text-center hover:bg-muted/40"
+              className="w-full rounded-xl border border-dashed p-7 text-center hover:bg-muted/40"
               onClick={() => fileInput.current?.click()}
               onDragOver={(event) => event.preventDefault()}
               onDrop={(event) => {

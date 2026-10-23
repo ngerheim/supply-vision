@@ -39,13 +39,13 @@ export function CentralNotificacoes({ navegar }: { navegar: (link: string) => vo
   return <div className="relative">
     <button ref={sino} type="button" onClick={() => { if (!aberta) { setCarregando(true); setErro(''); } setAberta(valor => !valor); }} aria-label={`Notificações: ${naoLidas} não lidas`} aria-expanded={aberta} aria-controls="central-notificacoes" className="relative rounded-lg border p-2 focus-visible:outline-2">
       <Bell aria-hidden="true" className="size-5"/>
-      {naoLidas > 0 && <span aria-hidden="true" className="absolute -right-2 -top-2 rounded-full bg-red-700 px-1.5 text-xs text-white">{naoLidas > 99 ? '99+' : naoLidas}</span>}
+      {naoLidas > 0 && <span aria-hidden="true" className="absolute -right-2 -top-2 rounded bg-accent px-1.5 text-xs text-accent-foreground">{naoLidas > 99 ? '99+' : naoLidas}</span>}
     </button>
-    {aberta && <dialog open id="central-notificacoes" ref={painel} tabIndex={-1} aria-label="Central de notificações" onKeyDown={e => { if (e.key === 'Escape') { e.preventDefault(); fechar(); } }} className="absolute left-auto right-0 top-12 z-50 m-0 max-h-[70vh] w-[min(24rem,calc(100vw-6rem))] overflow-auto rounded-xl border bg-background p-4 text-foreground shadow-xl">
+    {aberta && <dialog open id="central-notificacoes" ref={painel} tabIndex={-1} aria-label="Central de notificações" onKeyDown={e => { if (e.key === 'Escape') { e.preventDefault(); fechar(); } }} className="absolute left-auto right-0 top-12 z-50 m-0 max-h-[70vh] w-[min(24rem,calc(100vw-6rem))] overflow-auto rounded-xl border bg-card p-4 text-foreground shadow-xl">
       <div className="flex items-center justify-between gap-2"><h2 className="font-semibold">Notificações</h2><button type="button" onClick={fechar} aria-label="Fechar notificações">Fechar</button></div>
-      <button type="button" disabled={ocupada || naoLidas === 0} onClick={() => void marcar()} className="my-3 text-sm underline disabled:opacity-50">Marcar todas como lidas</button>
+      {naoLidas > 0 && <button type="button" disabled={ocupada} onClick={() => void marcar()} className="my-3 text-sm underline disabled:text-muted-foreground">Marcar todas como lidas</button>}
       {erro && <p role="alert">{erro}</p>}
-      {carregando ? <output>Carregando notificações…</output> : itens.length === 0 ? <p>Nenhuma notificação.</p> : <ul>{itens.map(item => <li key={item.id} className="border-t py-3">
+      {carregando ? <output>Carregando notificações…</output> : itens.length === 0 ? <p>Avisos sobre chamados e solicitações aparecem aqui.</p> : <ul>{itens.map(item => <li key={item.id} className="border-t py-3">
         <a href={item.link} aria-disabled={ocupada} onClick={event => { if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return; event.preventDefault(); void marcar(item); }} className={`block rounded focus-visible:outline-2 ${item.lida_em ? '' : 'font-semibold'}`}>
           {!item.lida_em && <span className="text-xs text-primary">Não lida · </span>}{item.texto}
           <time dateTime={item.criada_em} className="mt-1 block text-xs font-normal text-muted-foreground">{new Date(item.criada_em).toLocaleString('pt-BR')}</time>

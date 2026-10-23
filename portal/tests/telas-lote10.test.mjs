@@ -61,10 +61,36 @@ void test('Central: marcar todas atualiza lista, erro permanece acessivel e Esca
   tela.one('button',p => p.children==='Marcar todas como lidas').onClick();
   tela.requests[2].resolve({success:true}); await setImmediate();
   tela.requests[3].resolve({naoLidas:0}); await setImmediate(); tela.render();
-  assert.equal(tela.one('button',p => p.children==='Marcar todas como lidas').disabled,true);
+  assert.equal(tela.find(n => n.type==='button' && n.props.children==='Marcar todas como lidas').length,0);
   assert.equal(tela.find(n => n.type==='span' && String(n.props.children).includes('Não lida')).length,0);
   tela.one('dialog').onKeyDown({key:'Escape',preventDefault(){}}); tela.render();
   assert.equal(tela.find(n => n.type==='dialog').length,0);
+});
+
+void test('Central vazia explica os avisos e esconde marcar todas quando nao ha nao lidas', async t => {
+  const estado = {usuario:'pessoa',naoLidas:0};
+  const tela = await mount('central-notificacoes','CentralNotificacoes',{navegar(){}},{
+    '@/lib/central-estado': {
+      obterCentral:() => estado, centralInicial:() => estado, assinarCentral:() => () => {},
+      atualizarContagemCentral(){},
+    },
+  });
+  t.after(() => tela.unmount());
+  tela.one('button',p => p['aria-controls']).onClick(); tela.render();
+  tela.requests[0].resolve({notificacoes:[]}); await setImmediate(); tela.render();
+  assert.equal(tela.find(n => n.type==='button' && n.props.children==='Marcar todas como lidas').length,0);
+  assert.equal(tela.one('p').children,'Avisos sobre chamados e solicitações aparecem aqui.');
+});
+
+void test('marca usa somente imagem publica e conserva nome quando o arquivo falha', async t => {
+  const tela = await mount('marca','Marca',{});
+  t.after(() => tela.unmount());
+  const img = tela.one('img');
+  assert.equal(img.src,'/api/marca/logo');
+  assert.equal(tela.one('p').children,'Supply Vision');
+  img.onError(); tela.render();
+  assert.equal(tela.find(n => n.type==='img').length,0);
+  assert.equal(tela.one('p').children,'Supply Vision');
 });
 
 const catalogs = {
@@ -139,7 +165,8 @@ void test('acordo descarta resposta de outro id e pagina antiga apos mudar orden
   old.resolve(detail('a'));
   await setImmediate();
   h.render();
-  assert.equal(h.one('h2').children, 'b');
+  assert.equal(h.one('h2').children.type, 'Plaquinha');
+  assert.equal(h.one('h2').children.props.children, 'b');
   const more = h.one('Button', (p) =>
     Array.isArray(p.children)
       ? p.children.includes('Carregar mais condições')

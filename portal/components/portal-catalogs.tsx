@@ -68,7 +68,7 @@ export function CatalogPage({ type, rows, onAdd, onEdit, onDelete }: JsonData) {
             }}
           />
         </div>
-        <Button onClick={onAdd}>
+        <Button variant="create" onClick={onAdd}>
           <Plus /> Novo
         </Button>
       </div>

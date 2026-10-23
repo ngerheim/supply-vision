@@ -25,8 +25,8 @@ export const cnpj = (value: string) =>
   );
 export function Loading({ label }: { label: string }) {
   return (
-    <div className="grid min-h-screen place-items-center bg-[#eef2f5]">
-      <div className="flex items-center gap-3 rounded-2xl bg-white px-6 py-5 shadow-lg">
+    <div className="grid min-h-screen place-items-center bg-background">
+      <div className="flex items-center gap-3 rounded-2xl bg-card px-6 py-5 ">
         <LoaderCircle className="size-5 animate-spin text-primary" />
         <output className="text-sm font-medium">{label}</output>
       </div>

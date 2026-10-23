@@ -96,14 +96,14 @@ export function ChangeHistory({ users }: JsonData) {
   const load = () => setRecarregar((n) => n + 1);
   const actionTone = (a: string) =>
     a === 'CREATE'
-      ? 'bg-emerald-50 text-emerald-700'
+      ? 'bg-muted text-muted-foreground'
       : a === 'DELETE'
-        ? 'bg-red-50 text-red-700'
+        ? 'bg-muted text-muted-foreground'
         : a === 'IMPORT'
-          ? 'bg-violet-50 text-violet-700'
+          ? 'bg-muted text-muted-foreground'
           : a === 'LOGIN'
-            ? 'bg-slate-100 text-slate-600'
-            : 'bg-sky-50 text-sky-700';
+            ? 'bg-muted text-muted-foreground'
+            : 'bg-muted text-muted-foreground';
   const entityName = rotuloEntidadeHistorico;
   return (
     <div className="space-y-5">

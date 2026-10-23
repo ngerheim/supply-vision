@@ -4,6 +4,7 @@ import { api, errorText, baixarArquivo } from '@/lib/api';
 import { MIN_PASSWORD_LENGTH, validatePassword } from '@/lib/domain';
 import { useCallback, useEffect, useState } from 'react';
 import { CheckCircle2, Download, Pencil, Plus } from 'lucide-react';
+import { Status } from './status';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -61,7 +62,7 @@ export function Administration({ user, busy, run }: JsonData) {
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap justify-between gap-3">
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Button
             variant="outline"
             onClick={() =>
@@ -74,7 +75,7 @@ export function Administration({ user, busy, run }: JsonData) {
             Atualizar lista
           </Button>
           {podeGerenciar && (
-            <Button disabled={busy} onClick={() => setOpen(true)}>
+            <Button variant="create" disabled={busy} onClick={() => setOpen(true)}>
               <Plus /> Novo usuário
             </Button>
           )}
@@ -95,11 +96,11 @@ export function Administration({ user, busy, run }: JsonData) {
             </TableHeader>
             <TableBody>
               {users.map((r) => (
-                <TableRow key={r.id} className={r.active ? '' : 'opacity-50'}>
+                <TableRow key={r.id} >
                   <TableCell className="font-medium">
                     {r.name}
                     {r.id === user.id ? (
-                      <Badge className="ml-2 bg-teal-50 text-teal-700">
+                      <Badge className="ml-2 bg-muted text-muted-foreground">
                         você
                       </Badge>
                     ) : null}
@@ -109,10 +110,10 @@ export function Administration({ user, busy, run }: JsonData) {
                     <Badge
                       className={
                         r.role === 'admin'
-                          ? 'bg-violet-50 text-violet-700'
+                          ? 'bg-muted text-muted-foreground'
                           : r.role === 'editor'
-                            ? 'bg-sky-50 text-sky-700'
-                            : 'bg-slate-100 text-slate-600'
+                            ? 'bg-muted text-muted-foreground'
+                            : 'bg-muted text-muted-foreground'
                       }
                     >
                       {roleName(r.role)}
@@ -130,15 +131,9 @@ export function Administration({ user, busy, run }: JsonData) {
                     )}
                   </TableCell>
                   <TableCell>
-                    <Badge
-                      className={
-                        r.active
-                          ? 'bg-emerald-50 text-emerald-700'
-                          : 'bg-slate-100 text-slate-600'
-                      }
-                    >
+                    <Status value={r.active ? 'active' : 'cancelled'}>
                       {r.active ? 'Ativo' : 'Inativo'}
-                    </Badge>
+                    </Status>
                   </TableCell>
                   <TableCell className="text-right">
                     {podeGerenciar && (

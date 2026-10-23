@@ -1,4 +1,5 @@
 'use client';
+import { Marca } from './marca';
 import { api, errorText } from '@/lib/api';
 import { useState } from 'react';
 import { AlertTriangle, LoaderCircle, ShieldCheck } from 'lucide-react';
@@ -37,14 +38,13 @@ export function Login({
     }
   };
   return (
-    <main className="relative grid min-h-screen place-items-center overflow-hidden bg-[#0a1420] p-6">
-      <div className="pointer-events-none absolute inset-0 opacity-70 [background-image:radial-gradient(ellipse_at_15%_10%,rgba(45,212,191,.20)_0,transparent_45%),radial-gradient(ellipse_at_85%_80%,rgba(56,189,248,.16)_0,transparent_45%)]" />
-      <div className="pointer-events-none absolute inset-0 opacity-[.05] [background-image:linear-gradient(rgba(255,255,255,.6)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,.6)_1px,transparent_1px)] [background-size:56px_56px]" />
+    <main className="relative grid min-h-screen place-items-center overflow-hidden bg-background p-6">
       <section className="relative w-full max-w-md space-y-6 animate-in fade-in zoom-in-95 duration-500">
-        <h1 className="text-center text-4xl font-semibold tracking-[-.04em] text-white sm:text-5xl">
+        <Marca/>
+        <h1 className="text-center text-4xl font-semibold tracking-[-.04em] text-foreground sm:text-5xl">
           Portal Suprimentos
         </h1>
-        <Card className="border-white/10 bg-white p-3 text-foreground shadow-[0_30px_80px_-20px_rgb(0_0_0/.55)]">
+        <Card className="border-border bg-card p-3 text-foreground ">
           <CardContent className="pt-6">
             <form className="space-y-4" onSubmit={submit}>
               {message && (

@@ -1,4 +1,5 @@
 'use client';
+import { Plaquinha } from './plaquinha';
 import { COLUNAS_ORDENACAO_CHAMADOS } from '@/lib/operacao-dados';
 import { gerarChaveRelatorio } from '@/lib/relatorios';
 import { api, errorText } from '@/lib/api';
@@ -13,6 +14,7 @@ import {
   RefreshCw,
   Search,
 } from 'lucide-react';
+import { Status } from './status';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -46,21 +48,21 @@ import {
 import { useOrdenacao, CabecalhoOrdenavel } from './portal-table';
 
 const ticketStatusMap: AnyRow = {
-  aberto: ['Aberto', 'bg-sky-50 text-sky-700 ring-1 ring-sky-200'],
+  aberto: ['Aberto', 'bg-muted text-muted-foreground ring-1 ring-border'],
   aguardando_fornecedor: [
     'Aguardando fornecedor',
-    'bg-violet-50 text-violet-700 ring-1 ring-violet-200',
+    'bg-muted text-muted-foreground ring-1 ring-border',
   ],
   fechado: [
     'Fechado',
-    'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200',
+    'bg-muted text-muted-foreground ring-1 ring-border',
   ],
-  cancelado: ['Cancelado', 'bg-slate-100 text-slate-600 ring-1 ring-slate-200'],
+  cancelado: ['Cancelado', 'bg-muted text-muted-foreground ring-1 ring-border'],
 };
 const priorityMap: AnyRow = {
-  alta: ['Alta', 'bg-red-50 text-red-700'],
-  media: ['Média', 'bg-amber-50 text-amber-700'],
-  baixa: ['Baixa', 'bg-slate-100 text-slate-600'],
+  alta: ['Alta', 'bg-muted text-muted-foreground'],
+  media: ['Média', 'bg-muted text-muted-foreground'],
+  baixa: ['Baixa', 'bg-muted text-muted-foreground'],
 };
 function tempoEmAberto(criadoEm: string, fechadoEm?: string | null) {
   const inicio = new Date(criadoEm).getTime(),
@@ -87,9 +89,9 @@ function Sla({ createdAt, closedAt }: JsonData) {
     );
   const tom =
     t.dias >= 15
-      ? 'text-red-700'
+      ? 'text-muted-foreground'
       : t.dias >= 7
-        ? 'text-amber-700'
+        ? 'text-muted-foreground'
         : 'text-foreground';
   const aviso =
     t.dias >= 15
@@ -109,8 +111,8 @@ function Sla({ createdAt, closedAt }: JsonData) {
   );
 }
 function TicketStatus({ value }: JsonData) {
-  const x = ticketStatusMap[value] || [value, 'bg-slate-100'];
-  return <Badge className={x[1]}>{x[0]}</Badge>;
+  const x = ticketStatusMap[value] || [value, 'bg-muted'];
+  return <Status value={value}>{x[0]}</Status>;
 }
 export function Tickets({
   busy,
@@ -194,7 +196,7 @@ export function Tickets({
         {cards.map(([label, value]: JsonData, i: number) => (
           <Card
             key={label}
-            className="overflow-hidden shadow-sm animate-in fade-in slide-in-from-bottom-2 fill-mode-both"
+            className="overflow-hidden  animate-in fade-in slide-in-from-bottom-2 fill-mode-both"
             style={{ animationDelay: `${i * 60}ms` }}
           >
             <CardContent>
@@ -238,7 +240,7 @@ export function Tickets({
             <Badge
               className={
                 group === key
-                  ? 'bg-white/20 text-white'
+                  ? 'bg-card/20 text-primary-foreground'
                   : 'bg-background text-foreground'
               }
             >
@@ -264,7 +266,7 @@ export function Tickets({
             }}
           />
         </div>
-        <Button onClick={() => setOpen({ priority: 'media' })}>
+        <Button variant="create" onClick={() => setOpen({ priority: 'media' })}>
           <Plus /> Novo chamado
         </Button>
       </div>
@@ -300,11 +302,11 @@ export function Tickets({
                   <TableRow key={r.id}>
                     <TableCell>
                       <button
-                        className="block w-full truncate text-left font-mono text-xs font-semibold text-primary hover:underline"
+                        className="block w-full text-left text-link hover:underline"
                         title={r.code}
                         onClick={() => setDetail(r.id)}
                       >
-                        {r.code}
+                        <Plaquinha>{r.code}</Plaquinha>
                       </button>
                     </TableCell>
 
@@ -320,7 +322,7 @@ export function Tickets({
                     <TableCell>
                       <Badge
                         className={
-                          (priorityMap[r.priority] || ['—', 'bg-slate-100'])[1]
+                          (priorityMap[r.priority] || ['—', 'bg-muted'])[1]
                         }
                       >
                         {(priorityMap[r.priority] || ['—'])[0]}
@@ -449,12 +451,12 @@ function TicketDetail({ busy, id, users, onBack, run }: JsonData) {
             </h2>
             <TicketStatus value={t.status} />
             <Badge
-              className={(priorityMap[t.priority] || ['—', 'bg-slate-100'])[1]}
+              className={(priorityMap[t.priority] || ['—', 'bg-muted'])[1]}
             >
               {(priorityMap[t.priority] || ['—'])[0]}
             </Badge>
           </div>
-          <p className="text-sm text-muted-foreground font-mono">{t.code}</p>
+          <p><Plaquinha>{t.code}</Plaquinha></p>
         </div>
         <Button disabled={busy || loading} variant="outline" onClick={() => {
           if ((status !== t.status || statusMessage) && !confirm('Atualizar o chamado descarta a situação e a mensagem de alteração ainda não salvas. Continuar?')) return;
@@ -499,7 +501,7 @@ function TicketDetail({ busy, id, users, onBack, run }: JsonData) {
             )}
             {t.notes && (
               <div>
-                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                <p className="text-xs font-semibold tracking-wide text-muted-foreground">
                   Observações
                 </p>
                 <p className="mt-1 whitespace-pre-wrap">{t.notes}</p>
@@ -562,7 +564,7 @@ function TicketDetail({ busy, id, users, onBack, run }: JsonData) {
                 className="relative animate-in fade-in slide-in-from-left-2 fill-mode-both"
               >
                 <span
-                  className={`absolute -left-[31px] grid size-5 place-items-center rounded-full ring-4 ring-background ${e.kind === 'status' ? 'bg-amber-500' : e.kind === 'created' ? 'bg-teal-500' : 'bg-slate-300'}`}
+                  className={`absolute -left-[31px] grid size-5 place-items-center rounded ring-4 ring-background ${e.kind === 'status' ? 'bg-muted' : e.kind === 'created' ? 'bg-muted' : 'bg-muted'}`}
                 />
                 <div className="flex flex-wrap items-baseline gap-2">
                   <span className="text-sm font-semibold">

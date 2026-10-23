@@ -47,7 +47,7 @@ export function Maintenance({ url }: { url: string }) {
           </Button>
         </div>
       </div>
-      <Card className="overflow-hidden shadow-sm">
+      <Card className="overflow-hidden ">
         <CardContent className="p-0">
           <iframe
             key={recarga}

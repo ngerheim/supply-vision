@@ -1,4 +1,6 @@
 'use client';
+import { Status } from './status';
+import { Plaquinha } from './plaquinha';
 import { useEffect, useId, useState } from 'react';
 import { RefreshCw } from 'lucide-react';
 import { api, errorText } from '@/lib/api';
@@ -36,10 +38,10 @@ export function EmailNotifications({users,run}:{users:Row[];run:(action:()=>Prom
       <CardContent className="px-0 pb-0"><Table className="w-full min-w-[950px] table-fixed"><colgroup>{[22,13,24,11,9,15,6].map((w,i)=><col key={i} style={{width:`${w}%`}}/>)}</colgroup>
         <TableHeader><TableRow>{['Referência','Tipo','Destinatário','Situação','Tentativas','Data',''].map((name,i)=><TableHead key={i}>{name}</TableHead>)}</TableRow></TableHeader>
         <TableBody>{!loading&&!error&&data?.notifications.map((item:Row)=><TableRow key={`${item.deliveryKind}:${item.id}`}>
-          <TableCell><p className="font-mono text-xs">{item.ticketCode}</p><p className="truncate" title={item.supplierName}>{item.supplierName}</p>{item.periodStart&&<p className="text-xs text-muted-foreground">{new Date(item.periodStart).toLocaleString('pt-BR')} até {new Date(item.periodEnd).toLocaleString('pt-BR')}</p>}</TableCell>
+          <TableCell><Plaquinha>{item.ticketCode}</Plaquinha><p className="truncate" title={item.supplierName}>{item.supplierName}</p>{item.periodStart&&<p className="text-xs text-muted-foreground">{new Date(item.periodStart).toLocaleString('pt-BR')} até {new Date(item.periodEnd).toLocaleString('pt-BR')}</p>}</TableCell>
           <TableCell className="truncate">{types[item.type]||item.type}</TableCell>
           <TableCell><p className="truncate" title={item.recipientName}>{item.recipientName}</p><p className="truncate text-xs text-muted-foreground" title={item.recipientEmail}>{item.recipientEmail}</p></TableCell>
-          <TableCell>{statuses[item.status]||item.status}{item.lastError&&<p className="truncate text-xs text-red-700" title={item.lastError}>{item.lastError}</p>}</TableCell>
+          <TableCell><Status value={item.status}>{statuses[item.status]||item.status}</Status>{item.lastError&&<p className="truncate text-xs text-muted-foreground" title={item.lastError}>{item.lastError}</p>}</TableCell>
           <TableCell>{item.attempts}</TableCell><TableCell className="whitespace-normal text-xs">{new Date(item.sentAt||item.createdAt).toLocaleString('pt-BR')}</TableCell>
           <TableCell>{item.status==='failed'&&<Button size="icon-sm" variant="ghost" aria-label="Reenviar notificação" onClick={()=>{if(!window.confirm('Confira com o destinatário se esta entrega já chegou. Confirma o reenvio?'))return;run(async()=>{const rota=item.deliveryKind==='diario'?'daily-report-deliveries':'email-notifications';await api(`/api/${rota}/${item.id}/retry`,{method:'POST'});setRevision(r=>r+1);},'Reenvio colocado na fila.');}}><RefreshCw/></Button>}</TableCell>
         </TableRow>)}</TableBody></Table>

@@ -94,7 +94,7 @@ export function Mappings({ catalogs, run }: JsonData) {
         <div>
           <h1 className="text-2xl font-semibold">De/Para da importação</h1>
         </div>
-        <Button disabled={busy} onClick={() => setEdit({ type, active: true })}>
+        <Button variant="create" disabled={busy} onClick={() => setEdit({ type, active: true })}>
           <Plus /> Nova correspondência
         </Button>
       </div>
@@ -129,7 +129,7 @@ export function Mappings({ catalogs, run }: JsonData) {
                 {ordenar(rows, valoresDoMapeamento).map((row: AnyRow) => (
                   <TableRow
                     key={row.id}
-                    className={row.active ? '' : 'opacity-50'}
+
                   >
                     <TableCell>
                       <p className="font-medium">{row.source}</p>
