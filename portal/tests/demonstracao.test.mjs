@@ -80,6 +80,8 @@ void test('dados publicos de demonstracao passam no mesmo detector; CNPJs tem DV
 });
 
 void test('semeadura usa API real, cria perfis/acordos/chamados/Central e preserva dados ao repetir', async t => {
+  const modo = process.env.MODO_ENSAIO; process.env.MODO_ENSAIO = '1';
+  t.after(() => { if (modo === undefined) delete process.env.MODO_ENSAIO; else process.env.MODO_ENSAIO = modo; });
   const { base: temporario, pasta, opcoes } = fixture(t, false); prepararPasta(pasta, opcoes);
   const db = bancoSqliteLocal({ pastaPrivada: path.join(pasta, 'portal'), criar: true });
   const chave = Symbol.for('supply-vision:banco'), anterior = globalThis[chave], senha = env.INITIAL_ADMIN_PASSWORD;
@@ -105,12 +107,18 @@ void test('semeadura usa API real, cria perfis/acordos/chamados/Central e preser
   const base = `http://127.0.0.1:${servidor.address().port}`;
   await semear(base, pasta);
   const leitura = recursos.leitura = new DatabaseSync(bancoDemo(pasta));
-  const contar = tabela => leitura.prepare(`SELECT COUNT(*) n FROM ${tabela}`).get().n;
+  const contar = tabela => leitura.prepare(`SELECT COUNT(*) n FROM ${tabela} ${tabela === 'audit_logs' ? "WHERE action NOT IN ('LOGIN','LOGOUT')" : ''}`).get().n;
   assert.equal(contar('users'), 4); assert.equal(contar('agreements'), 5); assert.equal(contar('agreement_items'), 30);
   assert.equal(contar('suppliers'), 3); assert.equal(contar('locations'), 3); assert.equal(contar('tickets'), 4);
   assert.deepEqual(leitura.prepare('SELECT DISTINCT status FROM tickets ORDER BY status').all().map(r => r.status), ['aberto','aguardando_fornecedor','cancelado','fechado']);
   assert.equal(leitura.prepare('SELECT COUNT(*) n FROM tickets WHERE assigned_to IS NULL').get().n, 0);
   assert.ok(contar('ticket_events') >= 11); assert.ok(contar('audit_logs') > 30);
+  assert.equal(contar('solicitacoes'),6);
+  assert.deepEqual(leitura.prepare('SELECT DISTINCT status FROM solicitacoes ORDER BY status').all().map(r => r.status),['aberta','cadastrado','devolvida','em_analise','recusado']);
+  assert.equal(leitura.prepare("SELECT COUNT(*) n FROM solicitacoes WHERE urgencia='urgente'").get().n,1);
+  assert.equal(leitura.prepare('SELECT COUNT(*) n FROM solicitacoes WHERE nao_verificado=1').get().n,1);
+  assert.equal(leitura.prepare("SELECT COUNT(*) n FROM solicitacoes s JOIN users u ON u.id=s.solicitante_id WHERE u.email='consulta@demo.invalid'").get().n,6);
+  assert.equal(leitura.prepare("SELECT COUNT(*) n FROM solicitacoes s JOIN users u ON u.id=s.atendente_id WHERE u.email='suprimentos@demo.invalid'").get().n,4);
   const api = clienteApi(base); await api('/login', 'POST', exemplo.inicial);
   const acordos = (await api('/bootstrap')).agreements;
   assert.equal(acordos.filter(a => a.effectiveStatus === 'expired').length, 2);
@@ -118,15 +126,21 @@ void test('semeadura usa API real, cria perfis/acordos/chamados/Central e preser
   for (const usuario of exemplo.usuarios) {
     const sessao = clienteApi(base); await sessao('/login', 'POST', usuario);
     assert.equal((await sessao('/bootstrap')).user.role, usuario.role);
-    if (usuario.role !== 'viewer') assert.ok((await sessao('/central/nao-lidas')).naoLidas > 0);
+    assert.ok((await sessao('/central/nao-lidas')).naoLidas > 0);
     await sessao('/logout', 'POST');
   }
-  const antes = ['users','agreements','agreement_items','tickets','ticket_events','audit_logs','central_notifications'].filter(tabela => leitura.prepare("SELECT 1 FROM sqlite_master WHERE name=?").get(tabela)).map(tabela => [tabela, contar(tabela)]);
+  const antes = ['users','agreements','agreement_items','tickets','ticket_events','audit_logs','notificacoes_usuario','solicitacoes','solicitacao_andamentos','consultas_cnpj','email_notifications'].map(tabela => [tabela, contar(tabela)]);
   await semear(base, pasta); assert.deepEqual(antes.map(([tabela]) => [tabela, contar(tabela)]), antes);
   // Retoma sem o marco final: cadastros e acordos tambem sao idempotentes.
   const progresso = path.join(pasta, 'semeadura.json'), estado = JSON.parse(fs.readFileSync(progresso)); delete estado.concluido;
   fs.writeFileSync(progresso, JSON.stringify(estado));
   await semear(base, pasta);
+  assert.deepEqual(antes.map(([tabela]) => [tabela,contar(tabela)]),antes);
+  // Retoma inclusive uma solicitacao ja concluida sem marco individual.
+  const retomada = JSON.parse(fs.readFileSync(progresso)); delete retomada.concluido;
+  delete retomada['solicitacao-3']; delete retomada['solicitacao-2'];
+  fs.writeFileSync(progresso,JSON.stringify(retomada)); await semear(base,pasta);
+  assert.deepEqual(antes.map(([tabela]) => [tabela,contar(tabela)]),antes);
   assert.equal(contar('users'), 4); assert.equal(contar('agreements'), 5); assert.equal(contar('tickets'), 4); assert.equal(contar('agreement_items'), 30);
   assert.equal(validarPasta(pasta, opcoes).criar, false);
   assert.deepEqual(JSON.parse(fs.readFileSync(path.join(pasta, 'credenciais.json'))), exemplo);

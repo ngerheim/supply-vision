@@ -8,6 +8,7 @@ import { isValidCnpj, isValidState, normalizeCnpj, normalizeText } from './domai
 import { intervaloDatasNegocio } from './periodo-auditoria.ts';
 import { paginaSolicitada } from './paginacao.ts';
 import { criarConsultasFornecedor, FalhaConsulta, type DadosReceita } from './consultas-fornecedor.ts';
+import { prepararAvisosSolicitacao } from './fila-email-solicitacoes.ts';
 
 const STATUS = ['aberta', 'em_analise', 'devolvida', 'cadastrado', 'recusado'];
 const RECEITA = ['cnpj', 'razao_social', 'nome_fantasia', 'situacao_cadastral', 'cnae_codigo', 'cnae_descricao', 'consulta_fonte', 'consultada_em', 'nao_verificado'] as const;
@@ -129,12 +130,14 @@ export function solicitacoesApi(contexto: ContextoApi, consultas = criarConsulta
       const repeticaoCnpj = await duplicada(String(receita.cnpj)); if (repeticaoCnpj) return repeticaoCnpj;
       const dados = { ...receita, ...editaveis(body, receita) }, categorias = await categoriasEntrada(body.categorias ?? []);
       const campos = [...RECEITA, ...EDITAVEIS], timestamp = now(), solicitacaoId = id('sol'), evento = id('san'), ativas = categoriasAtivas(categorias);
+      const avisos = await prepararAvisosSolicitacao(contexto, { solicitacaoId, evento, autor: user, anterior: null, para: 'aberta', timestamp });
       try {
         const resultados = await rawDb().batch([
           statement(`INSERT INTO solicitacoes(id,${campos.join(',')},solicitante_id,criado_em,atualizado_em,request_key,request_hash) SELECT ${Array(campos.length + 6).fill('?').join(',')} WHERE ${ativas.sql}`, [solicitacaoId, ...campos.map(c => dados[c]), user.id, timestamp, timestamp, chave, hash, ...ativas.valores]),
           statement("INSERT INTO solicitacao_andamentos(id,solicitacao_id,user_id,para_status,texto,criado_em) SELECT ?,?,?,'aberta','Solicitação aberta',? WHERE EXISTS(SELECT 1 FROM solicitacoes WHERE id=?)", [evento, solicitacaoId, user.id, timestamp, solicitacaoId]),
           ...categorias.map(c => statement('INSERT INTO solicitacao_categorias(solicitacao_id,categoria_id) SELECT ?,? WHERE EXISTS(SELECT 1 FROM solicitacoes WHERE id=?)', [solicitacaoId, c, solicitacaoId])),
           auditoria(user, 'solicitacao', solicitacaoId, 'CREATE', 'Solicitação de cadastro de fornecedor aberta', timestamp, 'EXISTS(SELECT 1 FROM solicitacoes WHERE id=?)', [solicitacaoId]),
+          ...avisos,
         ]);
         if (!resultados[0].meta.changes) return fail('Uma categoria foi desativada. Atualize e tente novamente.', 409);
       } catch (erro) {
@@ -152,12 +155,14 @@ export function solicitacoesApi(contexto: ContextoApi, consultas = criarConsulta
   async function salvar(user: User, atual: Solicitacao, dados: Corpo, para: string, texto: string, chave: string | null, hash: string | null, categorias?: string[], consulta?: DadosReceita) {
     const timestamp = now(), evento = id('san'), campos = Object.keys(dados), ativas = categoriasAtivas(categorias ?? []);
     const condicaoEvento = 'EXISTS(SELECT 1 FROM solicitacao_andamentos WHERE id=?)';
+    const avisos = await prepararAvisosSolicitacao(contexto, { solicitacaoId: atual.id, evento, autor: user, anterior: atual.status, para, timestamp });
     const resultados = await rawDb().batch([
       statement(`UPDATE solicitacoes SET ${campos.map(c => `${c}=?`).join(',')},status=?,atualizado_em=?,revision=revision+1 WHERE id=? AND revision=? AND status=? AND ${ativas.sql}`, [...campos.map(c => dados[c]), para, timestamp, atual.id, atual.revision, atual.status, ...ativas.valores]),
       statement('INSERT INTO solicitacao_andamentos(id,solicitacao_id,user_id,de_status,para_status,texto,criado_em,request_key,request_hash) SELECT ?,?,?,?,?,?,?,?,? WHERE changes()=1', [evento, atual.id, user.id, atual.status, para, texto || null, timestamp, chave, hash]),
       ...(consulta ? [statement(`INSERT INTO consultas_cnpj(id,cnpj,fonte,dados_json,consultada_em,user_id) SELECT ?,?,?,?,?,? WHERE ${condicaoEvento}`, [id('cnpj'), atual.cnpj, dados.consulta_fonte, JSON.stringify(consulta), timestamp, user.id, evento])] : []),
       ...(categorias === undefined ? [] : [statement(`DELETE FROM solicitacao_categorias WHERE solicitacao_id=? AND ${condicaoEvento}`, [atual.id, evento]), ...categorias.map(c => statement(`INSERT INTO solicitacao_categorias(solicitacao_id,categoria_id) SELECT ?,? WHERE ${condicaoEvento}`, [atual.id, c, evento]))]),
       auditoria(user, 'solicitacao', atual.id, 'UPDATE', `Solicitação ${atual.codigo}: ${atual.status} → ${para}${texto ? `; ${texto}` : ''}`, timestamp, condicaoEvento, [evento]),
+      ...avisos,
     ]);
     return resultados[0].meta.changes ? ok({ success: true, revision: atual.revision + 1 }) : conflito();
   }

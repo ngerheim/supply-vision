@@ -10,6 +10,8 @@ import process from 'node:process';
 import { pathToFileURL } from 'node:url';
 
 import { montarEmailChamado, proximaTentativa } from '../lib/email-chamados.ts';
+import { montarEmailSolicitacao } from '../lib/email-solicitacoes.ts';
+import { pode } from '../lib/permissoes.ts';
 import { montarEmailRelatorioDiario } from '../lib/email-relatorio-diario.ts';
 import { criarTransportador, lerConfig, portalPrivado } from './configuracao.mjs';
 export { criarTransportador, lerConfig } from './configuracao.mjs';
@@ -256,15 +258,20 @@ export async function processarNotificacoes(db, config, transportador, { conclui
       const [item]=reservar(db,1);if(!item)break;
       try {
         // Revalida imediatamente antes do SMTP; uma fila antiga nao concede acesso.
-        const destinatario = db.prepare("SELECT id FROM users WHERE lower(email)=lower(?) AND active=1 AND role IN ('admin','editor') AND (? IS NULL OR id=?)")
-          .get(item.recipient_email, item.recipient_user_id ?? null, item.recipient_user_id ?? null);
+        const solicitacao = item.type === 'solicitacao_abertura' || item.type === 'solicitacao_andamento';
+        const pessoa = solicitacao ? db.prepare('SELECT id,role,active FROM users WHERE id=? AND lower(email)=lower(?) AND active=1').get(item.recipient_user_id, item.recipient_email) : null;
+        const registro = solicitacao ? db.prepare('SELECT solicitante_id FROM solicitacoes WHERE id=?').get(item.solicitacao_id) : null;
+        const destinatario = solicitacao
+          ? pessoa && registro && (item.type === 'solicitacao_abertura' ? pode(pessoa, 'solicitacao:atender') : registro.solicitante_id === pessoa.id && pode(pessoa, 'solicitacao:abrir'))
+          : db.prepare("SELECT id FROM users WHERE lower(email)=lower(?) AND active=1 AND role IN ('admin','editor') AND (? IS NULL OR id=?)")
+            .get(item.recipient_email, item.recipient_user_id ?? null, item.recipient_user_id ?? null);
         if (!destinatario) {
-          db.prepare("UPDATE email_notifications SET status='failed',locked_at=NULL,last_error='Permissão de chamado revogada ou destinatário alterado.',updated_at=? WHERE id=? AND status='processing' AND attempts=? AND locked_at=?")
-            .run(new Date().toISOString(), item.id, item.attempts, item.locked_at);
+          db.prepare("UPDATE email_notifications SET status='failed',locked_at=NULL,last_error=?,updated_at=? WHERE id=? AND status='processing' AND attempts=? AND locked_at=?")
+            .run(solicitacao ? 'Permissão de solicitação revogada ou destinatário alterado.' : 'Permissão de chamado revogada ou destinatário alterado.', new Date().toISOString(), item.id, item.attempts, item.locked_at);
           continue;
         }
         const dados = JSON.parse(item.payload_json);
-        const email = montarEmailChamado(item.type, dados, config.PORTAL_URL);
+        const email = solicitacao ? montarEmailSolicitacao(dados, config.PORTAL_URL) : montarEmailChamado(item.type, dados, config.PORTAL_URL);
         await transportador.sendMail({
           from: { name: config.EMAIL_FROM_NAME, address: config.SMTP_USER },
           to: { name: item.recipient_name, address: item.recipient_email },

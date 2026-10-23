@@ -230,6 +230,9 @@ jobs:
         # enderecos, historico, teclado e equivalencia dos acessos por perfil.
         # Cadastro API: tests/solicitacoes-api.test.mjs, tests/consultas-fornecedor.test.ts
         # e tests/database-migracoes.test.mjs; incluidos tambem no PREPARAR.
+        # Avisos SOL: tests/solicitacoes-api.test.mjs cobre eventos, fila,
+        # ensaio, destinatarios, rollback e idempotencia; regressao de chamados
+        # em tests/fila-email.test.mjs e tests/fila-email-confirmacao.test.mjs.
         # HTTP real: portal/scripts/teste-solicitacoes.mjs no portal/scripts/teste-portal-ponta-a-ponta.ps1.
         # Demonstracao: tests/demonstracao.test.mjs cobre travas, API, perfis,
         # acordos, chamados, Central e idempotencia; tambem no PREPARAR.
