@@ -9,7 +9,7 @@
 param([switch]$UsarBuildExistente, [string]$Relatorio, [ValidateRange(1024,65534)][int]$Porta = 3199)
 
 $ErrorActionPreference = 'Stop'
-. (Join-Path $PSScriptRoot '../../scripts/operacao-logica.ps1')
+. (Join-Path $PSScriptRoot 'portal-ensaio.ps1')
 $projeto = Split-Path -Parent $PSScriptRoot
 $env:PORTAL_TESTE_PORTA = [string]$Porta
 $baseUrl = "http://127.0.0.1:$porta"
@@ -41,11 +41,7 @@ $script:processoServidor = $null
 function Encerrar {
   $ErrorActionPreference = 'SilentlyContinue'
   if ($script:processoServidor) {
-    # /T encerra toda a arvore iniciada pelo teste.
-    if(!$script:processoServidor.HasExited){
-      [void](Executar-NativoOperacao 'taskkill.exe' @('/PID',[string]$script:processoServidor.Id,'/T','/F'))
-    }
-    $script:processoServidor.Dispose()
+    Encerrar-PortalEnsaio $script:registroServidor
     $script:processoServidor = $null
   }
   # Rede de seguranca restrita a esta execucao: so processos cuja linha de
@@ -80,29 +76,7 @@ $env:NODE_ENV = 'development'
 
 try {
 
-if ($UsarBuildExistente) {
-  if (-not (Test-Path -LiteralPath (Join-Path $projeto 'dist/server/index.js'))) {
-    throw 'A compilacao existente nao foi encontrada.'
-  }
-  Write-Host '  Testando a compilacao existente; o codigo-fonte nao sera recompilado.' -ForegroundColor Yellow
-} else {
-Write-Host '  Compilando...' -ForegroundColor DarkGray
-# Windows PowerShell trata avisos em stderr como erros quando redirecionados.
-# O resultado do compilador e seu codigo de saida, nao a presenca de avisos.
-$preferenciaAnterior = $ErrorActionPreference
-try {
-  $ErrorActionPreference = 'Continue'
-  $resultadoBuild = Executar-NativoOperacao 'npm.cmd' @('run','build')
-  $resultadoBuild.saida | Set-Content $logBuild
-  $codigoBuild = $resultadoBuild.codigo
-} finally { $ErrorActionPreference = $preferenciaAnterior }
-if ($codigoBuild -ne 0) {
-  Write-Host '  [FALHA] a compilacao nao passou.' -ForegroundColor Red
-  Get-Content $logBuild -ErrorAction SilentlyContinue | Select-Object -Last 10
-  exit 1
-}
-
-}
+Compilar-PortalEnsaio $projeto $logBuild -UsarBuildExistente:$UsarBuildExistente
 
 # A fixture autoriza criar banco apenas no diretorio descartavel.
 $ambienteServidor = @{
@@ -114,21 +88,8 @@ $ambienteServidor = @{
   INITIAL_ADMIN_PASSWORD = $senhaTeste
   PORTAL_API_TOKEN = 'relatorios-token-ci'
 }
-$ambienteAnterior = @{}
-foreach ($nome in $ambienteServidor.Keys) {
-  $ambienteAnterior[$nome] = [Environment]::GetEnvironmentVariable($nome, 'Process')
-}
-try {
-  foreach ($nome in $ambienteServidor.Keys) {
-    [Environment]::SetEnvironmentVariable($nome, $ambienteServidor[$nome], 'Process')
-  }
-  $script:processoServidor = Start-Process powershell.exe -ArgumentList '-NoProfile', '-Command', "node scripts/iniciar-portal.mjs local *> '$logServidor'" -WorkingDirectory $projeto -NoNewWindow -PassThru
-  [void]$script:processoServidor.Handle
-} finally {
-  foreach ($nome in $ambienteAnterior.Keys) {
-    [Environment]::SetEnvironmentVariable($nome, $ambienteAnterior[$nome], 'Process')
-  }
-}
+$script:registroServidor = Iniciar-PortalEnsaio $projeto $ambienteServidor $logServidor
+$script:processoServidor = $script:registroServidor.Processo
 
 $subiu = $false
 for ($i = 0; $i -lt 60; $i++) {
@@ -138,6 +99,7 @@ for ($i = 0; $i -lt 60; $i++) {
 if (-not $subiu) {
   Write-Host '  [FALHA] a instancia de teste nao subiu.' -ForegroundColor Red
   Get-Content $logServidor -ErrorAction SilentlyContinue | Select-Object -Last 12
+  Get-Content ($logServidor+'.erro') -ErrorAction SilentlyContinue | Select-Object -Last 12
   Encerrar
   exit 1
 }

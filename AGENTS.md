@@ -67,6 +67,10 @@ Abbreviated paths in a cell share the directory of the first file.
 - Optional local list `privado/termos-proibidos.txt` (UTF-8, literal, case-insensitive, one term per line, blank lines and `#` ignored). Never publish the real list.
 - Vendored SheetJS: keep the license, the official hash and the lockfile integrity; upgrades require explicit review.
 
+## Local demonstration
+- Run `powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/demonstracao.ps1` (PowerShell 5.1); use `-Porta 3100`, `-Pasta <absolute private directory>` and optionally `-Recriar`. Stop with Ctrl+C in the same console. Data and `credenciais.json` default to `%LOCALAPPDATA%/supply-vision-demo`, outside the checkout. Published example passwords belong only to this fictitious database.
+- The launcher shares build/start helpers with the end-to-end fixture, always forces `MODO_ENSAIO=1`, creates a database only on first startup, and binds only to `127.0.0.1`. It starts no supervisor, Alertas or scheduled tasks. Real private roots, installations, the checkout, foreign databases and links/junctions are refused. Recreating requires the demo sentinel and database identity. A per-directory mutex prevents concurrent launch/recreation; cleanup verifies PID, start time and entry point before stopping its own process tree.
+
 ## Versioning
 - `3.0` = a new module or a change in how the Portal is used; `2.x` = a closed set of improvements; `2.9.x` = a fix worth recording. Day-to-day updates get no number.
 - The version lives in `portal/package.json` and changes in the PR that closes the version. The `vX.Y.Z` tag goes on the `main` commit deployed to the server. `supv status` and the Portal sidebar show it.

@@ -1,0 +1,9 @@
+{
+  "aviso": "DEMONSTRACAO PUBLICA: senhas fixas, validas somente no banco ficticio local. Nunca usar em uma instalacao real.",
+  "inicial": { "name": "Administrador Inicial Exemplo", "email": "inicial@demo.invalid", "password": "Demo-Inicial-123!", "role": "admin" },
+  "usuarios": [
+    { "name": "Consulta Exemplo", "email": "consulta@demo.invalid", "password": "Demo-Consulta-123!", "role": "viewer" },
+    { "name": "Suprimentos Exemplo", "email": "suprimentos@demo.invalid", "password": "Demo-Editor-123!", "role": "editor" },
+    { "name": "Administrador Exemplo", "email": "admin@demo.invalid", "password": "Demo-Admin-123!", "role": "admin" }
+  ]
+}

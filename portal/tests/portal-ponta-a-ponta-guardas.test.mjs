@@ -7,6 +7,10 @@ void test('Portal ponta a ponta conserva processo e Handle, usa temporario unico
   const fonte = fs.readFileSync(new URL('../scripts/teste-portal-ponta-a-ponta.ps1', import.meta.url), 'utf8');
   assert.match(fonte, /ValidateRange\(1024,65534\)/);
   assert.doesNotMatch(fonte, /['"]consulta-teste\.cjs['"]/);
-  assert.match(fonte, /\$script:processoServidor\s*=\s*Start-Process[^\r\n]+-PassThru\r?\n\s*\[void\]\$script:processoServidor.Handle/);
-  assert.match(fonte, /!\$script:processoServidor.HasExited/);
+  assert.match(fonte, /Iniciar-PortalEnsaio \$projeto \$ambienteServidor \$logServidor/);
+  assert.match(fonte, /Encerrar-PortalEnsaio \$script:registroServidor/);
+  const auxiliar = fs.readFileSync(new URL('../scripts/portal-ensaio.ps1', import.meta.url), 'utf8');
+  assert.match(auxiliar, /\$processo = Start-Process[^\r\n]+-PassThru\r?\n\s*\[void\]\$processo.Handle/);
+  assert.match(auxiliar, /StartTime.ToUniversalTime\(\) -ne \$Registro.Inicio/);
+  assert.match(auxiliar, /CommandLine.Contains\(\$Registro.Entrada\)/);
 });
