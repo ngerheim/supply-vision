@@ -37,7 +37,7 @@ const { Dialog, DialogFooter } = await import('../components/ui/dialog.tsx');
 const { Input } = await import('../components/ui/input.tsx');
 
 for (const [role, allowed, forbidden] of [
-  ['viewer', ['Buscar', 'Manutenção'], ['Chamados', 'Acordos', 'Relatórios', 'Usuários']],
+  ['viewer', ['Buscar', 'Manutenção', 'Chamados'], ['Acordos', 'Relatórios', 'Usuários']],
   ['editor', ['Buscar', 'Manutenção', 'Chamados', 'Acordos', 'Cadastros'], ['Relatórios', 'Histórico', 'E-mails', 'Usuários']],
   ['admin', ['Buscar', 'Manutenção', 'Chamados', 'Acordos', 'Cadastros', 'Administração'], ['Relatórios', 'Histórico', 'E-mails', 'Usuários']],
 ]) {

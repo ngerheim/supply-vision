@@ -4,7 +4,10 @@ import type { Role } from './domain.ts';
 export const ABAS_NAVEGACAO = [
   { aba: 'buscar', label: 'Buscar', subabas: [{ chave: 'search', slug: null, label: 'Buscar' }] },
   { aba: 'manutencao', label: 'Manutenção', subabas: [{ chave: 'maintenance', slug: null, label: 'Manutenção' }] },
-  { aba: 'chamados', label: 'Chamados', subabas: [{ chave: 'tickets', slug: null, label: 'Chamados' }] },
+  { aba: 'chamados', label: 'Chamados', subabas: [
+    { chave: 'tickets', slug: 'parcerias', label: 'Parcerias' },
+    { chave: 'solicitacoes', slug: 'cadastro-fornecedor', label: 'Cadastro de fornecedor' },
+  ] },
   { aba: 'acordos', label: 'Acordos', subabas: [
     { chave: 'agreements', slug: 'acordos', label: 'Acordos' },
     { chave: 'imports', slug: 'importacoes', label: 'Importações' },
@@ -13,6 +16,7 @@ export const ABAS_NAVEGACAO = [
     { chave: 'suppliers', slug: 'fornecedores', label: 'Fornecedores' },
     { chave: 'catalogs', slug: 'catalogos', label: 'Catálogos' },
     { chave: 'mappings', slug: 'de-para', label: 'De/Para' },
+    { chave: 'categorias', slug: 'categorias', label: 'Categorias' },
   ] },
   { aba: 'administracao', label: 'Administração', subabas: [
     { chave: 'reports', slug: 'relatorios', label: 'Relatórios' },
@@ -70,19 +74,25 @@ export function enderecoParaBusca({ aba, subaba }: EnderecoNavegacao): string {
   return `?${params}`;
 }
 export function resolverEndereco(usuario: UsuarioPermissao, busca: string) {
+  const solicitacao = new URLSearchParams(busca).get('solicitacao');
+  if (solicitacao) {
+    return podeAcessarAba(usuario, 'solicitacoes')
+      ? { nav: 'solicitacoes' as Nav, endereco: enderecoDaChave('solicitacoes'), chamado: null, solicitacao, aviso: '' }
+      : { nav: 'search' as Nav, endereco: { ...BUSCAR }, chamado: null, solicitacao: null, aviso: AVISO_AREA_RESTRITA };
+  }
   const chamado = new URLSearchParams(busca).get('chamado');
   if (chamado) {
     return podeAcessarAba(usuario, 'tickets')
-      ? { nav: 'tickets' as Nav, endereco: enderecoDaChave('tickets'), chamado, aviso: '' }
-      : { nav: 'search' as Nav, endereco: { ...BUSCAR }, chamado: null, aviso: AVISO_CHAMADO_RESTRITO };
+      ? { nav: 'tickets' as Nav, endereco: enderecoDaChave('tickets'), chamado, solicitacao: null, aviso: '' }
+      : { nav: 'search' as Nav, endereco: { ...BUSCAR }, chamado: null, solicitacao: null, aviso: AVISO_CHAMADO_RESTRITO };
   }
   const endereco = lerEndereco(busca);
   const aba = ABAS_NAVEGACAO.find(item => item.aba === endereco.aba)!;
   const permitidas = subabasPermitidas(usuario, aba);
   const sub = endereco.subaba === null ? permitidas[0] : permitidas.find(item => item.slug === endereco.subaba);
   return sub
-    ? { nav: sub.chave, endereco: enderecoDaChave(sub.chave), chamado: null, aviso: '' }
-    : { nav: 'search' as Nav, endereco: { ...BUSCAR }, chamado: null, aviso: AVISO_AREA_RESTRITA };
+    ? { nav: sub.chave, endereco: enderecoDaChave(sub.chave), chamado: null, solicitacao: null, aviso: '' }
+    : { nav: 'search' as Nav, endereco: { ...BUSCAR }, chamado: null, solicitacao: null, aviso: AVISO_AREA_RESTRITA };
 }
 export const NOMES_PERFIL: Record<Role, string> = {
   viewer: 'Consulta',

@@ -1,6 +1,7 @@
 import type { Role } from './domain.ts';
 
 export const ACOES = [
+  'aba:solicitacoes', 'aba:categorias',
   'aba:search', 'aba:maintenance', 'aba:tickets', 'aba:agreements',
   'aba:suppliers', 'aba:imports', 'aba:catalogs', 'aba:mappings',
   'aba:reports', 'aba:history', 'aba:emails', 'aba:admin',
@@ -18,7 +19,7 @@ export const ACOES = [
 export type Acao = (typeof ACOES)[number];
 
 // Guardas gerais preservam a ordem e as mensagens do roteador, inclusive 404.
-const consulta: readonly Acao[] = ['aba:search', 'aba:maintenance', 'central:marcar', 'solicitacao:abrir'];
+const consulta: readonly Acao[] = ['aba:search', 'aba:maintenance', 'central:marcar', 'solicitacao:abrir', 'aba:solicitacoes'];
 const suprimentos: readonly Acao[] = [
   ...consulta, 'aba:tickets', 'aba:agreements', 'aba:suppliers', 'aba:imports',
   'aba:catalogs', 'aba:mappings', 'portal:consultar-gestao', 'portal:escrever',
@@ -36,7 +37,7 @@ const acoesPorPerfil: Record<Role, readonly Acao[]> = {
     'acordo:excluir', 'usuario:gerenciar', 'relatorio:consultar',
     'relatorio:executar', 'relatorio:cancelar', 'auditoria:consultar',
     'email:consultar', 'email:reenviar', 'base:exportar',
-    'categoria:gerenciar',
+    'categoria:gerenciar', 'aba:categorias',
   ],
 };
 

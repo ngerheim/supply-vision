@@ -46,7 +46,7 @@ void test('buscar abre acordo e importacao preserva acordo pre-selecionado; Cent
   assert.equal(janela.location.search,'?aba=acordos&sub=importacoes');
   tela.one('CentralNotificacoes').navegar('/?chamado=chamado-ficticio');tela.render();
   assert.equal(tela.one('Tickets').initialDetail,'chamado-ficticio');
-  assert.equal(janela.location.search,'?aba=chamados&chamado=chamado-ficticio');
+  assert.equal(janela.location.search,'?aba=chamados&sub=parcerias&chamado=chamado-ficticio');
   tela.one('Sidebar').setNav('search');tela.render();
   assert.equal(janela.location.search,'?aba=buscar');tela.one('SearchPage');
 });
@@ -69,6 +69,26 @@ for(const [role,query,aviso] of [
 void test('Portal abre detalhe pelo link legado sem alterar o endereco recebido',async t=>{
   const {tela,janela}=await abrir(t,'editor','?chamado=ID');
   assert.equal(tela.one('Tickets').initialDetail,'ID');assert.equal(janela.location.search,'?chamado=ID');
+});
+
+for(const role of ['viewer','editor','admin'])void test(`Chamados ${role}: subabas, link SOL, historico e nenhuma API de parcerias para viewer`,async t=>{
+  const {tela,janela}=await abrir(t,role,'?aba=chamados');
+  assert.equal(tela.one('Sidebar').nav,role==='viewer'?'solicitacoes':'tickets');
+  if(role==='viewer')tela.one('Solicitacoes');else tela.one('Tickets');
+  tela.one('CentralNotificacoes').navegar('/?aba=chamados&solicitacao=sol-ficticia');tela.render();
+  assert.equal(tela.one('Solicitacoes').initialDetail,'sol-ficticia');assert.equal(janela.location.search,'?aba=chamados&sub=cadastro-fornecedor&solicitacao=sol-ficticia');
+  tela.one('Solicitacoes').onOpen(null);tela.render();assert.equal(tela.one('Solicitacoes').initialDetail,null);
+  janela.mover(-1);tela.render();assert.equal(tela.one('Solicitacoes').initialDetail,'sol-ficticia');
+  tela.one('Sidebar').setNav('categorias');tela.render();
+  if(role==='admin')tela.one('CategoriasFornecedor');else tela.one('SearchPage');
+  if(role==='viewer'){
+    assert.equal(tela.find(n=>n.type==='Tickets').length,0);
+    assert.equal(tela.requests.some(r=>/tickets|users/.test(r.path)),false);
+  }
+});
+void test('link SOL recebido sem subaba abre detalhe no perfil Consulta',async t=>{
+  const {tela,janela}=await abrir(t,'viewer','?aba=chamados&solicitacao=sol-link');
+  assert.equal(tela.one('Solicitacoes').initialDetail,'sol-link');assert.equal(janela.location.search,'?aba=chamados&solicitacao=sol-link');
 });
 
 void test('subabas anunciam selecao e teclado percorre, retorna ao inicio e move o foco',async t=>{

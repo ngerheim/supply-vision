@@ -28,6 +28,13 @@ void test('sobrecarga informa espera sem expor resposta HTML do servidor', async
   t.mock.method(globalThis, 'fetch', () => Promise.resolve(new Response('<html>internal</html>', { status: 503, headers: { 'retry-after': '5' } })));
   await assert.rejects(api('/api/test'), /Tente novamente em 5 segundos/);
 });
+void test('consulta SOL preserva status 503 e revisao 409 para os estados da tela', async t => {
+  for(const status of [400,409,503]) {
+    t.mock.method(globalThis,'fetch',async()=>Response.json({error:'Mensagem fictícia da consulta'},{status}));
+    await assert.rejects(api('/api/solicitacoes/cnpj/fixture'),e=>e instanceof ApiError&&e.details.status===status&&e.message==='Mensagem fictícia da consulta');
+    t.mock.restoreAll();
+  }
+});
 
 void test('cancelamento solicitado pelo chamador é preservado', async t => {
   const abort = new DOMException('cancelado', 'AbortError');

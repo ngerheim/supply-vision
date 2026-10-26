@@ -73,7 +73,15 @@ export function solicitacoesApi(contexto: ContextoApi, consultas = criarConsulta
     const where = condicoes.length ? `WHERE ${condicoes.join(' AND ')}` : '';
     const total = Number((await first<{ n: number }>(`SELECT COUNT(*) n FROM solicitacoes ${where}`, valores))?.n ?? 0);
     const paginacao = paginaSolicitada(params), pageCount = Math.max(1, Math.ceil(total / paginacao.pageSize)), page = Math.min(paginacao.page, pageCount);
-    const solicitacoes = await all(`SELECT * FROM solicitacoes ${where} ORDER BY atualizado_em DESC,id DESC LIMIT ? OFFSET ?`, [...valores, paginacao.pageSize, (page - 1) * paginacao.pageSize]);
+    // A lista precisa dos nomes sem uma chamada de detalhe para cada linha.
+    // A restricao por solicitante continua no mesmo WHERE da contagem.
+    const linhas = await all(`SELECT solicitacoes.*,
+      (SELECT name FROM users WHERE users.id=solicitacoes.solicitante_id) AS solicitante,
+      (SELECT json_group_array(json_object('id',c.id,'nome',c.nome)) FROM categorias_fornecedor c JOIN solicitacao_categorias sc ON sc.categoria_id=c.id WHERE sc.solicitacao_id=solicitacoes.id) AS categorias_json
+      FROM solicitacoes ${where} ORDER BY atualizado_em DESC,id DESC LIMIT ? OFFSET ?`, [...valores, paginacao.pageSize, (page - 1) * paginacao.pageSize]);
+    const solicitacoes = linhas.map(({ categorias_json, solicitante, ...linha }) => ({ ...linha,
+      categorias: JSON.parse(String(categorias_json)), ...(pode(user, 'solicitacao:ver_todas') ? { solicitante } : {}),
+    }));
     return ok({ solicitacoes, total, page, pageCount, pageSize: paginacao.pageSize });
   }
   async function detalhe(user: User, solicitacaoId: string) {
@@ -105,8 +113,8 @@ export function solicitacoesApi(contexto: ContextoApi, consultas = criarConsulta
     return !dados.nao_verificado && dados.situacao_cadastral !== 'ATIVA' ? fail(`CNPJ com situação cadastral ${String(dados.situacao_cadastral)}. Somente empresas ATIVAS podem ser solicitadas.`, 409) : null;
   }
   async function duplicada(cnpj: string) {
-    const existente = await first<{ codigo: string; status: string }>("SELECT codigo,status FROM solicitacoes WHERE cnpj=? AND status IN ('aberta','em_analise','devolvida')", [cnpj]);
-    return existente ? fail(`Já existe a solicitação ${existente.codigo} com status ${existente.status} para este CNPJ.`, 409) : null;
+    const existente = await first<{ id: string; codigo: string; status: string }>("SELECT id,codigo,status FROM solicitacoes WHERE cnpj=? AND status IN ('aberta','em_analise','devolvida')", [cnpj]);
+    return existente ? ok({ error: `Já existe a solicitação ${existente.codigo} com status ${existente.status} para este CNPJ.`, existente }, { status: 409 }) : null;
   }
   async function categoriasEntrada(valor: unknown): Promise<string[]> {
     if (!Array.isArray(valor) || valor.length > 80 || valor.some(v => typeof v !== 'string' || !v || v.length > 100)) throw new EntradaInvalida('Categorias inválidas.');

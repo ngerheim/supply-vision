@@ -108,9 +108,9 @@ function Sla({ createdAt, closedAt }: JsonData) {
     </div>
   );
 }
-function TicketStatus({ value }: JsonData) {
+export function TicketStatus({ value, label }: JsonData) {
   const x = ticketStatusMap[value] || [value, 'bg-slate-100'];
-  return <Badge className={x[1]}>{x[0]}</Badge>;
+  return <Badge className={x[1]}>{label || x[0]}</Badge>;
 }
 export function Tickets({
   busy,
