@@ -108,19 +108,15 @@ for (const role of ['viewer', 'editor', 'admin'])
       pageCount: 2,
     });
     await flush(h);
-    assert.equal(
-      h.one('h2').children,
-      role === 'viewer'
-        ? 'Minhas solicitações'
-        : 'Solicitações de cadastro de fornecedor',
-    );
+    assert.equal(h.find((n) => n.type === 'h2').length, 0);
+    assert.equal(h.one('PageHeader').title, undefined);
     assert.equal(
       h.find(
         (n) => n.type === 'TableHead' && n.props.children === 'Solicitante',
       ).length,
       role === 'viewer' ? 0 : 1,
     );
-    assert.equal(h.one('a').children, 'SOL-8');
+    assert.equal(h.one('Plaquinha').children, 'SOL-8');
     h.one('a').onClick({ button: 0, preventDefault() {} });
     assert.deepEqual(abertas, ['sol']);
     assert.equal(h.one('SituacaoSolicitacao').value, 'aberta');

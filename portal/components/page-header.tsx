@@ -1,6 +1,6 @@
 'use client';
 import { createContext, useContext, type ReactNode } from 'react';
-import { abaDaChave, type Nav } from '@/lib/navegacao';
+import { abaDaChave, subabasPermitidas, type Nav } from '@/lib/navegacao';
 import type { UsuarioPermissao } from '@/lib/permissoes';
 import { Subabas } from './portal-subabas';
 
@@ -47,12 +47,14 @@ export function PageHeader({
   back?: { label: string; onClick: () => void };
 }) {
   const contexto = useContext(ContextoCabecalho);
+  const aba = abaDaChave(contexto?.nav ?? 'search');
+  const unica = contexto ? subabasPermitidas(contexto.usuario, aba) : [];
   return (
     <header className="patio-page-header">
       {back && (
         <a
           href={
-            contexto?.nav === 'tickets'
+            aba.aba === 'chamados'
               ? '/?aba=chamados'
               : contexto?.nav === 'search'
                 ? '/?aba=buscar'
@@ -70,7 +72,7 @@ export function PageHeader({
       <div className="patio-header-row">
         <div className="patio-header-heading">
           <h1 className="patio-page-title">
-            {title ?? titulos[abaDaChave(contexto?.nav ?? 'search').aba]}
+            {title ?? (unica.length === 1 && aba.subabas.length > 1 ? unica[0].label : titulos[aba.aba])}
           </h1>
           {status && <div className="patio-header-status">{status}</div>}
         </div>
