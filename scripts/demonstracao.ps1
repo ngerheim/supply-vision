@@ -47,7 +47,7 @@ try {
   }
   # Build real quando ausente ou anterior a algum fonte/dependencia versionada.
   $build = Join-Path $projeto 'dist/portal-build.json'
-  $reusar = Test-Path -LiteralPath $build
+  $reusar = (Test-Path -LiteralPath $build) -and (Test-Path -LiteralPath (Join-Path $projeto 'dist/server/index.js'))
   if ($reusar) {
     $dataBuild = (Get-Item -LiteralPath $build).LastWriteTimeUtc
     $fontes = @(Get-ChildItem (Join-Path $projeto 'app'),(Join-Path $projeto 'components'),(Join-Path $projeto 'lib'),(Join-Path $projeto 'scripts'),(Join-Path $projeto 'public') -Recurse -File)
