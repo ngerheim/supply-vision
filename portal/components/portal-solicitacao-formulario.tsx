@@ -3,15 +3,23 @@ import { useEffect, useRef, useState } from 'react';
 import { api, ApiError, errorText } from '@/lib/api';
 import {
   AVISO_MANUAL,
+  UFS,
   corpoJson,
+  dataHoraSolicitacao,
   erroDeRevisao,
+  formatarCnae,
+  mascaraCep,
   mascaraCnpj,
+  mascaraTelefone,
   rotuloSituacao,
 } from '@/lib/solicitacoes-cliente';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
-import { type AnyRow, Field } from './portal-presentation';
+import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
+import { type AnyRow, Field, Info } from './portal-presentation';
+import { PageHeader } from './page-header';
+import { Status } from './status';
 
 const receitaCampos = [
   ['razao_social', 'Razão social'],
@@ -26,8 +34,23 @@ const enderecoCampos = [
   ['complemento', 'Complemento'],
   ['bairro', 'Bairro'],
   ['cidade', 'Cidade'],
-  ['uf', 'UF'],
 ];
+function SeletorUf({ nome, valor, mudar }: { nome: string; valor: string; mudar: (nome: string, valor: string) => void }) {
+  return (
+    <NativeSelect
+      name={nome}
+      value={valor}
+      onChange={(e) => mudar(nome, e.target.value)}
+    >
+      <NativeSelectOption value="">—</NativeSelectOption>
+      {UFS.map((uf) => (
+        <NativeSelectOption key={uf} value={uf}>
+          {uf}
+        </NativeSelectOption>
+      ))}
+    </NativeSelect>
+  );
+}
 export function FormularioSolicitacao({
   value,
   categoriasIniciais = [],
@@ -46,6 +69,8 @@ export function FormularioSolicitacao({
   const [campos, setCampos] = useState<AnyRow>(() => ({
     ...value,
     cnpj: mascaraCnpj(value?.cnpj || ''),
+    cep: mascaraCep(value?.cep || ''),
+    telefone: mascaraTelefone(value?.telefone || ''),
     urgencia: value?.urgencia || 'normal',
   }));
   const [consultaId, setConsultaId] = useState<string | undefined>(undefined),
@@ -189,10 +214,11 @@ export function FormularioSolicitacao({
     }
   };
   return (
-    <div className="space-y-5">
-      <h2 className="text-2xl font-semibold">
-        {value ? 'Corrigir e reenviar' : 'Nova solicitação'}
-      </h2>
+    <div className="patio-page">
+      <PageHeader
+        back={{ label: '← Chamados', onClick: onCancel }}
+        title={value ? 'Corrigir e reenviar' : 'Nova solicitação de cadastro'}
+      />
       {devolucao && (
         <div
           role="note"
@@ -249,19 +275,69 @@ export function FormularioSolicitacao({
           {pronto && (
             <>
               <Card>
-                <CardContent className="grid gap-4 sm:grid-cols-2">
-                  {receitaCampos.map(([nome, label]) => (
-                    <Field key={nome} label={label}>
-                      <Input
-                        name={nome}
-                        value={campos[nome] || ''}
-                        readOnly={!manual}
-                        required={nome === 'razao_social'}
-                        maxLength={200}
-                        onChange={(e) => mudar(nome, e.target.value)}
-                      />
-                    </Field>
-                  ))}
+                <CardContent className="space-y-4">
+                  <h3 className="text-lg font-semibold">Receita</h3>
+                  {manual ? (
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      {receitaCampos.map(([nome, label]) => (
+                        <Field key={nome} label={label}>
+                          <Input
+                            name={nome}
+                            value={campos[nome] || ''}
+                            required={nome === 'razao_social'}
+                            maxLength={200}
+                            onChange={(e) => mudar(nome, e.target.value)}
+                          />
+                        </Field>
+                      ))}
+                    </div>
+                  ) : (
+                    <>
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <Info
+                          label="Razão social"
+                          value={campos.razao_social || '—'}
+                        />
+                        {campos.nome_fantasia && (
+                          <Info
+                            label="Nome fantasia"
+                            value={campos.nome_fantasia}
+                          />
+                        )}
+                        <Info
+                          label="Situação cadastral"
+                          value={
+                            <Status
+                              value={
+                                campos.situacao_cadastral === 'ATIVA'
+                                  ? 'concluido'
+                                  : 'cancelado'
+                              }
+                            >
+                              {campos.situacao_cadastral || '—'}
+                            </Status>
+                          }
+                        />
+                        <Info
+                          label="CNAE"
+                          value={
+                            [
+                              formatarCnae(campos.cnae_codigo),
+                              campos.cnae_descricao,
+                            ]
+                              .filter(Boolean)
+                              .join(' — ') || '—'
+                          }
+                        />
+                      </div>
+                      <p className="text-sm text-muted-foreground">
+                        Verificado na Receita
+                        {campos.consultada_em
+                          ? ` em ${dataHoraSolicitacao(campos.consultada_em)}`
+                          : ''}
+                      </p>
+                    </>
+                  )}
                 </CardContent>
               </Card>
               {campos.situacao_cadastral &&
@@ -273,35 +349,46 @@ export function FormularioSolicitacao({
                   </p>
                 )}
               <Card>
-                <CardContent className="grid gap-4 sm:grid-cols-3">
-                  <Field label="CEP">
-                    <Input
-                      name="cep"
-                      inputMode="numeric"
-                      maxLength={9}
-                      value={campos.cep || ''}
-                      onChange={(e) => mudar('cep', e.target.value)}
-                      onBlur={() => void consultarCep()}
-                    />
-                  </Field>
-                  {enderecoCampos.map(([nome, label]) => (
-                    <Field key={nome} label={label}>
+                <CardContent className="space-y-4">
+                  <h3 className="text-lg font-semibold">Endereço</h3>
+                  <div className="grid gap-4 sm:grid-cols-3">
+                    <Field label="CEP">
                       <Input
-                        name={nome}
-                        value={campos[nome] || ''}
-                        maxLength={
-                          nome === 'uf'
-                            ? 2
-                            : nome === 'numero'
+                        name="cep"
+                        inputMode="numeric"
+                        placeholder="00000-000"
+                        maxLength={9}
+                        value={campos.cep || ''}
+                        onChange={(e) =>
+                          mudar('cep', mascaraCep(e.target.value))
+                        }
+                        onBlur={() => void consultarCep()}
+                      />
+                    </Field>
+                    {enderecoCampos.map(([nome, label]) => (
+                      <Field key={nome} label={label}>
+                        <Input
+                          name={nome}
+                          value={campos[nome] || ''}
+                          maxLength={
+                            nome === 'numero'
                               ? 30
                               : nome === 'cidade'
                                 ? 80
                                 : 200
-                        }
-                        onChange={(e) => mudar(nome, e.target.value)}
+                          }
+                          onChange={(e) => mudar(nome, e.target.value)}
+                        />
+                      </Field>
+                    ))}
+                    <Field label="UF">
+                      <SeletorUf
+                        nome="uf"
+                        valor={campos.uf || ''}
+                        mudar={mudar}
                       />
                     </Field>
-                  ))}
+                  </div>
                   {consultandoCep && <output>Consultando CEP…</output>}
                   {erroCep && (
                     <p role="alert">
@@ -311,82 +398,102 @@ export function FormularioSolicitacao({
                 </CardContent>
               </Card>
               <Card>
-                <CardContent className="grid gap-4 sm:grid-cols-2">
-                  <Field label="Telefone">
-                    <Input
-                      name="telefone"
-                      type="tel"
-                      maxLength={200}
-                      value={campos.telefone || ''}
-                      onChange={(e) => mudar('telefone', e.target.value)}
-                    />
-                  </Field>
-                  <Field label="E-mail">
-                    <Input
-                      name="email"
-                      type="email"
-                      maxLength={200}
-                      value={campos.email || ''}
-                      onChange={(e) => mudar('email', e.target.value)}
-                    />
-                  </Field>
-                  <Field label="Cidade de atendimento (opcional)">
-                    <Input
-                      name="atendimento_cidade"
-                      maxLength={80}
-                      value={campos.atendimento_cidade || ''}
-                      onChange={(e) =>
-                        mudar('atendimento_cidade', e.target.value)
-                      }
-                    />
-                  </Field>
-                  <Field label="UF de atendimento (opcional)">
-                    <Input
-                      name="atendimento_uf"
-                      maxLength={2}
-                      value={campos.atendimento_uf || ''}
-                      onChange={(e) => mudar('atendimento_uf', e.target.value)}
-                    />
-                  </Field>
-                  <Field label="Urgência">
-                    <select
-                      name="urgencia"
-                      className="rounded-md border bg-background p-2"
-                      value={campos.urgencia}
-                      onChange={(e) => mudar('urgencia', e.target.value)}
-                    >
-                      <option value="normal">Normal</option>
-                      <option value="urgente">Urgente</option>
-                    </select>
-                  </Field>
-                  <fieldset className="space-y-2">
-                    <legend className="mb-2 font-medium">Categorias</legend>
-                    {categorias.map((c) => (
-                      <label key={c.id} className="flex items-center gap-2">
-                        <input
-                          type="checkbox"
-                          checked={selecionadas.includes(c.id)}
-                          onChange={(e) =>
-                            setSelecionadas((atual) =>
-                              e.target.checked
-                                ? [...atual, c.id]
-                                : atual.filter((id) => id !== c.id),
-                            )
-                          }
-                        />
-                        {c.nome}
-                      </label>
-                    ))}
-                    {categoriasProntas && !categorias.length && (
-                      <p>Nenhuma categoria ativa.</p>
-                    )}
-                    {categoriasIniciais.some((c) => !c.ativo) && (
-                      <p className="text-sm text-muted-foreground">
-                        Categorias inativas serão removidas no reenvio;
-                        selecione as categorias atuais.
-                      </p>
-                    )}
-                  </fieldset>
+                <CardContent className="space-y-4">
+                  <h3 className="text-lg font-semibold">Contato e pedido</h3>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <Field label="Telefone">
+                      <Input
+                        name="telefone"
+                        type="tel"
+                        inputMode="tel"
+                        placeholder="(00) 00000-0000"
+                        maxLength={15}
+                        value={campos.telefone || ''}
+                        onChange={(e) =>
+                          mudar('telefone', mascaraTelefone(e.target.value))
+                        }
+                      />
+                    </Field>
+                    <Field label="E-mail">
+                      <Input
+                        name="email"
+                        type="email"
+                        maxLength={200}
+                        value={campos.email || ''}
+                        onChange={(e) => mudar('email', e.target.value)}
+                      />
+                    </Field>
+                    <Field label="Cidade de atendimento (opcional)">
+                      <Input
+                        name="atendimento_cidade"
+                        maxLength={80}
+                        value={campos.atendimento_cidade || ''}
+                        onChange={(e) =>
+                          mudar('atendimento_cidade', e.target.value)
+                        }
+                      />
+                    </Field>
+                    <Field label="UF de atendimento (opcional)">
+                      <SeletorUf
+                        nome="atendimento_uf"
+                        valor={campos.atendimento_uf || ''}
+                        mudar={mudar}
+                      />
+                    </Field>
+                    <fieldset>
+                      <legend className="mb-1.5 text-sm font-medium">
+                        Urgência
+                      </legend>
+                      <div className="flex gap-2">
+                        {[
+                          ['normal', 'Normal'],
+                          ['urgente', 'Urgente'],
+                        ].map(([valor, rotulo]) => (
+                          <Button
+                            key={valor}
+                            type="button"
+                            variant={
+                              campos.urgencia === valor ? 'default' : 'outline'
+                            }
+                            aria-pressed={campos.urgencia === valor}
+                            onClick={() => mudar('urgencia', valor)}
+                          >
+                            {rotulo}
+                          </Button>
+                        ))}
+                      </div>
+                    </fieldset>
+                    <fieldset className="space-y-2">
+                      <legend className="mb-2 text-sm font-medium">
+                        Categorias
+                      </legend>
+                      {categorias.map((c) => (
+                        <label key={c.id} className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={selecionadas.includes(c.id)}
+                            onChange={(e) =>
+                              setSelecionadas((atual) =>
+                                e.target.checked
+                                  ? [...atual, c.id]
+                                  : atual.filter((id) => id !== c.id),
+                              )
+                            }
+                          />
+                          {c.nome}
+                        </label>
+                      ))}
+                      {categoriasProntas && !categorias.length && (
+                        <p>Nenhuma categoria ativa.</p>
+                      )}
+                      {categoriasIniciais.some((c) => !c.ativo) && (
+                        <p className="text-sm text-muted-foreground">
+                          Categorias inativas serão removidas no reenvio;
+                          selecione as categorias atuais.
+                        </p>
+                      )}
+                    </fieldset>
+                  </div>
                 </CardContent>
               </Card>
             </>
@@ -408,7 +515,7 @@ export function FormularioSolicitacao({
             <p>
               Solicitação em aberto:{' '}
               <a
-                className="text-primary underline"
+                className="text-link underline"
                 href={`?aba=chamados&solicitacao=${encodeURIComponent(existente.id)}`}
                 onClick={(e) => {
                   e.preventDefault();
@@ -419,16 +526,20 @@ export function FormularioSolicitacao({
               </a>
             </p>
           )}
-          <div className="flex gap-2">
+          <div className="flex justify-end gap-2">
             <Button type="button" variant="outline" onClick={onCancel}>
-              Voltar
+              Cancelar
             </Button>
             {pronto && (
               <Button
                 type="submit"
                 disabled={busy || consultandoCep || !categoriasProntas}
               >
-                {busy ? 'Enviando…' : value ? 'Corrigir e reenviar' : 'Enviar'}
+                {busy
+                  ? 'Enviando…'
+                  : value
+                    ? 'Corrigir e reenviar'
+                    : 'Enviar solicitação'}
               </Button>
             )}
           </div>
