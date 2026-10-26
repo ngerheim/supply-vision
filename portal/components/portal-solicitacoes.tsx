@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
+import { Plus, RefreshCw } from 'lucide-react';
 import { api, errorText } from '@/lib/api';
 import { pode } from '@/lib/permissoes';
 import {
@@ -10,6 +11,8 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
+import { PageHeader } from './page-header';
+import { Plaquinha } from './plaquinha';
 import {
   Table,
   TableHeader,
@@ -109,17 +112,27 @@ export function ListaSolicitacoes({
   }, [filtros, pagina, versao]);
   const todas = pode(user, 'solicitacao:ver_todas');
   return (
-    <div className="space-y-5">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-2xl font-semibold">
-          {todas
-            ? 'Solicitações de cadastro de fornecedor'
-            : 'Minhas solicitações'}
-        </h2>
-        {pode(user, 'solicitacao:abrir') && (
-          <Button onClick={onNew}>Nova solicitação</Button>
-        )}
-      </div>
+    <div className="patio-page">
+      <PageHeader
+        actions={
+          <>
+            <Button
+              variant="outline"
+              size="icon"
+              aria-label="Atualizar"
+              title="Atualizar"
+              onClick={() => setVersao((v) => v + 1)}
+            >
+              <RefreshCw />
+            </Button>
+            {pode(user, 'solicitacao:abrir') && (
+              <Button variant="create" onClick={onNew}>
+                <Plus /> Nova solicitação
+              </Button>
+            )}
+          </>
+        }
+      />
       <Card>
         <CardContent className="flex flex-wrap items-end gap-3">
           <Field label="Situação">
@@ -185,9 +198,6 @@ export function ListaSolicitacoes({
             />
             Só não verificados
           </label>
-          <Button variant="outline" onClick={() => setVersao((v) => v + 1)}>
-            Atualizar
-          </Button>
         </CardContent>
       </Card>
       {erro ? (
@@ -209,7 +219,6 @@ export function ListaSolicitacoes({
                     'Categorias',
                     'Urgência',
                     'Situação',
-                    'Verificação',
                     ...(todas ? ['Solicitante'] : []),
                     'Atualizado em',
                   ].map((t) => (
@@ -222,7 +231,7 @@ export function ListaSolicitacoes({
                   <TableRow key={s.id}>
                     <TableCell>
                       <a
-                        className="font-mono font-semibold text-primary hover:underline"
+                        className="text-link hover:underline"
                         href={`?aba=chamados&solicitacao=${encodeURIComponent(s.id)}`}
                         onClick={(e) => {
                           if (
@@ -237,7 +246,7 @@ export function ListaSolicitacoes({
                           }
                         }}
                       >
-                        {s.codigo}
+                        <Plaquinha>{s.codigo}</Plaquinha>
                       </a>
                     </TableCell>
                     <TableCell>
@@ -261,10 +270,10 @@ export function ListaSolicitacoes({
                     </TableCell>
                     <TableCell>
                       <SituacaoSolicitacao value={s.status} />
-                    </TableCell>
-                    <TableCell>
                       {Boolean(s.nao_verificado) && (
-                        <Badge variant="outline">Não verificado</Badge>
+                        <Badge className="ml-2" variant="outline">
+                          Não verificado
+                        </Badge>
                       )}
                     </TableCell>
                     {todas && (

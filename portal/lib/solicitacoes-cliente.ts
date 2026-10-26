@@ -1,9 +1,9 @@
 import { ApiError, errorText } from './api.ts';
 
 export const SITUACOES_SOLICITACAO = {
-  aberta: 'Aberta',
+  aberta: 'Aguardando análise',
   em_analise: 'Em análise',
-  devolvida: 'Devolvida',
+  devolvida: 'Devolvida para correção',
   cadastrado: 'Cadastrado',
   recusado: 'Recusado',
 };

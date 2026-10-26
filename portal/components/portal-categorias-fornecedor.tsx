@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
+import { RefreshCw } from 'lucide-react';
 import { api, ApiError, errorText } from '@/lib/api';
 import {
   corpoJson,
@@ -8,6 +9,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { PageHeader } from './page-header';
 import { Card, CardContent } from '@/components/ui/card';
 import {
   Table,
@@ -91,22 +93,26 @@ export function CategoriasFornecedor() {
     }
   };
   return (
-    <div className="space-y-5">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-2xl font-semibold">Categorias de fornecedor</h2>
-        <Button
-          variant="outline"
-          disabled={busy}
-          onClick={() => {
-            setEditando(null);
-            setNome('');
-            setErro('');
-            setVersao((v) => v + 1);
-          }}
-        >
-          Recarregar
-        </Button>
-      </div>
+    <div className="patio-page">
+      <PageHeader
+        actions={
+          <Button
+            variant="outline"
+            size="icon"
+            aria-label="Recarregar"
+            title="Recarregar"
+            disabled={busy}
+            onClick={() => {
+              setEditando(null);
+              setNome('');
+              setErro('');
+              setVersao((v) => v + 1);
+            }}
+          >
+            <RefreshCw />
+          </Button>
+        }
+      />
       <Card>
         <CardContent>
           <form
