@@ -104,6 +104,10 @@ body { min-width: 1100px; }
 .patio-page-header .patio-subabas { margin-top: 16px; }
 .patio-subabas { display: flex; align-items: center; gap: 24px; border-bottom: 1px solid var(--borda); }
 .patio-subabas [role='tab'] { min-height: 40px; padding: 8px 0; font-size: 15px; font-weight: 500; }
+.patio-subabas.patio-ticket-tabs { gap: 8px; border-bottom: 0; }
+.patio-subabas.patio-ticket-tabs [role='tab'] { min-height: 36px; padding: 4px 14px; border: 1px solid var(--borda); border-radius: 999px; background: var(--branco); color: var(--marinho); font-size: 14px; }
+.patio-subabas.patio-ticket-tabs [role='tab'][aria-selected='true'] { border-color: var(--marinho); background: var(--marinho); color: var(--branco); }
+.patio-ticket-tabs .patio-tab-count { color: inherit; opacity: 0.75; }
 .patio-tab-count { margin-left: 4px; color: var(--aco); font-size: 12px; font-weight: 400; }
 .patio-result-count { font-size: 15px; font-stretch: 100%; font-weight: 600; letter-spacing: 0; }
 .patio-table-container { min-height: 0; height: auto; }
@@ -134,11 +138,6 @@ input:not([type='checkbox']):not([type='radio']):not([type='range']), select, [d
   .search-col-item { width: 30%; } .search-col-model { width: 16%; } .search-col-supplier { width: 25%; } .search-col-city { width: 17%; } .search-col-price { width: 12%; }
   .search-item-meta { display: block; margin-top: 3px; }
 }
-.patio-ticket-metrics { display: flex; align-items: center; height: 64px; border: 1px solid var(--borda); border-radius: 4px; background: var(--branco); }
-.patio-ticket-metrics > div { display: flex; align-items: center; gap: 12px; padding: 0 24px; flex: 1; border-right: 1px solid var(--divisoria); }
-.patio-ticket-metrics > div:last-child { border: 0; }
-.patio-ticket-metrics strong { font-size: 28px; font-stretch: 100%; line-height: 1; font-weight: 700; font-variant-numeric: tabular-nums; }
-.patio-ticket-metrics span { color: var(--aco); font-size: 14px; }
 .patio-event-marker { position: absolute; left: -35px; top: -2px; display: grid; place-items: center; width: 28px; height: 28px; border: 1px solid var(--borda); border-radius: 4px; background: var(--branco); color: var(--marinho); }
 .patio-event-marker svg { width: 16px; height: 16px; }
 .patio-status { display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 8px; border-radius: 4px; max-width: 100%; font-size: 13px; font-weight: 600; line-height: 24px; white-space: nowrap; }
