@@ -48,6 +48,9 @@ jobs:
       - name: Conferir diagnostico e manifesto da fixture do Portal
         shell: powershell
         run: ./scripts/ci/testar-diagnostico-portal.ps1
+      - name: Conferir repeticao limitada de processos de teste
+        shell: powershell
+        run: ./scripts/ci/testar-processos-teste.ps1
       - name: Cache PSScriptAnalyzer 1.25.0
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -128,16 +131,15 @@ jobs:
       - name: Validar protecoes da atualizacao e agenda
         shell: powershell
         run: |
+          . ./scripts/ci/processos-teste.ps1
           foreach ($teste in @('testar-atualizacao-segura', 'testar-reparo-configuracao', 'testar-credencial-portal', 'testar-operacao', 'testar-health-local', 'testar-supv', 'testar-modo-ensaio', 'testar-avisos-admin', 'testar-estado-operacao', 'testar-python-minimo', 'testar-parada-supervisor', 'testar-recuperacao-atualizacao')) {
-            & powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./scripts/$teste.ps1
-            if ($LASTEXITCODE) { exit $LASTEXITCODE }
+            Invocar-ProcessoTesteCI powershell.exe @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "./scripts/$teste.ps1") -Teste $teste
           }
 
           # Interativo sem destinatario e timeout de aviso cobrem ramos distintos.
           # SemLogin + falha sem PortalReal repete a integracao do Portal.
           foreach ($argumentos in @(@(), @('-AvisoAdminTeste', 'lento'))) {
-            & powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./scripts/testar-supervisor-isolado.ps1 @argumentos
-            if ($LASTEXITCODE) { exit $LASTEXITCODE }
+            Invocar-ProcessoTesteCI powershell.exe (@('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', './scripts/testar-supervisor-isolado.ps1') + $argumentos) -Teste 'testar-supervisor-isolado.ps1'
           }
 
   powershell-ensaio:
@@ -163,8 +165,8 @@ jobs:
         timeout-minutes: 11
         shell: powershell
         run: |
-          & powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./scripts/testar-supervisor-isolado.ps1 -SemLogin -Ensaio -AvisoAdminTeste falha
-          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          . ./scripts/ci/processos-teste.ps1
+          Invocar-ProcessoTesteCI powershell.exe @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', './scripts/testar-supervisor-isolado.ps1', '-SemLogin', '-Ensaio', '-AvisoAdminTeste', 'falha') -Teste 'testar-supervisor-isolado.ps1'
 
   powershell:
     permissions: {}
@@ -315,8 +317,8 @@ jobs:
         run: |
           node --test portal/tests/runtime-local.test.mjs
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
-          & powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./scripts/testar-supervisor-isolado.ps1 -SemLogin -AvisoAdminTeste falha -PortalReal -DiagnosticoDestino (Join-Path $env:RUNNER_TEMP 'sv-supervisor-evidencias')
-          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          . ./scripts/ci/processos-teste.ps1
+          Invocar-ProcessoTesteCI powershell.exe @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', './scripts/testar-supervisor-isolado.ps1', '-SemLogin', '-AvisoAdminTeste', 'falha', '-PortalReal', '-DiagnosticoDestino', (Join-Path $env:RUNNER_TEMP 'sv-supervisor-evidencias')) -Teste 'testar-supervisor-isolado.ps1'
 
       - name: Guardar logs ficticios da partida do Portal em falha
         if: failure()
