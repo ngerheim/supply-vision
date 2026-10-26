@@ -1,11 +1,13 @@
-'use client';
-import { useEffect, useRef, useState } from 'react';
-import { api, ApiError, errorText } from '@/lib/api';
-import { corpoJson } from '@/lib/solicitacoes-cliente';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
-import { Card, CardContent } from '@/components/ui/card';
+"use client";
+import { useEffect, useRef, useState } from "react";
+import { RefreshCw } from "lucide-react";
+import { api, ApiError, errorText } from "@/lib/api";
+import { corpoJson } from "@/lib/solicitacoes-cliente";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@/components/ui/card";
+import { PageHeader } from "./page-header";
 import {
   Table,
   TableHeader,
@@ -13,21 +15,21 @@ import {
   TableBody,
   TableRow,
   TableCell,
-} from '@/components/ui/table';
+} from "@/components/ui/table";
 import {
   type AnyRow,
   Field,
   Loading,
   FalhaDeCarregamento,
-} from './portal-presentation';
+} from "./portal-presentation";
 
 export function Estoques() {
   const [rows, setRows] = useState<AnyRow[] | null>(null),
-    [erro, setErro] = useState(''),
-    [falha, setFalha] = useState('');
+    [erro, setErro] = useState(""),
+    [falha, setFalha] = useState("");
   const [versao, setVersao] = useState(0),
     [busy, setBusy] = useState(false),
-    [nome, setNome] = useState(''),
+    [nome, setNome] = useState(""),
     [editando, setEditando] = useState<AnyRow | null>(null);
   const trava = useRef(false),
     sequencia = useRef(0);
@@ -36,11 +38,11 @@ export function Estoques() {
       controller = new AbortController();
     queueMicrotask(() => {
       if (!controller.signal.aborted) {
-        setFalha('');
+        setFalha("");
         setRows(null);
       }
     });
-    void api('/api/estoques', { signal: controller.signal })
+    void api("/api/estoques", { signal: controller.signal })
       .then((x) => {
         if (atual === sequencia.current && !controller.signal.aborted)
           setRows(x.estoques);
@@ -58,18 +60,18 @@ export function Estoques() {
     if (trava.current) return;
     trava.current = true;
     setBusy(true);
-    setErro('');
+    setErro("");
     const atual = sequencia.current;
     try {
       await api(
-        `/api/estoques${row ? `/${encodeURIComponent(row.id)}` : ''}`,
-        corpoJson(row ? 'PUT' : 'POST', {
+        `/api/estoques${row ? `/${encodeURIComponent(row.id)}` : ""}`,
+        corpoJson(row ? "PUT" : "POST", {
           ...body,
           ...(row ? { expectedRevision: row.revision } : {}),
         }),
       );
       if (atual === sequencia.current) {
-        setNome('');
+        setNome("");
         setEditando(null);
         setVersao((v) => v + 1);
       }
@@ -78,8 +80,8 @@ export function Estoques() {
         setErro(
           e instanceof ApiError &&
             e.details.status === 409 &&
-            e.message.includes('alterado')
-            ? 'O estoque foi alterado; recarregue'
+            e.message.includes("alterado")
+            ? "O estoque foi alterado; recarregue"
             : errorText(e),
         );
     } finally {
@@ -89,20 +91,25 @@ export function Estoques() {
   };
   return (
     <div className="space-y-5">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <Button
-          variant="outline"
-          disabled={busy}
-          onClick={() => {
-            setEditando(null);
-            setNome('');
-            setErro('');
-            setVersao((v) => v + 1);
-          }}
-        >
-          Recarregar
-        </Button>
-      </div>
+      <PageHeader
+        actions={
+          <Button
+            variant="outline"
+            size="icon"
+            aria-label="Recarregar"
+            title="Recarregar"
+            disabled={busy}
+            onClick={() => {
+              setEditando(null);
+              setNome("");
+              setErro("");
+              setVersao((v) => v + 1);
+            }}
+          >
+            <RefreshCw />
+          </Button>
+        }
+      />
       <Card>
         <CardContent>
           <form
@@ -115,7 +122,7 @@ export function Estoques() {
               disabled={busy}
               className="flex flex-wrap items-end gap-3"
             >
-              <Field label={editando ? 'Renomear estoque' : 'Novo estoque'}>
+              <Field label={editando ? "Renomear estoque" : "Novo estoque"}>
                 <Input
                   name="nome"
                   required
@@ -125,7 +132,7 @@ export function Estoques() {
                 />
               </Field>
               <Button type="submit" disabled={busy || !rows}>
-                {editando ? 'Salvar nome' : 'Incluir'}
+                {editando ? "Salvar nome" : "Incluir"}
               </Button>
               {editando && (
                 <Button
@@ -133,7 +140,7 @@ export function Estoques() {
                   variant="outline"
                   onClick={() => {
                     setEditando(null);
-                    setNome('');
+                    setNome("");
                   }}
                 >
                   Cancelar
@@ -168,7 +175,7 @@ export function Estoques() {
                     <TableCell>{c.nome}</TableCell>
                     <TableCell>
                       <Badge variant="outline">
-                        {c.ativo ? 'Ativo' : 'Inativo'}
+                        {c.ativo ? "Ativo" : "Inativo"}
                       </Badge>
                     </TableCell>
                     <TableCell className="space-x-2">
@@ -178,7 +185,7 @@ export function Estoques() {
                         onClick={() => {
                           setEditando(c);
                           setNome(c.nome);
-                          setErro('');
+                          setErro("");
                         }}
                       >
                         Renomear {c.nome}
@@ -188,7 +195,7 @@ export function Estoques() {
                         disabled={busy || Boolean(editando)}
                         onClick={() => void salvar(c, { ativo: !c.ativo })}
                       >
-                        {c.ativo ? 'Desativar' : 'Ativar'} {c.nome}
+                        {c.ativo ? "Desativar" : "Ativar"} {c.nome}
                       </Button>
                     </TableCell>
                   </TableRow>
