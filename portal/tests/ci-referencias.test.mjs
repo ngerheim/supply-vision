@@ -6,6 +6,60 @@ import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { arquivosTesteCI, verificarTestesCI } from '../../scripts/ci/verificar-testes.mjs';
 
+void test('npm test seleciona arquivos pelo manifesto; arquivos ignorados exigem referencia', t => {
+  const raiz = fs.mkdtempSync(path.join(os.tmpdir(), 'sv-ci-padroes-'));
+  t.after(() => fs.rmSync(raiz, { recursive: true, force: true }));
+  const gravar = (nome, texto = '') => {
+    fs.mkdirSync(path.dirname(path.join(raiz, nome)), { recursive: true });
+    fs.writeFileSync(path.join(raiz, nome), texto);
+  };
+  const manifesto = padrao => gravar('portal/package.json', JSON.stringify({ scripts: {
+    test: `node --import ./scripts/isolamento-preparo.mjs --test --experimental-strip-types ${padrao}`,
+  } }));
+  const workflow = 'run: npm test';
+  manifesto('tests/*.test.ts tests/*.test.mjs');
+  gravar('portal/tests/novo.test.ts');
+  gravar('portal/tests/novo.test.mjs');
+  assert.doesNotThrow(() => verificarTestesCI(workflow, raiz));
+  gravar('portal/tests/ignorada/novo.test.mjs');
+  assert.throws(() => verificarTestesCI(workflow, raiz), /ignorada\/novo\.test\.mjs/);
+  const citado = `${workflow}\n# tests/ignorada/novo.test.mjs`;
+  assert.doesNotThrow(() => verificarTestesCI(citado, raiz));
+  manifesto('"tests/**/*.test.mjs" tests/*.test.ts');
+  assert.doesNotThrow(() => verificarTestesCI(workflow, raiz));
+  manifesto('tests/novo.test.ts');
+  assert.throws(() => verificarTestesCI(workflow, raiz), /novo\.test\.mjs/);
+  manifesto('tests/**/*.test.mjs tests/*.test.ts');
+  gravar('portal/tests/.ignorada/oculto.test.mjs');
+  assert.throws(() => verificarTestesCI(workflow, raiz), /\.ignorada\/oculto\.test\.mjs/);
+  gravar('portal/tests/fora.spec.ts');
+  assert.throws(() => verificarTestesCI(workflow, raiz), /fora\.spec\.ts/);
+  assert.doesNotThrow(() => verificarTestesCI(`${workflow}\n# tests/fora.spec.ts\n# tests/.ignorada/oculto.test.mjs`, raiz));
+  assert.throws(() => verificarTestesCI('# npm ausente', raiz), /novo\.test/);
+});
+
+void test('pytest cobre apenas a raiz executada e os nomes coletados por padrao', t => {
+  const raiz = fs.mkdtempSync(path.join(os.tmpdir(), 'sv-ci-pytest-'));
+  t.after(() => fs.rmSync(raiz, { recursive: true, force: true }));
+  fs.mkdirSync(path.join(raiz, 'alertas/tests/subpasta'), { recursive: true });
+  for (const arquivo of ['test_novo.py', 'subpasta/novo_test.py']) fs.writeFileSync(path.join(raiz, 'alertas/tests', arquivo), '');
+  assert.doesNotThrow(() => verificarTestesCI('run: python -m pytest alertas/tests -q', raiz));
+  assert.throws(() => verificarTestesCI('run: python -m pytest outro/tests -q', raiz), /test_novo\.py/);
+  fs.mkdirSync(path.join(raiz, 'alertas/tests/build'));
+  fs.writeFileSync(path.join(raiz, 'alertas/tests/build/test_ignorado.py'), '');
+  assert.throws(() => verificarTestesCI('run: python -m pytest alertas/tests -q', raiz), /build\/test_ignorado\.py/);
+});
+
+void test('scripts de teste fora de suites exigem chamada do workflow ou de um driver coberto', t => {
+  const raiz = fs.mkdtempSync(path.join(os.tmpdir(), 'sv-ci-script-solto-'));
+  t.after(() => fs.rmSync(raiz, { recursive: true, force: true }));
+  fs.mkdirSync(path.join(raiz, 'scripts/ci'), { recursive: true });
+  fs.writeFileSync(path.join(raiz, 'scripts/ci/testar-solto.ps1'), '');
+  assert.throws(() => verificarTestesCI('', raiz), /scripts\/ci\/testar-solto\.ps1/);
+  fs.writeFileSync(path.join(raiz, 'scripts/ci/testar-driver.ps1'), './scripts/ci/testar-solto.ps1');
+  assert.doesNotThrow(() => verificarTestesCI('run: ./scripts/ci/testar-driver.ps1', raiz));
+});
+
 void test('guarda do CI recusa arquivo ausente, inclusive nome construido em laco', t => {
   const raiz = fs.mkdtempSync(path.join(os.tmpdir(), 'sv-ci-referencias-'));
   t.after(() => fs.rmSync(raiz, { recursive: true, force: true }));
