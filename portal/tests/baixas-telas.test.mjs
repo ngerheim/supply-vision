@@ -220,7 +220,7 @@ void test('atendimento envia revision, recusa exige motivo, conflito bloqueia at
   await flush(h);
   assert.match(alerts(h), /recarregue/);
   assert.equal(h.one('fieldset').disabled, true);
-  button(h, 'Recarregar').onClick();
+  h.one('Button', (p) => p['aria-label'] === 'Recarregar').onClick();
   await flush(h);
   h.requests
     .at(-1)

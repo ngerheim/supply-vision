@@ -1,21 +1,23 @@
-'use client';
-import { useEffect, useRef, useState } from 'react';
-import { api, ApiError, errorText } from '@/lib/api';
-import { pode } from '@/lib/permissoes';
+"use client";
+import { useEffect, useRef, useState } from "react";
+import { RefreshCw } from "lucide-react";
+import { api, ApiError, errorText } from "@/lib/api";
+import { pode } from "@/lib/permissoes";
 import {
   exibirPlaca,
   linkBaixa,
   normalizarPlaca,
   SITUACOES_BAIXA,
-} from '@/lib/baixas';
-import { corpoJson, dataHoraSolicitacao } from '@/lib/solicitacoes-cliente';
-import { gerarChaveRelatorio } from '@/lib/relatorios';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
-import { Plaquinha } from './plaquinha';
-import { Status } from './status';
-import { Card, CardContent } from '@/components/ui/card';
+} from "@/lib/baixas";
+import { corpoJson, dataHoraSolicitacao } from "@/lib/solicitacoes-cliente";
+import { gerarChaveRelatorio } from "@/lib/relatorios";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { PageHeader } from "./page-header";
+import { Plaquinha } from "./plaquinha";
+import { Status } from "./status";
+import { Card, CardContent } from "@/components/ui/card";
 import {
   Table,
   TableHeader,
@@ -23,7 +25,7 @@ import {
   TableBody,
   TableRow,
   TableCell,
-} from '@/components/ui/table';
+} from "@/components/ui/table";
 import {
   type AnyRow,
   Field,
@@ -31,11 +33,11 @@ import {
   Loading,
   FalhaDeCarregamento,
   PaginacaoDeLista,
-} from './portal-presentation';
+} from "./portal-presentation";
 
 const situacao = (valor: string) =>
   SITUACOES_BAIXA[valor as keyof typeof SITUACOES_BAIXA] || valor;
-const selectClass = 'rounded-md border bg-background p-2';
+const selectClass = "rounded-md border bg-background p-2";
 function seguir(
   e: React.MouseEvent<HTMLAnchorElement>,
   id: string,
@@ -49,13 +51,13 @@ function seguir(
 // Cada montagem pertence a uma conta; leituras anteriores sao canceladas.
 function useLeitura(caminho: string, versao: number) {
   const [dados, setDados] = useState<AnyRow | null>(null),
-    [erro, setErro] = useState('');
+    [erro, setErro] = useState("");
   useEffect(() => {
     const controller = new AbortController();
     queueMicrotask(() => {
       if (!controller.signal.aborted) {
         setDados(null);
-        setErro('');
+        setErro("");
       }
     });
     void api(caminho, { signal: controller.signal })
@@ -103,10 +105,10 @@ export function ListaBaixas({
   onOpen: (id: string) => void;
 }) {
   const [filtros, setFiltros] = useState({
-      status: '',
-      estoque: '',
-      de: '',
-      ate: '',
+      status: "",
+      estoque: "",
+      de: "",
+      ate: "",
     }),
     [pagina, setPagina] = useState(1),
     [versao, setVersao] = useState(0);
@@ -114,8 +116,8 @@ export function ListaBaixas({
   for (const [nome, valor] of Object.entries(filtros))
     if (valor) params.set(nome, valor);
   const { dados, erro } = useLeitura(`/api/baixas?${params}`, versao),
-    estoques = useLeitura('/api/estoques', versao);
-  const todas = pode(user, 'baixa:ver_todas');
+    estoques = useLeitura("/api/estoques", versao);
+  const todas = pode(user, "baixa:ver_todas");
   const filtrar = (nome: keyof typeof filtros, valor: string) => {
     setFiltros({ ...filtros, [nome]: valor });
     setPagina(1);
@@ -127,14 +129,29 @@ export function ListaBaixas({
   for (const e of dados?.estoques_com_pedidos || []) opcoes.set(e.id, e.nome);
   for (const b of dados?.baixas || []) opcoes.set(b.estoque_id, b.estoque);
   if (filtros.estoque && !opcoes.has(filtros.estoque))
-    opcoes.set(filtros.estoque, 'Estoque selecionado');
+    opcoes.set(filtros.estoque, "Estoque selecionado");
   return (
     <div className="space-y-5">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        {pode(user, 'baixa:abrir') && (
-          <Button onClick={onNew}>Nova baixa</Button>
-        )}
-      </div>
+      <PageHeader
+        actions={
+          <>
+            <Button
+              variant="outline"
+              size="icon"
+              aria-label="Atualizar"
+              title="Atualizar"
+              onClick={() => setVersao((v) => v + 1)}
+            >
+              <RefreshCw />
+            </Button>
+            {pode(user, "baixa:abrir") && (
+              <Button variant="create" onClick={onNew}>
+                Nova baixa
+              </Button>
+            )}
+          </>
+        }
+      />
       <Card>
         <CardContent className="flex flex-wrap items-end gap-3">
           <Field label="Situação">
@@ -142,7 +159,7 @@ export function ListaBaixas({
               name="status"
               className={selectClass}
               value={filtros.status}
-              onChange={(e) => filtrar('status', e.target.value)}
+              onChange={(e) => filtrar("status", e.target.value)}
             >
               <option value="">Todas</option>
               {Object.entries(SITUACOES_BAIXA).map(([id, nome]) => (
@@ -157,7 +174,7 @@ export function ListaBaixas({
               name="estoque"
               className={selectClass}
               value={filtros.estoque}
-              onChange={(e) => filtrar('estoque', e.target.value)}
+              onChange={(e) => filtrar("estoque", e.target.value)}
             >
               <option value="">Todos</option>
               {[...opcoes].map(([id, nome]) => (
@@ -172,7 +189,7 @@ export function ListaBaixas({
               name="de"
               type="date"
               value={filtros.de}
-              onChange={(e) => filtrar('de', e.target.value)}
+              onChange={(e) => filtrar("de", e.target.value)}
             />
           </Field>
           <Field label="Até">
@@ -181,12 +198,9 @@ export function ListaBaixas({
               type="date"
               min={filtros.de}
               value={filtros.ate}
-              onChange={(e) => filtrar('ate', e.target.value)}
+              onChange={(e) => filtrar("ate", e.target.value)}
             />
           </Field>
-          <Button variant="outline" onClick={() => setVersao((v) => v + 1)}>
-            Atualizar
-          </Button>
         </CardContent>
       </Card>
       {estoques.erro && <p role="alert">{estoques.erro}</p>}
@@ -204,13 +218,13 @@ export function ListaBaixas({
               <TableHeader>
                 <TableRow>
                   {[
-                    'Código',
-                    'Nº da OS',
-                    'Placa',
-                    'Estoque',
-                    'Situação',
-                    ...(todas ? ['Solicitante'] : []),
-                    'Atualizado em',
+                    "Código",
+                    "Nº da OS",
+                    "Placa",
+                    "Estoque",
+                    "Situação",
+                    ...(todas ? ["Solicitante"] : []),
+                    "Atualizado em",
                   ].map((t) => (
                     <TableHead key={t}>{t}</TableHead>
                   ))}
@@ -267,16 +281,16 @@ export function FormularioBaixa({
   onCancel: () => void;
   onOpen: (id: string) => void;
 }) {
-  const [os, setOs] = useState(''),
-    [placa, setPlaca] = useState(''),
-    [estoque, setEstoque] = useState(''),
+  const [os, setOs] = useState(""),
+    [placa, setPlaca] = useState(""),
+    [estoque, setEstoque] = useState(""),
     [versao, setVersao] = useState(0);
-  const [erro, setErro] = useState(''),
+  const [erro, setErro] = useState(""),
     [existente, setExistente] = useState<AnyRow | null>(null),
     [busy, setBusy] = useState(false);
-  const { dados, erro: falha } = useLeitura('/api/estoques', versao),
+  const { dados, erro: falha } = useLeitura("/api/estoques", versao),
     trava = useRef(false),
-    tentativa = useRef({ corpo: '', chave: '' }),
+    tentativa = useRef({ corpo: "", chave: "" }),
     montado = useRef(true);
   useEffect(() => {
     montado.current = true;
@@ -296,7 +310,7 @@ export function FormularioBaixa({
       return;
     trava.current = true;
     setBusy(true);
-    setErro('');
+    setErro("");
     setExistente(null);
     const corpo = JSON.stringify({
       numero_os: os,
@@ -306,11 +320,11 @@ export function FormularioBaixa({
     if (tentativa.current.corpo !== corpo)
       tentativa.current = { corpo, chave: gerarChaveRelatorio() };
     try {
-      const criada = await api('/api/baixas', {
-        ...corpoJson('POST', JSON.parse(corpo)),
+      const criada = await api("/api/baixas", {
+        ...corpoJson("POST", JSON.parse(corpo)),
         headers: {
-          'content-type': 'application/json',
-          'idempotency-key': tentativa.current.chave,
+          "content-type": "application/json",
+          "idempotency-key": tentativa.current.chave,
         },
       });
       if (montado.current) onOpen(criada.id);
@@ -327,7 +341,10 @@ export function FormularioBaixa({
   };
   return (
     <div className="space-y-5">
-      <h2 className="text-2xl font-semibold">Nova baixa</h2>
+      <PageHeader
+        back={{ label: "← Chamados", onClick: onCancel }}
+        title="Nova baixa"
+      />
       <Card>
         <CardContent>
           <form
@@ -345,7 +362,7 @@ export function FormularioBaixa({
                   required
                   value={os}
                   onChange={(e) =>
-                    setOs(e.target.value.replace(/\D/g, '').slice(0, 20))
+                    setOs(e.target.value.replace(/\D/g, "").slice(0, 20))
                   }
                 />
               </Field>
@@ -433,8 +450,8 @@ export function DetalheBaixa({
   onBack: () => void;
 }) {
   const [versao, setVersao] = useState(0),
-    [erro, setErro] = useState(''),
-    [texto, setTexto] = useState(''),
+    [erro, setErro] = useState(""),
+    [texto, setTexto] = useState(""),
     [recusar, setRecusar] = useState(false),
     [busy, setBusy] = useState(false),
     [conflito, setConflito] = useState(false);
@@ -443,7 +460,7 @@ export function DetalheBaixa({
       versao,
     ),
     trava = useRef(false),
-    tentativa = useRef({ corpo: '', chave: '' }),
+    tentativa = useRef({ corpo: "", chave: "" }),
     montado = useRef(true);
   useEffect(() => {
     montado.current = true;
@@ -453,16 +470,16 @@ export function DetalheBaixa({
   }, []);
   const executar = async (para: string) => {
     if (trava.current || !dados || conflito) return;
-    if (para === 'recusada' && !texto.trim()) {
-      setErro('Informe o motivo da recusa.');
+    if (para === "recusada" && !texto.trim()) {
+      setErro("Informe o motivo da recusa.");
       return;
     }
     trava.current = true;
     setBusy(true);
-    setErro('');
+    setErro("");
     const body = {
         para,
-        texto: para === 'recusada' ? texto.trim() : '',
+        texto: para === "recusada" ? texto.trim() : "",
         expectedRevision: dados.baixa.revision,
       },
       corpo = JSON.stringify(body);
@@ -470,16 +487,16 @@ export function DetalheBaixa({
       tentativa.current = { corpo, chave: gerarChaveRelatorio() };
     try {
       await api(`/api/baixas/${encodeURIComponent(id)}/transicao`, {
-        ...corpoJson('POST', body),
+        ...corpoJson("POST", body),
         headers: {
-          'content-type': 'application/json',
-          'idempotency-key': tentativa.current.chave,
+          "content-type": "application/json",
+          "idempotency-key": tentativa.current.chave,
         },
       });
       if (montado.current) {
         setVersao((v) => v + 1);
         setRecusar(false);
-        setTexto('');
+        setTexto("");
       }
     } catch (e) {
       if (montado.current) {
@@ -487,7 +504,7 @@ export function DetalheBaixa({
         setConflito(mudou);
         setErro(
           mudou
-            ? 'A baixa foi alterada; recarregue antes de tentar novamente.'
+            ? "A baixa foi alterada; recarregue antes de tentar novamente."
             : errorText(e),
         );
       }
@@ -508,26 +525,34 @@ export function DetalheBaixa({
   const b = dados.baixa;
   return (
     <div className="space-y-5">
-      <div className="flex flex-wrap items-center gap-3">
-        <Button variant="outline" disabled={busy} onClick={onBack}>
-          Voltar
-        </Button>
-        <Plaquinha>{b.codigo}</Plaquinha>
-        <Status value={b.status}>{situacao(b.status)}</Status>
-        <Button
-          variant="outline"
-          disabled={busy}
-          onClick={() => {
-            setErro('');
-            setConflito(false);
-            setRecusar(false);
-            setTexto('');
-            setVersao((v) => v + 1);
-          }}
-        >
-          Recarregar
-        </Button>
-      </div>
+      <PageHeader
+        back={{ label: "← Chamados", onClick: onBack }}
+        title={`Baixa ${b.numero_os}`}
+        status={
+          <>
+            <Plaquinha>{b.codigo}</Plaquinha>
+            <Status value={b.status}>{situacao(b.status)}</Status>
+          </>
+        }
+        actions={
+          <Button
+            variant="outline"
+            size="icon"
+            aria-label="Recarregar"
+            title="Recarregar"
+            disabled={busy}
+            onClick={() => {
+              setErro("");
+              setConflito(false);
+              setRecusar(false);
+              setTexto("");
+              setVersao((v) => v + 1);
+            }}
+          >
+            <RefreshCw />
+          </Button>
+        }
+      />
       <Card>
         <CardContent className="space-y-4">
           <Info label="Nº da OS" value={b.numero_os} />
@@ -544,12 +569,12 @@ export function DetalheBaixa({
         </CardContent>
       </Card>
       {erro && <p role="alert">{erro}</p>}
-      {pode(user, 'baixa:atender') && b.status === 'aberta' && (
+      {pode(user, "baixa:atender") && b.status === "aberta" && (
         <Card>
           <CardContent>
             <fieldset disabled={busy || conflito} className="space-y-4">
               <div className="flex flex-wrap gap-3">
-                <Button onClick={() => void executar('baixada')}>
+                <Button onClick={() => void executar("baixada")}>
                   Marcar como baixada
                 </Button>
                 <Button variant="outline" onClick={() => setRecusar(true)}>
@@ -560,7 +585,7 @@ export function DetalheBaixa({
                 <form
                   onSubmit={(e) => {
                     e.preventDefault();
-                    void executar('recusada');
+                    void executar("recusada");
                   }}
                   className="space-y-4"
                 >
