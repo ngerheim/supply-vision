@@ -27,7 +27,7 @@ function Table({ className, horizontalControls=false, ...props }: React.Componen
     <div
       ref={scrollRef}
       data-slot="table-container"
-      className="relative h-[60vh] min-h-64 w-full overflow-auto"
+      className="relative w-full overflow-auto patio-table-container"
     >
       <table
         data-slot="table"
@@ -43,7 +43,7 @@ function TableHeader({ className, ...props }: React.ComponentProps<'thead'>) {
   return (
     <thead
       data-slot="table-header"
-      className={cn('sticky top-0 z-10 bg-card [&_tr]:border-b', className)}
+      className={cn('sticky top-0 z-10 bg-card [&_tr]:border-b-2 [&_tr]:border-primary', className)}
       {...props}
     />
   );

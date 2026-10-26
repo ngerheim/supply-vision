@@ -23,10 +23,10 @@ export const cnpj = (value: string) =>
     /^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/,
     '$1.$2.$3/$4-$5',
   );
-export function Loading({ label }: { label: string }) {
+export function Loading({ label, compact = false }: { label: string; compact?: boolean }) {
   return (
-    <div className="grid min-h-screen place-items-center bg-[#eef2f5]">
-      <div className="flex items-center gap-3 rounded-2xl bg-white px-6 py-5 shadow-lg">
+    <div className={compact ? "patio-loading" : "grid min-h-screen place-items-center bg-background"}>
+      <div className="flex items-center gap-3 rounded-2xl bg-card px-6 py-5 ">
         <LoaderCircle className="size-5 animate-spin text-primary" />
         <output className="text-sm font-medium">{label}</output>
       </div>
@@ -43,7 +43,7 @@ export function PaginacaoDeLista({
   alterar: (pagina: number) => void;
 }) {
   return paginas > 1 ? (
-    <div className="flex justify-end gap-2 border-t p-3">
+    <div className="flex items-center justify-end gap-2 border-t p-3"><span className="mr-3 text-sm text-muted-foreground">Página {pagina} de {paginas}</span>
       <Button
         variant="outline"
         disabled={pagina === 1}
@@ -122,13 +122,13 @@ export const roleName = (x: string) => (NOMES_PERFIL as AnyRow)[x] || x;
 export function Empty({ icon: Icon, title, text }: JsonData) {
   return (
     <Card>
-      <CardContent className="grid min-h-72 place-items-center text-center">
+      <CardContent className="patio-empty grid place-items-center text-center">
         <div>
           <div className="mx-auto grid size-12 place-items-center rounded-xl bg-muted text-muted-foreground">
             <Icon />
           </div>
           <p className="mt-4 font-semibold">{title}</p>
-          <p className="mt-1 text-sm text-muted-foreground">{text}</p>
+          {text && <p className="mt-1 text-sm text-muted-foreground">{text}</p>}
         </div>
       </CardContent>
     </Card>

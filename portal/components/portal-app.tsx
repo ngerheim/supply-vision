@@ -25,9 +25,8 @@ import { Tickets } from './portal-tickets';
 import { ChangeHistory } from './portal-history';
 import { Administration } from './portal-users';
 import { Mappings } from './portal-mappings';
-import { CentralNotificacoes } from './central-notificacoes';
+import { CabecalhoProvider } from './page-header';
 import { definirUsuarioCentral } from '@/lib/central-estado';
-import { Subabas } from './portal-subabas';
 import { Solicitacoes } from './portal-solicitacoes';
 import { CategoriasFornecedor } from './portal-categorias-fornecedor';
 
@@ -127,17 +126,16 @@ function PortalSession({ message, endSession }: { message: string; endSession: (
   const removeCatalog=(type:string,row:AnyRow)=>{const nome=row.tradeName||row.name||row.code||`${row.city} / ${row.state}`;if(!confirm(`Excluir "${nome}" definitivamente?\n\nSe estiver em uso por algum acordo, a exclusão será recusada.`))return;void run(async()=>{await api(`/api/catalogs/${type}/${row.id}?expectedRevision=${row.revision}`,{method:'DELETE'})},'Cadastro excluído.')};
 
   return <main className="min-h-screen bg-background text-foreground">
-    <Sidebar nav={nav} setNav={navigate} user={user} busy={busy} onLogout={logout} collapsed={sidebarCollapsed} onToggle={()=>setSidebarCollapsed(value=>!value)}/>
-    <section className={`min-w-0 pl-16 transition-[padding] duration-300 ${sidebarCollapsed?'lg:pl-16':'lg:pl-44'}`}><div className="mx-auto max-w-[1550px] p-4 sm:p-8">
-      <div className="mb-4 flex justify-end"><CentralNotificacoes navegar={link => {
+    <Sidebar nav={nav} setNav={navigate} user={user} busy={busy} onLogout={logout} navegarAviso={(link:string) => {
         const params = new URL(link, window.location.origin).searchParams;
         const chamado = params.get('chamado'), solicitacao = params.get('solicitacao');
         if (solicitacao) navegacao.current?.navegar('solicitacoes',solicitacao);
         else if (chamado) navegacao.current?.navegar('tickets',chamado);
         else window.location.assign(link);
-      }}/></div>
-      <Subabas nav={nav} usuario={user} navegar={navigate}/>
-      <div id="portal-conteudo" role={abaDaChave(nav).subabas.length > 1 ? 'tabpanel' : undefined} aria-labelledby={abaDaChave(nav).subabas.length > 1 ? `subaba-${nav}` : undefined}>
+      }} collapsed={sidebarCollapsed} onToggle={()=>setSidebarCollapsed(value=>!value)}/>
+    <section className={`patio-canvas ${sidebarCollapsed ? 'patio-canvas-collapsed' : ''}`}><div className="patio-container">
+      <CabecalhoProvider value={{nav, usuario:user, navegar:navigate}}>
+      <div id="portal-conteudo" role={abaDaChave(nav).subabas.length > 1 && !agreementId ? 'tabpanel' : undefined} aria-labelledby={abaDaChave(nav).subabas.length > 1 && !agreementId ? `subaba-${nav}` : undefined}>
       {nav==='search'&&(!agreementId||canWrite)&&<SearchPage catalogs={catalogs} openAgreement={openAgreement} filters={searchFilters} setFilters={setSearchFilters}/>}
       {((canWrite&&nav==='agreements')||(!canWrite&&nav==='search'&&agreementId))&&(agreementId?<AgreementDetail busy={busy} revision={data} id={agreementId} canWrite={canWrite} canDelete={pode(user, 'acordo:excluir')} onDelete={removerAcordo} onBack={()=>setAgreementId(null)} onEdit={(a:AnyRow)=>setAgreementModal({...a,expectedRevision:a.revision})} onItem={(i:AnyRow)=>setItemModal({...i,agreementId,expectedRevision:i.revision})} onImport={()=>{navigate('imports');setImportAgreement(agreementId)}} run={run}/>:<Agreements data={data} canWrite={canWrite} onOpen={setAgreementId} onNew={()=>setAgreementModal({locationIds:[],status:'active',startDate:dataDeNegocio()})}/>)}
       {nav==='maintenance'&&<Maintenance url={String(data.manutencao||'')}/>}
@@ -153,9 +151,9 @@ function PortalSession({ message, endSession }: { message: string; endSession: (
       {pode(user, 'aba:reports')&&nav==='reports'&&<Reports/>}
       {pode(user, 'aba:emails')&&nav==='emails'&&<EmailNotifications users={userList} run={run}/>}
       </div>
-    </div></section>
-    {loadError&&data&&<div className="fixed bottom-20 right-5 z-[100] max-w-md rounded-xl border bg-card p-4 shadow-lg"><p role="alert" className="text-sm">Não foi possível atualizar os dados.</p><Button className="mt-2" variant="outline" onClick={()=>void refresh().catch(()=>{})}>Atualizar dados</Button></div>}
-    {notice&&<output className={`fixed bottom-5 right-5 z-[100] flex max-w-md items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium text-white shadow-2xl ${notice.type==='ok'?'bg-emerald-700':'bg-red-700'}`}>{notice.type==='ok'?<CheckCircle2 className="size-5"/>:<AlertTriangle className="size-5"/>}{notice.text}</output>}
+    </CabecalhoProvider></div></section>
+    {loadError&&data&&<div className="fixed bottom-20 right-5 z-[100] max-w-md rounded-xl border bg-card p-4 "><p role="alert" className="text-sm">Não foi possível atualizar os dados.</p><Button className="mt-2" variant="outline" onClick={()=>void refresh().catch(()=>{})}>Atualizar dados</Button></div>}
+    {notice&&<output className={`fixed bottom-5 right-5 z-[100] flex max-w-md items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium border bg-card ${notice.type==='ok'?'text-status-done':'text-destructive'}`}>{notice.type==='ok'?<CheckCircle2 className="size-5"/>:<AlertTriangle className="size-5"/>}{notice.text}</output>}
     {canWrite&&agreementModal&&<AgreementDialog open value={agreementModal} catalogs={catalogs} busy={busy} onClose={()=>setAgreementModal(null)} onSave={(body:AnyRow)=>run(async()=>{if(body.id)await api(`/api/agreements/${body.id}`,{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify(body)});else {const created=await api('/api/agreements',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});openAgreement(created.id)};setAgreementModal(null)},body.id?'Acordo atualizado.':'Acordo criado.')}/>}
     {canWrite&&itemModal&&<ItemDialog open value={itemModal} catalogs={catalogs} busy={busy} onClose={()=>setItemModal(null)} onSave={(body:AnyRow)=>run(async()=>{if(body.id)await api(`/api/items/${body.id}`,{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify(body)});else await api(`/api/agreements/${body.agreementId}/items`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});setItemModal(null)},'Condição salva.')}/>}
     {pode(user, 'catalogo:gerenciar')&&catalogModal&&<CatalogDialog open value={catalogModal} busy={busy} onClose={()=>setCatalogModal(null)} onSave={(body:AnyRow)=>run(async()=>{const path=body.id?`/api/catalogs/${body.type}/${body.id}`:`/api/catalogs/${body.type}`;await api(path,{method:body.id?'PUT':'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});setCatalogModal(null)},'Cadastro salvo.')}/>}

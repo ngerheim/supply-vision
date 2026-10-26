@@ -1,4 +1,6 @@
 'use client';
+import { CampoData } from './campo-data';
+import { PageHeader } from './page-header';
 import {
   rotuloAcaoHistorico,
   rotuloEntidadeHistorico,
@@ -9,7 +11,7 @@ import { AlertTriangle, Download, RefreshCw } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import {
   Table,
@@ -96,25 +98,42 @@ export function ChangeHistory({ users }: JsonData) {
   const load = () => setRecarregar((n) => n + 1);
   const actionTone = (a: string) =>
     a === 'CREATE'
-      ? 'bg-emerald-50 text-emerald-700'
+      ? 'bg-muted text-muted-foreground'
       : a === 'DELETE'
-        ? 'bg-red-50 text-red-700'
+        ? 'bg-muted text-muted-foreground'
         : a === 'IMPORT'
-          ? 'bg-violet-50 text-violet-700'
+          ? 'bg-muted text-muted-foreground'
           : a === 'LOGIN'
-            ? 'bg-slate-100 text-slate-600'
-            : 'bg-sky-50 text-sky-700';
+            ? 'bg-muted text-muted-foreground'
+            : 'bg-muted text-muted-foreground';
   const entityName = rotuloEntidadeHistorico;
   return (
-    <div className="space-y-5">
+    <div className="patio-page">
+      <PageHeader
+        actions={
+          <>
+            {' '}
+            <Button
+              variant="outline"
+              onClick={() =>
+                void baixarArquivo(
+                  `/api/audit/export?${new URLSearchParams(Object.entries(f).filter(([, v]) => v))}`,
+                ).catch((error) => alert(errorText(error)))
+              }
+            >
+              <Download /> Exportar Excel
+            </Button>
+            <Button variant="outline" onClick={load}>
+              <RefreshCw /> Atualizar
+            </Button>
+          </>
+        }
+      />
       <Card>
-        <CardHeader>
-          <CardTitle>Filtros</CardTitle>
-        </CardHeader>
         <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
           <Field label="Busca" className="xl:col-span-2">
             <Input
-              placeholder="Detalhe, registro ou usuário"
+              placeholder="Buscar"
               value={f.q}
               onChange={(e) => setF({ ...f, q: e.target.value })}
             />
@@ -140,39 +159,26 @@ export function ChangeHistory({ users }: JsonData) {
             ]}
           />
           <Field label="De">
-            <Input
-              type="date"
+            <CampoData
+
               value={f.from}
-              onChange={(e) => setF({ ...f, from: e.target.value })}
+              onChange={(value) => setF({ ...f, from: value })}
             />
           </Field>
           <Field label="Até">
-            <Input
-              type="date"
+            <CampoData
+
               value={f.to}
-              onChange={(e) => setF({ ...f, to: e.target.value })}
+              onChange={(value) => setF({ ...f, to: value })}
             />
           </Field>
         </CardContent>
       </Card>
       <Card>
         <CardHeader className="border-b sm:grid-cols-[1fr_auto]">
-          <CardTitle>Histórico</CardTitle>
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              onClick={() =>
-                void baixarArquivo(
-                  `/api/audit/export?${new URLSearchParams(Object.entries(f).filter(([, v]) => v))}`,
-                ).catch(error => alert(errorText(error)))
-              }
-            >
-              <Download /> Exportar Excel
-            </Button>
-            <Button variant="outline" onClick={load}>
-              <RefreshCw /> Atualizar
-            </Button>
-          </div>
+          <p className="patio-result-count">
+            {meta.total} {meta.total === 1 ? 'registro' : 'registros'}
+          </p>
         </CardHeader>
         <CardContent className="px-0 pb-0">
           <Table>
@@ -244,6 +250,9 @@ export function ChangeHistory({ users }: JsonData) {
         </CardContent>
         {meta.pageCount > 1 && (
           <div className="flex flex-wrap items-center justify-between gap-3 border-t px-5 py-3">
+            <span className="text-sm text-muted-foreground">
+              Página {meta.page} de {meta.pageCount}
+            </span>
             <div className="flex items-center gap-1">
               <Button
                 size="sm"

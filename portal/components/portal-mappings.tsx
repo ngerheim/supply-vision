@@ -1,4 +1,5 @@
 'use client';
+import { PageHeader } from './page-header';
 import { api, errorText } from '@/lib/api';
 import { normalizeImportText } from '@/lib/domain';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -89,16 +90,19 @@ export function Mappings({ catalogs, run }: JsonData) {
   if (loadError)
     return <FalhaDeCarregamento erro={loadError} tentar={() => void load()} />;
   return (
-    <div className="space-y-5">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold">De/Para da importação</h1>
-        </div>
-        <Button disabled={busy} onClick={() => setEdit({ type, active: true })}>
-          <Plus /> Nova correspondência
-        </Button>
-      </div>
-      <div className="flex flex-wrap gap-2">
+    <div className="patio-page">
+      <PageHeader
+        actions={
+          <Button
+            variant="create"
+            disabled={busy}
+            onClick={() => setEdit({ type, active: true })}
+          >
+            <Plus /> Nova correspondência
+          </Button>
+        }
+      />
+      <div className="patio-choice-tabs">
         {(['items', 'models', 'units'] as const).map((value) => (
           <Button
             key={value}
@@ -127,10 +131,7 @@ export function Mappings({ catalogs, run }: JsonData) {
               </TableHeader>
               <TableBody>
                 {ordenar(rows, valoresDoMapeamento).map((row: AnyRow) => (
-                  <TableRow
-                    key={row.id}
-                    className={row.active ? '' : 'opacity-50'}
-                  >
+                  <TableRow key={row.id}>
                     <TableCell>
                       <p className="font-medium">{row.source}</p>
                       {normalizeImportText(row.source) !== row.sourceKey && (

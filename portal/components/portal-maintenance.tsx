@@ -1,4 +1,5 @@
 'use client';
+import { PageHeader } from './page-header';
 import { useState } from 'react';
 import { AlertTriangle, ExternalLink, RefreshCw } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -14,40 +15,39 @@ export function Maintenance({ url }: { url: string }) {
   const [recarga, setRecarga] = useState(0);
   if (!url)
     return (
-      <div className="space-y-5">
-        <h1 className="text-2xl font-semibold">Histórico de Manutenção</h1>
+      <div className="patio-page">
+        <PageHeader />
         <Alert>
           <AlertTriangle />
           <AlertTitle>Relatório temporariamente indisponível</AlertTitle>
           <AlertDescription>
-            O endereço do Power BI está ausente ou inválido na configuração
-            deste servidor. Avise a equipe responsável pelo Portal.
+            Avise a equipe responsável pelo Portal.
           </AlertDescription>
         </Alert>
       </div>
     );
   return (
-    <div className="space-y-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold">Histórico de Manutenção</h1>
-        </div>
-        <div className="flex flex-wrap gap-2 sm:justify-end">
-          <Button
-            variant="outline"
-            onClick={() => setRecarga((valor) => valor + 1)}
-          >
-            <RefreshCw /> Recarregar
-          </Button>
-          <Button
-            variant="outline"
-            onClick={() => window.open(url, '_blank', 'noopener,noreferrer')}
-          >
-            <ExternalLink /> Abrir em nova aba
-          </Button>
-        </div>
-      </div>
-      <Card className="overflow-hidden shadow-sm">
+    <div className="patio-page">
+      <PageHeader
+        actions={
+          <>
+            {' '}
+            <Button
+              variant="outline"
+              onClick={() => setRecarga((valor) => valor + 1)}
+            >
+              <RefreshCw /> Recarregar
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => window.open(url, '_blank', 'noopener,noreferrer')}
+            >
+              <ExternalLink /> Abrir em nova aba
+            </Button>
+          </>
+        }
+      />
+      <Card className="overflow-hidden ">
         <CardContent className="p-0">
           <iframe
             key={recarga}

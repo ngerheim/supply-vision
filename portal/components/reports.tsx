@@ -1,9 +1,13 @@
 'use client';
+import { PageHeader } from './page-header';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Download, FileText, LoaderCircle, RefreshCw } from 'lucide-react';
 import { api, errorText, baixarArquivo } from '@/lib/api';
-import { CABECALHO_ATUALIZACAO_AUTOMATICA, iniciarAtualizacaoPeriodica } from '@/lib/atualizacao-periodica';
+import {
+  CABECALHO_ATUALIZACAO_AUTOMATICA,
+  iniciarAtualizacaoPeriodica,
+} from '@/lib/atualizacao-periodica';
 import {
   NOMES_ACAO,
   validarPedidoRelatorio,
@@ -11,11 +15,15 @@ import {
   type AcaoRelatorio,
 } from '@/lib/relatorios';
 import { dataDeNegocio } from '@/lib/data-negocio';
-import { dataBrasileiraParaIso, exibirDataBrasileira, mascararDataBrasileira } from '@/lib/data-brasileira';
+import {
+  dataBrasileiraParaIso,
+  exibirDataBrasileira,
+  mascararDataBrasileira,
+} from '@/lib/data-brasileira';
 import { Button } from './ui/button';
 import { Card, CardContent } from './ui/card';
 import { Input } from './ui/input';
-import { Badge } from './ui/badge';
+import { Status } from './status';
 
 type Job = {
   id: string;
@@ -38,12 +46,6 @@ const statusName: Record<string, string> = {
   cancelled: 'Cancelado',
 };
 type AcaoDisponivel = Extract<AcaoRelatorio, 'relatorio' | 'recorte'>;
-const descricao: Record<AcaoDisponivel, string> = {
-  relatorio:
-    'Baixa o histórico de compras do Qlik, compara com os acordos vigentes e envia aos destinatários configurados. Conclui sem e-mail caso não haja dados elegíveis.',
-  recorte:
-    'Analisa um período com ambas as datas inclusas. O relatório fica disponível para download no Portal, sem envio de e-mail.',
-};
 const horario = (valor: string) =>
   new Date(valor).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
 
@@ -54,7 +56,7 @@ export function Reports() {
   const [busy, setBusy] = useState(false),
     [error, setError] = useState(''),
     [notice, setNotice] = useState('');
-  const [total,setTotal]=useState(0);
+  const [total, setTotal] = useState(0);
   const [jobs, setJobs] = useState<Job[]>([]),
     [online, setOnline] = useState(false),
     [loaded, setLoaded] = useState(false);
@@ -70,9 +72,15 @@ export function Reports() {
     const sequence = ++loadSequence.current.value;
     let data;
     try {
-      data = await api('/api/reports', automatica ? { signal, headers: CABECALHO_ATUALIZACAO_AUTOMATICA } : { signal });
+      data = await api(
+        '/api/reports',
+        automatica
+          ? { signal, headers: CABECALHO_ATUALIZACAO_AUTOMATICA }
+          : { signal },
+      );
     } catch (error) {
-      if (mounted.current && sequence === loadSequence.current.value) throw error;
+      if (mounted.current && sequence === loadSequence.current.value)
+        throw error;
       return;
     }
     if (!mounted.current || sequence !== loadSequence.current.value) return;
@@ -85,10 +93,14 @@ export function Reports() {
   useEffect(() => {
     const sequence = loadSequence.current;
     mounted.current = true;
-    const parar = iniciarAtualizacaoPeriodica((signal) => load(signal, true), (e) => {
-      setLoadError(errorText(e));
-      setOnline(false);
-    }, () => document.visibilityState !== 'hidden');
+    const parar = iniciarAtualizacaoPeriodica(
+      (signal) => load(signal, true),
+      (e) => {
+        setLoadError(errorText(e));
+        setOnline(false);
+      },
+      () => document.visibilityState !== 'hidden',
+    );
     return () => {
       mounted.current = false;
       sequence.value++;
@@ -101,13 +113,31 @@ export function Reports() {
     let active = true;
     const controller = new AbortController();
     const update = async (signal: AbortSignal, automatica = true) => {
-      const data = await api(`/api/reports/${selected}`, automatica ? { signal, headers: CABECALHO_ATUALIZACAO_AUTOMATICA } : { signal });
-      if (active) { setLog(data.job.log); setLogError(''); }
+      const data = await api(
+        `/api/reports/${selected}`,
+        automatica
+          ? { signal, headers: CABECALHO_ATUALIZACAO_AUTOMATICA }
+          : { signal },
+      );
+      if (active) {
+        setLog(data.job.log);
+        setLogError('');
+      }
     };
-    const falhou = (e: unknown) => { if (active) setLogError(errorText(e)); };
-    const parar = selectedStatus === 'queued' || selectedStatus === 'running'
-      ? iniciarAtualizacaoPeriodica(update, falhou, () => document.visibilityState !== 'hidden')
-      : (() => { void update(controller.signal, false).catch(falhou); return () => controller.abort(); })();
+    const falhou = (e: unknown) => {
+      if (active) setLogError(errorText(e));
+    };
+    const parar =
+      selectedStatus === 'queued' || selectedStatus === 'running'
+        ? iniciarAtualizacaoPeriodica(
+            update,
+            falhou,
+            () => document.visibilityState !== 'hidden',
+          )
+        : (() => {
+            void update(controller.signal, false).catch(falhou);
+            return () => controller.abort();
+          })();
     return () => {
       active = false;
       parar();
@@ -130,10 +160,10 @@ export function Reports() {
       });
       const mensagem =
         action === 'recorte'
-            ? `Gerar o recorte de ${from} a ${to} para download no Portal?`
-            : action === 'relatorio'
-              ? 'Executar agora e enviar aos destinatários configurados quando houver divergências ou pendências?'
-              : null;
+          ? `Gerar o recorte de ${from} a ${to} para download no Portal?`
+          : action === 'relatorio'
+            ? 'Executar agora e enviar aos destinatários configurados quando houver divergências ou pendências?'
+            : null;
       if (mensagem && !confirm(mensagem)) return;
       sending.current = true;
       setBusy(true);
@@ -147,9 +177,13 @@ export function Reports() {
       setLogError('');
       setSelected(result.id);
       setNotice(
-        'Solicitação registrada. Você pode sair desta aba, pois a execução continua no servidor.',
+        'Solicitação registrada.',
       );
-      await load().catch(e => setLoadError(`Solicitação registrada, mas não foi possível atualizar a lista: ${errorText(e)}`));
+      await load().catch((e) =>
+        setLoadError(
+          `Solicitação registrada, mas não foi possível atualizar a lista: ${errorText(e)}`,
+        ),
+      );
     } catch (e) {
       setError(errorText(e));
     } finally {
@@ -176,22 +210,45 @@ export function Reports() {
     }
   };
   return (
-    <div className="space-y-6">
+    <div className="patio-page">
+      <PageHeader
+        actions={
+          <>
+            {' '}
+            <Button
+              variant="outline"
+              onClick={() =>
+                void load().catch((e) => setLoadError(errorText(e)))
+              }
+            >
+              <RefreshCw />
+              Atualizar
+            </Button>{' '}
+            <Button disabled={busy || !online} onClick={() => void submit()}>
+              {busy ? <LoaderCircle className="animate-spin" /> : <FileText />}
+              {busy ? 'Registrando…' : 'Solicitar execução'}
+            </Button>
+          </>
+        }
+      />
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-semibold">Relatórios</h1>
-        <Badge variant={online ? 'default' : 'secondary'} title="Indica se o executor de relatórios respondeu nos últimos 30 segundos. Não valida a conexão com Qlik ou e-mail.">
+        <Status
+          value={loaded ? (online ? 'active' : 'failed') : 'pending'}
+
+        >
           {loaded
             ? online
               ? 'Pronto para executar'
               : 'Executor indisponível'
             : 'Verificando serviço…'}
-        </Badge>
+        </Status>
       </div>
-      {total>jobs.length&&<output>Mostrando os 100 relatórios mais recentes de {total}.</output>}
+      {total > jobs.length && (
+        <output>Mostrando os 100 relatórios mais recentes de {total}.</output>
+      )}
       {!online && loaded && !loadError && (
         <output className="block rounded-lg border p-3 text-sm">
-          Inicie a operação na central Supply Vision para habilitar as execuções
-          e os downloads.
+          Inicie a operação na central para executar e baixar relatórios.
         </output>
       )}
       {(error || loadError || logError) && (
@@ -203,7 +260,7 @@ export function Reports() {
         </p>
       )}
       {notice && (
-        <output className="block rounded-lg border border-emerald-500 p-3 text-sm">
+        <output className="block rounded-lg border border-border p-3 text-sm">
           {notice}
         </output>
       )}
@@ -228,7 +285,6 @@ export function Reports() {
               ))}
             </select>
           </label>
-          <p className="text-sm text-muted-foreground">{descricao[action]}</p>
           {action === 'recorte' && (
             <>
               <div className="grid gap-4 sm:grid-cols-2">
@@ -238,7 +294,7 @@ export function Reports() {
                     id="report-from"
                     type="text"
                     inputMode="numeric"
-                    placeholder="DD/MM/AAAA"
+                    placeholder="dd/mm/aaaa"
                     maxLength={10}
                     value={from}
                     disabled={busy}
@@ -254,7 +310,7 @@ export function Reports() {
                     id="report-to"
                     type="text"
                     inputMode="numeric"
-                    placeholder="DD/MM/AAAA"
+                    placeholder="dd/mm/aaaa"
                     maxLength={10}
                     value={to}
                     disabled={busy}
@@ -266,38 +322,20 @@ export function Reports() {
                 </label>
               </div>
               <p className="text-xs text-muted-foreground">
-                A comparação usa os acordos disponíveis hoje e suas vigências.
-                {' '}Os arquivos históricos ficam disponíveis por 24 horas após a geração.
-                Depois desse prazo, expiram e são excluídos automaticamente. Baixe antes de expirar.
+                Usa os acordos vigentes hoje. Baixe os arquivos em até 24 horas.
               </p>
             </>
           )}
-          <p className="text-xs text-muted-foreground">
-            As nomenclaturas de itens e modelos extraídas do Qlik são padronizadas
-            conforme o De/Para para reduzir ruídos na comparação.
-          </p>
-          <Button disabled={busy || !online} onClick={() => void submit()}>
-            {busy ? <LoaderCircle className="animate-spin" /> : <FileText />}
-            {busy ? 'Registrando…' : 'Solicitar execução'}
-          </Button>
         </CardContent>
       </Card>
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold">Últimas execuções</h2>
-        <Button
-          variant="outline"
-          onClick={() => void load().catch((e) => setLoadError(errorText(e)))}
-        >
-          <RefreshCw />
-          Atualizar
-        </Button>
       </div>
-      <p className="text-xs text-muted-foreground">
-        Uma execução por vez, com até cinco aguardando na fila. Sem dados
-        elegíveis, nenhum relatório ou e-mail é gerado. Períodos longos podem
-        levar mais tempo para processar.
-      </p>
-      {!loaded && !loadError && <output className="block text-sm text-muted-foreground">Carregando execuções…</output>}
+      {!loaded && !loadError && (
+        <output className="block text-sm text-muted-foreground">
+          Carregando execuções…
+        </output>
+      )}
       {loaded && !loadError && !jobs.length && (
         <p className="text-sm text-muted-foreground">
           Nenhuma execução solicitada pelo portal.
@@ -322,11 +360,9 @@ export function Reports() {
                   </p>
                 )}
               </div>
-              <Badge
-                variant={job.status === 'failed' ? 'destructive' : 'secondary'}
-              >
+              <Status value={job.status}>
                 {statusName[job.status] || job.status}
-              </Badge>
+              </Status>
             </div>
             <div className="flex flex-wrap gap-2">
               <Button
@@ -351,45 +387,66 @@ export function Reports() {
               )}
               {(job.status === 'review' || job.status === 'failed') &&
                 (job.action === 'relatorio' || job.action === 'recorte') && (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled={busy}
-                  onClick={() => {
-                    if (job.action !== 'relatorio' && job.action !== 'recorte') return;
-                    setAction(job.action);
-                    setFrom(exibirDataBrasileira(job.from || dataDeNegocio()));
-                    setTo(exibirDataBrasileira(job.to || dataDeNegocio()));
-                    key.current = null;
-                    setNotice(
-                      'Parâmetros copiados. Confira os registros e a entrega anterior antes de solicitar uma nova execução.',
-                    );
-                    window.scrollTo({ top: 0, behavior: 'smooth' });
-                  }}
-                >
-                  Usar estes parâmetros
-                </Button>
-              )}
-              {(JSON.parse(job.artifactsJson) as Array<{ name: string; expiresAt?: string | null; expired?: boolean }>).map(
-                (file) => {
-                  const expirou = file.expired || (!!file.expiresAt && Date.now() >= Date.parse(file.expiresAt));
-                  return <div key={file.name} className="max-w-full space-y-1">
                   <Button
                     size="sm"
                     variant="outline"
-                    disabled={!online || expirou}
-                    className="max-w-full"
-                    onClick={() => void download(job, file.name)}
+                    disabled={busy}
+                    onClick={() => {
+                      if (
+                        job.action !== 'relatorio' &&
+                        job.action !== 'recorte'
+                      )
+                        return;
+                      setAction(job.action);
+                      setFrom(
+                        exibirDataBrasileira(job.from || dataDeNegocio()),
+                      );
+                      setTo(exibirDataBrasileira(job.to || dataDeNegocio()));
+                      key.current = null;
+                      setNotice(
+                        'Parâmetros copiados. Confira os registros e a entrega anterior antes de solicitar uma nova execução.',
+                      );
+                      window.scrollTo({ top: 0, behavior: 'smooth' });
+                    }}
                   >
-                    <Download />
-                    <span className="truncate">{file.name}</span>
+                    Usar estes parâmetros
                   </Button>
-                  {file.expiresAt && <p className={`text-xs ${expirou ? 'text-destructive' : 'text-muted-foreground'}`}>
-                    {expirou ? 'Arquivo expirado. Gere um novo recorte para baixar.' : `Disponível até ${horario(file.expiresAt)} (horário de Brasília).`}
-                  </p>}
-                  </div>;
-                },
-              )}
+                )}
+              {(
+                JSON.parse(job.artifactsJson) as Array<{
+                  name: string;
+                  expiresAt?: string | null;
+                  expired?: boolean;
+                }>
+              ).map((file) => {
+                const expirou =
+                  file.expired ||
+                  (!!file.expiresAt &&
+                    Date.now() >= Date.parse(file.expiresAt));
+                return (
+                  <div key={file.name} className="max-w-full space-y-1">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={!online || expirou}
+                      className="max-w-full"
+                      onClick={() => void download(job, file.name)}
+                    >
+                      <Download />
+                      <span className="truncate">{file.name}</span>
+                    </Button>
+                    {file.expiresAt && (
+                      <p
+                        className={`text-xs ${expirou ? 'text-destructive' : 'text-muted-foreground'}`}
+                      >
+                        {expirou
+                          ? 'Arquivo expirado. Gere um novo recorte para baixar.'
+                          : `Disponível até ${horario(file.expiresAt)} (horário de Brasília).`}
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
             </div>
             {selected === job.id && (
               <pre

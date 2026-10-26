@@ -30,7 +30,7 @@ async function abrir(t,role,query='') {
 void test('Portal recarrega subaba do endereco; voltar e avancar mudam o conteudo e o menu',async t=>{
   const {tela,janela}=await abrir(t,'admin','?aba=cadastros&sub=catalogos');
   tela.one('Catalogs');assert.equal(tela.one('Sidebar').nav,'catalogs');
-  assert.equal(tela.one('Subabas').nav,'catalogs');
+  assert.equal(tela.one('CabecalhoProvider').value.nav,'catalogs');
   tela.one('Sidebar').setNav('agreements');tela.render();
   assert.equal(janela.location.search,'?aba=acordos&sub=acordos');tela.one('Agreements');
   janela.mover(-1);tela.render();tela.one('Catalogs');
@@ -44,7 +44,7 @@ void test('buscar abre acordo e importacao preserva acordo pre-selecionado; Cent
   tela.one('AgreementDetail').onImport();tela.render();
   assert.equal(tela.one('Imports').initialAgreement,'acordo-ficticio');
   assert.equal(janela.location.search,'?aba=acordos&sub=importacoes');
-  tela.one('CentralNotificacoes').navegar('/?chamado=chamado-ficticio');tela.render();
+  tela.one('Sidebar').navegarAviso('/?chamado=chamado-ficticio');tela.render();
   assert.equal(tela.one('Tickets').initialDetail,'chamado-ficticio');
   assert.equal(janela.location.search,'?aba=chamados&sub=parcerias&chamado=chamado-ficticio');
   tela.one('Sidebar').setNav('search');tela.render();
@@ -75,7 +75,7 @@ for(const role of ['viewer','editor','admin'])void test(`Chamados ${role}: subab
   const {tela,janela}=await abrir(t,role,'?aba=chamados');
   assert.equal(tela.one('Sidebar').nav,role==='viewer'?'solicitacoes':'tickets');
   if(role==='viewer')tela.one('Solicitacoes');else tela.one('Tickets');
-  tela.one('CentralNotificacoes').navegar('/?aba=chamados&solicitacao=sol-ficticia');tela.render();
+  tela.one('Sidebar').navegarAviso('/?aba=chamados&solicitacao=sol-ficticia');tela.render();
   assert.equal(tela.one('Solicitacoes').initialDetail,'sol-ficticia');assert.equal(janela.location.search,'?aba=chamados&sub=cadastro-fornecedor&solicitacao=sol-ficticia');
   tela.one('Solicitacoes').onOpen(null);tela.render();assert.equal(tela.one('Solicitacoes').initialDetail,null);
   janela.mover(-1);tela.render();assert.equal(tela.one('Solicitacoes').initialDetail,'sol-ficticia');

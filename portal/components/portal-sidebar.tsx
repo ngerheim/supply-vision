@@ -1,6 +1,13 @@
 'use client';
+import { Marca } from './marca';
+import { CentralNotificacoes } from './central-notificacoes';
 import packageInfo from '../package.json' with { type: 'json' };
-import { abaDaChave, gruposVisiveis, type Aba, type Nav } from '@/lib/navegacao';
+import {
+  abaDaChave,
+  gruposVisiveis,
+  type Aba,
+  type Nav,
+} from '@/lib/navegacao';
 import {
   Database,
   Handshake,
@@ -33,45 +40,22 @@ export function Sidebar({
   onLogout,
   collapsed,
   onToggle,
+  navegarAviso,
 }: JsonData) {
   return (
     <aside
-      className={`fixed inset-y-0 left-0 z-30 flex w-16 flex-col overflow-hidden border-r border-sidebar-border bg-sidebar text-sidebar-foreground transition-[width] duration-300 ${collapsed ? 'lg:w-16' : 'lg:w-44'}`}
+      className={`patio-sidebar ${collapsed ? 'patio-sidebar-collapsed' : ''}`}
     >
-      <div className="pointer-events-none absolute inset-0 opacity-60 [background-image:radial-gradient(ellipse_at_20%_0%,rgba(45,212,191,.14)_0,transparent_55%)]" />
-      <nav
-        className="relative flex-1 overflow-y-auto px-2 py-5 text-sm lg:px-3"
-        aria-label="Navegação principal"
-      >
-        <button
-          type="button"
-          onClick={onToggle}
-          title={
-            collapsed ? 'Expandir barra lateral' : 'Recolher barra lateral'
-          }
-          aria-label={
-            collapsed ? 'Expandir barra lateral' : 'Recolher barra lateral'
-          }
-          aria-expanded={!collapsed}
-          className="mb-3 hidden w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-xs opacity-45 hover:bg-sidebar-accent hover:opacity-100 lg:flex"
-        >
-          {collapsed ? (
-            <PanelLeftOpen className="size-4 shrink-0" />
-          ) : (
-            <PanelLeftClose className="size-4 shrink-0" />
-          )}
-          {!collapsed && <span className="truncate">Recolher menu</span>}
-        </button>
+      {!collapsed && <Marca />}
+      <nav className="patio-sidebar-nav" aria-label="Navegação principal">
         {gruposVisiveis(user).map((grupo) => (
           <fieldset
             key={grupo.nome}
             aria-label={grupo.nome}
-            className="mb-3 space-y-1 border-t border-sidebar-border pt-3"
+            className="patio-sidebar-group"
           >
             {!collapsed && (
-              <p className="hidden px-3 pb-2 text-[10px] font-bold uppercase tracking-[.15em] opacity-45 lg:block">
-                {grupo.nome}
-              </p>
+              <p className="patio-sidebar-group-label">{grupo.nome}</p>
             )}
             {grupo.abas.map((aba) => (
               <NavButton
@@ -85,31 +69,46 @@ export function Sidebar({
           </fieldset>
         ))}
       </nav>
-      <div
-        className="border-t border-sidebar-border p-3"
-        title={`v${version}`}
-      >
+      <CentralNotificacoes navegar={navegarAviso} collapsed={collapsed} />
+      <footer className="patio-sidebar-footer" title={`v${version}`}>
         {!collapsed && (
-          <p className="mb-2 hidden truncate text-xs opacity-60 lg:block">
-            {roleName(user.role)}
-          </p>
-        )}
-        {!collapsed && (
-          <p className="mb-2 hidden text-[10px] opacity-45 lg:block">
-            v{version}
-          </p>
+          <div className="patio-sidebar-user">
+            <p title={user.name}>{user.name}</p>
+            <span>{roleName(user.role)}</span>
+          </div>
         )}
         <Button
-          size="icon-sm"
           variant="ghost"
           onClick={onLogout}
           disabled={busy}
           aria-label="Sair"
           title="Sair"
+          className="patio-sidebar-logout"
         >
           <LogOut />
+          {!collapsed && <span>Sair</span>}
         </Button>
-      </div>
+        <button
+          type="button"
+          onClick={onToggle}
+          title={
+            collapsed ? 'Expandir barra lateral' : 'Recolher barra lateral'
+          }
+          aria-label={
+            collapsed ? 'Expandir barra lateral' : 'Recolher barra lateral'
+          }
+          aria-expanded={!collapsed}
+          className="patio-sidebar-toggle"
+        >
+          {collapsed ? (
+            <PanelLeftOpen className="size-4 shrink-0" />
+          ) : (
+            <PanelLeftClose className="size-4 shrink-0" />
+          )}
+          {!collapsed && <span className="truncate">Recolher menu</span>}
+        </button>
+        {!collapsed && <p className="patio-sidebar-version">v{version}</p>}
+      </footer>
     </aside>
   );
 }
@@ -126,15 +125,13 @@ function NavButton({
       title={label}
       aria-label={label}
       aria-current={active ? 'page' : undefined}
-      className={`group relative flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-all duration-200 ${active ? 'bg-sidebar-primary text-sidebar-primary-foreground shadow-sm' : 'opacity-55 hover:translate-x-0.5 hover:bg-sidebar-accent hover:opacity-100'}`}
+      className={`group relative flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-[15px] transition-colors duration-200 ${active ? 'bg-sidebar-primary text-sidebar-primary-foreground ' : 'opacity-100 hover:bg-sidebar-accent hover:opacity-100'}`}
     >
       {active && (
-        <span className="absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-full bg-teal-300" />
+        <span className="absolute left-0 inset-y-0 w-[4px] bg-accent" />
       )}
       <Icon className="size-4 shrink-0" />
-      {!collapsed && (
-        <span className="hidden flex-1 truncate lg:block">{label}</span>
-      )}
+      {!collapsed && <span className="flex-1 truncate">{label}</span>}
     </button>
   );
 }

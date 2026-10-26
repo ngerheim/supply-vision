@@ -1,4 +1,5 @@
 'use client';
+import { PageHeader } from './page-header';
 import { useRef, useState } from 'react';
 import {
   AlertTriangle,
@@ -179,7 +180,32 @@ export function Imports({
   };
   const ready = result?.valid && checkedCatalogs === data.catalogs;
   return (
-    <div className="mx-auto max-w-5xl space-y-5">
+    <div className="patio-page">
+      <PageHeader
+        actions={
+          <>
+            {' '}
+            <Button
+              disabled={busy}
+              variant="outline"
+              onClick={() => void template()}
+            >
+              <Download /> Baixar modelo
+            </Button>
+            <Button
+              disabled={busy || !file || !agreement}
+              onClick={() => void analyze()}
+            >
+              {busy ? (
+                <LoaderCircle className="animate-spin" />
+              ) : (
+                <CheckCircle2 />
+              )}{' '}
+              Conferir arquivo
+            </Button>
+          </>
+        }
+      />
       <Card>
         <CardContent className="space-y-5">
           <fieldset disabled={busy} className="space-y-4">
@@ -205,7 +231,7 @@ export function Imports({
             />
             <button
               type="button"
-              className="w-full rounded-xl border-2 border-dashed p-7 text-center hover:bg-muted/40"
+              className="w-full rounded-xl border border-dashed p-7 text-center hover:bg-muted/40"
               onClick={() => fileInput.current?.click()}
               onDragOver={(event) => event.preventDefault()}
               onDrop={(event) => {
@@ -218,25 +244,9 @@ export function Imports({
                 {file?.name || 'Arraste a planilha ou clique para selecionar'}
               </p>
               <p className="mt-1 text-xs text-muted-foreground">
-                até 2 MB · até 1.000 linhas, incluindo o cabeçalho
+                Até 2 MB e 1.000 linhas (com cabeçalho)
               </p>
             </button>
-            <div className="flex flex-wrap justify-between gap-3">
-              <Button variant="outline" onClick={() => void template()}>
-                <Download /> Baixar modelo
-              </Button>
-              <Button
-                disabled={!file || !agreement}
-                onClick={() => void analyze()}
-              >
-                {busy ? (
-                  <LoaderCircle className="animate-spin" />
-                ) : (
-                  <CheckCircle2 />
-                )}{' '}
-                Conferir arquivo
-              </Button>
-            </div>
           </fieldset>
           {error && (
             <Alert variant="destructive">
