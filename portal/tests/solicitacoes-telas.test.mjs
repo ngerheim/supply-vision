@@ -151,7 +151,14 @@ void test('abertura: mascara, consultaId, Receita somente leitura, categorias at
   const { h, saved } = await abrirForm(t);
   await consultar(h);
   assert.equal(input(h, 'cnpj').value, cliente.mascaraCnpj(receita.cnpj));
-  assert.equal(input(h, 'razao_social').readOnly, true);
+  assert.equal(
+    h.find((n) => n.type === 'Input' && n.props.name === 'razao_social').length,
+    0,
+  );
+  assert.equal(
+    h.one('Info', (p) => p.label === 'Razão social').value,
+    'Fornecedor fictício',
+  );
   assert.equal(
     h.find((n) => n.type === 'input' && n.props.type === 'checkbox').length,
     1,
@@ -230,7 +237,7 @@ for (const {situacao, detalhes} of [
     h.requests.at(-1).reject(new ApiError(detalhes));
     await flush(h);
     assert.ok(textos(h).includes(detalhes.error));
-    assert.equal(input(h, 'telefone').value, '123');
+    assert.equal(input(h, 'telefone').value, '(12) 3');
     if (detalhes.existente) {
       const link = h.one('a');
       assert.match(link.href, /solicitacao=existente/);
@@ -247,7 +254,7 @@ void test('consulta 503 habilita manual sem consultaId, preserva contato apos er
     .reject(new ApiError({ status: 503, error: 'Consulta indisponível.' }));
   await flush(h);
   assert.equal(h.one('output').children, cliente.AVISO_MANUAL);
-  assert.equal(input(h, 'razao_social').readOnly, false);
+  assert.ok(input(h, 'razao_social'));
   change(h, 'razao_social', 'Manual fictício');
   change(h, 'email', 'fixture@example.com');
   submit(h);
@@ -363,7 +370,7 @@ void test('somente o solicitante pode corrigir; relacionados so quando retornado
       .length,
     0,
   );
-  button(h, 'Recarregar').onClick();
+  h.one('Button', (p) => p['aria-label'] === 'Recarregar').onClick();
   h.render();
   h.requests
     .at(-1)
@@ -460,7 +467,11 @@ for (const manual of [false, true])
       devolucao: 'Corrigir endereço',
     });
     assert.equal(input(h, 'cnpj').readOnly, true);
-    assert.equal(input(h, 'razao_social').readOnly, !manual);
+    assert.equal(
+      h.find((n) => n.type === 'Input' && n.props.name === 'razao_social')
+        .length,
+      manual ? 1 : 0,
+    );
     assert.equal(
       h.one('div', (p) => p.role === 'note').children[0].props.children,
       'Mensagem da devolução',
@@ -539,4 +550,30 @@ void test('categorias: incluir, duplicidade, renomear, ativar/desativar e reviso
   h.requests.at(-1).resolve({ id: 'criada' });
   await flush(h);
   assert.equal(input(h, 'nome').value, '');
+});
+
+void test('formulario: mascaras de CEP e telefone, UF em lista e urgencia lado a lado', async (t) => {
+  const { h } = await abrirForm(t);
+  await consultar(h);
+  change(h, 'cep', '00000001');
+  assert.equal(input(h, 'cep').value, '00000-001');
+  change(h, 'telefone', '31999998888');
+  assert.equal(input(h, 'telefone').value, '(31) 99999-8888');
+  const uf = (nome) => {
+    const nos = h.find((n) => n.props?.nome === nome && n.props?.mudar);
+    assert.equal(nos.length, 1, `Esperado um seletor ${nome}`);
+    return nos[0].props;
+  };
+  assert.equal(uf('uf').valor, 'SP');
+  uf('atendimento_uf').mudar('atendimento_uf', 'MG');
+  h.render();
+  button(h, 'Urgente').onClick();
+  h.render();
+  assert.equal(button(h, 'Urgente').variant, 'default');
+  assert.equal(button(h, 'Normal').variant, 'outline');
+  submit(h);
+  const enviado = body(h.requests.at(-1));
+  assert.equal(enviado.atendimento_uf, 'MG');
+  assert.equal(enviado.urgencia, 'urgente');
+  assert.equal(enviado.telefone, '(31) 99999-8888');
 });
