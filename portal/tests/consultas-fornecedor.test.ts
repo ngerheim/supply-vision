@@ -62,3 +62,11 @@ void test('ensaio, CI e PREPARAR usam somente fixture, sem fetch', async t => {
     assert.equal(fetchMock.mock.callCount(), 0);
   } finally { for (const n of nomes) if (antigos[n] === undefined) delete process.env[n]; else process.env[n] = antigos[n]; }
 });
+
+void test('um 404 com a outra fonte fora vira indisponivel, nao inexistente', async () => {
+  const consultas = criarConsultasFornecedor({ provedor: async url => {
+    if (url.hostname === 'brasilapi.com.br') throw new FalhaConsulta('CNPJ ou CEP não encontrado.', 404);
+    throw new Error('Provedor ficticio indisponivel');
+  } });
+  await assert.rejects(consultas.cnpj(CNPJS_ENSAIO.ativa), (e: unknown) => e instanceof FalhaConsulta && e.status === 503 && e.message === CONSULTA_INDISPONIVEL);
+});

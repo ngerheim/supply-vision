@@ -65,12 +65,12 @@ export function criarConsultasFornecedor(opcoes: { provedor?: ProvedorConsulta; 
     const numero = normalizeCnpj(entrada);
     if (atualizar) cache.delete(`${ensaio() ? 'ensaio' : 'normal'}:cnpj:${numero}`);
     return comCache(`cnpj:${numero}`, async () => {
-      let inexistente = false;
+      let naoEncontrados = 0;
       for (const [fonte, url] of [['BrasilAPI', `https://brasilapi.com.br/api/cnpj/v1/${numero}`], ['ReceitaWS', `https://receitaws.com.br/v1/cnpj/${numero}`]]) {
         try { return { dados: normalizarReceita(await chamar(url), numero, fonte), fonte }; }
-        catch (erro) { if (erro instanceof FalhaConsulta && erro.status === 404) inexistente = true; }
+        catch (erro) { if (erro instanceof FalhaConsulta && erro.status === 404) naoEncontrados++; }
       }
-      if (inexistente) throw new FalhaConsulta('CNPJ não encontrado.', 404);
+      if (naoEncontrados === 2) throw new FalhaConsulta('CNPJ não encontrado.', 404);
       throw new FalhaConsulta(CONSULTA_INDISPONIVEL);
     });
   }
