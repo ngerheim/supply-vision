@@ -100,6 +100,7 @@ export function solicitacoesApi(contexto: ContextoApi, consultas = criarConsulta
       const consultaId = campo(body, 'consultaId', 100);
       const consulta = await first<{ cnpj: string; fonte: string; dados_json: string; consultada_em: string }>('SELECT cnpj,fonte,dados_json,consultada_em FROM consultas_cnpj WHERE id=? AND user_id=?', [consultaId, user.id]);
       if (!consulta) throw new EntradaInvalida('Consulta não encontrada. Consulte o CNPJ novamente.');
+      if (Date.parse(consulta.consultada_em) < Date.now() - 24 * 60 * 60 * 1000) throw new EntradaInvalida('A consulta na Receita expirou. Consulte o CNPJ novamente.');
       if (anterior && consulta.cnpj !== anterior.cnpj) throw new EntradaInvalida('O CNPJ da solicitação não pode ser alterado.');
       return { ...JSON.parse(consulta.dados_json) as DadosReceita, consulta_fonte: consulta.fonte, consultada_em: consulta.consultada_em, nao_verificado: 0 };
     }
