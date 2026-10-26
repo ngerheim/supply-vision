@@ -9,12 +9,12 @@ import { iniciarNavegacao } from '../lib/navegacao-historico.ts';
 // Inventario do contrato, independente da estrutura de producao.
 const rotas: Array<[Nav, string, string | null]> = [
   ['search','buscar',null], ['maintenance','manutencao',null], ['tickets','chamados','parcerias'],
-  ['solicitacoes','chamados','cadastro-fornecedor'], ['categorias','cadastros','categorias'],
+  ['solicitacoes','chamados','cadastro-fornecedor'], ['baixas','chamados','baixa-estoque'], ['estoques','cadastros','estoques'], ['categorias','cadastros','categorias'],
   ['agreements','acordos','acordos'], ['imports','acordos','importacoes'],
   ['suppliers','cadastros','fornecedores'], ['catalogs','cadastros','catalogos'], ['mappings','cadastros','de-para'],
   ['reports','administracao','relatorios'], ['history','administracao','historico'], ['emails','administracao','emails'], ['admin','administracao','usuarios'],
 ];
-void test('todas as 14 chaves e seis abas fazem ida e volta com slugs estaveis', () => {
+void test('todas as 16 chaves e seis abas fazem ida e volta com slugs estaveis', () => {
   assert.equal(ABAS_NAVEGACAO.length,6);
   assert.deepEqual(GRUPOS_NAVEGACAO.map(g => [g.nome,[...g.abas]]),[
     ['Consulta',['buscar','manutencao','chamados']],['Suprimentos',['acordos','cadastros']],['Administração',['administracao']],
@@ -39,9 +39,9 @@ void test('enderecos desconhecidos voltam para buscar sem erro', () => {
   }
 });
 const visibilidade = {
-  viewer: [['buscar',['search']],['manutencao',['maintenance']],['chamados',['solicitacoes']]],
-  editor: [['buscar',['search']],['manutencao',['maintenance']],['chamados',['tickets','solicitacoes']],['acordos',['agreements','imports']],['cadastros',['suppliers','catalogs','mappings']]],
-  admin: [['buscar',['search']],['manutencao',['maintenance']],['chamados',['tickets','solicitacoes']],['acordos',['agreements','imports']],['cadastros',['suppliers','catalogs','mappings','categorias']],['administracao',['reports','history','emails','admin']]],
+  viewer: [['buscar',['search']],['manutencao',['maintenance']],['chamados',['solicitacoes','baixas']]],
+  editor: [['buscar',['search']],['manutencao',['maintenance']],['chamados',['tickets','solicitacoes','baixas']],['acordos',['agreements','imports']],['cadastros',['suppliers','catalogs','mappings']]],
+  admin: [['buscar',['search']],['manutencao',['maintenance']],['chamados',['tickets','solicitacoes','baixas']],['acordos',['agreements','imports']],['cadastros',['suppliers','catalogs','mappings','categorias','estoques']],['administracao',['reports','history','emails','admin']]],
 };
 for (const role of ['viewer','editor','admin'] as const) {
   void test(`${role}: abas e subabas permitidas; acesso por endereco nao amplia permissoes`, () => {

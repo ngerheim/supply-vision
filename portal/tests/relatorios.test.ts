@@ -25,8 +25,8 @@ void test('solicitações funcionam em HTTP quando Crypto não oferece randomUUI
   assert.notEqual(gerarChaveRelatorio(fonte), requestKey);
 });
 void test('perfis herdam exatamente os três conjuntos solicitados', () => {
-  const consulta = new Set(['search','maintenance','solicitacoes']);
-  const administracao = new Set(['reports','history','emails','admin','categorias']);
+  const consulta = new Set(['search','maintenance','solicitacoes','baixas']);
+  const administracao = new Set(['reports','history','emails','admin','categorias','estoques']);
   for (const grupo of ABAS_NAVEGACAO)
     for (const {chave:aba} of grupo.subabas) {
       assert.equal(
@@ -42,7 +42,7 @@ void test('perfis herdam exatamente os três conjuntos solicitados', () => {
       assert.equal(podeAcessarAba({ role: 'admin' }, aba), true, aba);
     }
   assert.equal(NOMES_PERFIL.editor, 'Suprimentos');
-  assert.equal(new Set(ABAS_NAVEGACAO.flatMap(g => g.subabas.map(sub => sub.chave))).size, 14);
+  assert.equal(new Set(ABAS_NAVEGACAO.flatMap(g => g.subabas.map(sub => sub.chave))).size, 16);
 });
 void test('recorte aceita datas inclusivas e nunca mantém destinatário', () => {
   assert.deepEqual(validarPedidoRelatorio(base, '2026-02-01'), {

@@ -1,6 +1,7 @@
 import { portalPrivado } from '../scripts/configuracao.mjs';
 import { SCHEMA_CENTRAL } from './central-notificacoes.ts';
 import { SCHEMA_SOLICITACOES } from './solicitacoes-schema.ts';
+import { SCHEMA_BAIXAS } from './baixas-schema.ts';
 import { MIGRAR_FILA_SOLICITACOES } from './fila-email-schema.ts';
 import { bancoSqliteLocal } from './sqlite-local.ts';
 import { SESSAO_INATIVIDADE_MS } from './politica-sessao.ts';
@@ -261,6 +262,12 @@ async function initialize() {
     await db.batch([
       ...MIGRAR_FILA_SOLICITACOES.map(sql => db.prepare(sql)),
       db.prepare('INSERT OR IGNORE INTO schema_migrations(version,applied_at) VALUES(10,?)').bind(now()),
+    ]);
+  }
+  if (!await db.prepare('SELECT 1 ok FROM schema_migrations WHERE version=11').first()) {
+    await db.batch([
+      ...SCHEMA_BAIXAS.map(sql => db.prepare(sql)),
+      db.prepare('INSERT OR IGNORE INTO schema_migrations(version,applied_at) VALUES(11,?)').bind(now()),
     ]);
   }
   await db.prepare('PRAGMA optimize').run();

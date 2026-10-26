@@ -7,6 +7,12 @@ import { canWrite } from '../lib/api-compartilhada.ts';
 // Inventario manual do contrato anterior: [viewer, editor, admin, inativo].
 // Nao derivar expectativas dos conjuntos de producao.
 const equivalencia: Record<Acao, readonly boolean[]> = {
+  'baixa:abrir': [true, true, true, false],
+  'baixa:ver_todas': [false, true, true, false],
+  'baixa:atender': [false, true, true, false],
+  'estoque:gerenciar': [false, false, true, false],
+  'aba:baixas': [true, true, true, false],
+  'aba:estoques': [false, false, true, false],
   'aba:solicitacoes': [true, true, true, false],
   'aba:categorias': [false, false, true, false],
   'aba:search': [true, true, true, false],

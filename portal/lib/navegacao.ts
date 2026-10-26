@@ -7,6 +7,7 @@ export const ABAS_NAVEGACAO = [
   { aba: 'chamados', label: 'Chamados', subabas: [
     { chave: 'tickets', slug: 'parcerias', label: 'Parcerias' },
     { chave: 'solicitacoes', slug: 'cadastro-fornecedor', label: 'Cadastro de fornecedor' },
+    { chave: 'baixas', slug: 'baixa-estoque', label: 'Baixa no estoque' },
   ] },
   { aba: 'acordos', label: 'Acordos', subabas: [
     { chave: 'agreements', slug: 'acordos', label: 'Acordos' },
@@ -17,6 +18,7 @@ export const ABAS_NAVEGACAO = [
     { chave: 'catalogs', slug: 'catalogos', label: 'Catálogos' },
     { chave: 'mappings', slug: 'de-para', label: 'De/Para' },
     { chave: 'categorias', slug: 'categorias', label: 'Categorias' },
+    { chave: 'estoques', slug: 'estoques', label: 'Estoques' },
   ] },
   { aba: 'administracao', label: 'Administração', subabas: [
     { chave: 'reports', slug: 'relatorios', label: 'Relatórios' },
@@ -74,6 +76,12 @@ export function enderecoParaBusca({ aba, subaba }: EnderecoNavegacao): string {
   return `?${params}`;
 }
 export function resolverEndereco(usuario: UsuarioPermissao, busca: string) {
+  const baixa = new URLSearchParams(busca).get('baixa');
+  if (baixa) {
+    return podeAcessarAba(usuario, 'baixas')
+      ? { nav: 'baixas' as Nav, endereco: enderecoDaChave('baixas'), chamado: null, solicitacao: null, baixa, aviso: '' }
+      : { nav: 'search' as Nav, endereco: { ...BUSCAR }, chamado: null, solicitacao: null, baixa: null, aviso: AVISO_AREA_RESTRITA };
+  }
   const solicitacao = new URLSearchParams(busca).get('solicitacao');
   if (solicitacao) {
     return podeAcessarAba(usuario, 'solicitacoes')
