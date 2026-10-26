@@ -129,6 +129,12 @@ void test('Cadastro de fornecedor pelo roteador e SQLite reais', async t => {
     assert.equal((await get('solicitacoes/cep/00000000', 'viewer')).data.cidade, 'Cidade Fictícia');
     assert.equal((await get('solicitacoes/cep/000', 'viewer')).status, 400);
   });
+  await t.test('consulta com mais de 24 horas e recusada no envio', async () => {
+    sql.prepare('INSERT INTO consultas_cnpj(id,cnpj,fonte,dados_json,consultada_em,user_id) VALUES(?,?,?,?,?,?)').run('consulta-velha', CNPJS_ENSAIO.ativa, 'BrasilAPI', '{}', new Date(Date.now() - 25 * 3600000).toISOString(), 'viewer');
+    const velha = await post('solicitacoes', { consultaId: 'consulta-velha' }, 'viewer');
+    assert.equal(velha.status, 400);
+    assert.match(velha.data.error, /expirou/);
+  });
   let verificada;
   await t.test('envio usa consulta do servidor, ignora Receita adulterada e preserva endereco ajustado', async () => {
     const consulta = (await get(`solicitacoes/cnpj/${CNPJS_ENSAIO.ativa}`, 'viewer')).data;
