@@ -49,7 +49,8 @@
 }
 @layer base {
   * { @apply border-border; }
-  html { @apply font-sans; font-size: 15px; }
+  html { @apply font-sans; font-size: 15px; zoom: var(--zoom-portal); }
+  :root { --zoom-portal: 0.8; }
   body { @apply bg-background text-foreground; font-stretch: 100%; }
   h1, h2, h3, h4 { font-stretch: 72%; font-weight: 800; }
   table td, table th, .tabular-nums { font-variant-numeric: tabular-nums; }
@@ -78,6 +79,7 @@ h1, h2, h3, h4, [data-slot='card-title'], [data-slot='dialog-title'] { font-stre
 [data-slot='table-head'] button { font-stretch: inherit; font-weight: inherit; }
 .patio-subabas [role='tab'] { border: 0; border-bottom: 3px solid transparent; border-radius: 0; background: transparent; color: var(--aco); }
 .patio-subabas [role='tab'][aria-selected='true'] { border-bottom-color: var(--marinho); color: var(--marinho); }
+.patio-codigo { font-family: var(--font-mono, ui-monospace, monospace); font-weight: 600; white-space: nowrap; }
 .patio-placa { display: inline-block; max-width: 100%; vertical-align: middle; border: 2px solid var(--marinho); border-top: 6px solid var(--faixa-placa); border-radius: 3px; background: var(--branco); color: var(--marinho); padding: 1px 8px 2px; font-stretch: 70%; font-weight: 800; line-height: 1.2; text-align: center; overflow-wrap: anywhere; }
 @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
 
