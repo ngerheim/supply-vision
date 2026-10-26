@@ -20,7 +20,7 @@ import {
 import { Status } from './status';
 import { Prioridade } from './prioridade';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import {
   Dialog,
   DialogContent,
@@ -241,11 +241,6 @@ export function Tickets({ busy, users, run, initialDetail }: JsonData) {
       </div>
       {rows.length ? (
         <Card className="min-w-0">
-          <CardHeader className="border-b">
-            <p className="patio-result-count">
-              {data.total} {data.total === 1 ? 'chamado' : 'chamados'}
-            </p>
-          </CardHeader>
           <CardContent className="min-w-0 px-0 pb-0">
             <Table className="w-full min-w-[900px] table-fixed">
               <colgroup>
@@ -320,13 +315,7 @@ export function Tickets({ busy, users, run, initialDetail }: JsonData) {
           />
         </Card>
       ) : (
-        <div className="space-y-3">
-          <p className="patio-result-count">0 chamados</p>
-          <Empty
-            icon={MessageSquare}
-            title="Nenhum chamado"
-          />
-        </div>
+        <Empty icon={MessageSquare} title="Nenhum chamado" />
       )}
       {open && (
         <TicketDialog
