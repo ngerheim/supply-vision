@@ -174,13 +174,14 @@ input:not([type='checkbox']):not([type='radio']):not([type='range']), select, [d
 .patio-notifications-count { flex-shrink: 0; border-radius: 4px; padding: 0 4px; background: var(--accent); color: var(--accent-foreground); font-size: 11px; line-height: 18px; }
 .patio-notifications-collapsed { padding-inline: 8px; }
 .patio-notifications-collapsed .patio-notifications-count { position: absolute; right: 0; top: 0; }
-.patio-notifications-panel { position: fixed; inset: auto auto 24px 236px; width: 384px; max-height: calc(100vh - 48px); }
+.patio-notifications-panel { position: fixed; inset: auto auto 24px 236px; width: 384px; max-height: calc((100vh - 48px) / var(--zoom-portal)); }
 .patio-notifications-collapsed .patio-notifications-panel { left: 76px; }
 .patio-sidebar .patio-notifications-panel :focus-visible { outline-color: var(--marinho); }
 .patio-marca { display: grid; justify-items: center; gap: 12px; padding: 24px 16px; text-align: center; }
 .patio-marca img { display: block; width: 132px; height: auto; max-width: 100%; object-fit: contain; background: transparent; border: 0; border-radius: 0; padding: 0; }
 .patio-marca p { color: var(--sidebar-muted); font-size: 13px; font-weight: 400; }
-.patio-login { display: grid; grid-template-columns: 42% minmax(0,1fr); min-height: 100vh; background: var(--branco); }
+.patio-login { display: grid; grid-template-columns: 42% minmax(0,1fr); min-height: calc(100vh / var(--zoom-portal)); background: var(--branco); }
+.min-h-screen { min-height: calc(100vh / var(--zoom-portal)); }
 .patio-login-brand { display: grid; place-items: center; padding: 48px; background: var(--marinho); color: var(--branco); }
 .patio-marca-login { padding: 16px; gap: 20px; }
 .patio-marca-login img { width: 240px; }
