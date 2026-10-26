@@ -18,6 +18,31 @@ async function carregar(sufixo) {
   finally { hooks.deregister(); }
 }
 
+void test('baixas migram banco novo e versao 10 atomicamente, preservando legado e semente editada', async t => {
+  const pasta=fs.mkdtempSync(path.join(os.tmpdir(),'sv-baixa-migracao-'));
+  const db=bancoSqliteLocal({pastaPrivada:pasta,criar:true});
+  const chave=Symbol.for('supply-vision:banco'), anterior=globalThis[chave], senha=env.INITIAL_ADMIN_PASSWORD;
+  globalThis[chave]=db;env.INITIAL_ADMIN_PASSWORD='senha-ficticia-migracao-baixa';
+  t.after(()=>{globalThis[chave]=anterior;env.INITIAL_ADMIN_PASSWORD=senha;db.fechar();fs.rmSync(pasta,{recursive:true,force:true});});
+  await (await carregar('baixa-nova')).ensureDatabase();
+  assert.equal(await db.prepare('SELECT COUNT(*) n FROM estoques').first('n'),4);
+  const usuarios=(await db.prepare('SELECT * FROM users').all()).results;
+  await db.exec('DROP TABLE baixa_andamentos; DROP TABLE baixas_estoque; DROP TABLE estoques; DELETE FROM schema_migrations WHERE version=11');
+  await db.exec("CREATE TRIGGER falhar_migracao_baixas BEFORE INSERT ON schema_migrations WHEN NEW.version=11 BEGIN SELECT RAISE(ABORT,'falha ficticia baixa'); END");
+  const modulo=await carregar('baixa-existente-falha');
+  await assert.rejects(modulo.ensureDatabase(),/falha ficticia baixa/);
+  assert.equal(await db.prepare("SELECT COUNT(*) n FROM sqlite_schema WHERE type='table' AND name='estoques'").first('n'),0);
+  assert.deepEqual((await db.prepare('SELECT * FROM users').all()).results,usuarios);
+  await db.exec('DROP TRIGGER falhar_migracao_baixas');await modulo.ensureDatabase();
+  const marcador=await db.prepare('SELECT * FROM schema_migrations WHERE version=11').first();
+  await db.prepare("UPDATE estoques SET nome='Nome ficticio alterado',ativo=0,revision=1 WHERE id='estoque_semente_1'").run();
+  await (await carregar('baixa-reinicio')).ensureDatabase();
+  assert.deepEqual(await db.prepare('SELECT * FROM schema_migrations WHERE version=11').first(),marcador);
+  assert.equal(await db.prepare('SELECT COUNT(*) n FROM estoques').first('n'),4);
+  assert.equal(await db.prepare("SELECT ativo FROM estoques WHERE id='estoque_semente_1'").first('ativo'),0);
+  assert.deepEqual((await db.prepare('SELECT * FROM users').all()).results,usuarios);
+});
+
 void test('cadastro migra banco na versao 8 preservando legado e reaplica sem duplicar sementes', async t => {
   const pasta = fs.mkdtempSync(path.join(os.tmpdir(), 'sv-cadastro-migracao-'));
   const db = bancoSqliteLocal({ pastaPrivada: pasta, criar: true });
@@ -147,13 +172,13 @@ void test('falha ao inspecionar colunas bloqueia inicializacao e retomada migra 
     END`);
   falhar = false;
   await ensureDatabase();
-  assert.deepEqual((await db.prepare('SELECT version FROM ordem_migracoes ORDER BY posicao').all()).results.map(r => r.version), [1,2,3,4,5,6,7,8,9,10]);
+  assert.deepEqual((await db.prepare('SELECT version FROM ordem_migracoes ORDER BY posicao').all()).results.map(r => r.version), [1,2,3,4,5,6,7,8,9,10,11]);
   const antes = (await db.prepare('SELECT * FROM schema_migrations ORDER BY version').all()).results;
   const usuarios = (await db.prepare('SELECT * FROM users ORDER BY id').all()).results;
   await (await carregar('reinicio')).ensureDatabase();
   assert.deepEqual((await db.prepare('SELECT * FROM schema_migrations ORDER BY version').all()).results, antes);
   assert.deepEqual((await db.prepare('SELECT * FROM users ORDER BY id').all()).results, usuarios);
-  assert.equal(await db.prepare('SELECT COUNT(*) FROM ordem_migracoes').first('COUNT(*)'), 10);
+  assert.equal(await db.prepare('SELECT COUNT(*) FROM ordem_migracoes').first('COUNT(*)'), 11);
   assert.deepEqual((await db.prepare('PRAGMA foreign_key_check').all()).results, []);
   assert.equal(await db.prepare('PRAGMA foreign_keys').first('foreign_keys'), 1);
 });

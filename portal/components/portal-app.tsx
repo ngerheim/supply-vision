@@ -29,6 +29,8 @@ import { CabecalhoProvider } from './page-header';
 import { definirUsuarioCentral } from '@/lib/central-estado';
 import { Solicitacoes } from './portal-solicitacoes';
 import { CategoriasFornecedor } from './portal-categorias-fornecedor';
+import { Baixas } from './portal-baixas';
+import { Estoques } from './portal-estoques';
 
 export default function PortalApp() {
   const [session, setSession] = useState({ key: 0, message: '' });
@@ -47,6 +49,8 @@ function PortalSession({ message, endSession }: { message: string; endSession: (
   const [ticketLinkVersion,setTicketLinkVersion]=useState(0);
   const [solicitacaoLink,setSolicitacaoLink]=useState<string|null>(null);
   const [solicitacaoLinkVersion,setSolicitacaoLinkVersion]=useState(0);
+  const [baixaLink,setBaixaLink]=useState<string|null>(null);
+  const [baixaLinkVersion,setBaixaLinkVersion]=useState(0);
   const [importAgreement,setImportAgreement]=useState('');
   const [sidebarCollapsed,setSidebarCollapsed]=useState(false);
   const intentionalLogout=useRef(false);
@@ -89,6 +93,8 @@ function PortalSession({ message, endSession }: { message: string; endSession: (
         setNav(rota.nav);setAgreementId(null);setImportAgreement('');setTicketLink(rota.chamado);
         if(rota.chamado)setTicketLinkVersion(value=>value+1);
         setSolicitacaoLink(rota.solicitacao);
+        setBaixaLink(rota.baixa || null);
+        if(rota.baixa)setBaixaLinkVersion(value=>value+1);
         if(rota.solicitacao)setSolicitacaoLinkVersion(value=>value+1);
         if(rota.aviso)setNotice({type:'error',text:rota.aviso});
       },window);
@@ -128,8 +134,9 @@ function PortalSession({ message, endSession }: { message: string; endSession: (
   return <main className="min-h-screen bg-background text-foreground">
     <Sidebar nav={nav} setNav={navigate} user={user} busy={busy} onLogout={logout} navegarAviso={(link:string) => {
         const params = new URL(link, window.location.origin).searchParams;
-        const chamado = params.get('chamado'), solicitacao = params.get('solicitacao');
-        if (solicitacao) navegacao.current?.navegar('solicitacoes',solicitacao);
+        const chamado = params.get('chamado'), solicitacao = params.get('solicitacao'), baixa = params.get('baixa');
+        if (baixa) navegacao.current?.navegar('baixas',baixa);
+        else if (solicitacao) navegacao.current?.navegar('solicitacoes',solicitacao);
         else if (chamado) navegacao.current?.navegar('tickets',chamado);
         else window.location.assign(link);
       }} collapsed={sidebarCollapsed} onToggle={()=>setSidebarCollapsed(value=>!value)}/>
@@ -146,6 +153,8 @@ function PortalSession({ message, endSession }: { message: string; endSession: (
       {pode(user, 'aba:tickets')&&nav==='tickets'&&<Tickets key={`${ticketLink}:${ticketLinkVersion}`} busy={busy} users={userList} run={run} initialDetail={ticketLink}/>}
       {pode(user, 'aba:solicitacoes')&&nav==='solicitacoes'&&<Solicitacoes key={`${solicitacaoLink}:${solicitacaoLinkVersion}`} user={user} initialDetail={solicitacaoLink} onOpen={(id:string|null)=>navegacao.current?.navegar('solicitacoes',id||undefined)}/>}
       {pode(user, 'aba:categorias')&&nav==='categorias'&&<CategoriasFornecedor/>}
+      {pode(user, 'aba:baixas')&&nav==='baixas'&&<Baixas key={`${baixaLink}:${baixaLinkVersion}`} user={user} initialDetail={baixaLink} onOpen={(id:string|null)=>navegacao.current?.navegar('baixas',id||undefined)}/>}
+      {pode(user, 'aba:estoques')&&nav==='estoques'&&<Estoques/>}
       {pode(user, 'aba:history')&&nav==='history'&&<ChangeHistory users={userList}/>}
       {pode(user, 'aba:admin')&&nav==='admin'&&<Administration user={user} busy={busy} run={run}/>}
       {pode(user, 'aba:reports')&&nav==='reports'&&<Reports/>}

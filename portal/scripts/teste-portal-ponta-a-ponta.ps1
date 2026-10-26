@@ -451,6 +451,10 @@ Verifica 'Cadastro de fornecedor usa consulta ficticia e respeita fluxo e posse 
   & node (Join-Path $PSScriptRoot 'teste-solicitacoes.mjs') $temp $arquivoBanco | Out-Host
   $LASTEXITCODE -eq 0
 }
+Verifica 'Baixa no estoque respeita perfis, transicoes, Central e cadastro' {
+  & node (Join-Path $PSScriptRoot 'teste-baixas.mjs') $temp $arquivoBanco | Out-Host
+  $LASTEXITCODE -eq 0
+}
 & node (Join-Path $PSScriptRoot 'teste-http-fluxo.mjs')
 $codigoFluxo = $LASTEXITCODE
 Remove-Item Env:PORTAL_TESTE_COOKIE, Env:PORTAL_TESTE_PORTA, Env:PORTAL_TESTE_DESCARTAVEL -ErrorAction SilentlyContinue

@@ -27,6 +27,15 @@ async function abrir(t,role,query='') {
   await setImmediate();tela.render();await setImmediate();tela.render();
   return {tela,janela};
 }
+for(const role of ['viewer','editor','admin'])void test(`navegacao baixa ${role}: link, Central e cadastro de estoques`,async t=>{
+  const {tela,janela}=await abrir(t,role,'?aba=chamados&baixa=baixa-ficticia');
+  assert.equal(tela.one('Baixas').initialDetail,'baixa-ficticia');assert.equal(tela.one('Sidebar').nav,'baixas');
+  tela.one('Baixas').onOpen(null);tela.render();assert.equal(janela.location.search,'?aba=chamados&sub=baixa-estoque');
+  tela.one('Sidebar').navegarAviso('/?aba=chamados&baixa=outra');tela.render();assert.equal(tela.one('Baixas').initialDetail,'outra');
+  janela.mover(-1);tela.render();assert.equal(tela.one('Baixas').initialDetail,null);
+  tela.one('Sidebar').setNav('estoques');tela.render();
+  if(role==='admin')tela.one('Estoques');else tela.one('SearchPage');
+});
 void test('Portal recarrega subaba do endereco; voltar e avancar mudam o conteudo e o menu',async t=>{
   const {tela,janela}=await abrir(t,'admin','?aba=cadastros&sub=catalogos');
   tela.one('Catalogs');assert.equal(tela.one('Sidebar').nav,'catalogs');

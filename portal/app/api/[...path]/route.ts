@@ -23,6 +23,7 @@ import { notificacoesApi } from '@/lib/notificacoes-api';
 import { logoMarca } from '@/lib/marca-api';
 import { centralApi } from '@/lib/central-api';
 import { solicitacoesApi } from '@/lib/solicitacoes-api';
+import { baixasApi } from '@/lib/baixas-api';
 import { exportacoesApi } from '@/lib/exportacoes-api';
 import { bootstrapApi } from '@/lib/bootstrap-api';
 import { PORTAL_BUILD, TELA_DESATUALIZADA, buildDivergente, ehEscrita } from '@/lib/portal-build';
@@ -124,6 +125,7 @@ const auditoria = auditoriaApi(contexto);
 const notificacoes = notificacoesApi(contexto);
 const central = centralApi(contexto);
 const solicitacoes = solicitacoesApi(contexto);
+const baixas = baixasApi(contexto);
 const exportacoes = exportacoesApi(contexto);
 const inicializacao = bootstrapApi(contexto, acordos, importacoes);
 
@@ -200,6 +202,15 @@ async function GETInterno(request: NextRequest) {
   const user = await requireUser(request);
   if (!user) return fail('Sessão expirada.', 401);
 
+  if (parts[0] === 'baixas') {
+    if (!pode(user, 'baixa:abrir')) return fail('Seu perfil não permite consultar baixas.', 403);
+    if (parts.length === 1) return baixas.listar(user, request.nextUrl.searchParams);
+    return parts.length === 2 ? baixas.detalhe(user, parts[1]) : fail('Rota não encontrada.', 404);
+  }
+  if (parts[0] === 'estoques') {
+    if (!pode(user, 'baixa:abrir') && !pode(user, 'estoque:gerenciar')) return fail('Seu perfil não permite consultar estoques.', 403);
+    return parts.length === 1 ? baixas.listarEstoques(user) : fail('Rota não encontrada.', 404);
+  }
   if (parts[0] === 'solicitacoes') {
     if (!pode(user, 'solicitacao:abrir')) return fail('Seu perfil não permite consultar solicitações.', 403);
     if (parts.length === 1) return solicitacoes.listar(user, request.nextUrl.searchParams);
@@ -288,6 +299,15 @@ async function POSTInterno(request: NextRequest) {
   const user = await requireUser(request);
   if (!user) return fail('Sessão expirada.', 401);
   if (await first(VALIDACAO_ATIVA_SQL)) return denyWrite(request, 'Atualização em validação. Aguarde para salvar ou executar.', 503);
+  if (parts[0] === 'baixas') {
+    if (!pode(user, parts.length === 1 ? 'baixa:abrir' : 'baixa:atender')) return denyWrite(request, 'Seu perfil não permite esta operação.');
+    if (parts.length === 1) return baixas.criar(request, user);
+    return parts.length === 3 && parts[2] === 'transicao' ? baixas.transicionar(request, user, parts[1]) : fail('Rota não encontrada.', 404);
+  }
+  if (parts[0] === 'estoques') {
+    if (!pode(user, 'estoque:gerenciar')) return denyWrite(request, 'Seu perfil não permite gerenciar estoques.');
+    return parts.length === 1 ? baixas.gravarEstoque(request, user) : fail('Rota não encontrada.', 404);
+  }
   if (parts[0] === 'solicitacoes') {
     const acao = parts.length === 1 ? 'solicitacao:abrir' : 'solicitacao:atender';
     if (!pode(user, acao)) return denyWrite(request, 'Seu perfil não permite esta operação.');
@@ -334,6 +354,10 @@ async function PUTInterno(request: NextRequest) {
   if (!user) return fail('Sessão expirada.', 401);
   if (await first(VALIDACAO_ATIVA_SQL)) return denyWrite(request, 'Atualização em validação. Aguarde para salvar ou executar.', 503);
   const partesSolicitacao = partsOf(request);
+  if (partesSolicitacao[0] === 'estoques') {
+    if (!pode(user, 'estoque:gerenciar')) return denyWrite(request, 'Seu perfil não permite gerenciar estoques.');
+    return partesSolicitacao.length === 2 ? baixas.gravarEstoque(request, user, partesSolicitacao[1]) : fail('Rota não encontrada.', 404);
+  }
   if (partesSolicitacao[0] === 'solicitacoes') {
     if (!pode(user, 'solicitacao:abrir')) return denyWrite(request, 'Seu perfil não permite corrigir solicitações.');
     return partesSolicitacao.length === 2 ? solicitacoes.corrigir(request, user, partesSolicitacao[1]) : fail('Rota não encontrada.', 404);
