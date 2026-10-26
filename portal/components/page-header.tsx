@@ -1,8 +1,8 @@
-'use client';
-import { createContext, useContext, type ReactNode } from 'react';
-import { abaDaChave, subabasPermitidas, type Nav } from '@/lib/navegacao';
-import type { UsuarioPermissao } from '@/lib/permissoes';
-import { Subabas } from './portal-subabas';
+"use client";
+import { createContext, useContext, type ReactNode } from "react";
+import { abaDaChave, subabasPermitidas, type Nav } from "@/lib/navegacao";
+import type { UsuarioPermissao } from "@/lib/permissoes";
+import { Subabas } from "./portal-subabas";
 
 type Contexto = {
   nav: Nav;
@@ -24,12 +24,12 @@ export function CabecalhoProvider({
   );
 }
 const titulos = {
-  buscar: 'Buscar preços',
-  manutencao: 'Manutenção',
-  chamados: 'Chamados',
-  acordos: 'Acordos',
-  cadastros: 'Cadastros',
-  administracao: 'Administração',
+  buscar: "Buscar preços",
+  manutencao: "Manutenção",
+  chamados: "Chamados",
+  acordos: "Acordos",
+  cadastros: "Cadastros",
+  administracao: "Administração",
 };
 
 /** Page-owned actions keep their existing handlers. */
@@ -47,18 +47,22 @@ export function PageHeader({
   back?: { label: string; onClick: () => void };
 }) {
   const contexto = useContext(ContextoCabecalho);
-  const aba = abaDaChave(contexto?.nav ?? 'search');
+  const aba = abaDaChave(contexto?.nav ?? "search");
   const unica = contexto ? subabasPermitidas(contexto.usuario, aba) : [];
+  // O nome da aba ja esta na barra lateral; so aparece titulo proprio da tela.
+  const visivel =
+    title ??
+    (unica.length === 1 && aba.subabas.length > 1 ? unica[0].label : null);
   return (
     <header className="patio-page-header">
       {back && (
         <a
           href={
-            aba.aba === 'chamados'
-              ? '/?aba=chamados'
-              : contexto?.nav === 'search'
-                ? '/?aba=buscar'
-                : '/?aba=acordos&sub=acordos'
+            aba.aba === "chamados"
+              ? "/?aba=chamados"
+              : contexto?.nav === "search"
+                ? "/?aba=buscar"
+                : "/?aba=acordos&sub=acordos"
           }
           className="patio-back"
           onClick={(e) => {
@@ -69,16 +73,13 @@ export function PageHeader({
           {back.label}
         </a>
       )}
-      <div className="patio-header-row">
+      {!visivel && <h1 className="sr-only">{titulos[aba.aba]}</h1>}
+      <div className="patio-header-row" hidden={!visivel && !actions}>
         <div className="patio-header-heading">
-          <h1 className="patio-page-title">
-            {title ?? (unica.length === 1 && aba.subabas.length > 1 ? unica[0].label : titulos[aba.aba])}
-          </h1>
+          {visivel && <h1 className="patio-page-title">{visivel}</h1>}
           {status && <div className="patio-header-status">{status}</div>}
         </div>
-        <div className="patio-header-actions">
-          {actions}
-        </div>
+        <div className="patio-header-actions">{actions}</div>
       </div>
       {description && <p className="patio-header-description">{description}</p>}
       {contexto && !back && (

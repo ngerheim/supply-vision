@@ -21,6 +21,16 @@ export function CentralNotificacoes({ navegar, collapsed = false }: { navegar: (
     return () => controller.abort();
   }, [aberta]);
   function fechar() { setAberta(false); sino.current?.focus(); }
+  useEffect(() => {
+    if (!aberta || typeof document === 'undefined') return;
+    const fora = (event: PointerEvent) => {
+      const alvo = event.target as Node | null;
+      if (alvo && (painel.current?.contains(alvo) || sino.current?.contains(alvo))) return;
+      setAberta(false);
+    };
+    document.addEventListener('pointerdown', fora);
+    return () => document.removeEventListener('pointerdown', fora);
+  }, [aberta]);
   async function marcar(item?: NotificacaoCentral) {
     if (gravando.current || !usuario) return;
     gravando.current = true;

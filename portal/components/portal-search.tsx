@@ -1,21 +1,21 @@
-'use client';
-import { PageHeader } from './page-header';
-import { api, errorText } from '@/lib/api';
+"use client";
+import { PageHeader } from "./page-header";
+import { api, errorText } from "@/lib/api";
 import {
   SearchMultiSelect,
   type SearchOption,
-} from '@/components/search-multi-select';
+} from "@/components/search-multi-select";
 import {
   CAMPOS_BUSCA,
   filtrosVazios,
   parametrosBusca,
-} from '@/lib/filtros-busca';
-import { useEffect, useRef, useState } from 'react';
-import { AlertTriangle, LoaderCircle, Search } from 'lucide-react';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader } from '@/components/ui/card';
+} from "@/lib/filtros-busca";
+import { useEffect, useRef, useState } from "react";
+import { AlertTriangle, LoaderCircle, Search } from "lucide-react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import {
   Table,
   TableBody,
@@ -23,13 +23,12 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from '@/components/ui/table';
+} from "@/components/ui/table";
 import {
   type JsonData,
   type AnyRow,
   money,
-  Empty,
-} from './portal-presentation';
+} from "./portal-presentation";
 
 export function SearchPage({
   catalogs,
@@ -41,8 +40,8 @@ export function SearchPage({
     [meta, setMeta] = useState<AnyRow>({}),
     [loading, setLoading] = useState(false),
     [searched, setSearched] = useState(false),
-    [searchError, setSearchError] = useState('');
-  const [searchedQuery, setSearchedQuery] = useState('');
+    [searchError, setSearchError] = useState("");
+  const [searchedQuery, setSearchedQuery] = useState("");
   const searchSequence = useRef(0);
   const searchController = useRef<AbortController | null>(null);
   type Options = Record<(typeof CAMPOS_BUSCA)[number], SearchOption[]>;
@@ -50,7 +49,7 @@ export function SearchPage({
     query: string;
     options: Options;
   } | null>(null);
-  const [optionError, setOptionError] = useState(''),
+  const [optionError, setOptionError] = useState(""),
     [optionRevision, setOptionRevision] = useState(0);
   const query = parametrosBusca(filters).toString();
   const loadingOptions = optionResult?.query !== query || !!optionError;
@@ -58,7 +57,7 @@ export function SearchPage({
     searchSequence.current++;
     searchController.current?.abort();
     setLoading(false);
-    setSearchError('');
+    setSearchError("");
     setSearched(false);
   };
   useEffect(
@@ -71,7 +70,7 @@ export function SearchPage({
   useEffect(() => {
     const controller = new AbortController();
     const timer = setTimeout(() => {
-      setOptionError('');
+      setOptionError("");
       void api<{ options: Options }>(`/api/search/options?${query}`, {
         signal: controller.signal,
       })
@@ -89,11 +88,11 @@ export function SearchPage({
     };
   }, [query, optionRevision]);
   const labels = {
-    state: 'Estado',
-    location: 'Cidade',
-    model: 'Modelo',
-    item: 'Peça ou serviço',
-    supplier: 'Fornecedor',
+    state: "Estado",
+    location: "Cidade",
+    model: "Modelo",
+    item: "Peça ou serviço",
+    supplier: "Fornecedor",
   };
   const selectedOptions: Options = {
     state: Array.from(
@@ -118,7 +117,7 @@ export function SearchPage({
     const pending = new AbortController();
     searchController.current = pending;
     setLoading(true);
-    setSearchError('');
+    setSearchError("");
     try {
       const p = parametrosBusca(filters);
       const x = await api(`/api/search?${p}`, { signal: pending.signal });
@@ -141,7 +140,7 @@ export function SearchPage({
       <PageHeader />
       <Card className="overflow-hidden">
         <CardContent className="patio-search-filters">
-          {(['state', 'location', 'model', 'item', 'supplier'] as const).map(
+          {(["state", "location", "model", "item", "supplier"] as const).map(
             (campo) => (
               <SearchMultiSelect
                 key={campo}
@@ -158,7 +157,7 @@ export function SearchPage({
             ),
           )}
           <div className="patio-search-actions">
-            {' '}
+            {" "}
             <Button
               variant="ghost"
               className="text-muted-foreground"
@@ -177,10 +176,9 @@ export function SearchPage({
               onClick={search}
               disabled={loading}
             >
-              {loading ? <LoaderCircle className="animate-spin" /> : <Search />}{' '}
+              {loading ? <LoaderCircle className="animate-spin" /> : <Search />}{" "}
               Pesquisar
             </Button>
-
           </div>
         </CardContent>
       </Card>
@@ -189,7 +187,7 @@ export function SearchPage({
           <AlertTriangle />
           <AlertTitle>Não foi possível atualizar os filtros</AlertTitle>
           <AlertDescription>
-            {optionError}{' '}
+            {optionError}{" "}
             <Button
               variant="outline"
               onClick={() => setOptionRevision((v) => v + 1)}
@@ -211,8 +209,8 @@ export function SearchPage({
           <CardHeader className="border-b">
             <p className="patio-result-count">
               {meta.truncated
-                ? `Mostrando ${rows.length.toLocaleString('pt-BR')} de ${Number(meta.total).toLocaleString('pt-BR')} condições`
-                : `${Number(meta.total ?? rows.length).toLocaleString('pt-BR')} ${Number(meta.total ?? rows.length) === 1 ? 'condição encontrada' : 'condições encontradas'}`}
+                ? `Mostrando ${rows.length.toLocaleString("pt-BR")} de ${Number(meta.total).toLocaleString("pt-BR")} condições`
+                : `${Number(meta.total ?? rows.length).toLocaleString("pt-BR")} ${Number(meta.total ?? rows.length) === 1 ? "condição encontrada" : "condições encontradas"}`}
             </p>
             {meta.truncated && (
               <Alert variant="destructive" className="mt-3">
@@ -228,13 +226,13 @@ export function SearchPage({
             <Table className="patio-search-table">
               <colgroup>
                 {[
-                  'item',
-                  'model',
-                  'supplier',
-                  'city',
-                  'brands',
-                  'unit',
-                  'price',
+                  "item",
+                  "model",
+                  "supplier",
+                  "city",
+                  "brands",
+                  "unit",
+                  "price",
                 ].map((c) => (
                   <col key={c} className={`search-col-${c}`} />
                 ))}
@@ -246,9 +244,7 @@ export function SearchPage({
                   <TableHead>Fornecedor</TableHead>
                   <TableHead>Cidade</TableHead>
                   <TableHead className="search-secondary-col">Marcas</TableHead>
-                  <TableHead className="search-secondary-col">
-                    Unid.
-                  </TableHead>
+                  <TableHead className="search-secondary-col">Unid.</TableHead>
                   <TableHead className="text-right">Preço</TableHead>
                 </TableRow>
               </TableHeader>
@@ -263,7 +259,7 @@ export function SearchPage({
                         {r.item}
                       </button>
                       <p className="search-item-meta text-xs text-muted-foreground">
-                        {r.brands || 'Livre'} · {r.unit}
+                        {r.brands || "Livre"} · {r.unit}
                       </p>
                     </TableCell>
                     <TableCell>{r.model}</TableCell>
@@ -280,7 +276,7 @@ export function SearchPage({
                       {r.city} / {r.state}
                     </TableCell>
                     <TableCell className="search-secondary-col text-muted-foreground">
-                      {r.brands || 'Livre'}
+                      {r.brands || "Livre"}
                     </TableCell>
                     <TableCell className="search-secondary-col">
                       {r.unit}
@@ -300,13 +296,7 @@ export function SearchPage({
             </Table>
           </CardContent>
         </Card>
-      ) : (
-        <Empty
-          icon={Search}
-          title="Monte sua pesquisa"
-
-        />
-      )}
+      ) : null}
     </div>
   );
 }

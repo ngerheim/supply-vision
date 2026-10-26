@@ -53,7 +53,7 @@ export function Maintenance({ url }: { url: string }) {
             key={recarga}
             src={url}
             title="Histórico de Manutenção — relatório do Power BI"
-            className="h-[calc(100vh-11rem)] min-h-[640px] w-full border-0"
+            className="h-[calc((100vh-11rem)/0.8)] min-h-[640px] w-full border-0"
             allowFullScreen
             sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-forms allow-downloads"
           />

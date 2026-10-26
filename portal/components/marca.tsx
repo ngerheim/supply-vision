@@ -7,6 +7,6 @@ export function Marca({ login = false }: { login?: boolean }) {
     {/* The public SVG endpoint must remain an isolated image document. */}
     {/* oxlint-disable-next-line next/no-img-element */}
     {!ausente && <img src="/api/marca/logo" alt="" onError={() => setAusente(true)}/>}
-    <p>Supply Vision</p>
+    {ausente && <p>Supply Vision</p>}
   </div>;
 }

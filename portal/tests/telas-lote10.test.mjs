@@ -82,12 +82,12 @@ void test('Central vazia identifica o estado e esconde marcar todas quando nao h
   assert.equal(tela.one('p').children,'Nenhuma notificação.');
 });
 
-void test('marca usa somente imagem publica e conserva nome quando o arquivo falha', async t => {
+void test('marca usa somente imagem publica e mostra o nome so quando o arquivo falha', async t => {
   const tela = await mount('marca','Marca',{});
   t.after(() => tela.unmount());
   const img = tela.one('img');
   assert.equal(img.src,'/api/marca/logo');
-  assert.equal(tela.one('p').children,'Supply Vision');
+  assert.equal(tela.find((n)=>n.type==='p'&&n.props.children==='Supply Vision').length,0);
   img.onError(); tela.render();
   assert.equal(tela.find(n => n.type==='img').length,0);
   assert.equal(tela.one('p').children,'Supply Vision');
@@ -202,7 +202,7 @@ void test('limpar filtros cancela pesquisa e erro antigo nao reaparece', async (
   await search;
   h.render();
   assert.equal(h.find((n) => n.props?.children === 'Falha antiga').length, 0);
-  assert.equal(h.one('Empty').title, 'Monte sua pesquisa');
+  assert.equal(h.find((n) => n.type === 'Empty').length, 0);
 });
 
 void test('pesquisa nova prevalece mesmo se a anterior ignorar cancelamento', async (t) => {
