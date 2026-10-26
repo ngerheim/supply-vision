@@ -90,7 +90,7 @@ void test('Cadastro de fornecedor pelo roteador e SQLite reais', async t => {
       assert.equal(sql.prepare('SELECT user_id FROM consultas_cnpj WHERE id=?').get(consulta.data.consultaId).user_id,'viewer');
       const antes = sql.prepare('SELECT COUNT(*) n FROM consultas_cnpj').get().n;
       revogar = true;
-      const barrada = await get(`solicitacoes/cnpj/${CNPJS_ENSAIO.ativa}`,'viewer');
+      const barrada = await get(`solicitacoes/cnpj/${CNPJS_ENSAIO.baixada}`,'viewer');
       assert.equal(barrada.status,403); assert.match(barrada.data.error,/sessão ou permissão mudou/);
       assert.equal(sql.prepare('SELECT COUNT(*) n FROM consultas_cnpj').get().n,antes);
       assert.equal((await get(`solicitacoes/cnpj/${CNPJS_ENSAIO.ativa}`,'viewer')).status,401);
