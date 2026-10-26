@@ -1,50 +1,316 @@
 'use client';
+import { CampoData } from './campo-data';
+import { PageHeader } from './page-header';
+import { Status } from './status';
 import { useEffect, useId, useState } from 'react';
 import { RefreshCw } from 'lucide-react';
 import { api, errorText } from '@/lib/api';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
-import { Table, TableHeader, TableHead, TableRow, TableCell, TableBody } from '@/components/ui/table';
+import {
+  NativeSelect,
+  NativeSelectOption,
+} from '@/components/ui/native-select';
+import {
+  Table,
+  TableHeader,
+  TableHead,
+  TableRow,
+  TableCell,
+  TableBody,
+} from '@/components/ui/table';
 type Row = Record<string, ReturnType<typeof JSON.parse>>;
-const statuses:Record<string,string>={pending:'Pendente',processing:'Enviando',sent:'Enviada',failed:'Falhou'};
-const types:Record<string,string>={atribuicao:'Atribuição',atualizacao:'Atualização',conclusao:'Conclusão',cancelamento:'Cancelamento',relatorio_diario:'Relatório diário'};
-export function EmailNotifications({users,run}:{users:Row[];run:(action:()=>Promise<void>,message:string)=>unknown}){
-  const fieldId=useId();
-  const [data,setData]=useState<Row|null>(null),[error,setError]=useState(''),[loading,setLoading]=useState(true),[page,setPage]=useState(1),[revision,setRevision]=useState(0);
-  const [filters,setFilters]=useState({q:'',recipient:'',status:'',type:'',from:'',to:''});
-  const filter=(key:keyof typeof filters,value:string)=>{setFilters({...filters,[key]:value});setPage(1);};
-  useEffect(()=>{
-    let active=true;
-    const controller=new AbortController();
-    queueMicrotask(()=>{if(active){setLoading(true);setError('');}});
-    const params=new URLSearchParams({...filters,page:String(page),pageSize:'25'});
-    void api(`/api/email-notifications?${params}`,{signal:controller.signal}).then(result=>{if(active)setData(result);}).catch(cause=>{if(active){setError(errorText(cause));setData(null);}}).finally(()=>{if(active)setLoading(false);});
-    return()=>{active=false;controller.abort();};
-  },[filters,page,revision]);
-  const select=(label:string,key:'status'|'type'|'recipient',options:Record<string,string>)=><label htmlFor={`${fieldId}-${key}`} className="space-y-1 text-sm"><span>{label}</span><NativeSelect aria-label={label} id={`${fieldId}-${key}`} className="w-full" value={filters[key]} onChange={e=>filter(key,e.target.value)}><NativeSelectOption value="">Todos</NativeSelectOption>{Object.entries(options).map(([id,name])=><NativeSelectOption key={id} value={id}>{name}</NativeSelectOption>)}</NativeSelect></label>;
-  return <div className="space-y-5">
-    <Card><CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
-      <label htmlFor={`${fieldId}-q`} className="space-y-1 text-sm"><span>Busca</span><Input id={`${fieldId}-q`} value={filters.q} onChange={e=>filter('q',e.target.value)}/></label>
-      {select('Destinatário','recipient',Object.fromEntries(users.map(u=>[u.id,u.name])))}
-      {select('Situação','status',statuses)}{select('Tipo','type',types)}
-      <label htmlFor={`${fieldId}-from`} className="space-y-1 text-sm"><span>De</span><Input id={`${fieldId}-from`} type="date" value={filters.from} onChange={e=>filter('from',e.target.value)}/></label>
-      <label htmlFor={`${fieldId}-to`} className="space-y-1 text-sm"><span>Até</span><Input id={`${fieldId}-to`} type="date" value={filters.to} onChange={e=>filter('to',e.target.value)}/></label>
-    </CardContent></Card>
-    <Card><CardHeader className="flex flex-row items-center justify-between"><CardTitle>Notificações por e-mail</CardTitle><Button variant="outline" onClick={()=>setRevision(r=>r+1)}><RefreshCw/> Atualizar</Button></CardHeader>
-      <CardContent className="px-0 pb-0"><Table className="w-full min-w-[950px] table-fixed"><colgroup>{[22,13,24,11,9,15,6].map((w,i)=><col key={i} style={{width:`${w}%`}}/>)}</colgroup>
-        <TableHeader><TableRow>{['Referência','Tipo','Destinatário','Situação','Tentativas','Data',''].map((name,i)=><TableHead key={i}>{name}</TableHead>)}</TableRow></TableHeader>
-        <TableBody>{!loading&&!error&&data?.notifications.map((item:Row)=><TableRow key={`${item.deliveryKind}:${item.id}`}>
-          <TableCell><p className="font-mono text-xs">{item.ticketCode}</p><p className="truncate" title={item.supplierName}>{item.supplierName}</p>{item.periodStart&&<p className="text-xs text-muted-foreground">{new Date(item.periodStart).toLocaleString('pt-BR')} até {new Date(item.periodEnd).toLocaleString('pt-BR')}</p>}</TableCell>
-          <TableCell className="truncate">{types[item.type]||item.type}</TableCell>
-          <TableCell><p className="truncate" title={item.recipientName}>{item.recipientName}</p><p className="truncate text-xs text-muted-foreground" title={item.recipientEmail}>{item.recipientEmail}</p></TableCell>
-          <TableCell>{statuses[item.status]||item.status}{item.lastError&&<p className="truncate text-xs text-red-700" title={item.lastError}>{item.lastError}</p>}</TableCell>
-          <TableCell>{item.attempts}</TableCell><TableCell className="whitespace-normal text-xs">{new Date(item.sentAt||item.createdAt).toLocaleString('pt-BR')}</TableCell>
-          <TableCell>{item.status==='failed'&&<Button size="icon-sm" variant="ghost" aria-label="Reenviar notificação" onClick={()=>{if(!window.confirm('Confira com o destinatário se esta entrega já chegou. Confirma o reenvio?'))return;run(async()=>{const rota=item.deliveryKind==='diario'?'daily-report-deliveries':'email-notifications';await api(`/api/${rota}/${item.id}/retry`,{method:'POST'});setRevision(r=>r+1);},'Reenvio colocado na fila.');}}><RefreshCw/></Button>}</TableCell>
-        </TableRow>)}</TableBody></Table>
-        {loading&&<p className="p-5 text-sm">Carregando…</p>}{error&&<p role="alert" className="p-5 text-sm text-destructive">{error}</p>}{!loading&&!error&&!data?.notifications.length&&<p className="p-5 text-sm">Nenhuma notificação com esses filtros.</p>}
-      </CardContent>{data&&data.pageCount>1&&<div className="flex justify-end gap-2 border-t p-3"><Button variant="outline" disabled={loading||data.page<=1} onClick={()=>setPage(data.page-1)}>Anterior</Button><Button variant="outline" disabled={loading||data.page>=data.pageCount} onClick={()=>setPage(data.page+1)}>Próxima</Button></div>}
-    </Card>
-  </div>;
+const statuses: Record<string, string> = {
+  pending: 'Pendente',
+  processing: 'Enviando',
+  sent: 'Enviada',
+  failed: 'Falhou',
+};
+const types: Record<string, string> = {
+  atribuicao: 'Atribuição',
+  atualizacao: 'Atualização',
+  conclusao: 'Conclusão',
+  cancelamento: 'Cancelamento',
+  relatorio_diario: 'Relatório diário',
+};
+export function EmailNotifications({
+  users,
+  run,
+}: {
+  users: Row[];
+  run: (action: () => Promise<void>, message: string) => unknown;
+}) {
+  const fieldId = useId();
+  const [data, setData] = useState<Row | null>(null),
+    [error, setError] = useState(''),
+    [loading, setLoading] = useState(true),
+    [page, setPage] = useState(1),
+    [revision, setRevision] = useState(0);
+  const [filters, setFilters] = useState({
+    q: '',
+    recipient: '',
+    status: '',
+    type: '',
+    from: '',
+    to: '',
+  });
+  const filter = (key: keyof typeof filters, value: string) => {
+    setFilters({ ...filters, [key]: value });
+    setPage(1);
+  };
+  useEffect(() => {
+    let active = true;
+    const controller = new AbortController();
+    queueMicrotask(() => {
+      if (active) {
+        setLoading(true);
+        setError('');
+      }
+    });
+    const params = new URLSearchParams({
+      ...filters,
+      page: String(page),
+      pageSize: '25',
+    });
+    void api(`/api/email-notifications?${params}`, {
+      signal: controller.signal,
+    })
+      .then((result) => {
+        if (active) setData(result);
+      })
+      .catch((cause) => {
+        if (active) {
+          setError(errorText(cause));
+          setData(null);
+        }
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [filters, page, revision]);
+  const select = (
+    label: string,
+    key: 'status' | 'type' | 'recipient',
+    options: Record<string, string>,
+  ) => (
+    <label htmlFor={`${fieldId}-${key}`} className="space-y-1 text-sm">
+      <span>{label}</span>
+      <NativeSelect
+        aria-label={label}
+        id={`${fieldId}-${key}`}
+        className="w-full"
+        value={filters[key]}
+        onChange={(e) => filter(key, e.target.value)}
+      >
+        <NativeSelectOption value="">Todos</NativeSelectOption>
+        {Object.entries(options).map(([id, name]) => (
+          <NativeSelectOption key={id} value={id}>
+            {name}
+          </NativeSelectOption>
+        ))}
+      </NativeSelect>
+    </label>
+  );
+  return (
+    <div className="patio-page">
+      <PageHeader
+        actions={
+          <Button variant="outline" onClick={() => setRevision((r) => r + 1)}>
+            <RefreshCw /> Atualizar
+          </Button>
+        }
+      />
+      <Card>
+        <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
+          <label htmlFor={`${fieldId}-q`} className="space-y-1 text-sm">
+            <span>Busca</span>
+            <Input
+              placeholder="Buscar"
+              id={`${fieldId}-q`}
+              value={filters.q}
+              onChange={(e) => filter('q', e.target.value)}
+            />
+          </label>
+          {select(
+            'Destinatário',
+            'recipient',
+            Object.fromEntries(users.map((u) => [u.id, u.name])),
+          )}
+          {select('Situação', 'status', statuses)}
+          {select('Tipo', 'type', types)}
+          <label htmlFor={`${fieldId}-from`} className="space-y-1 text-sm">
+            <span>De</span>
+            <CampoData
+              id={`${fieldId}-from`}
+
+              value={filters.from}
+              onChange={(value) => filter('from', value)}
+            />
+          </label>
+          <label htmlFor={`${fieldId}-to`} className="space-y-1 text-sm">
+            <span>Até</span>
+            <CampoData
+              id={`${fieldId}-to`}
+
+              value={filters.to}
+              onChange={(value) => filter('to', value)}
+            />
+          </label>
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <p className="patio-result-count">
+            {data?.total ?? 0}{' '}
+            {(data?.total ?? 0) === 1 ? 'notificação' : 'notificações'}
+          </p>
+        </CardHeader>
+        <CardContent className="px-0 pb-0">
+          <Table className="w-full min-w-[950px] table-fixed">
+            <colgroup>
+              {[22, 13, 24, 11, 9, 15, 6].map((w, i) => (
+                <col key={i} style={{ width: `${w}%` }} />
+              ))}
+            </colgroup>
+            <TableHeader>
+              <TableRow>
+                {[
+                  'Referência',
+                  'Tipo',
+                  'Destinatário',
+                  'Situação',
+                  'Tentativas',
+                  'Data',
+                  '',
+                ].map((name, i) => (
+                  <TableHead key={i}>{name}</TableHead>
+                ))}
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {!loading &&
+                !error &&
+                data?.notifications.map((item: Row) => (
+                  <TableRow key={`${item.deliveryKind}:${item.id}`}>
+                    <TableCell>
+                      <span className="text-xs text-link">
+                        {item.ticketCode}
+                      </span>
+                      <p className="truncate" title={item.supplierName}>
+                        {item.supplierName}
+                      </p>
+                      {item.periodStart && (
+                        <p className="text-xs text-muted-foreground">
+                          {new Date(item.periodStart).toLocaleString('pt-BR')}{' '}
+                          até {new Date(item.periodEnd).toLocaleString('pt-BR')}
+                        </p>
+                      )}
+                    </TableCell>
+                    <TableCell className="truncate">
+                      {types[item.type] || item.type}
+                    </TableCell>
+                    <TableCell>
+                      <p className="truncate" title={item.recipientName}>
+                        {item.recipientName}
+                      </p>
+                      <p
+                        className="truncate text-xs text-muted-foreground"
+                        title={item.recipientEmail}
+                      >
+                        {item.recipientEmail}
+                      </p>
+                    </TableCell>
+                    <TableCell>
+                      <Status value={item.status}>
+                        {statuses[item.status] || item.status}
+                      </Status>
+                      {item.lastError && (
+                        <p
+                          className="truncate text-xs text-muted-foreground"
+                          title={item.lastError}
+                        >
+                          {item.lastError}
+                        </p>
+                      )}
+                    </TableCell>
+                    <TableCell>{item.attempts}</TableCell>
+                    <TableCell className="whitespace-normal text-xs">
+                      {new Date(item.sentAt || item.createdAt).toLocaleString(
+                        'pt-BR',
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {item.status === 'failed' && (
+                        <Button
+                          size="icon-sm"
+                          variant="ghost"
+                          aria-label="Reenviar notificação"
+                          onClick={() => {
+                            if (
+                              !window.confirm(
+                                'Confira com o destinatário se esta entrega já chegou. Confirma o reenvio?',
+                              )
+                            )
+                              return;
+                            run(async () => {
+                              const rota =
+                                item.deliveryKind === 'diario'
+                                  ? 'daily-report-deliveries'
+                                  : 'email-notifications';
+                              await api(`/api/${rota}/${item.id}/retry`, {
+                                method: 'POST',
+                              });
+                              setRevision((r) => r + 1);
+                            }, 'Reenvio colocado na fila.');
+                          }}
+                        >
+                          <RefreshCw />
+                        </Button>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
+            </TableBody>
+          </Table>
+          {loading && <p className="p-5 text-sm">Carregando…</p>}
+          {error && (
+            <p role="alert" className="p-5 text-sm text-destructive">
+              {error}
+            </p>
+          )}
+          {!loading && !error && !data?.notifications.length && (
+            <p className="p-5 text-sm">
+              Nenhuma notificação com esses filtros.
+            </p>
+          )}
+        </CardContent>
+        {data && data.pageCount > 1 && (
+          <div className="flex items-center justify-end gap-2 border-t p-3">
+            <span className="mr-3 text-sm text-muted-foreground">
+              Página {data.page} de {data.pageCount}
+            </span>
+            <Button
+              variant="outline"
+              disabled={loading || data.page <= 1}
+              onClick={() => setPage(data.page - 1)}
+            >
+              Anterior
+            </Button>
+            <Button
+              variant="outline"
+              disabled={loading || data.page >= data.pageCount}
+              onClick={() => setPage(data.page + 1)}
+            >
+              Próxima
+            </Button>
+          </div>
+        )}
+      </Card>
+    </div>
+  );
 }

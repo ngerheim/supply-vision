@@ -1,4 +1,5 @@
 'use client';
+import { CampoData } from './campo-data';
 
 import { useState } from 'react';
 import { CheckCircle2, LoaderCircle } from 'lucide-react';
@@ -10,7 +11,6 @@ import { Checkbox } from '@/components/ui/checkbox';
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -75,9 +75,6 @@ export function AgreementDialog({
       >
         <DialogHeader>
           <DialogTitle>{form.id ? 'Editar acordo' : 'Novo acordo'}</DialogTitle>
-          <DialogDescription>
-            Informe o fornecedor, a vigência e as localidades do acordo.
-          </DialogDescription>
         </DialogHeader>
         <form
           onSubmit={(event) => {
@@ -112,22 +109,22 @@ export function AgreementDialog({
                   }))}
               />
               <Field label="Início da vigência *">
-                <Input
-                  type="date"
+                <CampoData
+
                   required
                   value={form.startDate || ''}
-                  onChange={(event) =>
-                    setForm({ ...form, startDate: event.target.value })
+                  onChange={(value) =>
+                    setForm({ ...form, startDate: value })
                   }
                 />
               </Field>
               <Field label="Fim da vigência (opcional)">
-                <Input
-                  type="date"
+                <CampoData
+
                   min={form.startDate || undefined}
                   value={form.endDate || ''}
-                  onChange={(event) =>
-                    setForm({ ...form, endDate: event.target.value })
+                  onChange={(value) =>
+                    setForm({ ...form, endDate: value })
                   }
                 />
               </Field>
@@ -159,7 +156,7 @@ export function AgreementDialog({
                   <Input
                     value={query}
                     onChange={(event) => setQuery(event.target.value)}
-                    placeholder="Digite parte do nome…"
+                    placeholder="Buscar"
                   />
                 </Field>
               </div>
@@ -272,10 +269,6 @@ export function ItemDialog({
           <DialogTitle>
             {editing ? 'Editar condição' : 'Nova condição acordada'}
           </DialogTitle>
-          <DialogDescription>
-            Escolha a peça, a cidade e o preço. Você pode aplicar o mesmo preço
-            a vários modelos.
-          </DialogDescription>
         </DialogHeader>
         <form
           onSubmit={(event) => {
@@ -343,7 +336,7 @@ export function ItemDialog({
                   <Input
                     value={query}
                     onChange={(event) => setQuery(event.target.value)}
-                    placeholder="Buscar modelo…"
+                    placeholder="Buscar"
                   />
                 </Field>
                 <div className="grid max-h-48 gap-1 overflow-y-auto rounded-xl border p-3 sm:grid-cols-2">

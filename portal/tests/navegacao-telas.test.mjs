@@ -30,7 +30,7 @@ async function abrir(t,role,query='') {
 void test('Portal recarrega subaba do endereco; voltar e avancar mudam o conteudo e o menu',async t=>{
   const {tela,janela}=await abrir(t,'admin','?aba=cadastros&sub=catalogos');
   tela.one('Catalogs');assert.equal(tela.one('Sidebar').nav,'catalogs');
-  assert.equal(tela.one('Subabas').nav,'catalogs');
+  assert.equal(tela.one('CabecalhoProvider').value.nav,'catalogs');
   tela.one('Sidebar').setNav('agreements');tela.render();
   assert.equal(janela.location.search,'?aba=acordos&sub=acordos');tela.one('Agreements');
   janela.mover(-1);tela.render();tela.one('Catalogs');
@@ -44,7 +44,7 @@ void test('buscar abre acordo e importacao preserva acordo pre-selecionado; Cent
   tela.one('AgreementDetail').onImport();tela.render();
   assert.equal(tela.one('Imports').initialAgreement,'acordo-ficticio');
   assert.equal(janela.location.search,'?aba=acordos&sub=importacoes');
-  tela.one('CentralNotificacoes').navegar('/?chamado=chamado-ficticio');tela.render();
+  tela.one('Sidebar').navegarAviso('/?chamado=chamado-ficticio');tela.render();
   assert.equal(tela.one('Tickets').initialDetail,'chamado-ficticio');
   assert.equal(janela.location.search,'?aba=chamados&chamado=chamado-ficticio');
   tela.one('Sidebar').setNav('search');tela.render();

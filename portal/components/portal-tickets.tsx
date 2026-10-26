@@ -1,4 +1,6 @@
 'use client';
+import { PageHeader } from './page-header';
+import { Plaquinha } from './plaquinha';
 import { COLUNAS_ORDENACAO_CHAMADOS } from '@/lib/operacao-dados';
 import { gerarChaveRelatorio } from '@/lib/relatorios';
 import { api, errorText } from '@/lib/api';
@@ -11,11 +13,14 @@ import {
   Pencil,
   Plus,
   RefreshCw,
+  CirclePlus,
+  ArrowRightLeft,
   Search,
 } from 'lucide-react';
-import { Badge } from '@/components/ui/badge';
+import { Status } from './status';
+import { Prioridade } from './prioridade';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import {
   Dialog,
   DialogContent,
@@ -46,21 +51,13 @@ import {
 import { useOrdenacao, CabecalhoOrdenavel } from './portal-table';
 
 const ticketStatusMap: AnyRow = {
-  aberto: ['Aberto', 'bg-sky-50 text-sky-700 ring-1 ring-sky-200'],
+  aberto: ['Aberto', 'bg-muted text-muted-foreground ring-1 ring-border'],
   aguardando_fornecedor: [
     'Aguardando fornecedor',
-    'bg-violet-50 text-violet-700 ring-1 ring-violet-200',
+    'bg-muted text-muted-foreground ring-1 ring-border',
   ],
-  fechado: [
-    'Fechado',
-    'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200',
-  ],
-  cancelado: ['Cancelado', 'bg-slate-100 text-slate-600 ring-1 ring-slate-200'],
-};
-const priorityMap: AnyRow = {
-  alta: ['Alta', 'bg-red-50 text-red-700'],
-  media: ['Média', 'bg-amber-50 text-amber-700'],
-  baixa: ['Baixa', 'bg-slate-100 text-slate-600'],
+  fechado: ['Fechado', 'bg-muted text-muted-foreground ring-1 ring-border'],
+  cancelado: ['Cancelado', 'bg-muted text-muted-foreground ring-1 ring-border'],
 };
 function tempoEmAberto(criadoEm: string, fechadoEm?: string | null) {
   const inicio = new Date(criadoEm).getTime(),
@@ -82,42 +79,36 @@ function Sla({ createdAt, closedAt }: JsonData) {
     return (
       <div>
         <p className="font-medium tabular-nums">{t.rotulo}</p>
-        <p className="text-[11px] text-muted-foreground">até o encerramento</p>
       </div>
     );
   const tom =
     t.dias >= 15
-      ? 'text-red-700'
+      ? 'text-muted-foreground'
       : t.dias >= 7
-        ? 'text-amber-700'
+        ? 'text-muted-foreground'
         : 'text-foreground';
   const aviso =
     t.dias >= 15
       ? 'acima de 15 dias'
       : t.dias >= 7
         ? 'acima de 7 dias'
-        : 'em andamento';
+        : '';
   return (
     <div>
       <p className={`font-semibold tabular-nums ${tom}`}>{t.rotulo}</p>
-      <p
+      {aviso && <p
         className={`text-[11px] ${t.dias >= 7 ? tom : 'text-muted-foreground'}`}
       >
         {aviso}
-      </p>
+      </p>}
     </div>
   );
 }
 function TicketStatus({ value }: JsonData) {
-  const x = ticketStatusMap[value] || [value, 'bg-slate-100'];
-  return <Badge className={x[1]}>{x[0]}</Badge>;
+  const x = ticketStatusMap[value] || [value, 'bg-muted'];
+  return <Status value={value}>{x[0]}</Status>;
 }
-export function Tickets({
-  busy,
-  users,
-  run,
-  initialDetail,
-}: JsonData) {
+export function Tickets({ busy, users, run, initialDetail }: JsonData) {
   const [data, setData] = useState<AnyRow | null>(null),
     [group, setGroup] = useState<'ativos' | 'fechados' | 'cancelados'>(
       'ativos',
@@ -165,7 +156,13 @@ export function Tickets({
   }, [load, q, consulta]);
   if (loadError)
     return <FalhaDeCarregamento erro={loadError} tentar={() => void load()} />;
-  if (!data) return <Loading label="Carregando chamados…" />;
+  if (!data)
+    return (
+      <div className="patio-page">
+        <PageHeader />
+        <Loading label="Carregando chamados…" compact />
+      </div>
+    );
   if (detail)
     return (
       <TicketDetail
@@ -189,27 +186,31 @@ export function Tickets({
     ['Fechados', s.fechado],
   ];
   return (
-    <div className="space-y-6">
-      <section className="grid gap-3 sm:grid-cols-3">
-        {cards.map(([label, value]: JsonData, i: number) => (
-          <Card
-            key={label}
-            className="overflow-hidden shadow-sm animate-in fade-in slide-in-from-bottom-2 fill-mode-both"
-            style={{ animationDelay: `${i * 60}ms` }}
+    <div className="patio-page">
+      <PageHeader
+        actions={
+          <Button
+            variant="create"
+            onClick={() => setOpen({ priority: 'media' })}
           >
-            <CardContent>
-              <p className="text-sm font-medium text-muted-foreground">
-                {label}
-              </p>
-              <p className="mt-2 text-4xl font-semibold tabular-nums tracking-[-.045em]">
-                {Number(value || 0)}
-              </p>
-            </CardContent>
-          </Card>
+            <Plus /> Novo chamado
+          </Button>
+        }
+      />
+
+      <section
+        className="patio-ticket-metrics"
+        aria-label="Resumo dos chamados"
+      >
+        {cards.map(([label, value]: JsonData) => (
+          <div key={label}>
+            <strong>{Number(value || 0)}</strong>
+            <span>{label}</span>
+          </div>
         ))}
       </section>
       <div
-        className="flex flex-wrap gap-2 rounded-xl border bg-muted/35 p-1.5"
+        className="patio-subabas patio-ticket-tabs"
         role="tablist"
         aria-label="Situação dos chamados"
       >
@@ -235,27 +236,16 @@ export function Tickets({
             }}
           >
             {label}
-            <Badge
-              className={
-                group === key
-                  ? 'bg-white/20 text-white'
-                  : 'bg-background text-foreground'
-              }
-            >
-              {Number(count || 0)}
-            </Badge>
+            <span className="patio-tab-count">{Number(count || 0)}</span>
           </Button>
         ))}
       </div>
-      <output>
-        {data.total} chamados; página {currentPage} de {pageCount}.
-      </output>
       <div className="flex flex-wrap gap-3">
         <div className="relative min-w-0 basis-64 flex-1">
           <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             className="pl-9"
-            placeholder="Código, fornecedor ou cidade"
+            placeholder="Buscar"
             aria-label="Pesquisar chamados"
             value={q}
             onChange={(e) => {
@@ -264,16 +254,18 @@ export function Tickets({
             }}
           />
         </div>
-        <Button onClick={() => setOpen({ priority: 'media' })}>
-          <Plus /> Novo chamado
-        </Button>
       </div>
       {rows.length ? (
         <Card className="min-w-0">
+          <CardHeader className="border-b">
+            <p className="patio-result-count">
+              {data.total} {data.total === 1 ? 'chamado' : 'chamados'}
+            </p>
+          </CardHeader>
           <CardContent className="min-w-0 px-0 pb-0">
             <Table className="w-full min-w-[900px] table-fixed">
               <colgroup>
-                {[9, 31, 11, 20, 14, 15].map((largura, indice) => (
+                {[12, 27, 10, 22, 14, 15].map((largura, indice) => (
                   <col key={indice} style={{ width: `${largura}%` }} />
                 ))}
               </colgroup>
@@ -300,11 +292,11 @@ export function Tickets({
                   <TableRow key={r.id}>
                     <TableCell>
                       <button
-                        className="block w-full truncate text-left font-mono text-xs font-semibold text-primary hover:underline"
+                        className="block w-full text-left text-link hover:underline"
                         title={r.code}
                         onClick={() => setDetail(r.id)}
                       >
-                        {r.code}
+                        <Plaquinha>{r.code}</Plaquinha>
                       </button>
                     </TableCell>
 
@@ -318,13 +310,7 @@ export function Tickets({
                     </TableCell>
 
                     <TableCell>
-                      <Badge
-                        className={
-                          (priorityMap[r.priority] || ['—', 'bg-slate-100'])[1]
-                        }
-                      >
-                        {(priorityMap[r.priority] || ['—'])[0]}
-                      </Badge>
+                      <Prioridade value={r.priority} />
                     </TableCell>
                     <TableCell>
                       <TicketStatus value={r.status} />
@@ -350,11 +336,13 @@ export function Tickets({
           />
         </Card>
       ) : (
-        <Empty
-          icon={MessageSquare}
-          title="Nenhum chamado"
-          text="Abra um chamado para registrar uma necessidade de negociação."
-        />
+        <div className="space-y-3">
+          <p className="patio-result-count">0 chamados</p>
+          <Empty
+            icon={MessageSquare}
+            title="Nenhum chamado"
+          />
+        </div>
       )}
       {open && (
         <TicketDialog
@@ -396,25 +384,29 @@ function TicketDetail({ busy, id, users, onBack, run }: JsonData) {
   const [loading, setLoading] = useState(false);
   const [statusRevision, setStatusRevision] = useState<number | null>(null);
   const loadSequence = useRef({ value: 0 });
-  const load = useCallback(async (resetStatus = true) => {
-    const sequence = ++loadSequence.current.value;
-    setLoading(true);
-    setLoadError('');
-    try {
-      const x = await api(`/api/tickets/${id}`);
-      if (sequence !== loadSequence.current.value) return;
-      setD(x);
-      if (resetStatus) {
-        setStatus(x.ticket.status);
-        setStatusMessage('');
-        setStatusRevision(x.ticket.revision);
+  const load = useCallback(
+    async (resetStatus = true) => {
+      const sequence = ++loadSequence.current.value;
+      setLoading(true);
+      setLoadError('');
+      try {
+        const x = await api(`/api/tickets/${id}`);
+        if (sequence !== loadSequence.current.value) return;
+        setD(x);
+        if (resetStatus) {
+          setStatus(x.ticket.status);
+          setStatusMessage('');
+          setStatusRevision(x.ticket.revision);
+        }
+      } catch (error) {
+        if (sequence === loadSequence.current.value)
+          setLoadError(errorText(error));
+      } finally {
+        if (sequence === loadSequence.current.value) setLoading(false);
       }
-    } catch (error) {
-      if (sequence === loadSequence.current.value) setLoadError(errorText(error));
-    } finally {
-      if (sequence === loadSequence.current.value) setLoading(false);
-    }
-  }, [id]);
+    },
+    [id],
+  );
   useEffect(() => {
     const sequence = loadSequence.current;
     let active = true;
@@ -430,42 +422,62 @@ function TicketDetail({ busy, id, users, onBack, run }: JsonData) {
     return (
       <FalhaDeCarregamento
         erro={loadError}
-        tentar={() => void load(!d || (status === d.ticket.status && !statusMessage))}
+        tentar={() =>
+          void load(!d || (status === d.ticket.status && !statusMessage))
+        }
         voltar={onBack}
       />
     );
-  if (!d) return <Loading label="Abrindo chamado…" />;
+  if (!d)
+    return (
+      <div className="patio-page">
+        <PageHeader />
+        <Loading label="Abrindo chamado…" compact />
+      </div>
+    );
   const t = d.ticket;
   return (
-    <div className="space-y-5">
-      <div className="flex flex-wrap items-center gap-3">
-        <Button variant="outline" onClick={onBack}>
-          ← Voltar
-        </Button>
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <h2 className="truncate text-2xl font-semibold tracking-[-.02em]">
+    <div className="patio-page">
+      <PageHeader
+        back={{ label: '← Chamados', onClick: onBack }}
+        title={
+          <>
+            <Plaquinha>{t.code}</Plaquinha>
+            <span className="patio-detail-name" title={t.supplier_name}>
               {t.supplier_name}
-            </h2>
+            </span>
+          </>
+        }
+        status={
+          <>
             <TicketStatus value={t.status} />
-            <Badge
-              className={(priorityMap[t.priority] || ['—', 'bg-slate-100'])[1]}
+            <Prioridade value={t.priority} />
+          </>
+        }
+        actions={
+          <>
+            <Button
+              disabled={busy || loading}
+              variant="outline"
+              onClick={() => {
+                if (
+                  (status !== t.status || statusMessage) &&
+                  !confirm(
+                    'Atualizar o chamado descarta a situação e a mensagem de alteração ainda não salvas. Continuar?',
+                  )
+                )
+                  return;
+                void load();
+              }}
             >
-              {(priorityMap[t.priority] || ['—'])[0]}
-            </Badge>
-          </div>
-          <p className="text-sm text-muted-foreground font-mono">{t.code}</p>
-        </div>
-        <Button disabled={busy || loading} variant="outline" onClick={() => {
-          if ((status !== t.status || statusMessage) && !confirm('Atualizar o chamado descarta a situação e a mensagem de alteração ainda não salvas. Continuar?')) return;
-          void load();
-        }}>
-          <RefreshCw /> Atualizar
-        </Button>
-        <Button disabled={busy || loading} onClick={() => setEditing(true)}>
-          <Pencil /> Editar chamado
-        </Button>
-      </div>
+              <RefreshCw /> Atualizar
+            </Button>
+            <Button disabled={busy || loading} onClick={() => setEditing(true)}>
+              <Pencil /> Editar chamado
+            </Button>
+          </>
+        }
+      />
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <Info
           label="Local"
@@ -485,7 +497,7 @@ function TicketDetail({ busy, id, users, onBack, run }: JsonData) {
         </Card>
       </section>
       {(t.scope || t.notes) && (
-        <Card size="sm" className="max-w-3xl">
+        <Card size="sm" className="w-full">
           <CardContent className="space-y-3 text-sm">
             {t.scope && (
               <div>
@@ -499,7 +511,7 @@ function TicketDetail({ busy, id, users, onBack, run }: JsonData) {
             )}
             {t.notes && (
               <div>
-                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                <p className="text-xs font-semibold tracking-wide text-muted-foreground">
                   Observações
                 </p>
                 <p className="mt-1 whitespace-pre-wrap">{t.notes}</p>
@@ -510,50 +522,55 @@ function TicketDetail({ busy, id, users, onBack, run }: JsonData) {
       )}
       <Card size="sm">
         <CardContent>
-        <fieldset disabled={busy || loading} className="grid gap-3 sm:grid-cols-[minmax(12rem,14rem)_minmax(0,1fr)_auto] sm:items-end">
-          <SelectField
-            label="Alterar para"
+          <fieldset
             disabled={busy || loading}
-            value={status}
-            onChange={setStatus}
-            rows={Object.entries(ticketStatusMap).map(([k, v]: JsonData) => ({
-              id: k,
-              name: v[0],
-            }))}
-          />
-          <Field label="Mensagem da alteração (opcional)">
-            <Input
-              value={statusMessage}
-              onChange={(e) => setStatusMessage(e.target.value)}
-            />
-          </Field>
-          <Button
-            disabled={busy || loading || status === t.status}
-            onClick={() =>
-              run(async () => {
-                await api(`/api/tickets/${id}`, {
-                  method: 'PUT',
-                  headers: { 'content-type': 'application/json' },
-                  body: JSON.stringify({
-                    status,
-                    statusMessage,
-                    expectedRevision: statusRevision,
-                  }),
-                });
-                await load();
-              }, 'Situação atualizada.')
-            }
+            className="grid gap-3 grid-cols-[minmax(240px,280px)_minmax(0,1fr)_auto] sm:items-end"
           >
-            <RefreshCw /> Aplicar
-          </Button>
-        </fieldset>
-        {statusRevision !== t.revision && <output className="mt-3 block text-sm">O chamado mudou. Sua alteração ainda não foi salva. Use Atualizar para conferir a situação atual antes de aplicar.</output>}
+            <SelectField
+              label="Alterar para"
+              disabled={busy || loading}
+              value={status}
+              onChange={setStatus}
+              rows={Object.entries(ticketStatusMap).map(([k, v]: JsonData) => ({
+                id: k,
+                name: v[0],
+              }))}
+            />
+            <Field label="Mensagem da alteração (opcional)">
+              <Input
+                value={statusMessage}
+                onChange={(e) => setStatusMessage(e.target.value)}
+              />
+            </Field>
+            <Button
+              disabled={busy || loading || status === t.status}
+              onClick={() =>
+                run(async () => {
+                  await api(`/api/tickets/${id}`, {
+                    method: 'PUT',
+                    headers: { 'content-type': 'application/json' },
+                    body: JSON.stringify({
+                      status,
+                      statusMessage,
+                      expectedRevision: statusRevision,
+                    }),
+                  });
+                  await load();
+                }, 'Situação atualizada.')
+              }
+            >
+              <RefreshCw /> Aplicar
+            </Button>
+          </fieldset>
+          {statusRevision !== t.revision && (
+            <output className="mt-3 block text-sm">
+              O chamado mudou. Sua alteração ainda não foi salva. Use Atualizar
+              para conferir a situação atual antes de aplicar.
+            </output>
+          )}
         </CardContent>
       </Card>
       <Card>
-        <CardHeader className="border-b">
-          <CardTitle>Histórico</CardTitle>
-        </CardHeader>
         <CardContent className="pt-5">
           <ol className="relative space-y-5 border-l border-dashed pl-6">
             {d.events.map((e: AnyRow) => (
@@ -561,9 +578,15 @@ function TicketDetail({ busy, id, users, onBack, run }: JsonData) {
                 key={e.id}
                 className="relative animate-in fade-in slide-in-from-left-2 fill-mode-both"
               >
-                <span
-                  className={`absolute -left-[31px] grid size-5 place-items-center rounded-full ring-4 ring-background ${e.kind === 'status' ? 'bg-amber-500' : e.kind === 'created' ? 'bg-teal-500' : 'bg-slate-300'}`}
-                />
+                <span className="patio-event-marker" aria-hidden="true">
+                  {e.kind === 'created' ? (
+                    <CirclePlus />
+                  ) : e.kind === 'status' ? (
+                    <ArrowRightLeft />
+                  ) : (
+                    <MessageSquare />
+                  )}
+                </span>
                 <div className="flex flex-wrap items-baseline gap-2">
                   <span className="text-sm font-semibold">
                     {e.user || 'Sistema'}
@@ -592,7 +615,11 @@ function TicketDetail({ busy, id, users, onBack, run }: JsonData) {
           </ol>
           <div className="mt-6 space-y-3 border-t pt-5">
             <Field label="Registrar andamento">
-              <Textarea disabled={busy || loading} value={msg} onChange={(e) => setMsg(e.target.value)} />
+              <Textarea
+                disabled={busy || loading}
+                value={msg}
+                onChange={(e) => setMsg(e.target.value)}
+              />
             </Field>
             <div className="flex justify-end">
               <Button
@@ -643,7 +670,11 @@ function TicketDetail({ busy, id, users, onBack, run }: JsonData) {
             agreementId: t.agreement_id,
             notes: t.notes,
           }}
-          responsavelAtual={t.assigned_to ? { id: t.assigned_to, name: t.assignedTo || 'Responsável atual' } : null}
+          responsavelAtual={
+            t.assigned_to
+              ? { id: t.assigned_to, name: t.assignedTo || 'Responsável atual' }
+              : null
+          }
           users={users}
           onClose={() => setEditing(false)}
           onSave={(body: AnyRow) =>
@@ -663,7 +694,15 @@ function TicketDetail({ busy, id, users, onBack, run }: JsonData) {
   );
 }
 
-function TicketDialog({ busy, open, value, users, responsavelAtual, onClose, onSave }: JsonData) {
+function TicketDialog({
+  busy,
+  open,
+  value,
+  users,
+  responsavelAtual,
+  onClose,
+  onSave,
+}: JsonData) {
   const [form, setForm] = useState<AnyRow>(value || { priority: 'media' }),
     editing = !!value?.id;
   const [submissionKey] = useState(() =>
@@ -722,7 +761,10 @@ function TicketDialog({ busy, open, value, users, responsavelAtual, onClose, onS
             disabled={busy}
             value={form.assignedTo || ''}
             onChange={(v: string) => setForm({ ...form, assignedTo: v })}
-            rows={opcoesResponsavelChamado(users || [], editing ? responsavelAtual : null)}
+            rows={opcoesResponsavelChamado(
+              users || [],
+              editing ? responsavelAtual : null,
+            )}
           />
 
           <Field label="Escopo pretendido" className="sm:col-span-2">

@@ -1,4 +1,5 @@
 'use client';
+import { PageHeader } from './page-header';
 import { BRAZILIAN_STATES } from '@/lib/domain';
 import { correspondeBusca } from '@/lib/busca';
 import { useState } from 'react';
@@ -11,11 +12,10 @@ import {
   Trash2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -32,7 +32,14 @@ import {
 import { type JsonData, type AnyRow, cnpj, Field } from './portal-presentation';
 import { useOrdenacao, CabecalhoOrdenavel } from './portal-table';
 
-export function CatalogPage({ type, rows, onAdd, onEdit, onDelete }: JsonData) {
+export function CatalogPage({
+  type,
+  rows,
+  onAdd,
+  onEdit,
+  onDelete,
+  tabs,
+}: JsonData) {
   const [q, setQ] = useState(''),
     [page, setPage] = useState(1);
   const { ordem, alternar, ordenar } = useOrdenacao(type);
@@ -54,12 +61,21 @@ export function CatalogPage({ type, rows, onAdd, onEdit, onDelete }: JsonData) {
         ? ordered.slice((currentPage - 1) * 25, currentPage * 25)
         : ordered;
   return (
-    <div className="space-y-5">
+    <div className="patio-page">
+      <PageHeader
+        actions={
+          <Button variant="create" onClick={onAdd}>
+            <Plus /> Novo
+          </Button>
+        }
+      />
+      {tabs}
       <div className="flex gap-3">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
-            className="pl-9"
+            placeholder="Buscar"
+              className="pl-9"
             aria-label={`Pesquisar ${names[type][0].toLowerCase()}`}
             value={q}
             onChange={(e) => {
@@ -68,11 +84,24 @@ export function CatalogPage({ type, rows, onAdd, onEdit, onDelete }: JsonData) {
             }}
           />
         </div>
-        <Button onClick={onAdd}>
-          <Plus /> Novo
-        </Button>
       </div>
       <Card>
+        <CardHeader className="border-b">
+          <p className="patio-result-count">
+            {list.length}{' '}
+            {list.length === 1
+              ? (
+                  {
+                    suppliers: 'fornecedor',
+                    items: 'peça ou serviço',
+                    models: 'modelo de veículo',
+                    units: 'unidade de medida',
+                    locations: 'localidade',
+                  } as AnyRow
+                )[type]
+              : names[type][0].toLowerCase()}
+          </p>
+        </CardHeader>
         <CardContent className="px-0 pb-0">
           <Table
             horizontalControls={type === 'suppliers'}
@@ -137,7 +166,10 @@ export function CatalogPage({ type, rows, onAdd, onEdit, onDelete }: JsonData) {
           </Table>
         </CardContent>
         {type === 'suppliers' && pageCount > 1 && (
-          <div className="flex justify-end gap-2 border-t p-3">
+          <div className="flex items-center justify-end gap-2 border-t p-3">
+            <span className="mr-3 text-sm text-muted-foreground">
+              Página {currentPage} de {pageCount}
+            </span>
             <Button
               variant="outline"
               disabled={currentPage === 1}
@@ -167,28 +199,29 @@ export function Catalogs({ data, onAdd, onEdit, onDelete }: JsonData) {
     locations: 'Localidades',
   };
   return (
-    <div className="space-y-5">
-      <div className="flex flex-wrap gap-2">
-        {Object.entries(labels).map(([k, v]) => (
-          <Button
-            key={k}
-            variant={type === k ? 'default' : 'outline'}
-            onClick={() => setType(k)}
-          >
-            {String(v)}
-          </Button>
-        ))}
-      </div>
-      <CatalogPage
-        type={type}
-        rows={data.catalogs[type]}
-        onAdd={() => onAdd(type)}
-        onEdit={(row: AnyRow) => onEdit(type, row)}
-        onDelete={(row: AnyRow) => onDelete(type, row)}
-      />
-    </div>
+    <CatalogPage
+      tabs={
+        <div className="patio-choice-tabs">
+          {Object.entries(labels).map(([k, v]) => (
+            <Button
+              key={k}
+              variant={type === k ? 'default' : 'outline'}
+              onClick={() => setType(k)}
+            >
+              {String(v)}
+            </Button>
+          ))}
+        </div>
+      }
+      type={type}
+      rows={data.catalogs[type]}
+      onAdd={() => onAdd(type)}
+      onEdit={(row: AnyRow) => onEdit(type, row)}
+      onDelete={(row: AnyRow) => onDelete(type, row)}
+    />
   );
 }
+
 function catalogHeaders(type: string) {
   if (type === 'suppliers') return ['Nome', 'CNPJ', 'Cidade', 'UF'];
   if (type === 'locations') return ['UF', 'Cidade'];
@@ -216,9 +249,6 @@ export function CatalogDialog({
       <DialogContent showCloseButton={!busy}>
         <DialogHeader>
           <DialogTitle>{form.id ? 'Editar' : 'Novo'} cadastro</DialogTitle>
-          <DialogDescription>
-            Os dados ficarão disponíveis para acordos e importações.
-          </DialogDescription>
         </DialogHeader>
         <fieldset disabled={busy} className="space-y-4">
           {t === 'suppliers' && (

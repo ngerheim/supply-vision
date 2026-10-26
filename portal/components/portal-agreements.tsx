@@ -1,12 +1,15 @@
 'use client';
+import { PageHeader } from './page-header';
+import { Plaquinha } from './plaquinha';
 import { correspondeSituacaoAcordo } from '@/lib/situacao-acordos';
 import { api, errorText, baixarArquivo } from '@/lib/api';
 import { correspondeBusca } from '@/lib/busca';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Download, Pencil, Plus, Search, Trash2, Upload } from 'lucide-react';
+import { Status as PatioStatus } from './status';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import {
   NativeSelect,
@@ -44,14 +47,38 @@ export function Agreements({ data, onOpen, onNew, canWrite }: JsonData) {
       correspondeSituacaoAcordo(r.effectiveStatus || r.status, status),
   );
   return (
-    <div className="space-y-5">
+    <div className="patio-page">
+      <PageHeader
+        actions={
+          <>
+            {' '}
+            {canWrite && (
+              <Button
+                variant="outline"
+                onClick={() => {
+                  void baixarArquivo('/api/export/agreements').catch((error) =>
+                    alert(errorText(error)),
+                  );
+                }}
+              >
+                <Download /> Exportar acordos
+              </Button>
+            )}
+            {canWrite && (
+              <Button variant="create" onClick={onNew}>
+                <Plus /> Novo
+              </Button>
+            )}
+          </>
+        }
+      />
       <div className="flex flex-wrap gap-3">
         <div className="relative min-w-0 basis-64 flex-1">
           <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             className="pl-9"
             aria-label="Pesquisar acordos"
-            placeholder="Número, fornecedor, CNPJ ou cidade"
+            placeholder="Buscar por nome, CNPJ ou cidade"
             value={q}
             onChange={(e) => setQ(e.target.value)}
           />
@@ -71,26 +98,11 @@ export function Agreements({ data, onOpen, onNew, canWrite }: JsonData) {
           <NativeSelectOption value="expired">Expirado</NativeSelectOption>
           <NativeSelectOption value="suspended">Suspenso</NativeSelectOption>
         </NativeSelect>
-        {canWrite && (
-          <Button
-            variant="outline"
-            onClick={() => {
-              void baixarArquivo('/api/export/agreements').catch(error => alert(errorText(error)));
-            }}
-          >
-            <Download /> Exportar acordos
-          </Button>
-        )}
-        {canWrite && (
-          <Button onClick={onNew}>
-            <Plus /> Novo
-          </Button>
-        )}
       </div>
       <AgreementTable
         rows={rows}
         onOpen={onOpen}
-        title={`${rows.length} acordos`}
+        title={`${rows.length} ${rows.length === 1 ? 'acordo' : 'acordos'}`}
       />
     </div>
   );
@@ -110,7 +122,7 @@ function AgreementTable({ rows, onOpen, title }: JsonData) {
   return (
     <Card>
       <CardHeader className="border-b">
-        <CardTitle>{title}</CardTitle>
+        <p className="patio-result-count">{title}</p>
       </CardHeader>
       <CardContent className="px-0 pb-0">
         <Table>
@@ -128,9 +140,13 @@ function AgreementTable({ rows, onOpen, title }: JsonData) {
               .map((r: AnyRow) => (
                 <TableRow key={r.id}>
                   <TableCell>
-                    <button className="text-left" onClick={() => onOpen(r.id)}>
-                      <span className="block font-mono text-xs font-semibold text-primary hover:underline">
-                        {r.number}
+                    <button
+                      className="text-left"
+                      aria-label={r.number}
+                      onClick={() => onOpen(r.id)}
+                    >
+                      <span className="block text-link hover:underline">
+                        <Plaquinha>{r.number}</Plaquinha>
                       </span>
                     </button>
                   </TableCell>
@@ -187,7 +203,10 @@ export function AgreementDetail({
   const key = `${id}?${querySort}`;
   // O bootstrap mudou: o detalhe anterior pode ter uma revisao ja consumida
   // pela edicao de uma condicao. Aguarde a nova leitura antes de abrir formularios.
-  const detail = snapshot?.key === key && snapshot.revision === revision ? snapshot.detail : null;
+  const detail =
+    snapshot?.key === key && snapshot.revision === revision
+      ? snapshot.detail
+      : null;
   const sequence = useRef(0);
   const controller = useRef<AbortController | null>(null);
   const moreRequest = useRef<number | null>(null);
@@ -272,73 +291,88 @@ export function AgreementDetail({
         </Button>
       </div>
     );
-  if (!detail) return <Loading label="Abrindo acordo…" />;
+  if (!detail)
+    return (
+      <div className="patio-page">
+        <PageHeader />
+        <Loading label="Abrindo acordo…" compact />
+      </div>
+    );
   const a = detail.agreement,
     items = detail.items.filter(
       (x: AnyRow) =>
         !q || correspondeBusca(`${x.item} ${x.model} ${x.city} ${x.brands}`, q),
     );
   return (
-    <div className="space-y-5">
-      <div className="flex flex-wrap items-center gap-3">
-        <Button variant="outline" onClick={onBack}>
-          ← Voltar
-        </Button>
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <h2 className="truncate text-2xl font-semibold">{a.number}</h2>
-            <Status value={a.effectiveStatus || a.status} />
-          </div>
-          <p className="text-sm text-muted-foreground">
-            {a.supplier} · {cnpj(a.cnpj)}
-          </p>
-        </div>
-        {canWrite && (
+    <div className="patio-page">
+      <PageHeader
+        back={{ label: '← Acordos', onClick: onBack }}
+        title={
           <>
-            <Button
-              variant="outline"
-              disabled={busy}
-              onClick={() =>
-                onEdit({
-                  ...a,
-                  locationIds: detail.locations.map((x: AnyRow) => x.id),
-                  supplierId: a.supplier_id,
-                  startDate: a.start_date,
-                  endDate: a.end_date,
-                })
-              }
-            >
-              <Pencil /> Editar acordo
-            </Button>
-            <Button variant="outline" onClick={onImport}>
-              <Upload /> Substituir tabela
-            </Button>
-            {canDelete && (
-              <Button
-                variant="outline"
-                className="text-destructive hover:bg-destructive/10"
-                onClick={() => onDelete(a, detail)}
-              >
-                <Trash2 /> Excluir acordo
-              </Button>
-            )}
-            <Button
-              onClick={() =>
-                onItem({
-                  agreementId: id,
-                  modelIds: [],
-                  price: '',
-                  locationIds: detail.locations.map((x: AnyRow) => x.id),
-                  locationId:
-                    detail.locations.length === 1 ? detail.locations[0].id : '',
-                })
-              }
-            >
-              <Plus /> Nova condição
-            </Button>
+            <Plaquinha>{a.number}</Plaquinha>
+            <span className="patio-detail-name" title={a.supplier}>
+              {a.supplier}
+            </span>
           </>
-        )}
-      </div>
+        }
+        status={<Status value={a.effectiveStatus || a.status} />}
+        description={cnpj(a.cnpj)}
+        actions={
+          <>
+            {canWrite && (
+              <>
+                <Button
+                  variant="outline"
+                  disabled={busy}
+                  onClick={() =>
+                    onEdit({
+                      ...a,
+                      locationIds: detail.locations.map((x: AnyRow) => x.id),
+                      supplierId: a.supplier_id,
+                      startDate: a.start_date,
+                      endDate: a.end_date,
+                    })
+                  }
+                >
+                  <Pencil /> Editar acordo
+                </Button>
+                <Button variant="outline" onClick={onImport}>
+                  <Upload /> Substituir tabela
+                </Button>
+                {canDelete && (
+                  <Button
+                    variant="outline"
+                    className="patio-action-delete text-destructive hover:bg-destructive/10"
+                    aria-label="Excluir acordo"
+                    title="Excluir acordo"
+                    onClick={() => onDelete(a, detail)}
+                  >
+                    <Trash2 />
+                    <span>Excluir acordo</span>
+                  </Button>
+                )}
+                <Button
+                  variant="create"
+                  onClick={() =>
+                    onItem({
+                      agreementId: id,
+                      modelIds: [],
+                      price: '',
+                      locationIds: detail.locations.map((x: AnyRow) => x.id),
+                      locationId:
+                        detail.locations.length === 1
+                          ? detail.locations[0].id
+                          : '',
+                    })
+                  }
+                >
+                  <Plus /> Nova condição
+                </Button>
+              </>
+            )}
+          </>
+        }
+      />
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <Info label="Início" value={date(a.start_date)} />
         <Info label="Fim" value={date(a.end_date)} />
@@ -355,12 +389,11 @@ export function AgreementDetail({
       )}
       <Card>
         <CardHeader className="border-b sm:grid-cols-[1fr_auto]">
-          <div>
-            <CardTitle>Tabela vigente</CardTitle>
-          </div>
+          <p className="patio-result-count">{detail.totalItems} {detail.totalItems === 1 ? 'condição' : 'condições'}</p>
           <div className="relative">
             <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input
+              placeholder="Buscar"
               className="pl-9"
               aria-label="Filtrar condições carregadas"
               value={q}
@@ -399,7 +432,9 @@ export function AgreementDetail({
                   <TableCell>{r.unit}</TableCell>
                   <TableCell className="text-right font-semibold">
                     {r.courtesy ? (
-                      <Badge className="bg-sky-50 text-sky-700">Cortesia</Badge>
+                      <Badge className="bg-muted text-muted-foreground">
+                        Cortesia
+                      </Badge>
                     ) : (
                       money(r.price)
                     )}
@@ -454,8 +489,7 @@ export function AgreementDetail({
         {detail.items.length < detail.totalItems && (
           <div className="space-y-2 p-4">
             <p className="text-sm text-muted-foreground">
-              A ordenação considera todas as condições. O filtro considera
-              apenas as já carregadas.
+              O filtro considera apenas as condições carregadas.
             </p>
             <Button
               variant="outline"
@@ -473,18 +507,21 @@ export function AgreementDetail({
 
 function Status({ value }: JsonData) {
   const map: AnyRow = {
-    active: [
-      'Vigente',
-      'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200',
+    active: ['Vigente', 'bg-muted text-muted-foreground ring-1 ring-border'],
+    scheduled: [
+      'Agendado',
+      'bg-muted text-muted-foreground ring-1 ring-border',
     ],
-    scheduled: ['Agendado', 'bg-sky-50 text-sky-700 ring-1 ring-sky-200'],
     expiring: [
       'Vence em até 60 dias',
-      'bg-amber-50 text-amber-700 ring-1 ring-amber-200',
+      'bg-muted text-muted-foreground ring-1 ring-border',
     ],
-    expired: ['Expirado', 'bg-red-50 text-red-700 ring-1 ring-red-200'],
-    suspended: ['Suspenso', 'bg-amber-50 text-amber-700 ring-1 ring-amber-200'],
+    expired: ['Expirado', 'bg-muted text-muted-foreground ring-1 ring-border'],
+    suspended: [
+      'Suspenso',
+      'bg-muted text-muted-foreground ring-1 ring-border',
+    ],
   };
-  const x = map[value] || [value, 'bg-slate-100'];
-  return <Badge className={x[1]}>{x[0]}</Badge>;
+  const x = map[value] || [value, 'bg-muted'];
+  return <PatioStatus value={value}>{x[0]}</PatioStatus>;
 }

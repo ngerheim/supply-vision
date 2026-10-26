@@ -155,6 +155,10 @@ export async function mount(file, name, props, overrides = {}, globals = {}) {
         if (!node || typeof node !== 'object') return;
         if (predicate(node)) found.push(node);
         visit(node.props?.children);
+        visit(node.props?.actions);
+        visit(node.props?.title);
+        visit(node.props?.status);
+        visit(node.props?.tabs);
       };
       visit(tree);
       return found;

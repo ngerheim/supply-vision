@@ -33,6 +33,7 @@ Abbreviated paths in a cell share the directory of the first file.
 ## Invariants
 
 ### Configuration and data location
+- The company logo lives at `<private root>/portal/marca/logo.svg` and is never versioned.
 - `SUPPLY_VISION_PRIVADO` selects the private root (default `privado/`). Readers: Node `portal/scripts/configuracao.mjs` and `caminhos.mjs`, Python `sv_paths.py`, PowerShell `Obter-PastaPrivada` and `Ler-ConfigOperacao`. Templates live in `*.env.example` and `*.exemplo.*`; check precedence in the reader before relying on it.
 - `portal/scripts/banco-local.mjs` is the only database locator (`localizarBanco`, `diretorioBanco`, `destinoBanco`) for the Portal, consumers, PowerShell and tests. Keep the file name and `portal/banco/estado/state/v3/d1/miniflare-D1DatabaseObject/` under the private root. Never search recursively or choose between ambiguous databases. Operation never creates a missing database; fixtures create `portal.sqlite` only with `PORTAL_CRIAR_BANCO=1` and either `MODO_ENSAIO=1` or `CI=true`.
 

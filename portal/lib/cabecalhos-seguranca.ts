@@ -14,6 +14,13 @@ export const CABECALHOS_SEGURANCA: Record<string, string> = {
   'X-Frame-Options': 'DENY',
 };
 
+export const CABECALHOS_MARCA = {
+  'content-type': 'image/svg+xml',
+  'x-content-type-options': 'nosniff',
+  'content-security-policy': "default-src 'none'; style-src 'unsafe-inline'; sandbox",
+  'cache-control': 'public, max-age=60',
+};
+
 export function cabecalhosComNonce(nonce: string): Record<string, string> {
   if (!/^[A-Za-z0-9+/_=-]+$/.test(nonce)) throw new Error('Nonce invalido.');
   return { ...CABECALHOS_SEGURANCA,

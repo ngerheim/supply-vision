@@ -35,6 +35,21 @@ const { CabecalhoOrdenavel } = await import('../components/portal-table.tsx');
 const { Field, Info, Loading, SelectField, money, date } = await import('../components/portal-presentation.tsx');
 const { Dialog, DialogFooter } = await import('../components/ui/dialog.tsx');
 const { Input } = await import('../components/ui/input.tsx');
+const { Status } = await import('../components/status.tsx');
+const { Plaquinha } = await import('../components/plaquinha.tsx');
+
+void test('status conserva texto e distingue estados por cor e forma; plaquinha e texto copiavel', () => {
+  for (const [value,tom,forma] of [['aberto','open','circle'],['em_analise','waiting','clock-3'],['devolvido','returned','corner-up-left'],['fechado','done','check'],['cancelado','cancelled','x']]) {
+    const html = renderToStaticMarkup(h(Status,{value},'Rótulo existente'));
+    assert.ok(html.includes(`patio-status-${tom}`));
+    assert.ok(html.includes(`lucide-${forma}`));
+    assert.ok(html.includes('Rótulo existente'));
+    assert.ok(html.includes('aria-hidden="true"'));
+  }
+  const placa = renderToStaticMarkup(h(Plaquinha,null,'SUP-123 <teste>'));
+  assert.ok(placa.includes('SUP-123 &lt;teste&gt;'));
+  assert.ok(!placa.includes('<img') && !placa.includes('<svg'));
+});
 
 for (const [role, allowed, forbidden] of [
   ['viewer', ['Buscar', 'Manutenção'], ['Chamados', 'Acordos', 'Relatórios', 'Usuários']],
@@ -94,4 +109,38 @@ void test('formatacao brasileira e fechamento em portugues permanecem disponivei
   const html = renderToStaticMarkup(h(Dialog, { open: true }, h(DialogFooter, { showCloseButton: true })));
   assert.ok(html.includes('Fechar'));
   assert.ok(!html.includes('>Close<'));
+});
+
+const { PageHeader, CabecalhoProvider } = await import('../components/page-header.tsx');
+const { Login } = await import('../components/portal-login.tsx');
+void test('cabecalho compartilhado tem um H1, acoes da pagina e subabas por permissao', () => {
+  for (const [nav,title] of [['search','Buscar preços'],['maintenance','Manutenção'],['tickets','Chamados'],['agreements','Acordos'],['suppliers','Cadastros'],['reports','Administração']]) {
+    const html = renderToStaticMarkup(h(CabecalhoProvider,{value:{nav,usuario:{role:'admin'},navegar(){},navegarAviso(){}}},h(PageHeader,{actions:h('button',null,'Ação da página')})));
+    const primeiro=html.indexOf('<h1');
+    assert.ok(primeiro>=0 && html.indexOf('<h1',primeiro+1)===-1);
+    assert.ok(html.includes(title));
+    assert.ok(html.includes('Ação da página'));
+    assert.ok(!html.includes('central-notificacoes'));
+    if(nav==='reports') assert.ok(html.includes('Subabas de Administração'));
+  }
+});
+void test('login valida campos no envio e conserva acao Entrar habilitada com campos vazios', () => {
+  const html=renderToStaticMarkup(h(Login,{onLogin(){}}));
+  assert.ok(html.includes('patio-login-brand') && html.includes('patio-login-form-panel'));
+  assert.ok(html.includes('required=""'));
+  assert.ok(html.includes('type="email"') && html.includes('type="password"'));
+  const botao=html.slice(html.indexOf('<button'));
+  assert.ok(!botao.includes('disabled=""'));
+});
+
+void test('detalhes ocultam subabas da lista e notificacoes ficam antes do usuario', () => {
+  const html = renderToStaticMarkup(h(CabecalhoProvider,{value:{nav:'agreements',usuario:{role:'admin'},navegar(){}}},h(PageHeader,{back:{label:'← Acordos',onClick(){}},title:'Detalhe'})));
+  assert.ok(html.includes('← Acordos'));
+  assert.ok(!html.includes('role="tab"'));
+  const sidebar = renderToStaticMarkup(h(Sidebar,{user:{role:'admin',name:'Pessoa fictícia'},nav:'search'}));
+  assert.ok(sidebar.indexOf('aria-controls="central-notificacoes"') < sidebar.indexOf('patio-sidebar-user'));
+  assert.ok(sidebar.includes('>Notificações</span>'));
+  const collapsed = renderToStaticMarkup(h(Sidebar,{user:{role:'admin'},nav:'search',collapsed:true}));
+  assert.ok(collapsed.includes('aria-controls="central-notificacoes"'));
+  assert.ok(!collapsed.includes('>Notificações</span>'));
 });

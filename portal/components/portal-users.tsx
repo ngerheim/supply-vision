@@ -1,12 +1,14 @@
 'use client';
+import { PageHeader } from './page-header';
 import { pode } from '@/lib/permissoes';
 import { api, errorText, baixarArquivo } from '@/lib/api';
 import { MIN_PASSWORD_LENGTH, validatePassword } from '@/lib/domain';
 import { useCallback, useEffect, useState } from 'react';
 import { CheckCircle2, Download, Pencil, Plus } from 'lucide-react';
+import { Status } from './status';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
   Dialog,
@@ -49,38 +51,71 @@ export function Administration({ user, busy, run }: JsonData) {
   useEffect(() => {
     const controller = new AbortController();
     queueMicrotask(() => {
-      if (!controller.signal.aborted) void load(controller.signal).catch(error => {
-        if (!controller.signal.aborted) setLoadError(errorText(error));
-      });
+      if (!controller.signal.aborted)
+        void load(controller.signal).catch((error) => {
+          if (!controller.signal.aborted) setLoadError(errorText(error));
+        });
     });
     return () => controller.abort();
   }, [load]);
   const podeGerenciar = pode(user, 'usuario:gerenciar');
-  if (loadError) return <FalhaDeCarregamento erro={loadError} tentar={() => void load().catch(error => setLoadError(errorText(error)))}/>;
-  if (!users) return <Loading label="Carregando usuários…"/>;
-  return (
-    <div className="space-y-5">
-      <div className="flex flex-wrap justify-between gap-3">
-        <div className="flex gap-2">
-          <Button
-            variant="outline"
-            onClick={() =>
-              void baixarArquivo('/api/export').catch(error => setLoadError(errorText(error)))
-            }
-          >
-            <Download /> Exportar dados
-          </Button>
-          <Button disabled={busy} variant="outline" onClick={() => void run(load)}>
-            Atualizar lista
-          </Button>
-          {podeGerenciar && (
-            <Button disabled={busy} onClick={() => setOpen(true)}>
-              <Plus /> Novo usuário
-            </Button>
-          )}
-        </div>
+  if (loadError)
+    return (
+      <FalhaDeCarregamento
+        erro={loadError}
+        tentar={() =>
+          void load().catch((error) => setLoadError(errorText(error)))
+        }
+      />
+    );
+  if (!users)
+    return (
+      <div className="patio-page">
+        <PageHeader />
+        <Loading label="Carregando usuários…" compact />
       </div>
+    );
+  return (
+    <div className="patio-page">
+      <PageHeader
+        actions={
+          <>
+            {' '}
+            <Button
+              variant="outline"
+              onClick={() =>
+                void baixarArquivo('/api/export').catch((error) =>
+                  setLoadError(errorText(error)),
+                )
+              }
+            >
+              <Download /> Exportar dados
+            </Button>
+            <Button
+              disabled={busy}
+              variant="outline"
+              onClick={() => void run(load)}
+            >
+              Atualizar lista
+            </Button>
+            {podeGerenciar && (
+              <Button
+                variant="create"
+                disabled={busy}
+                onClick={() => setOpen(true)}
+              >
+                <Plus /> Novo usuário
+              </Button>
+            )}
+          </>
+        }
+      />
       <Card>
+        <CardHeader className="border-b">
+          <p className="patio-result-count">
+            {users.length} {users.length === 1 ? 'usuário' : 'usuários'}
+          </p>
+        </CardHeader>
         <CardContent className="px-0 pb-0">
           <Table>
             <TableHeader>
@@ -95,24 +130,26 @@ export function Administration({ user, busy, run }: JsonData) {
             </TableHeader>
             <TableBody>
               {users.map((r) => (
-                <TableRow key={r.id} className={r.active ? '' : 'opacity-50'}>
+                <TableRow key={r.id}>
                   <TableCell className="font-medium">
-                    {r.name}
+                    <div className="flex min-w-0 items-center gap-2">
+                    <span className="truncate" title={r.name}>{r.name}</span>
                     {r.id === user.id ? (
-                      <Badge className="ml-2 bg-teal-50 text-teal-700">
+                      <Badge className="shrink-0 bg-muted text-muted-foreground">
                         você
                       </Badge>
                     ) : null}
+                    </div>
                   </TableCell>
                   <TableCell className="text-sm">{r.email}</TableCell>
                   <TableCell>
                     <Badge
                       className={
                         r.role === 'admin'
-                          ? 'bg-violet-50 text-violet-700'
+                          ? 'bg-muted text-muted-foreground'
                           : r.role === 'editor'
-                            ? 'bg-sky-50 text-sky-700'
-                            : 'bg-slate-100 text-slate-600'
+                            ? 'bg-muted text-muted-foreground'
+                            : 'bg-muted text-muted-foreground'
                       }
                     >
                       {roleName(r.role)}
@@ -130,15 +167,9 @@ export function Administration({ user, busy, run }: JsonData) {
                     )}
                   </TableCell>
                   <TableCell>
-                    <Badge
-                      className={
-                        r.active
-                          ? 'bg-emerald-50 text-emerald-700'
-                          : 'bg-slate-100 text-slate-600'
-                      }
-                    >
+                    <Status value={r.active ? 'active' : 'cancelled'}>
                       {r.active ? 'Ativo' : 'Inativo'}
-                    </Badge>
+                    </Status>
                   </TableCell>
                   <TableCell className="text-right">
                     {podeGerenciar && (
@@ -159,22 +190,24 @@ export function Administration({ user, busy, run }: JsonData) {
           </Table>
         </CardContent>
       </Card>
-      {open && <UserDialog
-        open
-        busy={busy}
-        onClose={() => setOpen(false)}
-        onSave={(body: AnyRow) =>
-          run(async () => {
-            await api('/api/users', {
-              method: 'POST',
-              headers: { 'content-type': 'application/json' },
-              body: JSON.stringify(body),
-            });
-            setOpen(false);
-            await load().catch(error => setLoadError(errorText(error)));
-          }, 'Usuário criado.')
-        }
-      />}
+      {open && (
+        <UserDialog
+          open
+          busy={busy}
+          onClose={() => setOpen(false)}
+          onSave={(body: AnyRow) =>
+            run(async () => {
+              await api('/api/users', {
+                method: 'POST',
+                headers: { 'content-type': 'application/json' },
+                body: JSON.stringify(body),
+              });
+              setOpen(false);
+              await load().catch((error) => setLoadError(errorText(error)));
+            }, 'Usuário criado.')
+          }
+        />
+      )}
       {edit && (
         <UserEditDialog
           open
@@ -190,7 +223,7 @@ export function Administration({ user, busy, run }: JsonData) {
                 body: JSON.stringify(body),
               });
               setEdit(null);
-              await load().catch(error => setLoadError(errorText(error)));
+              await load().catch((error) => setLoadError(errorText(error)));
             }, 'Usuário atualizado.')
           }
         />
@@ -199,7 +232,14 @@ export function Administration({ user, busy, run }: JsonData) {
   );
 }
 
-function UserEditDialog({ open, busy, value, self, onClose, onSave }: JsonData) {
+function UserEditDialog({
+  open,
+  busy,
+  value,
+  self,
+  onClose,
+  onSave,
+}: JsonData) {
   const [form, setForm] = useState<AnyRow>({
     ...value,
     expectedRevision: value.revision,
@@ -377,7 +417,9 @@ function UserDialog({ open, busy, onClose, onSave }: JsonData) {
             Cancelar
           </Button>
           <Button
-            disabled={busy || !!passwordError || !form.name.trim() || !form.email.trim()}
+            disabled={
+              busy || !!passwordError || !form.name.trim() || !form.email.trim()
+            }
             onClick={() => !busy && !passwordError && onSave(form)}
           >
             Criar usuário
