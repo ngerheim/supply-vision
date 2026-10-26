@@ -77,7 +77,7 @@ exit /b %SV_RESULTADO_NPM%
  $tarefasDepois=@(Get-ScheduledTask|ForEach-Object {$_.TaskPath+$_.TaskName}|Sort-Object)
  $firewallDepois=@(Get-NetFirewallRule|Select-Object Name,Enabled,Action,Direction,Profile|Sort-Object Name|ConvertTo-Json -Depth 3)
  if(Compare-Object $tarefasAntes $tarefasDepois){throw 'npm.cmd test alterou tarefas agendadas.'}
- if(($firewallAntes-join '')-ne($firewallDepois-join '')){throw 'npm.cmd test alterou regras de firewall.'}
+ if(($firewallAntes-join '')-ne($firewallDepois-join '')){Write-Host ('Diferenca nas regras de firewall (<= antes, => depois):'+[Environment]::NewLine+((Compare-Object $firewallAntes $firewallDepois|Out-String)));throw 'npm.cmd test alterou regras de firewall.'}
  if($gitAntes-ne(& git -C $raiz status --porcelain --untracked-files=all|Out-String)){throw 'npm.cmd test escreveu no checkout.'}
  Write-Host 'npm.cmd test sem elevacao: nenhuma tarefa, regra de firewall ou escrita no checkout.'
 
