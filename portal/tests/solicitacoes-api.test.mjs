@@ -121,6 +121,9 @@ void test('Cadastro de fornecedor pelo roteador e SQLite reais', async t => {
     assert.equal((await get('solicitacoes/cnpj/11111111111111', 'viewer')).status, 400);
     const consulta = await get(`solicitacoes/cnpj/${CNPJS_ENSAIO.principalFora}`, 'viewer');
     assert.equal(consulta.status, 200); assert.equal(consulta.data.consulta_fonte, 'ReceitaWS'); assert.ok(consulta.data.consultaId);
+    const repetida = await get(`solicitacoes/cnpj/${CNPJS_ENSAIO.principalFora}`, 'viewer');
+    assert.equal(repetida.data.consultaId, consulta.data.consultaId);
+    assert.equal(repetida.data.consultada_em, consulta.data.consultada_em);
     assert.equal((await get(`solicitacoes/cnpj/${CNPJS_ENSAIO.inexistente}`, 'viewer')).status, 404);
     const falha = await get(`solicitacoes/cnpj/${CNPJS_ENSAIO.ambasFora}`, 'viewer'); assert.equal(falha.status, 503); assert.match(falha.data.error, /Preencha os dados manualmente/);
     assert.equal((await get('solicitacoes/cep/00000000', 'viewer')).data.cidade, 'Cidade Fictícia');
