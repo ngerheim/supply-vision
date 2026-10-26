@@ -180,11 +180,6 @@ export function Tickets({ busy, users, run, initialDetail }: JsonData) {
   const rows = data.tickets || [];
   const pageCount = data.pageCount,
     currentPage = data.page;
-  const cards = [
-    ['Abertos', s.aberto],
-    ['Aguardando', s.aguardando],
-    ['Fechados', s.fechado],
-  ];
   return (
     <div className="patio-page">
       <PageHeader
@@ -198,17 +193,6 @@ export function Tickets({ busy, users, run, initialDetail }: JsonData) {
         }
       />
 
-      <section
-        className="patio-ticket-metrics"
-        aria-label="Resumo dos chamados"
-      >
-        {cards.map(([label, value]: JsonData) => (
-          <div key={label}>
-            <strong>{Number(value || 0)}</strong>
-            <span>{label}</span>
-          </div>
-        ))}
-      </section>
       <div
         className="patio-subabas patio-ticket-tabs"
         role="tablist"
