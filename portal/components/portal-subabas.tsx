@@ -7,7 +7,7 @@ export function Subabas({ nav, usuario, navegar }: { nav: Nav; usuario: UsuarioP
   const aba = abaDaChave(nav);
   if (aba.subabas.length === 1) return null;
   const subabas = subabasPermitidas(usuario, aba);
-  return <div role="tablist" aria-label={`Subabas de ${aba.label}`} className="mb-4 flex flex-wrap gap-2">
+  return <div role="tablist" aria-label={`Subabas de ${aba.label}`} className="patio-subabas flex gap-5">
     {subabas.map((sub, indice) => <Button key={sub.chave} id={`subaba-${sub.chave}`} role="tab" type="button"
       aria-selected={nav === sub.chave} aria-controls="portal-conteudo" tabIndex={nav === sub.chave ? 0 : -1}
       variant={nav === sub.chave ? 'default' : 'outline'} onClick={() => navegar(sub.chave)}

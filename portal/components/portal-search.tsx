@@ -1,4 +1,5 @@
 'use client';
+import { PageHeader } from './page-header';
 import { api, errorText } from '@/lib/api';
 import {
   SearchMultiSelect,
@@ -14,7 +15,7 @@ import { AlertTriangle, LoaderCircle, Search } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import {
   Table,
   TableBody,
@@ -136,9 +137,10 @@ export function SearchPage({
     }
   };
   return (
-    <div className="space-y-5">
+    <div className="patio-page">
+      <PageHeader />
       <Card className="overflow-hidden">
-        <CardContent className="grid gap-3 pt-5 md:grid-cols-2 xl:grid-cols-[minmax(5rem,.45fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.15fr)_minmax(0,1.4fr)]">
+        <CardContent className="patio-search-filters">
           {(['state', 'location', 'model', 'item', 'supplier'] as const).map(
             (campo) => (
               <SearchMultiSelect
@@ -155,7 +157,8 @@ export function SearchPage({
               />
             ),
           )}
-          <div className="flex items-center justify-between gap-3 md:col-span-2 xl:col-span-5">
+          <div className="patio-search-actions">
+            {' '}
             <Button
               variant="ghost"
               className="text-muted-foreground"
@@ -177,6 +180,7 @@ export function SearchPage({
               {loading ? <LoaderCircle className="animate-spin" /> : <Search />}{' '}
               Pesquisar
             </Button>
+
           </div>
         </CardContent>
       </Card>
@@ -205,35 +209,46 @@ export function SearchPage({
       {searched && searchedQuery === query ? (
         <Card>
           <CardHeader className="border-b">
-            <CardTitle>
+            <p className="patio-result-count">
               {meta.truncated
                 ? `Mostrando ${rows.length.toLocaleString('pt-BR')} de ${Number(meta.total).toLocaleString('pt-BR')} condições`
-                : `${Number(meta.total ?? rows.length).toLocaleString('pt-BR')} condições encontradas`}
-            </CardTitle>
+                : `${Number(meta.total ?? rows.length).toLocaleString('pt-BR')} ${Number(meta.total ?? rows.length) === 1 ? 'condição encontrada' : 'condições encontradas'}`}
+            </p>
             {meta.truncated && (
               <Alert variant="destructive" className="mt-3">
                 <AlertTriangle />
                 <AlertTitle>Resultado incompleto</AlertTitle>
                 <AlertDescription>
-                  A consulta encontrou{' '}
-                  {Number(meta.total).toLocaleString('pt-BR')} condições e
-                  apenas as {rows.length.toLocaleString('pt-BR')} primeiras
-                  estão na tabela. Use os filtros de item, modelo, cidade ou
-                  fornecedor para reduzir a lista antes de comparar preços.
+                  Refine os filtros antes de comparar preços.
                 </AlertDescription>
               </Alert>
             )}
           </CardHeader>
           <CardContent className="px-0 pb-0">
-            <Table>
+            <Table className="patio-search-table">
+              <colgroup>
+                {[
+                  'item',
+                  'model',
+                  'supplier',
+                  'city',
+                  'brands',
+                  'unit',
+                  'price',
+                ].map((c) => (
+                  <col key={c} className={`search-col-${c}`} />
+                ))}
+              </colgroup>
               <TableHeader>
                 <TableRow>
                   <TableHead>Peça / serviço</TableHead>
                   <TableHead>Modelo</TableHead>
                   <TableHead>Fornecedor</TableHead>
                   <TableHead>Cidade</TableHead>
-                  <TableHead>Marcas</TableHead>
-                  <TableHead>Unidade</TableHead>
+                  <TableHead className="search-secondary-col">Marcas</TableHead>
+                  <TableHead className="search-secondary-col">
+                    Unid.
+                  </TableHead>
                   <TableHead className="text-right">Preço</TableHead>
                 </TableRow>
               </TableHeader>
@@ -242,29 +257,37 @@ export function SearchPage({
                   <TableRow key={r.id}>
                     <TableCell className="font-medium">
                       <button
-                        className="text-left text-primary hover:underline"
+                        className="text-left text-link hover:underline"
                         onClick={() => openAgreement(r.agreementId)}
                       >
                         {r.item}
                       </button>
+                      <p className="search-item-meta text-xs text-muted-foreground">
+                        {r.brands || 'Livre'} · {r.unit}
+                      </p>
                     </TableCell>
                     <TableCell>{r.model}</TableCell>
                     <TableCell>
                       <p className="font-medium">{r.supplier}</p>
-                      <p className="text-xs text-muted-foreground">
+                      <button
+                        className="text-xs text-link"
+                        onClick={() => openAgreement(r.agreementId)}
+                      >
                         {r.number}
-                      </p>
+                      </button>
                     </TableCell>
                     <TableCell>
                       {r.city} / {r.state}
                     </TableCell>
-                    <TableCell className="max-w-64 truncate text-muted-foreground">
+                    <TableCell className="search-secondary-col text-muted-foreground">
                       {r.brands || 'Livre'}
                     </TableCell>
-                    <TableCell>{r.unit}</TableCell>
+                    <TableCell className="search-secondary-col">
+                      {r.unit}
+                    </TableCell>
                     <TableCell className="text-right font-semibold tabular-nums">
                       {r.courtesy ? (
-                        <Badge className="bg-sky-50 text-sky-700">
+                        <Badge className="bg-muted text-muted-foreground">
                           Cortesia
                         </Badge>
                       ) : (
@@ -281,7 +304,7 @@ export function SearchPage({
         <Empty
           icon={Search}
           title="Monte sua pesquisa"
-          text="As opções se ajustam às escolhas nos outros filtros. Selecione uma ou mais opções e clique em Pesquisar."
+
         />
       )}
     </div>

@@ -3,9 +3,9 @@ import { useEffect, useRef, useState } from 'react';
 import { AlertTriangle } from 'lucide-react';
 import { api, errorText } from '@/lib/api';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Badge } from '@/components/ui/badge';
+import { Status } from './status';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import {
   Dialog,
   DialogContent,
@@ -36,7 +36,7 @@ function Info({ label, value }: { label: string; value: string }) {
   );
 }
 
-export function ImportHistory({ rows }: JsonData) {
+export function ImportHistory({ rows, total }: JsonData) {
   const [detail, setDetail] = useState<AnyRow | null>(null),
     [loading, setLoading] = useState(false),
     [selectedId, setSelectedId] = useState<string | null>(null),
@@ -80,7 +80,10 @@ export function ImportHistory({ rows }: JsonData) {
     <>
       <Card>
         <CardHeader className="border-b">
-          <CardTitle>Histórico</CardTitle>
+          <p className="patio-result-count">
+            {total ?? rows.length}{' '}
+            {(total ?? rows.length) === 1 ? 'importação' : 'importações'}
+          </p>
         </CardHeader>
         <CardContent className="px-0 pb-0">
           <Table>
@@ -106,15 +109,7 @@ export function ImportHistory({ rows }: JsonData) {
                     </button>
                   </TableCell>
                   <TableCell>
-                    <Badge
-                      className={
-                        r.status === 'completed'
-                          ? 'bg-emerald-50 text-emerald-700'
-                          : r.status === 'error'
-                            ? 'bg-red-50 text-red-700'
-                            : 'bg-amber-50 text-amber-700'
-                      }
-                    >
+                    <Status value={r.status}>
                       {r.status === 'completed'
                         ? 'Concluída'
                         : r.status === 'error'
@@ -122,7 +117,7 @@ export function ImportHistory({ rows }: JsonData) {
                           : r.status === 'conflict'
                             ? 'Não publicada: acordo ocupado'
                             : 'Processando'}
-                    </Badge>
+                    </Status>
                   </TableCell>
                   <TableCell>{date(r.createdAt)}</TableCell>
                 </TableRow>
