@@ -228,16 +228,7 @@ jobs:
           fi
       - run: npm ci
       - run: npm test
-        # Telas SOL e categorias: tests/solicitacoes-telas.test.mjs;
-        # perfis, consulta/manual, revisoes, reenvio e administracao no PREPARAR.
-        # Navegacao: tests/navegacao.test.ts e tests/navegacao-telas.test.mjs;
-        # enderecos, historico, teclado e equivalencia dos acessos por perfil.
-        # Cadastro API: tests/solicitacoes-api.test.mjs, tests/consultas-fornecedor.test.ts
-        # e tests/database-migracoes.test.mjs; incluidos tambem no PREPARAR.
-        # Avisos SOL: tests/solicitacoes-api.test.mjs cobre eventos, fila,
-        # ensaio, destinatarios, rollback e idempotencia; regressao de chamados
-        # em tests/fila-email.test.mjs e tests/fila-email-confirmacao.test.mjs.
-        # HTTP real: portal/scripts/teste-solicitacoes.mjs no portal/scripts/teste-portal-ponta-a-ponta.ps1.
+        # Cobertura detalhada: ver o cabeçalho de cada arquivo em portal/tests/.
         # Demonstracao: tests/demonstracao.test.mjs cobre travas, API, perfis,
         # acordos, chamados, Central e idempotencia; tambem no PREPARAR.
         # Central: tests/central.test.mjs e tests/central-cliente.test.ts;
