@@ -88,3 +88,8 @@ Abbreviated paths in a cell share the directory of the first file.
 - Python dependencies are pinned to exact versions (`alertas/config/requirements*.txt`), like the Node lockfile; Dependabot proposes upgrades with its cooldown. Never reintroduce version ranges.
 - When changing tests or CI, check references in the workflow and in the `scripts/ci/` drivers, including PowerShell names built in loops: `node scripts/ci/verificar-testes.mjs`.
 - In tests, scan HTML by index (as in `portal/tests/csp-nonce-smoke.test.mjs`); CodeQL flags HTML-matching regular expressions.
+
+## Expurgo e cabeçalho de build (2.10)
+- Com EXPURGO_HABILITADO=1 o expurgo sempre roda, antecedido de backup, e limpa as tabelas consultas_cnpj e notificacoes_usuario com prazo fixo de 90 dias. A antiga trava "nenhum prazo configurado" deixou de existir.
+- Toda resposta da API (inclusive erros e sem login) envia o cabeçalho x-portal-build com versão e commit. O repositório é público, então isso é aceito. Requisições sem o cabeçalho (scripts) continuam aceitas; com versão diferente a API responde 409 build_desatualizado.
+- Abas abertas em versão anterior à 2.10 não recebem o aviso de atualização na primeira atualização: atualizar fora do expediente.
