@@ -28,6 +28,8 @@ import { Mappings } from './portal-mappings';
 import { CentralNotificacoes } from './central-notificacoes';
 import { definirUsuarioCentral } from '@/lib/central-estado';
 import { Subabas } from './portal-subabas';
+import { Solicitacoes } from './portal-solicitacoes';
+import { CategoriasFornecedor } from './portal-categorias-fornecedor';
 
 export default function PortalApp() {
   const [session, setSession] = useState({ key: 0, message: '' });
@@ -44,6 +46,8 @@ function PortalSession({ message, endSession }: { message: string; endSession: (
   const [agreementModal,setAgreementModal]=useState<AnyRow|null>(null), [itemModal,setItemModal]=useState<AnyRow|null>(null), [catalogModal,setCatalogModal]=useState<AnyRow|null>(null);
   const [userList,setUserList]=useState<AnyRow[]>([]), [ticketLink,setTicketLink]=useState<string|null>(null);
   const [ticketLinkVersion,setTicketLinkVersion]=useState(0);
+  const [solicitacaoLink,setSolicitacaoLink]=useState<string|null>(null);
+  const [solicitacaoLinkVersion,setSolicitacaoLinkVersion]=useState(0);
   const [importAgreement,setImportAgreement]=useState('');
   const [sidebarCollapsed,setSidebarCollapsed]=useState(false);
   const intentionalLogout=useRef(false);
@@ -85,6 +89,8 @@ function PortalSession({ message, endSession }: { message: string; endSession: (
       navegacao.current=iniciarNavegacao({role:usuarioPerfil},rota=>{
         setNav(rota.nav);setAgreementId(null);setImportAgreement('');setTicketLink(rota.chamado);
         if(rota.chamado)setTicketLinkVersion(value=>value+1);
+        setSolicitacaoLink(rota.solicitacao);
+        if(rota.solicitacao)setSolicitacaoLinkVersion(value=>value+1);
         if(rota.aviso)setNotice({type:'error',text:rota.aviso});
       },window);
     });
@@ -124,8 +130,10 @@ function PortalSession({ message, endSession }: { message: string; endSession: (
     <Sidebar nav={nav} setNav={navigate} user={user} busy={busy} onLogout={logout} collapsed={sidebarCollapsed} onToggle={()=>setSidebarCollapsed(value=>!value)}/>
     <section className={`min-w-0 pl-16 transition-[padding] duration-300 ${sidebarCollapsed?'lg:pl-16':'lg:pl-44'}`}><div className="mx-auto max-w-[1550px] p-4 sm:p-8">
       <div className="mb-4 flex justify-end"><CentralNotificacoes navegar={link => {
-        const chamado = new URL(link, window.location.origin).searchParams.get('chamado');
-        if (chamado) navegacao.current?.navegar('tickets',chamado);
+        const params = new URL(link, window.location.origin).searchParams;
+        const chamado = params.get('chamado'), solicitacao = params.get('solicitacao');
+        if (solicitacao) navegacao.current?.navegar('solicitacoes',solicitacao);
+        else if (chamado) navegacao.current?.navegar('tickets',chamado);
         else window.location.assign(link);
       }}/></div>
       <Subabas nav={nav} usuario={user} navegar={navigate}/>
@@ -138,6 +146,8 @@ function PortalSession({ message, endSession }: { message: string; endSession: (
       {pode(user, 'aba:mappings')&&nav==='mappings'&&<Mappings catalogs={catalogs} run={run}/>}
       {pode(user, 'aba:catalogs')&&nav==='catalogs'&&<Catalogs data={data} onAdd={(type:string)=>setCatalogModal({type})} onEdit={(type:string,row:AnyRow)=>setCatalogModal({type,...row,expectedRevision:row.revision})} onDelete={removeCatalog}/>}
       {pode(user, 'aba:tickets')&&nav==='tickets'&&<Tickets key={`${ticketLink}:${ticketLinkVersion}`} busy={busy} users={userList} run={run} initialDetail={ticketLink}/>}
+      {pode(user, 'aba:solicitacoes')&&nav==='solicitacoes'&&<Solicitacoes key={`${solicitacaoLink}:${solicitacaoLinkVersion}`} user={user} initialDetail={solicitacaoLink} onOpen={(id:string|null)=>navegacao.current?.navegar('solicitacoes',id||undefined)}/>}
+      {pode(user, 'aba:categorias')&&nav==='categorias'&&<CategoriasFornecedor/>}
       {pode(user, 'aba:history')&&nav==='history'&&<ChangeHistory users={userList}/>}
       {pode(user, 'aba:admin')&&nav==='admin'&&<Administration user={user} busy={busy} run={run}/>}
       {pode(user, 'aba:reports')&&nav==='reports'&&<Reports/>}

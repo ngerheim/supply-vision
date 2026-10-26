@@ -17,7 +17,7 @@ export function iniciarNavegacao(
   return {
     navegar(chave: Nav, chamado?: string) {
       const params = new URLSearchParams(enderecoParaBusca(enderecoDaChave(chave)));
-      if (chamado) params.set('chamado', chamado);
+      if (chamado) params.set(chave === 'solicitacoes' ? 'solicitacao' : 'chamado', chamado);
       const endereco = `${janela.location.pathname}?${params}${janela.location.hash}`;
       const atual = `${janela.location.pathname}${janela.location.search}${janela.location.hash}`;
       if (endereco !== atual) janela.history.pushState(null, '', endereco);

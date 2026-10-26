@@ -226,6 +226,8 @@ jobs:
           fi
       - run: npm ci
       - run: npm test
+        # Telas SOL e categorias: tests/solicitacoes-telas.test.mjs;
+        # perfis, consulta/manual, revisoes, reenvio e administracao no PREPARAR.
         # Navegacao: tests/navegacao.test.ts e tests/navegacao-telas.test.mjs;
         # enderecos, historico, teclado e equivalencia dos acessos por perfil.
         # Cadastro API: tests/solicitacoes-api.test.mjs, tests/consultas-fornecedor.test.ts

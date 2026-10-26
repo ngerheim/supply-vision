@@ -141,6 +141,12 @@ void test('Cadastro de fornecedor pelo roteador e SQLite reais', async t => {
     const depois = contagens();
     const duplicada = await post('solicitacoes', { consultaId: consulta.consultaId }, 'viewer');
     assert.equal(duplicada.status, 409); assert.match(duplicada.data.error, new RegExp(`${verificada.codigo}.*aberta`)); assert.deepEqual(contagens(), depois);
+    assert.deepEqual(duplicada.data.existente,{id:verificada.id,codigo:verificada.codigo,status:'aberta'});
+    const listaViewer=(await get('solicitacoes','viewer')).data.solicitacoes.find(s=>s.id===verificada.id);
+    assert.deepEqual(listaViewer.categorias,[{id:'categoria_semente_1',nome:'Oficina'}]);
+    assert.equal(Object.hasOwn(listaViewer,'solicitante'),false);
+    const listaEditor=(await get('solicitacoes','editor')).data.solicitacoes.find(s=>s.id===verificada.id);
+    assert.equal(listaEditor.solicitante,'Pessoa viewer');
     const baixada = (await get(`solicitacoes/cnpj/${CNPJS_ENSAIO.baixada}`, 'viewer')).data;
     const rejeitada = await post('solicitacoes', { consultaId: baixada.consultaId }, 'viewer');
     assert.equal(rejeitada.status, 409); assert.match(rejeitada.data.error, /BAIXADA/); assert.deepEqual(contagens(), depois);

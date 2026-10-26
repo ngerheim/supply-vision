@@ -8,12 +8,13 @@ import { iniciarNavegacao } from '../lib/navegacao-historico.ts';
 
 // Inventario do contrato, independente da estrutura de producao.
 const rotas: Array<[Nav, string, string | null]> = [
-  ['search','buscar',null], ['maintenance','manutencao',null], ['tickets','chamados',null],
+  ['search','buscar',null], ['maintenance','manutencao',null], ['tickets','chamados','parcerias'],
+  ['solicitacoes','chamados','cadastro-fornecedor'], ['categorias','cadastros','categorias'],
   ['agreements','acordos','acordos'], ['imports','acordos','importacoes'],
   ['suppliers','cadastros','fornecedores'], ['catalogs','cadastros','catalogos'], ['mappings','cadastros','de-para'],
   ['reports','administracao','relatorios'], ['history','administracao','historico'], ['emails','administracao','emails'], ['admin','administracao','usuarios'],
 ];
-void test('todas as 12 chaves e seis abas fazem ida e volta com slugs estaveis', () => {
+void test('todas as 14 chaves e seis abas fazem ida e volta com slugs estaveis', () => {
   assert.equal(ABAS_NAVEGACAO.length,6);
   assert.deepEqual(GRUPOS_NAVEGACAO.map(g => [g.nome,[...g.abas]]),[
     ['Consulta',['buscar','manutencao','chamados']],['Suprimentos',['acordos','cadastros']],['Administração',['administracao']],
@@ -38,12 +39,12 @@ void test('enderecos desconhecidos voltam para buscar sem erro', () => {
   }
 });
 const visibilidade = {
-  viewer: [['buscar',['search']],['manutencao',['maintenance']]],
-  editor: [['buscar',['search']],['manutencao',['maintenance']],['chamados',['tickets']],['acordos',['agreements','imports']],['cadastros',['suppliers','catalogs','mappings']]],
-  admin: [['buscar',['search']],['manutencao',['maintenance']],['chamados',['tickets']],['acordos',['agreements','imports']],['cadastros',['suppliers','catalogs','mappings']],['administracao',['reports','history','emails','admin']]],
+  viewer: [['buscar',['search']],['manutencao',['maintenance']],['chamados',['solicitacoes']]],
+  editor: [['buscar',['search']],['manutencao',['maintenance']],['chamados',['tickets','solicitacoes']],['acordos',['agreements','imports']],['cadastros',['suppliers','catalogs','mappings']]],
+  admin: [['buscar',['search']],['manutencao',['maintenance']],['chamados',['tickets','solicitacoes']],['acordos',['agreements','imports']],['cadastros',['suppliers','catalogs','mappings','categorias']],['administracao',['reports','history','emails','admin']]],
 };
 for (const role of ['viewer','editor','admin'] as const) {
-  void test(`${role}: exatamente as abas e subabas antigas, reagrupadas; acesso por endereco nao amplia permissoes`, () => {
+  void test(`${role}: abas e subabas permitidas; acesso por endereco nao amplia permissoes`, () => {
     const grupos = gruposVisiveis({role});
     assert.deepEqual(grupos.flatMap(g => g.abas.map(aba => [aba.aba,aba.subabas.map(s => s.chave)])),visibilidade[role]);
     assert.deepEqual(grupos.map(g => g.nome),role === 'viewer' ? ['Consulta'] : role === 'editor' ? ['Consulta','Suprimentos'] : ['Consulta','Suprimentos','Administração']);
@@ -63,6 +64,14 @@ for (const role of ['viewer','editor','admin'] as const) {
 }
 void test('usuario inativo nao recebe grupos ou subabas', () => {
   assert.deepEqual(gruposVisiveis({role:'admin',active:0}),[]);
+});
+void test('links de solicitacao selecionam cadastro em todos os perfis e nao liberam inativos', () => {
+  for(const role of ['viewer','editor','admin']) {
+    const rota=resolverEndereco({role},'?aba=chamados&solicitacao=SOL%2F1');
+    assert.equal(rota.nav,'solicitacoes');assert.equal(rota.solicitacao,'SOL/1');assert.equal(rota.chamado,null);
+  }
+  const negada=resolverEndereco({role:'viewer',active:0},'?aba=chamados&solicitacao=SOL1');
+  assert.equal(negada.nav,'search');assert.equal(negada.solicitacao,null);assert.equal(negada.aviso,AVISO_AREA_RESTRITA);
 });
 void test('link legado de chamado preserva o detalhe e o aviso anterior, inclusive junto de aba', () => {
   for (const role of ['editor','admin']) for (const query of ['?chamado=ID%2F1','?aba=buscar&chamado=ID%2F1']) {
@@ -98,7 +107,7 @@ void test('pushState, voltar, avancar e recarga resolvem as mesmas telas; parada
   const nova = iniciarNavegacao({role:'admin'},rota => recarga.push(rota.nav),janela);
   assert.deepEqual(recarga,['imports']);nova.parar();
   controlador.navegar('tickets','ID/1');
-  assert.equal(janela.location.search,'?aba=chamados&chamado=ID%2F1');
+  assert.equal(janela.location.search,'?aba=chamados&sub=parcerias&chamado=ID%2F1');
   controlador.navegar('search');assert.equal(janela.location.search,'?aba=buscar','Trocar de aba remove chamado antigo');
   controlador.parar();const quantidade=vistas.length;janela.mover(-1);assert.equal(vistas.length,quantidade);
 });
