@@ -268,6 +268,55 @@ void test('consulta 503 habilita manual sem consultaId, preserva contato apos er
   await flush(h);
   assert.deepEqual(saved, ['manual']);
 });
+void test('trocar CNPJ limpa dados do fornecedor anterior antes do modo manual', async (t) => {
+  const { h } = await abrirForm(t);
+  const fornecedorA = {
+    ...receita,
+    razao_social: 'Fornecedor A fictício',
+    nome_fantasia: 'Fantasia A',
+    situacao_cadastral: 'ATIVA',
+    cnae_codigo: '4520001',
+    cnae_descricao: 'Atividade A fictícia',
+    cep: '12345678',
+    logradouro: 'Rua A',
+    numero: '10',
+    complemento: 'Sala A',
+    bairro: 'Bairro A',
+    cidade: 'Cidade A',
+    uf: 'SP',
+  };
+  await consultar(h, fornecedorA);
+  change(h, 'telefone', '11987654321');
+  change(h, 'email', 'a@example.com');
+  change(h, 'atendimento_cidade', 'Cidade de atendimento fictícia');
+  button(h, 'Urgente').onClick();
+
+  const cnpjB = cnpjFicticio(601);
+  change(h, 'cnpj', cnpjB);
+  button(h, 'Consultar').onClick();
+  h.requests.at(-1).reject(
+    new ApiError({ status: 503, error: 'Consulta indisponível.' }),
+  );
+  await flush(h);
+
+  for (const name of [
+    'razao_social', 'nome_fantasia', 'situacao_cadastral', 'cnae_codigo',
+    'cnae_descricao', 'cep', 'logradouro', 'numero', 'complemento',
+    'bairro', 'cidade', 'telefone', 'email',
+  ]) {
+    assert.equal(input(h, name).value, '', `${name} deve estar vazio`);
+  }
+  assert.equal(input(h, 'atendimento_cidade').value, 'Cidade de atendimento fictícia');
+  assert.equal(button(h, 'Urgente')['aria-pressed'], true);
+
+  submit(h);
+  const enviado = body(h.requests.at(-1));
+  assert.equal(enviado.cnpj, cnpjB);
+  assert.equal(enviado.atendimento_cidade, 'Cidade de atendimento fictícia');
+  assert.equal(enviado.urgencia, 'urgente');
+  for (const [campo, valor] of Object.entries(fornecedorA))
+    assert.notEqual(enviado[campo], valor, `${campo} de A não deve ser enviado`);
+});
 void test('CEP atrasado nao substitui endereco ja corrigido; falha permite preenchimento manual', async (t) => {
   const { h } = await abrirForm(t);
   await consultar(h);
