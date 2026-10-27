@@ -310,7 +310,7 @@ async function POSTInterno(request: NextRequest) {
   }
   if (parts[0] === 'solicitacoes') {
     const acao = parts.length === 1 ? 'solicitacao:abrir' : 'solicitacao:atender';
-    if (!pode(user, acao)) return denyWrite(request, 'Seu perfil não permite esta operação.');
+    if (!pode(user, acao) && !(parts.length === 3 && parts[2] === 'transicao' && pode(user, 'solicitacao:abrir'))) return denyWrite(request, 'Seu perfil não permite esta operação.');
     if (parts.length === 1) return solicitacoes.criar(request, user);
     if (parts.length === 3 && parts[2] === 'transicao') return solicitacoes.transicionar(request, user, parts[1]);
     if (parts.length === 3 && parts[2] === 'reconsultar') return solicitacoes.reconsultar(request, user, parts[1]);

@@ -331,7 +331,14 @@ for (const role of ['viewer', 'editor', 'admin'])
     'recusado',
   ])
     void test(`detalhe ${role}/${status}: acoes permitidas e dados`, async (t) => {
-      const h = await abrirDetalhe(t, role, status);
+      const h = await abrirDetalhe(
+        t,
+        role,
+        status,
+        role !== 'viewer' && status === 'devolvida'
+          ? { solicitante_id: 'outra' }
+          : {},
+      );
       for (const [label, permitido] of [
         ['Iniciar análise', role !== 'viewer' && status === 'aberta'],
         [
@@ -340,8 +347,13 @@ for (const role of ['viewer', 'editor', 'admin'])
         ],
         ['Devolver', role !== 'viewer' && status === 'em_analise'],
         ['Recusar', role !== 'viewer' && status === 'em_analise'],
-        ['Reconsultar na Receita', role !== 'viewer'],
-        ['Corrigir e reenviar', status === 'devolvida'],
+        [
+          'Reconsultar na Receita',
+          role !== 'viewer' && ['aberta', 'em_analise'].includes(status),
+        ],
+        ['Corrigir e reenviar', role === 'viewer' && status === 'devolvida'],
+        ['Recusar devolvida', role !== 'viewer' && status === 'devolvida'],
+        ['Cancelar solicitação', role === 'viewer' && status === 'devolvida'],
       ])
         assert.equal(
           h.find((n) => n.type === 'Button' && n.props.children === label)

@@ -184,16 +184,17 @@ export function solicitacoesApi(contexto: ContextoApi, consultas = criarConsulta
       if (!atual) return inexistente();
       if (!revisaoConfere(body.expectedRevision, atual.revision)) return conflito();
       if (atual.status !== 'devolvida') return fail('Somente solicitações devolvidas podem ser corrigidas.', 409);
-      const receita = await dadosReceita(body, user, atual), bloqueio = bloqueioSituacao(receita); if (bloqueio) return bloqueio;
+      const receita = await dadosReceita(body, user, atual);
       const categorias = body.categorias === undefined ? undefined : await categoriasEntrada(body.categorias);
       return salvar(user, atual, { ...Object.fromEntries(RECEITA.map(c => [c, receita[c]])), ...editaveis(body, atual) }, 'aberta', 'Solicitação corrigida pelo solicitante', null, null, categorias);
     });
   }
   async function transicionar(request: Request, user: User, solicitacaoId: string) {
-    return comAcaoEscrita('solicitacao:atender', async () => {
-      if (!pode(user, 'solicitacao:atender')) return fail('Seu perfil não permite atender solicitações.', 403);
+    return comAcaoEscrita(pode(user, 'solicitacao:atender') ? 'solicitacao:atender' : 'solicitacao:abrir', async () => {
       const body = await jsonBody<Corpo>(request), atual = await first<Solicitacao>('SELECT * FROM solicitacoes WHERE id=?', [solicitacaoId]);
       if (!atual) return inexistente();
+      const cancelamentoSolicitante = atual.status === 'devolvida' && atual.solicitante_id === user.id && campo(body, 'para', 30) === 'recusado';
+      if (!pode(user, 'solicitacao:atender') && !cancelamentoSolicitante) return fail('Seu perfil não permite atender solicitações.', 403);
       const chave = chaveIdempotencia(request), hash = chave ? await tokenHash(`transicao:${JSON.stringify(body)}`) : null;
       if (chave) {
         const anterior = await first<{ request_hash: string }>('SELECT request_hash FROM solicitacao_andamentos WHERE solicitacao_id=? AND user_id=? AND request_key=?', [solicitacaoId, user.id, chave]);
@@ -201,7 +202,9 @@ export function solicitacoesApi(contexto: ContextoApi, consultas = criarConsulta
       }
       if (!revisaoConfere(body.expectedRevision, atual.revision)) return conflito();
       const para = campo(body, 'para', 30), texto = campo(body, 'texto', LIMITES_CAMPO.mensagem);
-      if (!((atual.status === 'aberta' && para === 'em_analise') || (atual.status === 'em_analise' && ['cadastrado', 'recusado', 'devolvida'].includes(para)))) return fail('Transição de situação inválida.', 409);
+      const transicaoAtendente = (atual.status === 'aberta' && para === 'em_analise') || (atual.status === 'em_analise' && ['cadastrado', 'recusado', 'devolvida'].includes(para)) || (atual.status === 'devolvida' && para === 'recusado');
+      const cancelamentoProprio = atual.status === 'devolvida' && para === 'recusado' && atual.solicitante_id === user.id;
+      if (!(pode(user, 'solicitacao:atender') && transicaoAtendente) && !cancelamentoProprio) return fail('Transição de situação inválida.', 409);
       if (['recusado', 'devolvida'].includes(para) && !texto) return fail('Informe o motivo ou a mensagem de devolução.');
       return salvar(user, atual, { atendente_id: para === 'em_analise' ? user.id : atual.atendente_id, motivo_recusa: para === 'recusado' ? texto : null }, para, texto, chave, hash);
     });
@@ -212,6 +215,7 @@ export function solicitacoesApi(contexto: ContextoApi, consultas = criarConsulta
       const body = await jsonBody<Corpo>(request), atual = await first<Solicitacao>('SELECT * FROM solicitacoes WHERE id=?', [solicitacaoId]);
       if (!atual) return inexistente();
       if (!revisaoConfere(body.expectedRevision, atual.revision)) return conflito();
+      if (!['aberta', 'em_analise'].includes(atual.status)) return fail('Somente solicitações abertas ou em análise podem ser reconsultadas.', 409);
       try {
         const { dados, fonte } = await consultas.cnpj(atual.cnpj, true);
         // Reconsulta preserva o endereco ajustado e o historico do atendimento.
