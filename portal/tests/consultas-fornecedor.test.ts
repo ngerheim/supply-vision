@@ -70,3 +70,21 @@ void test('um 404 com a outra fonte fora vira indisponivel, nao inexistente', as
   } });
   await assert.rejects(consultas.cnpj(CNPJS_ENSAIO.ativa), (e: unknown) => e instanceof FalhaConsulta && e.status === 503 && e.message === CONSULTA_INDISPONIVEL);
 });
+
+void test('cache negativo expira em 60s para nao encontrado e 30s para indisponivel', async () => {
+  let agora = 0, chamadas = 0;
+  const consultas = criarConsultasFornecedor({ agora: () => agora, provedor: async url => {
+    chamadas++;
+    if (url.hostname === 'brasilapi.com.br') throw new FalhaConsulta('nao encontrado', 404);
+    throw new FalhaConsulta('indisponivel', 503);
+  } });
+  for (let i = 0; i < 2; i++) await assert.rejects(consultas.cnpj(CNPJS_ENSAIO.ativa), (e: unknown) => e instanceof FalhaConsulta && e.status === 503);
+  assert.equal(chamadas, 2);
+  agora = 29_999; await assert.rejects(consultas.cnpj(CNPJS_ENSAIO.ativa)); assert.equal(chamadas, 2);
+  agora = 30_000; await assert.rejects(consultas.cnpj(CNPJS_ENSAIO.ativa)); assert.equal(chamadas, 4);
+
+  const inexistente = criarConsultasFornecedor({ agora: () => agora, provedor: async () => { chamadas++; throw new FalhaConsulta('nao encontrado', 404); } });
+  await assert.rejects(inexistente.cep('00000000')); await assert.rejects(inexistente.cep('00000000')); assert.equal(chamadas, 5);
+  agora += 59_999; await assert.rejects(inexistente.cep('00000000')); assert.equal(chamadas, 5);
+  agora++; await assert.rejects(inexistente.cep('00000000')); assert.equal(chamadas, 6);
+});

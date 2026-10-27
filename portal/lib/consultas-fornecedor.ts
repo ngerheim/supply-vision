@@ -52,8 +52,20 @@ export function criarConsultasFornecedor(opcoes: { provedor?: ProvedorConsulta; 
   }
   async function comCache<T>(chave: string, executar: () => Promise<T>): Promise<T> {
     const modo = `${ensaio() ? 'ensaio' : 'normal'}:${chave}`, anterior = cache.get(modo);
-    if (anterior && anterior.ate > agora()) return structuredClone(anterior.valor) as T;
-    const valor = await executar();
+    if (anterior && anterior.ate > agora()) {
+      const valor = anterior.valor as { falha?: string; status?: number };
+      if (valor && typeof valor === 'object' && typeof valor.falha === 'string' && typeof valor.status === 'number') throw new FalhaConsulta(valor.falha, valor.status);
+      return structuredClone(anterior.valor) as T;
+    }
+    let valor: T;
+    try { valor = await executar(); }
+    catch (erro) {
+      if (!(erro instanceof FalhaConsulta) || (erro.status !== 404 && erro.status !== 503)) throw erro;
+      for (const [k, v] of cache) if (v.ate <= agora()) cache.delete(k);
+      if (cache.size >= 1000) cache.delete(cache.keys().next().value!);
+      cache.set(modo, { ate: agora() + (erro.status === 404 ? 60_000 : 30_000), valor: { falha: erro.message, status: erro.status } });
+      throw erro;
+    }
     // Cache limitado para nao reter indefinidamente chaves expiradas.
     for (const [k, v] of cache) if (v.ate <= agora()) cache.delete(k);
     if (cache.size >= 1000) cache.delete(cache.keys().next().value!);

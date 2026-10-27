@@ -47,9 +47,10 @@ export function solicitacoesApi(contexto: ContextoApi, consultas = criarConsulta
   async function consultarCnpj(user: User, numero: string) {
     return comAcaoEscrita('solicitacao:abrir', async () => {
       try {
-        const { dados, fonte } = await consultas.cnpj(numero);
-        const recente = await first<{ id: string; fonte: string; dados_json: string; consultada_em: string }>('SELECT id,fonte,dados_json,consultada_em FROM consultas_cnpj WHERE user_id=? AND cnpj=? AND julianday(consultada_em)>=julianday(?) ORDER BY consultada_em DESC,rowid DESC LIMIT 1', [user.id, dados.cnpj, new Date(Date.now() - 600_000).toISOString()]);
+        const cnpj = normalizeCnpj(numero);
+        const recente = await first<{ id: string; fonte: string; dados_json: string; consultada_em: string }>('SELECT id,fonte,dados_json,consultada_em FROM consultas_cnpj WHERE user_id=? AND cnpj=? AND julianday(consultada_em)>=julianday(?) ORDER BY consultada_em DESC,rowid DESC LIMIT 1', [user.id, cnpj, new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()]);
         if (recente) return ok({ ...JSON.parse(recente.dados_json) as DadosReceita, consulta_fonte: recente.fonte, consultada_em: recente.consultada_em, consultaId: recente.id });
+        const { dados, fonte } = await consultas.cnpj(numero);
         const consultaId = id('cnpj'), consultada_em = now();
         await statement('INSERT INTO consultas_cnpj(id,cnpj,fonte,dados_json,consultada_em,user_id) VALUES(?,?,?,?,?,?)', [consultaId, dados.cnpj, fonte, JSON.stringify(dados), consultada_em, user.id]).run();
         return ok({ ...dados, consulta_fonte: fonte, consultada_em, consultaId });
