@@ -42,6 +42,29 @@ void test('chamado criado as 19h de D aparece no relatorio de D+1',()=>{
   }finally{db.close()}
 });
 
+void test('andamento atribuido antes do commit aparece em exatamente um relatorio', {todo:'reproduz A2: andamento fora dos relatórios'}, () => {
+  const db=banco();
+  try{
+    const timestamp= new Date('2026-10-05T20:44:59.999Z'); // capturado pela API antes do batch
+    const corte=new Date('2026-10-05T20:45:00.000Z');
+    db.prepare("INSERT INTO tickets VALUES ('a','SUP-1','Oficina','aberto','2026-10-05T03:00:00.000Z','2026-10-05T03:00:00.000Z')").run();
+    prepararRelatoriosDiarios(db,corte);
+    const primeiro=periodo(db,'2026-10-05');
+    const payloadPrimeiro=JSON.parse(db.prepare('SELECT payload_json FROM daily_report_deliveries WHERE report_date=?').get('2026-10-05').payload_json);
+
+    // Libera o batch só depois que o consumidor congelou o conteúdo no corte.
+    db.prepare("INSERT INTO ticket_events (ticket_id,user_id,kind,message,created_at) VALUES ('a','u1','note','Andamento intercalado',?)").run(timestamp.toISOString());
+    prepararRelatoriosDiarios(db,new Date('2026-10-06T20:50:00.000Z'));
+    const segundo=periodo(db,'2026-10-06');
+    const payloadSegundo=JSON.parse(db.prepare('SELECT payload_json FROM daily_report_deliveries WHERE report_date=?').get('2026-10-06').payload_json);
+    const ocorrencias=[payloadPrimeiro,payloadSegundo].flatMap(p=>p.chamados).flatMap(c=>c.atualizacoes).filter(a=>a.descricao==='Andamento intercalado').length;
+
+    assert.equal(primeiro.fim,corte.toISOString());
+    assert.equal(segundo.inicio,primeiro.fim);
+    assert.equal(ocorrencias,1,'o andamento precisa aparecer em um dos dois conteúdos congelados');
+  }finally{db.close()}
+});
+
 void test('periodo continua do relatorio anterior mesmo nao enviado e e estavel em novas tentativas',()=>{
   const db=banco();
   try{
