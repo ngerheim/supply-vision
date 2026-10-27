@@ -129,6 +129,25 @@ void test('Cadastro de fornecedor pelo roteador e SQLite reais', async t => {
     assert.equal((await get('solicitacoes/cep/00000000', 'viewer')).data.cidade, 'Cidade Fictícia');
     assert.equal((await get('solicitacoes/cep/000', 'viewer')).status, 400);
   });
+  await t.test('reutiliza consulta persistida por 24h antes de chamar provedor externo', async () => {
+    const consulta = (await get(`solicitacoes/cnpj/${CNPJS_ENSAIO.ativa}`, 'viewer')).data;
+    const antes = sql.prepare('SELECT COUNT(*) n FROM consultas_cnpj').get().n;
+    let provedorChamado = false;
+    const { criarConsultasFornecedor } = await import('../lib/consultas-fornecedor.ts');
+    const { solicitacoesApi } = await import('../lib/solicitacoes-api.ts');
+    const fake = criarConsultasFornecedor({ provedor: async () => { provedorChamado = true; throw new Error('provedor nao deveria ser chamado'); } });
+    const fakeApi = solicitacoesApi({ ...banco, rawDb: () => db, first: (sql, values = []) => db.prepare(sql).bind(...values).first(), ok: data => ({ status: 200, data }), fail: (message, status = 400) => ({ status, data: { error: message } }) }, fake);
+    const resposta = await fakeApi.consultarCnpj({ id: 'viewer', role: 'viewer' }, CNPJS_ENSAIO.ativa);
+    assert.equal(resposta.data.consultaId, consulta.consultaId); assert.equal(provedorChamado, false);
+    assert.equal(sql.prepare('SELECT COUNT(*) n FROM consultas_cnpj').get().n, antes);
+  });
+  await t.test('limite de consultas por minuto isolado por usuario e compartilhado por CNPJ e CEP', async () => {
+    const chamadasCep = Array.from({ length: 20 }, () => get('solicitacoes/cep/00000000', 'editor'));
+    assert.deepEqual((await Promise.all(chamadasCep)).map(r => r.status), Array(20).fill(200));
+    const excedida = await get(`solicitacoes/cnpj/${CNPJS_ENSAIO.ativa}`, 'editor');
+    assert.equal(excedida.status, 429); assert.match(excedida.data.error, /20 consultas.*por minuto/);
+    assert.equal((await get(`solicitacoes/cep/00000000`, 'outro')).status, 200);
+  });
   await t.test('consulta com mais de 24 horas e recusada no envio', async () => {
     sql.prepare('INSERT INTO consultas_cnpj(id,cnpj,fonte,dados_json,consultada_em,user_id) VALUES(?,?,?,?,?,?)').run('consulta-velha', CNPJS_ENSAIO.ativa, 'BrasilAPI', '{}', new Date(Date.now() - 25 * 3600000).toISOString(), 'viewer');
     const velha = await post('solicitacoes', { consultaId: 'consulta-velha' }, 'viewer');

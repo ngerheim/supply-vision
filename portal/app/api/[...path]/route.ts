@@ -37,6 +37,18 @@ const ok = (data: unknown, init?: ResponseInit) => {
   return NextResponse.json(data, { ...init, headers });
 };
 const fail = (message: string, status = 400) => ok({ error: message }, { status });
+const CONSULTAS_POR_MINUTO = 20;
+const LIMITE_CONSULTAS_MENSAGEM = 'Limite de 20 consultas de CNPJ e CEP por minuto atingido. Aguarde antes de tentar novamente.';
+const consultasPorUsuario = new Map<string, number[]>();
+let ultimaConsulta = 0;
+function excedeuLimiteConsultas(userId: string) {
+  const agora = Math.max(Date.now(), ultimaConsulta + 1), recentes = (consultasPorUsuario.get(userId) ?? []).filter(t => t > agora - 60_000);
+  ultimaConsulta = agora;
+  if (recentes.length >= CONSULTAS_POR_MINUTO) { consultasPorUsuario.set(userId, recentes); return true; }
+  recentes.push(agora); consultasPorUsuario.set(userId, recentes);
+  if (consultasPorUsuario.size > 1000) for (const [id, tempos] of consultasPorUsuario) if (!tempos.some(t => t > agora - 60_000)) consultasPorUsuario.delete(id);
+  return false;
+}
 // Respostas antecipadas a escritas precisam finalizar o corpo HTTP. No runtime
 // local, deixar um corpo pequeno pendente pode derrubar a conexão reutilizada.
 // Mantém o limite mesmo em pedidos não autorizados.
@@ -216,11 +228,12 @@ async function GETInterno(request: NextRequest) {
     if (parts.length === 1) return solicitacoes.listar(user, request.nextUrl.searchParams);
     if (parts.length === 3 && parts[1] === 'cnpj') {
       if (await first(VALIDACAO_ATIVA_SQL)) return fail('Atualização em validação. Aguarde para consultar.', 503);
+      if (excedeuLimiteConsultas(user.id)) return fail(LIMITE_CONSULTAS_MENSAGEM, 429);
       // Este GET persiste a consulta; o handler declara solicitacao:abrir.
       definirAutorEscrita({ id: user.id, role: user.role, token: await tokenHash(banco.parseCookies(request).acordos_session || '') });
       return solicitacoes.consultarCnpj(user, parts[2]);
     }
-    if (parts.length === 3 && parts[1] === 'cep') return solicitacoes.consultarCep(parts[2]);
+    if (parts.length === 3 && parts[1] === 'cep') return excedeuLimiteConsultas(user.id) ? fail(LIMITE_CONSULTAS_MENSAGEM, 429) : solicitacoes.consultarCep(parts[2]);
     if (parts.length === 2) return solicitacoes.detalhe(user, parts[1]);
     return fail('Rota não encontrada.', 404);
   }
