@@ -141,7 +141,7 @@ void test('Baixa no estoque pelo roteador e SQLite reais', async (t) => {
   const entrada = (extras = {}) => ({
     numero_os: String(proximaOs++),
     placa: 'fic-1234',
-    estoque_id: 'estoque_semente_1',
+    estoque_id: estoqueA.id,
     ...extras,
   });
   const abrir = async (body = entrada(), user = 'viewer') => {
@@ -182,15 +182,22 @@ void test('Baixa no estoque pelo roteador e SQLite reais', async (t) => {
       )
       .all(`/?aba=chamados&baixa=${id}`);
 
+  const cadastrarEstoque = async (nome) => {
+    const resposta = await post('estoques', { nome }, admin);
+    assert.equal(resposta.status, 201, JSON.stringify(resposta.data));
+    return resposta.data;
+  };
+  const estoqueA = await cadastrarEstoque('Estoque Teste A');
+  const estoqueB = await cadastrarEstoque('Estoque Teste B');
   await t.test(
-    'semente e cadastro: guardas, nomes normalizados, revision e desativacao',
+    'cadastro: guardas, nomes normalizados, revision e desativacao',
     async () => {
       assert.ok(
         sql.prepare('SELECT 1 FROM schema_migrations WHERE version=11').get(),
       );
       assert.deepEqual(
         (await get('estoques')).data.estoques.map((e) => e.nome),
-        ['Belo Horizonte', 'Campo Grande', 'Paracatu', 'Parauapebas'],
+        ['Estoque Teste A', 'Estoque Teste B'],
       );
       for (const user of ['viewer', 'editor']) {
         assert.equal(
@@ -200,7 +207,7 @@ void test('Baixa no estoque pelo roteador e SQLite reais', async (t) => {
         assert.equal(
           (
             await put(
-              'estoques/estoque_semente_1',
+              `estoques/${estoqueA.id}`,
               { nome: 'Outro', expectedRevision: 0 },
               user,
             )
@@ -236,8 +243,8 @@ void test('Baixa no estoque pelo roteador e SQLite reais', async (t) => {
         ).status,
         200,
       );
-      assert.equal((await get('estoques')).data.estoques.length, 4);
-      assert.equal((await get('estoques', admin)).data.estoques.length, 5);
+      assert.equal((await get('estoques')).data.estoques.length, 2);
+      assert.equal((await get('estoques', admin)).data.estoques.length, 3);
       assert.equal(
         (await post('baixas', entrada({ estoque_id: novo.data.id }))).status,
         400,
@@ -254,7 +261,7 @@ void test('Baixa no estoque pelo roteador e SQLite reais', async (t) => {
       assert.equal(
         (
           await put(`estoques/${novo.data.id}`, {
-            nome: 'BELO HORIZONTE',
+            nome: 'ESTOQUE TESTE A',
             expectedRevision: 2,
           })
         ).status,
@@ -442,7 +449,7 @@ void test('Baixa no estoque pelo roteador e SQLite reais', async (t) => {
       ['7004', '2026-10-26T03:00:00Z'],
     ]) {
       const b = await abrir(
-        entrada({ numero_os, estoque_id: 'estoque_semente_2' }),
+        entrada({ numero_os, estoque_id: estoqueB.id }),
       );
       sql
         .prepare('UPDATE baixas_estoque SET criado_em=? WHERE id=?')
@@ -451,7 +458,7 @@ void test('Baixa no estoque pelo roteador e SQLite reais', async (t) => {
     assert.deepEqual(
       (
         await get(
-          'baixas?de=2026-10-25&ate=2026-10-25&estoque=estoque_semente_2',
+          `baixas?de=2026-10-25&ate=2026-10-25&estoque=${estoqueB.id}`,
         )
       ).data.baixas
         .map((b) => b.numero_os)
@@ -541,8 +548,8 @@ void test('Baixa no estoque pelo roteador e SQLite reais', async (t) => {
         ...db,
         async batch(instrucoes) {
           sql
-            .prepare("UPDATE estoques SET ativo=0 WHERE id='estoque_semente_1'")
-            .run();
+            .prepare('UPDATE estoques SET ativo=0 WHERE id=?')
+            .run(estoqueA.id);
           return db.batch(instrucoes);
         },
       };
@@ -552,8 +559,8 @@ void test('Baixa no estoque pelo roteador e SQLite reais', async (t) => {
       } finally {
         globalThis[chave] = db;
         sql
-          .prepare("UPDATE estoques SET ativo=1 WHERE id='estoque_semente_1'")
-          .run();
+          .prepare('UPDATE estoques SET ativo=1 WHERE id=?')
+          .run(estoqueA.id);
       }
     },
   );
@@ -582,7 +589,7 @@ void test('Baixa no estoque pelo roteador e SQLite reais', async (t) => {
         );
         assert.equal(
           (
-            await put('estoques/estoque_semente_1', {
+            await put(`estoques/${estoqueA.id}`, {
               ativo: false,
               expectedRevision: 0,
             })
@@ -626,7 +633,7 @@ void test('Baixa no estoque pelo roteador e SQLite reais', async (t) => {
         let user;
         return async (rota, method = 'GET', body, key) => {
           if (rota === '/login') {
-            user = body.role;
+            user = body.role === 'admin' ? admin : body.role;
             return {};
           }
           if (rota === '/logout') return {};
@@ -641,7 +648,7 @@ void test('Baixa no estoque pelo roteador e SQLite reais', async (t) => {
           return r.data;
         };
       };
-      const exemplo = { usuarios: [{ role: 'viewer' }, { role: 'editor' }] },
+      const exemplo = { usuarios: [{ role: 'viewer' }, { role: 'editor' }, { role: 'admin' }] },
         estado = {};
       let salvos = 0;
       await semearBaixas(

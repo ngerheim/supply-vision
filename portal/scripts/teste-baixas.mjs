@@ -55,9 +55,12 @@ for (const role of ['viewer', 'editor']) {
   assert.equal(login.status, 200);
   cookies[role] = login.headers.get('set-cookie').split(';')[0];
 }
-const estoques = (await pedir('estoques', 'GET', undefined, cookies.viewer))
-  .data.estoques;
-assert.equal(estoques.length, 4);
+const estoques = [];
+for (const nome of ['Estoque Teste A', 'Estoque Teste B']) {
+  const estoque = await pedir('estoques', 'POST', { nome });
+  assert.equal(estoque.status, 201);
+  estoques.push(estoque.data);
+}
 assert.equal(
   (
     await pedir(

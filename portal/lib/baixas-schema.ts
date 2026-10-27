@@ -21,8 +21,4 @@ export const SCHEMA_BAIXAS = [
   `CREATE INDEX IF NOT EXISTS idx_baixa_andamentos ON baixa_andamentos(baixa_id,criado_em,id)`,
   `CREATE TRIGGER IF NOT EXISTS baixa_andamentos_imutavel_update BEFORE UPDATE ON baixa_andamentos BEGIN SELECT RAISE(ABORT,'Andamentos sao imutaveis'); END`,
   `CREATE TRIGGER IF NOT EXISTS baixa_andamentos_imutavel_delete BEFORE DELETE ON baixa_andamentos BEGIN SELECT RAISE(ABORT,'Andamentos sao imutaveis'); END`,
-  ...['Belo Horizonte', 'Parauapebas', 'Campo Grande', 'Paracatu'].map(
-    (nome, i) =>
-      `INSERT OR IGNORE INTO estoques(id,nome,nome_chave) VALUES('estoque_semente_${i + 1}','${nome}','${nome.toUpperCase()}')`,
-  ),
 ];
