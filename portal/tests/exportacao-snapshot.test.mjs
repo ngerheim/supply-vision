@@ -31,6 +31,8 @@ void test('exportacao mantem referencias quando exclusao ocorre durante leituras
     reader.prepare("INSERT INTO solicitacao_andamentos(id,solicitacao_id,user_id,para_status,criado_em,request_key,request_hash) VALUES('san','sol','u','aberta','x','chave-ficticia','hash-ficticio')").run();
     reader.prepare("INSERT INTO estoques(id,nome,nome_chave) VALUES('est','Estoque ficticio','ESTOQUE FICTICIO')").run();
     reader.prepare("INSERT INTO baixas_estoque(id,numero_os,estoque_id,placa,solicitante_id,criado_em,atualizado_em,request_key,request_hash) VALUES('bx','123','est','ABC1234','u','x','x','chave-ficticia','hash-ficticio')").run();
+    reader.prepare("INSERT INTO itens_catalogo(id,descricao,descricao_chave,unidade) VALUES('itm','Filtro ficticio','FILTRO FICTICIO','un')").run();
+    reader.prepare("INSERT INTO baixa_itens(id,baixa_id,item_id,quantidade_centesimos,criado_em,atualizado_em) VALUES('bi','bx','itm',200,'x','x')").run();
     reader.prepare("INSERT INTO baixa_andamentos(id,baixa_id,user_id,para_status,criado_em,request_key,request_hash) VALUES('ban','bx','u','aberta','x','chave-ficticia','hash-ficticio')").run();
     reader.prepare("INSERT INTO email_notifications(id,solicitacao_id,event_id,type,recipient_name,recipient_email,payload_json,next_attempt_at,dedupe_key,created_at,updated_at) VALUES('mail','sol','san','solicitacao_abertura','Pessoa ficticia','pessoa@example.com','{}','2026-01-01T00:00:00.000Z','dedupe-ficticio','2026-01-01T00:00:00.000Z','2026-01-01T00:00:00.000Z')").run();
     let lotes=0;
@@ -57,6 +59,9 @@ void test('exportacao mantem referencias quando exclusao ocorre durante leituras
     assert.equal(tables.emailNotifications[0].solicitacao_id,tables.solicitacoes[0].id);
     assert.equal(tables.baixasEstoque[0].estoque_id,tables.estoques[0].id);
     assert.equal(tables.baixaAndamentos[0].baixa_id,tables.baixasEstoque[0].id);
+    assert.equal(tables.itensCatalogo[0].id,'itm');
+    assert.equal(tables.baixaItens[0].baixa_id,tables.baixasEstoque[0].id);
+    assert.equal(tables.baixaItens[0].item_id,tables.itensCatalogo[0].id);
     for(const tabela of [tables.solicitacoes,tables.solicitacaoAndamentos,tables.baixasEstoque,tables.baixaAndamentos])
       assert.equal(tabela.some(row=>'request_key' in row||'request_hash' in row),false);
     assert.equal(tables.users.some(u=>'password_hash' in u),false);

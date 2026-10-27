@@ -319,7 +319,9 @@ async function POSTInterno(request: NextRequest) {
   if (parts[0] === 'baixas') {
     if (!pode(user, parts.length === 1 ? 'baixa:abrir' : 'baixa:atender')) return denyWrite(request, 'Seu perfil não permite esta operação.');
     if (parts.length === 1) return baixas.criar(request, user);
-    return parts.length === 3 && parts[2] === 'transicao' ? baixas.transicionar(request, user, parts[1]) : fail('Rota não encontrada.', 404);
+    if(parts.length===3&&parts[2]==='transicao')return baixas.transicionar(request,user,parts[1]);
+    if(parts.length===3&&parts[2]==='atender-itens')return baixas.atenderItens(request,user,parts[1]);
+    return fail('Rota não encontrada.',404);
   }
   if (parts[0] === 'estoques') {
     if (!pode(user, 'estoque:gerenciar')) return denyWrite(request, 'Seu perfil não permite gerenciar estoques.');
@@ -375,6 +377,10 @@ async function PUTInterno(request: NextRequest) {
   if (!user) return fail('Sessão expirada.', 401);
   if (await first(VALIDACAO_ATIVA_SQL)) return denyWrite(request, 'Sistema em atualização, aguarde alguns instantes', 503, 'validacao');
   const partesSolicitacao = partsOf(request);
+  if(partesSolicitacao[0]==='baixas'){
+    if(partesSolicitacao.length===3&&partesSolicitacao[2]==='itens')return baixas.editarItens(request,user,partesSolicitacao[1]);
+    return fail('Rota não encontrada.',404);
+  }
   if (partesSolicitacao[0] === 'estoques') {
     if (!pode(user, 'estoque:gerenciar')) return denyWrite(request, 'Seu perfil não permite gerenciar estoques.');
     return partesSolicitacao.length === 2 ? baixas.gravarEstoque(request, user, partesSolicitacao[1]) : fail('Rota não encontrada.', 404);

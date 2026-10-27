@@ -110,6 +110,7 @@ void test('nova baixa valida placa enquanto digita, restringe OS, usa ativos e m
   h.requests[0].resolve({
     estoques: [estoque, { id: 'inativo', nome: 'Inativo', ativo: 0 }],
   });
+  h.requests.find(r=>r.path.startsWith('/api/itens?')).resolve({itens:[{id:'item-filtro',descricao:'Filtro fictício',unidade:'un',ativo:1}]});
   await flush(h);
   assert.equal(
     h.find((n) => n.type === 'option' && n.props.value === 'inativo').length,
@@ -126,6 +127,9 @@ void test('nova baixa valida placa enquanto digita, restringe OS, usa ativos e m
     false,
   );
   change(h, 'estoque_id', 'e', 'select');
+  h.one('select',p=>p['aria-label']==='Item do catálogo').onChange({target:{value:'item-filtro'}});h.render();
+  button(h,'Adicionar item').onClick();h.render();
+  h.one('Input',p=>p['aria-label']==='Quantidade Filtro fictício').onChange({target:{value:'2'}});h.render();
   submit(h);
   const tentativa = h.requests.at(-1);
   submit(h);
@@ -134,6 +138,7 @@ void test('nova baixa valida placa enquanto digita, restringe OS, usa ativos e m
     numero_os: '123',
     placa: 'FIC1234',
     estoque_id: 'e',
+    itens:[{itemId:'item-filtro',quantidade:2}],
   });
   assert.ok(tentativa.options.headers['idempotency-key']);
   tentativa.reject(
@@ -173,6 +178,7 @@ for (const role of ['viewer', 'editor', 'admin'])
           status,
           motivo_recusa: status === 'recusada' ? 'Motivo fictício' : null,
         },
+        itens:[{id:'bi-1',item_id:'cat-1',descricao:'Filtro fictício',unidade:'un',quantidade:1,status:'pendente'}],
         andamentos: [
           {
             id: 'a',
@@ -183,70 +189,76 @@ for (const role of ['viewer', 'editor', 'admin'])
         ],
       });
       await flush(h);
-      assert.equal(
-        h.find(
-          (n) =>
-            n.type === 'Button' && n.props.children === 'Marcar como baixada',
-        ).length,
-        role !== 'viewer' && status === 'aberta' ? 1 : 0,
-      );
+      assert.equal(h.find(n=>n.type==='Button'&&n.props.children==='Baixar selecionados').length,role!=='viewer'&&status==='aberta'?1:0);
       assert.ok(
         h.find((n) => n.type === 'Info' && n.props.label === 'Placa').length,
       );
     });
 void test('atendimento envia revision, recusa exige motivo, conflito bloqueia ate recarregar', async (t) => {
+  const item={id:'bi-1',item_id:'cat-1',descricao:'Filtro fictício',unidade:'un',quantidade:1,status:'pendente'};
   const h = await abrir(t, 'DetalheBaixa', {
     id: 'b',
     user: { role: 'editor' },
     onBack() {},
   });
-  h.requests[0].resolve({ baixa, andamentos: [] });
+  h.requests[0].resolve({ baixa, itens:[item], andamentos: [] });
+  h.requests.find(r=>r.path.startsWith('/api/itens?')).resolve({itens:[]});
   await flush(h);
-  button(h, 'Recusar').onClick();
+  h.one('input',p=>p['aria-label']==='Selecionar Filtro fictício').onChange({target:{checked:true}});
   h.render();
-  submit(h);
+  button(h,'Recusar selecionados').onClick();
   h.render();
   assert.match(alerts(h), /motivo/);
-  assert.equal(h.requests.length, 1);
-  change(h, 'motivo_recusa', 'Motivo fictício', 'Textarea');
-  submit(h);
+  assert.equal(h.requests.filter(r=>r.path==='/api/baixas/b').length, 1);
+  h.one('Input',p=>p['aria-label']==='Motivo Filtro fictício').onChange({target:{value:'Motivo fictício'}});h.render();
+  button(h,'Recusar selecionados').onClick();
   const r = h.requests.at(-1);
   assert.deepEqual(body(r), {
-    para: 'recusada',
-    texto: 'Motivo fictício',
     expectedRevision: 3,
+    itens:[{id:'bi-1',para:'recusado',motivo:'Motivo fictício'}],
   });
   r.reject(new ApiError({ status: 409, codigo: 'revisao', error: 'Alterada' }));
   await flush(h);
   assert.match(alerts(h), /recarregue/);
-  assert.equal(h.one('fieldset').disabled, true);
+  assert.equal(button(h,'Baixar selecionados').disabled,true);
   h.one('Button', (p) => p['aria-label'] === 'Recarregar').onClick();
   await flush(h);
-  h.requests
-    .at(-1)
-    .resolve({ baixa: { ...baixa, revision: 4 }, andamentos: [] });
+  h.requests.findLast(r=>r.path==='/api/baixas/b').resolve({ baixa: { ...baixa, revision: 4 },itens:[item], andamentos: [] });
   await flush(h);
-  button(h, 'Marcar como baixada').onClick();
+  button(h, 'Baixar selecionados').onClick();
   const nova = h.requests.at(-1);
   assert.deepEqual(body(nova), {
-    para: 'baixada',
-    texto: '',
     expectedRevision: 4,
+    itens:[{id:'bi-1',para:'baixado',motivo:''}],
   });
   nova.resolve({});
   await flush(h);
-  assert.ok(h.requests.at(-1).path.endsWith('/b'));
+  assert.ok(h.requests.findLast(r=>r.path==='/api/baixas/b'));
 });
 void test('409 que não é revisão mostra mensagem sem travar as ações', async (t) => {
   const h = await abrir(t, 'DetalheBaixa', { id: 'b', user: { role: 'editor' }, onBack() {} });
-  h.requests[0].resolve({ baixa, andamentos: [] });
+  h.requests[0].resolve({ baixa, itens:[{id:'bi-1',descricao:'Filtro fictício',unidade:'un',quantidade:1,status:'pendente'}], andamentos: [] });
+  h.requests.find(r=>r.path.startsWith('/api/itens?')).resolve({itens:[]});
   await flush(h);
-  button(h, 'Marcar como baixada').onClick();
+  h.one('input',p=>p['aria-label']==='Selecionar Filtro fictício').onChange({target:{checked:true}});h.render();
+  button(h, 'Baixar selecionados').onClick();
   h.requests.at(-1).reject(new ApiError({ status: 409, codigo: 'duplicado', error: 'Já existe um registro.' }));
   await flush(h);
   assert.equal(alerts(h), 'Já existe um registro.');
-  assert.notEqual(h.one('fieldset').disabled, true);
-  assert.notEqual(button(h, 'Marcar como baixada').disabled, true);
+  assert.notEqual(button(h, 'Baixar selecionados').disabled, true);
+});
+void test('detalhe seleciona itens para atendimento em lote e permite editar pendentes',async t=>{
+  const item={id:'bi-1',item_id:'cat-1',descricao:'Filtro fictício',unidade:'un',quantidade:2,status:'pendente'},h=await abrir(t,'DetalheBaixa',{id:'b',user:{id:'viewer',role:'viewer'},onBack(){}});
+  h.requests.find(r=>r.path==='/api/baixas/b').resolve({baixa:{...baixa,solicitante_id:'viewer'},itens:[item],andamentos:[]});
+  h.requests.find(r=>r.path.startsWith('/api/itens?')).resolve({itens:[{id:'cat-2',descricao:'Óleo fictício',unidade:'L',ativo:1}]});await flush(h);
+  h.one('Input',p=>p['aria-label']==='Quantidade Filtro fictício').onChange({target:{value:'3'}});h.render();
+  h.one('select',p=>p['aria-label']==='Adicionar item do catálogo').onChange({target:{value:'cat-2'}});h.render();button(h,'Adicionar item').onClick();h.render();
+  h.one('Input',p=>p['aria-label']==='Quantidade adicionada Óleo fictício').onChange({target:{value:'2.5'}});h.render();button(h,'Salvar itens pendentes').onClick();
+  const edit=h.requests.at(-1);assert.equal(edit.path,'/api/baixas/b/itens');assert.deepEqual(body(edit),{expectedRevision:3,itens:[{itemId:'cat-1',quantidade:3},{itemId:'cat-2',quantidade:2.5}]});edit.resolve({});await flush(h);
+  const a=await abrir(t,'DetalheBaixa',{id:'b',user:{role:'editor'},onBack(){}});
+  a.requests.find(r=>r.path==='/api/baixas/b').resolve({baixa, itens:[item],andamentos:[]});a.requests.find(r=>r.path.startsWith('/api/itens?')).resolve({itens:[]});await flush(a);
+  a.one('input',p=>p['aria-label']==='Selecionar Filtro fictício').onChange({target:{checked:true}});a.render();button(a,'Baixar selecionados').onClick();
+  const atender=a.requests.at(-1);assert.equal(atender.path,'/api/baixas/b/atender-itens');assert.deepEqual(body(atender),{expectedRevision:3,itens:[{id:'bi-1',para:'baixado',motivo:''}]});atender.resolve({});await flush(a);
 });
 void test('falha de leitura e 404 nao exibem dados nem acoes', async (t) => {
   const h = await abrir(t, 'DetalheBaixa', {
