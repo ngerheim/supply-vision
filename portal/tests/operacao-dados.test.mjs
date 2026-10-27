@@ -41,11 +41,15 @@ void test('prazo zero preserva tipo; configuracao invalida bloqueia', () => {
   finally { db.close(); }
   for (const valor of ['-1','1.5','invalido']) assert.throws(()=>configurarExpurgo({EXPURGO_EMAILS_DIAS:valor}));
 });
-void test('backup antes do primeiro expurgo e trava compartilhada; falha nao exclui', async t => {
+void test('pula backup sem candidatos e faz backup antes do expurgo; falha nao exclui', async t => {
   const pasta = fs.mkdtempSync(path.join(fs.realpathSync.native(os.tmpdir()),'sv-expurgo-'));
   t.after(()=>fs.rmSync(pasta,{recursive:true,force:true}));
   const arquivo=path.join(pasta,'banco.sqlite');banco(arquivo).close();
   const opcoes={config:{EXPURGO_HABILITADO:'1'},arquivo,pasta,agora};
+  const semCandidatos=path.join(pasta,'sem-candidatos.sqlite');
+  const limpo=banco(semCandidatos);limpo.prepare("UPDATE email_notifications SET updated_at=?").run(dias(1));limpo.prepare("UPDATE daily_report_deliveries SET updated_at=?").run(dias(1));limpo.prepare("UPDATE report_jobs SET completed_at=?").run(dias(1));limpo.prepare("UPDATE imports SET completed_at=?,summary_json=NULL").run(dias(1));limpo.close();
+  const semBackup=await executarExpurgo({...opcoes,arquivo:semCandidatos,backup(){assert.fail('backup nao deve ocorrer sem candidatos');}});
+  assert.equal(semBackup.mensagem,'nada a expurgar');
   await assert.rejects(executarExpurgo({...opcoes,backup(){throw new Error('copia falhou');}}),/copia falhou/);
   let db=new DatabaseSync(arquivo);assert.equal(db.prepare('SELECT COUNT(*) n FROM email_notifications').get().n,6);db.close();
   const lock=new DatabaseSync(path.join(pasta,'backup.lock.sqlite'));lock.exec('BEGIN EXCLUSIVE');
