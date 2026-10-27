@@ -228,7 +228,7 @@ void test('Cadastro de fornecedor pelo roteador e SQLite reais', async t => {
     const bodyCorrecao = { expectedRevision: 2, cidade: 'Cidade Corrigida', razao_social: 'Manual Corrigido', status: 'cadastrado', solicitante_id: 'outro', categorias: ['categoria_semente_2'] }, chaveCorrecao = { 'idempotency-key': 'correcao_ficticia_repetida_01' };
     assert.equal((await pedir('PUT', `solicitacoes/${s.id}`, 'viewer', bodyCorrecao, chaveCorrecao)).status, 200);
     const contagemCorrecao = contagens();
-    assert.equal((await pedir('PUT', `solicitacoes/${s.id}`, 'viewer', bodyCorrecao, chaveCorrecao)).status, 200);
+    const replayCorrecao = await pedir('PUT', `solicitacoes/${s.id}`, 'viewer', bodyCorrecao, chaveCorrecao); assert.equal(replayCorrecao.status, 200);
     assert.deepEqual(contagens(), contagemCorrecao);
     const chaveDivergente = await pedir('PUT', `solicitacoes/${s.id}`, 'viewer', { ...bodyCorrecao, cidade: 'Outra Cidade' }, chaveCorrecao);
     assert.equal(chaveDivergente.status, 409); assert.equal(chaveDivergente.data.codigo, 'duplicado');

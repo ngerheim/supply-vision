@@ -183,8 +183,6 @@ export function solicitacoesApi(contexto: ContextoApi, consultas = criarConsulta
     return comAcaoEscrita('solicitacao:abrir', async () => {
       const body = await jsonBody<Corpo>(request), atual = await first<Solicitacao>('SELECT * FROM solicitacoes WHERE id=? AND solicitante_id=?', [solicitacaoId, user.id]);
       if (!atual) return inexistente();
-      if (!revisaoConfere(body.expectedRevision, atual.revision)) return conflito();
-      if (atual.status !== 'devolvida') return ok({ error: 'Somente solicitações devolvidas podem ser corrigidas.', codigo: 'status_invalido' }, { status: 409 });
       const chave = chaveIdempotencia(request), hash = chave ? await tokenHash(`correcao:${JSON.stringify(body)}`) : null;
       if (chave) {
         const anterior = await first<{ request_hash: string }>('SELECT request_hash FROM solicitacao_andamentos WHERE solicitacao_id=? AND user_id=? AND request_key=?', [solicitacaoId, user.id, chave]);
