@@ -151,22 +151,33 @@ function garantirPeriodoRelatorio(db){
 // depois disso nunca era relatado.
 export function prepararRelatoriosDiarios(db,agora=null,raiz){
   garantirPeriodoRelatorio(db);
+  const consultarUsuariosEm=(local)=>db.prepare("SELECT id FROM users u WHERE active=1 AND role IN ('admin','editor') AND daily_report_enabled=1 AND daily_report_time<=? AND NOT EXISTS (SELECT 1 FROM daily_report_deliveries d WHERE d.user_id=u.id AND d.report_date=?) LIMIT 1").get(local.horario,local.data);
+  const existeConteudoPendente=()=>db.prepare("SELECT 1 FROM daily_report_deliveries WHERE status='pending' AND payload_json IS NULL LIMIT 1").get();
+  // Sondagem sem reserva: evita disputar o escritor quando nada precisa ser
+  // preparado. A decisão e repetida sob a trava porque outra execução pode
+  // congelar o conteudo entre esta leitura e BEGIN IMMEDIATE.
+  const amostra=typeof agora==='function'?agora():agora||new Date();
+  const localAmostra=horarioSaoPaulo(amostra);
+  if(!consultarUsuariosEm(localAmostra)&&!existeConteudoPendente())return localAmostra.data;
   db.exec('BEGIN IMMEDIATE');
   try {
   // Captura o corte somente depois de reservar a escrita. Produtores de eventos
   // usam a mesma origem (Date do processo Node) dentro da transação de escrita.
   const instante=typeof agora==='function'?agora():agora||new Date();
+  const localInstante=horarioSaoPaulo(instante);
+  if(!consultarUsuariosEm(localInstante)&&!existeConteudoPendente()){
+    db.exec('ROLLBACK');return localInstante.data;
+  }
   const corteAnterior=db.prepare('SELECT MAX(COALESCE(period_end,sent_at,created_at)) period_end FROM daily_report_deliveries').get()?.period_end;
   const instanteIso=instante.toISOString();
   const corteData=new Date(corteAnterior&&instanteIso<corteAnterior?corteAnterior:instanteIso);
   const agoraIso=corteData.toISOString();
   const local=horarioSaoPaulo(corteData);
   const corte=lerCorteRestauracao(corteData,raiz);
-  const consultarUsuarios=db.prepare("SELECT id,daily_report_time FROM users u WHERE active=1 AND role IN ('admin','editor') AND daily_report_enabled=1 AND daily_report_time<=? AND NOT EXISTS (SELECT 1 FROM daily_report_deliveries d WHERE d.user_id=u.id AND d.report_date=?)");
-  if(!consultarUsuarios.get(local.horario,local.data)&&!db.prepare("SELECT 1 FROM daily_report_deliveries WHERE status='pending' AND payload_json IS NULL LIMIT 1").get()){
+  if(!consultarUsuariosEm(local)&&!existeConteudoPendente()){
     db.exec('ROLLBACK');return local.data;
   }
-  const usuarios=consultarUsuarios.all(local.horario,local.data);
+  const usuarios=db.prepare("SELECT id,daily_report_time FROM users u WHERE active=1 AND role IN ('admin','editor') AND daily_report_enabled=1 AND daily_report_time<=? AND NOT EXISTS (SELECT 1 FROM daily_report_deliveries d WHERE d.user_id=u.id AND d.report_date=?)").all(local.horario,local.data);
   const ultimo=db.prepare("SELECT report_date,period_end,sent_at,created_at FROM daily_report_deliveries WHERE user_id=? AND report_date<? ORDER BY report_date DESC LIMIT 1");
   const inserir=db.prepare("INSERT OR IGNORE INTO daily_report_deliveries (id,user_id,report_date,status,attempts,next_attempt_at,created_at,updated_at,period_start,period_end,last_error) VALUES (?,?,?,?,0,?,?,?,?,?,?)");
   for(const usuario of usuarios){
