@@ -277,6 +277,27 @@ async function initialize() {
       db.prepare('INSERT OR IGNORE INTO schema_migrations(version,applied_at) VALUES(12,?)').bind(now()),
     ]);
   }
+  if (!await db.prepare('SELECT 1 ok FROM schema_migrations WHERE version=13').first()) {
+    await db.batch([
+      db.prepare(`CREATE TABLE IF NOT EXISTS itens_catalogo (id TEXT PRIMARY KEY, descricao TEXT NOT NULL UNIQUE COLLATE NOCASE,
+        descricao_chave TEXT NOT NULL UNIQUE, unidade TEXT NOT NULL CHECK(unidade IN ('un','L','m','kg')),
+        ativo INTEGER NOT NULL DEFAULT 1 CHECK(ativo IN (0,1)), revision INTEGER NOT NULL DEFAULT 0)`),
+      db.prepare(`CREATE TABLE IF NOT EXISTS baixa_itens (id TEXT PRIMARY KEY, baixa_id TEXT NOT NULL REFERENCES baixas_estoque(id),
+        item_id TEXT NOT NULL REFERENCES itens_catalogo(id), quantidade_centesimos INTEGER NOT NULL CHECK(quantidade_centesimos > 0),
+        status TEXT NOT NULL DEFAULT 'pendente' CHECK(status IN ('pendente','baixado','recusado')), motivo_recusa TEXT,
+        atendente_id TEXT REFERENCES users(id), atendido_em TEXT, criado_em TEXT NOT NULL, atualizado_em TEXT NOT NULL,
+        revision INTEGER NOT NULL DEFAULT 0, UNIQUE(baixa_id,item_id))`),
+      db.prepare('CREATE INDEX IF NOT EXISTS idx_baixa_itens_baixa_id ON baixa_itens(baixa_id)'),
+      db.prepare('CREATE INDEX IF NOT EXISTS idx_baixa_itens_item_id ON baixa_itens(item_id)'),
+      db.prepare(`INSERT OR IGNORE INTO itens_catalogo(id,descricao,descricao_chave,unidade,ativo) VALUES('item_legado','Item não especificado (legado)','ITEM NAO ESPECIFICADO (LEGADO)','un',0)`),
+      db.prepare(`INSERT OR IGNORE INTO baixa_itens(id,baixa_id,item_id,quantidade_centesimos,status,motivo_recusa,atendente_id,atendido_em,criado_em,atualizado_em)
+        SELECT 'bi_legado_'||b.id,b.id,'item_legado',100,
+        CASE b.status WHEN 'aberta' THEN 'pendente' WHEN 'baixada' THEN 'baixado' ELSE 'recusado' END,
+        b.motivo_recusa,b.atendente_id,CASE WHEN b.status='aberta' THEN NULL ELSE b.atualizado_em END,b.criado_em,b.atualizado_em
+        FROM baixas_estoque b WHERE NOT EXISTS(SELECT 1 FROM baixa_itens i WHERE i.baixa_id=b.id)`),
+      db.prepare('INSERT OR IGNORE INTO schema_migrations(version,applied_at) VALUES(13,?)').bind(now()),
+    ]);
+  }
   await db.prepare('PRAGMA optimize').run();
 }
 
