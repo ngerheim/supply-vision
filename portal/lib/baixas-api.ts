@@ -52,16 +52,18 @@ export function baixasApi(contexto: ContextoApi) {
     timestamp: string,
     condicao: string,
     valores: unknown[] = [],
+    detalhesSql = '?',
+    valoresDetalhes: unknown[] = [],
   ) =>
     statement(
-      `INSERT INTO audit_logs(id,user_id,action,entity,entity_id,details,created_at) SELECT ?,?,?,?,?,?,? WHERE ${condicao}`,
+      `INSERT INTO audit_logs(id,user_id,action,entity,entity_id,details,created_at) SELECT ?,?,?,?,?,${detalhesSql},? WHERE ${condicao}`,
       [
         id('aud'),
         user.id,
         acao,
         entidade,
         registro,
-        texto,
+        ...(detalhesSql === '?' ? [texto] : valoresDetalhes),
         timestamp,
         ...valores,
       ],
@@ -263,6 +265,8 @@ export function baixasApi(contexto: ContextoApi) {
             timestamp,
             'EXISTS(SELECT 1 FROM baixa_andamentos WHERE id=?)',
             [evento],
+            "('Pedido de baixa no estoque aberto: ' || (SELECT codigo FROM baixas_estoque WHERE id=?) || '; OS ' || ?)",
+            [registro, os],
           ),
           ...notificacoes,
         ]);

@@ -188,6 +188,7 @@ export function ChangeHistory({ users }: JsonData) {
                 <TableHead>Usuário</TableHead>
                 <TableHead>Ação</TableHead>
                 <TableHead>Registro</TableHead>
+                <TableHead>ID do registro</TableHead>
                 <TableHead>Detalhes</TableHead>
               </TableRow>
             </TableHeader>
@@ -211,6 +212,7 @@ export function ChangeHistory({ users }: JsonData) {
                   <TableCell className="text-sm">
                     {entityName(r.entity)}
                   </TableCell>
+                  <TableCell className="text-sm">{r.entityId || ''}</TableCell>
                   <TableCell className="max-w-[28rem] whitespace-pre-wrap break-words text-sm text-muted-foreground">
                     {r.detailsText || r.details}
                   </TableCell>
