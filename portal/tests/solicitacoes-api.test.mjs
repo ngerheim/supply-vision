@@ -465,7 +465,7 @@ void test('Cadastro de fornecedor pelo roteador e SQLite reais', async t => {
     const tabelas = ['solicitacoes', 'solicitacao_andamentos', 'categorias_fornecedor', 'solicitacao_categorias', 'consultas_cnpj'];
     const dados = () => Object.fromEntries(tabelas.map(tabela => [tabela, sql.prepare(`SELECT * FROM ${tabela} ORDER BY rowid`).all()]));
     const agora = new Date('2026-10-22T12:00:00.000Z');
-    for (const [id, dias] of [['antiga',91], ['limite',90], ['recente',1]]) sql.prepare('INSERT INTO consultas_cnpj VALUES(?,?,?,?,?,?)').run(id,CNPJS_ENSAIO.ativa,'BrasilAPI','{}',new Date(agora.getTime()-dias*86400000).toISOString(),'editor');
+    for (const [id, dias] of [['antiga',8], ['limite',7], ['recente',1]]) sql.prepare('INSERT INTO consultas_cnpj VALUES(?,?,?,?,?,?)').run(id,CNPJS_ENSAIO.ativa,'BrasilAPI','{}',new Date(agora.getTime()-dias*86400000).toISOString(),'editor');
     const antes = dados(), copia = criarCopiaIntegra(db.arquivo, path.join(pasta, 'backup.sqlite')), restaurada = path.join(pasta, 'restaurada.sqlite');
     prepararRestauracao(copia, restaurada, validarBanco);
     const restaurado = new DatabaseSync(restaurada);

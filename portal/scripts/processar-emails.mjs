@@ -22,6 +22,7 @@ const testarConexao = process.argv.includes('--test-connection');
 const indiceBanco = process.argv.indexOf('--database');
 const bancoInformado = indiceBanco >= 0 && process.argv[indiceBanco + 1] ? path.resolve(process.argv[indiceBanco + 1]) : null;
 const maxTentativas = 5;
+const limiteLogBytes = 5 * 1024 * 1024;
 
 // Falha ao gravar o log nunca pode desfazer um envio ja feito: se o erro
 // subisse, o item seria marcado como falho e reenviado.
@@ -29,9 +30,13 @@ function registrar(texto) {
   const linha = `${new Date().toISOString()}  ${texto}`;
   console.log(linha);
   try {
+    fs.mkdirSync(path.dirname(arquivoLog), { recursive: true });
+    if (fs.existsSync(arquivoLog) && fs.statSync(arquivoLog).size > limiteLogBytes) {
+      const antigo = `${arquivoLog}.1`;
+      if (fs.existsSync(antigo)) fs.unlinkSync(antigo);
+      fs.renameSync(arquivoLog, antigo);
+    }
     fs.appendFileSync(arquivoLog, `${linha}\n`, 'utf8');
-    const linhas = fs.readFileSync(arquivoLog, 'utf8').split(/\r?\n/);
-    if (linhas.length > 501) fs.writeFileSync(arquivoLog, `${linhas.slice(-500).join('\n')}\n`, 'utf8');
   } catch (erro) {
     console.error(`Nao foi possivel gravar o log: ${erro instanceof Error ? erro.message : 'erro desconhecido'}.`);
   }
