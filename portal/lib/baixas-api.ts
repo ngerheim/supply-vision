@@ -8,7 +8,7 @@ import {
   EntradaInvalida,
   LIMITES_CAMPO,
 } from './limites-entrada.ts';
-import { normalizeText } from './domain.ts';
+import { normalizeImportText, normalizeText } from './domain.ts';
 import { prepararNotificacaoCondicional } from './central-notificacoes.ts';
 import { intervaloDatasNegocio } from './periodo-auditoria.ts';
 import { paginaSolicitada } from './paginacao.ts';
@@ -373,6 +373,43 @@ export function baixasApi(contexto: ContextoApi) {
       ),
     });
   }
+  async function listarItens(user: User, params: URLSearchParams) {
+    const q = normalizeImportText(params.get('q') || ''), somenteAtivos=params.get('ativos')==='1', itens=await all(
+      `SELECT id,descricao,unidade,ativo,revision FROM itens_catalogo WHERE id<>'item_legado' ${(pode(user,'estoque:gerenciar')&&!somenteAtivos) ? '' : 'AND ativo=1'} ORDER BY descricao,id`,
+    );
+    return ok({itens:q?itens.filter(item=>normalizeImportText(item.descricao).includes(q)):itens});
+  }
+  async function gravarItem(request: Request, user: User, itemId?: string) {
+    return comAcaoEscrita('estoque:gerenciar', async () => {
+      if (!pode(user,'estoque:gerenciar')) return fail('Seu perfil não permite gerenciar itens.',403);
+      const body = await jsonBody<Corpo>(request);
+      if (itemId === 'item_legado') return fail('O item legado é protegido e não pode ser editado.',409);
+      const atual = itemId ? await first<{descricao:string;unidade:string;ativo:number;revision:number}>('SELECT * FROM itens_catalogo WHERE id=?',[itemId]) : null;
+      if (itemId && !atual) return fail('Item não encontrado.',404);
+      if (atual && !revisaoConfere(body.expectedRevision,atual.revision)) return contexto.ok({error:'Este registro foi alterado. Recarregue antes de salvar novamente.',codigo:'revisao'},{status:409});
+      const descricao = body.descricao === undefined && atual ? atual.descricao : campo(body,'descricao',120),
+        unidade = body.unidade === undefined && atual ? atual.unidade : campo(body,'unidade',2),
+        chave = chaveIdempotencia(request), hash = chave ? await tokenHash(JSON.stringify(body)) : null;
+      if (!descricao) return fail('Informe a descrição do item.');
+      if (!['un','L','m','kg'].includes(unidade)) return fail('Unidade inválida.');
+      if (body.ativo !== undefined && ![true,false,0,1].includes(body.ativo as boolean|number)) return fail('Situação do item inválida.');
+      const ativo = body.ativo === undefined ? (atual?.ativo ?? 1) : (body.ativo === true || body.ativo === 1 ? 1 : 0), registro=itemId??id('itm'), timestamp=now();
+      if (!atual && chave) {
+        const antiga=await first<{request_hash:string;item_id:string}>('SELECT request_hash,item_id FROM itens_catalogo_tentativas WHERE user_id=? AND request_key=?',[user.id,chave]);
+        if (antiga) return antiga.request_hash===hash ? ok({id:antiga.item_id,revision:0},{status:201}) : contexto.ok({error:'Esta tentativa já foi usada com outros dados.',codigo:'idempotencia'},{status:409});
+      }
+      try {
+        const statements = [
+          atual ? statement('UPDATE itens_catalogo SET descricao=?,descricao_chave=?,unidade=?,ativo=?,revision=revision+1 WHERE id=? AND revision=?',[descricao,normalizeText(descricao).normalize('NFC'),unidade,ativo,registro,atual.revision]) : statement('INSERT INTO itens_catalogo(id,descricao,descricao_chave,unidade,ativo) VALUES(?,?,?,?,?)',[registro,descricao,normalizeText(descricao).normalize('NFC'),unidade,ativo]),
+          auditoria(user,'item_catalogo',registro,atual?'UPDATE':'CREATE',`Item: ${descricao}; unidade: ${unidade}; ativo: ${ativo}`,timestamp,'changes()=1'),
+        ];
+        if (!atual && chave) statements.push(statement('INSERT INTO itens_catalogo_tentativas(user_id,request_key,request_hash,item_id,criado_em) SELECT ?,?,?,?,? WHERE changes()=1',[user.id,chave,hash,registro,timestamp]));
+        const results=await rawDb().batch(statements);
+        if (!results[0].meta.changes) return contexto.ok({error:'Este registro foi alterado. Recarregue antes de salvar novamente.',codigo:'revisao'},{status:409});
+      } catch (erro) { if (ehErroUnique(erro)) return contexto.ok({error:'Já existe um item com essa descrição.',codigo:'duplicado'},{status:409}); throw erro; }
+      return ok({id:registro,revision:atual?atual.revision+1:0},{status:atual?200:201});
+    });
+  }
   async function gravarEstoque(
     request: Request,
     user: User,
@@ -455,5 +492,7 @@ export function baixasApi(contexto: ContextoApi) {
     transicionar,
     listarEstoques,
     gravarEstoque,
+    listarItens,
+    gravarItem,
   };
 }

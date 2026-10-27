@@ -151,6 +151,7 @@ export function Estoques() {
         </CardContent>
       </Card>
       {erro && <p role="alert">{erro}</p>}
+      <h2 className="text-lg font-semibold">Estoques</h2>
       {falha ? (
         <FalhaDeCarregamento
           erro={falha}
@@ -206,6 +207,14 @@ export function Estoques() {
           </CardContent>
         </Card>
       )}
+      <ItensCatalogo />
     </div>
   );
+}
+
+export function ItensCatalogo() {
+  const [rows,setRows]=useState<AnyRow[]|null>(null),[descricao,setDescricao]=useState(""),[unidade,setUnidade]=useState("un"),[editando,setEditando]=useState<AnyRow|null>(null),[erro,setErro]=useState(""),[busy,setBusy]=useState(false),[versao,setVersao]=useState(0);
+  useEffect(()=>{let ativo=true;void api("/api/itens").then(x=>{if(ativo)setRows(x.itens)}).catch(e=>{if(ativo)setErro(errorText(e))});return()=>{ativo=false}},[versao]);
+  const salvar=async(row:AnyRow|null,body:AnyRow)=>{if(busy)return;setBusy(true);setErro("");try{await api(`/api/itens${row?`/${encodeURIComponent(row.id)}`:""}`,corpoJson(row?"PUT":"POST",{...body,...(row?{expectedRevision:row.revision}:{})}));setDescricao("");setUnidade("un");setEditando(null);setVersao(v=>v+1)}catch(e){setErro(e instanceof ApiError&&e.details.status===409&&e.details.codigo==="revisao"?"O item foi alterado; recarregue antes de salvar.":e instanceof ApiError&&e.details.status===409&&e.details.codigo==="duplicado"?"Já existe um item com essa descrição.":errorText(e))}finally{setBusy(false)}};
+  return <section className="space-y-4" aria-label="Itens"><h2 className="text-lg font-semibold">Itens</h2><Card><CardContent><form onSubmit={e=>{e.preventDefault();if(descricao.trim())void salvar(editando,{descricao:descricao.trim(),unidade})}}><fieldset disabled={busy} className="flex flex-wrap items-end gap-3"><Field label={editando?"Editar item":"Novo item"}><Input name="descricao_item" required maxLength={120} value={descricao} onChange={e=>setDescricao(e.target.value)}/></Field><Field label="Unidade"><select className="h-10 rounded-md border px-3" value={unidade} onChange={e=>setUnidade(e.target.value)}><option value="un">un</option><option value="L">L</option><option value="m">m</option><option value="kg">kg</option></select></Field><Button type="submit">{editando?"Salvar":"Incluir"}</Button>{editando&&<Button type="button" variant="outline" onClick={()=>{setEditando(null);setDescricao("")}}>Cancelar</Button>}</fieldset></form></CardContent></Card>{erro&&<p role="alert">{erro}</p>}{!rows?<Loading label="Carregando itens…"/>:<Card><CardContent><Table><TableHeader><TableRow><TableHead>Descrição</TableHead><TableHead>Unidade</TableHead><TableHead>Situação</TableHead><TableHead>Ações</TableHead></TableRow></TableHeader><TableBody>{rows.map(item=><TableRow key={item.id}><TableCell>{item.descricao}</TableCell><TableCell>{item.unidade}</TableCell><TableCell><Badge variant="outline">{item.ativo?"Ativo":"Inativo"}</Badge></TableCell><TableCell className="space-x-2"><Button variant="outline" disabled={busy||Boolean(editando)} onClick={()=>{setEditando(item);setDescricao(item.descricao);setUnidade(item.unidade)}}>Editar {item.descricao}</Button><Button variant="outline" disabled={busy||Boolean(editando)} onClick={()=>void salvar(item,{ativo:!item.ativo})}>{item.ativo?"Desativar":"Ativar"} {item.descricao}</Button></TableCell></TableRow>)}</TableBody></Table>{!rows.length&&<p className="p-4">Nenhum item cadastrado.</p>}</CardContent></Card>}</section>;
 }

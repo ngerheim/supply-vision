@@ -279,6 +279,31 @@ void test('Baixa no estoque pelo roteador e SQLite reais', async (t) => {
       );
     },
   );
+  await t.test('catálogo de itens: acesso, validação, idempotência, revisão e proteção do legado',async()=>{
+    assert.equal((await get('itens','viewer')).status,200);
+    assert.equal((await post('itens',{descricao:'Negado',unidade:'un'},'viewer')).status,403);
+    assert.equal((await put('itens/item_legado',{descricao:'Negado',expectedRevision:0},'viewer')).status,403);
+    assert.equal((await post('itens',{descricao:'Negado',unidade:'un'},'editor')).status,403);
+    assert.equal((await put('itens/item_legado',{descricao:'Negado',unidade:'un',expectedRevision:0},'editor')).status,403);
+    for(const body of [{descricao:'',unidade:'un'},{descricao:'X'.repeat(121),unidade:'un'},{descricao:'Unidade errada',unidade:'cx'}]) assert.equal((await post('itens',body,admin)).status,400);
+    const headers={'idempotency-key':'catalogo-ficticio-001'}, body={descricao:'Filtro fictício',unidade:'un'};
+    const criado=await post('itens',body,admin,headers);assert.equal(criado.status,201);
+    const repetido=await post('itens',body,admin,headers);assert.equal(repetido.status,201);assert.equal(repetido.data.id,criado.data.id);
+    const conflitoKey=await post('itens',{descricao:'Outro filtro',unidade:'un'},admin,headers);assert.equal(conflitoKey.status,409);
+    const duplicado=await post('itens',{descricao:'FILTRO FICTÍCIO',unidade:'L'},admin);assert.equal(duplicado.status,409);assert.equal(duplicado.data.codigo,'duplicado');
+    assert.equal((await put(`itens/${criado.data.id}`,{descricao:'Alterado',unidade:'un',expectedRevision:4})).data.codigo,'revisao');
+    assert.equal((await put('itens/item_legado',{descricao:'Alterado',expectedRevision:0})).status,409);
+    assert.equal((await put(`itens/${criado.data.id}`,{descricao:'Óleo alterado',unidade:'kg',expectedRevision:0})).status,200);
+    assert.ok(sql.prepare("SELECT 1 FROM audit_logs WHERE entity='item_catalogo' AND entity_id=?").get(criado.data.id));
+    assert.equal((await get('itens','viewer')).data.itens.some(i=>i.id==='item_legado'||i.id===criado.data.id),true);
+    assert.equal((await get('itens?q=oleo')).data.itens.some(i=>i.id===criado.data.id),true);
+    assert.equal((await get('itens',admin)).data.itens.some(i=>i.id==='item_legado'),false);
+    assert.equal((await put(`itens/${criado.data.id}`,{ativo:false,expectedRevision:1})).status,200);
+    assert.equal((await get('itens','viewer')).data.itens.some(i=>i.id===criado.data.id),false);
+    assert.equal((await get('itens',admin)).data.itens.some(i=>i.id===criado.data.id),true);
+    assert.equal((await get('itens?ativos=1',admin)).data.itens.some(i=>i.id===criado.data.id),false);
+    assert.equal((await pedir('DELETE',`itens/${criado.data.id}`,admin)).status,404);
+  });
   await t.test(
     'validacao, criacao atomica, idempotencia, duplicidade concorrente e acesso',
     async () => {
@@ -676,6 +701,7 @@ void test('Baixa no estoque pelo roteador e SQLite reais', async (t) => {
       await semearBaixas(cliente, 'http://fixture', exemplo, {}, () => {});
       assert.deepEqual(contagens(), antes);
       assert.equal(salvos, 4);
+      assert.deepEqual(sql.prepare('SELECT descricao,unidade FROM itens_catalogo WHERE descricao LIKE ? ORDER BY descricao').all('%fictício%').map(i=>[i.descricao,i.unidade]),[['Filtro de óleo fictício','un'],['Óleo de motor fictício','L']]);
       const demo = sql
         .prepare(
           "SELECT * FROM baixas_estoque WHERE numero_os BETWEEN '900001' AND '900004' ORDER BY numero_os",
