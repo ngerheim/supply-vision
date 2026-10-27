@@ -149,14 +149,23 @@ function garantirPeriodoRelatorio(db){
 // Cada relatorio cobre do fim do anterior (enviado ou nao) ate a preparacao
 // deste. Antes cobria so o dia D ate o horario do envio, e o que acontecia
 // depois disso nunca era relatado.
-export function prepararRelatoriosDiarios(db,agora=new Date(),raiz){
+export function prepararRelatoriosDiarios(db,agora=null,raiz){
   garantirPeriodoRelatorio(db);
-  const local=horarioSaoPaulo(agora),agoraIso=agora.toISOString();
-  const corte=lerCorteRestauracao(agora,raiz);
-  const consultarUsuarios=db.prepare("SELECT id,daily_report_time FROM users u WHERE active=1 AND role IN ('admin','editor') AND daily_report_enabled=1 AND daily_report_time<=? AND NOT EXISTS (SELECT 1 FROM daily_report_deliveries d WHERE d.user_id=u.id AND d.report_date=?)");
-  if(!consultarUsuarios.get(local.horario,local.data)&&!db.prepare("SELECT 1 FROM daily_report_deliveries WHERE status='pending' AND payload_json IS NULL LIMIT 1").get())return local.data;
   db.exec('BEGIN IMMEDIATE');
   try {
+  // Captura o corte somente depois de reservar a escrita. Produtores de eventos
+  // usam a mesma origem (Date do processo Node) dentro da transação de escrita.
+  const instante=typeof agora==='function'?agora():agora||new Date();
+  const corteAnterior=db.prepare('SELECT MAX(COALESCE(period_end,sent_at,created_at)) period_end FROM daily_report_deliveries').get()?.period_end;
+  const instanteIso=instante.toISOString();
+  const corteData=new Date(corteAnterior&&instanteIso<corteAnterior?corteAnterior:instanteIso);
+  const agoraIso=corteData.toISOString();
+  const local=horarioSaoPaulo(corteData);
+  const corte=lerCorteRestauracao(corteData,raiz);
+  const consultarUsuarios=db.prepare("SELECT id,daily_report_time FROM users u WHERE active=1 AND role IN ('admin','editor') AND daily_report_enabled=1 AND daily_report_time<=? AND NOT EXISTS (SELECT 1 FROM daily_report_deliveries d WHERE d.user_id=u.id AND d.report_date=?)");
+  if(!consultarUsuarios.get(local.horario,local.data)&&!db.prepare("SELECT 1 FROM daily_report_deliveries WHERE status='pending' AND payload_json IS NULL LIMIT 1").get()){
+    db.exec('ROLLBACK');return local.data;
+  }
   const usuarios=consultarUsuarios.all(local.horario,local.data);
   const ultimo=db.prepare("SELECT report_date,period_end,sent_at,created_at FROM daily_report_deliveries WHERE user_id=? AND report_date<? ORDER BY report_date DESC LIMIT 1");
   const inserir=db.prepare("INSERT OR IGNORE INTO daily_report_deliveries (id,user_id,report_date,status,attempts,next_attempt_at,created_at,updated_at,period_start,period_end,last_error) VALUES (?,?,?,?,0,?,?,?,?,?,?)");
@@ -168,14 +177,14 @@ export function prepararRelatoriosDiarios(db,agora=new Date(),raiz){
     const previsto=new Date(`${local.data}T${usuario.daily_report_time}:00-03:00`);
     // O periodo termina agora; o horario previsto protege tambem a entrega
     // cujo consumidor so voltou depois do corte.
-    const restaurado=corte&&(previsto<=corte||agora<=corte);
+    const restaurado=corte&&(previsto<=corte||corteData<=corte);
     inserir.run(`rpt_${crypto.randomUUID().replaceAll('-','')}`,usuario.id,local.data,restaurado?'failed':'pending',agoraIso,agoraIso,agoraIso,inicio,agoraIso,restaurado?MENSAGEM_RESTAURACAO:null);
   }
   // Congela tambem pendencias legadas, uma unica vez, antes do primeiro envio.
   const congelar=db.prepare('UPDATE daily_report_deliveries SET payload_json=? WHERE id=? AND payload_json IS NULL');
   for(const item of db.prepare("SELECT * FROM daily_report_deliveries WHERE status='pending' AND payload_json IS NULL").all()){
     const periodo=item.period_start&&item.period_end?{inicio:item.period_start,fim:item.period_end}:null;
-    congelar.run(JSON.stringify(dadosRelatorioDiario(db,item.report_date,agora,periodo)),item.id);
+    congelar.run(JSON.stringify(dadosRelatorioDiario(db,item.report_date,corteData,periodo)),item.id);
   }
   db.exec('COMMIT');
   return local.data;

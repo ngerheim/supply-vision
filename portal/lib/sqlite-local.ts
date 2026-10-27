@@ -41,6 +41,7 @@ export function bancoSqliteLocal(options: Parameters<typeof abrirSqliteLocal>[0]
   return {
     prepare, arquivo: banco.arquivo, fechar: () => banco.fechar(),
     async batch(consultas: { sql: string; values: unknown[] }[]) { return banco.batch(consultas, consultas.some(c => !leitura(c.sql)) ? guarda() : undefined); },
+    async batchConstruir(construir: (consultar: (consulta: {sql:string;values:unknown[]}) => {results: unknown[]}) => {sql:string;values:unknown[]}[]) { return banco.batch(consultar => construir(consultar), guarda()); },
     async exec(sql: string) { return banco.exec(sql); },
   };
 }
