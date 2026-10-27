@@ -18,7 +18,7 @@ export function bootstrapApi(contexto: ContextoApi, acordos: Pick<ReturnType<typ
     if (!pode(user, 'portal:consultar-gestao')) {
       const [suppliers, items, models, locations] = await Promise.all([
         all('SELECT id,trade_name AS tradeName FROM suppliers ORDER BY trade_name'),
-        all('SELECT id,name FROM catalog_items ORDER BY name'),
+        all('SELECT id,name,unidade_estoque AS unidadeEstoque,active FROM catalog_items WHERE active=1 AND id<>\'item_legado\' ORDER BY name'),
         all('SELECT id,name FROM vehicle_models ORDER BY name'),
         all('SELECT id,revision,city,state FROM locations ORDER BY state,city'),
       ]);
@@ -26,7 +26,7 @@ export function bootstrapApi(contexto: ContextoApi, acordos: Pick<ReturnType<typ
     }
     const [agreements, suppliers, items, models, units, locations, imports] = await Promise.all([
       agreementList(), all('SELECT id,revision,legal_name AS legalName,trade_name AS tradeName,cnpj,city,state,active FROM suppliers ORDER BY trade_name'),
-      all('SELECT id,revision,name,active FROM catalog_items ORDER BY name'), all('SELECT id,revision,name,active FROM vehicle_models ORDER BY name'),
+      all('SELECT id,revision,name,active,unidade_estoque AS unidadeEstoque FROM catalog_items ORDER BY name'), all('SELECT id,revision,name,active FROM vehicle_models ORDER BY name'),
       all('SELECT id,revision,code,name,active FROM units ORDER BY code'),
       all('SELECT id,revision,city,state FROM locations ORDER BY state,city'), pode(user, 'importacao:consultar') ? importList() : Promise.resolve([]),
     ]);

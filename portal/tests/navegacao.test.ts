@@ -10,14 +10,16 @@ import { iniciarNavegacao } from '../lib/navegacao-historico.ts';
 const rotas: Array<[Nav, string, string | null]> = [
   ['search','buscar',null], ['maintenance','manutencao',null], ['tickets','chamados','parcerias'],
   ['solicitacoes','chamados','cadastro-fornecedor'], ['baixas','chamados','baixa-estoque'], ['estoques','cadastros','estoques'], ['categorias','cadastros','categorias'],
+  ['estoque-saldo','estoque','saldo'], ['estoque-entradas','estoque','entradas'],
   ['agreements','acordos','acordos'], ['imports','acordos','importacoes'],
   ['suppliers','cadastros','fornecedores'], ['catalogs','cadastros','catalogos'], ['mappings','cadastros','de-para'],
   ['reports','administracao','relatorios'], ['history','administracao','historico'], ['emails','administracao','emails'], ['admin','administracao','usuarios'],
 ];
-void test('todas as 16 chaves e seis abas fazem ida e volta com slugs estaveis', () => {
-  assert.equal(ABAS_NAVEGACAO.length,6);
+void test('todas as 18 chaves e sete abas fazem ida e volta com slugs estaveis', () => {
+  assert.equal(ABAS_NAVEGACAO.length,7);
+  assert.equal(ABAS_NAVEGACAO.find(a=>a.aba==='chamados')?.subabas[0].label,'Acordos');
   assert.deepEqual(GRUPOS_NAVEGACAO.map(g => [g.nome,[...g.abas]]),[
-    ['Consulta',['buscar','manutencao','chamados']],['Suprimentos',['acordos','cadastros']],['Administração',['administracao']],
+    ['Consulta',['buscar','manutencao','chamados','estoque']],['Suprimentos',['acordos','cadastros']],['Administração',['administracao']],
   ]);
   for (const [chave,aba,subaba] of rotas) {
     const query = `?aba=${aba}${subaba ? `&sub=${subaba}` : ''}`;
@@ -39,9 +41,9 @@ void test('enderecos desconhecidos voltam para buscar sem erro', () => {
   }
 });
 const visibilidade = {
-  viewer: [['buscar',['search']],['manutencao',['maintenance']],['chamados',['solicitacoes','baixas']]],
-  editor: [['buscar',['search']],['manutencao',['maintenance']],['chamados',['tickets','solicitacoes','baixas']],['acordos',['agreements','imports']],['cadastros',['suppliers','catalogs','mappings']]],
-  admin: [['buscar',['search']],['manutencao',['maintenance']],['chamados',['tickets','solicitacoes','baixas']],['acordos',['agreements','imports']],['cadastros',['suppliers','catalogs','mappings','categorias','estoques']],['administracao',['reports','history','emails','admin']]],
+  viewer: [['buscar',['search']],['manutencao',['maintenance']],['chamados',['solicitacoes','baixas']],['estoque',['estoque-saldo','estoque-entradas']]],
+  editor: [['buscar',['search']],['manutencao',['maintenance']],['chamados',['tickets','solicitacoes','baixas']],['estoque',['estoque-saldo','estoque-entradas']],['acordos',['agreements','imports']],['cadastros',['suppliers','catalogs','mappings']]],
+  admin: [['buscar',['search']],['manutencao',['maintenance']],['chamados',['tickets','solicitacoes','baixas']],['estoque',['estoque-saldo','estoque-entradas']],['acordos',['agreements','imports']],['cadastros',['suppliers','catalogs','mappings','categorias','estoques']],['administracao',['reports','history','emails','admin']]],
 };
 for (const role of ['viewer','editor','admin'] as const) {
   void test(`${role}: abas e subabas permitidas; acesso por endereco nao amplia permissoes`, () => {

@@ -17,6 +17,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Settings,
+  Boxes,
   Wrench,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -28,6 +29,7 @@ const navItems: Record<Aba, { label: string; icon: typeof PackageSearch }> = {
   buscar: { label: "Buscar", icon: PackageSearch },
   manutencao: { label: "Manutenção", icon: Wrench },
   chamados: { label: "Chamados", icon: MessageSquare },
+  estoque: { label: "Estoque", icon: Boxes },
   acordos: { label: "Acordos", icon: Handshake },
   cadastros: { label: "Cadastros", icon: Database },
   administracao: { label: "Administração", icon: Settings },

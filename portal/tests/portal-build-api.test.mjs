@@ -47,7 +47,7 @@ void test('build na fronteira HTTP protege todas as escritas sem alterar banco o
   }
   for (const build of [PORTAL_BUILD, undefined]) {
     const nome = build ? 'Item build igual' : 'Item sem cabecalho';
-    const resposta = await rota.POST(pedido('POST', 'catalogs/items', build, {name:nome}));
+    const resposta = await rota.POST(pedido('POST', 'catalogs/items', build, {name:nome,unidadeEstoque:'un'}));
     assert.equal(resposta.status, 201);
     assert.equal(resposta.headers.get('x-portal-build'), PORTAL_BUILD);
     assert.equal(await db.prepare('SELECT COUNT(*) n FROM catalog_items WHERE name=?').bind(nome).first('n'), 1);

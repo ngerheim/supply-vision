@@ -38,17 +38,17 @@ const pedir = async (rota, method = 'GET', body, cookie = admin, chave) => {
   });
   return { status: r.status, data: await r.json() };
 };
-const catalogoAtual=(await pedir('itens')).data.itens;
+const catalogoAtual=(await pedir('catalogs/items')).data.itens;
 const obterItem=async(descricao,unidade)=>{
   const existente=catalogoAtual.find(i=>i.descricao===descricao&&i.unidade===unidade);
   if(existente){
     if(!existente.ativo){
-      const ativado=await pedir(`itens/${existente.id}`,'PUT',{ativo:true,expectedRevision:existente.revision});
+      const ativado=await pedir(`catalogs/items/${existente.id}`,'PUT',{ativo:true,unidadeEstoque:unidade, name:descricao,expectedRevision:existente.revision});
       assert.equal(ativado.status,200,JSON.stringify(ativado.data));
     }
     return existente;
   }
-  const criado=await pedir('itens','POST',{descricao,unidade});
+  const criado=await pedir('catalogs/items','POST',{name:descricao,unidadeEstoque:unidade});
   assert.equal(criado.status,201,JSON.stringify(criado.data));
   return{id:criado.data.id,descricao,unidade};
 };

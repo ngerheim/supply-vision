@@ -23,7 +23,7 @@ export function catalogosApi(contexto: ContextoApi) {
   // entao o portal explica o que trava e sugere inativar.
   const catalogConfig: Record<string, { table: string; queries: Array<[string, string]> }> = {
     suppliers: { table: 'suppliers', queries: [['acordo(s)', 'SELECT COUNT(*) n FROM agreements WHERE supplier_id=?']] },
-    items: { table: 'catalog_items', queries: [['condição(ões)', 'SELECT COUNT(*) n FROM agreement_items WHERE catalog_item_id=?'], ['correspondência(s) de De/Para', 'SELECT COUNT(*) n FROM import_item_mappings WHERE target_id=?']] },
+    items: { table: 'catalog_items', queries: [['condição(ões)', 'SELECT COUNT(*) n FROM agreement_items WHERE catalog_item_id=?'], ['baixa(s)', 'SELECT COUNT(*) n FROM baixa_itens WHERE item_id=?'], ['movimento(s) de estoque', 'SELECT COUNT(*) n FROM movimentos_estoque WHERE item_id=?'], ['correspondência(s) de De/Para', 'SELECT COUNT(*) n FROM import_item_mappings WHERE target_id=?']] },
     models: { table: 'vehicle_models', queries: [['condição(ões)', 'SELECT COUNT(*) n FROM agreement_items WHERE vehicle_model_id=?'], ['correspondência(s) de De/Para', 'SELECT COUNT(*) n FROM import_model_mappings WHERE target_id=?']] },
     units: { table: 'units', queries: [['condição(ões)', 'SELECT COUNT(*) n FROM agreement_items WHERE unit_id=?'], ['correspondência(s) de De/Para', 'SELECT COUNT(*) n FROM import_unit_mappings WHERE target_id=?']] },
     locations: { table: 'locations', queries: [['condição(ões)', 'SELECT COUNT(*) n FROM agreement_items WHERE location_id=?'], ['acordo(s)', 'SELECT COUNT(*) n FROM agreement_locations WHERE location_id=?']] },
@@ -82,7 +82,8 @@ export function catalogosApi(contexto: ContextoApi) {
       values = [recordId, textValue(body.legalName) || textValue(body.tradeName), textValue(body.tradeName), normalizeCnpj(body.cnpj), nullableText(body.city), nullableText(body.state)?.toUpperCase().slice(0,2) ?? null, timestamp, timestamp];
     } else if (type === 'items') {
       if (!textValue(body.name)) return fail('Informe o nome da peça ou serviço.');
-      sql = 'INSERT INTO catalog_items (id,name,active) VALUES (?,?,1)'; values = [recordId, normalizeText(body.name)];
+      if (!['un','L','m','kg'].includes(textValue(body.unidadeEstoque))) return fail('Selecione a unidade de estoque.');
+      sql = 'INSERT INTO catalog_items (id,name,active,unidade_estoque) VALUES (?,?,1,?)'; values = [recordId, normalizeText(body.name), body.unidadeEstoque];
     } else if (type === 'models') {
       if (!textValue(body.name)) return fail('Informe o modelo.');
       sql = 'INSERT INTO vehicle_models (id,name,active) VALUES (?,?,1)'; values = [recordId, normalizeText(body.name)];
@@ -120,7 +121,8 @@ export function catalogosApi(contexto: ContextoApi) {
         escrita = rawDb().prepare('UPDATE suppliers SET legal_name=?,trade_name=?,cnpj=?,city=?,state=?,active=?,updated_at=? WHERE id=? AND revision=?').bind(textValue(body.legalName) || textValue(body.tradeName), textValue(body.tradeName), normalizeCnpj(body.cnpj), nullableText(body.city), nullableText(body.state)?.toUpperCase().slice(0,2) ?? null, active, now(), recordId,existing.revision);
       } else if (type === 'items') {
         if (!textValue(body.name)) return fail('Informe o nome da peça ou serviço.');
-        escrita = rawDb().prepare('UPDATE catalog_items SET name=?,active=? WHERE id=? AND revision=?').bind(normalizeText(body.name), active, recordId,existing.revision);
+        if (!['un','L','m','kg'].includes(textValue(body.unidadeEstoque))) return fail('Selecione a unidade de estoque.');
+        escrita = rawDb().prepare('UPDATE catalog_items SET name=?,active=?,unidade_estoque=? WHERE id=? AND revision=?').bind(normalizeText(body.name), active, body.unidadeEstoque, recordId,existing.revision);
       } else if (type === 'models') {
         if (!textValue(body.name)) return fail('Informe o modelo.');
         escrita = rawDb().prepare('UPDATE vehicle_models SET name=?,active=? WHERE id=? AND revision=?').bind(normalizeText(body.name), active, recordId,existing.revision);

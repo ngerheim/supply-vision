@@ -226,6 +226,7 @@ function catalogHeaders(type: string) {
   if (type === 'suppliers') return ['Nome', 'CNPJ', 'Cidade', 'UF'];
   if (type === 'locations') return ['UF', 'Cidade'];
   if (type === 'units') return ['Unidade'];
+  if (type === 'items') return ['Nome', 'Unidade de estoque'];
   return ['Nome'];
 }
 function catalogCells(type: string, r: AnyRow) {
@@ -233,6 +234,7 @@ function catalogCells(type: string, r: AnyRow) {
     return [r.tradeName, cnpj(r.cnpj), r.city || '—', r.state || '—'];
   if (type === 'locations') return [r.state, r.city];
   if (type === 'units') return [r.code];
+  if (type === 'items') return [r.name, r.unidadeEstoque || 'un'];
   return [r.name];
 }
 export function CatalogDialog({
@@ -300,6 +302,7 @@ export function CatalogDialog({
               />
             </Field>
           )}
+          {t === 'items' && <Field label="Unidade de estoque *"><select className="h-10 rounded-md border px-3" value={form.unidadeEstoque || 'un'} onChange={e=>setForm({...form,unidadeEstoque:e.target.value})}><option value="un">un</option><option value="L">L</option><option value="m">m</option><option value="kg">kg</option></select></Field>}
           {t === 'units' && (
             <Field label="Unidade *">
               <Input

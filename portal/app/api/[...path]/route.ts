@@ -227,13 +227,13 @@ async function GETInterno(request: NextRequest) {
     if(parts.length===2&&parts[1]==='movimentos')return estoque.movimentos(user,request.nextUrl.searchParams);
     return fail('Rota não encontrada.',404);
   }
+  if(parts[0]==='catalogs'&&parts[1]==='items'){
+    if(!pode(user,'baixa:abrir')&&!pode(user,'estoque:gerenciar'))return fail('Seu perfil não permite consultar itens.',403);
+    return parts.length===2?baixas.listarItens(user,request.nextUrl.searchParams):fail('Rota não encontrada.',404);
+  }
   if (parts[0] === 'estoques') {
     if (!pode(user, 'baixa:abrir') && !pode(user, 'estoque:gerenciar')) return fail('Seu perfil não permite consultar estoques.', 403);
     return parts.length === 1 ? baixas.listarEstoques(user) : fail('Rota não encontrada.', 404);
-  }
-  if (parts[0] === 'itens') {
-    if (!pode(user, 'baixa:abrir') && !pode(user, 'estoque:gerenciar')) return fail('Seu perfil não permite consultar itens.',403);
-    return parts.length === 1 ? baixas.listarItens(user,request.nextUrl.searchParams) : fail('Rota não encontrada.',404);
   }
   if (parts[0] === 'solicitacoes') {
     if (!pode(user, 'solicitacao:abrir')) return fail('Seu perfil não permite consultar solicitações.', 403);
@@ -346,10 +346,6 @@ async function POSTInterno(request: NextRequest) {
     if (!pode(user, 'estoque:gerenciar')) return denyWrite(request, 'Seu perfil não permite gerenciar estoques.');
     return parts.length === 1 ? baixas.gravarEstoque(request, user) : fail('Rota não encontrada.', 404);
   }
-  if (parts[0] === 'itens') {
-    if (!pode(user,'estoque:gerenciar')) return denyWrite(request,'Seu perfil não permite gerenciar itens.');
-    return parts.length===1 ? baixas.gravarItem(request,user) : fail('Rota não encontrada.',404);
-  }
   if (parts[0] === 'solicitacoes') {
     const acao = parts.length === 1 ? 'solicitacao:abrir' : 'solicitacao:atender';
     if (!pode(user, acao) && !(parts.length === 3 && parts[2] === 'transicao' && pode(user, 'solicitacao:abrir'))) return denyWrite(request, 'Seu perfil não permite esta operação.');
@@ -403,10 +399,6 @@ async function PUTInterno(request: NextRequest) {
   if (partesSolicitacao[0] === 'estoques') {
     if (!pode(user, 'estoque:gerenciar')) return denyWrite(request, 'Seu perfil não permite gerenciar estoques.');
     return partesSolicitacao.length === 2 ? baixas.gravarEstoque(request, user, partesSolicitacao[1]) : fail('Rota não encontrada.', 404);
-  }
-  if (partesSolicitacao[0] === 'itens') {
-    if (!pode(user,'estoque:gerenciar')) return denyWrite(request,'Seu perfil não permite gerenciar itens.');
-    return partesSolicitacao.length===2 ? baixas.gravarItem(request,user,partesSolicitacao[1]) : fail('Rota não encontrada.',404);
   }
   if (partesSolicitacao[0] === 'solicitacoes') {
     if (!pode(user, 'solicitacao:abrir')) return denyWrite(request, 'Seu perfil não permite corrigir solicitações.');

@@ -14,7 +14,6 @@ import { gerarChaveRelatorio } from "@/lib/relatorios";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PageHeader } from "./page-header";
-import { EntradaEstoque, SaldoEstoque } from "./portal-estoques";
 import { Plaquinha } from "./plaquinha";
 import { Status } from "./status";
 import { Card, CardContent } from "@/components/ui/card";
@@ -81,7 +80,6 @@ export function Baixas({
   onOpen: (id: string | null) => void;
 }) {
   const [nova, setNova] = useState(false);
-  const [secao,setSecao]=useState<'baixas'|'entrada'|'saldo'>('baixas');
   if (initialDetail)
     return (
       <DetalheBaixa
@@ -92,10 +90,8 @@ export function Baixas({
     );
   if (nova)
     return <FormularioBaixa onCancel={() => setNova(false)} onOpen={onOpen} />;
-  if(secao==='entrada')return <><nav className="patio-subabas" aria-label="Baixas e estoques"><Button variant="ghost" onClick={()=>setSecao('baixas')}>Baixas</Button>{pode(user,'baixa:atender')&&<Button variant="ghost" aria-current="page">Entrada de estoque</Button>}<Button variant="ghost" onClick={()=>setSecao('saldo')}>Saldo de estoque</Button></nav><EntradaEstoque/></>;
-  if(secao==='saldo')return <><nav className="patio-subabas" aria-label="Baixas e estoques"><Button variant="ghost" onClick={()=>setSecao('baixas')}>Baixas</Button>{pode(user,'baixa:atender')&&<Button variant="ghost" onClick={()=>setSecao('entrada')}>Entrada de estoque</Button>}<Button variant="ghost" aria-current="page">Saldo de estoque</Button></nav><SaldoEstoque user={user}/></>;
   return (
-    <><nav className="patio-subabas" aria-label="Baixas e estoques"><Button variant="ghost" aria-current="page">Baixas</Button>{pode(user,'baixa:atender')&&<Button variant="ghost" onClick={()=>setSecao('entrada')}>Entrada de estoque</Button>}<Button variant="ghost" onClick={()=>setSecao('saldo')}>Saldo de estoque</Button></nav><ListaBaixas user={user} onNew={() => setNova(true)} onOpen={onOpen} /></>
+    <ListaBaixas user={user} onNew={() => setNova(true)} onOpen={onOpen} />
   );
 }
 export function ListaBaixas({
@@ -297,7 +293,7 @@ export function FormularioBaixa({
     [existente, setExistente] = useState<AnyRow | null>(null),
     [busy, setBusy] = useState(false);
   const { dados, erro: falha } = useLeitura("/api/estoques", versao),
-    catalogo=useLeitura(`/api/itens?ativos=1&q=${encodeURIComponent(consultaItem)}`,versao),
+    catalogo=useLeitura(`/api/catalogs/items?q=${encodeURIComponent(consultaItem)}`,versao),
     trava = useRef(false),
     tentativa = useRef({ corpo: "", chave: "" }),
     montado = useRef(true);
@@ -482,7 +478,7 @@ export function DetalheBaixa({
       `/api/baixas/${encodeURIComponent(id)}`,
       versao,
     ),
-    catalogoItens=useLeitura(`/api/itens?ativos=1&q=${encodeURIComponent(buscaCatalogo)}`,versao),
+    catalogoItens=useLeitura(`/api/catalogs/items?q=${encodeURIComponent(buscaCatalogo)}`,versao),
     trava = useRef(false),
     tentativa = useRef({ corpo: "", chave: "" });
   const atenderSelecionados=async(para:'baixado'|'recusado')=>{

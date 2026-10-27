@@ -17,11 +17,14 @@ export async function semearBaixas(clienteApi, base, exemplo, estado, salvar) {
   );
   await administrador('/login', 'POST', exemplo.usuarios.find((u) => u.role === 'admin'));
   try {
-    const itens = (await administrador('/itens')).itens;
+    const itens = (await administrador('/bootstrap')).catalogs.items;
+    const chaveItem=texto=>String(texto).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLocaleUpperCase('pt-BR').trim();
     const catalogo=[];
     for (const [descricao, unidade] of [['Filtro de óleo fictício','un'],['Óleo de motor fictício','L'],['Fluido fictício','L']]) {
-      let item=itens.find(item => item.descricao === descricao);
-      if (!item) { const criado=await administrador('/itens','POST',{descricao,unidade});item={id:criado.id,descricao,unidade}; }
+      const existente=itens.find(item => chaveItem(item.name) === chaveItem(descricao));
+      let item;
+      if (!existente) { const criado=await administrador('/catalogs/items','POST',{name:descricao,unidadeEstoque:unidade});item={id:criado.id,descricao,unidade};itens.push({id:item.id,name:descricao,unidadeEstoque:unidade,active:1,revision:0}); }
+      else { item={id:existente.id,descricao:existente.name,unidade:existente.unidadeEstoque||unidade};if(!existente.active)await administrador(`/catalogs/items/${item.id}`,'PUT',{name:existente.name,unidadeEstoque:item.unidade,active:true,expectedRevision:existente.revision}); }
       catalogo.push(item);
     }
     const marcadorEntrada='estoque-entrada-ficticia',marcadorAjuste='estoque-ajuste-ficticio';
