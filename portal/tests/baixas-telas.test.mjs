@@ -301,3 +301,15 @@ void test('estoques inclui, renomeia e alterna ativo com revision e erro 409', a
     expectedRevision: 3,
   });
 });
+void test('seção Itens inclui, edita, alterna ativo e mostra conflito de revisão',async t=>{
+  const h=await mount('portal-estoques','ItensCatalogo',{},modules);t.after(()=>h.unmount());
+  h.requests.find(r=>r.path==='/api/itens').resolve({itens:[{id:'i1',descricao:'Filtro fictício',unidade:'un',ativo:1,revision:0}]});await flush(h);
+  change(h,'descricao_item','Óleo fictício');
+  const campo=h.one('Input',p=>p.name==='descricao_item');campo.onChange({target:{value:'Óleo fictício'}});h.render();submit(h);
+  let r=h.requests.at(-1);assert.equal(r.path,'/api/itens');assert.deepEqual(body(r),{descricao:'Óleo fictício',unidade:'un'});r.resolve({id:'i2'});await flush(h);
+  h.requests.findLast(r=>r.path==='/api/itens').resolve({itens:[{id:'i1',descricao:'Filtro fictício',unidade:'un',ativo:1,revision:0}]});await flush(h);
+  button(h,'Editar Filtro fictício').onClick();h.render();change(h,'descricao_item','Filtro alterado');
+  h.one('select').onChange({target:{value:'kg'}});h.render();submit(h);r=h.requests.at(-1);assert.deepEqual(body(r),{descricao:'Filtro alterado',unidade:'kg',expectedRevision:0});
+  r.reject(new ApiError({status:409,codigo:'revisao',error:'Este registro foi alterado.'}));await flush(h);assert.match(alerts(h),/recarregue/);
+  button(h,'Cancelar').onClick();h.render();button(h,'Desativar Filtro fictício').onClick();r=h.requests.at(-1);assert.deepEqual(body(r),{ativo:false,expectedRevision:0});r.resolve({});await flush(h);
+});

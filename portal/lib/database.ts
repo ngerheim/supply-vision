@@ -289,6 +289,8 @@ async function initialize() {
         revision INTEGER NOT NULL DEFAULT 0, UNIQUE(baixa_id,item_id))`),
       db.prepare('CREATE INDEX IF NOT EXISTS idx_baixa_itens_baixa_id ON baixa_itens(baixa_id)'),
       db.prepare('CREATE INDEX IF NOT EXISTS idx_baixa_itens_item_id ON baixa_itens(item_id)'),
+      db.prepare(`CREATE TABLE IF NOT EXISTS itens_catalogo_tentativas (user_id TEXT NOT NULL REFERENCES users(id), request_key TEXT NOT NULL,
+        request_hash TEXT NOT NULL, item_id TEXT NOT NULL REFERENCES itens_catalogo(id), criado_em TEXT NOT NULL, PRIMARY KEY(user_id,request_key))`),
       db.prepare(`INSERT OR IGNORE INTO itens_catalogo(id,descricao,descricao_chave,unidade,ativo) VALUES('item_legado','Item não especificado (legado)','ITEM NAO ESPECIFICADO (LEGADO)','un',0)`),
       db.prepare(`INSERT OR IGNORE INTO baixa_itens(id,baixa_id,item_id,quantidade_centesimos,status,motivo_recusa,atendente_id,atendido_em,criado_em,atualizado_em)
         SELECT 'bi_legado_'||b.id,b.id,'item_legado',100,

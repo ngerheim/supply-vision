@@ -17,6 +17,9 @@ export async function semearBaixas(clienteApi, base, exemplo, estado, salvar) {
   );
   await administrador('/login', 'POST', exemplo.usuarios.find((u) => u.role === 'admin'));
   try {
+    const itens = (await administrador('/itens')).itens;
+    for (const [descricao, unidade] of [['Filtro de óleo fictício','un'],['Óleo de motor fictício','L']])
+      if (!itens.some(item => item.descricao === descricao)) await administrador('/itens','POST',{descricao,unidade});
     const estados = ['aberta', 'aberta', 'baixada', 'recusada'];
     const placas = ['FIC1234', 'FIC1A23', 'DEM5678', 'DEM5B67'];
     for (let i = 0; i < estados.length; i++) {

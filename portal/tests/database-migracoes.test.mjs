@@ -56,12 +56,12 @@ void test('itens migram versao 12 atomicamente, convertem baixas legadas e retom
   for (const [id,status] of [['b-aberta','aberta'],['b-baixada','baixada'],['b-recusada','recusada']])
     await db.prepare('INSERT INTO baixas_estoque(id,numero_os,estoque_id,placa,status,solicitante_id,motivo_recusa,atendente_id,criado_em,atualizado_em) VALUES(?,?,?,?,?,?,?,?,?,?)')
       .bind(id,String(['b-aberta','b-baixada','b-recusada'].indexOf(id)+1),'est-mig','ABC1234',status,user,status==='recusada'?'Motivo fictício':null,status==='aberta'?null:user,'2026-01-01','2026-01-02').run();
-  await db.exec('DROP INDEX idx_baixa_itens_baixa_id; DROP INDEX idx_baixa_itens_item_id; DROP TABLE baixa_itens; DROP TABLE itens_catalogo; DELETE FROM schema_migrations WHERE version=13');
+  await db.exec('DROP INDEX idx_baixa_itens_baixa_id; DROP INDEX idx_baixa_itens_item_id; DROP TABLE baixa_itens; DROP TABLE itens_catalogo_tentativas; DROP TABLE itens_catalogo; DELETE FROM schema_migrations WHERE version=13');
   const users=(await db.prepare('SELECT * FROM users').all()).results, baixas=(await db.prepare('SELECT * FROM baixas_estoque ORDER BY id').all()).results;
   await db.exec("CREATE TRIGGER falhar_migracao_itens BEFORE INSERT ON schema_migrations WHEN NEW.version=13 BEGIN SELECT RAISE(ABORT,'falha ficticia itens'); END");
   const modulo=await carregar('itens-falha');
   await assert.rejects(modulo.ensureDatabase(),/falha ficticia itens/);
-  assert.equal(await db.prepare("SELECT COUNT(*) n FROM sqlite_schema WHERE type='table' AND name IN ('itens_catalogo','baixa_itens')").first('n'),0);
+  assert.equal(await db.prepare("SELECT COUNT(*) n FROM sqlite_schema WHERE type='table' AND name IN ('itens_catalogo','baixa_itens','itens_catalogo_tentativas')").first('n'),0);
   assert.deepEqual((await db.prepare('SELECT * FROM baixas_estoque ORDER BY id').all()).results,baixas);
   assert.deepEqual((await db.prepare('SELECT * FROM users').all()).results,users);
   await db.exec('DROP TRIGGER falhar_migracao_itens');await modulo.ensureDatabase();
@@ -69,6 +69,7 @@ void test('itens migram versao 12 atomicamente, convertem baixas legadas e retom
     ['b-aberta','pendente',100,null,null,false],['b-baixada','baixado',100,null,user,true],['b-recusada','recusado',100,'Motivo fictício',user,true],
   ]);
   assert.equal(await db.prepare("SELECT COUNT(*) n FROM itens_catalogo WHERE id='item_legado' AND ativo=0").first('n'),1);
+  assert.equal(await db.prepare("SELECT COUNT(*) n FROM sqlite_schema WHERE type='table' AND name='itens_catalogo_tentativas'").first('n'),1);
   const marcador=await db.prepare('SELECT * FROM schema_migrations WHERE version=13').first();
   await (await carregar('itens-reinicio')).ensureDatabase();
   assert.deepEqual(await db.prepare('SELECT * FROM schema_migrations WHERE version=13').first(),marcador);
