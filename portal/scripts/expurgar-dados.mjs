@@ -27,7 +27,7 @@ function operacoesExpurgo(db, config, agora, executar) {
     resultados[nome] = resultado;
   };
   if (db.prepare("SELECT 1 FROM sqlite_schema WHERE type='table' AND name='consultas_cnpj'").get())
-    aplicar('consultas_cnpj', 'DELETE FROM consultas_cnpj WHERE consultada_em<?', [limite(90)]);
+    aplicar('consultas_cnpj', 'DELETE FROM consultas_cnpj WHERE consultada_em<?', [limite(7)]);
   if (db.prepare("SELECT 1 FROM sqlite_schema WHERE type='table' AND name='notificacoes_usuario'").get())
     aplicar('notificacoes_usuario', 'DELETE FROM notificacoes_usuario WHERE (lida_em IS NOT NULL AND lida_em<?) OR (lida_em IS NULL AND criada_em<?)', [limite(90), limite(config.notificacoesNaoLidas)]);
   if (config.emails) for (const tabela of ['email_notifications', 'daily_report_deliveries']) {

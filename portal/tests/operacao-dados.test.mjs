@@ -16,7 +16,9 @@ function banco(arquivo = ':memory:') {
     CREATE TABLE report_jobs(id TEXT,status TEXT,completed_at TEXT);
     CREATE TABLE imports(id TEXT,status TEXT,completed_at TEXT,summary_json TEXT);
     CREATE TABLE audit_logs(id TEXT); INSERT INTO audit_logs VALUES('preservar');
+    CREATE TABLE consultas_cnpj(id TEXT,consultada_em TEXT);
     CREATE TABLE ticket_events(id TEXT); INSERT INTO ticket_events VALUES('preservar')`);
+  for (const [id, tempo] of [['cnpj-velha',dias(8)],['cnpj-limite',dias(7)],['cnpj-nova',dias(6)]]) db.prepare('INSERT INTO consultas_cnpj VALUES(?,?)').run(id,tempo);
   for (const tabela of ['email_notifications', 'daily_report_deliveries']) {
     for (const [id, status, tempo] of [['velho','sent',dias(181)],['falha','failed',dias(181)],['limite','sent',dias(180)],['novo','sent',dias(179)],['pendente','pending',dias(181)],['ativo','processing',dias(181)]]) db.prepare(`INSERT INTO ${tabela} VALUES(?,?,?)`).run(id,status,tempo);
   }
@@ -28,7 +30,8 @@ void test('expurgo: limites exatos e preservacao de pendentes, auditoria e event
   const db = banco();
   try {
     assert.deepEqual(expurgar(db, configurarExpurgo({}), agora), {});
-    assert.deepEqual(expurgar(db, configurarExpurgo({ EXPURGO_HABILITADO:'1' }), agora), { email_notifications:2, daily_report_deliveries:2, report_jobs:1, imports:1 });
+    assert.deepEqual(expurgar(db, configurarExpurgo({ EXPURGO_HABILITADO:'1' }), agora), { consultas_cnpj:1, email_notifications:2, daily_report_deliveries:2, report_jobs:1, imports:1 });
+    assert.deepEqual(db.prepare('SELECT id FROM consultas_cnpj ORDER BY id').all().map(r=>r.id), ['cnpj-limite','cnpj-nova']);
     for (const tabela of ['email_notifications','daily_report_deliveries']) assert.deepEqual(db.prepare(`SELECT id FROM ${tabela} ORDER BY id`).all().map(r=>r.id), ['ativo','limite','novo','pendente']);
     assert.equal(db.prepare("SELECT summary_json FROM imports WHERE id='velho'").get().summary_json, null);
     assert.equal(db.prepare("SELECT summary_json FROM imports WHERE id='limite'").get().summary_json, '{"resumo":1}');
@@ -37,7 +40,7 @@ void test('expurgo: limites exatos e preservacao de pendentes, auditoria e event
 });
 void test('prazo zero preserva tipo; configuracao invalida bloqueia', () => {
   const db = banco();
-  try { assert.deepEqual(expurgar(db, configurarExpurgo({EXPURGO_HABILITADO:'1',EXPURGO_EMAILS_DIAS:'0',EXPURGO_RELATORIOS_DIAS:'0',EXPURGO_IMPORTACOES_DIAS:'0'}), agora), {}); }
+  try { assert.deepEqual(expurgar(db, configurarExpurgo({EXPURGO_HABILITADO:'1',EXPURGO_EMAILS_DIAS:'0',EXPURGO_RELATORIOS_DIAS:'0',EXPURGO_IMPORTACOES_DIAS:'0'}), agora), { consultas_cnpj:1 }); }
   finally { db.close(); }
   for (const valor of ['-1','1.5','invalido']) assert.throws(()=>configurarExpurgo({EXPURGO_EMAILS_DIAS:valor}));
 });
@@ -47,7 +50,7 @@ void test('pula backup sem candidatos e faz backup antes do expurgo; falha nao e
   const arquivo=path.join(pasta,'banco.sqlite');banco(arquivo).close();
   const opcoes={config:{EXPURGO_HABILITADO:'1'},arquivo,pasta,agora};
   const semCandidatos=path.join(pasta,'sem-candidatos.sqlite');
-  const limpo=banco(semCandidatos);limpo.prepare("UPDATE email_notifications SET updated_at=?").run(dias(1));limpo.prepare("UPDATE daily_report_deliveries SET updated_at=?").run(dias(1));limpo.prepare("UPDATE report_jobs SET completed_at=?").run(dias(1));limpo.prepare("UPDATE imports SET completed_at=?,summary_json=NULL").run(dias(1));limpo.close();
+  const limpo=banco(semCandidatos);limpo.prepare("UPDATE email_notifications SET updated_at=?").run(dias(1));limpo.prepare("UPDATE daily_report_deliveries SET updated_at=?").run(dias(1));limpo.prepare("UPDATE report_jobs SET completed_at=?").run(dias(1));limpo.prepare("UPDATE imports SET completed_at=?,summary_json=NULL").run(dias(1));limpo.prepare('UPDATE consultas_cnpj SET consultada_em=?').run(dias(3));limpo.close();
   const semBackup=await executarExpurgo({...opcoes,arquivo:semCandidatos,backup(){assert.fail('backup nao deve ocorrer sem candidatos');}});
   assert.equal(semBackup.mensagem,'nada a expurgar');
   await assert.rejects(executarExpurgo({...opcoes,backup(){throw new Error('copia falhou');}}),/copia falhou/);

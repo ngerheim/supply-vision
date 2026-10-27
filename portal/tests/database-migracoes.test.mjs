@@ -44,6 +44,35 @@ void test('baixas migram banco novo e versao 10 atomicamente e preservam marcado
   assert.deepEqual((await db.prepare('SELECT * FROM users').all()).results,usuarios);
 });
 
+void test('indices da versao 12 migram atomicamente e retomam apos falha', async t => {
+  const pasta=fs.mkdtempSync(path.join(os.tmpdir(),'sv-indices-migracao-'));
+  const db=bancoSqliteLocal({pastaPrivada:pasta,criar:true});
+  const chave=Symbol.for('supply-vision:banco'), anterior=globalThis[chave], senha=env.INITIAL_ADMIN_PASSWORD;
+  globalThis[chave]=db;env.INITIAL_ADMIN_PASSWORD='senha-ficticia-indices-migracao';
+  t.after(()=>{globalThis[chave]=anterior;env.INITIAL_ADMIN_PASSWORD=senha;db.fechar();fs.rmSync(pasta,{recursive:true,force:true});});
+  await (await carregar('indices-novos')).ensureDatabase();
+  const nomes=['idx_baixas_estoque_id','idx_consultas_cnpj_reuso'];
+  const temIndices=async()=>{
+    const baixas=(await db.prepare('PRAGMA index_list(baixas_estoque)').all()).results.map(i=>i.name);
+    const consultas=(await db.prepare('PRAGMA index_list(consultas_cnpj)').all()).results.map(i=>i.name);
+    return nomes.every(nome=>baixas.includes(nome)||consultas.includes(nome));
+  };
+  assert.equal(await temIndices(),true);
+  const usuarios=(await db.prepare('SELECT * FROM users').all()).results;
+  await db.exec('DROP INDEX idx_baixas_estoque_id; DROP INDEX idx_consultas_cnpj_reuso; DELETE FROM schema_migrations WHERE version=12');
+  await db.exec("CREATE TRIGGER falhar_migracao_indices BEFORE INSERT ON schema_migrations WHEN NEW.version=12 BEGIN SELECT RAISE(ABORT,'falha ficticia indices'); END");
+  const modulo=await carregar('indices-falha');
+  await assert.rejects(modulo.ensureDatabase(),/falha ficticia indices/);
+  assert.equal(await temIndices(),false);
+  assert.deepEqual((await db.prepare('SELECT * FROM users').all()).results,usuarios);
+  assert.equal(await db.prepare('SELECT 1 FROM schema_migrations WHERE version=12').first(),null);
+  await db.exec('DROP TRIGGER falhar_migracao_indices');await modulo.ensureDatabase();
+  const marcador=await db.prepare('SELECT * FROM schema_migrations WHERE version=12').first();
+  assert.equal(await temIndices(),true);
+  await (await carregar('indices-reinicio')).ensureDatabase();
+  assert.deepEqual(await db.prepare('SELECT * FROM schema_migrations WHERE version=12').first(),marcador);
+});
+
 void test('cadastro migra banco na versao 8 preservando legado e reaplica sem duplicar sementes', async t => {
   const pasta = fs.mkdtempSync(path.join(os.tmpdir(), 'sv-cadastro-migracao-'));
   const db = bancoSqliteLocal({ pastaPrivada: pasta, criar: true });
@@ -173,13 +202,13 @@ void test('falha ao inspecionar colunas bloqueia inicializacao e retomada migra 
     END`);
   falhar = false;
   await ensureDatabase();
-  assert.deepEqual((await db.prepare('SELECT version FROM ordem_migracoes ORDER BY posicao').all()).results.map(r => r.version), [1,2,3,4,5,6,7,8,9,10,11]);
+  assert.deepEqual((await db.prepare('SELECT version FROM ordem_migracoes ORDER BY posicao').all()).results.map(r => r.version), [1,2,3,4,5,6,7,8,9,10,11,12]);
   const antes = (await db.prepare('SELECT * FROM schema_migrations ORDER BY version').all()).results;
   const usuarios = (await db.prepare('SELECT * FROM users ORDER BY id').all()).results;
   await (await carregar('reinicio')).ensureDatabase();
   assert.deepEqual((await db.prepare('SELECT * FROM schema_migrations ORDER BY version').all()).results, antes);
   assert.deepEqual((await db.prepare('SELECT * FROM users ORDER BY id').all()).results, usuarios);
-  assert.equal(await db.prepare('SELECT COUNT(*) FROM ordem_migracoes').first('COUNT(*)'), 11);
+  assert.equal(await db.prepare('SELECT COUNT(*) FROM ordem_migracoes').first('COUNT(*)'), 12);
   assert.deepEqual((await db.prepare('PRAGMA foreign_key_check').all()).results, []);
   assert.equal(await db.prepare('PRAGMA foreign_keys').first('foreign_keys'), 1);
 });

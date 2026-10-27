@@ -131,7 +131,7 @@ export function baixasApi(contexto: ContextoApi) {
       pageCount = Math.max(1, Math.ceil(total / paginacao.pageSize)),
       page = Math.min(paginacao.page, pageCount);
     const baixas = await all(
-      `SELECT b.*,e.nome AS estoque${pode(user, 'baixa:ver_todas') ? ',u.name AS solicitante' : ''}
+      `SELECT b.id,b.codigo,b.numero_os,b.estoque_id,b.placa,b.status,b.solicitante_id,b.atendente_id,b.motivo_recusa,b.criado_em,b.atualizado_em,b.revision,e.nome AS estoque${pode(user, 'baixa:ver_todas') ? ',u.name AS solicitante' : ''}
       FROM baixas_estoque b JOIN estoques e ON e.id=b.estoque_id JOIN users u ON u.id=b.solicitante_id ${where}
       ORDER BY b.atualizado_em DESC,b.id DESC LIMIT ? OFFSET ?`,
       [...valores, paginacao.pageSize, (page - 1) * paginacao.pageSize],
@@ -154,7 +154,7 @@ export function baixasApi(contexto: ContextoApi) {
   }
   async function detalhe(user: User, baixaId: string) {
     const baixa = await first<Baixa>(
-      `SELECT b.*,e.nome AS estoque,u.name AS solicitante FROM baixas_estoque b JOIN estoques e ON e.id=b.estoque_id JOIN users u ON u.id=b.solicitante_id WHERE b.id=?`,
+      `SELECT b.id,b.codigo,b.numero_os,b.estoque_id,b.placa,b.status,b.solicitante_id,b.atendente_id,b.motivo_recusa,b.criado_em,b.atualizado_em,b.revision,e.nome AS estoque,u.name AS solicitante FROM baixas_estoque b JOIN estoques e ON e.id=b.estoque_id JOIN users u ON u.id=b.solicitante_id WHERE b.id=?`,
       [baixaId],
     );
     if (
@@ -163,7 +163,7 @@ export function baixasApi(contexto: ContextoApi) {
     )
       return inexistente();
     const andamentos = await all(
-      'SELECT a.*,u.name AS usuario FROM baixa_andamentos a JOIN users u ON u.id=a.user_id WHERE baixa_id=? ORDER BY a.criado_em,a.rowid',
+      'SELECT a.id,a.baixa_id,a.user_id,a.de_status,a.para_status,a.texto,a.criado_em,u.name AS usuario FROM baixa_andamentos a JOIN users u ON u.id=a.user_id WHERE baixa_id=? ORDER BY a.criado_em,a.rowid',
       [baixaId],
     );
     return ok({ baixa, andamentos });

@@ -203,7 +203,7 @@ void test('Baixa no estoque pelo roteador e SQLite reais', async (t) => {
     'cadastro: guardas, nomes normalizados, revision e desativacao',
     async () => {
       assert.ok(
-        sql.prepare('SELECT 1 FROM schema_migrations WHERE version=11').get(),
+        sql.prepare('SELECT 1 FROM schema_migrations WHERE version=12').get(),
       );
       assert.deepEqual(
         (await get('estoques')).data.estoques.map((e) => e.nome),
@@ -310,6 +310,10 @@ void test('Baixa no estoque pelo roteador e SQLite reais', async (t) => {
       assert.deepEqual(contagens(), antes);
       const detalhe = await get(`baixas/${primeira.data.id}`);
       assert.equal(detalhe.data.baixa.placa, 'FIC1234');
+      assert.equal(Object.hasOwn(detalhe.data.baixa, 'request_key'), false);
+      assert.equal(Object.hasOwn(detalhe.data.baixa, 'request_hash'), false);
+      assert.equal(Object.hasOwn(detalhe.data.andamentos[0], 'request_key'), false);
+      assert.equal(Object.hasOwn(detalhe.data.andamentos[0], 'request_hash'), false);
       assert.equal(detalhe.data.andamentos[0].para_status, 'aberta');
       const duplicada = await post('baixas', body);
       assert.equal(duplicada.status, 409);

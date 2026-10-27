@@ -270,6 +270,13 @@ async function initialize() {
       db.prepare('INSERT OR IGNORE INTO schema_migrations(version,applied_at) VALUES(11,?)').bind(now()),
     ]);
   }
+  if (!await db.prepare('SELECT 1 ok FROM schema_migrations WHERE version=12').first()) {
+    await db.batch([
+      db.prepare('CREATE INDEX IF NOT EXISTS idx_baixas_estoque_id ON baixas_estoque(estoque_id)'),
+      db.prepare('CREATE INDEX IF NOT EXISTS idx_consultas_cnpj_reuso ON consultas_cnpj(user_id,cnpj,consultada_em DESC)'),
+      db.prepare('INSERT OR IGNORE INTO schema_migrations(version,applied_at) VALUES(12,?)').bind(now()),
+    ]);
+  }
   await db.prepare('PRAGMA optimize').run();
 }
 
