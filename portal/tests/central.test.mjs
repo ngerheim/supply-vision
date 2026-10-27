@@ -133,12 +133,12 @@ void test('Central com roteador, migracao e SQLite reais', async t => {
     assert.equal(snapshot(),antesProdutor);
     sql.exec('DROP TRIGGER falhar_evento');
   });
-  await t.test('expurgo apaga so lidas ha mais de 90 dias e backup/restauracao preservam a Central', async () => {
+  await t.test('expurgo apaga lidas e nao lidas ha mais de 90 dias e backup/restauracao preservam a Central', async () => {
     sql.exec('DELETE FROM notificacoes_usuario');
     const agora = new Date('2026-10-22T12:00:00.000Z');
     const data = dias => new Date(agora.getTime()-dias*86400000).toISOString();
-    for (const [id,lida] of [['antiga',data(91)],['limite',data(90)],['recente',data(1)],['nao-lida',null]])
-      sql.prepare('INSERT INTO notificacoes_usuario(id,user_id,tipo,texto,link,criada_em,lida_em) VALUES(?,?,?,?,?,?,?)').run(id,'a','teste','Ficticio','/',data(200),lida);
+    for (const [id,criada,lida] of [['antiga',data(200),data(91)],['limite',data(200),data(90)],['recente',data(1),null],['nao-lida-antiga',data(91),null],['nao-lida-limite',data(90),null]])
+      sql.prepare('INSERT INTO notificacoes_usuario(id,user_id,tipo,texto,link,criada_em,lida_em) VALUES(?,?,?,?,?,?,?)').run(id,'a','teste','Ficticio','/',criada,lida);
     const antes = sql.prepare('SELECT * FROM notificacoes_usuario ORDER BY id').all();
     const copia = criarCopiaIntegra(db.arquivo,path.join(pasta,'backup.sqlite'));
     const restaurada = path.join(pasta,'restaurada.sqlite');
@@ -147,7 +147,7 @@ void test('Central com roteador, migracao e SQLite reais', async t => {
     try { assert.deepEqual(restaurado.prepare('SELECT * FROM notificacoes_usuario ORDER BY id').all(),antes); }
     finally { restaurado.close(); }
     const resultado = expurgar(sql,configurarExpurgo({EXPURGO_HABILITADO:'1',EXPURGO_EMAILS_DIAS:'0',EXPURGO_RELATORIOS_DIAS:'0',EXPURGO_IMPORTACOES_DIAS:'0'}),agora);
-    assert.equal(resultado.notificacoes_usuario,1);
-    assert.deepEqual(sql.prepare('SELECT id FROM notificacoes_usuario ORDER BY id').all().map(n => n.id),['limite','nao-lida','recente']);
+    assert.equal(resultado.notificacoes_usuario,2);
+    assert.deepEqual(sql.prepare('SELECT id FROM notificacoes_usuario ORDER BY id').all().map(n => n.id),['limite','nao-lida-limite','recente']);
   });
 });
