@@ -13,7 +13,7 @@ import { normalizeText, normalizeCnpj } from '../lib/domain.ts';
 
 // So a fronteira de persistencia e substituida. Roteador, handlers, validadores
 // e respostas HTTP sao os de producao, sem servidor ou arquivos privados.
-const estado = { user: null, consultas: [], travas: 0, db: null };
+const estado = { user: null, consultas: [], travas: 0, db: null, validacaoAtiva: false };
 const chave = Symbol.for('sv-lote07:api-teste');
 globalThis[chave] = estado;
 const bancoUrl = `data:text/javascript,${encodeURIComponent(`
@@ -29,7 +29,7 @@ const bancoUrl = `data:text/javascript,${encodeURIComponent(`
   export const rawDb = () => estado.db ?? { prepare(sql) {
     estado.consultas.push(sql);
     assertValidacao(sql);
-    return { bind() { return this; }, async first() { return null; } };
+    return { bind() { return this; }, async first() { return estado.validacaoAtiva ? { ativa: 1 } : null; } };
   } };
   function assertValidacao(sql) {
     if (sql !== ${JSON.stringify(VALIDACAO_ATIVA_SQL)}) throw new Error('Acesso indevido ao banco: ' + sql);
@@ -127,6 +127,17 @@ void test('origem externa ou invalida e recusada antes de acessar dados', async 
   }
   assert.deepEqual(estado.consultas, []);
   assert.equal(estado.travas, 0);
+});
+
+void test('validacao ativa drena corpos e responde codigo de validacao em todas as escritas', async () => {
+  estado.user = usuario('admin'); estado.validacaoAtiva = true;
+  try {
+    for (const [method, path] of [['POST', 'agreements'], ['PUT', 'items/outro'], ['DELETE', 'items/outro']]) {
+      const response = await rota[method](pedido(method, path));
+      assert.equal(response.status, 503, `${method} ${path}`);
+      assert.deepEqual(await response.json(), { error: 'Sistema em atualização, aguarde alguns instantes', codigo: 'validacao' });
+    }
+  } finally { estado.validacaoAtiva = false; }
 });
 
 void test('perfis autorizados continuam consultando e exportando pelas rotas de producao', async () => {

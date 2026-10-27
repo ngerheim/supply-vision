@@ -308,6 +308,7 @@ void test('Cadastro de fornecedor pelo roteador e SQLite reais', async t => {
   await t.test('ATIVA pode ser corrigida após reconsulta INAPTA', async () => {
     const consulta = (await get(`solicitacoes/cnpj/${CNPJS_ENSAIO.ativaAlternativa}`,'viewer')).data;
     const s = await abrir({ consultaId: consulta.consultaId }); await mover(s.id,'em_analise');
+    sql.prepare('UPDATE solicitacoes SET cnpj=? WHERE id=?').run(CNPJS_ENSAIO.inaptaAlternativa,s.id);
     assert.equal((await post(`solicitacoes/${s.id}/reconsultar`,{expectedRevision:1},'editor')).status,200);
     assert.equal(registro(s.id).situacao_cadastral,'INAPTA');
     assert.equal((await mover(s.id,'devolvida','Solicitar atualização cadastral')).status,200);
