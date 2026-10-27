@@ -12,6 +12,12 @@ import { revisaoConfere } from './controle-escrita.ts';
 export function chamadosApi(contexto: ContextoApi) {
   const { id, now, rawDb, tokenHash, adquirirTrava, liberarTrava, normalizeCnpj, normalizeText, ok, fail, jsonBody, all, first } = contexto;
 
+  function timestampEvento(consultar: (consulta: {sql:string;values:unknown[]}) => {results: unknown[]}) {
+    const corteAnterior=(consultar({sql:'SELECT MAX(COALESCE(period_end,sent_at,created_at)) period_end FROM daily_report_deliveries',values:[]}).results[0] as {period_end?:string|null}|undefined)?.period_end;
+    const atual=now();
+    return corteAnterior&&atual<corteAnterior?corteAnterior:atual;
+  }
+
   type TicketInput = Record<string, unknown>;
 
   async function comTravaDoChamado(request: Request, ticketId: string, operacao: () => Promise<Response>) {
@@ -97,12 +103,14 @@ export function chamadosApi(contexto: ContextoApi) {
       if(!reserva)throw new Error('Contador de chamados indisponível.');
       const proximo=reserva.value;
       const code=`SUP-${String(proximo).padStart(4,'0')}`;
-      const ticketId=id('tck'), eventId=id('tev'), timestamp=now();
+      const ticketId=id('tck'), eventId=id('tev');
       try{
-        const contexto:ContextoNotificacaoChamado={id:ticketId,codigo:code,fornecedor:supplierName,prioridade:String(priority),status:'aberto',solicitante:{id:user.id,nome:user.name,email:user.email},responsavel};
-        const notificacoes=prepararNotificacoesChamado({eventId,anterior:null,atual:contexto,autor:user,alteracoes:['Chamado atribuído'],timestamp});
         const busca=dadosBuscaChamado({code,supplier_name:supplierName,city:body.city?normalizeText(body.city):null,state});
-        await rawDb().batch([
+        await rawDb().batchConstruir(consultar=>{
+          const timestamp=timestampEvento(consultar);
+          const contexto:ContextoNotificacaoChamado={id:ticketId,codigo:code,fornecedor:supplierName,prioridade:String(priority),status:'aberto',solicitante:{id:user.id,nome:user.name,email:user.email},responsavel};
+          const notificacoes=prepararNotificacoesChamado({eventId,anterior:null,atual:contexto,autor:user,alteracoes:['Chamado atribuído'],timestamp});
+          return [
           rawDb().prepare(`INSERT INTO tickets (id,code,supplier_name,cnpj,city,state,contact,scope,priority,status,requested_by,assigned_to,notes,created_at,updated_at,request_key,request_hash,search_text,supplier_sort) VALUES (?,?,?,?,?,?,?,?,?,'aberto',?,?,?,?,?,?,?,?,?)`)
             .bind(ticketId,code,supplierName,ticketCnpj,body.city?normalizeText(body.city):null,state,nullableText(body.contact),nullableText(body.scope),priority,user.id,assignedTo,nullableText(body.notes),timestamp,timestamp,requestKey,requestHash,busca.searchText,busca.supplierSort),
           rawDb().prepare(`INSERT INTO ticket_events (id,ticket_id,user_id,kind,to_status,message,created_at) VALUES (?,?,?,'created','aberto',?,?)`)
@@ -110,7 +118,8 @@ export function chamadosApi(contexto: ContextoApi) {
           rawDb().prepare('INSERT INTO audit_logs (id,user_id,action,entity,entity_id,details,created_at) VALUES (?,?,?,?,?,?,?)')
             .bind(id('aud'),user.id,'CREATE','ticket',ticketId,`Chamado ${code} aberto: ${supplierName}`,timestamp),
           ...notificacoes,
-        ]);
+          ];
+        });
         return ok({ id:ticketId, code },{status:201});
       }catch(error:unknown){
         if(!errorMessage(error).includes('UNIQUE')) throw error;
@@ -166,15 +175,16 @@ export function chamadosApi(contexto: ContextoApi) {
     if(agreementId!==current.agreement_id) alteracoes.push('Acordo relacionado');
     if(notes!==current.notes) alteracoes.push('Observações');
     if(!alteracoes.length) return ok({success:true,unchanged:true});
-    const timestamp=now();
-    const closedAt=(status==='fechado'||status==='cancelado')?(current.closed_at||timestamp):null;
     const eventId=id('tev');
     const responsavel=await pessoaNotificacao(assignedTo);
     const atual:ContextoNotificacaoChamado={...anterior,fornecedor:supplierName,prioridade:String(priority),status,responsavel};
     const camposRegra=alteracoes.filter((item)=>item!=='Responsável');
-    const notificacoes=prepararNotificacoesChamado({eventId,anterior,atual,mudanca:{camposAlterados:camposRegra},autor:user,alteracoes,mensagem:nullableText(body.statusMessage),timestamp});
     const busca=dadosBuscaChamado({code:current.code,supplier_name:supplierName,city,state:nextState});
-    await rawDb().batch([
+    await rawDb().batchConstruir(consultar=>{
+      const timestamp=timestampEvento(consultar);
+      const closedAt=(status==='fechado'||status==='cancelado')?(current.closed_at||timestamp):null;
+      const notificacoes=prepararNotificacoesChamado({eventId,anterior,atual,mudanca:{camposAlterados:camposRegra},autor:user,alteracoes,mensagem:nullableText(body.statusMessage),timestamp});
+      return [
       rawDb().prepare(`UPDATE tickets SET supplier_name=?,cnpj=?,city=?,state=?,contact=?,scope=?,priority=?,status=?,assigned_to=?,agreement_id=?,notes=?,updated_at=?,closed_at=?,search_text=?,supplier_sort=?,revision=revision+1 WHERE id=?`)
         .bind(supplierName,nextCnpj,city,nextState,contact,scope,priority,status,assignedTo,agreementId,notes,timestamp,closedAt,busca.searchText,busca.supplierSort,ticketId),
       rawDb().prepare(`INSERT INTO ticket_events (id,ticket_id,user_id,kind,from_status,to_status,message,created_at) VALUES (?,?,?,${status!==current.status?"'status'":"'updated'"},?,?,?,?)`)
@@ -182,7 +192,8 @@ export function chamadosApi(contexto: ContextoApi) {
       rawDb().prepare('INSERT INTO audit_logs (id,user_id,action,entity,entity_id,details,created_at) VALUES (?,?,?,?,?,?,?)')
         .bind(id('aud'),user.id,'UPDATE','ticket',ticketId,`Chamado ${current.code}: ${alteracoes.join(', ')}`,timestamp),
       ...notificacoes,
-    ]);
+      ];
+    });
     return ok({ success:true });
   }
 
@@ -199,17 +210,19 @@ export function chamadosApi(contexto: ContextoApi) {
         return ok({success:true},{status:201});
       }
     }
-    const timestamp=now();
     const ticket=await contextoNotificacaoChamado(ticketId);
     if(!ticket) return fail('Chamado não encontrado.',404);
     const eventId=id('tev');
-    const notificacoes=prepararNotificacoesChamado({eventId,anterior:ticket,atual:ticket,mudanca:{andamentoAdicionado:true},autor:user,alteracoes:['Novo andamento'],mensagem,timestamp});
-    await rawDb().batch([
+    await rawDb().batchConstruir(consultar=>{
+      const timestamp=timestampEvento(consultar);
+      const notificacoes=prepararNotificacoesChamado({eventId,anterior:ticket,atual:ticket,mudanca:{andamentoAdicionado:true},autor:user,alteracoes:['Novo andamento'],mensagem,timestamp});
+      return [
       rawDb().prepare(`INSERT INTO ticket_events (id,ticket_id,user_id,kind,message,created_at,request_key) VALUES (?,?,?,'note',?,?,?)`).bind(eventId,ticketId,user.id,mensagem,timestamp,requestKey),
       rawDb().prepare('UPDATE tickets SET updated_at=?,revision=revision+1 WHERE id=?').bind(timestamp,ticketId),
       rawDb().prepare('INSERT INTO audit_logs (id,user_id,action,entity,entity_id,details,created_at) VALUES (?,?,?,?,?,?,?)').bind(id('aud'),user.id,'COMMENT','ticket',ticketId,`Andamento no chamado ${ticket.codigo}`,timestamp),
       ...notificacoes,
-    ]);
+      ];
+    });
     return ok({ success:true },{status:201});
   }
 
