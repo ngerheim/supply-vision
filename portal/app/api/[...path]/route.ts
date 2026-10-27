@@ -52,9 +52,9 @@ function excedeuLimiteConsultas(userId: string) {
 // Respostas antecipadas a escritas precisam finalizar o corpo HTTP. No runtime
 // local, deixar um corpo pequeno pendente pode derrubar a conexão reutilizada.
 // Mantém o limite mesmo em pedidos não autorizados.
-async function denyWrite(request: Request, message: string, status = 403) {
+async function denyWrite(request: Request, message: string, status = 403, codigo?: string) {
   if (request.body) await corpoBinarioLimitado(request, CORPO_MAX_JSON);
-  return fail(message, status);
+  return status === 409 || codigo ? ok({ error: message, ...(codigo ? { codigo } : {}) }, { status }) : fail(message, status);
 }
 const partsOf = (request: Request) => new URL(request.url).pathname.replace(/^\/api\/?/, '').split('/').filter(Boolean);
 
@@ -315,7 +315,7 @@ async function POSTInterno(request: NextRequest) {
   if (parts[0] === 'logout') return logout(request);
   const user = await requireUser(request);
   if (!user) return fail('Sessão expirada.', 401);
-  if (await first(VALIDACAO_ATIVA_SQL)) { if (request.body) await corpoBinarioLimitado(request, CORPO_MAX_JSON); return ok({ error: 'Sistema em atualização, aguarde alguns instantes', codigo: 'validacao' }, { status: 503 }); }
+  if (await first(VALIDACAO_ATIVA_SQL)) return denyWrite(request, 'Sistema em atualização, aguarde alguns instantes', 503, 'validacao');
   if (parts[0] === 'baixas') {
     if (!pode(user, parts.length === 1 ? 'baixa:abrir' : 'baixa:atender')) return denyWrite(request, 'Seu perfil não permite esta operação.');
     if (parts.length === 1) return baixas.criar(request, user);
@@ -373,7 +373,7 @@ async function PUTInterno(request: NextRequest) {
   if (originFailure) return originFailure;
   const user = await requireUser(request);
   if (!user) return fail('Sessão expirada.', 401);
-  if (await first(VALIDACAO_ATIVA_SQL)) { if (request.body) await corpoBinarioLimitado(request, CORPO_MAX_JSON); return ok({ error: 'Sistema em atualização, aguarde alguns instantes', codigo: 'validacao' }, { status: 503 }); }
+  if (await first(VALIDACAO_ATIVA_SQL)) return denyWrite(request, 'Sistema em atualização, aguarde alguns instantes', 503, 'validacao');
   const partesSolicitacao = partsOf(request);
   if (partesSolicitacao[0] === 'estoques') {
     if (!pode(user, 'estoque:gerenciar')) return denyWrite(request, 'Seu perfil não permite gerenciar estoques.');
@@ -412,7 +412,7 @@ async function DELETEInterno(request: NextRequest) {
   if (originFailure) return originFailure;
   const user = await requireUser(request);
   if (!user) return fail('Sessão expirada.', 401);
-  if (await first(VALIDACAO_ATIVA_SQL)) { if (request.body) await corpoBinarioLimitado(request, CORPO_MAX_JSON); return ok({ error: 'Sistema em atualização, aguarde alguns instantes', codigo: 'validacao' }, { status: 503 }); }
+  if (await first(VALIDACAO_ATIVA_SQL)) return denyWrite(request, 'Sistema em atualização, aguarde alguns instantes', 503, 'validacao');
   if (!pode(user, acaoEscrita(partsOf(request)))) return fail('Seu perfil permite somente consulta.', 403);
   const parts = partsOf(request);
   if (parts[0] === 'items' && parts[1]) {
