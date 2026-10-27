@@ -5,6 +5,7 @@ import { Status } from './status';
 import { useEffect, useId, useState } from 'react';
 import { RefreshCw } from 'lucide-react';
 import { api, errorText } from '@/lib/api';
+import { EMAIL_TYPES } from '@/lib/email-types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -26,13 +27,6 @@ const statuses: Record<string, string> = {
   processing: 'Enviando',
   sent: 'Enviada',
   failed: 'Falhou',
-};
-const types: Record<string, string> = {
-  atribuicao: 'Atribuição',
-  atualizacao: 'Atualização',
-  conclusao: 'Conclusão',
-  cancelamento: 'Cancelamento',
-  relatorio_diario: 'Relatório diário',
 };
 export function EmailNotifications({
   users,
@@ -142,7 +136,7 @@ export function EmailNotifications({
             Object.fromEntries(users.map((u) => [u.id, u.name])),
           )}
           {select('Situação', 'status', statuses)}
-          {select('Tipo', 'type', types)}
+          {select('Tipo', 'type', EMAIL_TYPES)}
           <label htmlFor={`${fieldId}-from`} className="space-y-1 text-sm">
             <span>De</span>
             <CampoData
@@ -212,7 +206,7 @@ export function EmailNotifications({
                       )}
                     </TableCell>
                     <TableCell className="truncate">
-                      {types[item.type] || item.type}
+                      {EMAIL_TYPES[item.type] || item.type}
                     </TableCell>
                     <TableCell>
                       <p className="truncate" title={item.recipientName}>
