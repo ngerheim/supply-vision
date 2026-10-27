@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { api, ApiError } from '../lib/api.ts';
 import { PORTAL_BUILD } from '../lib/portal-build.ts';
-import { obterEstadoPortal } from '../lib/estado-portal.ts';
+import { detectarEstadoPortal, obterEstadoPortal, ESTADO_INICIAL } from '../lib/estado-portal.ts';
 
 void test('helper envia identificador em toda escrita preservando os demais cabecalhos', async t => {
   for (const method of ['POST', 'PUT', 'PATCH', 'DELETE']) {
@@ -123,4 +123,29 @@ void test('409 com codigo de build sem cabecalho exige recarga e preserva sessao
   t.mock.method(globalThis, 'fetch', async () => Response.json({error:'Sessão expirada.'}, {status:401, headers:{'x-portal-build':'outro-build'}}));
   await assert.rejects(api('/api/test'), ApiError);
   assert.equal(expiradas,0,'A recarga obrigatoria nao desmonta os formularios nem encerra a sessao');
+});
+
+void test('409 de cada codigo preserva a mensagem e so build pede recarga', async t => {
+  const original = Object.getOwnPropertyDescriptor(globalThis, 'window');
+  Object.defineProperty(globalThis, 'window', { configurable: true, value: new EventTarget() });
+  t.after(() => { if (original) Object.defineProperty(globalThis, 'window', original); else Reflect.deleteProperty(globalThis, 'window'); });
+  for (const [codigo, mensagem] of [
+    ['revisao', 'Registro alterado.'], ['situacao', 'Situação cadastral inválida.'],
+    ['categoria_inativa', 'Categoria inativa.'], ['status_invalido', 'Status inválido.'],
+    ['duplicado', 'Registro duplicado.'],
+  ]) {
+    const erro = new ApiError({ error: mensagem, codigo, status: 409 });
+    assert.equal(erro.details.codigo, codigo);
+    assert.equal(erro.message, mensagem);
+    assert.equal(detectarEstadoPortal(ESTADO_INICIAL, { status: 409, codigo }, PORTAL_BUILD).versaoNova, false);
+  }
+  assert.equal(detectarEstadoPortal(ESTADO_INICIAL, { status: 409, codigo: 'build_desatualizado' }, PORTAL_BUILD).versaoNova, true);
+});
+
+void test('503 validacao preserva codigo e mensagem; 429 nao habilita modo manual', async t => {
+  t.mock.method(globalThis, 'fetch', async () => Response.json({ error: 'Sistema em atualização, aguarde alguns instantes', codigo: 'validacao' }, { status: 503 }));
+  await assert.rejects(api('/api/solicitacoes/cnpj/fixture'), error => error instanceof ApiError && error.details.codigo === 'validacao' && error.message === 'Sistema em atualização, aguarde alguns instantes');
+  t.mock.restoreAll();
+  t.mock.method(globalThis, 'fetch', async () => Response.json({ error: 'Limite de consultas.' }, { status: 429 }));
+  await assert.rejects(api('/api/solicitacoes/cnpj/fixture'), error => error instanceof ApiError && error.details.status === 429 && !error.details.codigo);
 });

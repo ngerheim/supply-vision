@@ -38,7 +38,7 @@ function editaveis(body: Corpo, anterior: Corpo = {}) {
 
 export function solicitacoesApi(contexto: ContextoApi, consultas = criarConsultasFornecedor()) {
   const { rawDb, all, first, id, now, ok, fail, jsonBody, tokenHash } = contexto;
-  const conflito = () => fail('Esta solicitação foi alterada. Atualize antes de salvar novamente.', 409);
+  const conflito = () => contexto.ok({ error: 'Esta solicitação foi alterada. Atualize antes de salvar novamente.', codigo: 'revisao' }, { status: 409 });
   const inexistente = () => fail('Solicitação não encontrada.', 404);
   const statement = (sql: string, valores: unknown[] = []) => rawDb().prepare(sql).bind(...valores);
   const auditoria = (user: User, entidade: string, registro: string, acao: string, detalhes: string, timestamp: string, condicao = '1', valores: unknown[] = [], detalhesSql = '?', valoresDetalhes: unknown[] = []) =>
@@ -54,12 +54,12 @@ export function solicitacoesApi(contexto: ContextoApi, consultas = criarConsulta
         const consultaId = id('cnpj'), consultada_em = now();
         await statement('INSERT INTO consultas_cnpj(id,cnpj,fonte,dados_json,consultada_em,user_id) VALUES(?,?,?,?,?,?)', [consultaId, dados.cnpj, fonte, JSON.stringify(dados), consultada_em, user.id]).run();
         return ok({ ...dados, consulta_fonte: fonte, consultada_em, consultaId });
-      } catch (erro) { if (erro instanceof FalhaConsulta) return fail(erro.message, erro.status); throw erro; }
+      } catch (erro) { if (erro instanceof FalhaConsulta) return ok({ error: erro.message, ...(erro.codigo ? { codigo: erro.codigo } : {}) }, { status: erro.status }); throw erro; }
     });
   }
   async function consultarCep(numero: string) {
     try { return ok(await consultas.cep(numero)); }
-    catch (erro) { if (erro instanceof FalhaConsulta) return fail(erro.message, erro.status); throw erro; }
+    catch (erro) { if (erro instanceof FalhaConsulta) return ok({ error: erro.message, ...(erro.codigo ? { codigo: erro.codigo } : {}) }, { status: erro.status }); throw erro; }
   }
   async function listar(user: User, params: URLSearchParams) {
     const condicoes: string[] = [], valores: unknown[] = [];
@@ -115,11 +115,11 @@ export function solicitacoesApi(contexto: ContextoApi, consultas = criarConsulta
     return { ...dados, consulta_fonte: null, consultada_em: null, nao_verificado: 1 };
   }
   function bloqueioSituacao(dados: Corpo) {
-    return !dados.nao_verificado && dados.situacao_cadastral !== 'ATIVA' ? fail(`CNPJ com situação cadastral ${String(dados.situacao_cadastral)}. Somente empresas ATIVAS podem ser solicitadas.`, 409) : null;
+    return !dados.nao_verificado && dados.situacao_cadastral !== 'ATIVA' ? contexto.ok({ error: `CNPJ com situação cadastral ${String(dados.situacao_cadastral)}. Somente empresas ATIVAS podem ser solicitadas.`, codigo: 'situacao' }, { status: 409 }) : null;
   }
   async function duplicada(cnpj: string) {
     const existente = await first<{ id: string; codigo: string; status: string }>("SELECT id,codigo,status FROM solicitacoes WHERE cnpj=? AND status IN ('aberta','em_analise','devolvida')", [cnpj]);
-    return existente ? ok({ error: `Já existe a solicitação ${existente.codigo} com status ${existente.status} para este CNPJ.`, existente }, { status: 409 }) : null;
+    return existente ? ok({ error: `Já existe a solicitação ${existente.codigo} com status ${existente.status} para este CNPJ.`, codigo: 'duplicado', existente }, { status: 409 }) : null;
   }
   async function categoriasEntrada(valor: unknown): Promise<string[]> {
     if (!Array.isArray(valor) || valor.length > 80 || valor.some(v => typeof v !== 'string' || !v || v.length > 100)) throw new EntradaInvalida('Categorias inválidas.');
@@ -136,7 +136,7 @@ export function solicitacoesApi(contexto: ContextoApi, consultas = criarConsulta
       const repetida = async () => {
         if (!chave) return null;
         const antiga = await first<{ id: string; codigo: string; request_hash: string }>('SELECT id,codigo,request_hash FROM solicitacoes WHERE solicitante_id=? AND request_key=?', [user.id, chave]);
-        return antiga ? antiga.request_hash !== hash ? fail('Esta tentativa já foi usada com outros dados.', 409) : ok({ id: antiga.id, codigo: antiga.codigo }, { status: 201 }) : null;
+        return antiga ? antiga.request_hash !== hash ? ok({ error: 'Esta tentativa já foi usada com outros dados.', codigo: 'duplicado' }, { status: 409 }) : ok({ id: antiga.id, codigo: antiga.codigo }, { status: 201 }) : null;
       };
       const anterior = await repetida(); if (anterior) return anterior;
       const receita = await dadosReceita(body, user), bloqueio = bloqueioSituacao(receita); if (bloqueio) return bloqueio;
@@ -152,7 +152,7 @@ export function solicitacoesApi(contexto: ContextoApi, consultas = criarConsulta
           auditoria(user, 'solicitacao', solicitacaoId, 'CREATE', 'Solicitação de cadastro de fornecedor aberta', timestamp, 'EXISTS(SELECT 1 FROM solicitacoes WHERE id=?)', [solicitacaoId], "('Solicitação de cadastro de fornecedor aberta: ' || (SELECT codigo FROM solicitacoes WHERE id=?))", [solicitacaoId]),
           ...avisos,
         ]);
-        if (!resultados[0].meta.changes) return fail('Uma categoria foi desativada. Atualize e tente novamente.', 409);
+        if (!resultados[0].meta.changes) return ok({ error: 'Uma categoria foi desativada. Atualize e tente novamente.', codigo: 'categoria_inativa' }, { status: 409 });
       } catch (erro) {
         if (!ehErroUnique(erro)) throw erro;
         const resposta = await repetida() ?? await duplicada(String(receita.cnpj)); if (resposta) return resposta;
@@ -184,10 +184,15 @@ export function solicitacoesApi(contexto: ContextoApi, consultas = criarConsulta
       const body = await jsonBody<Corpo>(request), atual = await first<Solicitacao>('SELECT * FROM solicitacoes WHERE id=? AND solicitante_id=?', [solicitacaoId, user.id]);
       if (!atual) return inexistente();
       if (!revisaoConfere(body.expectedRevision, atual.revision)) return conflito();
-      if (atual.status !== 'devolvida') return fail('Somente solicitações devolvidas podem ser corrigidas.', 409);
+      if (atual.status !== 'devolvida') return ok({ error: 'Somente solicitações devolvidas podem ser corrigidas.', codigo: 'status_invalido' }, { status: 409 });
       const receita = await dadosReceita(body, user, atual);
       const categorias = body.categorias === undefined ? undefined : await categoriasEntrada(body.categorias);
-      return salvar(user, atual, { ...Object.fromEntries(RECEITA.map(c => [c, receita[c]])), ...editaveis(body, atual) }, 'aberta', 'Solicitação corrigida pelo solicitante', null, null, categorias);
+      const chave = chaveIdempotencia(request), hash = chave ? await tokenHash(`correcao:${JSON.stringify(body)}`) : null;
+      if (chave) {
+        const anterior = await first<{ request_hash: string }>('SELECT request_hash FROM solicitacao_andamentos WHERE solicitacao_id=? AND user_id=? AND request_key=?', [solicitacaoId, user.id, chave]);
+        if (anterior) return anterior.request_hash === hash ? ok({ success: true }) : ok({ error: 'Esta tentativa já foi usada com outros dados.', codigo: 'duplicado' }, { status: 409 });
+      }
+      return salvar(user, atual, { ...Object.fromEntries(RECEITA.map(c => [c, receita[c]])), ...editaveis(body, atual) }, 'aberta', 'Solicitação corrigida pelo solicitante', chave, hash, categorias);
     });
   }
   async function transicionar(request: Request, user: User, solicitacaoId: string) {
@@ -199,13 +204,13 @@ export function solicitacoesApi(contexto: ContextoApi, consultas = criarConsulta
       const chave = chaveIdempotencia(request), hash = chave ? await tokenHash(`transicao:${JSON.stringify(body)}`) : null;
       if (chave) {
         const anterior = await first<{ request_hash: string }>('SELECT request_hash FROM solicitacao_andamentos WHERE solicitacao_id=? AND user_id=? AND request_key=?', [solicitacaoId, user.id, chave]);
-        if (anterior) return anterior.request_hash === hash ? ok({ success: true }) : fail('Esta tentativa já foi usada com outros dados.', 409);
+        if (anterior) return anterior.request_hash === hash ? ok({ success: true }) : ok({ error: 'Esta tentativa já foi usada com outros dados.', codigo: 'duplicado' }, { status: 409 });
       }
       if (!revisaoConfere(body.expectedRevision, atual.revision)) return conflito();
       const para = campo(body, 'para', 30), texto = campo(body, 'texto', LIMITES_CAMPO.mensagem);
       const transicaoAtendente = (atual.status === 'aberta' && para === 'em_analise') || (atual.status === 'em_analise' && ['cadastrado', 'recusado', 'devolvida'].includes(para)) || (atual.status === 'devolvida' && para === 'recusado');
       const cancelamentoProprio = atual.status === 'devolvida' && para === 'recusado' && atual.solicitante_id === user.id;
-      if (!(pode(user, 'solicitacao:atender') && transicaoAtendente) && !cancelamentoProprio) return fail('Transição de situação inválida.', 409);
+      if (!(pode(user, 'solicitacao:atender') && transicaoAtendente) && !cancelamentoProprio) return ok({ error: 'Transição de situação inválida.', codigo: 'status_invalido' }, { status: 409 });
       if (['recusado', 'devolvida'].includes(para) && !texto) return fail('Informe o motivo ou a mensagem de devolução.');
       return salvar(user, atual, { atendente_id: para === 'em_analise' ? user.id : atual.atendente_id, motivo_recusa: para === 'recusado' ? texto : null }, para, texto, chave, hash);
     });
@@ -215,13 +220,18 @@ export function solicitacoesApi(contexto: ContextoApi, consultas = criarConsulta
       if (!pode(user, 'solicitacao:atender')) return fail('Seu perfil não permite atender solicitações.', 403);
       const body = await jsonBody<Corpo>(request), atual = await first<Solicitacao>('SELECT * FROM solicitacoes WHERE id=?', [solicitacaoId]);
       if (!atual) return inexistente();
+      const chave = chaveIdempotencia(request), hash = chave ? await tokenHash(`reconsulta:${JSON.stringify(body)}`) : null;
+      if (chave) {
+        const anterior = await first<{ request_hash: string }>('SELECT request_hash FROM solicitacao_andamentos WHERE solicitacao_id=? AND user_id=? AND request_key=?', [solicitacaoId, user.id, chave]);
+        if (anterior) return anterior.request_hash === hash ? ok({ success: true }) : ok({ error: 'Esta tentativa já foi usada com outros dados.', codigo: 'duplicado' }, { status: 409 });
+      }
       if (!revisaoConfere(body.expectedRevision, atual.revision)) return conflito();
-      if (!['aberta', 'em_analise'].includes(atual.status)) return fail('Somente solicitações abertas ou em análise podem ser reconsultadas.', 409);
+      if (!['aberta', 'em_analise'].includes(atual.status)) return ok({ error: 'Somente solicitações abertas ou em análise podem ser reconsultadas.', codigo: 'status_invalido' }, { status: 409 });
       try {
         const { dados, fonte } = await consultas.cnpj(atual.cnpj, true);
         // Reconsulta preserva o endereco ajustado e o historico do atendimento.
-        return salvar(user, atual, { ...Object.fromEntries(RECEITA.filter(c => c in dados).map(c => [c, dados[c as keyof DadosReceita]])), consulta_fonte: fonte, consultada_em: now(), nao_verificado: 0 }, atual.status, 'Reconsultado na Receita', null, null, undefined, dados);
-      } catch (erro) { if (erro instanceof FalhaConsulta) return fail(erro.message, erro.status); throw erro; }
+        return salvar(user, atual, { ...Object.fromEntries(RECEITA.filter(c => c in dados).map(c => [c, dados[c as keyof DadosReceita]])), consulta_fonte: fonte, consultada_em: now(), nao_verificado: 0 }, atual.status, 'Reconsultado na Receita', chave, hash, undefined, dados);
+      } catch (erro) { if (erro instanceof FalhaConsulta) return ok({ error: erro.message, ...(erro.codigo ? { codigo: erro.codigo } : {}) }, { status: erro.status }); throw erro; }
     });
   }
   async function listarCategorias(user: User) {
@@ -244,7 +254,7 @@ export function solicitacoesApi(contexto: ContextoApi, consultas = criarConsulta
           auditoria(user, 'categoria_fornecedor', registro, atual ? 'UPDATE' : 'CREATE', `Categoria: ${nome}; ativa: ${ativo}`, timestamp, 'changes()=1'),
         ]);
         if (!resultados[0].meta.changes) return conflito();
-      } catch (erro) { if (ehErroUnique(erro)) return fail('Já existe uma categoria com esse nome.', 409); throw erro; }
+      } catch (erro) { if (ehErroUnique(erro)) return ok({ error: 'Já existe uma categoria com esse nome.', codigo: 'duplicado' }, { status: 409 }); throw erro; }
       return ok({ id: registro, revision: atual ? atual.revision + 1 : 0 }, { status: atual ? 200 : 201 });
     });
   }

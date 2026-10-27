@@ -122,6 +122,7 @@ void test('Cadastro de fornecedor pelo roteador e SQLite reais', async t => {
     const criada = await post('categorias-fornecedor', { nome: 'Categoria fictícia' }); assert.equal(criada.status, 201);
     assert.equal((await post('categorias-fornecedor', { nome: 'CATEGORIA FICTÍCIA' })).status, 409);
     assert.equal((await put(`categorias-fornecedor/${criada.data.id}`, { nome: 'Nome alterado', expectedRevision: 8 })).status, 409);
+    assert.equal((await put(`categorias-fornecedor/${criada.data.id}`, { nome: 'Nome alterado', expectedRevision: 8 })).data.codigo, 'revisao');
     assert.equal((await put(`categorias-fornecedor/${criada.data.id}`, { nome: 'Nome alterado', ativo: false, expectedRevision: 0 })).status, 200);
     assert.equal((await get('categorias-fornecedor', 'viewer')).data.categorias.length, 3);
     assert.equal((await get('categorias-fornecedor', admin)).data.categorias.length, 4);
@@ -188,14 +189,14 @@ void test('Cadastro de fornecedor pelo roteador e SQLite reais', async t => {
     assert.equal(listaEditor.solicitante,'Pessoa viewer');
     const baixada = (await get(`solicitacoes/cnpj/${CNPJS_ENSAIO.baixada}`, 'viewer')).data;
     const rejeitada = await post('solicitacoes', { consultaId: baixada.consultaId }, 'viewer');
-    assert.equal(rejeitada.status, 409); assert.match(rejeitada.data.error, /BAIXADA/); assert.deepEqual(contagens(), depois);
+    assert.equal(rejeitada.status, 409); assert.equal(rejeitada.data.codigo, 'situacao'); assert.match(rejeitada.data.error, /BAIXADA/); assert.deepEqual(contagens(), depois);
   });
   await t.test('manual nao verificado, idempotencia e duplicidade atomica concorrente', async () => {
     const body = manual(), headers = { 'idempotency-key': 'tentativa_cadastro_ficticia_01' };
     const primeira = await post('solicitacoes', body, 'viewer', headers); assert.equal(primeira.status, 201); assert.equal(registro(primeira.data.id).nao_verificado, 1);
     const antes = contagens();
     assert.deepEqual(await post('solicitacoes', body, 'viewer', headers), primeira);
-    assert.equal((await post('solicitacoes', { ...body, razao_social: 'Outro texto' }, 'viewer', headers)).status, 409); assert.deepEqual(contagens(), antes);
+    const divergente = await post('solicitacoes', { ...body, razao_social: 'Outro texto' }, 'viewer', headers); assert.equal(divergente.status, 409); assert.equal(divergente.data.codigo, 'duplicado'); assert.deepEqual(contagens(), antes);
     const concorrente = manual();
     const resultados = await Promise.all([post('solicitacoes', concorrente, 'viewer'), post('solicitacoes', concorrente, 'outro')]);
     assert.deepEqual(resultados.map(r => r.status).sort((a,b) => a-b), [201, 409]);
@@ -217,14 +218,18 @@ void test('Cadastro de fornecedor pelo roteador e SQLite reais', async t => {
   await t.test('transicoes, textos obrigatorios, devolucao e correcao exclusiva do solicitante', async () => {
     const s = await abrir();
     assert.equal((await mover(s.id, 'em_analise', '', 'viewer')).status, 403);
-    for (const para of ['aberta', 'devolvida', 'cadastrado', 'recusado', 'invalida']) assert.equal((await mover(s.id, para)).status, 409);
+    for (const para of ['aberta', 'devolvida', 'cadastrado', 'recusado', 'invalida']) { const resposta = await mover(s.id, para); assert.equal(resposta.status, 409); assert.equal(resposta.data.codigo, 'status_invalido'); }
     assert.equal((await mover(s.id, 'em_analise')).status, 200); assert.equal(registro(s.id).atendente_id, 'editor');
     for (const para of ['devolvida', 'recusado']) assert.equal((await mover(s.id, para)).status, 400);
     assert.equal((await mover(s.id, 'devolvida', 'Corrija o endereço')).status, 200);
     assert.equal((await put(`solicitacoes/${s.id}`, { expectedRevision: 2 }, 'outro')).status, 404);
     assert.equal((await put(`solicitacoes/${s.id}`, { expectedRevision: 2 }, 'editor')).status, 404);
     assert.equal((await put(`solicitacoes/${s.id}`, { expectedRevision: 0 }, 'viewer')).status, 409);
-    assert.equal((await put(`solicitacoes/${s.id}`, { expectedRevision: 2, cidade: 'Cidade Corrigida', razao_social: 'Manual Corrigido', status: 'cadastrado', solicitante_id: 'outro', categorias: ['categoria_semente_2'] }, 'viewer')).status, 200);
+    const bodyCorrecao = { expectedRevision: 2, cidade: 'Cidade Corrigida', razao_social: 'Manual Corrigido', status: 'cadastrado', solicitante_id: 'outro', categorias: ['categoria_semente_2'] }, chaveCorrecao = { 'idempotency-key': 'correcao_ficticia_repetida_01' };
+    assert.equal((await pedir('PUT', `solicitacoes/${s.id}`, 'viewer', bodyCorrecao, chaveCorrecao)).status, 200);
+    const contagemCorrecao = contagens();
+    assert.equal((await pedir('PUT', `solicitacoes/${s.id}`, 'viewer', bodyCorrecao, chaveCorrecao)).status, 200);
+    assert.deepEqual(contagens(), contagemCorrecao);
     assert.equal(registro(s.id).status, 'aberta'); assert.equal(registro(s.id).razao_social, 'Manual Corrigido'); assert.equal(registro(s.id).solicitante_id, 'viewer');
     assert.equal((await mover(s.id, 'em_analise', '', admin)).status, 200); assert.equal(registro(s.id).atendente_id, admin);
     assert.equal((await mover(s.id, 'cadastrado')).status, 200);
@@ -428,8 +433,10 @@ void test('Cadastro de fornecedor pelo roteador e SQLite reais', async t => {
     const existente = await abrir(), body = manual(), antes = contagens();
     assert.equal((await post('solicitacoes', body, 'viewer', { 'x-portal-build': 'antigo' })).status, 409); assert.deepEqual(contagens(), antes);
     sql.exec('INSERT OR REPLACE INTO operacao_validacao(id,ativa) VALUES(1,1)');
-    assert.equal((await post('solicitacoes', body, 'viewer')).status, 503);
-    assert.equal((await get(`solicitacoes/cnpj/${CNPJS_ENSAIO.ativa}`, 'viewer')).status, 503);
+    const escritaValidacao = await post('solicitacoes', body, 'viewer');
+    assert.equal(escritaValidacao.status, 503); assert.equal(escritaValidacao.data.codigo, 'validacao'); assert.match(escritaValidacao.data.error, /Sistema em atualização/);
+    const leituraValidacao = await get(`solicitacoes/cnpj/${CNPJS_ENSAIO.ativa}`, 'viewer');
+    assert.equal(leituraValidacao.status, 503); assert.equal(leituraValidacao.data.codigo, 'validacao');
     sql.exec('UPDATE operacao_validacao SET ativa=0');
     sql.exec("CREATE TRIGGER falhar_solicitacao BEFORE INSERT ON solicitacao_andamentos BEGIN SELECT RAISE(ABORT,'falha ficticia'); END");
     const log = console.error; console.error = () => {};

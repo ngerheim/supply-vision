@@ -500,7 +500,7 @@ export function DetalheBaixa({
       }
     } catch (e) {
       if (montado.current) {
-        const mudou = e instanceof ApiError && e.details.status === 409;
+        const mudou = e instanceof ApiError && e.details.status === 409 && e.details.codigo === "revisao";
         setConflito(mudou);
         setErro(
           mudou

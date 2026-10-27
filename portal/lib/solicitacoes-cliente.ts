@@ -22,7 +22,7 @@ export const mascaraCnpj = (valor: string) =>
     .replace(/(\.\d{3})(\d)/, '$1/$2')
     .replace(/(\/\d{4})(\d)/, '$1-$2');
 export function erroDeRevisao(erro: unknown) {
-  return erro instanceof ApiError && erro.details.status === 409
+  return erro instanceof ApiError && erro.details.status === 409 && erro.details.codigo === 'revisao'
     ? AVISO_REVISAO_SOLICITACAO
     : errorText(erro);
 }

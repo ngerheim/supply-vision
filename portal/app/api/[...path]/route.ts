@@ -36,7 +36,7 @@ const ok = (data: unknown, init?: ResponseInit) => {
   headers.set('x-content-type-options', 'nosniff');
   return NextResponse.json(data, { ...init, headers });
 };
-const fail = (message: string, status = 400) => ok({ error: message }, { status });
+const fail = (message: string, status = 400, codigo?: string) => ok({ error: message, ...(status === 409 ? { codigo: codigo || 'conflito' } : {}) }, { status });
 const CONSULTAS_POR_MINUTO = 20;
 const LIMITE_CONSULTAS_MENSAGEM = 'Limite de 20 consultas de CNPJ e CEP por minuto atingido. Aguarde antes de tentar novamente.';
 const consultasPorUsuario = new Map<string, number[]>();
@@ -227,7 +227,7 @@ async function GETInterno(request: NextRequest) {
     if (!pode(user, 'solicitacao:abrir')) return fail('Seu perfil não permite consultar solicitações.', 403);
     if (parts.length === 1) return solicitacoes.listar(user, request.nextUrl.searchParams);
     if (parts.length === 3 && parts[1] === 'cnpj') {
-      if (await first(VALIDACAO_ATIVA_SQL)) return fail('Atualização em validação. Aguarde para consultar.', 503);
+      if (await first(VALIDACAO_ATIVA_SQL)) return ok({ error: 'Sistema em atualização, aguarde alguns instantes', codigo: 'validacao' }, { status: 503 });
       if (excedeuLimiteConsultas(user.id)) return fail(LIMITE_CONSULTAS_MENSAGEM, 429);
       // Este GET persiste a consulta; o handler declara solicitacao:abrir.
       definirAutorEscrita({ id: user.id, role: user.role, token: await tokenHash(banco.parseCookies(request).acordos_session || '') });
@@ -311,7 +311,7 @@ async function POSTInterno(request: NextRequest) {
   if (parts[0] === 'logout') return logout(request);
   const user = await requireUser(request);
   if (!user) return fail('Sessão expirada.', 401);
-  if (await first(VALIDACAO_ATIVA_SQL)) return denyWrite(request, 'Atualização em validação. Aguarde para salvar ou executar.', 503);
+  if (await first(VALIDACAO_ATIVA_SQL)) { if (request.body) await corpoBinarioLimitado(request, CORPO_MAX_JSON); return ok({ error: 'Sistema em atualização, aguarde alguns instantes', codigo: 'validacao' }, { status: 503 }); }
   if (parts[0] === 'baixas') {
     if (!pode(user, parts.length === 1 ? 'baixa:abrir' : 'baixa:atender')) return denyWrite(request, 'Seu perfil não permite esta operação.');
     if (parts.length === 1) return baixas.criar(request, user);
@@ -365,7 +365,7 @@ async function PUTInterno(request: NextRequest) {
   if (originFailure) return originFailure;
   const user = await requireUser(request);
   if (!user) return fail('Sessão expirada.', 401);
-  if (await first(VALIDACAO_ATIVA_SQL)) return denyWrite(request, 'Atualização em validação. Aguarde para salvar ou executar.', 503);
+  if (await first(VALIDACAO_ATIVA_SQL)) { if (request.body) await corpoBinarioLimitado(request, CORPO_MAX_JSON); return ok({ error: 'Sistema em atualização, aguarde alguns instantes', codigo: 'validacao' }, { status: 503 }); }
   const partesSolicitacao = partsOf(request);
   if (partesSolicitacao[0] === 'estoques') {
     if (!pode(user, 'estoque:gerenciar')) return denyWrite(request, 'Seu perfil não permite gerenciar estoques.');
@@ -400,7 +400,7 @@ async function DELETEInterno(request: NextRequest) {
   if (originFailure) return originFailure;
   const user = await requireUser(request);
   if (!user) return fail('Sessão expirada.', 401);
-  if (await first(VALIDACAO_ATIVA_SQL)) return denyWrite(request, 'Atualização em validação. Aguarde para salvar ou executar.', 503);
+  if (await first(VALIDACAO_ATIVA_SQL)) { if (request.body) await corpoBinarioLimitado(request, CORPO_MAX_JSON); return ok({ error: 'Sistema em atualização, aguarde alguns instantes', codigo: 'validacao' }, { status: 503 }); }
   if (!pode(user, acaoEscrita(partsOf(request)))) return fail('Seu perfil permite somente consulta.', 403);
   const parts = partsOf(request);
   if (parts[0] === 'items' && parts[1]) {
