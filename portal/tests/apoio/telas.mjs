@@ -40,6 +40,7 @@ export async function mount(file, name, props, overrides = {}, globals = {}) {
   const same = (a, b) =>
     a && b && a.length === b.length && a.every((v, i) => Object.is(v, b[i]));
   const hooks = {
+    useId() { return `id-${cursor++}`; },
     useSyncExternalStore(_assinar, obter) { return obter(); },
     useState(initial) {
       const index = cursor++;
