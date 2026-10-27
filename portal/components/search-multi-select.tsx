@@ -147,6 +147,43 @@ export function SearchMultiSelect({
                   Atualizando opções…
                 </output>
               )}
+              {selected.length > 0 && (
+                <div className="border-b p-1">
+                  <p className="px-2 py-1 text-xs font-medium text-muted-foreground">
+                    Selecionadas
+                  </p>
+                  {selected.map((o) => {
+                    const unavailable = !options.some(
+                      (option) => option.id === o.id,
+                    );
+                    return (
+                      <div
+                        key={o.id}
+                        className="flex items-center gap-2 rounded p-2 text-sm"
+                      >
+                        <span className="min-w-0 flex-1 break-words">
+                          {o.name}
+                          {unavailable && (
+                            <span className="ml-1 text-muted-foreground">
+                              (indisponível)
+                            </span>
+                          )}
+                        </span>
+                        <button
+                          type="button"
+                          aria-label={`Remover ${o.name}`}
+                          className="shrink-0 rounded p-1 hover:bg-muted"
+                          onClick={() =>
+                            onChange(value.filter((id) => id !== o.id))
+                          }
+                        >
+                          <X className="size-3" />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
               <Combobox.Empty className="p-2 text-sm text-muted-foreground">
                 {loading
                   ? ''
