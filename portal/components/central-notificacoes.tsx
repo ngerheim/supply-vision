@@ -7,14 +7,15 @@ import { assinarCentral, obterCentral, centralInicial, atualizarContagemCentral,
 export function CentralNotificacoes({ navegar, collapsed = false }: { navegar: (link: string) => void; collapsed?: boolean }) {
   const { usuario, naoLidas } = useSyncExternalStore(assinarCentral, obterCentral, centralInicial);
   const [aberta, setAberta] = useState(false), [itens, setItens] = useState<NotificacaoCentral[]>([]);
+  const [cursor, setCursor] = useState<{ criada_em: string; id: string } | null>(null), [temAnteriores, setTemAnteriores] = useState(false);
   const [erro, setErro] = useState(''), [ocupada, setOcupada] = useState(false), [carregando, setCarregando] = useState(false);
   const painel = useRef<HTMLDialogElement>(null), sino = useRef<HTMLButtonElement>(null);
   const gravando = useRef(false);
   useEffect(() => {
     if (!aberta) return;
     const controller = new AbortController();
-    void api<{ notificacoes: NotificacaoCentral[] }>('/api/central', { signal: controller.signal })
-      .then(dados => { if (!controller.signal.aborted) setItens(dados.notificacoes); })
+    void api<{ notificacoes: NotificacaoCentral[]; temAnteriores: boolean; proximoCursor: { criada_em: string; id: string } | null }>('/api/central', { signal: controller.signal })
+      .then(dados => { if (!controller.signal.aborted) { setItens(dados.notificacoes); setTemAnteriores(dados.temAnteriores); setCursor(dados.proximoCursor); } })
       .catch(error => { if (!controller.signal.aborted) setErro(errorText(error)); })
       .finally(() => { if (!controller.signal.aborted) setCarregando(false); });
     painel.current?.focus();
@@ -46,6 +47,16 @@ export function CentralNotificacoes({ navegar, collapsed = false }: { navegar: (
     } catch (error) { setErro(errorText(error)); }
     finally { gravando.current = false; setOcupada(false); }
   }
+  async function carregarAnteriores() {
+    if (!cursor || carregando) return;
+    setCarregando(true); setErro('');
+    try {
+      const query = new URLSearchParams({ cursorData: cursor.criada_em, cursorId: cursor.id });
+      const dados = await api<{ notificacoes: NotificacaoCentral[]; temAnteriores: boolean; proximoCursor: { criada_em: string; id: string } | null }>(`/api/central?${query}`);
+      setItens(atuais => [...atuais, ...dados.notificacoes]); setTemAnteriores(dados.temAnteriores); setCursor(dados.proximoCursor);
+    } catch (error) { setErro(errorText(error)); }
+    finally { setCarregando(false); }
+  }
   return <div className={`patio-notifications ${collapsed ? 'patio-notifications-collapsed' : ''}`}>
     <button ref={sino} type="button" onClick={() => { if (!aberta) { setCarregando(true); setErro(''); } setAberta(valor => !valor); }} aria-label={`Notificações: ${naoLidas} não lidas`} title="Notificações" aria-expanded={aberta} aria-controls="central-notificacoes" className="patio-notifications-trigger">
       <Bell aria-hidden="true" className="size-5"/>
@@ -62,6 +73,7 @@ export function CentralNotificacoes({ navegar, collapsed = false }: { navegar: (
           <time dateTime={item.criada_em} className="mt-1 block text-xs font-normal text-muted-foreground">{new Date(item.criada_em).toLocaleString('pt-BR')}</time>
         </a>
       </li>)}</ul>}
+      {!carregando && temAnteriores && <button type="button" onClick={() => void carregarAnteriores()} className="mt-3 text-sm underline">Carregar anteriores</button>}
     </dialog>}
   </div>;
 }

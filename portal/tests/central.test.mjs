@@ -22,7 +22,7 @@ const hooks = registerHooks({ resolve(s, c, next) {
 } });
 const banco = await import('../lib/database.ts');
 const rota = await import('../app/api/[...path]/route.ts');
-const { prepararNotificacaoUsuario } = await import('../lib/central-notificacoes.ts');
+const { prepararNotificacaoUsuario, prepararNotificacaoCondicional } = await import('../lib/central-notificacoes.ts');
 hooks.deregister();
 
 void test('Central com roteador, migracao e SQLite reais', async t => {
@@ -81,6 +81,21 @@ void test('Central com roteador, migracao e SQLite reais', async t => {
     await db.batch(Array.from({length:35}, () => notificar('a')));
     assert.equal((await get('central','a')).notificacoes.length,30);
     assert.deepEqual(await get('central/nao-lidas','a'),{naoLidas:35});
+    const recentes = (await get('central','a')).notificacoes;
+    await db.prepare('UPDATE notificacoes_usuario SET lida_em=? WHERE user_id=?').bind(banco.now(),'a').run();
+    const antigas = (await get(`central?cursorData=${encodeURIComponent(recentes.at(-1).criada_em)}&cursorId=${encodeURIComponent(recentes.at(-1).id)}`,'a')).notificacoes;
+    assert.equal(antigas.length,7);
+    assert.ok(!recentes.some(n => antigas.some(a => a.id === n.id)));
+    await prepararNotificacaoUsuario({destinatario:'a',tipo:'teste',texto:'x'.repeat(400),link:'/'}).run();
+    const truncada = sql.prepare("SELECT texto FROM notificacoes_usuario WHERE tipo='teste' ORDER BY rowid DESC LIMIT 1").get().texto;
+    assert.equal(truncada.length,300);
+    assert.equal(truncada.at(-1),'…');
+    for (const tipo of ['teste','solicitacao','baixa']) {
+      assert.throws(() => prepararNotificacaoCondicional({tipo,texto:'Mensagem ficticia',textoSql:'?',link:'https://example.invalid',origem:'(SELECT 1)',destinatarioSql:'?',valoresDestinatario:['a'],condicao:'1=1',valoresTexto:['Mensagem ficticia']}),/Link da notificação inválido/);
+      await prepararNotificacaoCondicional({tipo,texto:'Mensagem ficticia',textoSql:'?',link:'/',origem:'(SELECT 1)',destinatarioSql:'?',valoresDestinatario:['a'],condicao:'1=1',valoresTexto:['x'.repeat(400)]}).run();
+      const aviso = sql.prepare('SELECT texto FROM notificacoes_usuario WHERE tipo=? ORDER BY rowid DESC LIMIT 1').get(tipo).texto;
+      assert.equal(aviso.length,300); assert.equal(aviso.at(-1),'…');
+    }
   });
   const snapshot = () => JSON.stringify(sql.prepare("SELECT name FROM sqlite_schema WHERE type='table' ORDER BY name").all().map(({name}) => [name,sql.prepare(`SELECT * FROM "${String(name)}" ORDER BY rowid`).all()]));
   await t.test('build divergente e polling com sessao vencida nao gravam nada', async () => {
@@ -137,8 +152,11 @@ void test('Central com roteador, migracao e SQLite reais', async t => {
     sql.exec('DELETE FROM notificacoes_usuario');
     const agora = new Date('2026-10-22T12:00:00.000Z');
     const data = dias => new Date(agora.getTime()-dias*86400000).toISOString();
-    for (const [id,criada,lida] of [['antiga',data(200),data(91)],['limite',data(200),data(90)],['recente',data(1),null],['nao-lida-antiga',data(91),null],['nao-lida-limite',data(90),null]])
+    for (const [id,criada,lida] of [['antiga',data(200),data(91)],['limite',data(200),data(90)],['recente',data(1),null],['nao-lida-antiga',data(366),null],['nao-lida-limite',data(365),null]])
       sql.prepare('INSERT INTO notificacoes_usuario(id,user_id,tipo,texto,link,criada_em,lida_em) VALUES(?,?,?,?,?,?,?)').run(id,'a','teste','Ficticio','/',criada,lida);
+    const resultado = expurgar(sql,configurarExpurgo({EXPURGO_HABILITADO:'1',EXPURGO_EMAILS_DIAS:'0',EXPURGO_RELATORIOS_DIAS:'0',EXPURGO_IMPORTACOES_DIAS:'0'}),agora);
+    assert.equal(resultado.notificacoes_usuario,2);
+    assert.deepEqual(sql.prepare('SELECT id FROM notificacoes_usuario ORDER BY id').all().map(n => n.id),['limite','nao-lida-limite','recente']);
     const antes = sql.prepare('SELECT * FROM notificacoes_usuario ORDER BY id').all();
     const copia = criarCopiaIntegra(db.arquivo,path.join(pasta,'backup.sqlite'));
     const restaurada = path.join(pasta,'restaurada.sqlite');
@@ -146,8 +164,5 @@ void test('Central com roteador, migracao e SQLite reais', async t => {
     const restaurado = new DatabaseSync(restaurada);
     try { assert.deepEqual(restaurado.prepare('SELECT * FROM notificacoes_usuario ORDER BY id').all(),antes); }
     finally { restaurado.close(); }
-    const resultado = expurgar(sql,configurarExpurgo({EXPURGO_HABILITADO:'1',EXPURGO_EMAILS_DIAS:'0',EXPURGO_RELATORIOS_DIAS:'0',EXPURGO_IMPORTACOES_DIAS:'0'}),agora);
-    assert.equal(resultado.notificacoes_usuario,2);
-    assert.deepEqual(sql.prepare('SELECT id FROM notificacoes_usuario ORDER BY id').all().map(n => n.id),['limite','nao-lida-limite','recente']);
   });
 });
