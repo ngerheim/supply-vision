@@ -22,6 +22,22 @@ type Baixa = Row & {
   solicitante_id: string;
   revision: number;
 };
+type ItemEntrada = { itemId: string; quantidade: number };
+function itensEntrada(valor: unknown): ItemEntrada[] {
+  if (!Array.isArray(valor) || valor.length < 1 || valor.length > 50)
+    throw new EntradaInvalida('Informe de 1 a 50 itens.');
+  const vistos = new Set<string>();
+  return valor.map((item) => {
+    if (!item || typeof item !== 'object') throw new EntradaInvalida('Item inválido.');
+    const { itemId, quantidade } = item as Record<string, unknown>;
+    if (typeof itemId !== 'string' || !itemId.trim() || itemId.length > 100 || vistos.has(itemId))
+      throw new EntradaInvalida('Item ausente ou repetido.');
+    vistos.add(itemId);
+    if (typeof quantidade !== 'number' || !Number.isFinite(quantidade) || quantidade <= 0 || !Number.isSafeInteger(Math.round(quantidade*100)) || !/^\d+(?:\.\d{1,2})?$/.test(String(quantidade)))
+      throw new EntradaInvalida('Quantidade deve ser positiva e ter até duas casas decimais.');
+    return { itemId, quantidade };
+  });
+}
 function campo(body: Corpo, nome: string, maximo: number): string {
   const valor = body[nome];
   if (valor === undefined || valor === null) return '';
@@ -131,7 +147,11 @@ export function baixasApi(contexto: ContextoApi) {
       pageCount = Math.max(1, Math.ceil(total / paginacao.pageSize)),
       page = Math.min(paginacao.page, pageCount);
     const baixas = await all(
-      `SELECT b.id,b.codigo,b.numero_os,b.estoque_id,b.placa,b.status,b.solicitante_id,b.atendente_id,b.motivo_recusa,b.criado_em,b.atualizado_em,b.revision,e.nome AS estoque${pode(user, 'baixa:ver_todas') ? ',u.name AS solicitante' : ''}
+      `SELECT b.id,b.codigo,b.numero_os,b.estoque_id,b.placa,b.status,b.solicitante_id,b.atendente_id,b.motivo_recusa,b.criado_em,b.atualizado_em,b.revision,e.nome AS estoque${pode(user, 'baixa:ver_todas') ? ',u.name AS solicitante' : ''},
+      (SELECT COUNT(*) FROM baixa_itens bi WHERE bi.baixa_id=b.id) AS itens_total,
+      (SELECT COUNT(*) FROM baixa_itens bi WHERE bi.baixa_id=b.id AND bi.status='pendente') AS itens_pendentes,
+      (SELECT COUNT(*) FROM baixa_itens bi WHERE bi.baixa_id=b.id AND bi.status='baixado') AS itens_baixados,
+      (SELECT COUNT(*) FROM baixa_itens bi WHERE bi.baixa_id=b.id AND bi.status='recusado') AS itens_recusados
       FROM baixas_estoque b JOIN estoques e ON e.id=b.estoque_id JOIN users u ON u.id=b.solicitante_id ${where}
       ORDER BY b.atualizado_em DESC,b.id DESC LIMIT ? OFFSET ?`,
       [...valores, paginacao.pageSize, (page - 1) * paginacao.pageSize],
@@ -166,7 +186,8 @@ export function baixasApi(contexto: ContextoApi) {
       'SELECT a.id,a.baixa_id,a.user_id,a.de_status,a.para_status,a.texto,a.criado_em,u.name AS usuario FROM baixa_andamentos a JOIN users u ON u.id=a.user_id WHERE baixa_id=? ORDER BY a.criado_em,a.rowid',
       [baixaId],
     );
-    return ok({ baixa, andamentos });
+    const itens = await all('SELECT i.id,i.item_id,i.quantidade_centesimos/100.0 AS quantidade,i.status,i.motivo_recusa,i.atendido_em,c.descricao,c.unidade,u.name AS atendente FROM baixa_itens i JOIN itens_catalogo c ON c.id=i.item_id LEFT JOIN users u ON u.id=i.atendente_id WHERE i.baixa_id=? ORDER BY i.rowid',[baixaId]);
+    return ok({ baixa, andamentos, itens });
   }
   async function duplicada(os: string) {
     const existente = await first(
@@ -205,7 +226,8 @@ export function baixasApi(contexto: ContextoApi) {
       if (replay) return replay;
       const os = campo(body, 'numero_os', 20),
         estoque = campo(body, 'estoque_id', 100),
-        placa = normalizarPlaca(campo(body, 'placa', 8));
+        placa = normalizarPlaca(campo(body, 'placa', 8)),
+        itens = itensEntrada(body.itens);
       if (!/^\d{1,20}$/.test(os))
         return fail('Informe o número da OS com 1 a 20 dígitos.');
       if (!placa)
@@ -216,11 +238,18 @@ export function baixasApi(contexto: ContextoApi) {
         ]))
       )
         return fail('Selecione um estoque ativo.');
+      const catalogo = await all<{id:string;descricao:string;unidade:string;ativo:number}>('SELECT id,descricao,unidade,ativo FROM itens_catalogo WHERE id IN ('+itens.map(()=>'?').join(',')+')',itens.map(i=>i.itemId));
+      for (const item of itens) {
+        const cat=catalogo.find(c=>c.id===item.itemId);
+        if (!cat || !cat.ativo || item.itemId==='item_legado') return fail('Selecione apenas itens ativos do catálogo.');
+        if (cat.unidade==='un' && !Number.isInteger(item.quantidade)) return fail('A quantidade de itens em unidade deve ser inteira.');
+      }
       const repeticao = await duplicada(os);
       if (repeticao) return repeticao;
       const registro = id('bxa'),
         evento = id('ban'),
         timestamp = now();
+      const descricaoItens=itens.map(item=>{const cat=catalogo.find(c=>c.id===item.itemId)!;return `${cat.descricao}: ${item.quantidade} ${cat.unidade}; pendente`;}).join(', ');
       const notificacoes = await avisos(
         registro,
         evento,
@@ -234,7 +263,7 @@ export function baixasApi(contexto: ContextoApi) {
         const resultados = await rawDb().batch([
           statement(
             `INSERT INTO baixas_estoque(id,numero_os,estoque_id,placa,solicitante_id,criado_em,atualizado_em,request_key,request_hash)
-            SELECT ?,?,?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM estoques WHERE id=? AND ativo=1)`,
+            SELECT ?,?,?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM estoques WHERE id=? AND ativo=1) AND (SELECT COUNT(*) FROM itens_catalogo WHERE id IN (${itens.map(()=>'?').join(',')}) AND ativo=1)=?`,
             [
               registro,
               os,
@@ -246,29 +275,32 @@ export function baixasApi(contexto: ContextoApi) {
               chave,
               hash,
               estoque,
+              ...itens.map(item=>item.itemId),
+              itens.length,
             ],
           ),
           statement(
-            `INSERT INTO baixa_andamentos(id,baixa_id,user_id,para_status,texto,criado_em) SELECT ?,?,?,'aberta','Pedido de baixa aberto',? WHERE EXISTS(SELECT 1 FROM baixas_estoque WHERE id=?)`,
-            [evento, registro, user.id, timestamp, registro],
+            `INSERT INTO baixa_andamentos(id,baixa_id,user_id,para_status,texto,criado_em) SELECT ?,?,?,'aberta',?,? WHERE EXISTS(SELECT 1 FROM baixas_estoque WHERE id=?)`,
+            [evento, registro, user.id, `Pedido de baixa aberto; ${descricaoItens}`, timestamp, registro],
           ),
+          ...itens.map(item=>statement(`INSERT INTO baixa_itens(id,baixa_id,item_id,quantidade_centesimos,status,criado_em,atualizado_em) SELECT ?,?,?,?,'pendente',?,? WHERE EXISTS(SELECT 1 FROM baixas_estoque WHERE id=?) AND EXISTS(SELECT 1 FROM itens_catalogo WHERE id=? AND ativo=1)`,[id('bit'),registro,item.itemId,Math.round(item.quantidade*100),timestamp,timestamp,registro,item.itemId])),
           auditoria(
             user,
             'baixa_estoque',
             registro,
             'CREATE',
-            'Pedido de baixa no estoque aberto',
+            `Pedido de baixa no estoque aberto; ${descricaoItens}`,
             timestamp,
             'EXISTS(SELECT 1 FROM baixa_andamentos WHERE id=?)',
             [evento],
-            "('Pedido de baixa no estoque aberto: ' || (SELECT codigo FROM baixas_estoque WHERE id=?) || '; OS ' || ?)",
-            [registro, os],
+            "('Pedido de baixa no estoque aberto: ' || (SELECT codigo FROM baixas_estoque WHERE id=?) || '; OS ' || ? || '; ' || ?)",
+            [registro, os, descricaoItens],
           ),
           ...notificacoes,
         ]);
         if (!resultados[0].meta.changes)
           return fail(
-            'O estoque foi desativado. Atualize e tente novamente.',
+            'O estoque ou um item foi desativado. Atualize e tente novamente.',
             409,
           );
       } catch (erro) {
@@ -318,22 +350,61 @@ export function baixasApi(contexto: ContextoApi) {
         return fail('Transição de situação inválida.', 409);
       if (para === 'recusada' && !texto)
         return fail('Informe o motivo da recusa.');
-      const mensagem = para === 'recusada' ? texto : '',
-        timestamp = now(),
-        evento = id('ban');
+      const pendentes=await all<{id:string;descricao:string;unidade:string;quantidade_centesimos:number}>('SELECT bi.id,c.descricao,c.unidade,bi.quantidade_centesimos FROM baixa_itens bi JOIN itens_catalogo c ON c.id=bi.item_id WHERE bi.baixa_id=? AND bi.status=\'pendente\' ORDER BY bi.rowid',[baixaId]);
+      if(!pendentes.length)return fail('Não há itens pendentes para atender.',409);
+      const acao=para==='baixada'?'baixado':'recusado';
+      const itens=pendentes.map(i=>({id:i.id,para:acao as 'baixado'|'recusado',motivo:para==='recusada'?texto:''}));
+      return aplicarAtendimento(user,atual,itens,chave,hash);
+    });
+  }
+  async function atenderItens(request:Request,user:User,baixaId:string){
+    return comAcaoEscrita('baixa:atender',async()=>{
+      if(!pode(user,'baixa:atender'))return fail('Seu perfil não permite atender baixas.',403);
+      const body=await jsonBody<Corpo>(request),atual=await first<Baixa>('SELECT * FROM baixas_estoque WHERE id=?',[baixaId]);
+      if(!atual)return inexistente();
+      const chave=chaveIdempotencia(request),hash=chave?await tokenHash(JSON.stringify(body)):null;
+      if(chave){const antiga=await first<{request_hash:string}>('SELECT request_hash FROM baixa_andamentos WHERE baixa_id=? AND user_id=? AND request_key=?',[baixaId,user.id,chave]);if(antiga)return antiga.request_hash===hash?ok({success:true}):fail('Esta tentativa já foi usada com outros dados.',409);}
+      if(!revisaoConfere(body.expectedRevision,atual.revision))return conflito();
+      if(atual.status!=='aberta')return fail('Baixa não está aberta.',409);
+      if(!Array.isArray(body.itens)||body.itens.length<1||body.itens.length>50)return fail('Selecione de 1 a 50 itens.');
+      const itens=body.itens.map((i)=>{if(!i||typeof i!=='object')throw new EntradaInvalida('Item inválido.');const x=i as Record<string,unknown>;if(typeof x.id!=='string'||!['baixado','recusado'].includes(String(x.para)))throw new EntradaInvalida('Item inválido.');return{id:x.id,para:x.para as 'baixado'|'recusado',motivo:(typeof x.motivo==='string'?x.motivo.trim():'')||(typeof body.texto==='string'?body.texto.trim():'')};});
+      return aplicarAtendimento(user,atual,itens,chave,hash);
+    });
+  }
+  async function aplicarAtendimento(user:User, atual:Baixa, itens:{id:string;para:'baixado'|'recusado';motivo:string}[], chave:string|null, hash:string|null) {
+      const baixaId=atual.id;
+      if(!itens.length||itens.length>50)return fail('Selecione de 1 a 50 itens pendentes.');
+      if(itens.some(i=>!['baixado','recusado'].includes(i.para)))return fail('Situação de item inválida.');
+      const unicos=new Set(itens.map(i=>i.id));if(unicos.size!==itens.length)return fail('Item repetido.');
+      const registros=await all<{id:string;descricao:string;unidade:string;quantidade_centesimos:number;status:string}>('SELECT bi.id,c.descricao,c.unidade,bi.quantidade_centesimos,bi.status FROM baixa_itens bi JOIN itens_catalogo c ON c.id=bi.item_id WHERE bi.baixa_id=? AND bi.id IN ('+itens.map(()=>'?').join(',')+')',[baixaId,...itens.map(i=>i.id)]);
+      if(registros.length!==itens.length||registros.some(i=>i.status!=='pendente'))return fail('Um ou mais itens já foram atendidos. Recarregue a baixa.',409);
+      if(itens.some(i=>i.para==='recusado'&&!i.motivo.trim()))return fail('Informe o motivo da recusa de cada item.');
+      const timestamp=now(),evento=id('ban'),baixados=itens.filter(i=>i.para==='baixado').length,recusados=itens.length-baixados;
+      const textoResumo=`${baixados} ${baixados===1?'item baixado':'itens baixados'}, ${recusados} ${recusados===1?'recusado':'recusados'}`;
+      const baixadosIds=itens.filter(i=>i.para==='baixado').map(i=>i.id),baixadosSql=baixadosIds.length?baixadosIds.map(()=>'?').join(','):'NULL';
+      const statusNovo=await first<{status:string}>('SELECT CASE WHEN EXISTS(SELECT 1 FROM baixa_itens WHERE baixa_id=? AND status=\'pendente\' AND id NOT IN ('+itens.map(()=>'?').join(',')+')) THEN \'aberta\' WHEN EXISTS(SELECT 1 FROM baixa_itens WHERE baixa_id=? AND (status=\'baixado\' OR id IN ('+baixadosSql+'))) THEN \'baixada\' ELSE \'recusada\' END AS status',[baixaId,...itens.map(i=>i.id),baixaId,...baixadosIds]);
+      const paraCabecalho=statusNovo?.status||'aberta';
+      const motivosRecusa=itens.filter(i=>i.para==='recusado').map(i=>i.motivo).filter(Boolean).join('; ');
       const notificacoes = await avisos(
         baixaId,
         evento,
         user,
         atual,
-        para,
-        mensagem,
+        paraCabecalho,
+        `${textoResumo}${motivosRecusa?`; ${motivosRecusa}`:''}`,
         timestamp,
       );
-      const resultados = await rawDb().batch([
+      const statements:ReturnType<typeof statement>[]=[];
+      for(const item of itens){
+        const reg=registros.find(r=>r.id===item.id)!;
+        const motivo=item.motivo||null;
+        statements.push(statement("UPDATE baixa_itens SET status=?,motivo_recusa=?,atendente_id=?,atendido_em=?,atualizado_em=?,revision=revision+1 WHERE id=? AND baixa_id=? AND status='pendente' AND EXISTS(SELECT 1 FROM baixas_estoque WHERE id=? AND revision=? AND status='aberta')",[item.para,motivo,user.id,timestamp,timestamp,item.id,baixaId,baixaId,atual.revision]));
+        statements.push(statement('INSERT INTO baixa_andamentos(id,baixa_id,user_id,de_status,para_status,texto,criado_em) SELECT ?,?,?,\'pendente\',?,?,? WHERE changes()=1',[id('ban'),baixaId,user.id,item.para,`${reg.descricao}: ${reg.quantidade_centesimos/100} ${reg.unidade}; ${item.para}${motivo?`; ${motivo}`:''}`,timestamp]));
+      }
+      statements.push(
         statement(
-          "UPDATE baixas_estoque SET status=?,atendente_id=?,motivo_recusa=?,atualizado_em=?,revision=revision+1 WHERE id=? AND revision=? AND status='aberta'",
-          [para, user.id, mensagem || null, timestamp, baixaId, atual.revision],
+          "UPDATE baixas_estoque SET status=CASE WHEN EXISTS(SELECT 1 FROM baixa_itens WHERE baixa_id=? AND status='pendente' AND id NOT IN ("+itens.map(()=>'?').join(',')+")) THEN 'aberta' WHEN EXISTS(SELECT 1 FROM baixa_itens WHERE baixa_id=? AND (status='baixado' OR id IN ("+baixadosSql+"))) THEN 'baixada' ELSE 'recusada' END,atendente_id=?,motivo_recusa=CASE WHEN EXISTS(SELECT 1 FROM baixa_itens WHERE baixa_id=? AND status='pendente' AND id NOT IN ("+itens.map(()=>'?').join(',')+")) THEN NULL ELSE ? END,atualizado_em=?,revision=revision+1 WHERE id=? AND revision=? AND status='aberta'",
+          [baixaId,...itens.map(i=>i.id),baixaId,...baixadosIds,user.id,baixaId,...itens.map(i=>i.id),motivosRecusa||null,timestamp,baixaId,atual.revision],
         ),
         statement(
           'INSERT INTO baixa_andamentos(id,baixa_id,user_id,de_status,para_status,texto,criado_em,request_key,request_hash) SELECT ?,?,?,?,?,?,?,?,? WHERE changes()=1',
@@ -342,8 +413,8 @@ export function baixasApi(contexto: ContextoApi) {
             baixaId,
             user.id,
             atual.status,
-            para,
-            mensagem || null,
+            paraCabecalho,
+            textoResumo,
             timestamp,
             chave,
             hash,
@@ -354,16 +425,34 @@ export function baixasApi(contexto: ContextoApi) {
           'baixa_estoque',
           baixaId,
           'UPDATE',
-          `${atual.codigo}: ${SITUACOES_BAIXA[para as keyof typeof SITUACOES_BAIXA]}${mensagem ? `; ${mensagem}` : ''}`,
+          `${atual.codigo}: ${textoResumo}; ${registros.map(i=>{const acao=itens.find(x=>x.id===i.id)!;return `${i.descricao} ${i.quantidade_centesimos/100} ${i.unidade}: ${acao.para}${acao.motivo?`; ${acao.motivo}`:''}`;}).join(', ')}`,
           timestamp,
           'EXISTS(SELECT 1 FROM baixa_andamentos WHERE id=?)',
           [evento],
         ),
         ...notificacoes,
-      ]);
-      return resultados[0].meta.changes
+      );
+      const resultados = await rawDb().batch(statements);
+      const alteracoes=resultados.filter((r,index)=>index%2===0&&index<itens.length*2).every(r=>r.meta.changes===1);
+      return alteracoes && resultados[itens.length*2].meta.changes
         ? ok({ success: true, revision: atual.revision + 1 })
-        : ((await repetida()) ?? conflito());
+        : conflito();
+  }
+  async function editarItens(request:Request,user:User,baixaId:string){
+    return comAcaoEscrita('baixa:abrir',async()=>{
+      const body=await jsonBody<Corpo>(request),atual=await first<Baixa>('SELECT * FROM baixas_estoque WHERE id=?',[baixaId]);
+      if(!atual||(atual.solicitante_id!==user.id&&!pode(user,'baixa:ver_todas')))return inexistente();
+      if(atual.solicitante_id!==user.id)return fail('Somente o solicitante pode editar os itens.',403);
+      const chave=chaveIdempotencia(request),hash=chave?await tokenHash(JSON.stringify(body)):null;
+      if(chave){const antiga=await first<{request_hash:string}>('SELECT request_hash FROM baixa_andamentos WHERE baixa_id=? AND user_id=? AND request_key=?',[baixaId,user.id,chave]);if(antiga)return antiga.request_hash===hash?ok({success:true}):fail('Esta tentativa já foi usada com outros dados.',409);}
+      if(atual.status!=='aberta')return fail('A baixa não está aberta.',409);
+      if(!revisaoConfere(body.expectedRevision,atual.revision))return conflito();
+      const itens=itensEntrada(body.itens),catalogo=await all<{id:string;descricao:string;unidade:string;ativo:number}>('SELECT id,descricao,unidade,ativo FROM itens_catalogo WHERE id IN ('+itens.map(()=>'?').join(',')+')',itens.map(i=>i.itemId));
+      for(const item of itens){const cat=catalogo.find(c=>c.id===item.itemId);if(!cat||!cat.ativo||item.itemId==='item_legado')return fail('Selecione apenas itens ativos do catálogo.');if(cat.unidade==='un'&&!Number.isInteger(item.quantidade))return fail('A quantidade de itens em unidade deve ser inteira.');}
+      const travados=await all<{item_id:string}>('SELECT item_id FROM baixa_itens WHERE baixa_id=? AND status<>\'pendente\'',[baixaId]);
+      if(itens.some(i=>travados.some(t=>t.item_id===i.itemId)))return fail('Itens atendidos não podem ser alterados.',409);
+      const descricaoItens=itens.map(item=>{const cat=catalogo.find(c=>c.id===item.itemId)!;return `${cat.descricao}: ${item.quantidade} ${cat.unidade}; pendente`;}).join(', '),timestamp=now(),evento=id('ban'),notificacoes=await avisos(baixaId,evento,user,atual,'aberta','Itens atualizados',timestamp),statements=[statement("DELETE FROM baixa_itens WHERE baixa_id=? AND status='pendente' AND EXISTS(SELECT 1 FROM baixas_estoque WHERE id=? AND revision=? AND status='aberta')",[baixaId,baixaId,atual.revision]),...itens.map(item=>statement("INSERT INTO baixa_itens(id,baixa_id,item_id,quantidade_centesimos,status,criado_em,atualizado_em) SELECT ?,?,?,?,'pendente',?,? WHERE EXISTS(SELECT 1 FROM baixas_estoque WHERE id=? AND revision=? AND status='aberta')",[id('bit'),baixaId,item.itemId,Math.round(item.quantidade*100),timestamp,timestamp,baixaId,atual.revision])),statement('UPDATE baixas_estoque SET atualizado_em=?,revision=revision+1 WHERE id=? AND revision=? AND status=\'aberta\'',[timestamp,baixaId,atual.revision]),statement('INSERT INTO baixa_andamentos(id,baixa_id,user_id,de_status,para_status,texto,criado_em,request_key,request_hash) SELECT ?,?,?,\'aberta\',\'aberta\',?,?,?,? WHERE changes()=1',[evento,baixaId,user.id,`Itens atualizados; ${descricaoItens}`,timestamp,chave,hash]),auditoria(user,'baixa_estoque',baixaId,'UPDATE',`${atual.codigo}: itens atualizados; ${descricaoItens}`,timestamp,'EXISTS(SELECT 1 FROM baixa_andamentos WHERE id=?)',[evento]),...notificacoes];
+      const resultado=await rawDb().batch(statements);return resultado[1+itens.length].meta.changes?ok({success:true,revision:atual.revision+1}):conflito();
     });
   }
   async function listarEstoques(user: User) {
@@ -490,6 +579,8 @@ export function baixasApi(contexto: ContextoApi) {
     detalhe,
     criar,
     transicionar,
+    atenderItens,
+    editarItens,
     listarEstoques,
     gravarEstoque,
     listarItens,

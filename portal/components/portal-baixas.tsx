@@ -13,7 +13,6 @@ import { corpoJson, dataHoraSolicitacao } from "@/lib/solicitacoes-cliente";
 import { gerarChaveRelatorio } from "@/lib/relatorios";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { PageHeader } from "./page-header";
 import { Plaquinha } from "./plaquinha";
 import { Status } from "./status";
@@ -220,6 +219,7 @@ export function ListaBaixas({
                   {[
                     "Código",
                     "Nº da OS",
+                    "Itens",
                     "Placa",
                     "Estoque",
                     "Situação",
@@ -243,6 +243,7 @@ export function ListaBaixas({
                       </a>
                     </TableCell>
                     <TableCell>{b.numero_os}</TableCell>
+                    <TableCell>{b.itens_total || 0} itens · {b.itens_pendentes || 0} pendente{b.itens_pendentes===1?'':'s'}</TableCell>
                     <TableCell>{exibirPlaca(b.placa)}</TableCell>
                     <TableCell>{b.estoque}</TableCell>
                     <TableCell>
@@ -284,19 +285,21 @@ export function FormularioBaixa({
   const [os, setOs] = useState(""),
     [placa, setPlaca] = useState(""),
     [estoque, setEstoque] = useState(""),
+    [consultaItem, setConsultaItem] = useState(""),
+    [selecionado, setSelecionado] = useState(""),
+    [itens, setItens] = useState<{itemId:string;quantidade:string;descricao:string;unidade:string}[]>([]),
     [versao, setVersao] = useState(0);
   const [erro, setErro] = useState(""),
     [existente, setExistente] = useState<AnyRow | null>(null),
     [busy, setBusy] = useState(false);
   const { dados, erro: falha } = useLeitura("/api/estoques", versao),
+    catalogo=useLeitura(`/api/itens?ativos=1&q=${encodeURIComponent(consultaItem)}`,versao),
     trava = useRef(false),
     tentativa = useRef({ corpo: "", chave: "" }),
     montado = useRef(true);
   useEffect(() => {
     montado.current = true;
-    return () => {
-      montado.current = false;
-    };
+    return () => { montado.current = false; };
   }, []);
   const valida = normalizarPlaca(placa),
     ativos = (dados?.estoques || []).filter((e: AnyRow) => e.ativo);
@@ -305,7 +308,7 @@ export function FormularioBaixa({
       trava.current ||
       !valida ||
       !/^\d{1,20}$/.test(os) ||
-      !ativos.some((e: AnyRow) => e.id === estoque)
+      !ativos.some((e: AnyRow) => e.id === estoque) || !itens.length || itens.some(i=>!i.quantidade||Number(i.quantidade)<=0||(i.unidade==='un'&&!Number.isInteger(Number(i.quantidade)))||!/^[0-9]+(?:\.[0-9]{1,2})?$/.test(i.quantidade))
     )
       return;
     trava.current = true;
@@ -316,6 +319,7 @@ export function FormularioBaixa({
       numero_os: os,
       placa: valida,
       estoque_id: estoque,
+      itens: itens.map(i=>({itemId:i.itemId,quantidade:Number(i.quantidade)})),
     });
     if (tentativa.current.corpo !== corpo)
       tentativa.current = { corpo, chave: gerarChaveRelatorio() };
@@ -398,6 +402,15 @@ export function FormularioBaixa({
                   ))}
                 </select>
               </Field>
+              <Field label="Buscar item do catálogo">
+                <Input name="buscar_item" value={consultaItem} onChange={e=>setConsultaItem(e.target.value)} placeholder="Descrição do item" />
+                <select aria-label="Item do catálogo" className={selectClass} value={selecionado} onChange={e=>setSelecionado(e.target.value)}>
+                  <option value="">Selecione um item</option>
+                  {(catalogo.dados?.itens||[]).filter((i:AnyRow)=>!itens.some(x=>x.itemId===i.id)).map((i:AnyRow)=><option key={i.id} value={i.id}>{i.descricao} · {i.unidade}</option>)}
+                </select>
+                <Button type="button" variant="outline" disabled={!selecionado||itens.length>=50} onClick={()=>{const i=(catalogo.dados?.itens||[]).find((x:AnyRow)=>x.id===selecionado);if(i)setItens([...itens,{itemId:i.id,descricao:i.descricao,unidade:i.unidade,quantidade:''}]);setSelecionado('');}}>Adicionar item</Button>
+              </Field>
+              {itens.map((i,index)=><div key={i.itemId} className="flex items-end gap-3"><Field label={`${i.descricao} (${i.unidade})`}><Input aria-label={`Quantidade ${i.descricao}`} inputMode="decimal" value={i.quantidade} onChange={e=>setItens(itens.map((x,n)=>n===index?{...x,quantidade:e.target.value}:x))}/></Field><Button type="button" variant="outline" aria-label={`Remover ${i.descricao}`} onClick={()=>setItens(itens.filter((_,n)=>n!==index))}>Remover</Button></div>)}
               {falha && (
                 <FalhaDeCarregamento
                   erro={falha}
@@ -424,6 +437,7 @@ export function FormularioBaixa({
                     busy ||
                     !valida ||
                     !os ||
+                    !itens.length ||
                     !ativos.some((e: AnyRow) => e.id === estoque)
                   }
                 >
@@ -451,67 +465,38 @@ export function DetalheBaixa({
 }) {
   const [versao, setVersao] = useState(0),
     [erro, setErro] = useState(""),
-    [texto, setTexto] = useState(""),
-    [recusar, setRecusar] = useState(false),
+    [selecionados, setSelecionados] = useState<string[]>([]),
+    [motivos, setMotivos] = useState<Record<string,string>>({}),
+    [quantidades, setQuantidades] = useState<Record<string,string>>({}),
+    [removidos,setRemovidos]=useState<string[]>([]),
+    [buscaCatalogo,setBuscaCatalogo]=useState(''),
+    [novoCatalogo,setNovoCatalogo]=useState(''),
+    [adicionais,setAdicionais]=useState<{itemId:string;quantidade:number}[]>([]),
     [busy, setBusy] = useState(false),
     [conflito, setConflito] = useState(false);
   const { dados, erro: falha } = useLeitura(
       `/api/baixas/${encodeURIComponent(id)}`,
       versao,
     ),
+    catalogoItens=useLeitura(`/api/itens?ativos=1&q=${encodeURIComponent(buscaCatalogo)}`,versao),
     trava = useRef(false),
-    tentativa = useRef({ corpo: "", chave: "" }),
-    montado = useRef(true);
-  useEffect(() => {
-    montado.current = true;
-    return () => {
-      montado.current = false;
-    };
-  }, []);
-  const executar = async (para: string) => {
-    if (trava.current || !dados || conflito) return;
-    if (para === "recusada" && !texto.trim()) {
-      setErro("Informe o motivo da recusa.");
-      return;
-    }
-    trava.current = true;
-    setBusy(true);
-    setErro("");
-    const body = {
-        para,
-        texto: para === "recusada" ? texto.trim() : "",
-        expectedRevision: dados.baixa.revision,
-      },
-      corpo = JSON.stringify(body);
-    if (tentativa.current.corpo !== corpo)
-      tentativa.current = { corpo, chave: gerarChaveRelatorio() };
-    try {
-      await api(`/api/baixas/${encodeURIComponent(id)}/transicao`, {
-        ...corpoJson("POST", body),
-        headers: {
-          "content-type": "application/json",
-          "idempotency-key": tentativa.current.chave,
-        },
-      });
-      if (montado.current) {
-        setVersao((v) => v + 1);
-        setRecusar(false);
-        setTexto("");
-      }
-    } catch (e) {
-      if (montado.current) {
-        const mudou = e instanceof ApiError && e.details.status === 409 && e.details.codigo === "revisao";
-        setConflito(mudou);
-        setErro(
-          mudou
-            ? "A baixa foi alterada; recarregue antes de tentar novamente."
-            : errorText(e),
-        );
-      }
-    } finally {
-      trava.current = false;
-      if (montado.current) setBusy(false);
-    }
+    tentativa = useRef({ corpo: "", chave: "" });
+  const atenderSelecionados=async(para:'baixado'|'recusado')=>{
+    if(!dados||!selecionados.length||trava.current||conflito)return;
+    if(para==='recusado'&&selecionados.some(i=>!motivos[i]?.trim())){setErro('Informe o motivo da recusa de cada item selecionado.');return;}
+    const body={expectedRevision:dados.baixa.revision,itens:selecionados.map(id=>({id,para,motivo:para==='recusado'?motivos[id].trim():''}))},corpo=JSON.stringify(body);
+    if(tentativa.current.corpo!==corpo)tentativa.current={corpo,chave:gerarChaveRelatorio()};
+    trava.current=true;setBusy(true);setErro('');
+    try{await api(`/api/baixas/${encodeURIComponent(id)}/atender-itens`,{...corpoJson('POST',body),headers:{'content-type':'application/json','idempotency-key':tentativa.current.chave}});setSelecionados([]);setMotivos({});setVersao(v=>v+1);}
+    catch(e){const mudou=e instanceof ApiError&&e.details.status===409&&e.details.codigo==='revisao';setConflito(mudou);setErro(mudou?'A baixa foi alterada; recarregue antes de tentar novamente.':errorText(e));}
+    finally{trava.current=false;setBusy(false);}
+  };
+  const salvarPendentes=async()=>{
+    if(!dados)return;
+    const pendentes=(dados.itens||[]).filter((i:AnyRow)=>i.status==='pendente'&&!removidos.includes(i.id)),body={expectedRevision:b.revision,itens:[...pendentes.map((i:AnyRow)=>({itemId:i.item_id,quantidade:Number(quantidades[i.id]??i.quantidade)})),...adicionais]};
+    const corpo=JSON.stringify(body);if(tentativa.current.corpo!==corpo)tentativa.current={corpo,chave:gerarChaveRelatorio()};
+    try{await api(`/api/baixas/${encodeURIComponent(id)}/itens`,{...corpoJson('PUT',body),headers:{'content-type':'application/json','idempotency-key':tentativa.current.chave}});setRemovidos([]);setAdicionais([]);setQuantidades({});setVersao(v=>v+1);}
+    catch(e){const mudou=e instanceof ApiError&&e.details.status===409&&e.details.codigo==='revisao';setConflito(mudou);setErro(mudou?'A baixa foi alterada; recarregue antes de tentar novamente.':errorText(e));}
   };
   if (falha)
     return (
@@ -544,8 +529,6 @@ export function DetalheBaixa({
             onClick={() => {
               setErro("");
               setConflito(false);
-              setRecusar(false);
-              setTexto("");
               setVersao((v) => v + 1);
             }}
           >
@@ -569,44 +552,11 @@ export function DetalheBaixa({
         </CardContent>
       </Card>
       {erro && <p role="alert">{erro}</p>}
-      {pode(user, "baixa:atender") && b.status === "aberta" && (
-        <Card>
-          <CardContent>
-            <fieldset disabled={busy || conflito} className="space-y-4">
-              <div className="flex flex-wrap gap-3">
-                <Button onClick={() => void executar("baixada")}>
-                  Marcar como baixada
-                </Button>
-                <Button variant="outline" onClick={() => setRecusar(true)}>
-                  Recusar
-                </Button>
-              </div>
-              {recusar && (
-                <form
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    void executar("recusada");
-                  }}
-                  className="space-y-4"
-                >
-                  <Field label="Motivo da recusa">
-                    <Textarea
-                      name="motivo_recusa"
-                      required
-                      maxLength={2000}
-                      value={texto}
-                      onChange={(e) => setTexto(e.target.value)}
-                    />
-                  </Field>
-                  <Button type="submit" disabled={!texto.trim()}>
-                    Confirmar recusa
-                  </Button>
-                </form>
-              )}
-            </fieldset>
-          </CardContent>
-        </Card>
-      )}
+      <Card><CardContent className="space-y-3"><h3 className="font-semibold">Itens da baixa</h3><Table><TableHeader><TableRow><TableHead>Item</TableHead><TableHead>Quantidade</TableHead><TableHead>Status</TableHead><TableHead>Motivo</TableHead><TableHead>Atendente</TableHead></TableRow></TableHeader><TableBody>{(dados.itens||[]).filter((i:AnyRow)=>!removidos.includes(i.id)).map((i:AnyRow)=><TableRow key={i.id}><TableCell>{pode(user,'baixa:atender')&&i.status==='pendente'&&<input type="checkbox" aria-label={`Selecionar ${i.descricao}`} checked={selecionados.includes(i.id)} onChange={e=>setSelecionados(e.target.checked?[...selecionados,i.id]:selecionados.filter(x=>x!==i.id))}/>} {i.descricao}</TableCell><TableCell>{b.status==='aberta'&&b.solicitante_id===user.id&&i.status==='pendente'?<Input aria-label={`Quantidade ${i.descricao}`} value={quantidades[i.id]??String(i.quantidade)} onChange={e=>setQuantidades({...quantidades,[i.id]:e.target.value})}/>:`${i.quantidade} ${i.unidade}`}</TableCell><TableCell>{i.status}</TableCell><TableCell>{i.motivo_recusa||''}{pode(user,'baixa:atender')&&selecionados.includes(i.id)&&<Input aria-label={`Motivo ${i.descricao}`} value={motivos[i.id]||''} onChange={e=>setMotivos({...motivos,[i.id]:e.target.value})}/>}</TableCell><TableCell>{i.atendente||''}{i.atendido_em?` · ${dataHoraSolicitacao(i.atendido_em)}`:''}{b.solicitante_id===user.id&&i.status==='pendente'&&<Button type="button" variant="outline" onClick={()=>setRemovidos([...removidos,i.id])}>Remover</Button>}</TableCell></TableRow>)}</TableBody></Table>
+      {b.status==='aberta'&&b.solicitante_id===user.id&&<div className="flex gap-2"><Input aria-label="Buscar item do catálogo" value={buscaCatalogo} onChange={e=>setBuscaCatalogo(e.target.value)}/><select aria-label="Adicionar item do catálogo" className={selectClass} value={novoCatalogo} onChange={e=>setNovoCatalogo(e.target.value)}><option value="">Selecione</option>{(catalogoItens.dados?.itens||[]).filter((i:AnyRow)=>!(dados.itens||[]).some((x:AnyRow)=>x.item_id===i.id&&!removidos.includes(x.id))&&!adicionais.some(x=>x.itemId===i.id)).map((i:AnyRow)=><option value={i.id} key={i.id}>{i.descricao} · {i.unidade}</option>)}</select><Button type="button" variant="outline" disabled={!novoCatalogo||adicionais.length+dados.itens.filter((i:AnyRow)=>i.status==='pendente').length>=50} onClick={()=>{const i=(catalogoItens.dados?.itens||[]).find((x:AnyRow)=>x.id===novoCatalogo);if(i)setAdicionais([...adicionais,{itemId:i.id,quantidade:1}]);setNovoCatalogo('');}}>Adicionar item</Button></div>}
+      {adicionais.map((item,index)=>{const cat=(catalogoItens.dados?.itens||[]).find((i:AnyRow)=>i.id===item.itemId);return <div key={item.itemId} className="flex items-end gap-2"><span>{cat?.descricao} · {cat?.unidade}</span><Input aria-label={`Quantidade adicionada ${cat?.descricao}`} inputMode="decimal" value={item.quantidade} onChange={e=>setAdicionais(adicionais.map((x,n)=>n===index?{...x,quantidade:Number(e.target.value)}:x))}/><Button type="button" variant="outline" onClick={()=>setAdicionais(adicionais.filter((_,n)=>n!==index))}>Remover</Button></div>;})}
+      {b.status==='aberta'&&b.solicitante_id===user.id&&<Button disabled={busy||conflito} onClick={()=>void salvarPendentes()}>Salvar itens pendentes</Button>}
+      {pode(user,'baixa:atender')&&b.status==='aberta'&&<div className="flex gap-3"><Button disabled={busy||conflito||!selecionados.length} onClick={()=>void atenderSelecionados('baixado')}>Baixar selecionados</Button><Button variant="outline" disabled={busy||conflito||!selecionados.length} onClick={()=>void atenderSelecionados('recusado')}>Recusar selecionados</Button></div>}</CardContent></Card>
       <Card>
         <CardContent className="space-y-4">
           <h3 className="font-semibold">Andamento</h3>

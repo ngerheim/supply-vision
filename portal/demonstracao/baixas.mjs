@@ -18,8 +18,12 @@ export async function semearBaixas(clienteApi, base, exemplo, estado, salvar) {
   await administrador('/login', 'POST', exemplo.usuarios.find((u) => u.role === 'admin'));
   try {
     const itens = (await administrador('/itens')).itens;
-    for (const [descricao, unidade] of [['Filtro de óleo fictício','un'],['Óleo de motor fictício','L']])
-      if (!itens.some(item => item.descricao === descricao)) await administrador('/itens','POST',{descricao,unidade});
+    const catalogo=[];
+    for (const [descricao, unidade] of [['Filtro de óleo fictício','un'],['Óleo de motor fictício','L'],['Fluido fictício','L']]) {
+      let item=itens.find(item => item.descricao === descricao);
+      if (!item) { const criado=await administrador('/itens','POST',{descricao,unidade});item={id:criado.id,descricao,unidade}; }
+      catalogo.push(item);
+    }
     const estados = ['aberta', 'aberta', 'baixada', 'recusada'];
     const placas = ['FIC1234', 'FIC1A23', 'DEM5678', 'DEM5B67'];
     for (let i = 0; i < estados.length; i++) {
@@ -35,6 +39,7 @@ export async function semearBaixas(clienteApi, base, exemplo, estado, salvar) {
           numero_os: String(900001 + i),
           placa: placas[i],
           estoque_id: estoque.id,
+          itens: catalogo.slice(0,(i%3)+1).map((item,j)=>({itemId:item.id,quantidade:item.unidade==='un'?j+1:j+1.25})),
         },
         `demonstracao-baixa-${i}`,
       );

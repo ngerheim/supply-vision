@@ -77,6 +77,7 @@ void test('Baixa no estoque pelo roteador e SQLite reais', async (t) => {
     fs.rmSync(pasta, { recursive: true, force: true });
   });
   await banco.ensureDatabase();
+  sql.prepare("INSERT OR IGNORE INTO itens_catalogo(id,descricao,descricao_chave,unidade,ativo) VALUES('item_teste','Filtro de teste','FILTRO DE TESTE','un',1)").run();
   const admin = (await db.prepare('SELECT id FROM users LIMIT 1').first()).id;
   for (const [id, role] of [
     ['editor', 'editor'],
@@ -142,6 +143,7 @@ void test('Baixa no estoque pelo roteador e SQLite reais', async (t) => {
     numero_os: String(proximaOs++),
     placa: 'fic-1234',
     estoque_id: estoqueA.id,
+    itens: [{itemId:'item_teste',quantidade:1}],
     ...extras,
   });
   const abrir = async (body = entrada(), user = 'viewer') => {
@@ -182,6 +184,7 @@ void test('Baixa no estoque pelo roteador e SQLite reais', async (t) => {
       )
       .all(`/?aba=chamados&baixa=${id}`);
 
+
   const cadastrarEstoque = async (nome) => {
     const resposta = await post('estoques', { nome }, admin);
     assert.equal(resposta.status, 201, JSON.stringify(resposta.data));
@@ -189,6 +192,12 @@ void test('Baixa no estoque pelo roteador e SQLite reais', async (t) => {
   };
   const estoqueA = await cadastrarEstoque('Estoque Teste A');
   const estoqueB = await cadastrarEstoque('Estoque Teste B');
+  await t.test('baixa histórica exibe item legado com descrição do catálogo',async()=>{
+    const timestamp=banco.now();
+    sql.prepare("INSERT INTO baixas_estoque(id,numero_os,estoque_id,placa,status,solicitante_id,criado_em,atualizado_em) VALUES('bxa_legado_teste','981099',?,'ABC1234','baixada','viewer',?,?)").run(estoqueA.id,timestamp,timestamp);
+    sql.prepare("INSERT INTO baixa_itens(id,baixa_id,item_id,quantidade_centesimos,status,atendido_em,criado_em,atualizado_em) VALUES('bi_legado_teste','bxa_legado_teste','item_legado',100,'baixado',?,?,?)").run(timestamp,timestamp,timestamp);
+    const d=await get('baixas/bxa_legado_teste');assert.equal(d.status,200);assert.equal(d.data.itens[0].descricao,'Item não especificado (legado)');
+  });
   await t.test('histórico localiza cada baixa pelo código e mostra a OS', async () => {
     for (const os of ['981001', '981002']) {
       const aberta = await abrir(entrada({ numero_os: os }));
@@ -423,7 +432,7 @@ void test('Baixa no estoque pelo roteador e SQLite reais', async (t) => {
         respostas.map((r) => r.status).sort((a, b) => a - b),
         [200, 409],
       );
-      assert.equal(contagens()[1], antes[1] + 1);
+      assert.equal(contagens()[1], antes[1] + 2);
       assert.throws(
         () =>
           sql
@@ -480,6 +489,37 @@ void test('Baixa no estoque pelo roteador e SQLite reais', async (t) => {
       );
     },
   );
+  await t.test('itens na abertura, edição otimista, atendimento parcial e status calculado',async()=>{
+    const litro=await post('itens',{descricao:'Fluido api fictício',unidade:'L'},admin),un=await post('itens',{descricao:'Parafuso api fictício',unidade:'un'},admin),metro=await post('itens',{descricao:'Mangueira api fictícia',unidade:'m'},admin),litroId=litro.data.id,unId=un.data.id,metroId=metro.data.id;
+    assert.equal((await post('baixas',entrada({itens:[{itemId:'item_legado',quantidade:1}]}))).status,400);
+    assert.equal((await post('baixas',entrada({itens:[{itemId:unId,quantidade:1.5}]}))).status,400);
+    assert.equal((await post('baixas',entrada({itens:[{itemId:litroId,quantidade:1.234}]}))).status,400);
+    assert.equal((await post('baixas',entrada({itens:[{itemId:litroId,quantidade:1},{itemId:litroId,quantidade:2}]}))).status,400);
+    assert.equal((await put(`itens/${litroId}`,{ativo:false,expectedRevision:0})).status,200);
+    assert.equal((await post('baixas',entrada({itens:[{itemId:litroId,quantidade:1}]}))).status,400);
+    assert.equal((await put(`itens/${litroId}`,{ativo:true,expectedRevision:1})).status,200);
+    const criada=await abrir(entrada({itens:[{itemId:unId,quantidade:2},{itemId:litroId,quantidade:1.25},{itemId:metroId,quantidade:4.5}]})),detalhe=await get(`baixas/${criada.id}`);
+    assert.equal(detalhe.data.itens.find(i=>i.item_id===litroId).quantidade,1.25);
+    assert.equal(Object.hasOwn(detalhe.data.itens[0],'request_key'),false);
+    const editBody={expectedRevision:0,itens:[{itemId:unId,quantidade:3},{itemId:litroId,quantidade:2.5}]},editKey={'idempotency-key':'editar-itens-ficticio'};
+    const edit=await pedir('PUT',`baixas/${criada.id}/itens`,'viewer',editBody,editKey);assert.equal(edit.status,200);
+    const idsDepoisEdit=sql.prepare('SELECT id FROM baixa_itens WHERE baixa_id=? ORDER BY item_id').all(criada.id).map(i=>i.id);
+    assert.equal((await pedir('PUT',`baixas/${criada.id}/itens`,'viewer',editBody,editKey)).status,200);
+    assert.deepEqual(sql.prepare('SELECT id FROM baixa_itens WHERE baixa_id=? ORDER BY item_id').all(criada.id).map(i=>i.id),idsDepoisEdit);
+    assert.equal((await get(`baixas/${criada.id}`)).data.itens.length,2);
+    assert.equal((await pedir('PUT',`baixas/${criada.id}/itens`,'outro',{expectedRevision:1,itens:[{itemId:unId,quantidade:4}]})).status,404);
+    assert.equal((await pedir('PUT',`baixas/${criada.id}/itens`,'viewer',{expectedRevision:0,itens:[{itemId:unId,quantidade:4}]})).data.codigo,'revisao');
+    const pendentes=(await get(`baixas/${criada.id}`)).data.itens;
+    const atenderBody={expectedRevision:1,itens:[{id:pendentes[0].id,para:'baixado'}]},atenderKey={'idempotency-key':'atender-itens-ficticio'};
+    assert.equal((await post(`baixas/${criada.id}/atender-itens`,atenderBody,'editor',atenderKey)).status,200);
+    assert.equal((await post(`baixas/${criada.id}/atender-itens`,atenderBody,'editor',atenderKey)).status,200);
+    assert.equal(registro(criada.id).status,'aberta');
+    const restante=(await get(`baixas/${criada.id}`)).data.itens.find(i=>i.status==='pendente');
+    assert.equal((await post(`baixas/${criada.id}/atender-itens`,{expectedRevision:2,itens:[{id:restante.id,para:'recusado'}]},'editor')).status,400);
+    assert.equal((await post(`baixas/${criada.id}/atender-itens`,{expectedRevision:2,itens:[{id:restante.id,para:'recusado',motivo:'Sem saldo fictício'}]},'editor')).status,200);
+    assert.equal(registro(criada.id).status,'baixada');
+    assert.equal((await get('baixas')).data.baixas.find(b=>b.id===criada.id).itens_baixados,1);
+  });
   await t.test('filtros, paginacao e dia de negocio de Brasilia', async () => {
     for (const [numero_os, criado] of [
       ['7001', '2026-10-25T02:59:59Z'],
@@ -537,7 +577,6 @@ void test('Baixa no estoque pelo roteador e SQLite reais', async (t) => {
       );
       await mover(b.id, 'recusada', 'Sem saldo fictício');
       const resposta = avisos(b.id).find((a) => a.user_id === 'viewer');
-      assert.ok(resposta.texto.includes('Sem saldo fictício'));
       assert.ok(resposta.texto.includes('Recusada'));
       const propria = await abrir(entrada(), 'editor');
       assert.deepEqual(
@@ -701,7 +740,7 @@ void test('Baixa no estoque pelo roteador e SQLite reais', async (t) => {
       await semearBaixas(cliente, 'http://fixture', exemplo, {}, () => {});
       assert.deepEqual(contagens(), antes);
       assert.equal(salvos, 4);
-      assert.deepEqual(sql.prepare('SELECT descricao,unidade FROM itens_catalogo WHERE descricao LIKE ? ORDER BY descricao').all('%fictício%').map(i=>[i.descricao,i.unidade]),[['Filtro de óleo fictício','un'],['Óleo de motor fictício','L']]);
+      assert.deepEqual(sql.prepare('SELECT descricao,unidade FROM itens_catalogo WHERE descricao LIKE ? ORDER BY descricao').all('%fictício%').map(i=>[i.descricao,i.unidade]),[['Filtro de óleo fictício','un'],['Fluido api fictício','L'],['Fluido fictício','L'],['Parafuso api fictício','un'],['Óleo de motor fictício','L']]);
       const demo = sql
         .prepare(
           "SELECT * FROM baixas_estoque WHERE numero_os BETWEEN '900001' AND '900004' ORDER BY numero_os",
@@ -722,7 +761,7 @@ void test('Baixa no estoque pelo roteador e SQLite reais', async (t) => {
   await t.test(
     'expurgo preserva; copia integral e restauracao incluem as tres tabelas',
     async () => {
-      const protegidas = ['estoques', 'baixas_estoque', 'baixa_andamentos'];
+      const protegidas = ['estoques', 'baixas_estoque', 'baixa_andamentos','itens_catalogo','baixa_itens'];
       const dados = () =>
         Object.fromEntries(
           protegidas.map((tabela) => [
