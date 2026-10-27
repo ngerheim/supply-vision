@@ -38,6 +38,23 @@ const pedir = async (rota, method = 'GET', body, cookie = admin, chave) => {
   });
   return { status: r.status, data: await r.json() };
 };
+const catalogoAtual=(await pedir('itens')).data.itens;
+const obterItem=async(descricao,unidade)=>{
+  const existente=catalogoAtual.find(i=>i.descricao===descricao&&i.unidade===unidade);
+  if(existente){
+    if(!existente.ativo){
+      const ativado=await pedir(`itens/${existente.id}`,'PUT',{ativo:true,expectedRevision:existente.revision});
+      assert.equal(ativado.status,200,JSON.stringify(ativado.data));
+    }
+    return existente;
+  }
+  const criado=await pedir('itens','POST',{descricao,unidade});
+  assert.equal(criado.status,201,JSON.stringify(criado.data));
+  return{id:criado.data.id,descricao,unidade};
+};
+const itemUn=await obterItem('Filtro HTTP ficticio','un'),
+  itemL=await obterItem('Oleo HTTP ficticio','L'),
+  itensPadrao=[{itemId:itemUn.id,quantidade:2},{itemId:itemL.id,quantidade:1.25}];
 const cookies = {};
 for (const role of ['viewer', 'editor']) {
   const body = {
@@ -84,6 +101,7 @@ const entrada = {
   numero_os: '987654321',
   estoque_id: estoques[0].id,
   placa: 'fic-1234',
+  itens:itensPadrao,
 };
 const criada = await pedir(
   'baixas',
@@ -152,8 +170,9 @@ assert.equal(
 );
 assert.equal(
   (await pedir(rota, 'GET', undefined, cookies.viewer)).data.andamentos.length,
-  2,
+  4,
 );
+assert.deepEqual((await pedir(rota,'GET',undefined,cookies.viewer)).data.itens.map(i=>i.status),['baixado','baixado']);
 const nova = await pedir(
   'baixas',
   'POST',
@@ -172,6 +191,9 @@ assert.equal(
   ).status,
   200,
 );
+const recusadaDetalhe=(await pedir(`baixas/${nova.data.id}`,'GET',undefined,cookies.admin)).data;
+assert.equal(recusadaDetalhe.baixa.status,'recusada');
+assert.deepEqual(recusadaDetalhe.itens.map(i=>i.status),['recusado','recusado']);
 const propria = await pedir('baixas', 'POST', {
   ...entrada,
   numero_os: '987654322',
@@ -188,6 +210,25 @@ assert.equal(
   ),
   false,
 );
+const edicao=await pedir('baixas','POST',{...entrada,numero_os:'987654324'},cookies.viewer);
+assert.equal(edicao.status,201);
+const edicaoRota=`baixas/${edicao.data.id}`;
+const edicaoAtual=(await pedir(edicaoRota,'GET',undefined,cookies.viewer)).data;
+assert.equal((await pedir(`${edicaoRota}/itens`,'PUT',{expectedRevision:edicaoAtual.baixa.revision,itens:[{itemId:itemUn.id,quantidade:4}]},cookies.editor)).status,403);
+assert.equal((await pedir(`${edicaoRota}/itens`,'PUT',{expectedRevision:edicaoAtual.baixa.revision,itens:[{itemId:itemUn.id,quantidade:4},{itemId:itemL.id,quantidade:2.5}]},cookies.viewer)).status,200);
+assert.equal((await pedir(edicaoRota,'GET',undefined,cookies.viewer)).data.itens.find(i=>i.item_id===itemL.id).quantidade,2.5);
+const parcial=await pedir('baixas','POST',{...entrada,numero_os:'987654325'},cookies.viewer);
+assert.equal(parcial.status,201);
+const parcialRota=`baixas/${parcial.data.id}`,
+  parcialAntes=(await pedir(parcialRota,'GET',undefined,cookies.viewer)).data;
+const atendimento=await pedir(`${parcialRota}/atender-itens`,'POST',{expectedRevision:parcialAntes.baixa.revision,itens:[{id:parcialAntes.itens.find(i=>i.item_id===itemUn.id).id,para:'baixado'},{id:parcialAntes.itens.find(i=>i.item_id===itemL.id).id,para:'recusado',motivo:'Sem saldo HTTP ficticio'}]},cookies.editor);
+assert.equal(atendimento.status,200,JSON.stringify(atendimento.data));
+const parcialDepois=(await pedir(parcialRota,'GET',undefined,cookies.viewer)).data;
+assert.equal(parcialDepois.baixa.status,'baixada');
+assert.deepEqual(parcialDepois.itens.map(i=>i.status),['baixado','recusado']);
+assert.equal(parcialDepois.itens.find(i=>i.status==='recusado').motivo_recusa,'Sem saldo HTTP ficticio');
+const avisoParcial=(await pedir('central','GET',undefined,cookies.viewer)).data.notificacoes.filter(a=>a.link===`/?aba=chamados&baixa=${parcial.data.id}`);
+assert.equal(avisoParcial.length,1);
 const avisos = (await pedir('central', 'GET', undefined, cookies.viewer)).data
   .notificacoes;
 assert.ok(
@@ -218,5 +259,5 @@ assert.equal(
   400,
 );
 console.log(
-  '[OK] Baixas HTTP: perfis, placa, idempotencia, duplicidade, revision, transicoes, Central e estoques.',
+  '[OK] Baixas HTTP: catálogo, itens, edição, atendimento parcial e legado, perfis, placa, idempotencia, duplicidade, revision, transicoes, Central e estoques.',
 );
