@@ -247,7 +247,16 @@ export function FormularioSolicitacao({
                   readOnly={Boolean(value)}
                   required
                   onChange={(e) => {
-                    mudar('cnpj', mascaraCnpj(e.target.value));
+                    const cnpj = mascaraCnpj(e.target.value);
+                    sequenciaCep.current++;
+                    setConsultandoCep(false);
+                    setCampos((atual) => ({
+                      cnpj,
+                      // Mantém apenas dados do pedido que não identificam o fornecedor.
+                      atendimento_cidade: atual.atendimento_cidade || '',
+                      atendimento_uf: atual.atendimento_uf || '',
+                      urgencia: atual.urgencia || 'normal',
+                    }));
                     setPronto(false);
                     setManual(false);
                     setConsultaId(undefined);
