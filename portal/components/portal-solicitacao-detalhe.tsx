@@ -252,9 +252,22 @@ export function DetalheSolicitacao({
         </Card>
       ))}
       {podeCorrigir && (
-        <Button disabled={busy} onClick={() => setCorrigir(true)}>
-          Corrigir e reenviar
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button disabled={busy} onClick={() => setCorrigir(true)}>
+            Corrigir e reenviar
+          </Button>
+          <Button
+            variant="outline"
+            disabled={busy}
+            onClick={() => {
+              setAcao("recusado");
+              setTexto("");
+              setErro("");
+            }}
+          >
+            Cancelar solicitação
+          </Button>
+        </div>
       )}
       {pode(user, "solicitacao:atender") && (
         <Card>
@@ -287,13 +300,28 @@ export function DetalheSolicitacao({
                     {label}
                   </Button>
                 ))}
-              <Button
-                variant="outline"
-                disabled={busy}
-                onClick={() => void executar("reconsultar")}
-              >
-                Reconsultar na Receita
-              </Button>
+              {s.status === "devolvida" && (
+                <Button
+                  variant="outline"
+                  disabled={busy}
+                  onClick={() => {
+                    setAcao("recusado");
+                    setTexto("");
+                    setErro("");
+                  }}
+                >
+                  Recusar devolvida
+                </Button>
+              )}
+              {["aberta", "em_analise"].includes(s.status) && (
+                <Button
+                  variant="outline"
+                  disabled={busy}
+                  onClick={() => void executar("reconsultar")}
+                >
+                  Reconsultar na Receita
+                </Button>
+              )}
             </div>
             {acao && (
               <form
@@ -308,7 +336,9 @@ export function DetalheSolicitacao({
                       acao === "devolvida"
                         ? "Mensagem de devolução (obrigatória)"
                         : acao === "recusado"
-                          ? "Motivo da recusa (obrigatório)"
+                          ? podeCorrigir && s.solicitante_id === user.id
+                            ? "Motivo do cancelamento (obrigatório)"
+                            : "Motivo da recusa (obrigatório)"
                           : "Observação (opcional)"
                     }
                   >

@@ -10,16 +10,18 @@ export function cnpjFicticio(semente: number) {
   return valor;
 }
 export const CNPJS_ENSAIO = {
-  ativa: cnpjFicticio(1), baixada: cnpjFicticio(2), inexistente: cnpjFicticio(3),
-  principalFora: cnpjFicticio(4), ambasFora: cnpjFicticio(5),
+  ativa: cnpjFicticio(1), baixada: cnpjFicticio(2), inexistente: cnpjFicticio(3), ativaAlternativa: cnpjFicticio(7),
+  principalFora: cnpjFicticio(4), ambasFora: cnpjFicticio(5), inapta: cnpjFicticio(6),
 };
+let alternativaConsultada = false;
 
 export async function provedorConsultaEnsaio(url: URL): Promise<unknown> {
   const codigo = url.pathname.split('/').at(-1)!;
   if (url.pathname.includes('/cep/')) return { cep: codigo, street: 'Rua Fictícia', neighborhood: 'Bairro Fictício', city: 'Cidade Fictícia', state: 'SP' };
   if (codigo === CNPJS_ENSAIO.ambasFora || (codigo === CNPJS_ENSAIO.principalFora && url.hostname === 'brasilapi.com.br')) throw new Error('Provedor ficticio indisponivel');
   if (codigo === CNPJS_ENSAIO.inexistente) return { status: 'ERROR', message: 'CNPJ ficticio inexistente' };
-  const situacao = codigo === CNPJS_ENSAIO.baixada ? 'BAIXADA' : 'ATIVA';
+  const situacao = codigo === CNPJS_ENSAIO.baixada ? 'BAIXADA' : codigo === CNPJS_ENSAIO.inapta || (codigo === CNPJS_ENSAIO.ativaAlternativa && alternativaConsultada) ? 'INAPTA' : 'ATIVA';
+  if (codigo === CNPJS_ENSAIO.ativaAlternativa) alternativaConsultada = true;
   const endereco = { logradouro: 'Rua Fictícia', numero: '10', complemento: '', bairro: 'Bairro Fictício', uf: 'SP', cep: '00000000' };
   return url.hostname === 'brasilapi.com.br'
     ? { ...endereco, cnpj: codigo, razao_social: 'FORNECEDOR FICTÍCIO', nome_fantasia: 'FANTASIA FICTÍCIA', descricao_situacao_cadastral: situacao, cnae_fiscal: 4520001, cnae_fiscal_descricao: 'Atividade fictícia', municipio: 'Cidade Fictícia' }

@@ -224,7 +224,7 @@ void test('Cadastro de fornecedor pelo roteador e SQLite reais', async t => {
       const s = await abrir();
       sql.prepare('UPDATE solicitacoes SET status=? WHERE id=?').run(de,s.id);
       const antes = contagens();
-      const permitido = (de === 'aberta' && para === 'em_analise') || (de === 'em_analise' && ['devolvida','cadastrado','recusado'].includes(para));
+      const permitido = (de === 'aberta' && para === 'em_analise') || (de === 'em_analise' && ['devolvida','cadastrado','recusado'].includes(para)) || (de === 'devolvida' && para === 'recusado');
       const resposta = await mover(s.id, para, 'Mensagem fictícia');
       assert.equal(resposta.status, permitido ? 200 : 409, `${de} -> ${para}`);
       if (!permitido) assert.deepEqual(contagens(), antes);
@@ -235,6 +235,19 @@ void test('Cadastro de fornecedor pelo roteador e SQLite reais', async t => {
     assert.deepEqual(resultados.map(r => r.status).sort((a,b) => a-b),[200,409]);
     assert.equal(contagens()[1], antes[1]+1); assert.equal(contagens()[3], antes[3]+1);
   });
+  await t.test('devolvida pode ser recusada pelo atendente ou cancelada pelo solicitante e libera CNPJ', async () => {
+    const atendida = await abrir(); await mover(atendida.id,'em_analise'); await mover(atendida.id,'devolvida','Corrija os dados');
+    assert.equal((await mover(atendida.id,'recusado','Motivo fictício','outro')).status,403);
+    assert.equal((await mover(atendida.id,'recusado','','editor')).status,400);
+    assert.equal((await mover(atendida.id,'recusado','Motivo fictício','editor')).status,200);
+    assert.equal(registro(atendida.id).status,'recusado');
+    assert.equal((await abrir(manual({cnpj:registro(atendida.id).cnpj}))).id !== atendida.id,true);
+
+    const cancelada = await abrir(); await mover(cancelada.id,'em_analise'); await mover(cancelada.id,'devolvida','Corrija os dados');
+    assert.equal((await mover(cancelada.id,'recusado','Motivo fictício','outro')).status,403);
+    assert.equal((await mover(cancelada.id,'recusado','Motivo fictício','viewer')).status,200);
+    assert.equal(registro(cancelada.id).status,'recusado');
+  });
   await t.test('reconsulta atualiza Receita sem sobrescrever endereco e falha nao altera', async () => {
     const s = await abrir(manual({ cnpj: CNPJS_ENSAIO.principalFora, cidade: 'Endereço Ajustado' }));
     assert.equal((await post(`solicitacoes/${s.id}/reconsultar`, { expectedRevision: 0 }, 'viewer')).status, 403);
@@ -244,6 +257,24 @@ void test('Cadastro de fornecedor pelo roteador e SQLite reais', async t => {
     assert.ok(sql.prepare('SELECT 1 FROM consultas_cnpj WHERE cnpj=? AND user_id=?').get(CNPJS_ENSAIO.principalFora,'editor'));
     const falha = await abrir(manual({ cnpj: CNPJS_ENSAIO.ambasFora })), antes = contagens();
     assert.equal((await post(`solicitacoes/${falha.id}/reconsultar`, { expectedRevision: 0 }, 'editor')).status, 503); assert.deepEqual(contagens(), antes); assert.equal(registro(falha.id).revision, 0);
+    for (const status of ['devolvida','cadastrado','recusado']) {
+      const bloqueada = await abrir(manual({ cnpj: cnpjFicticio(numero++) }));
+      if (status === 'devolvida') { await mover(bloqueada.id,'em_analise'); await mover(bloqueada.id,'devolvida','Revisar'); }
+      else { await mover(bloqueada.id,'em_analise'); await mover(bloqueada.id,status,'Motivo fictício'); }
+      const antes = contagens();
+      assert.equal((await post(`solicitacoes/${bloqueada.id}/reconsultar`, { expectedRevision: registro(bloqueada.id).revision }, 'editor')).status,409);
+      assert.deepEqual(contagens(),antes);
+    }
+  });
+  await t.test('ATIVA pode ser corrigida após reconsulta INAPTA', async () => {
+    const consulta = (await get(`solicitacoes/cnpj/${CNPJS_ENSAIO.ativaAlternativa}`,'viewer')).data;
+    const s = await abrir({ consultaId: consulta.consultaId }); await mover(s.id,'em_analise');
+    assert.equal((await post(`solicitacoes/${s.id}/reconsultar`,{expectedRevision:1},'editor')).status,200);
+    assert.equal(registro(s.id).situacao_cadastral,'INAPTA');
+    assert.equal((await mover(s.id,'devolvida','Solicitar atualização cadastral')).status,200);
+    assert.equal((await put(`solicitacoes/${s.id}`,{expectedRevision:3,razao_social:'Fornecedor Corrigido Fictício'},'viewer')).status,200);
+    assert.equal(registro(s.id).status,'aberta');
+    assert.equal(registro(s.id).situacao_cadastral,'INAPTA');
   });
   await t.test('categorias antigas preservadas; filtros usam dia civil de Brasilia e atualizacao desc', async () => {
     assert.equal((await put('categorias-fornecedor/categoria_semente_1', { ativo: false, expectedRevision: 0 })).status, 200);
@@ -281,10 +312,11 @@ void test('Cadastro de fornecedor pelo roteador e SQLite reais', async t => {
     }
     assert.equal(central(normal.id).at(-1).texto,`${normal.codigo}: devolvida para correção`);
     // Quem devolve pode diferir de quem assumiu a analise.
-    const diferente = await abrir(); await mover(diferente.id,'em_analise'); await mover(diferente.id,'devolvida','Corrigir',admin);
+    const diferente = await abrir(); await mover(diferente.id,'em_analise');
     const antesReconsulta = contagens();
-    assert.equal((await post(`solicitacoes/${diferente.id}/reconsultar`,{expectedRevision:2},'editor')).status,200);
+    assert.equal((await post(`solicitacoes/${diferente.id}/reconsultar`,{expectedRevision:1},'editor')).status,200);
     assert.deepEqual(contagens().slice(5),antesReconsulta.slice(5));
+    await mover(diferente.id,'devolvida','Corrigir',admin);
     await put(`solicitacoes/${diferente.id}`,{expectedRevision:3},'viewer');
     assert.equal(central(diferente.id).at(-1).user_id,admin);
     assert.equal(emails(diferente.id).length,2);
