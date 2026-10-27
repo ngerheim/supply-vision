@@ -230,6 +230,8 @@ void test('Cadastro de fornecedor pelo roteador e SQLite reais', async t => {
     const contagemCorrecao = contagens();
     assert.equal((await pedir('PUT', `solicitacoes/${s.id}`, 'viewer', bodyCorrecao, chaveCorrecao)).status, 200);
     assert.deepEqual(contagens(), contagemCorrecao);
+    const chaveDivergente = await pedir('PUT', `solicitacoes/${s.id}`, 'viewer', { ...bodyCorrecao, cidade: 'Outra Cidade' }, chaveCorrecao);
+    assert.equal(chaveDivergente.status, 409); assert.equal(chaveDivergente.data.codigo, 'duplicado');
     assert.equal(registro(s.id).status, 'aberta'); assert.equal(registro(s.id).razao_social, 'Manual Corrigido'); assert.equal(registro(s.id).solicitante_id, 'viewer');
     assert.equal((await mover(s.id, 'em_analise', '', admin)).status, 200); assert.equal(registro(s.id).atendente_id, admin);
     assert.equal((await mover(s.id, 'cadastrado')).status, 200);
@@ -250,6 +252,8 @@ void test('Cadastro de fornecedor pelo roteador e SQLite reais', async t => {
     const headers = { 'idempotency-key': 'transicao_ficticia_repetida_01' }, body = { para: 'devolvida', texto: 'Corrigir', expectedRevision: 1 };
     assert.equal((await post(`solicitacoes/${s.id}/transicao`, body, 'editor', headers)).status, 200);
     const depois = contagens(); assert.equal((await post(`solicitacoes/${s.id}/transicao`, body, 'editor', headers)).status, 200); assert.deepEqual(contagens(), depois);
+    const chaveDivergente = await post(`solicitacoes/${s.id}/transicao`, { ...body, texto: 'Outro texto' }, 'editor', headers);
+    assert.equal(chaveDivergente.status, 409); assert.equal(chaveDivergente.data.codigo, 'duplicado');
     assert.throws(() => sql.prepare('UPDATE solicitacao_andamentos SET texto=? WHERE solicitacao_id=?').run('Alterado',s.id), /imutaveis/);
     assert.throws(() => sql.prepare('DELETE FROM solicitacao_andamentos WHERE solicitacao_id=?').run(s.id), /imutaveis/);
   });

@@ -185,13 +185,15 @@ export function solicitacoesApi(contexto: ContextoApi, consultas = criarConsulta
       if (!atual) return inexistente();
       if (!revisaoConfere(body.expectedRevision, atual.revision)) return conflito();
       if (atual.status !== 'devolvida') return ok({ error: 'Somente solicitações devolvidas podem ser corrigidas.', codigo: 'status_invalido' }, { status: 409 });
-      const receita = await dadosReceita(body, user, atual);
-      const categorias = body.categorias === undefined ? undefined : await categoriasEntrada(body.categorias);
       const chave = chaveIdempotencia(request), hash = chave ? await tokenHash(`correcao:${JSON.stringify(body)}`) : null;
       if (chave) {
         const anterior = await first<{ request_hash: string }>('SELECT request_hash FROM solicitacao_andamentos WHERE solicitacao_id=? AND user_id=? AND request_key=?', [solicitacaoId, user.id, chave]);
         if (anterior) return anterior.request_hash === hash ? ok({ success: true }) : ok({ error: 'Esta tentativa já foi usada com outros dados.', codigo: 'duplicado' }, { status: 409 });
       }
+      if (!revisaoConfere(body.expectedRevision, atual.revision)) return conflito();
+      if (atual.status !== 'devolvida') return ok({ error: 'Somente solicitações devolvidas podem ser corrigidas.', codigo: 'status_invalido' }, { status: 409 });
+      const receita = await dadosReceita(body, user, atual);
+      const categorias = body.categorias === undefined ? undefined : await categoriasEntrada(body.categorias);
       return salvar(user, atual, { ...Object.fromEntries(RECEITA.map(c => [c, receita[c]])), ...editaveis(body, atual) }, 'aberta', 'Solicitação corrigida pelo solicitante', chave, hash, categorias);
     });
   }
@@ -199,13 +201,15 @@ export function solicitacoesApi(contexto: ContextoApi, consultas = criarConsulta
     return comAcaoEscrita(pode(user, 'solicitacao:atender') ? 'solicitacao:atender' : 'solicitacao:abrir', async () => {
       const body = await jsonBody<Corpo>(request), atual = await first<Solicitacao>('SELECT * FROM solicitacoes WHERE id=?', [solicitacaoId]);
       if (!atual) return inexistente();
-      const cancelamentoSolicitante = atual.status === 'devolvida' && atual.solicitante_id === user.id && campo(body, 'para', 30) === 'recusado';
-      if (!pode(user, 'solicitacao:atender') && !cancelamentoSolicitante) return fail('Seu perfil não permite atender solicitações.', 403);
+      const solicitanteDaSolicitacao = atual.solicitante_id === user.id;
+      if (!pode(user, 'solicitacao:atender') && !solicitanteDaSolicitacao) return fail('Seu perfil não permite atender solicitações.', 403);
       const chave = chaveIdempotencia(request), hash = chave ? await tokenHash(`transicao:${JSON.stringify(body)}`) : null;
       if (chave) {
         const anterior = await first<{ request_hash: string }>('SELECT request_hash FROM solicitacao_andamentos WHERE solicitacao_id=? AND user_id=? AND request_key=?', [solicitacaoId, user.id, chave]);
         if (anterior) return anterior.request_hash === hash ? ok({ success: true }) : ok({ error: 'Esta tentativa já foi usada com outros dados.', codigo: 'duplicado' }, { status: 409 });
       }
+      const cancelamentoSolicitante = atual.status === 'devolvida' && solicitanteDaSolicitacao && campo(body, 'para', 30) === 'recusado';
+      if (!pode(user, 'solicitacao:atender') && !cancelamentoSolicitante) return fail('Seu perfil não permite atender solicitações.', 403);
       if (!revisaoConfere(body.expectedRevision, atual.revision)) return conflito();
       const para = campo(body, 'para', 30), texto = campo(body, 'texto', LIMITES_CAMPO.mensagem);
       const transicaoAtendente = (atual.status === 'aberta' && para === 'em_analise') || (atual.status === 'em_analise' && ['cadastrado', 'recusado', 'devolvida'].includes(para)) || (atual.status === 'devolvida' && para === 'recusado');
