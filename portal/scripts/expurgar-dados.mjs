@@ -12,7 +12,7 @@ export function configurarExpurgo(config) {
     if (!Number.isInteger(valor) || valor < 0 || valor > 36500) throw new Error(`Prazo invalido: ${nome}`);
     return valor;
   };
-  return { ativo: config.EXPURGO_HABILITADO === '1', emails: dias('EXPURGO_EMAILS_DIAS', 180), relatorios: dias('EXPURGO_RELATORIOS_DIAS', 90), importacoes: dias('EXPURGO_IMPORTACOES_DIAS', 180) };
+  return { ativo: config.EXPURGO_HABILITADO === '1', emails: dias('EXPURGO_EMAILS_DIAS', 180), relatorios: dias('EXPURGO_RELATORIOS_DIAS', 90), importacoes: dias('EXPURGO_IMPORTACOES_DIAS', 180), notificacoesNaoLidas: dias('EXPURGO_NOTIFICACOES_NAO_LIDAS_DIAS', 365) };
 }
 // Somente estados terminais; pendentes/em andamento e auditoria sao preservados.
 function operacoesExpurgo(db, config, agora, executar) {
@@ -29,7 +29,7 @@ function operacoesExpurgo(db, config, agora, executar) {
   if (db.prepare("SELECT 1 FROM sqlite_schema WHERE type='table' AND name='consultas_cnpj'").get())
     aplicar('consultas_cnpj', 'DELETE FROM consultas_cnpj WHERE consultada_em<?', [limite(90)]);
   if (db.prepare("SELECT 1 FROM sqlite_schema WHERE type='table' AND name='notificacoes_usuario'").get())
-    aplicar('notificacoes_usuario', 'DELETE FROM notificacoes_usuario WHERE (lida_em IS NOT NULL AND lida_em<?) OR (lida_em IS NULL AND criada_em<?)', [limite(90), limite(90)]);
+    aplicar('notificacoes_usuario', 'DELETE FROM notificacoes_usuario WHERE (lida_em IS NOT NULL AND lida_em<?) OR (lida_em IS NULL AND criada_em<?)', [limite(90), limite(config.notificacoesNaoLidas)]);
   if (config.emails) for (const tabela of ['email_notifications', 'daily_report_deliveries']) {
     aplicar(tabela, `DELETE FROM ${tabela} WHERE status IN ('sent','failed') AND updated_at<?`, [limite(config.emails)]);
   }

@@ -229,7 +229,7 @@ async function GETInterno(request: NextRequest) {
     return parts.length === 1 ? solicitacoes.listarCategorias(user) : fail('Rota não encontrada.', 404);
   }
   if (parts[0] === 'central') {
-    if (parts.length === 1) return central.listar(user);
+    if (parts.length === 1) return central.listar(user, request.nextUrl.searchParams);
     if (parts.length === 2) return parts[1] === 'nao-lidas' ? central.contar(user) : central.detalhe(user, parts[1]);
     return fail('Rota não encontrada.', 404);
   }

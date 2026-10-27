@@ -1,4 +1,5 @@
 import type { ContextoApi, User } from './api-compartilhada.ts';
+import { prepararNotificacaoCondicional } from './central-notificacoes.ts';
 import { pode } from './permissoes.ts';
 import { linkSolicitacao, situacaoSolicitacao } from './email-solicitacoes.ts';
 
@@ -29,9 +30,7 @@ export async function prepararAvisosSolicitacao(contexto: ContextoApi, {
     const valores = [solicitacaoId, evento, pessoa.role, pessoa.id];
     const texto = anterior === null ? "'Nova solicitação ' || s.codigo || CASE WHEN s.urgencia='urgente' THEN ' (urgente)' ELSE '' END"
       : para === 'aberta' ? "s.codigo || ': corrigida e reenviada'" : `s.codigo || ': ' || ?`;
-    const central = rawDb().prepare(`INSERT INTO notificacoes_usuario(id,user_id,tipo,texto,link,criada_em)
-      SELECT ?,?,'solicitacao',${texto},?,? FROM solicitacoes s WHERE s.id=? AND ${condicao}`)
-      .bind(id('ntf'), pessoa.id, ...(anterior !== null && para !== 'aberta' ? [situacaoSolicitacao[para]] : []), linkSolicitacao(solicitacaoId), timestamp, ...valores);
+    const central = prepararNotificacaoCondicional({ tipo:'solicitacao', texto:'Notificação de solicitação', textoSql:texto, link:linkSolicitacao(solicitacaoId), timestamp, origem:'solicitacoes s', destinatarioSql:'?', valoresDestinatario:[pessoa.id], condicao:`s.id=? AND ${condicao}`, valoresTexto:anterior !== null && para !== 'aberta' ? [situacaoSolicitacao[para]] : [], valores });
     if ((para === 'aberta' && anterior !== null) || !pessoa.email.trim()) return [central];
     const tipo = anterior === null ? 'solicitacao_abertura' : 'solicitacao_andamento';
     const email = rawDb().prepare(`INSERT OR IGNORE INTO email_notifications

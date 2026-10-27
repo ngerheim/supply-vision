@@ -3,8 +3,14 @@ import { comAcaoEscrita } from './autor-escrita.ts';
 
 export function centralApi({ rawDb, all, first, now, ok, fail }: ContextoApi) {
   const colunas = 'id,tipo,texto,link,criada_em,lida_em';
-  async function listar(user: User) {
-    return ok({ notificacoes: await all(`SELECT ${colunas} FROM notificacoes_usuario WHERE user_id=? ORDER BY criada_em DESC,id DESC LIMIT 30`, [user.id]) });
+  async function listar(user: User, params: URLSearchParams) {
+    const cursorData = params.get('cursorData'), cursorId = params.get('cursorId');
+    const pagina = cursorData && cursorId
+      ? await all(`SELECT ${colunas} FROM notificacoes_usuario WHERE user_id=? AND (criada_em<? OR (criada_em=? AND id<?)) ORDER BY criada_em DESC,id DESC LIMIT 31`, [user.id, cursorData, cursorData, cursorId])
+      : await all(`SELECT ${colunas} FROM notificacoes_usuario WHERE user_id=? ORDER BY criada_em DESC,id DESC LIMIT 31`, [user.id]);
+    const notificacoes = pagina.slice(0, 30);
+    const ultima = notificacoes.at(-1);
+    return ok({ notificacoes, temAnteriores: pagina.length > 30, proximoCursor: pagina.length > 30 && ultima ? { criada_em: ultima.criada_em, id: ultima.id } : null });
   }
   async function contar(user: User) {
     return ok({ naoLidas: Number((await first<{ n: number }>('SELECT COUNT(*) n FROM notificacoes_usuario WHERE user_id=? AND lida_em IS NULL', [user.id]))?.n || 0) });

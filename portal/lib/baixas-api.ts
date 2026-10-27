@@ -9,6 +9,7 @@ import {
   LIMITES_CAMPO,
 } from './limites-entrada.ts';
 import { normalizeText } from './domain.ts';
+import { prepararNotificacaoCondicional } from './central-notificacoes.ts';
 import { intervaloDatasNegocio } from './periodo-auditoria.ts';
 import { paginaSolicitada } from './paginacao.ts';
 import { linkBaixa, normalizarPlaca, SITUACOES_BAIXA } from './baixas.ts';
@@ -84,25 +85,10 @@ export function baixasApi(contexto: ContextoApi) {
           p.id !== autor.id &&
           (atual ? p.id === atual.solicitante_id : pode(p, 'baixa:atender')),
       )
-      .map((p) =>
-        statement(
-          `INSERT INTO notificacoes_usuario(id,user_id,tipo,texto,link,criada_em)
-       SELECT ?,?,'baixa',b.codigo || ': ' || ?,?,? FROM baixas_estoque b WHERE b.id=?
-       AND EXISTS(SELECT 1 FROM baixa_andamentos WHERE id=? AND baixa_id=b.id)
-       AND ? IN (SELECT role FROM users WHERE id=? AND active=1)`,
-          [
-            id('ntf'),
-            p.id,
-            `${SITUACOES_BAIXA[para as keyof typeof SITUACOES_BAIXA]}${texto ? `; ${texto}` : ''}`,
-            linkBaixa(baixaId),
-            timestamp,
-            baixaId,
-            evento,
-            p.role,
-            p.id,
-          ],
-        ),
-      );
+      .map((p) => {
+        const mensagem = `${SITUACOES_BAIXA[para as keyof typeof SITUACOES_BAIXA]}${texto ? `; ${texto}` : ''}`;
+        return prepararNotificacaoCondicional({ tipo:'baixa', texto:mensagem, textoSql:"b.codigo || ': ' || ?", link:linkBaixa(baixaId), timestamp, origem:'baixas_estoque b', destinatarioSql:'?', valoresDestinatario:[p.id], condicao:'b.id=? AND EXISTS(SELECT 1 FROM baixa_andamentos WHERE id=? AND baixa_id=b.id) AND ? IN (SELECT role FROM users WHERE id=? AND active=1)', valoresTexto:[mensagem], valores:[baixaId, evento, p.role, p.id] });
+      });
   }
   async function listar(user: User, params: URLSearchParams) {
     const condicoes: string[] = [],
