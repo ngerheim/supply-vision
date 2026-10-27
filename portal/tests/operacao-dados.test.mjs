@@ -50,7 +50,7 @@ void test('pula backup sem candidatos e faz backup antes do expurgo; falha nao e
   const arquivo=path.join(pasta,'banco.sqlite');banco(arquivo).close();
   const opcoes={config:{EXPURGO_HABILITADO:'1'},arquivo,pasta,agora};
   const semCandidatos=path.join(pasta,'sem-candidatos.sqlite');
-  const limpo=banco(semCandidatos);limpo.prepare("UPDATE email_notifications SET updated_at=?").run(dias(1));limpo.prepare("UPDATE daily_report_deliveries SET updated_at=?").run(dias(1));limpo.prepare("UPDATE report_jobs SET completed_at=?").run(dias(1));limpo.prepare("UPDATE imports SET completed_at=?,summary_json=NULL").run(dias(1));limpo.prepare('DELETE FROM consultas_cnpj');limpo.close();
+  const limpo=banco(semCandidatos);limpo.prepare("UPDATE email_notifications SET updated_at=?").run(dias(1));limpo.prepare("UPDATE daily_report_deliveries SET updated_at=?").run(dias(1));limpo.prepare("UPDATE report_jobs SET completed_at=?").run(dias(1));limpo.prepare("UPDATE imports SET completed_at=?,summary_json=NULL").run(dias(1));limpo.prepare('UPDATE consultas_cnpj SET consultada_em=?').run(dias(3));limpo.close();
   const semBackup=await executarExpurgo({...opcoes,arquivo:semCandidatos,backup(){assert.fail('backup nao deve ocorrer sem candidatos');}});
   assert.equal(semBackup.mensagem,'nada a expurgar');
   await assert.rejects(executarExpurgo({...opcoes,backup(){throw new Error('copia falhou');}}),/copia falhou/);
