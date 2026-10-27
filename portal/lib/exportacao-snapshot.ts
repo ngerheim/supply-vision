@@ -27,6 +27,7 @@ export const CONSULTAS_EXPORTACAO = {
   itensCatalogo: 'SELECT * FROM itens_catalogo ORDER BY descricao,id',
   baixaItens: 'SELECT id,baixa_id,item_id,quantidade_centesimos,status,motivo_recusa,atendente_id,atendido_em,criado_em,atualizado_em,revision FROM baixa_itens ORDER BY baixa_id,criado_em,id',
   baixaAndamentos: 'SELECT id,baixa_id,user_id,de_status,para_status,texto,criado_em FROM baixa_andamentos ORDER BY criado_em,id',
+  movimentosEstoque: 'SELECT id,estoque_id,item_id,tipo,quantidade_centesimos,documento,observacao,origem_tipo,origem_id,movimento_estornado_id,user_id,data_movimento,criado_em FROM movimentos_estoque ORDER BY criado_em,id',
   auditLogs: 'SELECT * FROM audit_logs ORDER BY created_at',
   reportJobs: 'SELECT * FROM report_jobs',
   dailyReportDeliveries: 'SELECT * FROM daily_report_deliveries',

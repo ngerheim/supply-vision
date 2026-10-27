@@ -154,7 +154,7 @@ function PortalSession({ message, endSession }: { message: string; endSession: (
       {pode(user, 'aba:solicitacoes')&&nav==='solicitacoes'&&<Solicitacoes key={`${solicitacaoLink}:${solicitacaoLinkVersion}`} user={user} initialDetail={solicitacaoLink} onOpen={(id:string|null)=>navegacao.current?.navegar('solicitacoes',id||undefined)}/>}
       {pode(user, 'aba:categorias')&&nav==='categorias'&&<CategoriasFornecedor/>}
       {pode(user, 'aba:baixas')&&nav==='baixas'&&<Baixas key={`${baixaLink}:${baixaLinkVersion}`} user={user} initialDetail={baixaLink} onOpen={(id:string|null)=>navegacao.current?.navegar('baixas',id||undefined)}/>}
-      {pode(user, 'aba:estoques')&&nav==='estoques'&&<Estoques/>}
+      {pode(user, 'aba:estoques')&&nav==='estoques'&&<Estoques user={user}/>}
       {pode(user, 'aba:history')&&nav==='history'&&<ChangeHistory users={userList}/>}
       {pode(user, 'aba:admin')&&nav==='admin'&&<Administration user={user} busy={busy} run={run}/>}
       {pode(user, 'aba:reports')&&nav==='reports'&&<Reports/>}

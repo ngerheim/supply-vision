@@ -325,3 +325,16 @@ void test('seção Itens inclui, edita, alterna ativo e mostra conflito de revis
   r.reject(new ApiError({status:409,codigo:'revisao',error:'Este registro foi alterado.'}));await flush(h);assert.match(alerts(h),/recarregue/);
   button(h,'Cancelar').onClick();h.render();button(h,'Desativar Filtro fictício').onClick();r=h.requests.at(-1);assert.deepEqual(body(r),{ativo:false,expectedRevision:0});r.resolve({});await flush(h);
 });
+void test('entrada e saldo de estoque permitem lançar, filtrar e abrir histórico',async t=>{
+  const h=await mount('portal-estoques','EntradaEstoque',{},modules,{crypto});t.after(()=>h.unmount());
+  h.requests.find(r=>r.path==='/api/estoques').resolve({estoques:[estoque]});
+  h.requests.find(r=>r.path==='/api/itens').resolve({itens:[{id:'itm',descricao:'Óleo fictício',unidade:'L',ativo:1},{id:'legado',descricao:'Legado',unidade:'un',ativo:0}]});await flush(h);
+  const stock=h.one('select');stock.onChange({target:{value:'e'}});h.render();button(h,'Óleo fictício · L').onClick();h.render();h.one('Input',p=>p.type==='number').onChange({target:{value:'1.25'}});h.render();submit(h);
+  const envio=h.requests.at(-1);assert.equal(envio.path,'/api/estoque/entradas');assert.deepEqual(body(envio).itens,[{itemId:'itm',quantidade:1.25}]);assert.ok(envio.options.headers['idempotency-key']);envio.resolve({});await flush(h);assert.equal(h.one('output').children,'Entrada registrada.');
+  const saldo=await mount('portal-estoques','SaldoEstoque',{user:{role:'admin'}},modules);t.after(()=>saldo.unmount());
+  saldo.requests.find(r=>r.path==='/api/estoques').resolve({estoques:[estoque]});saldo.requests.find(r=>r.path.startsWith('/api/estoque/saldos')).resolve({saldos:[{estoque_id:'e',estoque:'Estoque fictício',item_id:'itm',descricao:'Óleo fictício',unidade:'L',saldo:-0.25}]});await flush(saldo);
+  assert.ok(saldo.find(n=>n.type==='TableCell').some(n=>n.props.children===-0.25));
+  saldo.one('TableRow',p=>typeof p.onClick==='function').onClick();saldo.render();
+  saldo.requests.at(-1).resolve({movimentos:[{id:'m',tipo:'saida',quantidade:-1,unidade:'L',data_movimento:'2026-10-27',baixa_id:'b',baixa_codigo:'BX-8'}]});await flush(saldo);
+  assert.equal(saldo.one('a').href,'/?aba=chamados&baixa=b');assert.equal(saldo.one('a').children,'BX-8');
+});

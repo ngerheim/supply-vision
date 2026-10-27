@@ -34,6 +34,7 @@ void test('exportacao mantem referencias quando exclusao ocorre durante leituras
     reader.prepare("INSERT INTO itens_catalogo(id,descricao,descricao_chave,unidade) VALUES('itm','Filtro ficticio','FILTRO FICTICIO','un')").run();
     reader.prepare("INSERT INTO baixa_itens(id,baixa_id,item_id,quantidade_centesimos,criado_em,atualizado_em) VALUES('bi','bx','itm',200,'x','x')").run();
     reader.prepare("INSERT INTO baixa_andamentos(id,baixa_id,user_id,para_status,criado_em,request_key,request_hash) VALUES('ban','bx','u','aberta','x','chave-ficticia','hash-ficticio')").run();
+    reader.prepare("INSERT INTO movimentos_estoque(id,estoque_id,item_id,tipo,quantidade_centesimos,origem_tipo,origem_id,user_id,data_movimento,criado_em,request_key,request_hash) VALUES('mov','est','itm','entrada',500,'entrada','origem-ficticia','u','2026-10-01','x','chave-movimento-ficticia','hash-movimento-ficticio')").run();
     reader.prepare("INSERT INTO email_notifications(id,solicitacao_id,event_id,type,recipient_name,recipient_email,payload_json,next_attempt_at,dedupe_key,created_at,updated_at) VALUES('mail','sol','san','solicitacao_abertura','Pessoa ficticia','pessoa@example.com','{}','2026-01-01T00:00:00.000Z','dedupe-ficticio','2026-01-01T00:00:00.000Z','2026-01-01T00:00:00.000Z')").run();
     let lotes=0;
     const db={prepare:sql=>sql,batch:async queries=>{
@@ -62,6 +63,9 @@ void test('exportacao mantem referencias quando exclusao ocorre durante leituras
     assert.equal(tables.itensCatalogo[0].id,'itm');
     assert.equal(tables.baixaItens[0].baixa_id,tables.baixasEstoque[0].id);
     assert.equal(tables.baixaItens[0].item_id,tables.itensCatalogo[0].id);
+    assert.equal(tables.movimentosEstoque[0].id,'mov');
+    assert.equal('request_key' in tables.movimentosEstoque[0],false);
+    assert.equal('request_hash' in tables.movimentosEstoque[0],false);
     for(const tabela of [tables.solicitacoes,tables.solicitacaoAndamentos,tables.baixasEstoque,tables.baixaAndamentos])
       assert.equal(tabela.some(row=>'request_key' in row||'request_hash' in row),false);
     assert.equal(tables.users.some(u=>'password_hash' in u),false);

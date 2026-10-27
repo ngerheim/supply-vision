@@ -24,6 +24,7 @@ import { logoMarca } from '@/lib/marca-api';
 import { centralApi } from '@/lib/central-api';
 import { solicitacoesApi } from '@/lib/solicitacoes-api';
 import { baixasApi } from '@/lib/baixas-api';
+import { estoqueApi } from '@/lib/estoque-api';
 import { exportacoesApi } from '@/lib/exportacoes-api';
 import { bootstrapApi } from '@/lib/bootstrap-api';
 import { PORTAL_BUILD, TELA_DESATUALIZADA, buildDivergente, ehEscrita } from '@/lib/portal-build';
@@ -138,6 +139,7 @@ const notificacoes = notificacoesApi(contexto);
 const central = centralApi(contexto);
 const solicitacoes = solicitacoesApi(contexto);
 const baixas = baixasApi(contexto);
+const estoque = estoqueApi(contexto);
 const exportacoes = exportacoesApi(contexto);
 const inicializacao = bootstrapApi(contexto, acordos, importacoes);
 
@@ -218,6 +220,12 @@ async function GETInterno(request: NextRequest) {
     if (!pode(user, 'baixa:abrir')) return fail('Seu perfil não permite consultar baixas.', 403);
     if (parts.length === 1) return baixas.listar(user, request.nextUrl.searchParams);
     return parts.length === 2 ? baixas.detalhe(user, parts[1]) : fail('Rota não encontrada.', 404);
+  }
+  if(parts[0]==='estoque'){
+    if(!pode(user,'baixa:abrir')&&!pode(user,'estoque:gerenciar'))return fail('Seu perfil não permite consultar estoque.',403);
+    if(parts.length===2&&parts[1]==='saldos')return estoque.saldos(user,request.nextUrl.searchParams);
+    if(parts.length===2&&parts[1]==='movimentos')return estoque.movimentos(user,request.nextUrl.searchParams);
+    return fail('Rota não encontrada.',404);
   }
   if (parts[0] === 'estoques') {
     if (!pode(user, 'baixa:abrir') && !pode(user, 'estoque:gerenciar')) return fail('Seu perfil não permite consultar estoques.', 403);
@@ -322,6 +330,17 @@ async function POSTInterno(request: NextRequest) {
     if(parts.length===3&&parts[2]==='transicao')return baixas.transicionar(request,user,parts[1]);
     if(parts.length===3&&parts[2]==='atender-itens')return baixas.atenderItens(request,user,parts[1]);
     return fail('Rota não encontrada.',404);
+  }
+  if(parts[0]==='estoque'){
+    if(parts.length===2&&parts[1]==='entradas'){
+      if(!pode(user,'baixa:atender'))return denyWrite(request,'Seu perfil não permite registrar entradas.');
+      return estoque.gravarEntrada(request,user);
+    }
+    if(parts.length===2&&parts[1]==='ajustes'){
+      if(!pode(user,'estoque:gerenciar'))return denyWrite(request,'Somente administradores podem ajustar estoque.');
+      return estoque.gravarAjuste(request,user);
+    }
+    if(parts.length===4&&parts[1]==='movimentos'&&parts[3]==='estorno')return estoque.estornar(request,user,parts[2]);
   }
   if (parts[0] === 'estoques') {
     if (!pode(user, 'estoque:gerenciar')) return denyWrite(request, 'Seu perfil não permite gerenciar estoques.');

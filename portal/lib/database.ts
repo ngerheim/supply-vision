@@ -300,6 +300,23 @@ async function initialize() {
       db.prepare('INSERT OR IGNORE INTO schema_migrations(version,applied_at) VALUES(13,?)').bind(now()),
     ]);
   }
+  if (!await db.prepare('SELECT 1 ok FROM schema_migrations WHERE version=14').first()) {
+    await db.batch([
+      db.prepare(`CREATE TABLE IF NOT EXISTS movimentos_estoque (id TEXT PRIMARY KEY, estoque_id TEXT NOT NULL REFERENCES estoques(id),
+        item_id TEXT NOT NULL REFERENCES itens_catalogo(id), tipo TEXT NOT NULL CHECK(tipo IN ('entrada','saida','ajuste','estorno')),
+        quantidade_centesimos INTEGER NOT NULL CHECK(quantidade_centesimos<>0), documento TEXT CHECK(documento IS NULL OR length(documento)<=60),
+        observacao TEXT CHECK(observacao IS NULL OR length(observacao)<=300), origem_tipo TEXT, origem_id TEXT,
+        movimento_estornado_id TEXT UNIQUE REFERENCES movimentos_estoque(id), user_id TEXT REFERENCES users(id),
+        data_movimento TEXT NOT NULL, criado_em TEXT NOT NULL, request_key TEXT, request_hash TEXT, UNIQUE(user_id,request_key))`),
+      db.prepare('CREATE INDEX IF NOT EXISTS idx_movimentos_estoque_item ON movimentos_estoque(estoque_id,item_id)'),
+      db.prepare('CREATE INDEX IF NOT EXISTS idx_movimentos_item ON movimentos_estoque(item_id)'),
+      db.prepare('CREATE INDEX IF NOT EXISTS idx_movimentos_origem ON movimentos_estoque(origem_tipo,origem_id)'),
+      db.prepare('CREATE INDEX IF NOT EXISTS idx_movimentos_criado ON movimentos_estoque(criado_em)'),
+      db.prepare("CREATE TRIGGER IF NOT EXISTS movimentos_estoque_imutavel_update BEFORE UPDATE ON movimentos_estoque BEGIN SELECT RAISE(ABORT,'Movimentos de estoque sao imutaveis'); END"),
+      db.prepare("CREATE TRIGGER IF NOT EXISTS movimentos_estoque_imutavel_delete BEFORE DELETE ON movimentos_estoque BEGIN SELECT RAISE(ABORT,'Movimentos de estoque sao imutaveis'); END"),
+      db.prepare('INSERT OR IGNORE INTO schema_migrations(version,applied_at) VALUES(14,?)').bind(now()),
+    ]);
+  }
   await db.prepare('PRAGMA optimize').run();
 }
 

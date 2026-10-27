@@ -186,7 +186,7 @@ export function baixasApi(contexto: ContextoApi) {
       'SELECT a.id,a.baixa_id,a.user_id,a.de_status,a.para_status,a.texto,a.criado_em,u.name AS usuario FROM baixa_andamentos a JOIN users u ON u.id=a.user_id WHERE baixa_id=? ORDER BY a.criado_em,a.rowid',
       [baixaId],
     );
-    const itens = await all('SELECT i.id,i.item_id,i.quantidade_centesimos/100.0 AS quantidade,i.status,i.motivo_recusa,i.atendido_em,c.descricao,c.unidade,u.name AS atendente FROM baixa_itens i JOIN itens_catalogo c ON c.id=i.item_id LEFT JOIN users u ON u.id=i.atendente_id WHERE i.baixa_id=? ORDER BY i.rowid',[baixaId]);
+    const itens = await all('SELECT i.id,i.item_id,i.quantidade_centesimos/100.0 AS quantidade,i.status,i.motivo_recusa,i.atendido_em,c.descricao,c.unidade,u.name AS atendente,CASE WHEN i.status=\'pendente\' THEN COALESCE((SELECT SUM(m.quantidade_centesimos) FROM movimentos_estoque m WHERE m.estoque_id=b.estoque_id AND m.item_id=i.item_id),0)/100.0 ELSE NULL END AS saldo FROM baixa_itens i JOIN baixas_estoque b ON b.id=i.baixa_id JOIN itens_catalogo c ON c.id=i.item_id LEFT JOIN users u ON u.id=i.atendente_id WHERE i.baixa_id=? ORDER BY i.rowid',[baixaId]);
     return ok({ baixa, andamentos, itens });
   }
   async function duplicada(os: string) {
@@ -379,7 +379,7 @@ export function baixasApi(contexto: ContextoApi) {
       const registros=await all<{id:string;descricao:string;unidade:string;quantidade_centesimos:number;status:string}>('SELECT bi.id,c.descricao,c.unidade,bi.quantidade_centesimos,bi.status FROM baixa_itens bi JOIN itens_catalogo c ON c.id=bi.item_id WHERE bi.baixa_id=? AND bi.id IN ('+itens.map(()=>'?').join(',')+')',[baixaId,...itens.map(i=>i.id)]);
       if(registros.length!==itens.length||registros.some(i=>i.status!=='pendente'))return fail('Um ou mais itens já foram atendidos. Recarregue a baixa.',409);
       if(itens.some(i=>i.para==='recusado'&&!i.motivo.trim()))return fail('Informe o motivo da recusa de cada item.');
-      const timestamp=now(),evento=id('ban'),baixados=itens.filter(i=>i.para==='baixado').length,recusados=itens.length-baixados;
+      const timestamp=now(),dataMovimento=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(timestamp)),evento=id('ban'),baixados=itens.filter(i=>i.para==='baixado').length,recusados=itens.length-baixados;
       const textoResumo=`${baixados} ${baixados===1?'item baixado':'itens baixados'}, ${recusados} ${recusados===1?'recusado':'recusados'}`;
       const baixadosIds=itens.filter(i=>i.para==='baixado').map(i=>i.id),baixadosSql=baixadosIds.length?baixadosIds.map(()=>'?').join(','):'NULL';
       const statusNovo=await first<{status:string}>('SELECT CASE WHEN EXISTS(SELECT 1 FROM baixa_itens WHERE baixa_id=? AND status=\'pendente\' AND id NOT IN ('+itens.map(()=>'?').join(',')+')) THEN \'aberta\' WHEN EXISTS(SELECT 1 FROM baixa_itens WHERE baixa_id=? AND (status=\'baixado\' OR id IN ('+baixadosSql+'))) THEN \'baixada\' ELSE \'recusada\' END AS status',[baixaId,...itens.map(i=>i.id),baixaId,...baixadosIds]);
@@ -399,6 +399,7 @@ export function baixasApi(contexto: ContextoApi) {
         const reg=registros.find(r=>r.id===item.id)!;
         const motivo=item.motivo||null;
         statements.push(statement("UPDATE baixa_itens SET status=?,motivo_recusa=?,atendente_id=?,atendido_em=?,atualizado_em=?,revision=revision+1 WHERE id=? AND baixa_id=? AND status='pendente' AND EXISTS(SELECT 1 FROM baixas_estoque WHERE id=? AND revision=? AND status='aberta')",[item.para,motivo,user.id,timestamp,timestamp,item.id,baixaId,baixaId,atual.revision]));
+        if(item.para==='baixado'&&reg.id!=='item_legado')statements.push(statement("INSERT INTO movimentos_estoque(id,estoque_id,item_id,tipo,quantidade_centesimos,observacao,origem_tipo,origem_id,user_id,data_movimento,criado_em) SELECT ?,b.estoque_id,bi.item_id,'saida',-bi.quantidade_centesimos,NULL,'baixa_item',bi.id,?,?,? FROM baixas_estoque b JOIN baixa_itens bi ON bi.baixa_id=b.id WHERE b.id=? AND bi.id=? AND changes()=1",[id('mov'),user.id,dataMovimento,timestamp,baixaId,item.id]));
         statements.push(statement('INSERT INTO baixa_andamentos(id,baixa_id,user_id,de_status,para_status,texto,criado_em) SELECT ?,?,?,\'pendente\',?,?,? WHERE changes()=1',[id('ban'),baixaId,user.id,item.para,`${reg.descricao}: ${reg.quantidade_centesimos/100} ${reg.unidade}; ${item.para}${motivo?`; ${motivo}`:''}`,timestamp]));
       }
       statements.push(
