@@ -20,6 +20,7 @@ import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
 import { type AnyRow, Field, Info } from './portal-presentation';
 import { PageHeader } from './page-header';
 import { Status } from './status';
+import { gerarChaveRelatorio } from '@/lib/relatorios';
 
 const receitaCampos = [
   ['razao_social', 'Razão social'],
@@ -89,6 +90,7 @@ export function FormularioSolicitacao({
   const [busy, setBusy] = useState(false),
     [consultandoCep, setConsultandoCep] = useState(false);
   const trava = useRef(false),
+    tentativaEnvio = useRef({ corpo: '', chave: '' }),
     sequenciaCep = useRef(0),
     montado = useRef(true);
   useEffect(() => {
@@ -147,7 +149,7 @@ export function FormularioSolicitacao({
       setPronto(true);
     } catch (e) {
       if (!montado.current) return;
-      if (e instanceof ApiError && e.details.status === 503) {
+      if (e instanceof ApiError && e.details.status === 503 && e.details.codigo !== 'validacao') {
         setManual(true);
         setPronto(true);
         setConsultaId(undefined);
@@ -194,13 +196,17 @@ export function FormularioSolicitacao({
       consultaId,
       ...(value ? { expectedRevision: value.revision } : {}),
     };
+    const corpo = JSON.stringify(body);
+    if (tentativaEnvio.current.corpo !== corpo)
+      tentativaEnvio.current = { corpo, chave: gerarChaveRelatorio() };
     try {
       const x = await api(
         value
           ? `/api/solicitacoes/${encodeURIComponent(value.id)}`
           : '/api/solicitacoes',
-        corpoJson(value ? 'PUT' : 'POST', body),
+        { ...corpoJson(value ? 'PUT' : 'POST', body), headers: { 'content-type': 'application/json', 'idempotency-key': tentativaEnvio.current.chave } },
       );
+      tentativaEnvio.current = { corpo: '', chave: '' };
       if (montado.current) onSaved(value?.id || x.id);
     } catch (e) {
       if (montado.current) {

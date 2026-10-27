@@ -10,7 +10,8 @@ export type DadosReceita = {
 export type ProvedorConsulta = (url: URL, signal: AbortSignal) => Promise<unknown>;
 export class FalhaConsulta extends Error {
   readonly status: number;
-  constructor(message: string, status = 503) { super(message); this.status = status; }
+  readonly codigo?: string;
+  constructor(message: string, status = 503, codigo?: string) { super(message); this.status = status; this.codigo = codigo; }
 }
 export const CONSULTA_INDISPONIVEL = 'Consulta à Receita indisponível. Preencha os dados manualmente.';
 const texto = (v: unknown, limite = 200) => typeof v === 'string' || typeof v === 'number' ? String(v).trim().slice(0, limite) : '';

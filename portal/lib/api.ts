@@ -82,7 +82,10 @@ export async function api<T = JsonData>(
       : leitura ? 'Não foi possível conectar ao portal. Verifique sua conexão e tente novamente.' : 'A conexão foi interrompida. Confira o resultado antes de repetir a operação.' });
   }
   if (!response.ok) {
-    if ((response.status === 429 || response.status === 503) && !(response.status === 503 && path.startsWith('/api/solicitacoes/'))) {
+    const codigo = typeof data === 'object' && data ? (data as AnyRow).codigo : undefined;
+    if (codigo === 'validacao') throw new ApiError({ ...(data as AnyRow), status: response.status });
+    if (response.status === 429) throw new ApiError({ ...(typeof data === 'object' && data ? data : { error: 'Limite de consultas atingido.' }), status: response.status });
+    if (response.status === 503 && !path.startsWith('/api/solicitacoes/')) {
       const espera = Number(response.headers.get('retry-after'));
       throw new ApiError({ error: `O servidor está ocupado. ${espera > 0 && Number.isFinite(espera) ? `Tente novamente em ${Math.ceil(espera)} segundos.` : 'Aguarde um momento e tente novamente.'}` });
     }

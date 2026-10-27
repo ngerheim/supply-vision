@@ -10,6 +10,7 @@ import { cnpjFicticio } from '../lib/consultas-fornecedor-ensaio.ts';
 const modules = {
   '@/lib/solicitacoes-cliente': cliente,
   '@/lib/permissoes': permissoes,
+  '@/lib/relatorios': { gerarChaveRelatorio: () => 'chave-ficticia-reenvio' },
 };
 const user = (role) => ({ id: 'pessoa', role });
 const categorias = [
@@ -245,7 +246,7 @@ for (const {situacao, detalhes} of [
       assert.deepEqual(opened, ['existente']);
     }
   });
-void test('consulta 503 habilita manual sem consultaId, preserva contato apos erro no envio', async (t) => {
+void test('503 indisponível habilita manual; validacao e 429 não habilitam', async (t) => {
   const { h, saved } = await abrirForm(t);
   change(h, 'cnpj', receita.cnpj);
   button(h, 'Consultar').onClick();
@@ -253,6 +254,7 @@ void test('consulta 503 habilita manual sem consultaId, preserva contato apos er
     .at(-1)
     .reject(new ApiError({ status: 503, error: 'Consulta indisponível.' }));
   await flush(h);
+  // Provedor fora do ar habilita preenchimento manual.
   assert.equal(h.one('output').children, cliente.AVISO_MANUAL);
   assert.ok(input(h, 'razao_social'));
   change(h, 'razao_social', 'Manual fictício');
@@ -267,6 +269,23 @@ void test('consulta 503 habilita manual sem consultaId, preserva contato apos er
   h.requests.at(-1).resolve({ id: 'manual' });
   await flush(h);
   assert.deepEqual(saved, ['manual']);
+});
+void test('503 de validacao mostra aviso de atualização sem habilitar modo manual', async (t) => {
+  const { h: h1 } = await abrirForm(t);
+  change(h1, 'cnpj', receita.cnpj);
+  button(h1, 'Consultar').onClick();
+  h1.requests.at(-1).reject(new ApiError({ status: 503, codigo: 'validacao', error: 'Sistema em atualização, aguarde alguns instantes' }));
+  await flush(h1);
+  assert.equal(textos(h1), 'Sistema em atualização, aguarde alguns instantes');
+  assert.equal(h1.find((n) => n.type === 'output').length, 0);
+  assert.equal(h1.find((n) => n.type === 'Input' && n.props.name === 'razao_social').length, 0);
+  const { h: h2 } = await abrirForm(t);
+  change(h2, 'cnpj', receita.cnpj);
+  button(h2, 'Consultar').onClick();
+  h2.requests.at(-1).reject(new ApiError({ status: 429, error: 'Limite de consultas.' }));
+  await flush(h2);
+  assert.equal(textos(h2), 'Limite de consultas.');
+  assert.equal(h2.find((n) => n.type === 'output').length, 0);
 });
 void test('trocar CNPJ limpa dados do fornecedor anterior antes do modo manual', async (t) => {
   const { h } = await abrirForm(t);
@@ -476,7 +495,7 @@ for (const para of ['cadastrado', 'devolvida', 'recusado'])
     assert.equal(body(r).expectedRevision, 7);
     assert.equal(body(r).para, para);
     r.reject(
-      new ApiError({ status: 409, error: 'Esta solicitação foi alterada.' }),
+      new ApiError({ status: 409, codigo: 'revisao', error: 'Esta solicitação foi alterada.' }),
     );
     await flush(h);
     assert.equal(textos(h), cliente.AVISO_REVISAO_SOLICITACAO);
@@ -544,12 +563,15 @@ for (const manual of [false, true])
     assert.equal(body(r).expectedRevision, 7);
     assert.equal(body(r).cnpj, receita.cnpj);
     assert.deepEqual(body(r).categorias, ['oficina']);
-    r.reject(new ApiError({ status: 409, error: 'Alterada' }));
+    assert.ok(r.options.headers['idempotency-key']);
+    r.reject(new ApiError({ status: 409, codigo: 'revisao', error: 'Alterada' }));
     await flush(h);
     assert.equal(textos(h), cliente.AVISO_REVISAO_SOLICITACAO);
     assert.equal(input(h, 'cidade').value, 'Cidade corrigida');
     submit(h);
-    h.requests.at(-1).resolve({ success: true });
+    const repetida = h.requests.at(-1);
+    assert.equal(repetida.options.headers['idempotency-key'], r.options.headers['idempotency-key']);
+    repetida.resolve({ success: true });
     await flush(h);
     assert.deepEqual(saved, ['sol']);
   });
@@ -583,8 +605,8 @@ void test('categorias: incluir, duplicidade, renomear, ativar/desativar e reviso
   const renomear = h.requests.at(-1);
   assert.equal(body(renomear).expectedRevision, 3);
   assert.equal(body(renomear).nome, 'Nome fictício');
-  renomear.reject(
-    new ApiError({ status: 409, error: 'Esta solicitação foi alterada.' }),
+    renomear.reject(
+    new ApiError({ status: 409, codigo: 'duplicado', error: 'Esta solicitação foi alterada.' }),
   );
   await flush(h);
   assert.equal(textos(h), cliente.AVISO_REVISAO_SOLICITACAO);

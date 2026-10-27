@@ -216,7 +216,7 @@ void test('atendimento envia revision, recusa exige motivo, conflito bloqueia at
     texto: 'Motivo fictício',
     expectedRevision: 3,
   });
-  r.reject(new ApiError({ status: 409, error: 'Alterada' }));
+  r.reject(new ApiError({ status: 409, codigo: 'revisao', error: 'Alterada' }));
   await flush(h);
   assert.match(alerts(h), /recarregue/);
   assert.equal(h.one('fieldset').disabled, true);
@@ -236,6 +236,17 @@ void test('atendimento envia revision, recusa exige motivo, conflito bloqueia at
   nova.resolve({});
   await flush(h);
   assert.ok(h.requests.at(-1).path.endsWith('/b'));
+});
+void test('409 que não é revisão mostra mensagem sem travar as ações', async (t) => {
+  const h = await abrir(t, 'DetalheBaixa', { id: 'b', user: { role: 'editor' }, onBack() {} });
+  h.requests[0].resolve({ baixa, andamentos: [] });
+  await flush(h);
+  button(h, 'Marcar como baixada').onClick();
+  h.requests.at(-1).reject(new ApiError({ status: 409, codigo: 'duplicado', error: 'Já existe um registro.' }));
+  await flush(h);
+  assert.equal(alerts(h), 'Já existe um registro.');
+  assert.notEqual(h.one('fieldset').disabled, true);
+  assert.notEqual(button(h, 'Marcar como baixada').disabled, true);
 });
 void test('falha de leitura e 404 nao exibem dados nem acoes', async (t) => {
   const h = await abrir(t, 'DetalheBaixa', {

@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
+import { gerarChaveRelatorio } from "@/lib/relatorios";
 import {
   type AnyRow,
   Field,
@@ -47,6 +48,7 @@ export function DetalheSolicitacao({
   const [acao, setAcao] = useState(""),
     [texto, setTexto] = useState("");
   const trava = useRef(false),
+    tentativa = useRef({ corpo: "", chave: "" }),
     sequencia = useRef(0);
   useEffect(() => {
     const atual = ++sequencia.current,
@@ -94,14 +96,18 @@ export function DetalheSolicitacao({
     setBusy(true);
     setErro("");
     const atual = sequencia.current;
+    const body = {
+      expectedRevision: dados.solicitacao.revision,
+      ...(para === "reconsultar" ? {} : { para, texto: texto.trim() }),
+    }, corpo = JSON.stringify(body);
+    if (tentativa.current.corpo !== corpo)
+      tentativa.current = { corpo, chave: gerarChaveRelatorio() };
     try {
       await api(
         `/api/solicitacoes/${encodeURIComponent(id)}/${para === "reconsultar" ? "reconsultar" : "transicao"}`,
-        corpoJson("POST", {
-          expectedRevision: dados.solicitacao.revision,
-          ...(para === "reconsultar" ? {} : { para, texto: texto.trim() }),
-        }),
+        { ...corpoJson("POST", body), headers: { "content-type": "application/json", "idempotency-key": tentativa.current.chave } },
       );
+      tentativa.current = { corpo: "", chave: "" };
       if (atual === sequencia.current) setVersao((v) => v + 1);
     } catch (e) {
       if (atual === sequencia.current) setErro(erroDeRevisao(e));

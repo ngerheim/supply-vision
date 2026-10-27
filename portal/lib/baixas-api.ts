@@ -37,11 +37,7 @@ export function baixasApi(contexto: ContextoApi) {
     rawDb()
       .prepare(sql)
       .bind(...valores);
-  const conflito = () =>
-    fail(
-      'Este registro foi alterado. Recarregue antes de salvar novamente.',
-      409,
-    );
+  const conflito = () => contexto.ok({ error: 'Este registro foi alterado. Recarregue antes de salvar novamente.', codigo: 'revisao' }, { status: 409 });
   const inexistente = () => fail('Baixa não encontrada.', 404);
   const auditoria = (
     user: User,
