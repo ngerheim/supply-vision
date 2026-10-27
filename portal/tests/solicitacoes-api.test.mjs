@@ -51,6 +51,17 @@ void test('Cadastro de fornecedor pelo roteador e SQLite reais', async t => {
   const mover = (id, para, texto = '', user = 'editor') => post(`solicitacoes/${id}/transicao`, { para, texto, expectedRevision: registro(id).revision }, user);
   const contagens = () => ['solicitacoes', 'solicitacao_andamentos', 'solicitacao_categorias', 'audit_logs', 'suppliers', 'email_notifications', 'notificacoes_usuario'].map(tabela => sql.prepare(`SELECT COUNT(*) n FROM ${tabela}`).get().n);
 
+  await t.test('histórico localiza cada solicitação pelo código', async () => {
+    for (let i = 0; i < 2; i++) {
+      const aberta = await abrir(manual(), 'viewer');
+      const historico = await get(`audit?q=${encodeURIComponent(aberta.codigo)}`, admin);
+      assert.equal(historico.status, 200);
+      assert.equal(historico.data.logs.length, 1);
+      assert.equal(historico.data.logs[0].entityId, aberta.id);
+      assert.match(historico.data.logs[0].detailsText, new RegExp(aberta.codigo));
+    }
+  });
+
   await t.test('GETs do viewer preservam leituras sem autor de escrita e atividade de sessao', async () => {
     const timestamp = banco.now();
     sql.prepare('INSERT INTO suppliers(id,legal_name,trade_name,cnpj,created_at,updated_at) VALUES(?,?,?,?,?,?)').run('fornecedor_get_ficticio','Fornecedor Fictício','Fornecedor Fictício',cnpjFicticio(70),timestamp,timestamp);

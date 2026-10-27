@@ -189,6 +189,16 @@ void test('Baixa no estoque pelo roteador e SQLite reais', async (t) => {
   };
   const estoqueA = await cadastrarEstoque('Estoque Teste A');
   const estoqueB = await cadastrarEstoque('Estoque Teste B');
+  await t.test('histórico localiza cada baixa pelo código e mostra a OS', async () => {
+    for (const os of ['981001', '981002']) {
+      const aberta = await abrir(entrada({ numero_os: os }));
+      const historico = await get(`audit?q=${encodeURIComponent(aberta.codigo)}`, admin);
+      assert.equal(historico.status, 200);
+      assert.equal(historico.data.logs.length, 1);
+      assert.equal(historico.data.logs[0].entityId, aberta.id);
+      assert.match(historico.data.logs[0].detailsText, new RegExp(`${aberta.codigo}.*${os}`));
+    }
+  });
   await t.test(
     'cadastro: guardas, nomes normalizados, revision e desativacao',
     async () => {

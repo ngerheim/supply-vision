@@ -6,10 +6,11 @@ import { MAX_EXPORT_AUDITORIA, erroExportacaoAuditoria, BUSCA_LITERAL_AUDITORIA_
 void test('busca de histórico trata porcentagem, sublinhado e barra como texto', () => {
  const db=new DatabaseSync(':memory:');
  try {
-  db.exec('CREATE TABLE logs(details TEXT,entity TEXT);CREATE TABLE users(name TEXT);INSERT INTO users VALUES(NULL)');
+  db.exec('CREATE TABLE logs(details TEXT,entity TEXT,entity_id TEXT);CREATE TABLE users(name TEXT);INSERT INTO users VALUES(NULL)');
   for(const value of ['100% concluido','1000 concluido','item_a','itemba',String.raw`pasta\arquivo`])db.prepare('INSERT INTO logs(details) VALUES (?)').run(value);
+  db.prepare('INSERT INTO logs(entity_id) VALUES (?)').run('SOL-FICTICIO-123');
   const find=db.prepare(`SELECT details FROM logs l LEFT JOIN users u ON 1=1 WHERE ${BUSCA_LITERAL_AUDITORIA_SQL}`);
-  for(const [q,expected] of [['%',['100% concluido']],['_',['item_a']],['\\',[String.raw`pasta\arquivo`]]])assert.deepEqual(find.all(String(q),String(q),String(q)).map(r=>r.details),expected);
+  for(const [q,expected] of [['%',['100% concluido']],['_',['item_a']],['\\',[String.raw`pasta\arquivo`]],['SOL-FICTICIO-123',[null]]])assert.deepEqual(find.all(String(q),String(q),String(q),String(q)).map(r=>r.details),expected);
  }finally{db.close();}
 });
 void test('exportação nunca trunca: aceita o limite e recusa antes de carregar acima dele', () => {

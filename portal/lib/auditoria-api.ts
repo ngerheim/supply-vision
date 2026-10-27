@@ -16,7 +16,7 @@ export function erroExportacaoAuditoria(total: number): string | null {
     : null;
 }
 // INSTR preserva a busca literal e evita o limite de padrao LIKE do SQLite.
-export const BUSCA_LITERAL_AUDITORIA_SQL = '(instr(lower(l.details),lower(?))>0 OR instr(lower(l.entity),lower(?))>0 OR instr(lower(u.name),lower(?))>0)';
+export const BUSCA_LITERAL_AUDITORIA_SQL = '(instr(lower(l.details),lower(?))>0 OR instr(lower(l.entity),lower(?))>0 OR instr(lower(l.entity_id),lower(?))>0 OR instr(lower(u.name),lower(?))>0)';
 
 // Registro de auditoria como instrucao preparada, para entrar no MESMO batch
 // da escrita: se a escrita confirma, o registro confirma junto, e vice-versa.
@@ -34,7 +34,7 @@ export function auditoriaApi(contexto: ContextoApi) {
     const userId=params?.get('user'); if(userId){conditions.push('l.user_id=?');values.push(userId)}
     const action=params?.get('action'); if(action){conditions.push('l.action=?');values.push(action)}
     const entity=params?.get('entity'); if(entity){conditions.push('l.entity=?');values.push(entity)}
-    const q=params?.get('q'); if(q){exigeTexto(q,LIMITES_CAMPO.busca,'busca');conditions.push(BUSCA_LITERAL_AUDITORIA_SQL);values.push(q,q,q)}
+    const q=params?.get('q'); if(q){exigeTexto(q,LIMITES_CAMPO.busca,'busca');conditions.push(BUSCA_LITERAL_AUDITORIA_SQL);values.push(q,q,q,q)}
     const periodo=intervaloDatasNegocio(params?.get('from')||null,params?.get('to')||null);
     if(periodo.inicio){conditions.push('l.created_at>=?');values.push(periodo.inicio)}
     if(periodo.fim){conditions.push('l.created_at<?');values.push(periodo.fim)}

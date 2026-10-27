@@ -41,8 +41,8 @@ export function solicitacoesApi(contexto: ContextoApi, consultas = criarConsulta
   const conflito = () => fail('Esta solicitação foi alterada. Atualize antes de salvar novamente.', 409);
   const inexistente = () => fail('Solicitação não encontrada.', 404);
   const statement = (sql: string, valores: unknown[] = []) => rawDb().prepare(sql).bind(...valores);
-  const auditoria = (user: User, entidade: string, registro: string, acao: string, detalhes: string, timestamp: string, condicao = '1', valores: unknown[] = []) =>
-    statement(`INSERT INTO audit_logs(id,user_id,action,entity,entity_id,details,created_at) SELECT ?,?,?,?,?,?,? WHERE ${condicao}`, [id('aud'), user.id, acao, entidade, registro, detalhes, timestamp, ...valores]);
+  const auditoria = (user: User, entidade: string, registro: string, acao: string, detalhes: string, timestamp: string, condicao = '1', valores: unknown[] = [], detalhesSql = '?', valoresDetalhes: unknown[] = []) =>
+    statement(`INSERT INTO audit_logs(id,user_id,action,entity,entity_id,details,created_at) SELECT ?,?,?,?,?,${detalhesSql},? WHERE ${condicao}`, [id('aud'), user.id, acao, entidade, registro, ...(detalhesSql === '?' ? [detalhes] : valoresDetalhes), timestamp, ...valores]);
 
   async function consultarCnpj(user: User, numero: string) {
     return comAcaoEscrita('solicitacao:abrir', async () => {
@@ -149,7 +149,7 @@ export function solicitacoesApi(contexto: ContextoApi, consultas = criarConsulta
           statement(`INSERT INTO solicitacoes(id,${campos.join(',')},solicitante_id,criado_em,atualizado_em,request_key,request_hash) SELECT ${Array(campos.length + 6).fill('?').join(',')} WHERE ${ativas.sql}`, [solicitacaoId, ...campos.map(c => dados[c]), user.id, timestamp, timestamp, chave, hash, ...ativas.valores]),
           statement("INSERT INTO solicitacao_andamentos(id,solicitacao_id,user_id,para_status,texto,criado_em) SELECT ?,?,?,'aberta','Solicitação aberta',? WHERE EXISTS(SELECT 1 FROM solicitacoes WHERE id=?)", [evento, solicitacaoId, user.id, timestamp, solicitacaoId]),
           ...categorias.map(c => statement('INSERT INTO solicitacao_categorias(solicitacao_id,categoria_id) SELECT ?,? WHERE EXISTS(SELECT 1 FROM solicitacoes WHERE id=?)', [solicitacaoId, c, solicitacaoId])),
-          auditoria(user, 'solicitacao', solicitacaoId, 'CREATE', 'Solicitação de cadastro de fornecedor aberta', timestamp, 'EXISTS(SELECT 1 FROM solicitacoes WHERE id=?)', [solicitacaoId]),
+          auditoria(user, 'solicitacao', solicitacaoId, 'CREATE', 'Solicitação de cadastro de fornecedor aberta', timestamp, 'EXISTS(SELECT 1 FROM solicitacoes WHERE id=?)', [solicitacaoId], "('Solicitação de cadastro de fornecedor aberta: ' || (SELECT codigo FROM solicitacoes WHERE id=?))", [solicitacaoId]),
           ...avisos,
         ]);
         if (!resultados[0].meta.changes) return fail('Uma categoria foi desativada. Atualize e tente novamente.', 409);
