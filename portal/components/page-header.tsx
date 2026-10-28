@@ -3,6 +3,7 @@ import { createContext, useContext, type ReactNode } from "react";
 import { abaDaChave, subabasPermitidas, type Nav } from "@/lib/navegacao";
 import type { UsuarioPermissao } from "@/lib/permissoes";
 import { Subabas } from "./portal-subabas";
+import type { ReactNode } from "react";
 
 type Contexto = {
   nav: Nav;
@@ -83,7 +84,7 @@ export function PageHeader({
         <div className="patio-header-actions">{actions}</div>
       </div>
       {description && <p className="patio-header-description">{description}</p>}
-      {contexto && !back && (
+      {contexto && !back && aba.subabas.length < 2 && (
         <Subabas
           nav={contexto.nav}
           usuario={contexto.usuario}
@@ -92,4 +93,17 @@ export function PageHeader({
       )}
     </header>
   );
+}
+
+/** Linha única reutilizável para abas: navegação à esquerda e ações à direita. */
+export function LinhaDeAba({ actions }: { actions?: ReactNode }) {
+  const contexto = useContext(ContextoCabecalho);
+  const aba = abaDaChave(contexto?.nav ?? "search");
+  return <header className="patio-page-header patio-tab-header">
+    <h1 className="sr-only">{titulos[aba.aba]}</h1>
+    <div className="patio-tab-row">
+      {contexto && <Subabas nav={contexto.nav} usuario={contexto.usuario} navegar={contexto.navegar} />}
+      <div className="patio-header-actions">{actions}</div>
+    </div>
+  </header>;
 }

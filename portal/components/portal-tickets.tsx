@@ -1,5 +1,5 @@
 'use client';
-import { PageHeader } from './page-header';
+import { PageHeader, LinhaDeAba } from './page-header';
 import { Plaquinha } from './plaquinha';
 import { COLUNAS_ORDENACAO_CHAMADOS } from '@/lib/operacao-dados';
 import { gerarChaveRelatorio } from '@/lib/relatorios';
@@ -15,7 +15,6 @@ import {
   RefreshCw,
   CirclePlus,
   ArrowRightLeft,
-  Search,
 } from 'lucide-react';
 import { Status } from './status';
 import { Prioridade } from './prioridade';
@@ -49,6 +48,7 @@ import {
   Empty,
 } from './portal-presentation';
 import { useOrdenacao, CabecalhoOrdenavel } from './portal-table';
+import { TabelaPadrao, BarraFiltros } from './tela-padrao';
 
 const ticketStatusMap: AnyRow = {
   aberto: ['Aberto', 'bg-muted text-muted-foreground ring-1 ring-border'],
@@ -182,7 +182,7 @@ export function Tickets({ busy, users, run, initialDetail }: JsonData) {
     currentPage = data.page;
   return (
     <div className="patio-page">
-      <PageHeader
+      <LinhaDeAba
         actions={
           <Button
             variant="create"
@@ -192,12 +192,7 @@ export function Tickets({ busy, users, run, initialDetail }: JsonData) {
           </Button>
         }
       />
-
-      <div
-        className="patio-subabas patio-ticket-tabs"
-        role="tablist"
-        aria-label="Situação dos chamados"
-      >
+      <div className="patio-ticket-groups" role="tablist" aria-label="Status dos chamados">
         {(
           [
             [
@@ -209,11 +204,12 @@ export function Tickets({ busy, users, run, initialDetail }: JsonData) {
             ['cancelados', 'Cancelados', s.cancelado],
           ] as const
         ).map(([key, label, count]) => (
-          <Button
+          <button
             key={key}
+            type="button"
+            className={group === key ? 'bg-primary text-primary-foreground' : 'bg-background text-foreground'}
             role="tab"
             aria-selected={group === key}
-            variant={group === key ? 'default' : 'ghost'}
             onClick={() => {
               setGroup(key);
               setPage(1);
@@ -221,27 +217,11 @@ export function Tickets({ busy, users, run, initialDetail }: JsonData) {
           >
             {label}
             <span className="patio-tab-count">{Number(count || 0)}</span>
-          </Button>
+          </button>
         ))}
       </div>
-      <div className="flex flex-wrap gap-3">
-        <div className="relative min-w-0 basis-64 flex-1">
-          <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            className="pl-9"
-            placeholder="Buscar"
-            aria-label="Pesquisar chamados"
-            value={q}
-            onChange={(e) => {
-              setQ(e.target.value);
-              setPage(1);
-            }}
-          />
-        </div>
-      </div>
-      {rows.length ? (
-        <Card className="min-w-0">
-          <CardContent className="min-w-0 px-0 pb-0">
+      <BarraFiltros busca={q} onBusca={value => { setQ(value); setPage(1); }} placeholder="Pesquisar chamados" />
+      <TabelaPadrao contador={`${data.total ?? rows.length} ${(data.total ?? rows.length) === 1 ? 'chamado' : 'chamados'}`} pagina={<PaginacaoDeLista pagina={currentPage} paginas={pageCount} alterar={setPage} />} vazio={!rows.length ? <Empty icon={MessageSquare} title="Nenhum chamado" /> : undefined}>
             <Table className="w-full min-w-[900px] table-fixed">
               <colgroup>
                 {[12, 27, 10, 22, 14, 15].map((largura, indice) => (
@@ -306,17 +286,7 @@ export function Tickets({ busy, users, run, initialDetail }: JsonData) {
                   </TableRow>
                 ))}
               </TableBody>
-            </Table>
-          </CardContent>
-          <PaginacaoDeLista
-            pagina={currentPage}
-            paginas={pageCount}
-            alterar={setPage}
-          />
-        </Card>
-      ) : (
-        <Empty icon={MessageSquare} title="Nenhum chamado" />
-      )}
+      </TabelaPadrao>
       {open && (
         <TicketDialog
           busy={busy}

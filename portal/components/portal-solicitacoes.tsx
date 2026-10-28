@@ -11,7 +11,8 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
-import { PageHeader } from './page-header';
+import { PageHeader, LinhaDeAba } from './page-header';
+import { BarraFiltros, TabelaPadrao } from './tela-padrao';
 import { Plaquinha } from './plaquinha';
 import {
   Table,
@@ -113,7 +114,7 @@ export function ListaSolicitacoes({
   const todas = pode(user, 'solicitacao:ver_todas');
   return (
     <div className="patio-page">
-      <PageHeader
+      <LinhaDeAba
         actions={
           <>
             <Button
@@ -133,10 +134,8 @@ export function ListaSolicitacoes({
           </>
         }
       />
-      <Card>
-        <CardContent className="flex flex-wrap items-end gap-3">
-          <Field label="Situação">
-            <select
+      <BarraFiltros>
+            <select aria-label="Situação"
               value={filtros.status}
               onChange={(e) => {
                 setFiltros({ ...filtros, status: e.target.value });
@@ -151,9 +150,7 @@ export function ListaSolicitacoes({
                 </option>
               ))}
             </select>
-          </Field>
-          <Field label="Urgência">
-            <select
+            <select aria-label="Urgência"
               value={filtros.urgencia}
               onChange={(e) => {
                 setFiltros({ ...filtros, urgencia: e.target.value });
@@ -165,29 +162,9 @@ export function ListaSolicitacoes({
               <option value="normal">Normal</option>
               <option value="urgente">Urgente</option>
             </select>
-          </Field>
-          <Field label="De">
-            <Input
-              type="date"
-              value={filtros.de}
-              onChange={(e) => {
-                setFiltros({ ...filtros, de: e.target.value });
-                setPagina(1);
-              }}
-            />
-          </Field>
-          <Field label="Até">
-            <Input
-              type="date"
-              value={filtros.ate}
-              min={filtros.de}
-              onChange={(e) => {
-                setFiltros({ ...filtros, ate: e.target.value });
-                setPagina(1);
-              }}
-            />
-          </Field>
-          <label className="flex items-center gap-2 pb-2">
+          <Input aria-label="Período: De" type="date" value={filtros.de} onChange={(e) => { setFiltros({ ...filtros, de: e.target.value }); setPagina(1); }} />
+          <Input aria-label="Período: Até" type="date" value={filtros.ate} min={filtros.de} onChange={(e) => { setFiltros({ ...filtros, ate: e.target.value }); setPagina(1); }} />
+          <label className="flex items-center gap-2 whitespace-nowrap text-sm">
             <input
               type="checkbox"
               checked={filtros.nao_verificado}
@@ -198,8 +175,7 @@ export function ListaSolicitacoes({
             />
             Só não verificados
           </label>
-        </CardContent>
-      </Card>
+      </BarraFiltros>
       {erro ? (
         <FalhaDeCarregamento
           erro={erro}
@@ -208,9 +184,7 @@ export function ListaSolicitacoes({
       ) : !dados ? (
         <Loading label="Carregando solicitações…" />
       ) : (
-        <Card>
-          <CardContent>
-            <Table>
+        <TabelaPadrao contador={`${dados.total ?? dados.solicitacoes.length} ${(dados.total ?? dados.solicitacoes.length) === 1 ? 'cadastro' : 'cadastros'}`} pagina={<PaginacaoDeLista pagina={dados.page} paginas={dados.pageCount} alterar={setPagina} />} vazio={!dados.solicitacoes.length ? <p className="p-6 text-center text-muted-foreground">Nenhum cadastro encontrado.</p> : undefined}>
               <TableHeader>
                 <TableRow>
                   {[
@@ -287,19 +261,7 @@ export function ListaSolicitacoes({
                   </TableRow>
                 ))}
               </TableBody>
-            </Table>
-            {!dados.solicitacoes.length && (
-              <p className="p-6 text-center text-muted-foreground">
-                Nenhuma solicitação encontrada.
-              </p>
-            )}
-            <PaginacaoDeLista
-              pagina={dados.page}
-              paginas={dados.pageCount}
-              alterar={setPagina}
-            />
-          </CardContent>
-        </Card>
+        </TabelaPadrao>
       )}
     </div>
   );

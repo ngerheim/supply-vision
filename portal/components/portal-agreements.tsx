@@ -1,11 +1,12 @@
 'use client';
-import { PageHeader } from './page-header';
+import { PageHeader, LinhaDeAba } from './page-header';
+import { BarraFiltros, TabelaPadrao } from './tela-padrao';
 import { Plaquinha } from './plaquinha';
 import { correspondeSituacaoAcordo } from '@/lib/situacao-acordos';
 import { api, errorText, baixarArquivo } from '@/lib/api';
 import { correspondeBusca } from '@/lib/busca';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Download, Pencil, Plus, Search, Trash2, Upload } from 'lucide-react';
+import { Download, Pencil, Plus, Trash2, Upload } from 'lucide-react';
 import { Status as PatioStatus } from './status';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -48,7 +49,7 @@ export function Agreements({ data, onOpen, onNew, canWrite }: JsonData) {
   );
   return (
     <div className="patio-page">
-      <PageHeader
+      <LinhaDeAba
         actions={
           <>
             {' '}
@@ -72,17 +73,7 @@ export function Agreements({ data, onOpen, onNew, canWrite }: JsonData) {
           </>
         }
       />
-      <div className="flex flex-wrap gap-3">
-        <div className="relative min-w-0 basis-64 flex-1">
-          <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            className="pl-9"
-            aria-label="Pesquisar acordos"
-            placeholder="Buscar por nome, CNPJ ou cidade"
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-          />
-        </div>
+      <BarraFiltros busca={q} onBusca={setQ} placeholder="Buscar por nome, CNPJ ou cidade">
         <NativeSelect
           className="w-48"
           aria-label="Situação do acordo"
@@ -98,7 +89,7 @@ export function Agreements({ data, onOpen, onNew, canWrite }: JsonData) {
           <NativeSelectOption value="expired">Expirado</NativeSelectOption>
           <NativeSelectOption value="suspended">Suspenso</NativeSelectOption>
         </NativeSelect>
-      </div>
+      </BarraFiltros>
       <AgreementTable
         rows={rows}
         onOpen={onOpen}
@@ -120,13 +111,8 @@ function AgreementTable({ rows, onOpen, title }: JsonData) {
     r.effectiveStatus || r.status,
   ]);
   return (
-    <Card>
-      <CardHeader className="border-b">
-        <p className="patio-result-count">{title}</p>
-      </CardHeader>
-      <CardContent className="px-0 pb-0">
-        <Table>
-          <TableHeader>
+    <TabelaPadrao contador={title} pagina={<PaginacaoDeLista pagina={currentPage} paginas={pageCount} alterar={setPage} />}>
+      <TableHeader>
             <CabecalhoOrdenavel
               acoes={false}
               titulos={['Acordo', 'Fornecedor', 'Localidades', 'Situação']}
@@ -165,14 +151,7 @@ function AgreementTable({ rows, onOpen, title }: JsonData) {
                 </TableRow>
               ))}
           </TableBody>
-        </Table>
-      </CardContent>
-      <PaginacaoDeLista
-        pagina={currentPage}
-        paginas={pageCount}
-        alterar={setPage}
-      />
-    </Card>
+    </TabelaPadrao>
   );
 }
 
