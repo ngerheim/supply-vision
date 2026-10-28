@@ -2,6 +2,7 @@ import './apoio/logs-email.mjs';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { registerHooks } from 'node:module';
 import { DatabaseSync } from 'node:sqlite';
@@ -17,7 +18,7 @@ import { cnpjFicticio } from '../lib/consultas-fornecedor-ensaio.ts';
 const hooks=registerHooks({resolve(s,c,next){if(s==='next/server')return next('vinext/shims/server',c);if(s.startsWith('@/'))return next(new URL(`../${s.slice(2)}.ts`,import.meta.url).href,c);if(s==='./database')return next(new URL('../lib/database.ts',import.meta.url).href,c);return next(s,c);}});
 const banco=await import('../lib/database.ts'),rota=await import('../app/api/[...path]/route.ts');hooks.deregister();
 void test('pagamentos multipart: anexos, posse, download, transicoes e permissao',async t=>{
-  const pasta=fs.mkdtempSync(path.join(process.cwd(),'sv-pagamentos-fixture-')),db=bancoSqliteLocal({pastaPrivada:pasta,criar:true}),sql=new DatabaseSync(db.arquivo),chave=Symbol.for('supply-vision:banco'),anterior=globalThis[chave],senha=env.INITIAL_ADMIN_PASSWORD;
+  const pasta=fs.mkdtempSync(path.join(os.tmpdir(),'sv-pagamentos-fixture-')),db=bancoSqliteLocal({pastaPrivada:pasta,criar:true}),sql=new DatabaseSync(db.arquivo),chave=Symbol.for('supply-vision:banco'),anterior=globalThis[chave],senha=env.INITIAL_ADMIN_PASSWORD;
   globalThis[chave]=db;env.INITIAL_ADMIN_PASSWORD='senha-ficticia-pagamento-api';
   t.after(()=>{sql.close();db.fechar();globalThis[chave]=anterior;env.INITIAL_ADMIN_PASSWORD=senha;fs.rmSync(pasta,{recursive:true,force:true});});
   await banco.ensureDatabase();const admin=(await db.prepare('SELECT id FROM users LIMIT 1').first()).id;
