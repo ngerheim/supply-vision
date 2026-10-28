@@ -1,9 +1,8 @@
 import { localizarBanco } from './banco-local.mjs';
 // Teste HTTP real, sempre em um banco novo e local. Nunca aceita URL/banco externo.
-// npm run test:imports (requer npm run build). Evidências ficam no temporário do sistema.
+// npm run test:imports (requer npm run build). Evidências ficam em work/.
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawn, execFileSync } from 'node:child_process';
@@ -18,13 +17,8 @@ import { CABECALHOS_SEGURANCA } from '../lib/cabecalhos-seguranca.ts';
 import { passwordHash, PBKDF2_ITERACOES_LEGADO } from '../lib/criptografia.ts';
 
 const portal = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const checkout = path.resolve(portal, '..');
-const baseEvidencias = path.resolve(process.env.SV_IMPORT_STRESS_DIR || os.tmpdir());
-const relativoCheckout = path.relative(checkout, baseEvidencias);
-if (relativoCheckout === '' || (!path.isAbsolute(relativoCheckout) && relativoCheckout !== '..' && !relativoCheckout.startsWith(`..${path.sep}`))) {
-  throw new Error('SV_IMPORT_STRESS_DIR precisa ficar fora do checkout.');
-}
-const output = fs.mkdtempSync(path.join(baseEvidencias, 'import-stress-'));
+fs.mkdirSync(path.join(portal, 'work'), { recursive: true });
+const output = fs.mkdtempSync(path.join(fs.realpathSync.native(path.join(portal, 'work')), 'import-stress-'));
 const privadoFixture = path.join(output, 'privado');
 const state = path.join(privadoFixture, 'portal/banco/estado/state');
 const runtime = path.join(output, 'runtime');
