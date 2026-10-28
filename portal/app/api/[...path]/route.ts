@@ -226,6 +226,7 @@ async function GETInterno(request: NextRequest) {
   if(parts[0]==='estoque'){
     if(!pode(user,'baixa:abrir')&&!pode(user,'estoque:gerenciar'))return fail('Seu perfil não permite consultar estoque.',403);
     if(parts.length===2&&parts[1]==='saldos')return estoque.saldos(user,request.nextUrl.searchParams);
+    if(parts.length===2&&parts[1]==='entradas')return estoque.entradas(user,request.nextUrl.searchParams);
     if(parts.length===2&&parts[1]==='movimentos')return estoque.movimentos(user,request.nextUrl.searchParams);
     return fail('Rota não encontrada.',404);
   }
