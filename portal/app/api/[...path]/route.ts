@@ -25,6 +25,7 @@ import { centralApi } from '@/lib/central-api';
 import { solicitacoesApi } from '@/lib/solicitacoes-api';
 import { baixasApi } from '@/lib/baixas-api';
 import { estoqueApi } from '@/lib/estoque-api';
+import { pagamentosApi } from '@/lib/pagamentos-api';
 import { exportacoesApi } from '@/lib/exportacoes-api';
 import { bootstrapApi } from '@/lib/bootstrap-api';
 import { PORTAL_BUILD, TELA_DESATUALIZADA, buildDivergente, ehEscrita } from '@/lib/portal-build';
@@ -140,6 +141,7 @@ const central = centralApi(contexto);
 const solicitacoes = solicitacoesApi(contexto);
 const baixas = baixasApi(contexto);
 const estoque = estoqueApi(contexto);
+const pagamentos = pagamentosApi(contexto);
 const exportacoes = exportacoesApi(contexto);
 const inicializacao = bootstrapApi(contexto, acordos, importacoes);
 
@@ -230,6 +232,13 @@ async function GETInterno(request: NextRequest) {
   if(parts[0]==='catalogs'&&parts[1]==='items'){
     if(!pode(user,'baixa:abrir')&&!pode(user,'estoque:gerenciar'))return fail('Seu perfil não permite consultar itens.',403);
     return parts.length===2?baixas.listarItens(user,request.nextUrl.searchParams):fail('Rota não encontrada.',404);
+  }
+  if(parts[0]==='pagamentos'){
+    if(!pode(user,'solicitacao:abrir'))return fail('Seu perfil não permite consultar pagamentos.',403);
+    if(parts.length===1)return pagamentos.listar(user,request.nextUrl.searchParams);
+    if(parts.length===2)return pagamentos.detalhe(user,parts[1]);
+    if(parts.length===4&&parts[2]==='anexos')return pagamentos.download(user,parts[1],parts[3]);
+    return fail('Rota não encontrada.',404);
   }
   if (parts[0] === 'estoques') {
     if (!pode(user, 'baixa:abrir') && !pode(user, 'estoque:gerenciar')) return fail('Seu perfil não permite consultar estoques.', 403);
@@ -324,6 +333,12 @@ async function POSTInterno(request: NextRequest) {
   const user = await requireUser(request);
   if (!user) return fail('Sessão expirada.', 401);
   if (await first(VALIDACAO_ATIVA_SQL)) return denyWrite(request, 'Sistema em atualização, aguarde alguns instantes', 503, 'validacao');
+  if(partsOf(request)[0]==='pagamentos'){
+    const parts=partsOf(request);
+    if(parts.length===1){if(!pode(user,'solicitacao:abrir'))return denyWrite(request,'Seu perfil não permite abrir solicitações.');const bytes=await corpoBinarioLimitado(request,10*1024*1024+128*1024);if(bytes===null)return fail('Corpo da solicitação acima do limite de 10 MB.',413);return pagamentos.criar(new Request(request.url,{method:'POST',headers:request.headers,body:bytes.buffer.slice(bytes.byteOffset,bytes.byteOffset+bytes.byteLength) as ArrayBuffer}),user);}
+    if(parts.length===3&&parts[2]==='transicao'){if(!pode(user,'solicitacao:atender'))return denyWrite(request,'Seu perfil não permite atender solicitações.');return pagamentos.transicionar(request,user,parts[1]);}
+    return fail('Rota não encontrada.',404);
+  }
   if (parts[0] === 'baixas') {
     if (!pode(user, parts.length === 1 ? 'baixa:abrir' : 'baixa:atender')) return denyWrite(request, 'Seu perfil não permite esta operação.');
     if (parts.length === 1) return baixas.criar(request, user);

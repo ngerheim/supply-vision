@@ -31,6 +31,7 @@ import { Solicitacoes } from './portal-solicitacoes';
 import { CategoriasFornecedor } from './portal-categorias-fornecedor';
 import { Baixas } from './portal-baixas';
 import { Estoques, EntradaEstoque, SaldoEstoque } from './portal-estoques';
+import { Pagamentos } from './portal-pagamentos';
 
 export default function PortalApp() {
   const [session, setSession] = useState({ key: 0, message: '' });
@@ -51,6 +52,8 @@ function PortalSession({ message, endSession }: { message: string; endSession: (
   const [solicitacaoLinkVersion,setSolicitacaoLinkVersion]=useState(0);
   const [baixaLink,setBaixaLink]=useState<string|null>(null);
   const [baixaLinkVersion,setBaixaLinkVersion]=useState(0);
+  const [pagamentoLink,setPagamentoLink]=useState<string|null>(null);
+  const [pagamentoLinkVersion,setPagamentoLinkVersion]=useState(0);
   const [importAgreement,setImportAgreement]=useState('');
   const [sidebarCollapsed,setSidebarCollapsed]=useState(false);
   const intentionalLogout=useRef(false);
@@ -94,6 +97,7 @@ function PortalSession({ message, endSession }: { message: string; endSession: (
         if(rota.chamado)setTicketLinkVersion(value=>value+1);
         setSolicitacaoLink(rota.solicitacao);
         setBaixaLink(rota.baixa || null);
+        const pagamento=new URLSearchParams(window.location.search).get('pagamento');setPagamentoLink(pagamento);if(pagamento)setPagamentoLinkVersion(value=>value+1);
         if(rota.baixa)setBaixaLinkVersion(value=>value+1);
         if(rota.solicitacao)setSolicitacaoLinkVersion(value=>value+1);
         if(rota.aviso)setNotice({type:'error',text:rota.aviso});
@@ -134,8 +138,9 @@ function PortalSession({ message, endSession }: { message: string; endSession: (
   return <main className="min-h-screen bg-background text-foreground">
     <Sidebar nav={nav} setNav={navigate} user={user} busy={busy} onLogout={logout} navegarAviso={(link:string) => {
         const params = new URL(link, window.location.origin).searchParams;
-        const chamado = params.get('chamado'), solicitacao = params.get('solicitacao'), baixa = params.get('baixa');
+        const chamado = params.get('chamado'), solicitacao = params.get('solicitacao'), baixa = params.get('baixa'), pagamento=params.get('pagamento');
         if (baixa) navegacao.current?.navegar('baixas',baixa);
+        else if (pagamento) navegacao.current?.navegar('pagamentos',pagamento);
         else if (solicitacao) navegacao.current?.navegar('solicitacoes',solicitacao);
         else if (chamado) navegacao.current?.navegar('tickets',chamado);
         else window.location.assign(link);
@@ -154,6 +159,7 @@ function PortalSession({ message, endSession }: { message: string; endSession: (
       {pode(user, 'aba:solicitacoes')&&nav==='solicitacoes'&&<Solicitacoes key={`${solicitacaoLink}:${solicitacaoLinkVersion}`} user={user} initialDetail={solicitacaoLink} onOpen={(id:string|null)=>navegacao.current?.navegar('solicitacoes',id||undefined)}/>}
       {pode(user, 'aba:categorias')&&nav==='categorias'&&<CategoriasFornecedor/>}
       {pode(user, 'aba:baixas')&&nav==='baixas'&&<Baixas key={`${baixaLink}:${baixaLinkVersion}`} user={user} initialDetail={baixaLink} onOpen={(id:string|null)=>navegacao.current?.navegar('baixas',id||undefined)}/>}
+      {pode(user, 'aba:solicitacoes')&&nav==='pagamentos'&&<Pagamentos key={`${pagamentoLink}:${pagamentoLinkVersion}`} user={user} initialDetail={pagamentoLink} onOpen={(id:string|null)=>navegacao.current?.navegar('pagamentos',id||undefined)}/>}
       {pode(user, 'aba:estoques')&&nav==='estoques'&&<Estoques/>}
       {podeAcessarAba(user,'estoque-saldo')&&nav==='estoque-saldo'&&<SaldoEstoque user={user}/>}
       {podeAcessarAba(user,'estoque-entradas')&&nav==='estoque-entradas'&&<EntradaEstoque/>}

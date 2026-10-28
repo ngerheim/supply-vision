@@ -8,6 +8,7 @@ export const ABAS_NAVEGACAO = [
     { chave: 'tickets', slug: 'parcerias', label: 'Acordos' },
     { chave: 'solicitacoes', slug: 'cadastro-fornecedor', label: 'Cadastro de fornecedor' },
     { chave: 'baixas', slug: 'baixa-estoque', label: 'Baixa no estoque' },
+    { chave: 'pagamentos', slug: 'pagamento', label: 'Solicitação de pagamento' },
   ] },
   { aba: 'estoque', label: 'Estoque', subabas: [
     { chave: 'estoque-saldo', slug: 'saldo', label: 'Saldo' },
@@ -45,9 +46,10 @@ export const AVISO_AREA_RESTRITA = 'Seu perfil não tem acesso a esta área.';
 export const AVISO_CHAMADO_RESTRITO = 'Seu perfil permite consultar preços e acordos. O acesso a chamados é restrito.';
 const BUSCAR: EnderecoNavegacao = { aba: 'buscar', subaba: null };
 
-const ACAO_ABA: Partial<Record<Nav, Acao>> = { 'estoque-saldo': 'aba:baixas', 'estoque-entradas': 'aba:baixas' };
+const ACAO_ABA: Partial<Record<Nav, Acao>> = { 'estoque-saldo': 'aba:baixas', 'estoque-entradas': 'aba:baixas', pagamentos: 'aba:solicitacoes' };
 export function podeAcessarAba(usuario: UsuarioPermissao, chave: Nav): boolean {
   return pode(usuario, ACAO_ABA[chave] ?? (`aba:${chave}` as Acao));
+
 }
 export function abaDaChave(chave: Nav): DefinicaoAba {
   return ABAS_NAVEGACAO.find(aba => aba.subabas.some(sub => sub.chave === chave))!;
