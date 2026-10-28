@@ -2,9 +2,9 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-export function criarTemporarioTeste(prefixo, base = os.tmpdir()) {
+export function criarTemporarioTeste(prefixo) {
   // O caminho longo evita falhas de cpSync com TEMP em formato Windows 8.3.
-  return fs.mkdtempSync(path.join(fs.realpathSync.native(base), prefixo));
+  return fs.mkdtempSync(path.join(fs.realpathSync.native(os.tmpdir()), prefixo));
 }
 
 export function motivoPularIntegracaoWindows(env = process.env, plataforma = process.platform) {

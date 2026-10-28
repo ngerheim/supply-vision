@@ -2,6 +2,7 @@ import { portalPrivado } from '../scripts/configuracao.mjs';
 import { SCHEMA_CENTRAL } from './central-notificacoes.ts';
 import { SCHEMA_SOLICITACOES } from './solicitacoes-schema.ts';
 import { SCHEMA_BAIXAS } from './baixas-schema.ts';
+import { SCHEMA_PAGAMENTOS } from './pagamentos-schema.ts';
 import { MIGRAR_FILA_SOLICITACOES } from './fila-email-schema.ts';
 import { bancoSqliteLocal } from './sqlite-local.ts';
 import { SESSAO_INATIVIDADE_MS } from './politica-sessao.ts';
@@ -369,6 +370,12 @@ async function initialize() {
       incluir('INSERT OR IGNORE INTO schema_migrations(version,applied_at) VALUES(14,?)',[now()]);
       return comandos;
     });
+  }
+  if (!await db.prepare('SELECT 1 ok FROM schema_migrations WHERE version=15').first()) {
+    await db.batchConstruir(() => [
+      ...SCHEMA_PAGAMENTOS.map(sql => db.prepare(sql)),
+      db.prepare('INSERT OR IGNORE INTO schema_migrations(version,applied_at) VALUES(15,?)').bind(now()),
+    ]);
   }
   await db.prepare('PRAGMA optimize').run();
 }

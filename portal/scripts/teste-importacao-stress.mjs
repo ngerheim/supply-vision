@@ -180,12 +180,13 @@ try {
   await check('Servidor Node serve somente o build e mantem cabecalhos de seguranca', async () => {
     for (const rota of ['/', '/api/health', '/package.json', '/vite.config.ts', '/AGENTS.md', '/.env', '/.git/config', '/scripts/iniciar-portal.mjs', '/privado/portal/banco/estado/state/base.sqlite', '/%2e%2e/package.json', '/%5cprivado/base.sqlite']) {
       const r=await fetch(base+rota);
+      const resposta = await r.text();
+      if (r.status >= 500) fs.writeFileSync(path.join(output, `http-error-GET-${rota === '/' ? 'root' : encodeURIComponent(rota)}-${Date.now()}.txt`), `${rota}\nHTTP ${r.status}\n${resposta}`);
       assert.equal(r.status, ['/', '/api/health'].includes(rota)?200:404,rota);
       for(const [nome,valor] of Object.entries(CABECALHOS_SEGURANCA)) {
         const recebido = r.headers.get(nome);
         assert.equal(nome === 'Content-Security-Policy' ? recebido?.replace(/ 'nonce-[^']+'/g, '') : recebido, valor, rota+' '+nome);
       }
-      await r.arrayBuffer();
     }
   });
   await check('Login usa IP do socket e ignora cabecalhos de origem forjados', async () => {

@@ -8,6 +8,7 @@ import { exportarTabelas } from '../lib/exportacao-snapshot.ts';
 import { SCHEMA_RELATORIOS } from '../lib/relatorios.ts';
 import { SCHEMA_SOLICITACOES } from '../lib/solicitacoes-schema.ts';
 import { SCHEMA_BAIXAS } from '../lib/baixas-schema.ts';
+import { SCHEMA_PAGAMENTOS } from '../lib/pagamentos-schema.ts';
 import { MIGRAR_FILA_SOLICITACOES } from '../lib/fila-email-schema.ts';
 
 void test('exportacao mantem referencias quando exclusao ocorre durante leituras',async()=>{
@@ -19,6 +20,7 @@ void test('exportacao mantem referencias quando exclusao ocorre durante leituras
     for(const ddl of SCHEMA_RELATORIOS)reader.exec(ddl);
     for(const ddl of SCHEMA_SOLICITACOES)if(ddl.startsWith('CREATE TABLE'))reader.exec(ddl);
     for(const ddl of SCHEMA_BAIXAS)if(ddl.startsWith('CREATE TABLE'))reader.exec(ddl);
+    for(const ddl of SCHEMA_PAGAMENTOS)if(ddl.startsWith('CREATE TABLE'))reader.exec(ddl);
     for(const ddl of MIGRAR_FILA_SOLICITACOES)reader.exec(ddl);
     reader.exec("ALTER TABLE catalog_items ADD COLUMN unidade_estoque TEXT NOT NULL DEFAULT 'un' CHECK(unidade_estoque IN ('un','L','m','kg')); DROP TABLE IF EXISTS baixa_itens; CREATE TABLE baixa_itens(id TEXT PRIMARY KEY,baixa_id TEXT NOT NULL REFERENCES baixas_estoque(id),item_id TEXT NOT NULL REFERENCES catalog_items(id),quantidade_centesimos INTEGER NOT NULL,status TEXT NOT NULL DEFAULT 'pendente',motivo_recusa TEXT,atendente_id TEXT REFERENCES users(id),atendido_em TEXT,criado_em TEXT NOT NULL,atualizado_em TEXT NOT NULL,revision INTEGER NOT NULL DEFAULT 0,UNIQUE(baixa_id,item_id)); CREATE TABLE movimentos_estoque(id TEXT PRIMARY KEY,estoque_id TEXT NOT NULL REFERENCES estoques(id),item_id TEXT NOT NULL REFERENCES catalog_items(id),tipo TEXT NOT NULL,quantidade_centesimos INTEGER NOT NULL,documento TEXT,observacao TEXT,origem_tipo TEXT,origem_id TEXT,movimento_estornado_id TEXT UNIQUE REFERENCES movimentos_estoque(id),user_id TEXT REFERENCES users(id),data_movimento TEXT NOT NULL,criado_em TEXT NOT NULL,request_key TEXT,request_hash TEXT,UNIQUE(user_id,request_key));");
     reader.exec(`ALTER TABLE users ADD COLUMN daily_report_enabled INTEGER DEFAULT 0; ALTER TABLE users ADD COLUMN daily_report_time TEXT;
@@ -36,6 +38,9 @@ void test('exportacao mantem referencias quando exclusao ocorre durante leituras
     reader.prepare("INSERT INTO baixa_itens(id,baixa_id,item_id,quantidade_centesimos,criado_em,atualizado_em) VALUES('bi','bx','itm',200,'x','x')").run();
     reader.prepare("INSERT INTO baixa_andamentos(id,baixa_id,user_id,para_status,criado_em,request_key,request_hash) VALUES('ban','bx','u','aberta','x','chave-ficticia','hash-ficticio')").run();
     reader.prepare("INSERT INTO movimentos_estoque(id,estoque_id,item_id,tipo,quantidade_centesimos,origem_tipo,origem_id,user_id,data_movimento,criado_em,request_key,request_hash) VALUES('mov','est','itm','entrada',500,'entrada','origem-ficticia','u','2026-10-01','x','chave-movimento-ficticia','hash-movimento-ficticio')").run();
+    reader.prepare("INSERT INTO pagamentos(id,fornecedor,numero_oc,numero_nf,valor_centavos,vencimento,solicitante_id,criado_em,atualizado_em,request_key,request_hash) VALUES('pag','Fornecedor Ficticio','OC-1','NF-1',100,'2026-12-01','u','x','x','chave-ficticia','hash-ficticio')").run();
+    reader.prepare("INSERT INTO pagamento_anexos(id,pagamento_id,tipo,nome_arquivo,mime,tamanho,sha256,conteudo,criado_em,user_id) VALUES('anx','pag','oc','oc.pdf','application/pdf',5,'hash-ficticio',X'255044462D','x','u')").run();
+    reader.prepare("INSERT INTO pagamento_andamentos(id,pagamento_id,user_id,para_status,criado_em,request_key,request_hash) VALUES('pan','pag','u','aberta','x','chave-ficticia','hash-ficticio')").run();
     reader.prepare("INSERT INTO email_notifications(id,solicitacao_id,event_id,type,recipient_name,recipient_email,payload_json,next_attempt_at,dedupe_key,created_at,updated_at) VALUES('mail','sol','san','solicitacao_abertura','Pessoa ficticia','pessoa@example.com','{}','2026-01-01T00:00:00.000Z','dedupe-ficticio','2026-01-01T00:00:00.000Z','2026-01-01T00:00:00.000Z')").run();
     let lotes=0;
     const db={prepare:sql=>sql,batch:async queries=>{
@@ -68,7 +73,9 @@ void test('exportacao mantem referencias quando exclusao ocorre durante leituras
     assert.equal(tables.movimentosEstoque[0].id,'mov');
     assert.equal('request_key' in tables.movimentosEstoque[0],false);
     assert.equal('request_hash' in tables.movimentosEstoque[0],false);
-    for(const tabela of [tables.solicitacoes,tables.solicitacaoAndamentos,tables.baixasEstoque,tables.baixaAndamentos])
+    assert.equal(tables.pagamentos[0].codigo,'PAG-0001');assert.equal(tables.pagamentoAnexos[0].pagamento_id,'pag');assert.equal(tables.pagamentoAndamentos[0].pagamento_id,'pag');
+    assert.equal('conteudo' in tables.pagamentoAnexos[0],false);
+    for(const tabela of [tables.solicitacoes,tables.solicitacaoAndamentos,tables.baixasEstoque,tables.baixaAndamentos,tables.movimentosEstoque,tables.pagamentos,tables.pagamentoAndamentos])
       assert.equal(tabela.some(row=>'request_key' in row||'request_hash' in row),false);
     assert.equal(tables.users.some(u=>'password_hash' in u),false);
     assert.equal(tables.users.some(u=>'password_salt' in u),false);

@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { criarTemporarioTeste, motivoPularIntegracaoWindows } from './apoio/ambiente.mjs';
@@ -12,15 +13,11 @@ void test('integracao privilegiada exige chave explicita e Windows, mesmo com CI
   assert.equal(motivoPularIntegracaoWindows({ SV_TESTES_INTEGRACAO_WINDOWS: '1' }, 'win32'), false);
 });
 
-void test('temporario resolve alias antes de criar diretorio e copiar arvore', () => {
+void test('temporario cria diretorio fora do checkout e permite copiar arvore', () => {
   const raiz = criarTemporarioTeste('sv-temp-alias-');
   try {
-    const longo = path.join(raiz, 'automacao.ficticia com espacos');
-    const alias = path.join(raiz, 'alias');
-    fs.mkdirSync(longo);
-    fs.symlinkSync(longo, alias, process.platform === 'win32' ? 'junction' : 'dir');
-    const destino = criarTemporarioTeste('copia-', alias);
-    assert.equal(path.dirname(destino), fs.realpathSync.native(longo));
+    const destino = criarTemporarioTeste('copia-');
+    assert.equal(path.dirname(destino), fs.realpathSync.native(os.tmpdir()));
     const origem = path.join(raiz, 'origem');
     fs.mkdirSync(origem); fs.writeFileSync(path.join(origem, 'fixture.txt'), 'ficticio');
     fs.cpSync(origem, path.join(destino, 'scripts'), { recursive: true });
