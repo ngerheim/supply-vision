@@ -12,7 +12,7 @@ function form(oc=new Blob(['%PDF-1.7 ficticio']),nf=new Blob(['%PDF-1.7 ficticio
 async function upload(f,cookie=viewer,key='pagamento-http-chave-0001'){const r=await fetch(base+'pagamentos',{method:'POST',headers:{cookie,'idempotency-key':key},body:f,signal:AbortSignal.timeout(30000)});return{status:r.status,data:await r.json()};}
 assert.equal((await upload(form(new Blob(['texto invalido']),new Blob(['%PDF-1.7'])))).status,400);
 assert.equal((await upload(form(new Blob([new Uint8Array(5*1024*1024+1)]),new Blob(['%PDF-1.7'])),'', 'pagamento-http-grande-0001')).status,401);
-const grande=await upload(form(new Blob([new Uint8Array(5*1024*1024+1)]),new Blob(['%PDF-1.7'])),viewer,'pagamento-http-grande-0002');assert.equal(grande.status,400);
+const grande=await upload(form(new Blob([new Uint8Array(5*1024*1024+1)]),new Blob(['%PDF-1.7'])),viewer,'pagamento-http-grande-0002');assert.equal(grande.status,413);assert.equal(grande.data.error,'Cada anexo deve ter até 5 MB.');
 const aberta=await upload(form());assert.equal(aberta.status,201,JSON.stringify(aberta.data));assert.match(aberta.data.codigo,/^PAG-\d{4}$/);
 const rota=`pagamentos/${aberta.data.id}`,detalhe=await json(rota,{cookie:viewer});assert.equal(detalhe.status,200);assert.equal(detalhe.data.anexos.length,2);assert.equal(detalhe.data.pagamento.request_key,undefined);
 const download=await fetch(base+`${rota}/anexos/oc`,{headers:{cookie:viewer},signal:AbortSignal.timeout(30000)});assert.equal(download.status,200);assert.equal(download.headers.get('x-content-type-options'),'nosniff');assert.match(download.headers.get('content-disposition'),/attachment/);assert.equal(new TextDecoder().decode((await download.arrayBuffer()).slice(0,5)),'%PDF-');

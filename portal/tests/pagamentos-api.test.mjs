@@ -30,7 +30,7 @@ void test('pagamentos multipart: anexos, posse, download, transicoes e permissao
   assert.equal((await pedir('POST','pagamentos','viewer',form(undefined,undefined,{cnpj:'12345678000199'}))).status,400);
   assert.equal((await pedir('POST','pagamentos','viewer',form(undefined,undefined,{vencimento:'2026-02-30'}))).status,400);
   const png=new Blob([Uint8Array.of(137,80,78,71,13,10,26,10,0)]),jpg=new Blob([Uint8Array.of(255,216,255,217)]),assinaturas=await pedir('POST','pagamentos','viewer',form(png,jpg));assert.equal(assinaturas.status,201);const tipos=(await pedir('GET',`pagamentos/${assinaturas.data.id}`)).data.anexos.map(a=>a.mime);assert.deepEqual(tipos,['image/jpeg','image/png']);
-  const grande=await pedir('POST','pagamentos','viewer',form(new Blob([new Uint8Array(5*1024*1024+1)])));assert.equal(grande.status,400);
+  const grande=await pedir('POST','pagamentos','viewer',form(new Blob([new Uint8Array(5*1024*1024+1)])));assert.equal(grande.status,413);assert.equal(grande.data.error,'Cada anexo deve ter até 5 MB.');assert.equal(grande.headers.get('connection'),'close');
   const xml=await pedir('POST','pagamentos','outro',form(undefined,new Blob(['<?xml version="1.0"?><nfe/>']),{cnpj:cnpjFicticio(51)}));assert.equal(xml.status,201);
   const criada=await pedir('POST','pagamentos','viewer',form(),{'idempotency-key':'pagamento-teste-chave-001'});assert.equal(criada.status,201,JSON.stringify(criada.data));assert.match(criada.data.codigo,/^PAG-\d{4}$/);
   const filtrada=await pedir('GET','pagamentos?status=aberta&de=2026-10-01&ate=2026-10-31&busca=NF-1','viewer');assert.ok(filtrada.data.pagamentos.some(p=>p.id===criada.data.id));

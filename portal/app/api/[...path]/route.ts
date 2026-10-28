@@ -331,11 +331,18 @@ async function POSTInterno(request: NextRequest) {
   if (parts[0] === 'login') return login(request);
   if (parts[0] === 'logout') return logout(request);
   const user = await requireUser(request);
-  if (!user) return fail('Sessão expirada.', 401);
+  if (!user) {
+    if (parts[0] === 'pagamentos' && request.body) {
+      // Uploads multipart sem sessão também precisam ser drenados. Descarta
+      // desde o primeiro byte e permite até o limite total do upload + 1 MB.
+      await corpoBinarioLimitado(request, 0, { drenagemBytes: 11 * 1024 * 1024 + 128 * 1024 });
+    }
+    return fail('Sessão expirada.', 401);
+  }
   if (await first(VALIDACAO_ATIVA_SQL)) return denyWrite(request, 'Sistema em atualização, aguarde alguns instantes', 503, 'validacao');
   if(partsOf(request)[0]==='pagamentos'){
     const parts=partsOf(request);
-    if(parts.length===1){if(!pode(user,'solicitacao:abrir'))return denyWrite(request,'Seu perfil não permite abrir solicitações.');const bytes=await corpoBinarioLimitado(request,10*1024*1024+128*1024);if(bytes===null)return fail('Corpo da solicitação acima do limite de 10 MB.',413);return pagamentos.criar(new Request(request.url,{method:'POST',headers:request.headers,body:bytes.buffer.slice(bytes.byteOffset,bytes.byteOffset+bytes.byteLength) as ArrayBuffer}),user);}
+    if(parts.length===1){if(!pode(user,'solicitacao:abrir'))return denyWrite(request,'Seu perfil não permite abrir solicitações.');const bytes=await corpoBinarioLimitado(request,10*1024*1024+128*1024,{drenagemBytes:1024*1024});if(bytes===null)return ok({error:'Corpo da solicitação acima do limite de 10 MB.'},{status:413,headers:{connection:'close'}});return pagamentos.criar(new Request(request.url,{method:'POST',headers:request.headers,body:bytes.buffer.slice(bytes.byteOffset,bytes.byteOffset+bytes.byteLength) as ArrayBuffer}),user);}
     if(parts.length===3&&parts[2]==='transicao'){if(!pode(user,'solicitacao:atender'))return denyWrite(request,'Seu perfil não permite atender solicitações.');return pagamentos.transicionar(request,user,parts[1]);}
     return fail('Rota não encontrada.',404);
   }
