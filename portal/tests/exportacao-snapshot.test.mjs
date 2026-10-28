@@ -15,7 +15,7 @@ void test('exportacao mantem referencias quando exclusao ocorre durante leituras
   const reader=new DatabaseSync(arquivo),writer=new DatabaseSync(arquivo);
   try {
     reader.exec('PRAGMA journal_mode=WAL');
-    for(const [,ddl] of fs.readFileSync(new URL('../lib/database.ts',import.meta.url),'utf8').matchAll(/`(CREATE TABLE IF NOT EXISTS [^`]+)`/g))if(!ddl.includes('${'))reader.exec(ddl);
+    for(const [,ddl] of fs.readFileSync(new URL('../lib/database.ts',import.meta.url),'utf8').matchAll(/`(CREATE TABLE IF NOT EXISTS [^`]+)`/g))reader.exec(ddl);
     for(const ddl of SCHEMA_RELATORIOS)reader.exec(ddl);
     for(const ddl of SCHEMA_SOLICITACOES)if(ddl.startsWith('CREATE TABLE'))reader.exec(ddl);
     for(const ddl of SCHEMA_BAIXAS)if(ddl.startsWith('CREATE TABLE'))reader.exec(ddl);

@@ -16,7 +16,7 @@ const user = { id: 'u', role: 'admin' };
 function fixture(t) {
   const db = new DatabaseSync(':memory:');
   t.after(() => db.close());
-  for (const [, ddl] of fs.readFileSync(new URL('../lib/database.ts', import.meta.url), 'utf8').matchAll(/`(CREATE TABLE IF NOT EXISTS [^`]+)`/g)) if(!ddl.includes('${')) db.exec(ddl);
+  for (const [, ddl] of fs.readFileSync(new URL('../lib/database.ts', import.meta.url), 'utf8').matchAll(/`(CREATE TABLE IF NOT EXISTS [^`]+)`/g)) db.exec(ddl);
   db.exec("ALTER TABLE catalog_items ADD COLUMN unidade_estoque TEXT NOT NULL DEFAULT 'un' CHECK(unidade_estoque IN ('un','L','m','kg'))");
   for (const tabela of ['agreements', 'agreement_items', 'users', ...TABELAS_CADASTRO]) db.exec(`ALTER TABLE ${tabela} ADD COLUMN revision INTEGER NOT NULL DEFAULT 0`);
   for (const sql of TRIGGERS_REVISAO) db.exec(sql);

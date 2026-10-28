@@ -336,12 +336,12 @@ async function initialize() {
       incluir(`INSERT INTO baixa_itens_nova(id,baixa_id,item_id,quantidade_centesimos,status,motivo_recusa,atendente_id,atendido_em,criado_em,atualizado_em,revision)
         SELECT b.id,b.baixa_id,m.novo_id,b.quantidade_centesimos,b.status,b.motivo_recusa,b.atendente_id,b.atendido_em,b.criado_em,b.atualizado_em,b.revision
         FROM baixa_itens b JOIN estoque_item_mapa m ON m.antigo_id=b.item_id ORDER BY b.rowid`);
-      const ddlMovimentos=(tabela:string)=>`CREATE TABLE IF NOT EXISTS ${tabela} (id TEXT PRIMARY KEY, estoque_id TEXT NOT NULL REFERENCES estoques(id),
-        item_id TEXT NOT NULL REFERENCES catalog_items(id), tipo TEXT NOT NULL CHECK(tipo IN ('entrada','saida','ajuste','estorno')),
-        quantidade_centesimos INTEGER NOT NULL CHECK(quantidade_centesimos<>0), documento TEXT CHECK(documento IS NULL OR length(documento)<=60),
-        observacao TEXT CHECK(observacao IS NULL OR length(observacao)<=300), origem_tipo TEXT, origem_id TEXT,
-        movimento_estornado_id TEXT UNIQUE REFERENCES ${tabela}(id), user_id TEXT REFERENCES users(id),
-        data_movimento TEXT NOT NULL, criado_em TEXT NOT NULL, request_key TEXT, request_hash TEXT, UNIQUE(user_id,request_key))`;
+      const ddlMovimentos=(tabela:string)=>'CREATE TABLE IF NOT EXISTS '+tabela+' (id TEXT PRIMARY KEY, estoque_id TEXT NOT NULL REFERENCES estoques(id), '+
+        "item_id TEXT NOT NULL REFERENCES catalog_items(id), tipo TEXT NOT NULL CHECK(tipo IN ('entrada','saida','ajuste','estorno')), "+
+        'quantidade_centesimos INTEGER NOT NULL CHECK(quantidade_centesimos<>0), documento TEXT CHECK(documento IS NULL OR length(documento)<=60), '+
+        'observacao TEXT CHECK(observacao IS NULL OR length(observacao)<=300), origem_tipo TEXT, origem_id TEXT, '+
+        'movimento_estornado_id TEXT UNIQUE REFERENCES '+tabela+'(id), user_id TEXT REFERENCES users(id), '+
+        'data_movimento TEXT NOT NULL, criado_em TEXT NOT NULL, request_key TEXT, request_hash TEXT, UNIQUE(user_id,request_key))';
       incluir(ddlMovimentos(possuiMovimentos?'movimentos_estoque_nova':'movimentos_estoque'));
       if(possuiMovimentos){
       incluir(`INSERT INTO movimentos_estoque_nova(id,estoque_id,item_id,tipo,quantidade_centesimos,documento,observacao,origem_tipo,origem_id,movimento_estornado_id,user_id,data_movimento,criado_em,request_key,request_hash)
