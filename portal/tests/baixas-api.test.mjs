@@ -58,7 +58,7 @@ void test('placas antigas e Mercosul: normalizacao, exibicao e entradas invalida
 
 void test('Baixa no estoque pelo roteador e SQLite reais', async (t) => {
   const pasta = fs.mkdtempSync(path.join(os.tmpdir(), 'sv-baixas-'));
-  const pastaBackup=fs.mkdtempSync(path.join(process.cwd(),'..','.fixture-backup-baixas-'));
+  const pastaBackup=fs.mkdtempSync(path.join(os.tmpdir(),'sv-fixture-backup-baixas-'));
   const db = bancoSqliteLocal({ pastaPrivada: pasta, criar: true }),
     sql = new DatabaseSync(db.arquivo);
   const chave = Symbol.for('supply-vision:banco'),
