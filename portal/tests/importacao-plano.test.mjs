@@ -110,7 +110,7 @@ void test('impressao canonica ignora ordem e rotulos; inclui cada valor persisti
   assert.equal(hash([{ ...row, brands: '' }]), hash([{ ...row, brands: null }]));
 });
 
-const pedido = () => new Request('http://fixture', { method: 'POST', body: '{}' });
+const pedido = (body = {}) => new Request('http://fixture', { method: 'POST', body: JSON.stringify(body) });
 void test('todos os escritores de cadastros e De/Para respeitam a reserva ate o ultimo lote', { timeout: 10000 }, async t => {
   const f = fixture(t), previa = await (await f.importar()).json();
   let anunciar, continuar;
@@ -134,7 +134,7 @@ void test('todos os escritores de cadastros e De/Para respeitam a reserva ate o 
   assert.equal((await publicacao).status, 200);
   assert.equal(f.db.prepare('SELECT COUNT(*) n FROM travas').get().n, 0);
   // A falha de validacao tambem libera a reserva para a proxima importacao.
-  assert.equal((await f.catalogos.createCatalog(pedido(), user, 'items')).status, 400);
+  assert.equal((await f.catalogos.createCatalog(pedido({ name: '' }), user, 'items')).status, 400);
   assert.equal(f.db.prepare('SELECT COUNT(*) n FROM travas').get().n, 0);
 });
 
@@ -174,6 +174,13 @@ void test('catálogo de itens cria e edita unidade de estoque', async t => {
   const editar=await f.catalogos.updateCatalog(new Request('http://fixture',{method:'PUT',body:JSON.stringify({name:'Item com unidade fictício',unidadeEstoque:'kg',expectedRevision:0})}),user,'items',criado.id);
   assert.equal(editar.status,200);
   assert.equal(f.db.prepare('SELECT unidade_estoque FROM catalog_items WHERE id=?').get(criado.id).unidade_estoque,'kg');
+  const legado=await f.catalogos.createCatalog(new Request('http://fixture',{method:'POST',body:JSON.stringify({name:'Item legado sem unidade'})}),user,'items');
+  assert.equal(legado.status,201);
+  const legadoId=(await legado.json()).id;
+  assert.equal(f.db.prepare('SELECT unidade_estoque FROM catalog_items WHERE id=?').get(legadoId).unidade_estoque,'un');
+  const preservar=await f.catalogos.updateCatalog(new Request('http://fixture',{method:'PUT',body:JSON.stringify({name:'Item legado sem unidade',expectedRevision:0})}),user,'items',legadoId);
+  assert.equal(preservar.status,200);
+  assert.equal(f.db.prepare('SELECT unidade_estoque FROM catalog_items WHERE id=?').get(legadoId).unidade_estoque,'un');
   assert.equal((await f.catalogos.createCatalog(new Request('http://fixture',{method:'POST',body:JSON.stringify({name:'Unidade inválida',unidadeEstoque:'cx'})}),user,'items')).status,400);
 });
 

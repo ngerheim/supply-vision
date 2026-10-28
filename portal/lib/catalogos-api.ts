@@ -32,7 +32,7 @@ export function catalogosApi(contexto: ContextoApi) {
   async function deleteCatalog(user: User, type: string, recordId: string, expectedRevision: number | null, donoTrava: string) {
     const cfg = Object.hasOwn(catalogConfig, type) ? catalogConfig[type] : null;
     if (!cfg) return fail('Cadastro inválido.');
-    const existing = await first<{ id: string; active: number; revision: number }>(`SELECT * FROM ${cfg.table} WHERE id=?`, [recordId]);
+    const existing = await first<{ id: string; active: number; revision: number; unidade_estoque?: string }>(`SELECT * FROM ${cfg.table} WHERE id=?`, [recordId]);
     if (!existing) return fail('Cadastro não encontrado.', 404);
     if(!revisaoConfere(expectedRevision,existing.revision))return fail('Registro alterado. Atualize a lista antes de excluir.',409);
 
@@ -82,8 +82,9 @@ export function catalogosApi(contexto: ContextoApi) {
       values = [recordId, textValue(body.legalName) || textValue(body.tradeName), textValue(body.tradeName), normalizeCnpj(body.cnpj), nullableText(body.city), nullableText(body.state)?.toUpperCase().slice(0,2) ?? null, timestamp, timestamp];
     } else if (type === 'items') {
       if (!textValue(body.name)) return fail('Informe o nome da peça ou serviço.');
-      if (!['un','L','m','kg'].includes(textValue(body.unidadeEstoque))) return fail('Selecione a unidade de estoque.');
-      sql = 'INSERT INTO catalog_items (id,name,active,unidade_estoque) VALUES (?,?,1,?)'; values = [recordId, normalizeText(body.name), body.unidadeEstoque];
+      const unidadeEstoque = textValue(body.unidadeEstoque) || 'un';
+      if (!['un','L','m','kg'].includes(unidadeEstoque)) return fail('Selecione uma unidade de estoque válida.');
+      sql = 'INSERT INTO catalog_items (id,name,active,unidade_estoque) VALUES (?,?,1,?)'; values = [recordId, normalizeText(body.name), unidadeEstoque];
     } else if (type === 'models') {
       if (!textValue(body.name)) return fail('Informe o modelo.');
       sql = 'INSERT INTO vehicle_models (id,name,active) VALUES (?,?,1)'; values = [recordId, normalizeText(body.name)];
@@ -110,7 +111,7 @@ export function catalogosApi(contexto: ContextoApi) {
     if (!cfg) return fail('Cadastro inválido.');
     const body = await jsonBody<CatalogInput>(request);
     exigeCamposDeCatalogo(body);
-    const existing = await first<{ id: string; active: number; revision: number }>(`SELECT * FROM ${cfg.table} WHERE id=?`, [recordId]);
+    const existing = await first<{ id: string; active: number; revision: number; unidade_estoque?: string }>(`SELECT * FROM ${cfg.table} WHERE id=?`, [recordId]);
     if (!existing) return fail('Cadastro não encontrado.', 404);
     if(!revisaoConfere(body.expectedRevision,existing.revision))return fail('Cadastro alterado. Atualize a lista antes de salvar.',409);
     const active = situacaoAtiva(body.active, existing.active);
@@ -121,8 +122,9 @@ export function catalogosApi(contexto: ContextoApi) {
         escrita = rawDb().prepare('UPDATE suppliers SET legal_name=?,trade_name=?,cnpj=?,city=?,state=?,active=?,updated_at=? WHERE id=? AND revision=?').bind(textValue(body.legalName) || textValue(body.tradeName), textValue(body.tradeName), normalizeCnpj(body.cnpj), nullableText(body.city), nullableText(body.state)?.toUpperCase().slice(0,2) ?? null, active, now(), recordId,existing.revision);
       } else if (type === 'items') {
         if (!textValue(body.name)) return fail('Informe o nome da peça ou serviço.');
-        if (!['un','L','m','kg'].includes(textValue(body.unidadeEstoque))) return fail('Selecione a unidade de estoque.');
-        escrita = rawDb().prepare('UPDATE catalog_items SET name=?,active=?,unidade_estoque=? WHERE id=? AND revision=?').bind(normalizeText(body.name), active, body.unidadeEstoque, recordId,existing.revision);
+        const unidadeEstoque = body.unidadeEstoque === undefined ? existing.unidade_estoque || 'un' : textValue(body.unidadeEstoque) || 'un';
+        if (!['un','L','m','kg'].includes(unidadeEstoque)) return fail('Selecione uma unidade de estoque válida.');
+        escrita = rawDb().prepare('UPDATE catalog_items SET name=?,active=?,unidade_estoque=? WHERE id=? AND revision=?').bind(normalizeText(body.name), active, unidadeEstoque, recordId,existing.revision);
       } else if (type === 'models') {
         if (!textValue(body.name)) return fail('Informe o modelo.');
         escrita = rawDb().prepare('UPDATE vehicle_models SET name=?,active=? WHERE id=? AND revision=?').bind(normalizeText(body.name), active, recordId,existing.revision);
