@@ -1,13 +1,17 @@
-import { pode, type UsuarioPermissao } from './permissoes.ts';
+import { pode, type Acao, type UsuarioPermissao } from './permissoes.ts';
 import type { Role } from './domain.ts';
 
 export const ABAS_NAVEGACAO = [
   { aba: 'buscar', label: 'Buscar', subabas: [{ chave: 'search', slug: null, label: 'Buscar' }] },
   { aba: 'manutencao', label: 'Manutenção', subabas: [{ chave: 'maintenance', slug: null, label: 'Manutenção' }] },
   { aba: 'chamados', label: 'Chamados', subabas: [
-    { chave: 'tickets', slug: 'parcerias', label: 'Parcerias' },
+    { chave: 'tickets', slug: 'parcerias', label: 'Acordos' },
     { chave: 'solicitacoes', slug: 'cadastro-fornecedor', label: 'Cadastro de fornecedor' },
     { chave: 'baixas', slug: 'baixa-estoque', label: 'Baixa no estoque' },
+  ] },
+  { aba: 'estoque', label: 'Estoque', subabas: [
+    { chave: 'estoque-saldo', slug: 'saldo', label: 'Saldo' },
+    { chave: 'estoque-entradas', slug: 'entradas', label: 'Entradas' },
   ] },
   { aba: 'acordos', label: 'Acordos', subabas: [
     { chave: 'agreements', slug: 'acordos', label: 'Acordos' },
@@ -33,7 +37,7 @@ export type DefinicaoSubaba = DefinicaoAba['subabas'][number];
 export type Nav = DefinicaoSubaba['chave'];
 export type EnderecoNavegacao = { aba: Aba; subaba: DefinicaoSubaba['slug'] };
 export const GRUPOS_NAVEGACAO = [
-  { nome: 'Consulta', abas: ['buscar', 'manutencao', 'chamados'] },
+  { nome: 'Consulta', abas: ['buscar', 'manutencao', 'chamados', 'estoque'] },
   { nome: 'Suprimentos', abas: ['acordos', 'cadastros'] },
   { nome: 'Administração', abas: ['administracao'] },
 ] as const;
@@ -41,8 +45,9 @@ export const AVISO_AREA_RESTRITA = 'Seu perfil não tem acesso a esta área.';
 export const AVISO_CHAMADO_RESTRITO = 'Seu perfil permite consultar preços e acordos. O acesso a chamados é restrito.';
 const BUSCAR: EnderecoNavegacao = { aba: 'buscar', subaba: null };
 
+const ACAO_ABA: Partial<Record<Nav, Acao>> = { 'estoque-saldo': 'aba:baixas', 'estoque-entradas': 'aba:baixas' };
 export function podeAcessarAba(usuario: UsuarioPermissao, chave: Nav): boolean {
-  return pode(usuario, `aba:${chave}`);
+  return pode(usuario, ACAO_ABA[chave] ?? (`aba:${chave}` as Acao));
 }
 export function abaDaChave(chave: Nav): DefinicaoAba {
   return ABAS_NAVEGACAO.find(aba => aba.subabas.some(sub => sub.chave === chave))!;

@@ -17,6 +17,7 @@ function fixture(t) {
   const db = new DatabaseSync(':memory:');
   t.after(() => db.close());
   for (const [, ddl] of fs.readFileSync(new URL('../lib/database.ts', import.meta.url), 'utf8').matchAll(/`(CREATE TABLE IF NOT EXISTS [^`]+)`/g)) db.exec(ddl);
+  db.exec("ALTER TABLE catalog_items ADD COLUMN unidade_estoque TEXT NOT NULL DEFAULT 'un' CHECK(unidade_estoque IN ('un','L','m','kg'))");
   for (const tabela of ['agreements', 'agreement_items', 'users', ...TABELAS_CADASTRO]) db.exec(`ALTER TABLE ${tabela} ADD COLUMN revision INTEGER NOT NULL DEFAULT 0`);
   for (const sql of TRIGGERS_REVISAO) db.exec(sql);
   db.exec(`INSERT INTO suppliers(id,legal_name,trade_name,cnpj,created_at,updated_at) VALUES('s','Fixture','Fixture','11222333000181','x','x');
@@ -109,7 +110,7 @@ void test('impressao canonica ignora ordem e rotulos; inclui cada valor persisti
   assert.equal(hash([{ ...row, brands: '' }]), hash([{ ...row, brands: null }]));
 });
 
-const pedido = () => new Request('http://fixture', { method: 'POST', body: '{}' });
+const pedido = (body = {}) => new Request('http://fixture', { method: 'POST', body: JSON.stringify(body) });
 void test('todos os escritores de cadastros e De/Para respeitam a reserva ate o ultimo lote', { timeout: 10000 }, async t => {
   const f = fixture(t), previa = await (await f.importar()).json();
   let anunciar, continuar;
@@ -133,7 +134,7 @@ void test('todos os escritores de cadastros e De/Para respeitam a reserva ate o 
   assert.equal((await publicacao).status, 200);
   assert.equal(f.db.prepare('SELECT COUNT(*) n FROM travas').get().n, 0);
   // A falha de validacao tambem libera a reserva para a proxima importacao.
-  assert.equal((await f.catalogos.createCatalog(pedido(), user, 'items')).status, 400);
+  assert.equal((await f.catalogos.createCatalog(pedido({ name: '' }), user, 'items')).status, 400);
   assert.equal(f.db.prepare('SELECT COUNT(*) n FROM travas').get().n, 0);
 });
 
@@ -145,11 +146,12 @@ void test('cadastro em andamento impede a importacao de resolver um plano parcia
   f.noLote(async statements => {
     if (statements.some(s => s.sql.includes('INSERT INTO catalog_items'))) { anunciar(); await aguardar; }
   });
-  const cadastro = f.catalogos.createCatalog(new Request('http://fixture', { method: 'POST', body: JSON.stringify({ name: 'NOVO ITEM FICTICIO' }) }), user, 'items');
+  const cadastro = f.catalogos.createCatalog(new Request('http://fixture', { method: 'POST', body: JSON.stringify({ name: 'NOVO ITEM FICTICIO', unidadeEstoque:'kg' }) }), user, 'items');
   await chegou;
   try { assert.equal((await f.importar()).status, 409); }
   finally { continuar(); }
   assert.equal((await cadastro).status, 201);
+  assert.equal(f.db.prepare("SELECT unidade_estoque FROM catalog_items WHERE name='NOVO ITEM FICTICIO'").get().unidade_estoque,'kg');
   assert.equal((await f.importar()).status, 200);
   assert.equal(f.db.prepare('SELECT COUNT(*) n FROM travas').get().n, 0);
 });
@@ -158,9 +160,28 @@ void test('falha de escrita em cadastro libera a reserva sem gravar parcialmente
   const f = fixture(t);
   f.db.exec("CREATE TRIGGER falha_fixture BEFORE INSERT ON catalog_items BEGIN SELECT RAISE(ABORT, 'falha sintetica'); END");
   const antes = f.snapshot();
-  await assert.rejects(f.catalogos.createCatalog(new Request('http://fixture', { method: 'POST', body: JSON.stringify({ name: 'NOVO ITEM FICTICIO' }) }), user, 'items'), /falha sintetica/);
+  await assert.rejects(f.catalogos.createCatalog(new Request('http://fixture', { method: 'POST', body: JSON.stringify({ name: 'NOVO ITEM FICTICIO', unidadeEstoque:'un' }) }), user, 'items'), /falha sintetica/);
   assert.equal(f.snapshot(), antes);
   assert.equal(f.db.prepare('SELECT COUNT(*) n FROM travas').get().n, 0);
+});
+
+void test('catálogo de itens cria e edita unidade de estoque', async t => {
+  const f=fixture(t);
+  const criar=await f.catalogos.createCatalog(new Request('http://fixture',{method:'POST',body:JSON.stringify({name:'Item com unidade fictício',unidadeEstoque:'L'})}),user,'items');
+  assert.equal(criar.status,201);
+  const criado=await criar.json();
+  assert.equal(f.db.prepare('SELECT unidade_estoque FROM catalog_items WHERE id=?').get(criado.id).unidade_estoque,'L');
+  const editar=await f.catalogos.updateCatalog(new Request('http://fixture',{method:'PUT',body:JSON.stringify({name:'Item com unidade fictício',unidadeEstoque:'kg',expectedRevision:0})}),user,'items',criado.id);
+  assert.equal(editar.status,200);
+  assert.equal(f.db.prepare('SELECT unidade_estoque FROM catalog_items WHERE id=?').get(criado.id).unidade_estoque,'kg');
+  const legado=await f.catalogos.createCatalog(new Request('http://fixture',{method:'POST',body:JSON.stringify({name:'Item legado sem unidade'})}),user,'items');
+  assert.equal(legado.status,201);
+  const legadoId=(await legado.json()).id;
+  assert.equal(f.db.prepare('SELECT unidade_estoque FROM catalog_items WHERE id=?').get(legadoId).unidade_estoque,'un');
+  const preservar=await f.catalogos.updateCatalog(new Request('http://fixture',{method:'PUT',body:JSON.stringify({name:'Item legado sem unidade',expectedRevision:0})}),user,'items',legadoId);
+  assert.equal(preservar.status,200);
+  assert.equal(f.db.prepare('SELECT unidade_estoque FROM catalog_items WHERE id=?').get(legadoId).unidade_estoque,'un');
+  assert.equal((await f.catalogos.createCatalog(new Request('http://fixture',{method:'POST',body:JSON.stringify({name:'Unidade inválida',unidadeEstoque:'cx'})}),user,'items')).status,400);
 });
 
 void test('escritor que perdeu a reserva durante a leitura do corpo nao altera referencias', async t => {

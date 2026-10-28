@@ -269,7 +269,10 @@ void test('cadastro bloqueia envio e fechamento; conflito preserva rascunho e re
     onClose: () => closed++,
   };
   const h = await mount('portal-catalogs', 'CatalogDialog', props);
+  assert.equal(h.find(n => n.type === 'select').length,1);
   h.one('Input').onChange({ target: { value: 'Rascunho fictício' } });
+  h.render();
+  h.one('select').onChange({target:{value:'kg'}});
   h.render();
   h.one('Button', (p) => p.children?.includes('Salvar')).onClick();
   h.render({
@@ -281,6 +284,7 @@ void test('cadastro bloqueia envio e fechamento; conflito preserva rascunho e re
   h.one('Dialog').onOpenChange(false);
   h.one('Button', (p) => p.children?.includes('Salvar')).onClick();
   assert.equal(saved.length, 1);
+  assert.equal(saved[0].unidadeEstoque,'kg');
   assert.equal(closed, 0);
   h.render({ ...props, busy: false });
   assert.equal(h.one('Input').value, 'Rascunho fictício');

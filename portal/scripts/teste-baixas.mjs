@@ -38,17 +38,17 @@ const pedir = async (rota, method = 'GET', body, cookie = admin, chave) => {
   });
   return { status: r.status, data: await r.json() };
 };
-const catalogoAtual=(await pedir('itens')).data.itens;
+const catalogoAtual=(await pedir('catalogs/items')).data.itens;
 const obterItem=async(descricao,unidade)=>{
   const existente=catalogoAtual.find(i=>i.descricao===descricao&&i.unidade===unidade);
   if(existente){
     if(!existente.ativo){
-      const ativado=await pedir(`itens/${existente.id}`,'PUT',{ativo:true,expectedRevision:existente.revision});
+      const ativado=await pedir(`catalogs/items/${existente.id}`,'PUT',{ativo:true,unidadeEstoque:unidade, name:descricao,expectedRevision:existente.revision});
       assert.equal(ativado.status,200,JSON.stringify(ativado.data));
     }
     return existente;
   }
-  const criado=await pedir('itens','POST',{descricao,unidade});
+  const criado=await pedir('catalogs/items','POST',{name:descricao,unidadeEstoque:unidade});
   assert.equal(criado.status,201,JSON.stringify(criado.data));
   return{id:criado.data.id,descricao,unidade};
 };
@@ -103,6 +103,9 @@ const entrada = {
   placa: 'fic-1234',
   itens:itensPadrao,
 };
+const hoje = new Intl.DateTimeFormat('en-CA',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+const estoqueInicial=await pedir('estoque/entradas','POST',{estoqueId:estoques[0].id,dataMovimento:hoje,documento:'Entrada teste fictícia',observacao:'Semente HTTP fictícia',itens:[{itemId:itemUn.id,quantidade:100},{itemId:itemL.id,quantidade:100}]},cookies.editor,'entrada-http-baixas');
+assert.equal(estoqueInicial.status,200,JSON.stringify(estoqueInicial.data));
 const criada = await pedir(
   'baixas',
   'POST',
@@ -173,6 +176,14 @@ assert.equal(
   4,
 );
 assert.deepEqual((await pedir(rota,'GET',undefined,cookies.viewer)).data.itens.map(i=>i.status),['baixado','baixado']);
+const saldoAposBaixa=(await pedir(`estoque/saldos?estoqueId=${estoques[0].id}`, 'GET',undefined,cookies.viewer)).data.saldos;
+assert.equal(saldoAposBaixa.find(i=>i.item_id===itemUn.id).saldo,98);
+const movimentosEntrada=(await pedir(`estoque/movimentos?estoqueId=${estoques[0].id}&itemId=${itemUn.id}`,'GET',undefined,cookies.viewer)).data.movimentos;
+const movimentoEntrada=movimentosEntrada.find(m=>m.origem_tipo==='entrada');
+assert.ok(movimentosEntrada.some(m=>m.tipo==='saida'&&m.origem_tipo==='baixa_item'));
+const estorno=await pedir(`estoque/movimentos/${movimentoEntrada.id}/estorno`,'POST',{motivo:'Correção HTTP fictícia'},cookies.editor,'estorno-http-baixas');
+assert.equal(estorno.status,200,JSON.stringify(estorno.data));
+assert.equal((await pedir(`estoque/movimentos/${movimentoEntrada.id}/estorno`,'POST',{motivo:'Correção HTTP fictícia'},cookies.editor)).data.codigo,'duplicado');
 const nova = await pedir(
   'baixas',
   'POST',
@@ -258,6 +269,4 @@ assert.equal(
   ).status,
   400,
 );
-console.log(
-  '[OK] Baixas HTTP: catálogo, itens, edição, atendimento parcial e legado, perfis, placa, idempotencia, duplicidade, revision, transicoes, Central e estoques.',
-);
+console.log('[OK] Baixas HTTP: catálogo, itens, edição, entrada, saída automática, saldo, estorno, atendimento parcial, perfis, idempotência, revision e estoques.');

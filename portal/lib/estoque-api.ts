@@ -1,0 +1,51 @@
+import type { ContextoApi, User } from './api-compartilhada.ts';
+import { pode } from './permissoes.ts';
+import { comAcaoEscrita } from './autor-escrita.ts';
+import { chaveIdempotencia, EntradaInvalida } from './limites-entrada.ts';
+import { normalizeImportText } from './domain.ts';
+import { paginaSolicitada } from './paginacao.ts';
+
+type Corpo = Record<string, unknown>;
+const hojeBrasilia = () => new Intl.DateTimeFormat('en-CA',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+const dataValida = (s: unknown): s is string => typeof s==='string' && /^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(Date.parse(`${s}T00:00:00Z`)) && new Date(`${s}T00:00:00Z`).toISOString().slice(0,10)===s;
+
+export function estoqueApi(ctx: ContextoApi) {
+  const {rawDb,all,first,id,now,ok,fail,jsonBody,tokenHash}=ctx;
+  const stmt=(sql:string,v:unknown[]=[])=>rawDb().prepare(sql).bind(...v);
+  const erroDuplicado=()=>ctx.ok({error:'Este movimento já foi estornado.',codigo:'duplicado'},{status:409});
+  async function gravar(request:Request,user:User,ajuste:boolean){
+    return comAcaoEscrita(ajuste?'estoque:gerenciar':'baixa:atender',async()=>{
+      if(!pode(user,ajuste?'estoque:gerenciar':'baixa:atender'))return fail('Seu perfil não permite esta operação.',403);
+      const body=await jsonBody<Corpo>(request), estoqueId=typeof body.estoqueId==='string'?body.estoqueId:'',data=body.dataMovimento;
+      const estoque=await first<{id:string}>('SELECT id FROM estoques WHERE id=? AND ativo=1',[estoqueId]);if(!estoque)return fail('Estoque inexistente ou inativo.');
+      if(!dataValida(data)||data>hojeBrasilia())return fail('Informe uma data civil válida que não seja futura.');
+      const documento=typeof body.documento==='string'?body.documento.trim():'';
+      const observacao=typeof body.observacao==='string'?body.observacao.trim():'';
+      if(documento.length>60||observacao.length>300||ajuste&&!observacao)return fail(ajuste?'Informe uma observação para o ajuste.':'Documento ou observação excede o limite.');
+      if(!Array.isArray(body.itens)||body.itens.length<1||body.itens.length>50)return fail('Informe de 1 a 50 itens.');
+      const seen=new Set<string>();
+      const itens=body.itens.map((x)=>{if(!x||typeof x!=='object')throw new EntradaInvalida('Item inválido.');const i=x as Record<string,unknown>;if(typeof i.itemId!=='string'||!i.itemId||seen.has(i.itemId))throw new EntradaInvalida('Item ausente ou repetido.');seen.add(i.itemId);if(typeof i.quantidade!=='number'||!Number.isFinite(i.quantidade)||!/^-?\d+(?:\.\d{1,2})?$/.test(String(i.quantidade))||i.quantidade===0||(!ajuste&&i.quantidade<0))throw new EntradaInvalida('Quantidade inválida.');return{itemId:i.itemId,cent:Math.round(i.quantidade*100)};});
+      const catalogo=await all<{id:string;unidade:string}>('SELECT id,unidade_estoque AS unidade FROM catalog_items WHERE id IN ('+itens.map(()=>'?').join(',')+') AND active=1 AND id<>\'item_legado\'',itens.map(i=>i.itemId));
+      if(catalogo.length!==itens.length||itens.some(i=>i.itemId==='item_legado'))return fail('Há item inexistente, inativo ou legado.');
+      if(itens.some(i=>catalogo.find(c=>c.id===i.itemId)?.unidade==='un'&&i.cent%100!==0))return fail('Itens em unidade "un" exigem quantidade inteira.');
+      const chave=chaveIdempotencia(request), hash=chave?await tokenHash(JSON.stringify(body)):null;
+      if(chave){const antigo=await first<{request_hash:string}>('SELECT request_hash FROM movimentos_estoque WHERE user_id=? AND request_key=?',[user.id,chave]);if(antigo)return antigo.request_hash===hash?ok({success:true}):fail('Esta tentativa já foi usada com outros dados.',409);}
+      const origem=id(ajuste?'ajuste':'ent'),ts=now();
+      const statements=itens.map((i,n)=>stmt('INSERT INTO movimentos_estoque(id,estoque_id,item_id,tipo,quantidade_centesimos,documento,observacao,origem_tipo,origem_id,user_id,data_movimento,criado_em,request_key,request_hash) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)',[id('mov'),estoqueId,i.itemId,ajuste?'ajuste':'entrada',i.cent,documento||null,observacao||null,ajuste?'ajuste':'entrada',origem,user.id,data,ts,n===0?chave:null,n===0?hash:null]));
+      statements.push(stmt('INSERT INTO audit_logs(id,user_id,action,entity,entity_id,details,created_at) VALUES(?,?,?,?,?,?,?)',[id('aud'),user.id,'CREATE','movimentos_estoque',origem,`${ajuste?'Ajuste':'Entrada'} em estoque ${estoqueId}; ${itens.length} itens`,ts]));
+      try{await rawDb().batch(statements)}catch(e){if(String((e as Error)?.message).includes('UNIQUE'))return ctx.ok({error:'Esta tentativa já foi registrada.',codigo:'duplicado'},{status:409});throw e;}
+      return ok({success:true,origemId:origem});
+    });
+  }
+  async function estornar(request:Request,user:User,movimentoId:string){return comAcaoEscrita('baixa:atender',async()=>{
+    const original=await first<{id:string;tipo:string;estoque_id:string;item_id:string;quantidade_centesimos:number;documento:string|null;data_movimento:string}>('SELECT * FROM movimentos_estoque WHERE id=?',[movimentoId]);
+    if(!original)return fail('Movimento não encontrado.',404);if(!['entrada','ajuste'].includes(original.tipo))return ctx.ok({error:'Este tipo de movimento não pode ser estornado.',codigo:'nao_estornavel'},{status:409});
+    const permitido=original.tipo==='ajuste'?pode(user,'estoque:gerenciar'):pode(user,'baixa:atender');if(!permitido)return fail('Seu perfil não permite estornar este movimento.',403);
+    const body=await jsonBody<Corpo>(request),motivo=typeof body.motivo==='string'?body.motivo.trim():'';if(!motivo||motivo.length>300)return fail('Informe o motivo do estorno.');
+    if(await first('SELECT 1 FROM movimentos_estoque WHERE movimento_estornado_id=?',[movimentoId]))return erroDuplicado();
+    const ts=now(),estorno=id('mov');try{await rawDb().batch([stmt('INSERT INTO movimentos_estoque(id,estoque_id,item_id,tipo,quantidade_centesimos,documento,observacao,origem_tipo,origem_id,movimento_estornado_id,user_id,data_movimento,criado_em) VALUES(?,?,?,\'estorno\',?,?,?,?,?,?,?,?,?)',[estorno,original.estoque_id,original.item_id,-original.quantidade_centesimos,original.documento,motivo,'estorno',movimentoId,movimentoId,user.id,hojeBrasilia(),ts]),stmt('INSERT INTO audit_logs(id,user_id,action,entity,entity_id,details,created_at) VALUES(?,?,?,?,?,?,?)',[id('aud'),user.id,'CREATE','movimentos_estoque',estorno,`Estorno de ${movimentoId}: ${motivo}`,ts])]);}catch(e){if(String((e as Error)?.message).includes('UNIQUE'))return erroDuplicado();throw e;}return ok({success:true,id:estorno});
+  });}
+  async function saldos(user:User,params:URLSearchParams){const pag=paginaSolicitada(params);const where:string[]=["c.active=1","c.id<>'item_legado'"],vals:unknown[]=[];const estoque=params.get('estoqueId');if(estoque){where.push('e.id=?');vals.push(estoque);}const q=params.get('q')?.trim();const tendo=`COALESCE(SUM(m.quantidade_centesimos),0)`,cond=`WHERE ${where.join(' AND ')}`,having=params.get('somenteNegativos')==='1'?`HAVING ${tendo}<0`:'';let rows=await all<{estoque_id:string;estoque:string;item_id:string;descricao:string;unidade:string;saldo:number}>(`SELECT e.id estoque_id,e.nome estoque,c.id item_id,c.name descricao,c.unidade_estoque unidade,${tendo}/100.0 saldo FROM estoques e CROSS JOIN catalog_items c LEFT JOIN movimentos_estoque m ON m.estoque_id=e.id AND m.item_id=c.id ${cond} GROUP BY e.id,c.id ${having} ORDER BY e.nome,c.name`,vals);if(q){const chave=normalizeImportText(q);rows=rows.filter(r=>normalizeImportText(r.descricao).includes(chave));}const total=rows.length,pageCount=Math.max(1,Math.ceil(total/pag.pageSize)),page=Math.min(pag.page,pageCount);rows=rows.slice((page-1)*pag.pageSize,page*pag.pageSize);return ok({saldos:rows,total,page,pageCount,pageSize:pag.pageSize});}
+  async function movimentos(user:User,params:URLSearchParams){const pag=paginaSolicitada(params);const where:string[]=[];const vals:unknown[]=[];for(const [param,col] of [['estoqueId','m.estoque_id'],['itemId','m.item_id'],['tipo','m.tipo']] as const){const v=params.get(param);if(v){where.push(`${col}=?`);vals.push(v);}}const de=params.get('de'),ate=params.get('ate');if(de&&dataValida(de)){where.push('m.data_movimento>=?');vals.push(de);}if(ate&&dataValida(ate)){where.push('m.data_movimento<=?');vals.push(ate);}const cond=where.length?`WHERE ${where.join(' AND ')}`:'';const total=Number((await first<{n:number}>(`SELECT COUNT(*) n FROM movimentos_estoque m ${cond}`,vals))?.n||0),pageCount=Math.max(1,Math.ceil(total/pag.pageSize)),page=Math.min(pag.page,pageCount);const rows=await all(`SELECT m.id,m.estoque_id,e.nome estoque,m.item_id,c.name AS descricao,c.unidade_estoque AS unidade,m.tipo,m.quantidade_centesimos/100.0 quantidade,m.documento,m.observacao,m.origem_tipo,m.origem_id,m.data_movimento,m.criado_em,u.name usuario,b.id baixa_id,b.codigo baixa_codigo,CASE WHEN m.movimento_estornado_id IS NOT NULL THEN 1 WHEN EXISTS(SELECT 1 FROM movimentos_estoque x WHERE x.movimento_estornado_id=m.id) THEN 1 ELSE 0 END estornado FROM movimentos_estoque m JOIN estoques e ON e.id=m.estoque_id JOIN catalog_items c ON c.id=m.item_id LEFT JOIN users u ON u.id=m.user_id LEFT JOIN baixa_itens bi ON m.origem_tipo='baixa_item' AND bi.id=m.origem_id LEFT JOIN baixas_estoque b ON b.id=bi.baixa_id ${cond} ORDER BY m.criado_em DESC,m.id DESC LIMIT ? OFFSET ?`,[...vals,pag.pageSize,(page-1)*pag.pageSize]);return ok({movimentos:rows,total,page,pageCount,pageSize:pag.pageSize});}
+  return {gravarEntrada:(r:Request,u:User)=>gravar(r,u,false),gravarAjuste:(r:Request,u:User)=>gravar(r,u,true),estornar,saldos,movimentos};
+}

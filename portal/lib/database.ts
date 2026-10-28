@@ -16,6 +16,7 @@ import { LIMPAR_TRAVAS_VENCIDAS_SQL, RENOVAR_TRAVA_SQL, TravaPerdida, TRAVA_VALI
 import { MIGRAR_FORNECEDORES_CHAMADOS_SQL } from './chamados.ts';
 import { TRIGGERS_REVISAO, TRIGGERS_REVISAO_LISTA_ACORDO, TABELAS_CADASTRO } from './controle-escrita.ts';
 import { env } from '../scripts/configuracao-servidor.mjs';
+import { normalizeText } from './domain.ts';
 import { type Role, validatePassword } from '@/lib/domain';
 
 export function parseCookies(request: Request): Record<string, string> {
@@ -299,6 +300,75 @@ async function initialize() {
         FROM baixas_estoque b WHERE NOT EXISTS(SELECT 1 FROM baixa_itens i WHERE i.baixa_id=b.id)`),
       db.prepare('INSERT OR IGNORE INTO schema_migrations(version,applied_at) VALUES(13,?)').bind(now()),
     ]);
+  }
+  if (!await db.prepare('SELECT 1 ok FROM schema_migrations WHERE version=14').first()) {
+    await db.batchConstruir((consultar) => {
+      const antigos=consultar({sql:'SELECT id,descricao,unidade,ativo FROM itens_catalogo ORDER BY id',values:[]}).results as Array<{id:string;descricao:string;unidade:string;ativo:number}>;
+      const existentes=consultar({sql:'SELECT id,name,active FROM catalog_items ORDER BY id',values:[]}).results as Array<{id:string;name:string;active:number}>;
+      const colunaUnidade=consultar({sql:'PRAGMA table_info(catalog_items)',values:[]}).results.some((coluna)=> (coluna as {name:string}).name==='unidade_estoque');
+      const possuiMovimentos=consultar({sql:"SELECT 1 FROM sqlite_schema WHERE type='table' AND name='movimentos_estoque'",values:[]}).results.length>0;
+      const porNome=new Map(existentes.filter(item=>item.id!=='item_legado').map(item=>[normalizeText(item.name).toLocaleLowerCase('pt-BR'),item.id]));
+      const ids=new Set(existentes.map(item=>item.id)),mapeamento=new Map<string,string>();
+      const comandos: Array<{sql:string;values:unknown[]}> = [];
+      const incluir=(sql:string,values:unknown[]=[])=>comandos.push({sql,values});
+      incluir('PRAGMA defer_foreign_keys=ON');
+      if(!colunaUnidade)incluir("ALTER TABLE catalog_items ADD COLUMN unidade_estoque TEXT NOT NULL DEFAULT 'un' CHECK(unidade_estoque IN ('un','L','m','kg'))");
+      if(!ids.has('item_legado')){
+        incluir("INSERT INTO catalog_items(id,name,active,unidade_estoque) VALUES('item_legado','Item não especificado (legado)',0,'un')");
+        ids.add('item_legado');porNome.set(normalizeText('Item não especificado (legado)').toLocaleLowerCase('pt-BR'),'item_legado');
+      } else incluir("UPDATE catalog_items SET name='Item não especificado (legado)',active=0,unidade_estoque='un' WHERE id='item_legado'");
+      for(const item of antigos){
+        if(item.id==='item_legado'){mapeamento.set(item.id,'item_legado');continue;}
+        const chave=normalizeText(item.descricao).toLocaleLowerCase('pt-BR'),correspondente=porNome.get(chave);
+        if(correspondente){mapeamento.set(item.id,correspondente);incluir('UPDATE catalog_items SET unidade_estoque=? WHERE id=?',[item.unidade,correspondente]);continue;}
+        let novoId=item.id;
+        if(ids.has(novoId)){novoId=id('cat');while(ids.has(novoId))novoId=id('cat');}
+        mapeamento.set(item.id,novoId);porNome.set(chave,novoId);ids.add(novoId);
+        incluir('INSERT INTO catalog_items(id,name,active,unidade_estoque) VALUES(?,?,?,?)',[novoId,item.descricao,item.ativo,item.unidade]);
+      }
+      incluir('CREATE TEMP TABLE IF NOT EXISTS estoque_item_mapa (antigo_id TEXT PRIMARY KEY, novo_id TEXT NOT NULL)');
+      for(const [antigoId,novoId] of mapeamento)incluir('INSERT INTO estoque_item_mapa(antigo_id,novo_id) VALUES(?,?)',[antigoId,novoId]);
+      incluir(`CREATE TABLE IF NOT EXISTS baixa_itens_nova (id TEXT PRIMARY KEY, baixa_id TEXT NOT NULL REFERENCES baixas_estoque(id),
+        item_id TEXT NOT NULL REFERENCES catalog_items(id), quantidade_centesimos INTEGER NOT NULL CHECK(quantidade_centesimos > 0),
+        status TEXT NOT NULL DEFAULT 'pendente' CHECK(status IN ('pendente','baixado','recusado')), motivo_recusa TEXT,
+        atendente_id TEXT REFERENCES users(id), atendido_em TEXT, criado_em TEXT NOT NULL, atualizado_em TEXT NOT NULL,
+        revision INTEGER NOT NULL DEFAULT 0, UNIQUE(baixa_id,item_id))`);
+      incluir(`INSERT INTO baixa_itens_nova(id,baixa_id,item_id,quantidade_centesimos,status,motivo_recusa,atendente_id,atendido_em,criado_em,atualizado_em,revision)
+        SELECT b.id,b.baixa_id,m.novo_id,b.quantidade_centesimos,b.status,b.motivo_recusa,b.atendente_id,b.atendido_em,b.criado_em,b.atualizado_em,b.revision
+        FROM baixa_itens b JOIN estoque_item_mapa m ON m.antigo_id=b.item_id ORDER BY b.rowid`);
+      const ddlMovimentos=(tabela:string)=>'CREATE TABLE IF NOT EXISTS '+tabela+' (id TEXT PRIMARY KEY, estoque_id TEXT NOT NULL REFERENCES estoques(id), '+
+        "item_id TEXT NOT NULL REFERENCES catalog_items(id), tipo TEXT NOT NULL CHECK(tipo IN ('entrada','saida','ajuste','estorno')), "+
+        'quantidade_centesimos INTEGER NOT NULL CHECK(quantidade_centesimos<>0), documento TEXT CHECK(documento IS NULL OR length(documento)<=60), '+
+        'observacao TEXT CHECK(observacao IS NULL OR length(observacao)<=300), origem_tipo TEXT, origem_id TEXT, '+
+        'movimento_estornado_id TEXT UNIQUE REFERENCES '+tabela+'(id), user_id TEXT REFERENCES users(id), '+
+        'data_movimento TEXT NOT NULL, criado_em TEXT NOT NULL, request_key TEXT, request_hash TEXT, UNIQUE(user_id,request_key))';
+      incluir(ddlMovimentos(possuiMovimentos?'movimentos_estoque_nova':'movimentos_estoque'));
+      if(possuiMovimentos){
+      incluir(`INSERT INTO movimentos_estoque_nova(id,estoque_id,item_id,tipo,quantidade_centesimos,documento,observacao,origem_tipo,origem_id,movimento_estornado_id,user_id,data_movimento,criado_em,request_key,request_hash)
+        SELECT m.id,m.estoque_id,i.novo_id,m.tipo,m.quantidade_centesimos,m.documento,m.observacao,m.origem_tipo,m.origem_id,m.movimento_estornado_id,m.user_id,m.data_movimento,m.criado_em,m.request_key,m.request_hash
+        FROM movimentos_estoque m JOIN estoque_item_mapa i ON i.antigo_id=m.item_id WHERE m.movimento_estornado_id IS NULL ORDER BY m.rowid`);
+      incluir(`INSERT INTO movimentos_estoque_nova(id,estoque_id,item_id,tipo,quantidade_centesimos,documento,observacao,origem_tipo,origem_id,movimento_estornado_id,user_id,data_movimento,criado_em,request_key,request_hash)
+        SELECT m.id,m.estoque_id,i.novo_id,m.tipo,m.quantidade_centesimos,m.documento,m.observacao,m.origem_tipo,m.origem_id,m.movimento_estornado_id,m.user_id,m.data_movimento,m.criado_em,m.request_key,m.request_hash
+        FROM movimentos_estoque m JOIN estoque_item_mapa i ON i.antigo_id=m.item_id WHERE m.movimento_estornado_id IS NOT NULL ORDER BY m.rowid`);
+      }
+      incluir('DROP TRIGGER IF EXISTS movimentos_estoque_imutavel_update');
+      incluir('DROP TRIGGER IF EXISTS movimentos_estoque_imutavel_delete');
+      if(possuiMovimentos)incluir('DROP TABLE movimentos_estoque');
+      incluir('DROP TABLE baixa_itens');
+      incluir('ALTER TABLE baixa_itens_nova RENAME TO baixa_itens');
+      if(possuiMovimentos)incluir('ALTER TABLE movimentos_estoque_nova RENAME TO movimentos_estoque');
+      incluir('CREATE INDEX IF NOT EXISTS idx_baixa_itens_baixa_id ON baixa_itens(baixa_id)');
+      incluir('CREATE INDEX IF NOT EXISTS idx_baixa_itens_item_id ON baixa_itens(item_id)');
+      incluir('CREATE INDEX IF NOT EXISTS idx_movimentos_estoque_item ON movimentos_estoque(estoque_id,item_id)');
+      incluir('CREATE INDEX IF NOT EXISTS idx_movimentos_item ON movimentos_estoque(item_id)');
+      incluir('CREATE INDEX IF NOT EXISTS idx_movimentos_origem ON movimentos_estoque(origem_tipo,origem_id)');
+      incluir('CREATE INDEX IF NOT EXISTS idx_movimentos_criado ON movimentos_estoque(criado_em)');
+      incluir("CREATE TRIGGER IF NOT EXISTS movimentos_estoque_imutavel_update BEFORE UPDATE ON movimentos_estoque BEGIN SELECT RAISE(ABORT,'Movimentos de estoque sao imutaveis'); END");
+      incluir("CREATE TRIGGER IF NOT EXISTS movimentos_estoque_imutavel_delete BEFORE DELETE ON movimentos_estoque BEGIN SELECT RAISE(ABORT,'Movimentos de estoque sao imutaveis'); END");
+      incluir('DROP TABLE estoque_item_mapa');
+      incluir('INSERT OR IGNORE INTO schema_migrations(version,applied_at) VALUES(14,?)',[now()]);
+      return comandos;
+    });
   }
   await db.prepare('PRAGMA optimize').run();
 }

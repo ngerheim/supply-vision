@@ -27,6 +27,7 @@ const titulos = {
   buscar: "Buscar preços",
   manutencao: "Manutenção",
   chamados: "Chamados",
+  estoque: "Estoque",
   acordos: "Acordos",
   cadastros: "Cadastros",
   administracao: "Administração",

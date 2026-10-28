@@ -110,7 +110,7 @@ void test('nova baixa valida placa enquanto digita, restringe OS, usa ativos e m
   h.requests[0].resolve({
     estoques: [estoque, { id: 'inativo', nome: 'Inativo', ativo: 0 }],
   });
-  h.requests.find(r=>r.path.startsWith('/api/itens?')).resolve({itens:[{id:'item-filtro',descricao:'Filtro fictício',unidade:'un',ativo:1}]});
+  h.requests.find(r=>r.path.startsWith('/api/catalogs/items?')).resolve({itens:[{id:'item-filtro',descricao:'Filtro fictício',unidade:'un',ativo:1}]});
   await flush(h);
   assert.equal(
     h.find((n) => n.type === 'option' && n.props.value === 'inativo').length,
@@ -202,7 +202,7 @@ void test('atendimento envia revision, recusa exige motivo, conflito bloqueia at
     onBack() {},
   });
   h.requests[0].resolve({ baixa, itens:[item], andamentos: [] });
-  h.requests.find(r=>r.path.startsWith('/api/itens?')).resolve({itens:[]});
+  h.requests.find(r=>r.path.startsWith('/api/catalogs/items?')).resolve({itens:[]});
   await flush(h);
   h.one('input',p=>p['aria-label']==='Selecionar Filtro fictício').onChange({target:{checked:true}});
   h.render();
@@ -238,7 +238,7 @@ void test('atendimento envia revision, recusa exige motivo, conflito bloqueia at
 void test('409 que não é revisão mostra mensagem sem travar as ações', async (t) => {
   const h = await abrir(t, 'DetalheBaixa', { id: 'b', user: { role: 'editor' }, onBack() {} });
   h.requests[0].resolve({ baixa, itens:[{id:'bi-1',descricao:'Filtro fictício',unidade:'un',quantidade:1,status:'pendente'}], andamentos: [] });
-  h.requests.find(r=>r.path.startsWith('/api/itens?')).resolve({itens:[]});
+  h.requests.find(r=>r.path.startsWith('/api/catalogs/items?')).resolve({itens:[]});
   await flush(h);
   h.one('input',p=>p['aria-label']==='Selecionar Filtro fictício').onChange({target:{checked:true}});h.render();
   button(h, 'Baixar selecionados').onClick();
@@ -250,13 +250,13 @@ void test('409 que não é revisão mostra mensagem sem travar as ações', asyn
 void test('detalhe seleciona itens para atendimento em lote e permite editar pendentes',async t=>{
   const item={id:'bi-1',item_id:'cat-1',descricao:'Filtro fictício',unidade:'un',quantidade:2,status:'pendente'},h=await abrir(t,'DetalheBaixa',{id:'b',user:{id:'viewer',role:'viewer'},onBack(){}});
   h.requests.find(r=>r.path==='/api/baixas/b').resolve({baixa:{...baixa,solicitante_id:'viewer'},itens:[item],andamentos:[]});
-  h.requests.find(r=>r.path.startsWith('/api/itens?')).resolve({itens:[{id:'cat-2',descricao:'Óleo fictício',unidade:'L',ativo:1}]});await flush(h);
+  h.requests.find(r=>r.path.startsWith('/api/catalogs/items?')).resolve({itens:[{id:'cat-2',descricao:'Óleo fictício',unidade:'L',ativo:1}]});await flush(h);
   h.one('Input',p=>p['aria-label']==='Quantidade Filtro fictício').onChange({target:{value:'3'}});h.render();
   h.one('select',p=>p['aria-label']==='Adicionar item do catálogo').onChange({target:{value:'cat-2'}});h.render();button(h,'Adicionar item').onClick();h.render();
   h.one('Input',p=>p['aria-label']==='Quantidade adicionada Óleo fictício').onChange({target:{value:'2.5'}});h.render();button(h,'Salvar itens pendentes').onClick();
   const edit=h.requests.at(-1);assert.equal(edit.path,'/api/baixas/b/itens');assert.deepEqual(body(edit),{expectedRevision:3,itens:[{itemId:'cat-1',quantidade:3},{itemId:'cat-2',quantidade:2.5}]});edit.resolve({});await flush(h);
   const a=await abrir(t,'DetalheBaixa',{id:'b',user:{role:'editor'},onBack(){}});
-  a.requests.find(r=>r.path==='/api/baixas/b').resolve({baixa, itens:[item],andamentos:[]});a.requests.find(r=>r.path.startsWith('/api/itens?')).resolve({itens:[]});await flush(a);
+  a.requests.find(r=>r.path==='/api/baixas/b').resolve({baixa, itens:[item],andamentos:[]});a.requests.find(r=>r.path.startsWith('/api/catalogs/items?')).resolve({itens:[]});await flush(a);
   a.one('input',p=>p['aria-label']==='Selecionar Filtro fictício').onChange({target:{checked:true}});a.render();button(a,'Baixar selecionados').onClick();
   const atender=a.requests.at(-1);assert.equal(atender.path,'/api/baixas/b/atender-itens');assert.deepEqual(body(atender),{expectedRevision:3,itens:[{id:'bi-1',para:'baixado',motivo:''}]});atender.resolve({});await flush(a);
 });
@@ -313,15 +313,16 @@ void test('estoques inclui, renomeia e alterna ativo com revision e erro 409', a
     expectedRevision: 3,
   });
 });
-void test('seção Itens inclui, edita, alterna ativo e mostra conflito de revisão',async t=>{
-  const h=await mount('portal-estoques','ItensCatalogo',{},modules);t.after(()=>h.unmount());
-  h.requests.find(r=>r.path==='/api/itens').resolve({itens:[{id:'i1',descricao:'Filtro fictício',unidade:'un',ativo:1,revision:0}]});await flush(h);
-  change(h,'descricao_item','Óleo fictício');
-  const campo=h.one('Input',p=>p.name==='descricao_item');campo.onChange({target:{value:'Óleo fictício'}});h.render();submit(h);
-  let r=h.requests.at(-1);assert.equal(r.path,'/api/itens');assert.deepEqual(body(r),{descricao:'Óleo fictício',unidade:'un'});r.resolve({id:'i2'});await flush(h);
-  h.requests.findLast(r=>r.path==='/api/itens').resolve({itens:[{id:'i1',descricao:'Filtro fictício',unidade:'un',ativo:1,revision:0}]});await flush(h);
-  button(h,'Editar Filtro fictício').onClick();h.render();change(h,'descricao_item','Filtro alterado');
-  h.one('select').onChange({target:{value:'kg'}});h.render();submit(h);r=h.requests.at(-1);assert.deepEqual(body(r),{descricao:'Filtro alterado',unidade:'kg',expectedRevision:0});
-  r.reject(new ApiError({status:409,codigo:'revisao',error:'Este registro foi alterado.'}));await flush(h);assert.match(alerts(h),/recarregue/);
-  button(h,'Cancelar').onClick();h.render();button(h,'Desativar Filtro fictício').onClick();r=h.requests.at(-1);assert.deepEqual(body(r),{ativo:false,expectedRevision:0});r.resolve({});await flush(h);
+void test('entrada e saldo de estoque permitem lançar, filtrar e abrir histórico',async t=>{
+  const h=await mount('portal-estoques','EntradaEstoque',{},modules,{crypto});t.after(()=>h.unmount());
+  h.requests.find(r=>r.path==='/api/estoques').resolve({estoques:[estoque]});
+  h.requests.find(r=>r.path==='/api/catalogs/items').resolve({itens:[{id:'itm',descricao:'Óleo fictício',unidade:'L',ativo:1}]});await flush(h);
+  const stock=h.one('select');stock.onChange({target:{value:'e'}});h.render();button(h,'Óleo fictício · L').onClick();h.render();h.one('Input',p=>p.type==='number').onChange({target:{value:'1.25'}});h.render();submit(h);
+  const envio=h.requests.at(-1);assert.equal(envio.path,'/api/estoque/entradas');assert.deepEqual(body(envio).itens,[{itemId:'itm',quantidade:1.25}]);assert.ok(envio.options.headers['idempotency-key']);envio.resolve({});await flush(h);assert.equal(h.one('output').children,'Entrada registrada.');
+  const saldo=await mount('portal-estoques','SaldoEstoque',{user:{role:'admin'}},modules);t.after(()=>saldo.unmount());
+  saldo.requests.find(r=>r.path==='/api/estoques').resolve({estoques:[estoque]});saldo.requests.find(r=>r.path.startsWith('/api/estoque/saldos')).resolve({saldos:[{estoque_id:'e',estoque:'Estoque fictício',item_id:'itm',descricao:'Óleo fictício',unidade:'L',saldo:-0.25}]});await flush(saldo);
+  assert.ok(saldo.find(n=>n.type==='TableCell').some(n=>n.props.children===-0.25));
+  saldo.one('TableRow',p=>typeof p.onClick==='function').onClick();saldo.render();
+  saldo.requests.at(-1).resolve({movimentos:[{id:'m',tipo:'saida',quantidade:-1,unidade:'L',data_movimento:'2026-10-27',baixa_id:'b',baixa_codigo:'BX-8'}]});await flush(saldo);
+  assert.equal(saldo.one('a').href,'/?aba=chamados&baixa=b');assert.equal(saldo.one('a').children,'BX-8');
 });
