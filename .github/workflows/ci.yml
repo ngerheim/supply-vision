@@ -329,7 +329,13 @@ jobs:
         run: ./scripts/ci/testar-operacao-persistencia.ps1 -Evento '${{ github.event_name }}'
       - name: Validar importacoes e falhas HTTP no portal compilado
         working-directory: portal
-        run: npm run test:imports
+        shell: pwsh
+        run: |
+          $evidencias = Join-Path $env:RUNNER_TEMP 'sv-import-stress'
+          New-Item -ItemType Directory -Force -Path $evidencias | Out-Null
+          "SV_IMPORT_STRESS_DIR=$evidencias" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          npm run test:imports
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
       - name: Ensaiar restauracao de backup ficticio
         working-directory: portal
         run: npm run test:restore -- --fixture
@@ -342,9 +348,9 @@ jobs:
           if-no-files-found: ignore
           # Apenas logs da instancia descartavel; nunca bancos, configs ou snapshots.
           path: |
-            portal/work/import-stress-*/servidor.log
-            portal/work/import-stress-*/resultado.json
-            portal/work/import-stress-*/http-error-*.txt
+            ${{ env.SV_IMPORT_STRESS_DIR }}/import-stress-*/servidor.log
+            ${{ env.SV_IMPORT_STRESS_DIR }}/import-stress-*/resultado.json
+            ${{ env.SV_IMPORT_STRESS_DIR }}/import-stress-*/http-error-*.txt
 
   atualizacao-real-cenarios:
     name: Atualizacao real - ${{ matrix.grupo }}

@@ -18,7 +18,13 @@ import { CABECALHOS_SEGURANCA } from '../lib/cabecalhos-seguranca.ts';
 import { passwordHash, PBKDF2_ITERACOES_LEGADO } from '../lib/criptografia.ts';
 
 const portal = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const output = fs.mkdtempSync(path.join(os.tmpdir(), 'sv-import-stress-'));
+const checkout = path.resolve(portal, '..');
+const baseEvidencias = path.resolve(process.env.SV_IMPORT_STRESS_DIR || os.tmpdir());
+const relativoCheckout = path.relative(checkout, baseEvidencias);
+if (relativoCheckout === '' || (!path.isAbsolute(relativoCheckout) && relativoCheckout !== '..' && !relativoCheckout.startsWith(`..${path.sep}`))) {
+  throw new Error('SV_IMPORT_STRESS_DIR precisa ficar fora do checkout.');
+}
+const output = fs.mkdtempSync(path.join(baseEvidencias, 'import-stress-'));
 const privadoFixture = path.join(output, 'privado');
 const state = path.join(privadoFixture, 'portal/banco/estado/state');
 const runtime = path.join(output, 'runtime');
@@ -180,12 +186,13 @@ try {
   await check('Servidor Node serve somente o build e mantem cabecalhos de seguranca', async () => {
     for (const rota of ['/', '/api/health', '/package.json', '/vite.config.ts', '/AGENTS.md', '/.env', '/.git/config', '/scripts/iniciar-portal.mjs', '/privado/portal/banco/estado/state/base.sqlite', '/%2e%2e/package.json', '/%5cprivado/base.sqlite']) {
       const r=await fetch(base+rota);
+      const resposta = await r.text();
+      if (r.status >= 500) fs.writeFileSync(path.join(output, `http-error-GET-${rota === '/' ? 'root' : encodeURIComponent(rota)}-${Date.now()}.txt`), `${rota}\nHTTP ${r.status}\n${resposta}`);
       assert.equal(r.status, ['/', '/api/health'].includes(rota)?200:404,rota);
       for(const [nome,valor] of Object.entries(CABECALHOS_SEGURANCA)) {
         const recebido = r.headers.get(nome);
         assert.equal(nome === 'Content-Security-Policy' ? recebido?.replace(/ 'nonce-[^']+'/g, '') : recebido, valor, rota+' '+nome);
       }
-      await r.arrayBuffer();
     }
   });
   await check('Login usa IP do socket e ignora cabecalhos de origem forjados', async () => {
