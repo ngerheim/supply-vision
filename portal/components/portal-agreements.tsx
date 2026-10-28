@@ -6,7 +6,7 @@ import { correspondeSituacaoAcordo } from '@/lib/situacao-acordos';
 import { api, errorText, baixarArquivo } from '@/lib/api';
 import { correspondeBusca } from '@/lib/busca';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Download, Pencil, Plus, Trash2, Upload } from 'lucide-react';
+import { Download, Pencil, Plus, Search, Trash2, Upload } from 'lucide-react';
 import { Status as PatioStatus } from './status';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';

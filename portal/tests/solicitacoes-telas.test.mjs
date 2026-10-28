@@ -110,7 +110,7 @@ for (const role of ['viewer', 'editor', 'admin'])
     });
     await flush(h);
     assert.equal(h.find((n) => n.type === 'h2').length, 0);
-    assert.equal(h.one('PageHeader').title, undefined);
+    assert.equal(h.one('LinhaDeAba').actions !== undefined, true);
     assert.equal(
       h.find(
         (n) => n.type === 'TableHead' && n.props.children === 'Solicitante',

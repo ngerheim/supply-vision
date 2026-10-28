@@ -3,7 +3,6 @@ import { createContext, useContext, type ReactNode } from "react";
 import { abaDaChave, subabasPermitidas, type Nav } from "@/lib/navegacao";
 import type { UsuarioPermissao } from "@/lib/permissoes";
 import { Subabas } from "./portal-subabas";
-import type { ReactNode } from "react";
 
 type Contexto = {
   nav: Nav;
@@ -84,7 +83,7 @@ export function PageHeader({
         <div className="patio-header-actions">{actions}</div>
       </div>
       {description && <p className="patio-header-description">{description}</p>}
-      {contexto && !back && aba.subabas.length < 2 && (
+      {contexto && !back && (
         <Subabas
           nav={contexto.nav}
           usuario={contexto.usuario}

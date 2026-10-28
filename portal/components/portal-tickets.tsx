@@ -222,7 +222,7 @@ export function Tickets({ busy, users, run, initialDetail }: JsonData) {
       </div>
       <BarraFiltros busca={q} onBusca={value => { setQ(value); setPage(1); }} placeholder="Pesquisar chamados" />
       <TabelaPadrao contador={`${data.total ?? rows.length} ${(data.total ?? rows.length) === 1 ? 'chamado' : 'chamados'}`} pagina={<PaginacaoDeLista pagina={currentPage} paginas={pageCount} alterar={setPage} />} vazio={!rows.length ? <Empty icon={MessageSquare} title="Nenhum chamado" /> : undefined}>
-            <Table className="w-full min-w-[900px] table-fixed">
+      <Table className="w-full min-w-[900px] table-fixed">
               <colgroup>
                 {[12, 27, 10, 22, 14, 15].map((largura, indice) => (
                   <col key={indice} style={{ width: `${largura}%` }} />
@@ -286,6 +286,7 @@ export function Tickets({ busy, users, run, initialDetail }: JsonData) {
                   </TableRow>
                 ))}
               </TableBody>
+      </Table>
       </TabelaPadrao>
       {open && (
         <TicketDialog

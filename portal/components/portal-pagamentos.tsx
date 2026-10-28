@@ -12,7 +12,9 @@ import { BarraFiltros, TabelaPadrao } from './tela-padrao';
 import { TableBody, TableCell, TableHeader, TableHead, TableRow } from '@/components/ui/table';
 import { Plaquinha } from './plaquinha';
 import { Status } from './status';
-import { type AnyRow, Field, Loading } from './portal-presentation';
+import { Card, CardContent } from '@/components/ui/card';
+import { CampoData } from './campo-data';
+import { type AnyRow, Field, Loading, PaginacaoDeLista } from './portal-presentation';
 
 const estado: Record<string, string> = {
   aberta: 'Aberta', em_analise: 'Em análise', paga: 'Paga', recusada: 'Recusada',
