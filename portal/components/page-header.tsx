@@ -93,3 +93,16 @@ export function PageHeader({
     </header>
   );
 }
+
+/** Linha única reutilizável para abas: navegação à esquerda e ações à direita. */
+export function LinhaDeAba({ actions }: { actions?: ReactNode }) {
+  const contexto = useContext(ContextoCabecalho);
+  const aba = abaDaChave(contexto?.nav ?? "search");
+  return <header className="patio-page-header patio-tab-header">
+    <h1 className="sr-only">{titulos[aba.aba]}</h1>
+    <div className="patio-tab-row">
+      {contexto && <Subabas nav={contexto.nav} usuario={contexto.usuario} navegar={contexto.navegar} />}
+      <div className="patio-header-actions">{actions}</div>
+    </div>
+  </header>;
+}

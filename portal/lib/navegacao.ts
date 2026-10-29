@@ -6,9 +6,9 @@ export const ABAS_NAVEGACAO = [
   { aba: 'manutencao', label: 'Manutenção', subabas: [{ chave: 'maintenance', slug: null, label: 'Manutenção' }] },
   { aba: 'chamados', label: 'Chamados', subabas: [
     { chave: 'tickets', slug: 'parcerias', label: 'Acordos' },
-    { chave: 'solicitacoes', slug: 'cadastro-fornecedor', label: 'Cadastro de fornecedor' },
-    { chave: 'baixas', slug: 'baixa-estoque', label: 'Baixa no estoque' },
-    { chave: 'pagamentos', slug: 'pagamento', label: 'Solicitação de pagamento' },
+    { chave: 'solicitacoes', slug: 'cadastro-fornecedor', label: 'Cadastros' },
+    { chave: 'baixas', slug: 'baixa-estoque', label: 'Baixa' },
+    { chave: 'pagamentos', slug: 'pagamento', label: 'Pagamentos' },
   ] },
   { aba: 'estoque', label: 'Estoque', subabas: [
     { chave: 'estoque-saldo', slug: 'saldo', label: 'Saldo' },

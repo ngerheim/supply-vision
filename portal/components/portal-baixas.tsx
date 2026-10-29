@@ -13,7 +13,8 @@ import { corpoJson, dataHoraSolicitacao } from "@/lib/solicitacoes-cliente";
 import { gerarChaveRelatorio } from "@/lib/relatorios";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { PageHeader } from "./page-header";
+import { PageHeader, LinhaDeAba } from "./page-header";
+import { BarraFiltros, TabelaPadrao } from "./tela-padrao";
 import { Plaquinha } from "./plaquinha";
 import { Status } from "./status";
 import { Card, CardContent } from "@/components/ui/card";
@@ -131,7 +132,7 @@ export function ListaBaixas({
     opcoes.set(filtros.estoque, "Estoque selecionado");
   return (
     <div className="space-y-5">
-      <PageHeader
+      <LinhaDeAba
         actions={
           <>
             <Button
@@ -151,57 +152,26 @@ export function ListaBaixas({
           </>
         }
       />
-      <Card>
-        <CardContent className="flex flex-wrap items-end gap-3">
-          <Field label="Situação">
-            <select
-              name="status"
-              className={selectClass}
-              value={filtros.status}
-              onChange={(e) => filtrar("status", e.target.value)}
-            >
+      <BarraFiltros>
+          <select aria-label="Situação" name="status" className={selectClass} value={filtros.status} onChange={(e) => filtrar("status", e.target.value)}>
               <option value="">Todas</option>
               {Object.entries(SITUACOES_BAIXA).map(([id, nome]) => (
                 <option key={id} value={id}>
                   {nome}
                 </option>
               ))}
-            </select>
-          </Field>
-          <Field label="Estoque">
-            <select
-              name="estoque"
-              className={selectClass}
-              value={filtros.estoque}
-              onChange={(e) => filtrar("estoque", e.target.value)}
-            >
+          </select>
+          <select aria-label="Estoque" name="estoque" className={selectClass} value={filtros.estoque} onChange={(e) => filtrar("estoque", e.target.value)}>
               <option value="">Todos</option>
               {[...opcoes].map(([id, nome]) => (
                 <option key={id} value={id}>
                   {nome}
                 </option>
               ))}
-            </select>
-          </Field>
-          <Field label="De">
-            <Input
-              name="de"
-              type="date"
-              value={filtros.de}
-              onChange={(e) => filtrar("de", e.target.value)}
-            />
-          </Field>
-          <Field label="Até">
-            <Input
-              name="ate"
-              type="date"
-              min={filtros.de}
-              value={filtros.ate}
-              onChange={(e) => filtrar("ate", e.target.value)}
-            />
-          </Field>
-        </CardContent>
-      </Card>
+          </select>
+          <Input aria-label="Período: De" name="de" type="date" value={filtros.de} onChange={(e) => filtrar("de", e.target.value)} />
+          <Input aria-label="Período: Até" name="ate" type="date" min={filtros.de} value={filtros.ate} onChange={(e) => filtrar("ate", e.target.value)} />
+      </BarraFiltros>
       {estoques.erro && <p role="alert">{estoques.erro}</p>}
       {erro ? (
         <FalhaDeCarregamento
@@ -211,9 +181,7 @@ export function ListaBaixas({
       ) : !dados ? (
         <Loading label="Carregando baixas…" />
       ) : (
-        <Card>
-          <CardContent>
-            <Table>
+        <TabelaPadrao contador={`${dados.total ?? dados.baixas.length} ${(dados.total ?? dados.baixas.length) === 1 ? "baixa" : "baixas"}`} pagina={<PaginacaoDeLista pagina={dados.page} paginas={dados.pageCount} alterar={setPagina} />} vazio={!dados.baixas.length ? <p className="p-6 text-center text-muted-foreground">Nenhuma baixa encontrada.</p> : undefined}>
               <TableHeader>
                 <TableRow>
                   {[
@@ -258,19 +226,7 @@ export function ListaBaixas({
                   </TableRow>
                 ))}
               </TableBody>
-            </Table>
-            {!dados.baixas.length && (
-              <p className="p-6 text-center text-muted-foreground">
-                Nenhuma baixa encontrada.
-              </p>
-            )}
-            <PaginacaoDeLista
-              pagina={dados.page}
-              paginas={dados.pageCount}
-              alterar={setPagina}
-            />
-          </CardContent>
-        </Card>
+        </TabelaPadrao>
       )}
     </div>
   );

@@ -10,12 +10,14 @@ import { iniciarNavegacao } from '../lib/navegacao-historico.ts';
 const rotas: Array<[Nav, string, string | null]> = [
   ['search','buscar',null], ['maintenance','manutencao',null], ['tickets','chamados','parcerias'],
   ['estoque-saldo','estoque','saldo'], ['estoque-entradas','estoque','entradas'],
+  ['solicitacoes','chamados','cadastro-fornecedor'], ['baixas','chamados','baixa-estoque'], ['pagamentos','chamados','pagamento'],
   ['agreements','acordos','acordos'], ['imports','acordos','importacoes'],
   ['suppliers','cadastros','fornecedores'], ['catalogs','cadastros','catalogos'], ['mappings','cadastros','de-para'],
   ['reports','administracao','relatorios'], ['history','administracao','historico'], ['emails','administracao','emails'], ['admin','administracao','usuarios'],
 ];
 void test('todas as 19 chaves e sete abas fazem ida e volta com slugs estaveis', () => {
   assert.equal(ABAS_NAVEGACAO.length,7);
+  assert.deepEqual(ABAS_NAVEGACAO.find(a => a.aba === 'chamados')?.subabas.map(s => s.label), ['Acordos','Cadastros','Baixa','Pagamentos']);
   assert.deepEqual(GRUPOS_NAVEGACAO.map(g => [g.nome,[...g.abas]]),[
     ['Consulta',['buscar','manutencao','chamados','estoque']],['Suprimentos',['acordos','cadastros']],['Administração',['administracao']],
   ]);

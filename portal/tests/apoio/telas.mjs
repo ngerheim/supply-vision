@@ -105,6 +105,13 @@ export async function mount(file, name, props, overrides = {}, globals = {}) {
       }),
       CabecalhoOrdenavel: 'CabecalhoOrdenavel',
     },
+    './tela-padrao': {
+      BarraFiltros: ({ busca, onBusca, placeholder, children }) => jsx.jsx('div', { children: [
+        onBusca ? jsx.jsx('Input', { 'aria-label': placeholder, value: busca || '', onChange: (event) => onBusca(event.target.value) }) : null,
+        children,
+      ] }),
+      TabelaPadrao: 'TabelaPadrao',
+    },
     './portal-presentation': {
       ...visual,
       money: (value) =>
@@ -118,7 +125,11 @@ export async function mount(file, name, props, overrides = {}, globals = {}) {
       Info: 'Info',
       Loading: 'Loading',
       Empty: 'Empty',
-      PaginacaoDeLista: 'PaginacaoDeLista',
+      PaginacaoDeLista: ({ pagina, paginas, alterar }) => paginas > 1 ? jsx.jsx('div', { children: [
+        jsx.jsx('span', { children: `Página ${pagina} de ${paginas}` }),
+        jsx.jsx('Button', { children: 'Anterior', onClick: () => alterar(pagina - 1) }),
+        jsx.jsx('Button', { children: 'Próxima', onClick: () => alterar(pagina + 1) }),
+      ] }) : null,
       FalhaDeCarregamento: 'FalhaDeCarregamento',
     },
     ...overrides,
@@ -160,6 +171,7 @@ export async function mount(file, name, props, overrides = {}, globals = {}) {
         visit(node.props?.title);
         visit(node.props?.status);
         visit(node.props?.tabs);
+      visit(node.props?.pagina);
       };
       visit(tree);
       return found;
