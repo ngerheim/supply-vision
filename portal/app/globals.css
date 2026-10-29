@@ -79,6 +79,8 @@ h1, h2, h3, h4, [data-slot='card-title'], [data-slot='dialog-title'] { font-stre
 [data-slot='table-head'] button { font-stretch: inherit; font-weight: inherit; }
 .patio-subabas [role='tab'] { border: 0; border-bottom: 3px solid transparent; border-radius: 0; background: transparent; color: var(--aco); }
 .patio-subabas [role='tab'][aria-selected='true'] { border-bottom-color: var(--marinho); color: var(--marinho); }
+.patio-subabas [role='tab'] { min-width: auto; }
+.patio-subabas .patio-subaba-ativa { color: var(--marinho); }
 .patio-codigo { font-family: var(--font-mono, ui-monospace, monospace); font-weight: 600; white-space: nowrap; }
 .patio-placa { display: inline-block; max-width: 100%; vertical-align: middle; border: 2px solid var(--marinho); border-top: 6px solid var(--faixa-placa); border-radius: 3px; background: var(--branco); color: var(--marinho); padding: 1px 8px 2px; font-stretch: 70%; font-weight: 800; line-height: 1.2; text-align: center; overflow-wrap: anywhere; }
 @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
@@ -102,6 +104,18 @@ body { min-width: 1100px; }
 .patio-back { display: inline-block; margin-bottom: 12px; font-size: 14px; }
 .patio-header-description { margin-top: 8px; color: var(--aco); font-size: 13px; }
 .patio-page-header .patio-subabas { margin-top: 16px; }
+.patio-tab-header { display: flex; align-items: stretch; }
+.patio-tab-row { display: flex; align-items: center; justify-content: space-between; gap: 20px; width: 100%; min-width: 0; }
+.patio-tab-header .patio-subabas { flex: 1; margin-top: 0; min-width: 0; }
+.patio-tab-header .patio-subabas [role='tab'] { min-height: 44px; }
+.patio-filters { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.patio-filter-search { position: relative; min-width: 240px; flex: 1; }
+.patio-filters select, .patio-filters input:not([type='checkbox']) { width: 176px; min-width: 140px; }
+.patio-filters input[type='checkbox'] { min-width: 16px; }
+.patio-table-card { overflow: hidden; }
+.patio-ticket-groups { display: flex; align-items: center; gap: 8px; }
+.patio-ticket-groups [role='tab'] { min-height: 36px; padding: 4px 12px; border: 1px solid var(--borda); border-radius: 999px; }
+@media (max-width: 1200px) { .patio-filters { flex-wrap: wrap; } .patio-filter-search { flex-basis: 100%; } }
 .patio-subabas { display: flex; align-items: center; gap: 24px; border-bottom: 1px solid var(--borda); }
 .patio-subabas [role='tab'] { min-height: 40px; padding: 8px 0; font-size: 15px; font-weight: 500; }
 .patio-subabas.patio-ticket-tabs { gap: 8px; border-bottom: 0; }
