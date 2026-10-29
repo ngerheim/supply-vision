@@ -213,6 +213,7 @@ void test('Baixa no estoque pelo roteador e SQLite reais', async (t) => {
     assert.equal((await post('estoque/entradas',body,'editor',chave)).status,200);
     assert.equal((await post('estoque/entradas',body,'editor',chave)).status,200);
     assert.equal((await post('estoque/entradas',{...body,documento:'Outra entrada'},'editor',chave)).status,409);
+    const listaEntradas=await get(`estoque/entradas?estoqueId=${estoqueA.id}&q=Filtro&de=${hoje}&ate=${hoje}`,'viewer');assert.equal(listaEntradas.status,200);assert.equal(listaEntradas.data.entradas.length,1);assert.equal(listaEntradas.data.entradas[0].documento,'NF fictícia');assert.equal(listaEntradas.data.entradas[0].itens,1);assert.equal((await get('estoque/entradas?de=2099-99-99','viewer')).status,400);
     assert.equal((await post('estoque/ajustes',{...body,observacao:'',itens:[{itemId:'item_teste',quantidade:1}]},admin)).status,400);
     assert.equal((await post('estoque/ajustes',{...body,itens:[{itemId:'item_teste',quantidade:1}]},'editor')).status,403);
     assert.equal((await post('estoque/ajustes',{...body,itens:[{itemId:'item_teste',quantidade:-1}]},admin)).status,200);
@@ -227,6 +228,7 @@ void test('Baixa no estoque pelo roteador e SQLite reais', async (t) => {
     assert.equal((await post(`estoque/movimentos/${movimentoEstorno.data.id}/estorno`,{motivo:'Estorno de estorno'},'editor')).status,409);
     assert.equal((await post(`estoque/movimentos/${entradaMov.id}/estorno`,{motivo:'Ajuste fictício'},'editor')).data.codigo,'duplicado');
     const saldos=(await get(`estoque/saldos?estoqueId=${estoqueA.id}&q=Filtro&somenteNegativos=1`,'viewer')).data.saldos;assert.equal(saldos[0].saldo,-3);
+    assert.deepEqual((await get(`estoque/saldos?estoqueId=${estoqueA.id}&q=Filtro`,'viewer')).data.saldos,[],'o saldo zero ou negativo não aparece na lista normal');
     const pendente=await abrir(entrada({itens:[{itemId:'item_teste',quantidade:4}]}));assert.equal((await get(`baixas/${pendente.id}`)).data.itens[0].saldo,-3);
     const recusada=await abrir(entrada({itens:[{itemId:'item_teste',quantidade:1}]}));assert.equal((await mover(recusada.id,'recusada','Recusa fictícia')).status,200);
     assert.equal(sql.prepare("SELECT COUNT(*) n FROM movimentos_estoque WHERE origem_id IN (SELECT id FROM baixa_itens WHERE baixa_id=?)").get(recusada.id).n,0);

@@ -464,10 +464,12 @@ export function baixasApi(contexto: ContextoApi) {
     });
   }
   async function listarItens(user: User, params: URLSearchParams) {
-    const q = normalizeImportText(params.get('q') || ''), itens=await all<{id:string;descricao:string;unidade:string;ativo:number;revision:number}>(
+    const q = normalizeImportText(params.get('q') || '');
+    if(q.length<2)return ok({itens:[]});
+    const catalogo=await all<{id:string;descricao:string;unidade:string;ativo:number;revision:number}>(
       `SELECT id,name AS descricao,unidade_estoque AS unidade,active AS ativo,revision FROM catalog_items WHERE id<>'item_legado' AND active=1 ORDER BY name,id`,
     );
-    return ok({itens:q?itens.filter(item=>normalizeImportText(item.descricao).includes(q)):itens});
+    return ok({itens:catalogo.filter(item=>normalizeImportText(item.descricao).includes(q)).slice(0,20)});
   }
   async function gravarEstoque(
     request: Request,
