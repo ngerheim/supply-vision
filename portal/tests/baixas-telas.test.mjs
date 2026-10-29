@@ -329,7 +329,7 @@ void test('entrada e saldo de estoque listam, filtram, validam e registram entra
   h.one('form').onSubmit({preventDefault(){}});h.render();assert.match(alerts(h),/quantidades maiores que zero/);h.one('Button',p=>p['aria-label']==='Remover linha 1').onClick();h.render();
 
   h.one('NativeSelect',p=>p['aria-label']==='Estoque da entrada').onChange({target:{value:'e'}});h.render();h.one('Input',p=>p['aria-label']==='Quantidade da linha 1').onChange({target:{value:'1.25'}});h.render();submit(h);
-  const envio=h.requests.at(-1);assert.equal(envio.path,'/api/estoque/entradas');assert.deepEqual(body(envio).itens,[{itemId:'itm',quantidade:1.25}]);assert.ok(envio.options.headers['idempotency-key']);envio.resolve({});await flush(h);assert.equal(h.find(n=>n.type==='section'&&n.props.role==='dialog').length,0);
+  const envio=h.requests.at(-1);assert.equal(envio.path,'/api/estoque/entradas');assert.deepEqual(body(envio).itens,[{itemId:'itm',quantidade:1.25}]);assert.ok(envio.options.headers['idempotency-key']);envio.resolve({});await flush(h);assert.equal(h.find(n=>n.type==='dialog').length,0);
   const saldo=await mount('portal-estoques','SaldoEstoque',{user:{role:'admin'}},modules);t.after(()=>saldo.unmount());
   saldo.requests.find(r=>r.path==='/api/estoques').resolve({estoques:[estoque]});saldo.requests.find(r=>r.path.startsWith('/api/estoque/saldos')).resolve({saldos:[{estoque_id:'e',estoque:'Estoque fictício',item_id:'itm',descricao:'Óleo fictício',unidade:'L',saldo:-0.25}]});await flush(saldo);
   assert.ok(saldo.find(n=>n.type==='TableCell').some(n=>n.props.children===-0.25));
