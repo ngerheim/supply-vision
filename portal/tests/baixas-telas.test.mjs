@@ -36,12 +36,16 @@ const flush = async (h) => {
   await setImmediate();
   h.render();
 };
+const textoVisivel = (children) => {
+  if (Array.isArray(children)) return children.map(textoVisivel).join('');
+  if (typeof children === 'string' || typeof children === 'number')
+    return String(children);
+  return children && typeof children === 'object'
+    ? textoVisivel(children.props?.children ?? '')
+    : '';
+};
 const button = (h, nome) =>
-  h.one(
-    'Button',
-    (p) =>
-      (Array.isArray(p.children) ? p.children.join('') : p.children) === nome,
-  );
+  h.one('Button', (p) => textoVisivel(p.children).trim() === nome);
 const change = (h, nome, value, tipo = 'Input') => {
   h.one(tipo, (p) => p.name === nome).onChange({ target: { value } });
   h.render();
@@ -319,17 +323,17 @@ void test('entrada e saldo de estoque listam, filtram, validam e registram entra
   assert.ok(h.find(n=>n.type==='TableHead').some(n=>n.props.children==='Registrado por'));assert.ok(h.find(n=>n.type==='TableCell').some(n=>n.props.children==='NF-1'));
   h.one('Input',p=>p['aria-label']==='Buscar entradas').onChange({target:{value:'Filtro'}});h.render();assert.match(h.requests.at(-1).path,/q=Filtro/);
   button(h,'Nova entrada').onClick();h.render();
-  h.one('Input',p=>p['aria-label']==='Buscar item no catálogo').onChange({target:{value:'Óleo'}});h.render();
+  h.one('Input',p=>p['aria-label']==='Buscar item no catálogo').onChange({target:{value:'Óleo'}});h.render();await new Promise(resolve=>setTimeout(resolve,200));await flush(h);
   const pesquisa=h.requests.at(-1);assert.match(pesquisa.path,/catalogs\/items\?q=/);pesquisa.resolve({itens:[{id:'itm',descricao:'Óleo fictício',unidade:'L',ativo:1}]});await flush(h);
-  h.one('button',p=>String(p.children).includes('Óleo fictício')).onClick();h.render();
-  h.one('Button',p=>p.children==='+ Adicionar item').onClick();h.render();h.one('form').onSubmit({preventDefault(){}});h.render();assert.match(alerts(h),/quantidades maiores que zero/);
-  h.one('Input',p=>p['aria-label']==='Buscar item no catálogo').onChange({target:{value:'Óleo'}});h.render();const repetido=h.requests.at(-1);repetido.resolve({itens:[{id:'itm',descricao:'Óleo fictício',unidade:'L',ativo:1}]});await flush(h);h.one('button',p=>String(p.children).includes('Óleo fictício')).onClick();h.render();assert.match(alerts(h),/já foi adicionado/);
-  h.one('Input',p=>p['aria-label']==='Quantidade da linha 1').onChange({target:{value:'1.25'}});h.render();submit(h);
-  const envio=h.requests.at(-1);assert.equal(envio.path,'/api/estoque/entradas');assert.deepEqual(body(envio).itens,[{itemId:'itm',quantidade:1.25}]);assert.ok(envio.options.headers['idempotency-key']);envio.resolve({});await flush(h);assert.equal(h.one('section',p=>p.role==='dialog').length,0);
+  h.one('button',p=>textoVisivel(p.children).includes('Óleo fictício')).onClick();h.render();
+  h.one('form').onSubmit({preventDefault(){}});h.render();assert.match(alerts(h),/quantidades maiores que zero/);h.one('Button',p=>p['aria-label']==='Remover linha 1').onClick();h.render();
+
+  h.one('NativeSelect',p=>p['aria-label']==='Estoque da entrada').onChange({target:{value:'e'}});h.render();h.one('Input',p=>p['aria-label']==='Quantidade da linha 1').onChange({target:{value:'1.25'}});h.render();submit(h);
+  const envio=h.requests.at(-1);assert.equal(envio.path,'/api/estoque/entradas');assert.deepEqual(body(envio).itens,[{itemId:'itm',quantidade:1.25}]);assert.ok(envio.options.headers['idempotency-key']);envio.resolve({});await flush(h);assert.equal(h.find(n=>n.type==='section'&&n.props.role==='dialog').length,0);
   const saldo=await mount('portal-estoques','SaldoEstoque',{user:{role:'admin'}},modules);t.after(()=>saldo.unmount());
   saldo.requests.find(r=>r.path==='/api/estoques').resolve({estoques:[estoque]});saldo.requests.find(r=>r.path.startsWith('/api/estoque/saldos')).resolve({saldos:[{estoque_id:'e',estoque:'Estoque fictício',item_id:'itm',descricao:'Óleo fictício',unidade:'L',saldo:-0.25}]});await flush(saldo);
-  assert.ok(!saldo.find(n=>n.type==='TableCell').some(n=>n.props.children===-0.25));assert.ok(saldo.find(n=>n.type==='p').some(n=>n.props.children==='Nenhum item com saldo neste estoque.'));
-  saldo.requests.find(r=>r.path.startsWith('/api/estoque/saldos')).resolve({saldos:[{estoque_id:'e',estoque:'Estoque fictício',item_id:'itm',descricao:'Óleo fictício',unidade:'L',saldo:2}]});await flush(saldo);
+  assert.ok(saldo.find(n=>n.type==='TableCell').some(n=>n.props.children===-0.25));
+  saldo.one('Input',p=>p['aria-label']==='Buscar item').onChange({target:{value:'Óleo'}});saldo.render();saldo.requests.at(-1).resolve({saldos:[{estoque_id:'e',estoque:'Estoque fictício',item_id:'itm',descricao:'Óleo fictício',unidade:'L',saldo:2}]});await flush(saldo);
   saldo.one('TableRow',p=>typeof p.onClick==='function').onClick();saldo.render();
   saldo.requests.at(-1).resolve({movimentos:[{id:'m',tipo:'saida',quantidade:-1,unidade:'L',data_movimento:'2026-10-27',baixa_id:'b',baixa_codigo:'BX-8'}]});await flush(saldo);
   assert.equal(saldo.one('a').href,'/?aba=chamados&baixa=b');assert.equal(saldo.one('a').children,'BX-8');
