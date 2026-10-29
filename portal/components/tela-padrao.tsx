@@ -4,7 +4,6 @@ import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Search } from 'lucide-react';
 import { Table } from '@/components/ui/table';
-import { PaginacaoDeLista } from './portal-presentation';
 
 export function BarraFiltros({
   busca, onBusca, placeholder = 'Buscar', children,

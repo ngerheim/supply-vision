@@ -45,12 +45,11 @@ export function Lista({ onNew, onOpen }: { onNew: () => void; onOpen: (id: strin
   const carregar = useCallback(() => {
     const q = new URLSearchParams({ page: String(pagina) });
     if (status) q.set('status', status); if (busca) q.set('busca', busca); if (de) q.set('de', de); if (ate) q.set('ate', ate);
-    setErro(''); setDados(null);
     void api(`/api/pagamentos?${q}`).then(setDados).catch((e) => setErro(errorText(e)));
-  }, [status, busca, de, ate, pagina, versao]);
-  useEffect(carregar, [carregar]);
-  const filtro = (set: (v: string) => void) => (v: string) => { set(v); setPagina(1); };
-  return <div className="patio-page"><LinhaDeAba actions={<><Button variant="outline" onClick={() => setVersao(v => v + 1)}>Atualizar</Button><Button variant="create" onClick={onNew}>Nova solicitação</Button></>} />
+  }, [status, busca, de, ate, pagina]);
+  useEffect(carregar, [carregar, versao]);
+  const filtro = (set: (v: string) => void) => (v: string) => { set(v); setPagina(1); setDados(null); setErro(''); };
+  return <div className="patio-page"><LinhaDeAba actions={<><Button variant="outline" onClick={() => {setErro('');setVersao(v => v + 1)}}>Atualizar</Button><Button variant="create" onClick={onNew}>Nova solicitação</Button></>} />
     <BarraFiltros busca={busca} onBusca={filtro(setBusca)} placeholder="Código, fornecedor, OC ou NF"><select aria-label="Situação" className="rounded-md border bg-background p-2" value={status} onChange={(e) => filtro(setStatus)(e.target.value)}><option value="">Todas as situações</option>{Object.entries(estado).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select><Input aria-label="Período: De" type="date" value={de} onChange={(e) => filtro(setDe)(e.target.value)} /><Input aria-label="Período: Até" type="date" value={ate} onChange={(e) => filtro(setAte)(e.target.value)} /></BarraFiltros>
     {erro && <p role="alert">{erro}</p>}{!dados ? <Loading label="Carregando pagamentos…" /> : <TabelaPadrao contador={`${dados.total ?? (dados.pagamentos || []).length} ${(dados.total ?? (dados.pagamentos || []).length) === 1 ? 'pagamento' : 'pagamentos'}`} pagina={<PaginacaoDeLista pagina={dados.page} paginas={dados.pageCount} alterar={setPagina} />}><TableHeader><TableRow>{['Código','Fornecedor','OC','NF','Valor','Situação','Vencimento'].map(t=><TableHead key={t}>{t}</TableHead>)}</TableRow></TableHeader><TableBody>{(dados.pagamentos || []).map((p: AnyRow)=><TableRow key={p.id}><TableCell><button className="text-link hover:underline" onClick={()=>onOpen(p.id)}><Plaquinha>{p.codigo}</Plaquinha></button></TableCell><TableCell>{p.fornecedor}</TableCell><TableCell>{p.numero_oc}</TableCell><TableCell>{p.numero_nf}</TableCell><TableCell>R$ {(Number(p.valor_centavos)/100).toLocaleString('pt-BR',{minimumFractionDigits:2})}</TableCell><TableCell><Status value={p.status}>{estado[p.status]}</Status></TableCell><TableCell>{dataBr(p.vencimento)}</TableCell></TableRow>)}</TableBody></TabelaPadrao>}
   </div>;

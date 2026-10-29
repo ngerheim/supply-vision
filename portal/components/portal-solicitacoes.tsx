@@ -10,12 +10,10 @@ import {
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { Card, CardContent } from '@/components/ui/card';
-import { PageHeader, LinhaDeAba } from './page-header';
+import { LinhaDeAba } from './page-header';
 import { BarraFiltros, TabelaPadrao } from './tela-padrao';
 import { Plaquinha } from './plaquinha';
 import {
-  Table,
   TableHeader,
   TableHead,
   TableBody,
@@ -24,7 +22,6 @@ import {
 } from '@/components/ui/table';
 import {
   type AnyRow,
-  Field,
   Loading,
   FalhaDeCarregamento,
   PaginacaoDeLista,
