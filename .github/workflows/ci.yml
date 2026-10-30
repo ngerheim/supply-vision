@@ -19,17 +19,27 @@ concurrency:
 
 jobs:
   powershell-inicializacao:
-    name: PowerShell - inicializacao e atualizacao
+    name: Scripts - inicializacao e atualizacao
     runs-on: windows-latest
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: portal/package.json
       - name: Alinhar Node da maquina com o servidor
         shell: powershell
         run: ./scripts/ci/fixar-node-runner.ps1
+      # Via rapida: PR so de telas, rotas, regras ou testes pula os cenarios
+      # longos sem pular o job (o supv atualizar exige checks com sucesso).
+      - name: Escopo do PR
+        id: escopo
+        env:
+          SV_ESCOPO_BASE: ${{ github.event.pull_request.base.sha }}
+          SV_ESCOPO_HEAD: ${{ github.event.pull_request.head.sha }}
+        run: node scripts/ci/escopo-pr.mjs
       # Windows PowerShell 5.1, o mesmo do servidor. Um erro de sintaxe no
       # atualizador ou no supervisor so apareceria no servidor.
       - name: Analise sintatica dos scripts
@@ -52,11 +62,13 @@ jobs:
         shell: powershell
         run: ./scripts/ci/testar-processos-teste.ps1
       - name: Cache PSScriptAnalyzer 1.25.0
+        if: steps.escopo.outputs.mecanismo == 'true'
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ runner.temp }}/pssa/PSScriptAnalyzer/1.25.0
           key: pssa-${{ runner.os }}-1.25.0-v2
       - name: Instalar PSScriptAnalyzer 1.25.0
+        if: steps.escopo.outputs.mecanismo == 'true'
         shell: powershell
         run: |
           $base = Join-Path $env:RUNNER_TEMP 'pssa'
@@ -72,6 +84,7 @@ jobs:
           }
           if ((Test-ModuleManifest (Join-Path $destino 'PSScriptAnalyzer.psd1')).Version -ne '1.25.0') { throw 'Versao do analisador incorreta.' }
       - name: PSScriptAnalyzer (erros)
+        if: steps.escopo.outputs.mecanismo == 'true'
         shell: powershell
         run: |
           Import-Module (Join-Path $env:RUNNER_TEMP 'pssa/PSScriptAnalyzer/1.25.0/PSScriptAnalyzer.psd1')
@@ -80,6 +93,7 @@ jobs:
           if ($achados.Count) { exit 1 }
 
       - name: Validar inicializacao com conta e atualizacao
+        if: steps.escopo.outputs.mecanismo == 'true'
         shell: powershell
         env:
           SV_TESTES_INTEGRACAO_WINDOWS: '1'
@@ -114,21 +128,32 @@ jobs:
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
 
   powershell-protecoes:
-    name: PowerShell - protecoes e agenda
+    name: Scripts - protecoes e agenda
     runs-on: windows-latest
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: portal/package.json
       - name: Alinhar Node da maquina com o servidor
         shell: powershell
         run: ./scripts/ci/fixar-node-runner.ps1
+      # Via rapida: PR so de telas, rotas, regras ou testes pula os cenarios
+      # longos sem pular o job (o supv atualizar exige checks com sucesso).
+      - name: Escopo do PR
+        id: escopo
+        env:
+          SV_ESCOPO_BASE: ${{ github.event.pull_request.base.sha }}
+          SV_ESCOPO_HEAD: ${{ github.event.pull_request.head.sha }}
+        run: node scripts/ci/escopo-pr.mjs
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: '3.12'
       - name: Validar protecoes da atualizacao e agenda
+        if: steps.escopo.outputs.mecanismo == 'true'
         shell: powershell
         run: |
           . ./scripts/ci/processos-teste.ps1
@@ -143,25 +168,37 @@ jobs:
           }
 
   powershell-ensaio:
-    name: PowerShell - ensaio e firewall
+    name: Scripts - ensaio e firewall
     runs-on: windows-latest
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: portal/package.json
       - name: Alinhar Node da maquina com o servidor
         shell: powershell
         run: ./scripts/ci/fixar-node-runner.ps1
+      # Via rapida: PR so de telas, rotas, regras ou testes pula os cenarios
+      # longos sem pular o job (o supv atualizar exige checks com sucesso).
+      - name: Escopo do PR
+        id: escopo
+        env:
+          SV_ESCOPO_BASE: ${{ github.event.pull_request.base.sha }}
+          SV_ESCOPO_HEAD: ${{ github.event.pull_request.head.sha }}
+        run: node scripts/ci/escopo-pr.mjs
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: '3.12'
       - name: Validar restricao de firewall sem alterar regras reais
+        if: steps.escopo.outputs.mecanismo == 'true'
         shell: powershell
         run: ./portal/scripts/testar-restricao-firewall.ps1
 
       - name: Validar ensaio sem login e supressao de avisos
+        if: steps.escopo.outputs.mecanismo == 'true'
         timeout-minutes: 11
         shell: powershell
         run: |
@@ -170,7 +207,7 @@ jobs:
 
   powershell:
     permissions: {}
-    name: PowerShell
+    name: Scripts do servidor
     needs: [powershell-inicializacao, powershell-protecoes, powershell-ensaio]
     if: always()
     runs-on: ubuntu-latest
@@ -183,12 +220,12 @@ jobs:
           ENSAIO: ${{ needs.powershell-ensaio.result }}
         run: |
           if [ "$INICIALIZACAO" != success ] || [ "$PROTECOES" != success ] || [ "$ENSAIO" != success ]; then
-            echo "::error::PowerShell reprovado: inicializacao=$INICIALIZACAO, protecoes=$PROTECOES, ensaio=$ENSAIO (exige todos com sucesso)."
+            echo "::error::Scripts do servidor reprovado: inicializacao=$INICIALIZACAO, protecoes=$PROTECOES, ensaio=$ENSAIO (exige todos com sucesso)."
             exit 1
           fi
 
   portal:
-    name: Portal
+    name: Portal - testes e build
     runs-on: ubuntu-latest
     timeout-minutes: 20
     defaults:
@@ -203,17 +240,29 @@ jobs:
           node-version-file: portal/package.json
           cache: npm
           cache-dependency-path: portal/package-lock.json
+      # Via rapida: PR so de telas, rotas, regras ou testes pula os cenarios
+      # longos sem pular o job (o supv atualizar exige checks com sucesso).
+      - name: Escopo do PR
+        id: escopo
+        working-directory: .
+        env:
+          SV_ESCOPO_BASE: ${{ github.event.pull_request.base.sha }}
+          SV_ESCOPO_HEAD: ${{ github.event.pull_request.head.sha }}
+        run: node scripts/ci/escopo-pr.mjs
       - name: Conferir arquivos de teste citados no CI
         working-directory: .
         run: node scripts/ci/verificar-testes.mjs
+      # O hash fixado em verificar-infra-publica.mjs sempre e conferido; o
+      # pacote oficial so e baixado quando vendor/ ou o mecanismo mudam.
       - name: Conferir pacote SheetJS contra o oficial
+        if: steps.escopo.outputs.mecanismo == 'true'
         working-directory: .
         run: curl --fail --location --retry 3 --max-time 120 https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz --output "$RUNNER_TEMP/xlsx-oficial.tgz"
       - name: Impedir dados de infraestrutura interna no repositorio publico
         working-directory: .
         env:
           SV_BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || '' }}
-          SV_XLSX_OFICIAL: ${{ runner.temp }}/xlsx-oficial.tgz
+          SV_XLSX_OFICIAL: ${{ steps.escopo.outputs.mecanismo == 'true' && format('{0}/xlsx-oficial.tgz', runner.temp) || '' }}
         run: node scripts/verificar-infra-publica.mjs
       # Arquivo gravado com CRLF no indice aparece como alterado no checkout
       # do Windows e trava o atualizar-servidor.ps1 ("alteracoes locais").
@@ -249,15 +298,20 @@ jobs:
         working-directory: .
         shell: pwsh
         run: ./scripts/testar-credencial-portal.ps1 -ExigirBuild
-      # Auditar runtime e ferramentas no PR e na execucao semanal.
-      - run: npm audit
+      # Vulnerabilidades novas nao dependem do PR: auditoria so na execucao
+      # semanal e no disparo manual (o Dependabot tambem avisa).
+      - name: npm audit
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+        run: npm audit
 
   portal-integracao:
-    name: Portal - instalacao nova e autenticacao real
+    name: Portal - operacao no Windows
     runs-on: windows-latest
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: portal/package.json
@@ -269,6 +323,14 @@ jobs:
           ./scripts/ci/fixar-node-runner.ps1
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           node -v
+      # Via rapida: PR so de telas, rotas, regras ou testes pula os cenarios
+      # longos sem pular o job (o supv atualizar exige checks com sucesso).
+      - name: Escopo do PR
+        id: escopo
+        env:
+          SV_ESCOPO_BASE: ${{ github.event.pull_request.base.sha }}
+          SV_ESCOPO_HEAD: ${{ github.event.pull_request.head.sha }}
+        run: node scripts/ci/escopo-pr.mjs
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"
@@ -285,11 +347,13 @@ jobs:
       - run: npm ci
         working-directory: portal
       - name: Validar senha 7-Zip via stdin e restauracao ficticia
+        if: steps.escopo.outputs.mecanismo == 'true'
         shell: powershell
         run: |
           node --experimental-strip-types --test portal/tests/backup-7z.test.mjs portal/tests/backup-7z-integracao.test.mjs portal/tests/backup-restauracao-e2e.test.mjs
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
       - name: npm com conta de usuario e TEMP curto 8.3
+        if: steps.escopo.outputs.mecanismo == 'true'
         shell: powershell
         env:
           SV_TESTES_INTEGRACAO_WINDOWS: '1'
@@ -299,10 +363,12 @@ jobs:
         run: ./portal/scripts/teste-portal-ponta-a-ponta.ps1
 
       - name: Validar launcher de demonstracao no PowerShell 5.1
+        if: steps.escopo.outputs.mecanismo == 'true'
         shell: powershell
         run: ./scripts/testar-demonstracao.ps1
 
       - name: Validar parada do supervisor com Portal real e SQLite
+        if: steps.escopo.outputs.mecanismo == 'true'
         timeout-minutes: 11
         shell: powershell
         run: |
@@ -324,6 +390,7 @@ jobs:
             ${{ runner.temp }}/sv-supervisor-evidencias/*/supervisor.log
 
       - name: Validar operacao e persistencia dos alertas
+        if: steps.escopo.outputs.mecanismo == 'true'
         shell: powershell
         # Driver conserva os cinco slots de scripts/testar-persistencia-alertas.ps1.
         run: ./scripts/ci/testar-operacao-persistencia.ps1 -Evento '${{ github.event_name }}'
@@ -331,6 +398,7 @@ jobs:
         working-directory: portal
         run: npm run test:imports
       - name: Ensaiar restauracao de backup ficticio
+        if: steps.escopo.outputs.mecanismo == 'true'
         working-directory: portal
         run: npm run test:restore -- --fixture
       - name: Guardar evidencias das importacoes em falha
@@ -347,11 +415,15 @@ jobs:
             portal/work/import-stress-*/http-error-*.txt
 
   atualizacao-real-cenarios:
-    name: Atualizacao real - ${{ matrix.grupo }}
+    name: Atualizacao do servidor - ${{ matrix.nome }}
     strategy:
       fail-fast: false
       matrix:
-        grupo: [atualizacao, reversao]
+        include:
+          - grupo: atualizacao
+            nome: sucesso
+          - grupo: reversao
+            nome: reversao
     if: github.event_name == 'pull_request'
     runs-on: windows-latest
     timeout-minutes: 40
@@ -364,7 +436,7 @@ jobs:
         shell: powershell
         run: |
           git fetch origin main
-          if ($LASTEXITCODE) { throw 'Nao foi possivel obter main para Atualizacao real.' }
+          if ($LASTEXITCODE) { throw 'Nao foi possivel obter main para Atualizacao do servidor.' }
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: portal/package.json
@@ -373,6 +445,14 @@ jobs:
       - name: Alinhar Node da maquina com o servidor
         shell: powershell
         run: ./scripts/ci/fixar-node-runner.ps1
+      # Via rapida: PR so de telas, rotas, regras ou testes pula os cenarios
+      # longos sem pular o job (o supv atualizar exige checks com sucesso).
+      - name: Escopo do PR
+        id: escopo
+        env:
+          SV_ESCOPO_BASE: ${{ github.event.pull_request.base.sha }}
+          SV_ESCOPO_HEAD: ${{ github.event.pull_request.head.sha }}
+        run: node scripts/ci/escopo-pr.mjs
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: '3.12'
@@ -382,6 +462,7 @@ jobs:
             alertas/config/requirements-dev.txt
             alertas/config/requirements-ci.txt
       - name: Executar grupo de atualizacao real
+        if: steps.escopo.outputs.mecanismo == 'true'
         timeout-minutes: 37
         shell: powershell
         env:
@@ -427,7 +508,7 @@ jobs:
 
   atualizacao-real:
     permissions: {}
-    name: Atualizacao real
+    name: Atualizacao do servidor
     needs: [atualizacao-real-cenarios]
     if: always() && github.event_name == 'pull_request'
     runs-on: ubuntu-latest
@@ -438,7 +519,7 @@ jobs:
           RESULTADO: ${{ needs.atualizacao-real-cenarios.result }}
         run: |
           if [ "$RESULTADO" != success ]; then
-            echo "::error::Atualizacao real reprovada: resultado dos grupos=$RESULTADO (exige ambos com sucesso)."
+            echo "::error::Atualizacao do servidor reprovada: resultado dos grupos=$RESULTADO (exige ambos com sucesso)."
             exit 1
           fi
 
@@ -457,10 +538,12 @@ jobs:
             alertas/config/requirements-dev.txt
             alertas/config/requirements-ci.txt
       - run: pip install -r alertas/config/requirements.txt -r alertas/config/requirements-dev.txt
+      - name: Instalar ferramentas de CI (ruff, pip-audit)
+        run: pip install -r alertas/config/requirements-ci.txt
+      # Vulnerabilidades novas nao dependem do PR: so na semanal e no manual.
       - name: Auditar dependencias Python
-        run: |
-          pip install -r alertas/config/requirements-ci.txt
-          pip-audit -r alertas/config/requirements.txt
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+        run: pip-audit -r alertas/config/requirements.txt
       - name: Lint Python (ruff)
         run: ruff check alertas
       - name: Preparar configuração fictícia

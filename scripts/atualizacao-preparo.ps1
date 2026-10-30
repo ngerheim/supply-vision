@@ -735,9 +735,9 @@ function Obter-ChecksCIPreparo([string]$Sha) {
 }
 # O H2 so roda em PR. No push da main, o agregador e os grupos da matriz
 # aparecem pulados; o GitHub pode registrar o nome sem expandir a matriz
-# ("Atualizacao real - ${{ matrix.grupo }}"). Somente eles podem ser skipped.
+# ("Atualizacao do servidor - ${{ matrix.nome }}"). Somente eles podem ser skipped.
 function Testar-H2PuladoNaMain($Check) {
- return $Check.status-ceq'completed'-and$Check.conclusion-ceq'skipped'-and$Check.name-cmatch'^Atualizacao real( - .+)?$'
+ return $Check.status-ceq'completed'-and$Check.conclusion-ceq'skipped'-and$Check.name-cmatch'^Atualizacao do servidor( - .+)?$'
 }
 function Consultar-CIPRIdentica([string]$Sha,$ChecksMain) {
  $checks=$ChecksMain
@@ -762,13 +762,13 @@ function Consultar-CIPRIdentica([string]$Sha,$ChecksMain) {
   $checksPR=@(Obter-ChecksCIPreparo $head)
   foreach($c in $checksPR){
    $skipMain=@($checks|Where-Object {$_.name-ceq$c.name-and$_.app.id-eq$c.app.id-and$_.app.slug-ceq$c.app.slug-and$_.status-ceq'completed'-and$_.conclusion-ceq'skipped'})
-   if($c.status-cne'completed'-or($c.conclusion-cne'success'-and!($c.name-ceq'Atualizacao real'-and$c.conclusion-ceq'skipped'-and$skipMain.Count-eq1))){throw "check da PR nao aprovado: $($c.name) ($($c.status)/$($c.conclusion))"}
+   if($c.status-cne'completed'-or($c.conclusion-cne'success'-and!($c.name-ceq'Atualizacao do servidor'-and$c.conclusion-ceq'skipped'-and$skipMain.Count-eq1))){throw "check da PR nao aprovado: $($c.name) ($($c.status)/$($c.conclusion))"}
   }
   # Compara tambem checks extras observados na main, sem afrouxar jobs push-only.
   foreach($c in $checks){
    # Grupos do H2 pulados na main nao existem com esse nome na PR; o
-   # agregador "Atualizacao real" da PR ja exige os dois grupos verdes.
-   if((Testar-H2PuladoNaMain $c)-and$c.name-cne'Atualizacao real'){continue}
+   # agregador "Atualizacao do servidor" da PR ja exige os dois grupos verdes.
+   if((Testar-H2PuladoNaMain $c)-and$c.name-cne'Atualizacao do servidor'){continue}
    $cobertura=@($checksPR|Where-Object {$_.name-ceq$c.name-and$_.app.id-eq$c.app.id-and$_.app.slug-ceq$c.app.slug})
    if($cobertura.Count-ne1){throw "check da main sem cobertura unica na PR (bloqueia): $($c.name)"}
   }
@@ -781,7 +781,7 @@ function Consultar-CIPreparo([string]$Sha,[switch]$ForcarCompleto,$Andamento=$nu
  $completo=@{rapido=$false;sha=$Sha;motivo='resposta inesperada da API'}
  if($ForcarCompleto){$completo.motivo='preparo completo forcado';return $completo}
  if($Sha-notmatch'^[0-9a-f]{40}$'){$completo.motivo='SHA invalido';return $completo}
- $obrigatorios=@('Portal','Portal - instalacao nova e autenticacao real','PowerShell','Alertas','Atualizacao real')
+ $obrigatorios=@('Portal - testes e build','Portal - operacao no Windows','Scripts do servidor','Alertas','Atualizacao do servidor')
  $motivoPrazo='Prazo de 30 min aguardando CI da main esgotado; modo completo'
  $inicio=& $Agora;$id=[guid]::NewGuid().ToString('N');$prConsultada=$false;$aguardou=$false;$motivoPR=''
  try{
