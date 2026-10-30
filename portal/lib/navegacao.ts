@@ -30,6 +30,7 @@ export const ABAS_NAVEGACAO = [
     { chave: 'history', slug: 'historico', label: 'Histórico' },
     { chave: 'emails', slug: 'emails', label: 'E-mails' },
     { chave: 'admin', slug: 'usuarios', label: 'Usuários' },
+    { chave: 'permissoes', slug: 'permissoes', label: 'Permissões' },
   ] },
 ] as const;
 export type DefinicaoAba = (typeof ABAS_NAVEGACAO)[number];
@@ -46,7 +47,7 @@ export const AVISO_AREA_RESTRITA = 'Seu perfil não tem acesso a esta área.';
 export const AVISO_CHAMADO_RESTRITO = 'Seu perfil permite consultar preços e acordos. O acesso a chamados é restrito.';
 const BUSCAR: EnderecoNavegacao = { aba: 'buscar', subaba: null };
 
-const ACAO_ABA: Partial<Record<Nav, Acao>> = { 'estoque-saldo': 'aba:baixas', 'estoque-entradas': 'aba:baixas', pagamentos: 'aba:solicitacoes' };
+const ACAO_ABA: Partial<Record<Nav, Acao>> = { 'estoque-saldo': 'aba:estoque', 'estoque-entradas': 'aba:estoque' };
 export function podeAcessarAba(usuario: UsuarioPermissao, chave: Nav): boolean {
   return pode(usuario, ACAO_ABA[chave] ?? (`aba:${chave}` as Acao));
 
