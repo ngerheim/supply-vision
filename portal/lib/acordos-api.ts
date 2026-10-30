@@ -182,17 +182,17 @@ export function acordosApi(contexto: ContextoApi) {
       state: `SELECT DISTINCT l.state AS id,l.state AS name
         FROM agreement_locations al JOIN locations l ON l.id=al.location_id
         WHERE al.agreement_id IN (SELECT value FROM json_each(?))`,
-      location: `SELECT DISTINCT l.id,l.city AS name
+      location: `SELECT DISTINCT l.id AS id,l.city AS name
         FROM agreement_locations al JOIN locations l ON l.id=al.location_id
         WHERE al.agreement_id IN (SELECT value FROM json_each(?))`,
-      supplier: `SELECT DISTINCT s.id,s.trade_name AS name
+      supplier: `SELECT DISTINCT s.id AS id,s.trade_name AS name
         FROM agreements a JOIN suppliers s ON s.id=a.supplier_id
         WHERE a.id IN (SELECT value FROM json_each(?))`,
-      item: `SELECT DISTINCT ci.id,ci.name FROM agreements a
+      item: `SELECT DISTINCT ci.id AS id,ci.name AS name FROM agreements a
         JOIN agreement_items ai ON ai.version_id=a.current_version_id
         JOIN catalog_items ci ON ci.id=ai.catalog_item_id
         WHERE a.id IN (SELECT value FROM json_each(?))`,
-      model: `SELECT DISTINCT vm.id,vm.name FROM agreements a
+      model: `SELECT DISTINCT vm.id AS id,vm.name AS name FROM agreements a
         JOIN agreement_items ai ON ai.version_id=a.current_version_id
         JOIN vehicle_models vm ON vm.id=ai.vehicle_model_id
         WHERE a.id IN (SELECT value FROM json_each(?))`,
