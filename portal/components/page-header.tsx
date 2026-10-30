@@ -30,6 +30,7 @@ const titulos = {
   estoque: "Estoque",
   acordos: "Acordos",
   cadastros: "Cadastros",
+  analise: "Análise",
   administracao: "Administração",
 };
 

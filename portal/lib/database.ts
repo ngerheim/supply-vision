@@ -7,6 +7,7 @@ import { MIGRAR_FILA_SOLICITACOES } from './fila-email-schema.ts';
 import { bancoSqliteLocal } from './sqlite-local.ts';
 import { SESSAO_INATIVIDADE_MS } from './politica-sessao.ts';
 import { lerPermissoes } from './permissoes.ts';
+import { SCHEMA_ANALISE } from './analise.ts';
 
 export { SESSAO_INATIVIDADE_MS } from './politica-sessao.ts';
 import { CRIAR_CONTADOR_CHAMADOS_SQL, MIGRAR_CONTADOR_CHAMADOS_SQL, migrarBuscaChamados, migrarIndicesListasGlobais } from './operacao-dados.ts';
@@ -392,6 +393,13 @@ async function initialize() {
     await db.batchConstruir(() => [
       db.prepare(SCHEMA_PERMISSOES_USUARIO),
       db.prepare('INSERT OR IGNORE INTO schema_migrations(version,applied_at) VALUES(16,?)').bind(now()),
+    ]);
+  }
+  // Compras ja comparadas pelo Alertas, base da aba Analise.
+  if (!await db.prepare('SELECT 1 ok FROM schema_migrations WHERE version=17').first()) {
+    await db.batchConstruir(() => [
+      ...SCHEMA_ANALISE.map(sql => db.prepare(sql)),
+      db.prepare('INSERT OR IGNORE INTO schema_migrations(version,applied_at) VALUES(17,?)').bind(now()),
     ]);
   }
   await db.prepare('PRAGMA optimize').run();
