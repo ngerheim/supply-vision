@@ -21,6 +21,7 @@ export const ACOES = [
   'aba:pagamentos', 'pagamento:abrir', 'pagamento:ver_todas', 'pagamento:atender',
   'aba:estoque', 'estoque:consultar', 'estoque:lancar',
   'aba:permissoes', 'permissao:gerenciar',
+  'aba:analise', 'analise:consultar',
 ] as const;
 export type Acao = (typeof ACOES)[number];
 
@@ -39,6 +40,7 @@ const suprimentos: readonly Acao[] = [
   'solicitacao:ver_todas', 'solicitacao:atender',
   'baixa:ver_todas', 'baixa:atender',
   'pagamento:ver_todas', 'pagamento:atender', 'estoque:lancar',
+  'aba:analise', 'analise:consultar',
 ];
 const acoesPorPerfil: Record<Role, readonly Acao[]> = {
   viewer: consulta,
@@ -77,6 +79,7 @@ export const AREAS = [
   { area: 'relatorios', aba: 'Administração', label: 'Relatórios' },
   { area: 'historico', aba: 'Administração', label: 'Histórico' },
   { area: 'emails', aba: 'Administração', label: 'E-mails' },
+  { area: 'analise', aba: 'Análise', label: 'Análise' },
 ] as const;
 export type Area = (typeof AREAS)[number]['area'];
 export const AREAS_IDS: readonly Area[] = AREAS.map(a => a.area);
@@ -116,6 +119,7 @@ export const EXIGENCIAS: Partial<Record<Acao, Exigencia>> = {
   'portal:consultar-gestao': L('acordos', 'importacoes', 'fornecedores', 'catalogos', 'depara'),
   'portal:escrever': E('acordos', 'fornecedores', 'catalogos'),
   'usuario:consultar': L('parcerias'),
+  'aba:analise': L('analise'), 'analise:consultar': L('analise'),
 };
 // Fora do painel: so o perfil admin. Evita que alguem amplie os proprios poderes.
 // central:marcar nao pertence a area nenhuma e segue o perfil.

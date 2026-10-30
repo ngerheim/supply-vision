@@ -25,6 +25,7 @@ import { Tickets } from './portal-tickets';
 import { ChangeHistory } from './portal-history';
 import { Permissoes } from './portal-permissoes';
 import { Contratos } from './portal-contratos';
+import { Analise } from './portal-analise';
 import { Administration } from './portal-users';
 import { Mappings } from './portal-mappings';
 import { CabecalhoProvider } from './page-header';
@@ -167,6 +168,7 @@ function PortalSession({ message, endSession }: { message: string; endSession: (
       {podeAcessarAba(user,'estoque-saldo')&&nav==='estoque-saldo'&&<SaldoEstoque user={user}/>}
       {podeAcessarAba(user,'estoque-entradas')&&nav==='estoque-entradas'&&<EntradaEstoque/>}
       {pode(user, 'aba:history')&&nav==='history'&&<ChangeHistory users={userList}/>}
+      {pode(user, 'aba:analise')&&nav==='analise'&&<Analise/>}
       {pode(user, 'aba:admin')&&nav==='admin'&&<Administration user={user} busy={busy} run={run}/>}
       {pode(user, 'aba:permissoes')&&nav==='permissoes'&&<Permissoes busy={busy} run={run}/>}
       {pode(user, 'aba:reports')&&nav==='reports'&&<Reports/>}

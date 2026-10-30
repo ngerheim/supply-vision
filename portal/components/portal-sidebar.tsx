@@ -17,6 +17,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Settings,
+  ChartColumn,
   Boxes,
   Wrench,
 } from "lucide-react";
@@ -32,6 +33,7 @@ const navItems: Record<Aba, { label: string; icon: typeof PackageSearch }> = {
   estoque: { label: "Estoque", icon: Boxes },
   acordos: { label: "Acordos", icon: Handshake },
   cadastros: { label: "Cadastros", icon: Database },
+  analise: { label: "Análise", icon: ChartColumn },
   administracao: { label: "Administração", icon: Settings },
 };
 export function Sidebar({

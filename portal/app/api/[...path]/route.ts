@@ -20,6 +20,7 @@ import { chamadosApi } from '@/lib/chamados-api';
 import { usuariosApi } from '@/lib/usuarios-api';
 import { permissoesApi } from '@/lib/permissoes-api';
 import { contratosApi } from '@/lib/contratos-api';
+import { analiseApi } from '@/lib/analise-api';
 import { auditoriaApi } from '@/lib/auditoria-api';
 import { notificacoesApi } from '@/lib/notificacoes-api';
 import { logoMarca } from '@/lib/marca-api';
@@ -139,6 +140,7 @@ const chamados = chamadosApi(contexto);
 const usuarios = usuariosApi(contexto);
 const permissoes = permissoesApi(contexto);
 const contratos = contratosApi(contexto);
+const analise = analiseApi(contexto);
 const auditoria = auditoriaApi(contexto);
 const notificacoes = notificacoesApi(contexto);
 const central = centralApi(contexto);
@@ -281,6 +283,7 @@ async function GETInterno(request: NextRequest) {
   if (parts[0] === 'agreements' && parts[1]) return agreementDetail(parts[1], user, request.nextUrl.searchParams);
 
   if (parts[0] === 'permissoes') return parts.length === 1 ? permissoes.matriz(user) : fail('Rota não encontrada.', 404);
+  if (parts[0] === 'analise') return parts.length === 1 ? analise.painel(user, request.nextUrl.searchParams) : fail('Rota não encontrada.', 404);
   if (parts[0] === 'contratos') return parts.length === 1 ? contratos.preparar(user, request.nextUrl.searchParams.get('acordo')) : fail('Rota não encontrada.', 404);
 
   // Guarda geral antes das permissoes especificas; preserva as respostas HTTP.
@@ -343,6 +346,10 @@ async function POSTInterno(request: NextRequest) {
   const parts = partsOf(request);
   if (parts[0] === 'login') return login(request);
   if (parts[0] === 'logout') return logout(request);
+  if (parts[0] === 'internal' && parts[1] === 'compras' && parts.length === 2) {
+    if (!tokenInternoValido(request)) return fail('Credencial interna inválida.', 401);
+    return analise.receberDia(request);
+  }
   const user = await requireUser(request);
   if (!user) {
     if (parts[0] === 'pagamentos' && request.body) {

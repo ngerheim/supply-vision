@@ -89,6 +89,10 @@ if __name__ == "__main__":
     resumo = resumir_status(df)
     imprimir_resumo(resumo)
 
+    # Alimenta a aba Análise do Portal; falha aqui não interrompe o alerta.
+    from envio_analise import enviar_comparacao
+    enviar_comparacao(df)
+
     run_id = os.environ.get("SUPPLY_VISION_RUN_ID")
     stamp = run_id or datetime.now().strftime("%Y%m%d_%H%M%S")
     base  = pathlib.Path(OUTPUT_DIR)

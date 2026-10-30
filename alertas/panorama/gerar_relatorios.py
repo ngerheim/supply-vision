@@ -94,6 +94,9 @@ def gerar():
     print('Processando...')
     df    = rodar.processar(df_base, df_acordo)
     rodar.imprimir_resumo(rodar.resumir_status(df))
+    # O recorte também preenche a Análise do Portal (histórico).
+    from envio_analise import enviar_comparacao
+    enviar_comparacao(df)
 
     stamp = os.environ.get('SUPPLY_VISION_RUN_ID') or \
             f"{datetime.now():%Y%m%d_%H%M%S}_{secrets.token_hex(3)}"
