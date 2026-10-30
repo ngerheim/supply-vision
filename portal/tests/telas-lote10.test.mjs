@@ -193,9 +193,11 @@ void test('limpar filtros cancela pesquisa e erro antigo nao reaparece', async (
   const props = { catalogs, filters: filtros.filtrosVazios(), setFilters() {} };
   const h = await mount('portal-search', 'SearchPage', props);
   t.after(() => h.unmount());
-  const search = h.one('Button', (p) => p.size === 'lg').onClick();
+  const barra = h.one('BarraBuscaAcordos');
+  const search = barra.onSearch();
   const request = h.requests[0];
-  h.one('Button', (p) => p.variant === 'ghost').onClick();
+  barra.onChange();
+  barra.onClear();
   h.render();
   assert.equal(request.options.signal.aborted, true);
   request.reject(new Error('Falha antiga'));
@@ -211,7 +213,7 @@ void test('pesquisa nova prevalece mesmo se a anterior ignorar cancelamento', as
     filters: filtros.filtrosVazios(),
   });
   t.after(() => h.unmount());
-  const search = h.one('Button', (p) => p.size === 'lg').onClick;
+  const search = h.one('BarraBuscaAcordos').onSearch;
   const first = search(),
     second = search();
   h.requests[1].resolve({

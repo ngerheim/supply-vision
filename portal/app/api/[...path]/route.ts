@@ -274,6 +274,10 @@ async function GETInterno(request: NextRequest) {
   }
   if (parts[0] === 'bootstrap') return bootstrap(user);
   if (parts[0] === 'search') return parts[1] === 'options' ? searchOptions(request.nextUrl.searchParams) : search(request.nextUrl.searchParams);
+  if (parts[0] === 'agreements' && parts[1] === 'options') {
+    if (!pode(user, 'portal:consultar-gestao')) return fail('Seu perfil não permite consultar acordos.', 403);
+    return acordos.agreementOptions(request.nextUrl.searchParams);
+  }
   if (parts[0] === 'agreements' && parts[1]) return agreementDetail(parts[1], user, request.nextUrl.searchParams);
 
   if (parts[0] === 'permissoes') return parts.length === 1 ? permissoes.matriz(user) : fail('Rota não encontrada.', 404);
@@ -283,6 +287,7 @@ async function GETInterno(request: NextRequest) {
   // Consulta simples permanece disponivel acima desta guarda.
   if (!pode(user, acaoConsulta(parts))) return fail('Seu perfil permite apenas consultar acordos e preços.', 403);
 
+  if (parts[0] === 'agreements' && parts.length === 1) return ok({ agreements: await acordos.agreementList(request.nextUrl.searchParams) });
   if (parts[0] === 'reports') {
     if (!pode(user, 'relatorio:consultar')) return fail('Somente administradores podem executar e consultar relatórios.', 403);
     return consultarRelatorios(parts[1], parts[2]);
