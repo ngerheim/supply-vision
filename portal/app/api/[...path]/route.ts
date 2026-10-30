@@ -19,6 +19,7 @@ import { importacoesApi } from '@/lib/importacoes-api';
 import { chamadosApi } from '@/lib/chamados-api';
 import { usuariosApi } from '@/lib/usuarios-api';
 import { permissoesApi } from '@/lib/permissoes-api';
+import { contratosApi } from '@/lib/contratos-api';
 import { auditoriaApi } from '@/lib/auditoria-api';
 import { notificacoesApi } from '@/lib/notificacoes-api';
 import { logoMarca } from '@/lib/marca-api';
@@ -137,6 +138,7 @@ const importacoes = importacoesApi(contexto, acordos);
 const chamados = chamadosApi(contexto);
 const usuarios = usuariosApi(contexto);
 const permissoes = permissoesApi(contexto);
+const contratos = contratosApi(contexto);
 const auditoria = auditoriaApi(contexto);
 const notificacoes = notificacoesApi(contexto);
 const central = centralApi(contexto);
@@ -275,6 +277,7 @@ async function GETInterno(request: NextRequest) {
   if (parts[0] === 'agreements' && parts[1]) return agreementDetail(parts[1], user, request.nextUrl.searchParams);
 
   if (parts[0] === 'permissoes') return parts.length === 1 ? permissoes.matriz(user) : fail('Rota não encontrada.', 404);
+  if (parts[0] === 'contratos') return parts.length === 1 ? contratos.preparar(user, request.nextUrl.searchParams.get('acordo')) : fail('Rota não encontrada.', 404);
 
   // Guarda geral antes das permissoes especificas; preserva as respostas HTTP.
   // Consulta simples permanece disponivel acima desta guarda.
@@ -345,6 +348,10 @@ async function POSTInterno(request: NextRequest) {
     return fail('Sessão expirada.', 401);
   }
   if (await first(VALIDACAO_ATIVA_SQL)) return denyWrite(request, 'Sistema em atualização, aguarde alguns instantes', 503, 'validacao');
+  if (partsOf(request)[0] === 'contratos') {
+    if (!pode(user, 'acordo:consultar-completo')) return denyWrite(request, 'Seu perfil não permite gerar contratos.');
+    return partsOf(request).length === 1 ? contratos.gerar(request, user) : fail('Rota não encontrada.', 404);
+  }
   if(partsOf(request)[0]==='pagamentos'){
     const parts=partsOf(request);
     if(parts.length===1){if(!pode(user,'pagamento:abrir'))return denyWrite(request,'Seu perfil não permite abrir solicitações.');const bytes=await corpoBinarioLimitado(request,10*1024*1024+128*1024,{drenagemBytes:1024*1024});if(bytes===null)return ok({error:'Corpo da solicitação acima do limite de 10 MB.'},{status:413,headers:{connection:'close'}});return pagamentos.criar(new Request(request.url,{method:'POST',headers:request.headers,body:bytes.buffer.slice(bytes.byteOffset,bytes.byteOffset+bytes.byteLength) as ArrayBuffer}),user);}
