@@ -112,15 +112,15 @@ function Invoke-RestMethod {
  }
 
  Registrar 'api-checks'
- $nomes=@('Portal','Portal - instalacao nova e autenticacao real','PowerShell','Alertas','Atualizacao real')
+ $nomes=@('Portal - testes e build','Portal - operacao no Windows','Scripts do servidor','Alertas','Atualizacao do servidor')
  # Os grupos sao checks extras: exigem success na main e cobertura unica na PR.
- if($Caso-like'*powershell*'){$nomes+=@('PowerShell - inicializacao e atualizacao','PowerShell - protecoes e agenda','PowerShell - ensaio e firewall')}
+ if($Caso-like'*powershell*'){$nomes+=@('Scripts - inicializacao e atualizacao','Scripts - protecoes e agenda','Scripts - ensaio e firewall')}
  if($Caso-like'ci-espera-*'){
   $segundos=($global:ciAgora-[datetime]'2026-01-01').TotalSeconds
   Registrar ("consulta-ci:"+$segundos)
   if($Caso-eq'ci-espera-api'-and$segundos-ge30){throw 'API indisponivel durante a espera'}
  }
- $checks=@(foreach($nome in $nomes){[pscustomobject]@{name=$nome;head_sha=('2'*40);status='completed';conclusion=$(if($nome-eq'Atualizacao real'){'skipped'}else{'success'});app=@{slug='github-actions';id=15368}}})
+ $checks=@(foreach($nome in $nomes){[pscustomobject]@{name=$nome;head_sha=('2'*40);status='completed';conclusion=$(if($nome-eq'Atualizacao do servidor'){'skipped'}else{'success'});app=@{slug='github-actions';id=15368}}})
  if($Caso-like'ci-pr-*'){
   $naPR=$Uri-like("*/commits/$prSha/check-runs?*")
   if($naPR){
@@ -129,11 +129,11 @@ function Invoke-RestMethod {
    if($Caso-eq'ci-pr-pendente'){$checks[0].status='in_progress';$checks[0].conclusion=$null}
    if($Caso-eq'ci-pr-skipped'){$checks[0].conclusion='skipped'}
    if($Caso-eq'ci-pr-skipped-real'){$checks[4].conclusion='skipped'}
-   if($Caso-eq'ci-pr-sem-check'){$checks=@($checks|Where-Object name -ne 'PowerShell')}
+   if($Caso-eq'ci-pr-sem-check'){$checks=@($checks|Where-Object name -ne 'Scripts do servidor')}
    if($Caso-eq'ci-pr-app'){$checks[0].app=@{slug='outro';id=9}}
    if($Caso-eq'ci-pr-sha'){$checks[0].head_sha=$mainSha}
-   if($Caso-eq'ci-pr-powershell-ausente'){$checks=@($checks|Where-Object name -ne 'PowerShell - ensaio e firewall')}
-   if($Caso-eq'ci-pr-powershell-renomeado'){$checks[-1].name='PowerShell - outro grupo'}
+   if($Caso-eq'ci-pr-powershell-ausente'){$checks=@($checks|Where-Object name -ne 'Scripts - ensaio e firewall')}
+   if($Caso-eq'ci-pr-powershell-renomeado'){$checks[-1].name='Scripts - outro grupo'}
    if($Caso-eq'ci-pr-powershell-duplicado'){$checks+=@($checks[-1])}
    if($Caso-eq'ci-pr-powershell-pendente'){$checks[-1].status='in_progress';$checks[-1].conclusion=$null}
    if($Caso-eq'ci-pr-powershell-skipped'){$checks[-1].conclusion='skipped'}
@@ -155,14 +155,14 @@ function Invoke-RestMethod {
  }
  # Push da main: grupos da matriz do H2 pulados, com o nome sem expandir.
  if($Caso-in@('ci-matriz-pulada','ci-pr-matriz')-and!($Caso-eq'ci-pr-matriz'-and$naPR)){
-  $checks+=@([pscustomobject]@{name='Atualizacao real - ${{ matrix.grupo }}';head_sha=$checks[0].head_sha;status='completed';conclusion='skipped';app=@{slug='github-actions';id=15368}})
+  $checks+=@([pscustomobject]@{name='Atualizacao do servidor - ${{ matrix.nome }}';head_sha=$checks[0].head_sha;status='completed';conclusion='skipped';app=@{slug='github-actions';id=15368}})
  }
  if($Caso-eq'ci-pr-matriz'-and$naPR){
-  foreach($grupo in @('atualizacao','reversao')){$checks+=@([pscustomobject]@{name="Atualizacao real - $grupo";head_sha=$prSha;status='completed';conclusion='success';app=@{slug='github-actions';id=15368}})}
+  foreach($grupo in @('sucesso','reversao')){$checks+=@([pscustomobject]@{name="Atualizacao do servidor - $grupo";head_sha=$prSha;status='completed';conclusion='success';app=@{slug='github-actions';id=15368}})}
  }
  if($Caso-eq'ci-powershell-skipped'){$checks[-1].conclusion='skipped'}
  if($Caso-eq'ci-powershell-falho'){$checks[-1].conclusion='failure'}
- if($Caso-eq'ci-ausente'){$checks=@($checks|Where-Object name -ne 'PowerShell')}
+ if($Caso-eq'ci-ausente'){$checks=@($checks|Where-Object name -ne 'Scripts do servidor')}
  if($Caso-eq'ci-pendente'){$checks[3].status='in_progress'}
  if($Caso-eq'ci-falho'){$checks[0].conclusion='failure'}
  if($Caso-eq'ci-timeout'){$checks[0].conclusion='timed_out'}
@@ -260,12 +260,12 @@ exit $LASTEXITCODE
    if($andamentoModo.modo-ne$modoEsperado-or!$andamentoModo.motivoModo){throw 'Decisao ou motivo ausente no acompanhamento.'}
    if(!$tempos.Contains($andamentoModo.motivoModo)){throw 'Motivo do acompanhamento difere do log.'}
    $motivoEsperado=switch($caso){
-    'ci-powershell-skipped' {'check nao aprovado: PowerShell - ensaio e firewall (completed/skipped)'}
-    'ci-pr-powershell-ausente' {'check da main sem cobertura unica na PR (bloqueia): PowerShell - ensaio e firewall'}
-    'ci-pr-powershell-renomeado' {'check da main sem cobertura unica na PR (bloqueia): PowerShell - ensaio e firewall'}
-    'ci-pr-powershell-duplicado' {'check da main sem cobertura unica na PR (bloqueia): PowerShell - ensaio e firewall'}
-    'ci-pr-powershell-pendente' {'check da PR nao aprovado: PowerShell - ensaio e firewall (in_progress/)'}
-    'ci-pr-powershell-skipped' {'check da PR nao aprovado: PowerShell - ensaio e firewall (completed/skipped)'}
+    'ci-powershell-skipped' {'check nao aprovado: Scripts - ensaio e firewall (completed/skipped)'}
+    'ci-pr-powershell-ausente' {'check da main sem cobertura unica na PR (bloqueia): Scripts - ensaio e firewall'}
+    'ci-pr-powershell-renomeado' {'check da main sem cobertura unica na PR (bloqueia): Scripts - ensaio e firewall'}
+    'ci-pr-powershell-duplicado' {'check da main sem cobertura unica na PR (bloqueia): Scripts - ensaio e firewall'}
+    'ci-pr-powershell-pendente' {'check da PR nao aprovado: Scripts - ensaio e firewall (in_progress/)'}
+    'ci-pr-powershell-skipped' {'check da PR nao aprovado: Scripts - ensaio e firewall (completed/skipped)'}
     'ci-espera-verde' {'CI da main verde (2222222)'}
     'ci-espera-api' {'consulta indisponivel ou invalida; modo completo'}
     'ci-pr-verde' {'CI da PR #123 (3333333) verde, conteudo identico ao da main (2222222)'}

@@ -253,12 +253,12 @@ try{
   Exigir-Supv ($resumo.Count-eq1-and$resumo[0]-like'*users=1, tickets=0*') 'resumo da restauracao exibe contagens legiveis'
   Exigir-Supv ((Mascarar-Homologacao $resumo[0])-eq$resumo[0]) 'resumo real da restauracao nao e omitido'
   foreach($modo in @('rapido','completo')){
-   $motivo=Formatar-MotivoPreparo 'check nao aprovado: Atualizacao real - ${{ matrix.grupo }} (completed/skipped); modo completo'
+   $motivo=Formatar-MotivoPreparo 'check nao aprovado: Atualizacao do servidor - ${{ matrix.nome }} (completed/skipped); modo completo'
    $linha="PREPARAR: modo $modo - motivo: $motivo"
    Exigir-Supv ((Mascarar-Homologacao $linha)-eq$linha-and$linha.Contains('(matrix.grupo)')) 'linha do modo PREPARAR preserva motivo nos logs'
-   $a=@{numero=1;total=37;nome='PREPARAR / Build do Portal';modo=$modo;motivoModo='check nao aprovado: Atualizacao real - ${{ matrix.grupo }} (completed/skipped)';estado='andamento';etapaSegundos=0;totalSegundos=0;restanteSegundos=$null}
+   $a=@{numero=1;total=37;nome='PREPARAR / Build do Portal';modo=$modo;motivoModo='check nao aprovado: Atualizacao do servidor - ${{ matrix.nome }} (completed/skipped)';estado='andamento';etapaSegundos=0;totalSegundos=0;restanteSegundos=$null}
    $texto=Capturar-Supv {Mostrar-ProgressoSupv $a @{}}
-   Exigir-Supv ($texto.Contains("Modo ${modo}: check nao aprovado: Atualizacao real - (matrix.grupo)")-and$texto-notlike'*conteudo omitido*') 'status preserva motivo do modo com rotulo de matriz'
+   Exigir-Supv ($texto.Contains("Modo ${modo}: check nao aprovado: Atualizacao do servidor - (matrix.nome)")-and$texto-notlike'*conteudo omitido*') 'status preserva motivo do modo com rotulo de matriz'
   }
   foreach($linha in @('{"users":11}','SELECT * FROM users','usuario=exemplo','payload: sigiloso','preco=10','chamado: exemplo')){
    Exigir-Supv ((Mascarar-Homologacao $linha)-eq'[conteudo omitido]') 'regra de omissao integral permanece restritiva'
