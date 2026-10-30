@@ -36,8 +36,8 @@ export async function fetchPortal(path: string, options?: RequestInit): Promise<
   return response;
 }
 
-export async function baixarArquivo(path: string, nome?: string): Promise<void> {
-  const response = await fetchPortal(path);
+export async function baixarArquivo(path: string, nome?: string, options?: RequestInit): Promise<void> {
+  const response = await fetchPortal(path, options);
   if (!response.ok) {
     if (response.status === 401 && !obterEstadoPortal().versaoNova) window.dispatchEvent(new Event('portal:session-expired'));
     const dados = await response.json().catch(() => ({}));
