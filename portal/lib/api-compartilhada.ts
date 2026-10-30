@@ -1,9 +1,9 @@
-import { pode } from './permissoes.ts';
+import { pode, type Permissoes } from './permissoes.ts';
 import type * as Banco from './database.ts';
 import type { NextResponse } from 'next/server';
 import { errorMessage, type Role } from './domain.ts';
 
-export type User = { id: string; name: string; email: string; role: Role };
+export type User = { id: string; name: string; email: string; role: Role; permissoes?: Permissoes };
 export type Row = Record<string, unknown>;
 
 // O roteador fornece banco e HTTP uma vez. Importar o SQL de um assunto nos

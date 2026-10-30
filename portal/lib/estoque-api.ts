@@ -14,8 +14,8 @@ export function estoqueApi(ctx: ContextoApi) {
   const stmt=(sql:string,v:unknown[]=[])=>rawDb().prepare(sql).bind(...v);
   const erroDuplicado=()=>ctx.ok({error:'Este movimento já foi estornado.',codigo:'duplicado'},{status:409});
   async function gravar(request:Request,user:User,ajuste:boolean){
-    return comAcaoEscrita(ajuste?'estoque:gerenciar':'baixa:atender',async()=>{
-      if(!pode(user,ajuste?'estoque:gerenciar':'baixa:atender'))return fail('Seu perfil não permite esta operação.',403);
+    return comAcaoEscrita(ajuste?'estoque:gerenciar':'estoque:lancar',async()=>{
+      if(!pode(user,ajuste?'estoque:gerenciar':'estoque:lancar'))return fail('Seu perfil não permite esta operação.',403);
       const body=await jsonBody<Corpo>(request), estoqueId=typeof body.estoqueId==='string'?body.estoqueId:'',data=body.dataMovimento;
       const estoque=await first<{id:string}>('SELECT id FROM estoques WHERE id=? AND ativo=1',[estoqueId]);if(!estoque)return fail('Estoque inexistente ou inativo.');
       if(!dataValida(data)||data>hojeBrasilia())return fail('Informe uma data civil válida que não seja futura.');
@@ -37,10 +37,10 @@ export function estoqueApi(ctx: ContextoApi) {
       return ok({success:true,origemId:origem});
     });
   }
-  async function estornar(request:Request,user:User,movimentoId:string){return comAcaoEscrita('baixa:atender',async()=>{
+  async function estornar(request:Request,user:User,movimentoId:string){return comAcaoEscrita('estoque:lancar',async()=>{
     const original=await first<{id:string;tipo:string;estoque_id:string;item_id:string;quantidade_centesimos:number;documento:string|null;data_movimento:string}>('SELECT * FROM movimentos_estoque WHERE id=?',[movimentoId]);
     if(!original)return fail('Movimento não encontrado.',404);if(!['entrada','ajuste'].includes(original.tipo))return ctx.ok({error:'Este tipo de movimento não pode ser estornado.',codigo:'nao_estornavel'},{status:409});
-    const permitido=original.tipo==='ajuste'?pode(user,'estoque:gerenciar'):pode(user,'baixa:atender');if(!permitido)return fail('Seu perfil não permite estornar este movimento.',403);
+    const permitido=original.tipo==='ajuste'?pode(user,'estoque:gerenciar'):pode(user,'estoque:lancar');if(!permitido)return fail('Seu perfil não permite estornar este movimento.',403);
     const body=await jsonBody<Corpo>(request),motivo=typeof body.motivo==='string'?body.motivo.trim():'';if(!motivo||motivo.length>300)return fail('Informe o motivo do estorno.');
     if(await first('SELECT 1 FROM movimentos_estoque WHERE movimento_estornado_id=?',[movimentoId]))return erroDuplicado();
     const ts=now(),estorno=id('mov');try{await rawDb().batch([stmt('INSERT INTO movimentos_estoque(id,estoque_id,item_id,tipo,quantidade_centesimos,documento,observacao,origem_tipo,origem_id,movimento_estornado_id,user_id,data_movimento,criado_em) VALUES(?,?,?,\'estorno\',?,?,?,?,?,?,?,?,?)',[estorno,original.estoque_id,original.item_id,-original.quantidade_centesimos,original.documento,motivo,'estorno',movimentoId,movimentoId,user.id,hojeBrasilia(),ts]),stmt('INSERT INTO audit_logs(id,user_id,action,entity,entity_id,details,created_at) VALUES(?,?,?,?,?,?,?)',[id('aud'),user.id,'CREATE','movimentos_estoque',estorno,`Estorno de ${movimentoId}: ${motivo}`,ts])]);}catch(e){if(String((e as Error)?.message).includes('UNIQUE'))return erroDuplicado();throw e;}return ok({success:true,id:estorno});

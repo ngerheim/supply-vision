@@ -859,7 +859,7 @@ export function SaldoEstoque({ user }: { user: AnyRow }) {
                         !m.estornado &&
                         (m.tipo === 'ajuste'
                           ? pode(user, 'estoque:gerenciar')
-                          : pode(user, 'baixa:atender')) && (
+                          : pode(user, 'estoque:lancar')) && (
                           <Button
                             variant="outline"
                             onClick={() => setSelecionado(m)}

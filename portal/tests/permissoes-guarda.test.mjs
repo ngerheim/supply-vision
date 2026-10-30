@@ -7,7 +7,7 @@ import test from 'node:test';
 // (exceto o proprio modulo que define a politica). Novas guardas falham
 // mesmo dentro de usuarios-api.ts ou portal-users.tsx.
 const excecoes = {
-  'lib/sqlite-local.ts': ['u.role=?', "u.role IN ('admin','editor')"],
+  'lib/sqlite-local.ts': ['u.role=?'],
   'lib/fila-email-chamados.ts': ["role IN ('admin','editor')", "r.role IN ('admin','editor')", "a.role IN ('admin','editor')"],
   'lib/usuarios-api.ts': [
     "role<>'admin'", "outro.role='admin'", 'role=?', 'role=?',

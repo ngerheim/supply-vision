@@ -18,6 +18,7 @@ import { mapeamentosApi } from '@/lib/mapeamentos-api';
 import { importacoesApi } from '@/lib/importacoes-api';
 import { chamadosApi } from '@/lib/chamados-api';
 import { usuariosApi } from '@/lib/usuarios-api';
+import { permissoesApi } from '@/lib/permissoes-api';
 import { auditoriaApi } from '@/lib/auditoria-api';
 import { notificacoesApi } from '@/lib/notificacoes-api';
 import { logoMarca } from '@/lib/marca-api';
@@ -135,6 +136,7 @@ const mapeamentos = mapeamentosApi(contexto);
 const importacoes = importacoesApi(contexto, acordos);
 const chamados = chamadosApi(contexto);
 const usuarios = usuariosApi(contexto);
+const permissoes = permissoesApi(contexto);
 const auditoria = auditoriaApi(contexto);
 const notificacoes = notificacoesApi(contexto);
 const central = centralApi(contexto);
@@ -224,25 +226,25 @@ async function GETInterno(request: NextRequest) {
     return parts.length === 2 ? baixas.detalhe(user, parts[1]) : fail('Rota não encontrada.', 404);
   }
   if(parts[0]==='estoque'){
-    if(!pode(user,'baixa:abrir')&&!pode(user,'estoque:gerenciar'))return fail('Seu perfil não permite consultar estoque.',403);
+    if(!pode(user,'estoque:consultar')&&!pode(user,'estoque:gerenciar'))return fail('Seu perfil não permite consultar estoque.',403);
     if(parts.length===2&&parts[1]==='saldos')return estoque.saldos(user,request.nextUrl.searchParams);
     if(parts.length===2&&parts[1]==='entradas')return estoque.entradas(user,request.nextUrl.searchParams);
     if(parts.length===2&&parts[1]==='movimentos')return estoque.movimentos(user,request.nextUrl.searchParams);
     return fail('Rota não encontrada.',404);
   }
   if(parts[0]==='catalogs'&&parts[1]==='items'){
-    if(!pode(user,'baixa:abrir')&&!pode(user,'estoque:gerenciar'))return fail('Seu perfil não permite consultar itens.',403);
+    if(!pode(user,'baixa:abrir')&&!pode(user,'estoque:consultar')&&!pode(user,'estoque:gerenciar'))return fail('Seu perfil não permite consultar itens.',403);
     return parts.length===2?baixas.listarItens(user,request.nextUrl.searchParams):fail('Rota não encontrada.',404);
   }
   if(parts[0]==='pagamentos'){
-    if(!pode(user,'solicitacao:abrir'))return fail('Seu perfil não permite consultar pagamentos.',403);
+    if(!pode(user,'pagamento:abrir'))return fail('Seu perfil não permite consultar pagamentos.',403);
     if(parts.length===1)return pagamentos.listar(user,request.nextUrl.searchParams);
     if(parts.length===2)return pagamentos.detalhe(user,parts[1]);
     if(parts.length===4&&parts[2]==='anexos')return pagamentos.download(user,parts[1],parts[3]);
     return fail('Rota não encontrada.',404);
   }
   if (parts[0] === 'estoques') {
-    if (!pode(user, 'baixa:abrir') && !pode(user, 'estoque:gerenciar')) return fail('Seu perfil não permite consultar estoques.', 403);
+    if (!pode(user, 'baixa:abrir') && !pode(user, 'estoque:consultar') && !pode(user, 'estoque:gerenciar')) return fail('Seu perfil não permite consultar estoques.', 403);
     return parts.length === 1 ? baixas.listarEstoques(user) : fail('Rota não encontrada.', 404);
   }
   if (parts[0] === 'solicitacoes') {
@@ -271,6 +273,8 @@ async function GETInterno(request: NextRequest) {
   if (parts[0] === 'bootstrap') return bootstrap(user);
   if (parts[0] === 'search') return parts[1] === 'options' ? searchOptions(request.nextUrl.searchParams) : search(request.nextUrl.searchParams);
   if (parts[0] === 'agreements' && parts[1]) return agreementDetail(parts[1], user, request.nextUrl.searchParams);
+
+  if (parts[0] === 'permissoes') return parts.length === 1 ? permissoes.matriz(user) : fail('Rota não encontrada.', 404);
 
   // Guarda geral antes das permissoes especificas; preserva as respostas HTTP.
   // Consulta simples permanece disponivel acima desta guarda.
@@ -343,8 +347,8 @@ async function POSTInterno(request: NextRequest) {
   if (await first(VALIDACAO_ATIVA_SQL)) return denyWrite(request, 'Sistema em atualização, aguarde alguns instantes', 503, 'validacao');
   if(partsOf(request)[0]==='pagamentos'){
     const parts=partsOf(request);
-    if(parts.length===1){if(!pode(user,'solicitacao:abrir'))return denyWrite(request,'Seu perfil não permite abrir solicitações.');const bytes=await corpoBinarioLimitado(request,10*1024*1024+128*1024,{drenagemBytes:1024*1024});if(bytes===null)return ok({error:'Corpo da solicitação acima do limite de 10 MB.'},{status:413,headers:{connection:'close'}});return pagamentos.criar(new Request(request.url,{method:'POST',headers:request.headers,body:bytes.buffer.slice(bytes.byteOffset,bytes.byteOffset+bytes.byteLength) as ArrayBuffer}),user);}
-    if(parts.length===3&&parts[2]==='transicao'){if(!pode(user,'solicitacao:atender'))return denyWrite(request,'Seu perfil não permite atender solicitações.');return pagamentos.transicionar(request,user,parts[1]);}
+    if(parts.length===1){if(!pode(user,'pagamento:abrir'))return denyWrite(request,'Seu perfil não permite abrir solicitações.');const bytes=await corpoBinarioLimitado(request,10*1024*1024+128*1024,{drenagemBytes:1024*1024});if(bytes===null)return ok({error:'Corpo da solicitação acima do limite de 10 MB.'},{status:413,headers:{connection:'close'}});return pagamentos.criar(new Request(request.url,{method:'POST',headers:request.headers,body:bytes.buffer.slice(bytes.byteOffset,bytes.byteOffset+bytes.byteLength) as ArrayBuffer}),user);}
+    if(parts.length===3&&parts[2]==='transicao'){if(!pode(user,'pagamento:atender'))return denyWrite(request,'Seu perfil não permite atender solicitações.');return pagamentos.transicionar(request,user,parts[1]);}
     return fail('Rota não encontrada.',404);
   }
   if (parts[0] === 'baixas') {
@@ -356,7 +360,7 @@ async function POSTInterno(request: NextRequest) {
   }
   if(parts[0]==='estoque'){
     if(parts.length===2&&parts[1]==='entradas'){
-      if(!pode(user,'baixa:atender'))return denyWrite(request,'Seu perfil não permite registrar entradas.');
+      if(!pode(user,'estoque:lancar'))return denyWrite(request,'Seu perfil não permite registrar entradas.');
       return estoque.gravarEntrada(request,user);
     }
     if(parts.length===2&&parts[1]==='ajustes'){
@@ -430,6 +434,10 @@ async function PUTInterno(request: NextRequest) {
   if (partesSolicitacao[0] === 'categorias-fornecedor') {
     if (!pode(user, 'categoria:gerenciar')) return denyWrite(request, 'Seu perfil não permite gerenciar categorias.');
     return partesSolicitacao.length === 2 ? solicitacoes.gravarCategoria(request, user, partesSolicitacao[1]) : fail('Rota não encontrada.', 404);
+  }
+  if (partesSolicitacao[0] === 'permissoes') {
+    if (!pode(user, 'permissao:gerenciar')) return denyWrite(request, 'Somente administradores podem alterar as permissões.');
+    return partesSolicitacao.length === 1 ? permissoes.salvar(request, user) : fail('Rota não encontrada.', 404);
   }
   if (!pode(user, acaoEscrita(partsOf(request)))) return denyWrite(request, 'Seu perfil permite somente consulta.');
   const parts = partsOf(request);

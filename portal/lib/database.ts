@@ -6,6 +6,8 @@ import { SCHEMA_PAGAMENTOS } from './pagamentos-schema.ts';
 import { MIGRAR_FILA_SOLICITACOES } from './fila-email-schema.ts';
 import { bancoSqliteLocal } from './sqlite-local.ts';
 import { SESSAO_INATIVIDADE_MS } from './politica-sessao.ts';
+import { lerPermissoes } from './permissoes.ts';
+
 export { SESSAO_INATIVIDADE_MS } from './politica-sessao.ts';
 import { CRIAR_CONTADOR_CHAMADOS_SQL, MIGRAR_CONTADOR_CHAMADOS_SQL, migrarBuscaChamados, migrarIndicesListasGlobais } from './operacao-dados.ts';
 import { SCHEMA_VALIDACAO } from './operacao-validacao.ts';
@@ -19,6 +21,13 @@ import { TRIGGERS_REVISAO, TRIGGERS_REVISAO_LISTA_ACORDO, TABELAS_CADASTRO } fro
 import { env } from '../scripts/configuracao-servidor.mjs';
 import { normalizeText } from './domain.ts';
 import { type Role, validatePassword } from '@/lib/domain';
+
+// Ajustes individuais do painel de permissoes (ver lib/permissoes.ts).
+export const SCHEMA_PERMISSOES_USUARIO = `CREATE TABLE IF NOT EXISTS permissoes_usuario (
+  user_id TEXT NOT NULL REFERENCES users(id), area TEXT NOT NULL,
+  nivel TEXT NOT NULL CHECK(nivel IN ('sem','leitura','edicao')),
+  atualizado_em TEXT NOT NULL, atualizado_por TEXT REFERENCES users(id),
+  PRIMARY KEY(user_id, area))`;
 
 export function parseCookies(request: Request): Record<string, string> {
   const cookies: Record<string, string> = Object.create(null);
@@ -377,6 +386,14 @@ async function initialize() {
       db.prepare('INSERT OR IGNORE INTO schema_migrations(version,applied_at) VALUES(15,?)').bind(now()),
     ]);
   }
+  // Ajustes individuais do painel de permissoes. A tabela nasce vazia: sem
+  // ajuste, cada usuario continua com exatamente o acesso do proprio perfil.
+  if (!await db.prepare('SELECT 1 ok FROM schema_migrations WHERE version=16').first()) {
+    await db.batchConstruir(() => [
+      db.prepare(SCHEMA_PERMISSOES_USUARIO),
+      db.prepare('INSERT OR IGNORE INTO schema_migrations(version,applied_at) VALUES(16,?)').bind(now()),
+    ]);
+  }
   await db.prepare('PRAGMA optimize').run();
 }
 
@@ -407,7 +424,8 @@ export async function currentUser(request: Request) {
   if (registraAtividade(request, visto, Date.now())) {
     await rawDb().prepare('UPDATE sessions SET last_seen_at=? WHERE token=?').bind(agora, guardado).run();
   }
-  return { id: sessao.id, name: sessao.name, email: sessao.email, role: sessao.role };
+  const ajustes = await rawDb().prepare('SELECT area,nivel FROM permissoes_usuario WHERE user_id=?').bind(sessao.id).all<{ area: string; nivel: string }>();
+  return { id: sessao.id, name: sessao.name, email: sessao.email, role: sessao.role, permissoes: lerPermissoes(ajustes.results) };
 }
 
 export async function audit(userId: string | null, action: string, entity: string, entityId: string | null, details: string) {

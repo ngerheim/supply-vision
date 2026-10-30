@@ -15,7 +15,7 @@ const rotas: Array<[Nav, string, string | null]> = [
   ['suppliers','cadastros','fornecedores'], ['catalogs','cadastros','catalogos'], ['mappings','cadastros','de-para'],
   ['reports','administracao','relatorios'], ['history','administracao','historico'], ['emails','administracao','emails'], ['admin','administracao','usuarios'],
 ];
-void test('todas as 19 chaves e sete abas fazem ida e volta com slugs estaveis', () => {
+void test('todas as 20 chaves e sete abas fazem ida e volta com slugs estaveis', () => {
   assert.equal(ABAS_NAVEGACAO.length,7);
   assert.deepEqual(ABAS_NAVEGACAO.find(a => a.aba === 'chamados')?.subabas.map(s => s.label), ['Acordos','Cadastros','Baixa','Pagamentos']);
   assert.deepEqual(GRUPOS_NAVEGACAO.map(g => [g.nome,[...g.abas]]),[
@@ -43,7 +43,7 @@ void test('enderecos desconhecidos voltam para buscar sem erro', () => {
 const visibilidade = {
   viewer: [['buscar',['search']],['manutencao',['maintenance']],['chamados',['solicitacoes','baixas','pagamentos']],['estoque',['estoque-saldo','estoque-entradas']]],
   editor: [['buscar',['search']],['manutencao',['maintenance']],['chamados',['tickets','solicitacoes','baixas','pagamentos']],['estoque',['estoque-saldo','estoque-entradas']],['acordos',['agreements','imports']],['cadastros',['suppliers','catalogs','mappings']]],
-  admin: [['buscar',['search']],['manutencao',['maintenance']],['chamados',['tickets','solicitacoes','baixas','pagamentos']],['estoque',['estoque-saldo','estoque-entradas']],['acordos',['agreements','imports']],['cadastros',['suppliers','catalogs','mappings','categorias','estoques']],['administracao',['reports','history','emails','admin']]],
+  admin: [['buscar',['search']],['manutencao',['maintenance']],['chamados',['tickets','solicitacoes','baixas','pagamentos']],['estoque',['estoque-saldo','estoque-entradas']],['acordos',['agreements','imports']],['cadastros',['suppliers','catalogs','mappings','categorias','estoques']],['administracao',['reports','history','emails','admin','permissoes']]],
 };
 for (const role of ['viewer','editor','admin'] as const) {
   void test(`${role}: abas e subabas permitidas; acesso por endereco nao amplia permissoes`, () => {

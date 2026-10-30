@@ -89,7 +89,7 @@ export function Detalhe({ id, user, onBack }: { id: string; user: AnyRow; onBack
   const carregar = () => void api(`/api/pagamentos/${id}`).then(setDados).catch((e) => setErro(errorText(e)));
   useEffect(carregar, [id]);
   if (!dados) return <div>{erro || <Loading label="Carregando solicitações de pagamento…" />}</div>;
-  const p = dados.pagamento as AnyRow, atende = pode(user, 'solicitacao:atender');
+  const p = dados.pagamento as AnyRow, atende = pode(user, 'pagamento:atender');
   const transicionar = async (para: string) => {
     if (trava.current) return;
     const body = { para, texto: motivo, expectedRevision: p.revision }, corpo = JSON.stringify(body);
