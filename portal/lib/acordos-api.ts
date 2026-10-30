@@ -1,3 +1,4 @@
+import { CAMPOS_BUSCA, condicoesBusca } from './filtros-busca.ts';
 import { pode } from './permissoes.ts';
 import { consultaBusca, consultasOpcoesBusca } from './consulta-busca.ts';
 import { dataDeNegocio } from './data-negocio.ts';
@@ -136,7 +137,35 @@ export function acordosApi(contexto: ContextoApi) {
     return ok({ success: true, condicoes, versoes, chamadosDesvinculados: chamados });
   }
 
-  async function agreementList() {
+  async function agreementList(params = new URLSearchParams(), ignorarCampo?: typeof CAMPOS_BUSCA[number]) {
+    const filtros = condicoesBusca(params, ignorarCampo);
+    const conditions: string[] = [];
+    const values: string[] = [];
+    let offset = 0;
+    const locais: string[] = [], itens: string[] = [];
+    for (const condition of filtros.conditions) {
+      const count = (condition.match(/\?/g) || []).length;
+      const selected = filtros.values.slice(offset, offset + count);
+      offset += count;
+      if (condition.startsWith('l.')) locais.push(condition);
+      else if (condition.startsWith('s.')) conditions.push(condition);
+      else itens.push(condition);
+      values.push(...selected);
+    }
+    // Keep parameter order equal to the original field order: locations, items, supplier.
+    const where = [
+      ...(locais.length ? [`EXISTS (
+        SELECT 1 FROM agreement_locations al JOIN locations l ON l.id=al.location_id
+        WHERE al.agreement_id=a.id AND ${locais.join(' AND ')}
+      )`] : []),
+      ...(itens.length ? [`EXISTS (
+        SELECT 1 FROM agreement_items ai
+        JOIN catalog_items ci ON ci.id=ai.catalog_item_id
+        JOIN vehicle_models vm ON vm.id=ai.vehicle_model_id
+        WHERE ai.version_id=a.current_version_id AND ${itens.join(' AND ')}
+      )`] : []),
+      ...conditions,
+    ];
     return all(`SELECT a.id,a.number,a.status,a.start_date AS startDate,a.end_date AS endDate,a.updated_at AS updatedAt,
     ${SITUACAO_EFETIVA_SQL} AS effectiveStatus,
     s.trade_name AS supplier,s.cnpj,
@@ -144,7 +173,36 @@ export function acordosApi(contexto: ContextoApi) {
     (SELECT COUNT(*) FROM agreement_items ai WHERE ai.version_id=a.current_version_id) AS itemCount,
     (SELECT GROUP_CONCAT(l.city || ' / ' || l.state) FROM agreement_locations al JOIN locations l ON l.id=al.location_id WHERE al.agreement_id=a.id) AS locations
     FROM agreements a JOIN suppliers s ON s.id=a.supplier_id
-    ORDER BY a.updated_at DESC`, [dataDeNegocio()]);
+    ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
+    ORDER BY a.updated_at DESC`, [dataDeNegocio(), ...values]);
+  }
+
+  async function agreementOptions(params: URLSearchParams) {
+    const queries = {
+      state: `SELECT DISTINCT l.state AS id,l.state AS name
+        FROM agreement_locations al JOIN locations l ON l.id=al.location_id
+        WHERE al.agreement_id IN (SELECT value FROM json_each(?))`,
+      location: `SELECT DISTINCT l.id,l.city AS name
+        FROM agreement_locations al JOIN locations l ON l.id=al.location_id
+        WHERE al.agreement_id IN (SELECT value FROM json_each(?))`,
+      supplier: `SELECT DISTINCT s.id,s.trade_name AS name
+        FROM agreements a JOIN suppliers s ON s.id=a.supplier_id
+        WHERE a.id IN (SELECT value FROM json_each(?))`,
+      item: `SELECT DISTINCT ci.id,ci.name FROM agreements a
+        JOIN agreement_items ai ON ai.version_id=a.current_version_id
+        JOIN catalog_items ci ON ci.id=ai.catalog_item_id
+        WHERE a.id IN (SELECT value FROM json_each(?))`,
+      model: `SELECT DISTINCT vm.id,vm.name FROM agreements a
+        JOIN agreement_items ai ON ai.version_id=a.current_version_id
+        JOIN vehicle_models vm ON vm.id=ai.vehicle_model_id
+        WHERE a.id IN (SELECT value FROM json_each(?))`,
+    };
+    const entries = await Promise.all(CAMPOS_BUSCA.map(async campo => {
+      const agreements = await agreementList(params, campo);
+      const ids = JSON.stringify(agreements.map(row => row.id));
+      return [campo, await all(`${queries[campo]} ORDER BY name COLLATE NOCASE,id`, [ids])] as const;
+    }));
+    return ok({ options: Object.fromEntries(entries) });
   }
 
   async function agreementDetail(agreementId: string, user: User, params: URLSearchParams) {
@@ -393,5 +451,5 @@ export function acordosApi(contexto: ContextoApi) {
     return ok({generatedAt:now(),agreements});
   }
 
-  return { agreementList, agreementDetail, createAgreement, updateAgreement, addAgreementItems, updateItem, deleteItem, deleteAgreement, comTravaDoAcordo, travarAcordo, soltarAcordo, acordoDaCondicao, search, searchOptions, internalAgreements };
+  return { agreementList, agreementOptions, agreementDetail, createAgreement, updateAgreement, addAgreementItems, updateItem, deleteItem, deleteAgreement, comTravaDoAcordo, travarAcordo, soltarAcordo, acordoDaCondicao, search, searchOptions, internalAgreements };
 }

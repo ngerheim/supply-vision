@@ -1,4 +1,6 @@
 'use client';
+import { BarraBuscaAcordos } from './barra-busca-acordos';
+import { CAMPOS_BUSCA, filtrosVazios, parametrosBusca, type FiltrosBusca } from '@/lib/filtros-busca';
 import { PageHeader, LinhaDeAba } from './page-header';
 import { BarraFiltros, TabelaPadrao } from './tela-padrao';
 import { Plaquinha } from './plaquinha';
@@ -35,17 +37,51 @@ import {
 } from './portal-presentation';
 import { useOrdenacao, CabecalhoOrdenavel } from './portal-table';
 
-export function Agreements({ data, onOpen, onNew, canWrite }: JsonData) {
-  const [q, setQ] = useState(''),
-    [status, setStatus] = useState('');
-  const rows = data.agreements.filter(
-    (r: AnyRow) =>
-      (!q ||
-        correspondeBusca(
-          `${r.number} ${r.supplier} ${r.cnpj} ${r.locations}`,
-          q,
-        )) &&
-      correspondeSituacaoAcordo(r.effectiveStatus || r.status, status),
+export function Agreements({ data, catalogs, onOpen, onNew, canWrite }: JsonData) {
+  const [filters, setFilters] = useState<FiltrosBusca>(filtrosVazios);
+  const [applied, setApplied] = useState('');
+  const [result, setResult] = useState<{ query: string; rows: AnyRow[] } | null>(null);
+  const [loadError, setLoadError] = useState('');
+  const [status, setStatus] = useState('');
+
+  useEffect(() => {
+    const readUrl = () => {
+      const params = new URLSearchParams(window.location.search);
+      const next = filtrosVazios();
+      for (const campo of CAMPOS_BUSCA) next[campo] = params.getAll(campo);
+      setFilters(next);
+      setStatus(params.get('situacao') || '');
+      setApplied(parametrosBusca(next).toString());
+    };
+    queueMicrotask(readUrl);
+    window.addEventListener('popstate', readUrl);
+    return () => window.removeEventListener('popstate', readUrl);
+  }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    api<{ agreements: AnyRow[] }>(`/api/agreements?${applied}`, { signal: controller.signal })
+      .then(value => {
+        if (!controller.signal.aborted) {
+          setResult({ query: applied, rows: value.agreements });
+          setLoadError('');
+        }
+      })
+      .catch(error => { if (!controller.signal.aborted) setLoadError(errorText(error)); });
+    return () => controller.abort();
+  }, [applied, data]);
+
+  const apply = (next: FiltrosBusca) => {
+    const params = new URLSearchParams(window.location.search);
+    for (const campo of CAMPOS_BUSCA) {
+      params.delete(campo);
+      for (const value of next[campo]) params.append(campo, value);
+    }
+    window.history.pushState(null, '', `${window.location.pathname}?${params}${window.location.hash}`);
+    setApplied(parametrosBusca(next).toString());
+  };
+  const rows = (result?.query === applied ? result.rows : []).filter((r: AnyRow) =>
+    correspondeSituacaoAcordo(r.effectiveStatus || r.status, status),
   );
   return (
     <div className="patio-page">
@@ -73,12 +109,23 @@ export function Agreements({ data, onOpen, onNew, canWrite }: JsonData) {
           </>
         }
       />
-      <BarraFiltros busca={q} onBusca={setQ} placeholder="Buscar por nome, CNPJ ou cidade">
+      <BarraBuscaAcordos optionsPath="/api/agreements/options" catalogs={catalogs} filters={filters} setFilters={setFilters}
+        onChange={() => {}} onClear={() => apply(filtrosVazios())}
+        onSearch={() => apply(filters)} loading={false} />
+      {loadError && <p role="alert">{loadError}</p>}
+      <BarraFiltros>
         <NativeSelect
           className="w-48"
           aria-label="Situação do acordo"
           value={status}
-          onChange={(e) => setStatus(e.target.value)}
+          onChange={(e) => {
+            const value = e.target.value;
+            const params = new URLSearchParams(window.location.search);
+            if (value) params.set('situacao', value);
+            else params.delete('situacao');
+            window.history.pushState(null, '', `${window.location.pathname}?${params}${window.location.hash}`);
+            setStatus(value);
+          }}
         >
           <NativeSelectOption value="">Todas as situações</NativeSelectOption>
           <NativeSelectOption value="active">Vigente</NativeSelectOption>
