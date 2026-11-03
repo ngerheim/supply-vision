@@ -14,6 +14,10 @@ import { criarCopiaIntegra } from '../scripts/backup.mjs';
 import { prepararRestauracao } from '../scripts/restauracao-segura.mjs';
 import { validarBanco } from '../scripts/validar-banco.mjs';
 import { cnpjFicticio } from '../lib/consultas-fornecedor-ensaio.ts';
+import { dataDeNegocio } from '../lib/data-negocio.ts';
+
+// Periodo do filtro e o dia de negocio de hoje: datas fixas vencem com o tempo.
+const hoje = dataDeNegocio();
 
 const hooks=registerHooks({resolve(s,c,next){if(s==='next/server')return next('vinext/shims/server',c);if(s.startsWith('@/'))return next(new URL(`../${s.slice(2)}.ts`,import.meta.url).href,c);if(s==='./database')return next(new URL('../lib/database.ts',import.meta.url).href,c);return next(s,c);}});
 const banco=await import('../lib/database.ts'),rota=await import('../app/api/[...path]/route.ts');hooks.deregister();
@@ -34,7 +38,7 @@ void test('pagamentos multipart: anexos, posse, download, transicoes e permissao
   const grande=await pedir('POST','pagamentos','viewer',form(new Blob([new Uint8Array(5*1024*1024+1)])));assert.equal(grande.status,413);assert.equal(grande.data.error,'Cada anexo deve ter até 5 MB.');assert.equal(grande.headers.get('connection'),'close');
   const xml=await pedir('POST','pagamentos','outro',form(undefined,new Blob(['<?xml version="1.0"?><nfe/>']),{cnpj:cnpjFicticio(51)}));assert.equal(xml.status,201);
   const criada=await pedir('POST','pagamentos','viewer',form(),{'idempotency-key':'pagamento-teste-chave-001'});assert.equal(criada.status,201,JSON.stringify(criada.data));assert.match(criada.data.codigo,/^PAG-\d{4}$/);
-  const filtrada=await pedir('GET','pagamentos?status=aberta&de=2026-10-01&ate=2026-10-31&busca=NF-1','viewer');assert.ok(filtrada.data.pagamentos.some(p=>p.id===criada.data.id));
+  const filtrada=await pedir('GET',`pagamentos?status=aberta&de=${hoje}&ate=${hoje}&busca=NF-1`,'viewer');assert.ok(filtrada.data.pagamentos.some(p=>p.id===criada.data.id));
   assert.equal((await pedir('GET','pagamentos?status=desconhecida')).status,400);assert.equal((await pedir('GET','pagamentos?de=2026-02-30')).status,400);
   assert.deepEqual(await pedir('POST','pagamentos','viewer',form(),{'idempotency-key':'pagamento-teste-chave-001'}),criada);
   assert.equal((await pedir('POST','pagamentos','viewer',form(undefined,undefined,{observacao:'Dados diferentes'}),{'idempotency-key':'pagamento-teste-chave-001'})).data.codigo,'duplicado');
