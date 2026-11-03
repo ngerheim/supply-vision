@@ -1,5 +1,5 @@
 'use client';
-import { pode } from '@/lib/permissoes';
+import { pode, type Permissoes as AjustesPermissao } from '@/lib/permissoes';
 import { Reports } from '@/components/reports';
 import { abaDaChave, podeAcessarAba, type Nav } from '@/lib/navegacao';
 import { iniciarNavegacao } from '@/lib/navegacao-historico';
@@ -26,6 +26,7 @@ import { ChangeHistory } from './portal-history';
 import { Permissoes } from './portal-permissoes';
 import { Contratos } from './portal-contratos';
 import { Analise } from './portal-analise';
+import { Alertas, DestinatariosAlertas } from './portal-alertas';
 import { Administration } from './portal-users';
 import { Mappings } from './portal-mappings';
 import { CabecalhoProvider } from './page-header';
@@ -57,6 +58,8 @@ function PortalSession({ message, endSession }: { message: string; endSession: (
   const [baixaLinkVersion,setBaixaLinkVersion]=useState(0);
   const [pagamentoLink,setPagamentoLink]=useState<string|null>(null);
   const [pagamentoLinkVersion,setPagamentoLinkVersion]=useState(0);
+  const [rodadaLink,setRodadaLink]=useState<string|null>(null);
+  const [rodadaLinkVersion,setRodadaLinkVersion]=useState(0);
   const [importAgreement,setImportAgreement]=useState('');
   const [sidebarCollapsed,setSidebarCollapsed]=useState(false);
   const intentionalLogout=useRef(false);
@@ -89,25 +92,27 @@ function PortalSession({ message, endSession }: { message: string; endSession: (
   },[endSession]);
   const initialize=useCallback(async()=>{setLoadError('');try{const x=await api('/api/session');setUser(x.user);if(x.user)await refresh()}catch(error){setLoadError(errorText(error))}},[refresh]);
   useEffect(()=>{let active=true;queueMicrotask(()=>{if(active)void initialize()});return()=>{active=false}},[initialize]);
-  const usuarioId=user?.id, usuarioPerfil=user?.role;
+  // Os ajustes do painel de permissoes tambem decidem as abas acessiveis pelo endereco.
+  const usuarioId=user?.id, usuarioPerfil=user?.role, usuarioAjustes=JSON.stringify(user?.permissoes??{});
   useEffect(()=>{
     if(!usuarioId)return;
     let active=true;
     queueMicrotask(()=>{
       if(!active)return;
-      navegacao.current=iniciarNavegacao({role:usuarioPerfil},rota=>{
+      navegacao.current=iniciarNavegacao({role:usuarioPerfil,permissoes:JSON.parse(usuarioAjustes) as AjustesPermissao},rota=>{
         setNav(rota.nav);setAgreementId(null);setImportAgreement('');setTicketLink(rota.chamado);
         if(rota.chamado)setTicketLinkVersion(value=>value+1);
         setSolicitacaoLink(rota.solicitacao);
         setBaixaLink(rota.baixa || null);
         const pagamento=new URLSearchParams(window.location.search).get('pagamento');setPagamentoLink(pagamento);if(pagamento)setPagamentoLinkVersion(value=>value+1);
+        const rodada=new URLSearchParams(window.location.search).get('rodada');setRodadaLink(rodada);if(rodada)setRodadaLinkVersion(value=>value+1);
         if(rota.baixa)setBaixaLinkVersion(value=>value+1);
         if(rota.solicitacao)setSolicitacaoLinkVersion(value=>value+1);
         if(rota.aviso)setNotice({type:'error',text:rota.aviso});
       },window);
     });
     return()=>{active=false;navegacao.current?.parar();navegacao.current=null};
-  },[usuarioId,usuarioPerfil]);
+  },[usuarioId,usuarioPerfil,usuarioAjustes]);
   useEffect(()=>{const expired=()=>{if(intentionalLogout.current)return;refreshSequence.current++;endSession('Sua sessão expirou. Entre novamente.')};window.addEventListener('portal:session-expired',expired);return()=>window.removeEventListener('portal:session-expired',expired)},[endSession]);
   const run=async(fn:()=>Promise<JsonData>,success?:string)=>{if(busyRef.current)return;busyRef.current=true;setBusy(true);try{return await salvarEAtualizar(fn,refresh,()=>{if(success)notify('ok',success)},()=>notify('error','Alteração salva, mas não foi possível atualizar a tela. Use Atualizar dados para conferir.'))}catch(error:unknown){notify('error',errorText(error))}finally{busyRef.current=false;setBusy(false)}};
 
@@ -141,9 +146,10 @@ function PortalSession({ message, endSession }: { message: string; endSession: (
   return <main className="min-h-screen bg-background text-foreground">
     <Sidebar nav={nav} setNav={navigate} user={user} busy={busy} onLogout={logout} navegarAviso={(link:string) => {
         const params = new URL(link, window.location.origin).searchParams;
-        const chamado = params.get('chamado'), solicitacao = params.get('solicitacao'), baixa = params.get('baixa'), pagamento=params.get('pagamento');
+        const chamado = params.get('chamado'), solicitacao = params.get('solicitacao'), baixa = params.get('baixa'), pagamento=params.get('pagamento'), rodada=params.get('rodada');
         if (baixa) navegacao.current?.navegar('baixas',baixa);
         else if (pagamento) navegacao.current?.navegar('pagamentos',pagamento);
+        else if (rodada) navegacao.current?.navegar('alertas',rodada);
         else if (solicitacao) navegacao.current?.navegar('solicitacoes',solicitacao);
         else if (chamado) navegacao.current?.navegar('tickets',chamado);
         else window.location.assign(link);
@@ -169,6 +175,8 @@ function PortalSession({ message, endSession }: { message: string; endSession: (
       {podeAcessarAba(user,'estoque-entradas')&&nav==='estoque-entradas'&&<EntradaEstoque/>}
       {pode(user, 'aba:history')&&nav==='history'&&<ChangeHistory users={userList}/>}
       {pode(user, 'aba:analise')&&nav==='analise'&&<Analise/>}
+      {pode(user, 'aba:alertas')&&nav==='alertas'&&<Alertas key={`${rodadaLink}:${rodadaLinkVersion}`} inicial={rodadaLink}/>}
+      {pode(user, 'alertas:destinatarios')&&nav==='alertas-destinatarios'&&<DestinatariosAlertas busy={busy} run={run}/>}
       {pode(user, 'aba:admin')&&nav==='admin'&&<Administration user={user} busy={busy} run={run}/>}
       {pode(user, 'aba:permissoes')&&nav==='permissoes'&&<Permissoes busy={busy} run={run}/>}
       {pode(user, 'aba:reports')&&nav==='reports'&&<Reports/>}

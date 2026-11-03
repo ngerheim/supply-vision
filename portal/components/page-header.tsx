@@ -31,6 +31,7 @@ const titulos = {
   acordos: "Acordos",
   cadastros: "Cadastros",
   analise: "Análise",
+  alertas: "Alertas",
   administracao: "Administração",
 };
 
