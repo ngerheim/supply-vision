@@ -166,11 +166,9 @@ export function AcoesAnalise({ abrirFornecedor }: { abrirFornecedor: (nome: stri
           ))}
         </div>
       } />
-      <p className="text-xs text-muted-foreground">
-        Sugestões geradas a partir das compras dos últimos 90 dias, ordenadas pelo valor envolvido. Rejeitada não volta; adiada volta no prazo escolhido;
-        feita volta se a condição continuar 60 dias depois.
-        {dados?.geradasEm && ` Refeitas em ${dataHoraSolicitacao(dados.geradasEm)}.`}
-        {erro && ` ${erro}`}
+      <p className="text-xs text-muted-foreground" title="Rejeitada não volta. Adiada volta no prazo escolhido. Feita volta se a condição continuar 60 dias depois.">
+        Compras dos últimos 90 dias, por valor envolvido{dados?.geradasEm && ` · refeitas em ${dataHoraSolicitacao(dados.geradasEm)}`}
+        {erro && ` · ${erro}`}
       </p>
       {!dados ? <Loading label="Carregando sugestões…" compact /> : lista === 'historico' ? (
         <TabelaPadrao contador={`${dados.eventos.length} registros`} vazio={!dados.eventos.length ? <p className="p-4 text-sm text-muted-foreground">Nenhum registro ainda.</p> : undefined}>
@@ -178,10 +176,10 @@ export function AcoesAnalise({ abrirFornecedor }: { abrirFornecedor: (nome: stri
           <TableBody>{dados.eventos.map((e: AnyRow) => (
             <TableRow key={e.id}>
               <TableCell className="whitespace-nowrap tabular-nums">{dataHoraSolicitacao(e.criadoEm)}</TableCell>
-              <TableCell className="max-w-80 truncate" title={e.titulo}>{e.titulo}</TableCell>
+              <TableCell className="min-w-72 whitespace-normal">{e.titulo}</TableCell>
               <TableCell className="whitespace-nowrap">{e.de ? `${ROTULO_STATUS[e.de] ?? e.de} → ` : ''}{ROTULO_STATUS[e.para] ?? e.para}</TableCell>
               <TableCell>{e.usuario ?? 'Sistema'}</TableCell>
-              <TableCell className="max-w-80 truncate text-muted-foreground" title={e.motivo ?? ''}>{e.motivo ?? '—'}</TableCell>
+              <TableCell className="min-w-56 whitespace-normal text-muted-foreground">{e.motivo ?? '—'}</TableCell>
             </TableRow>
           ))}</TableBody>
         </TabelaPadrao>
@@ -189,22 +187,23 @@ export function AcoesAnalise({ abrirFornecedor }: { abrirFornecedor: (nome: stri
         <TabelaPadrao contador={`${dados.acoes.length} ${dados.acoes.length === 1 ? 'sugestão' : 'sugestões'}${lista === 'pendente' && c ? ` · ${rs(c.impactoPendente)} envolvidos` : ''}`}
           vazio={!dados.acoes.length ? <p className="p-4 text-sm text-muted-foreground">{lista === 'pendente' ? 'Nenhuma sugestão pendente.' : 'Nenhuma sugestão adiada.'}</p> : undefined}>
           <TableHeader><TableRow>
-            <TableHead>Tipo</TableHead><TableHead>Sugestão</TableHead><TableHead className="text-right">Valor envolvido</TableHead>
+            <TableHead>Sugestão</TableHead><TableHead className="text-right">Valor envolvido</TableHead>
             <TableHead>{lista === 'pulada' ? 'Volta em' : 'Desde'}</TableHead><TableHead><span className="sr-only">Decisão</span></TableHead>
           </TableRow></TableHeader>
           <TableBody>{dados.acoes.map((a: AnyRow) => (
             <TableRow key={a.id}>
-              <TableCell className="whitespace-nowrap text-xs text-muted-foreground">{a.tipoLabel}</TableCell>
-              <TableCell className="max-w-xl">
-                <div className="font-medium">{a.titulo}</div>
+              <TableCell className="w-full min-w-[28rem] whitespace-normal">
+                <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{a.tipoLabel}</div>
+                {a.filtro?.fornecedor
+                  ? <button type="button" className="text-left font-medium text-link hover:underline" title="Ver o painel do fornecedor" onClick={() => abrirFornecedor(a.filtro.fornecedor)}>{a.titulo}</button>
+                  : <div className="font-medium">{a.titulo}</div>}
                 <div className="text-xs text-muted-foreground">{a.detalhe}</div>
                 {a.motivo && <div className="text-xs text-muted-foreground">{a.motivo}{a.resolvidaPor ? ` · ${a.resolvidaPor}` : ''}</div>}
               </TableCell>
-              <TableCell className="text-right tabular-nums">{rs(a.impacto)}</TableCell>
+              <TableCell className="whitespace-nowrap text-right tabular-nums">{rs(a.impacto)}</TableCell>
               <TableCell className="whitespace-nowrap tabular-nums">{lista === 'pulada' ? dataBr(a.adiadaAte) : dataBr(a.criadaEm)}</TableCell>
               <TableCell>
-                <div className="flex flex-wrap justify-end gap-2">
-                  {a.filtro?.fornecedor && <Button size="sm" variant="ghost" onClick={() => abrirFornecedor(a.filtro.fornecedor)}>Ver fornecedor</Button>}
+                <div className="flex flex-nowrap justify-end gap-2">
                   {dados.podeResolver && (lista === 'pendente'
                     ? <Botoes acao={a} decidir={setDecisao} />
                     : <Button size="sm" variant="outline" onClick={() => reabrir(a)}><RotateCcw /> Voltar para a fila</Button>)}

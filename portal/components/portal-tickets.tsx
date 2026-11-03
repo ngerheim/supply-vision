@@ -220,7 +220,7 @@ export function Tickets({ busy, users, run, initialDetail }: JsonData) {
           </button>
         ))}
       </div>
-      <BarraFiltros busca={q} onBusca={value => { setQ(value); setPage(1); }} placeholder="Pesquisar chamados" />
+      <BarraFiltros busca={q} onBusca={value => { setQ(value); setPage(1); }} placeholder="Pesquisar" />
       <TabelaPadrao contador={`${data.total ?? rows.length} ${(data.total ?? rows.length) === 1 ? 'chamado' : 'chamados'}`} pagina={<PaginacaoDeLista pagina={currentPage} paginas={pageCount} alterar={setPage} />} vazio={!rows.length ? <Empty icon={MessageSquare} title="Nenhum chamado" /> : undefined}>
       <Table className="w-full min-w-[900px] table-fixed">
               <colgroup>
