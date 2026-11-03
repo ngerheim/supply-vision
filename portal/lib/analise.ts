@@ -1,4 +1,5 @@
 import { EntradaInvalida } from './limites-entrada.ts';
+import { isIsoDate } from './domain.ts';
 
 // Compras ja comparadas pelo Alertas (uma linha por item de OS). O Alertas
 // reenvia cada dia inteiro; o Portal troca as linhas daquela data de uma vez.
@@ -12,7 +13,6 @@ export const SCHEMA_ANALISE = [
 ];
 
 export const STATUS_ELEGIVEIS = ['CONFORME', 'ACIMA DO ACORDO', 'ABAIXO DO ACORDO', 'SEM ACORDO'] as const;
-const DATA = /^\d{4}-\d{2}-\d{2}$/;
 export const LIMITE_LINHAS_DIA = 20000;
 
 export type LinhaCompra = {
@@ -37,7 +37,7 @@ const numero = (v: unknown) => {
 export function validarDia(body: unknown): { data: string; linhas: LinhaCompra[] } {
   if (!body || typeof body !== 'object') throw new EntradaInvalida('Corpo inválido.');
   const { data, linhas } = body as { data?: unknown; linhas?: unknown };
-  if (typeof data !== 'string' || !DATA.test(data) || Number.isNaN(Date.parse(`${data}T00:00:00Z`))) throw new EntradaInvalida('Data inválida.');
+  if (!isIsoDate(data)) throw new EntradaInvalida('Data inválida.');
   if (!Array.isArray(linhas)) throw new EntradaInvalida('Envie a lista de linhas.');
   if (linhas.length > LIMITE_LINHAS_DIA) throw new EntradaInvalida('Linhas demais para um dia.');
   return { data, linhas: linhas.map(l => {
@@ -62,9 +62,10 @@ export type FiltrosAnalise = { de: string; ate: string; cidade: string[]; fornec
 // acordos e nao medem o desempenho daquele mes.
 export function lerFiltros(params: URLSearchParams, padraoAte: string, corte: string | null = null): FiltrosAnalise {
   const ate = params.get('ate') || padraoAte;
+  if (!isIsoDate(ate) || (params.get('de') && !isIsoDate(params.get('de')))) throw new EntradaInvalida('Período inválido.');
   const noventa = subtrairDias(ate, 89);
   const de = params.get('de') || (corte && corte > noventa && corte <= ate ? corte : noventa);
-  if (!DATA.test(de) || !DATA.test(ate) || de > ate) throw new EntradaInvalida('Período inválido.');
+  if (de > ate) throw new EntradaInvalida('Período inválido.');
   const lista = (nome: string) => [...new Set(params.getAll(nome).filter(Boolean))].slice(0, 50);
   return { de, ate, cidade: lista('cidade'), fornecedor: lista('fornecedor'), grupo: lista('grupo') };
 }

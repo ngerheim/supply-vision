@@ -2,15 +2,14 @@ import { pode } from './permissoes.ts';
 import { dataDeNegocio } from './data-negocio.ts';
 import { type ContextoApi, type User } from './api-compartilhada.ts';
 import { comAcaoEscrita } from './autor-escrita.ts';
-import { auditoriaNoLote } from './auditoria-api.ts';
 import { EntradaInvalida } from './limites-entrada.ts';
+import { isIsoDate } from './domain.ts';
 import { curvaAbc, filtroSql, lerFiltros, mediana, pareto, validarDia, variacaoPorCidade, type FiltrosAnalise } from './analise.ts';
 import { DIAS_ADIAMENTO, STATUS_ACAO, TIPOS_ACAO, candidatas, conciliar, type AcaoAtual, type StatusAcao } from './analise-acoes.ts';
 
 type Num = number | null;
 const n = (v: Num | undefined) => Number(v ?? 0);
 const razao = (a: number, b: number) => (b ? a / b : null);
-const DATA = /^\d{4}-\d{2}-\d{2}$/;
 // Mesmo periodo um ano antes (29/02 vira 28/02).
 const anoAntes = (d: string) => { const [a, m, dia] = d.split('-'); return `${Number(a) - 1}-${m}-${m === '02' && dia === '29' ? '28' : dia}`; };
 const somarDias = (data: string, dias: number) => { const d = new Date(`${data}T12:00:00Z`); d.setUTCDate(d.getUTCDate() + dias); return d.toISOString().slice(0, 10); };
@@ -195,7 +194,7 @@ export function analiseApi(contexto: ContextoApi) {
     const body = await jsonBody<{ corteVigencia?: unknown }>(request);
     const ts = now(), statements = [];
     if (body.corteVigencia !== undefined && body.corteVigencia !== null) {
-      if (typeof body.corteVigencia !== 'string' || !DATA.test(body.corteVigencia)) throw new EntradaInvalida('Data de corte inválida.');
+      if (!isIsoDate(body.corteVigencia)) throw new EntradaInvalida('Data de corte inválida.');
       statements.push(rawDb().prepare(`INSERT INTO analise_parametros(chave,valor,atualizado_em) VALUES('corte_vigencia',?,?)
         ON CONFLICT(chave) DO UPDATE SET valor=excluded.valor,atualizado_em=excluded.atualizado_em`).bind(body.corteVigencia, ts));
     }
@@ -208,24 +207,29 @@ export function analiseApi(contexto: ContextoApi) {
     if (!ultimo) return { novas: 0, encerradas: 0 };
     const hoje = dataDeNegocio();
     const lista = await candidatas(all, ultimo);
-    const atuais = await all<AcaoAtual>('SELECT id,chave,status,adiada_ate,resolvida_em FROM analise_acoes');
+    const atuais = await all<AcaoAtual & { atualizada_em: string }>('SELECT id,chave,status,adiada_ate,resolvida_em,atualizada_em FROM analise_acoes');
+    const revisao = new Map(atuais.map(a => [a.id, a]));
     const plano = conciliar(atuais, lista, hoje);
     const db = rawDb(), statements = [];
+    // Cada mudanca so grava se a sugestao ainda esta como foi lida: uma decisao
+    // humana tomada no meio da conciliacao prevalece, e o evento so entra junto.
     const evento = (acaoId: string, de: string | null, para: string, motivo: string) => db.prepare(
-      'INSERT INTO analise_acoes_eventos(id,acao_id,user_id,de,para,motivo,criado_em) VALUES (?,?,NULL,?,?,?,?)').bind(contexto.id('aev'), acaoId, de, para, motivo, ts);
+      'INSERT INTO analise_acoes_eventos(id,acao_id,user_id,de,para,motivo,criado_em) SELECT ?,?,NULL,?,?,?,? WHERE changes()=1').bind(contexto.id('aev'), acaoId, de, para, motivo, ts);
+    const comoLida = (id: string) => [revisao.get(id)!.status, revisao.get(id)!.atualizada_em];
     for (const c of plano.inserir) {
       const novaId = contexto.id('aca');
-      statements.push(db.prepare(`INSERT INTO analise_acoes(id,chave,tipo,titulo,detalhe,impacto,filtro,status,criada_em,atualizada_em,vista_em)
+      statements.push(db.prepare(`INSERT OR IGNORE INTO analise_acoes(id,chave,tipo,titulo,detalhe,impacto,filtro,status,criada_em,atualizada_em,vista_em)
         VALUES (?,?,?,?,?,?,?,'pendente',?,?,?)`).bind(novaId, c.chave, c.tipo, c.titulo, c.detalhe, c.impacto, JSON.stringify(c.filtro), ts, ts, ts));
       statements.push(evento(novaId, null, 'pendente', 'Sugerida a partir dos dados.'));
     }
     for (const u of plano.atualizar) {
-      statements.push(db.prepare(`UPDATE analise_acoes SET titulo=?,detalhe=?,impacto=?,filtro=?,vista_em=?${u.para ? ",status=?,adiada_ate=NULL,atualizada_em=?" : ''} WHERE id=?`)
-        .bind(u.c.titulo, u.c.detalhe, u.c.impacto, JSON.stringify(u.c.filtro), ts, ...(u.para ? [u.para, ts] : []), u.id));
-      if (u.para) statements.push(evento(u.id, null, u.para, u.motivo ?? ''));
+      statements.push(db.prepare(`UPDATE analise_acoes SET titulo=?,detalhe=?,impacto=?,filtro=?,vista_em=?${u.para ? ",status=?,adiada_ate=NULL,atualizada_em=?" : ''}
+        WHERE id=? AND status=? AND atualizada_em=?`)
+        .bind(u.c.titulo, u.c.detalhe, u.c.impacto, JSON.stringify(u.c.filtro), ts, ...(u.para ? [u.para, ts] : []), u.id, ...comoLida(u.id)));
+      if (u.para) statements.push(evento(u.id, revisao.get(u.id)!.status, u.para, u.motivo ?? ''));
     }
     for (const a of plano.encerrar) {
-      statements.push(db.prepare("UPDATE analise_acoes SET status='encerrada',adiada_ate=NULL,atualizada_em=? WHERE id=?").bind(ts, a.id));
+      statements.push(db.prepare("UPDATE analise_acoes SET status='encerrada',adiada_ate=NULL,atualizada_em=? WHERE id=? AND status=? AND atualizada_em=?").bind(ts, a.id, ...comoLida(a.id)));
       statements.push(evento(a.id, a.status, 'encerrada', 'A condição deixou de aparecer nos dados dos últimos 90 dias.'));
     }
     if (statements.length) await db.batch(statements);
@@ -272,13 +276,15 @@ export function analiseApi(contexto: ContextoApi) {
       if (para !== 'pendente' && acao.status !== 'pendente' && !(acao.status === 'pulada' && para !== 'pulada')) return fail('Esta sugestão não está pendente.');
       const ts = now(), adiada = para === 'pulada' ? somarDias(dataDeNegocio(), dias) : null;
       const texto = para === 'pulada' ? `Adiada por ${dias} dias${motivo ? `: ${motivo}` : ''}` : motivo || null;
-      const db = rawDb();
+      const db = rawDb(), eventoId = contexto.id('aev');
       const r = await db.batch([
         db.prepare(`UPDATE analise_acoes SET status=?,adiada_ate=?,motivo=?,atualizada_em=?,resolvida_em=?,resolvida_por=? WHERE id=? AND status=?`)
           .bind(para, adiada, para === 'pendente' ? null : texto, ts, para === 'pendente' ? null : ts, para === 'pendente' ? null : user.id, acaoId, acao.status),
         db.prepare('INSERT INTO analise_acoes_eventos(id,acao_id,user_id,de,para,motivo,criado_em) SELECT ?,?,?,?,?,?,? WHERE changes()=1')
-          .bind(contexto.id('aev'), acaoId, user.id, acao.status, para, texto, ts),
-        auditoriaNoLote(contexto, user.id, 'UPDATE', 'analise_acao', acaoId, `${acao.titulo}: ${acao.status} → ${para}${texto ? ` (${texto})` : ''}`),
+          .bind(eventoId, acaoId, user.id, acao.status, para, texto, ts),
+        db.prepare(`INSERT INTO audit_logs(id,user_id,action,entity,entity_id,details,created_at)
+          SELECT ?,?,'UPDATE','analise_acao',?,?,? WHERE EXISTS(SELECT 1 FROM analise_acoes_eventos WHERE id=?)`)
+          .bind(contexto.id('aud'), user.id, acaoId, `${acao.titulo}: ${acao.status} → ${para}${texto ? ` (${texto})` : ''}`, ts, eventoId),
       ]);
       return r[0].meta.changes ? ok({ success: true, status: para, adiadaAte: adiada }) : ok({ error: 'A sugestão mudou de situação. Atualize a tela.', codigo: 'revisao' }, { status: 409 });
     });

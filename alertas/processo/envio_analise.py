@@ -8,6 +8,7 @@ No fim, avisa o Portal (com a data de corte de vigência), que refaz as
 próximas ações de Suprimentos com os dados novos.
 """
 import json
+from datetime import timedelta
 import math
 import re
 import urllib.error
@@ -102,8 +103,22 @@ def concluir_envio(base, token):
         return json.loads(resposta.read().decode("utf-8"))
 
 
-def enviar_comparacao(df, url=None, token=None):
-    """Envia dia a dia. Devolve (dias enviados, dias com falha)."""
+def dias_do_periodo(inicio, fim):
+    """Todas as datas civis do periodo, em AAAA-MM-DD."""
+    dias, d = [], inicio
+    while d <= fim:
+        dias.append(d.isoformat())
+        d += timedelta(days=1)
+    return dias
+
+
+def enviar_comparacao(df, url=None, token=None, periodo=None):
+    """Envia dia a dia. Devolve (dias enviados, falhas).
+
+    Com `periodo` (inicio, fim), de uma extracao integra: todo dia do periodo
+    e enviado, inclusive vazio, para o Portal apagar o que sumiu da fonte ou
+    dos filtros. Falha ao refazer as proximas acoes conta como uma falha.
+    """
     url = url if url is not None else str(sv_paths.PORTAL_URL)
     token = token if token is not None else str(sv_paths.PORTAL_API_TOKEN)
     if not url or not token:
@@ -116,7 +131,11 @@ def enviar_comparacao(df, url=None, token=None):
         return 0, 0
     endpoint = f"{base}/api/internal/compras"
     enviados = falhas = 0
-    dias = sorted(linhas_por_dia(df).items())
+    por_dia = linhas_por_dia(df)
+    if periodo:
+        validos = dias_do_periodo(*periodo)
+        por_dia = {d: por_dia.get(d, []) for d in validos}
+    dias = sorted(por_dia.items())
     for indice, (data, linhas) in enumerate(dias):
         if len(linhas) > LIMITE_LINHAS_DIA:
             print(f"AVISO: {data} tem {len(linhas):,} linhas; acima do limite da Análise, não enviado.")
@@ -137,5 +156,6 @@ def enviar_comparacao(df, url=None, token=None):
             r = concluir_envio(endpoint.rsplit("/api/", 1)[0], token)
             print(f"  Próximas ações: {r.get('novas', 0)} nova(s), {r.get('encerradas', 0)} encerrada(s).")
         except (OSError, ValueError, urllib.error.URLError) as erro:
+            falhas += 1
             print(f"AVISO: próximas ações não atualizadas no Portal: {erro}")
     return enviados, falhas
