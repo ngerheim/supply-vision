@@ -3,9 +3,13 @@
 Cada dia é enviado inteiro e substitui o que o Portal tinha daquela data,
 então reenviar (rodada parcial, recorte histórico) nunca duplica linhas.
 Falha no envio não interrompe o alerta: só gera aviso no log.
+
+No fim, avisa o Portal (com a data de corte de vigência), que refaz as
+próximas ações de Suprimentos com os dados novos.
 """
 import json
 import math
+import re
 import urllib.error
 import urllib.request
 
@@ -82,6 +86,22 @@ def enviar_dia(endpoint, token, data, linhas):
         return json.loads(resposta.read().decode("utf-8"))
 
 
+def corte_vigencia():
+    """Data de corte em AAAA-MM-DD; antes dela vale a tabela atual de acordos."""
+    valor = getattr(sv_paths, "CORTE_VIGENCIA_ACORDOS", None)
+    texto = valor.isoformat()[:10] if hasattr(valor, "isoformat") else str(valor or "").strip()[:10]
+    return texto if re.fullmatch(r"\d{4}-\d{2}-\d{2}", texto) else None
+
+
+def concluir_envio(base, token):
+    corpo = json.dumps({"corteVigencia": corte_vigencia()}).encode("utf-8")
+    requisicao = urllib.request.Request(f"{base}/api/internal/analise/concluir", data=corpo, method="POST", headers={
+        "Authorization": f"Bearer {token}", "Content-Type": "application/json", "Accept": "application/json",
+    })
+    with portal_conexao.abrir(requisicao, timeout=TEMPO_LIMITE_S * 3) as resposta:
+        return json.loads(resposta.read().decode("utf-8"))
+
+
 def enviar_comparacao(df, url=None, token=None):
     """Envia dia a dia. Devolve (dias enviados, dias com falha)."""
     url = url if url is not None else str(sv_paths.PORTAL_URL)
@@ -112,4 +132,10 @@ def enviar_comparacao(df, url=None, token=None):
             print(f"AVISO: compras de {data} em diante não enviadas para a Análise: {erro}")
             break
     print(f"  Análise: {enviados} dia(s) enviado(s) ao Portal" + (f", {falhas} com falha" if falhas else "") + ".")
+    if enviados:
+        try:
+            r = concluir_envio(endpoint.rsplit("/api/", 1)[0], token)
+            print(f"  Próximas ações: {r.get('novas', 0)} nova(s), {r.get('encerradas', 0)} encerrada(s).")
+        except (OSError, ValueError, urllib.error.URLError) as erro:
+            print(f"AVISO: próximas ações não atualizadas no Portal: {erro}")
     return enviados, falhas

@@ -26,6 +26,7 @@ import { ChangeHistory } from './portal-history';
 import { Permissoes } from './portal-permissoes';
 import { Contratos } from './portal-contratos';
 import { Analise } from './portal-analise';
+import { PaginaAcoesAnalise } from './portal-analise-pagina-acoes';
 import { Alertas, DestinatariosAlertas } from './portal-alertas';
 import { Administration } from './portal-users';
 import { Mappings } from './portal-mappings';
@@ -174,7 +175,8 @@ function PortalSession({ message, endSession }: { message: string; endSession: (
       {podeAcessarAba(user,'estoque-saldo')&&nav==='estoque-saldo'&&<SaldoEstoque user={user}/>}
       {podeAcessarAba(user,'estoque-entradas')&&nav==='estoque-entradas'&&<EntradaEstoque/>}
       {pode(user, 'aba:history')&&nav==='history'&&<ChangeHistory users={userList}/>}
-      {pode(user, 'aba:analise')&&nav==='analise'&&<Analise/>}
+      {pode(user, 'aba:analise')&&nav==='analise'&&<Analise verAcoes={()=>navigate('analise-acoes')}/>}
+      {pode(user, 'aba:analise')&&nav==='analise-acoes'&&<PaginaAcoesAnalise/>}
       {pode(user, 'aba:alertas')&&nav==='alertas'&&<Alertas key={`${rodadaLink}:${rodadaLinkVersion}`} inicial={rodadaLink}/>}
       {pode(user, 'alertas:destinatarios')&&nav==='alertas-destinatarios'&&<DestinatariosAlertas busy={busy} run={run}/>}
       {pode(user, 'aba:admin')&&nav==='admin'&&<Administration user={user} busy={busy} run={run}/>}

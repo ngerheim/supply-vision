@@ -313,3 +313,27 @@ void test('parada do runner encerra arvore inteira e aguarda confirmacao', async
   confirmar(null); await parada;
   await assert.rejects(encerrarArvore({ pid: 123, exitCode: null }, (...args) => args[3](new Error('falha'))), /falha/);
 });
+
+void test('reprocessamento diario da Analise: agenda valida, uma vez por horario e so ate 3 h depois', async () => {
+  const { lerAgendaReprocessamento, agendarReprocessamento, chaveReprocessamento } = await import('../scripts/processar-relatorios.mjs');
+  assert.throws(() => lerAgendaReprocessamento({ ANALISE_REPROCESSAMENTO_HORARIOS: '6:30' }));
+  assert.throws(() => lerAgendaReprocessamento({ ANALISE_REPROCESSAMENTO_HORARIOS: '06:30', ANALISE_REPROCESSAMENTO_DIAS: '0' }));
+  assert.deepEqual(lerAgendaReprocessamento({}), { horarios: [], dias: 400 });
+  const agenda = lerAgendaReprocessamento({ ANALISE_REPROCESSAMENTO_HORARIOS: '19:30, 06:30', ANALISE_REPROCESSAMENTO_DIAS: '30' });
+  assert.deepEqual(agenda.horarios, ['06:30', '19:30']);
+  assert.match(chaveReprocessamento('2026-11-03', '06:30'), /^[a-f0-9-]{36}$/);
+  const db = new DatabaseSync(':memory:');
+  db.exec("CREATE TABLE users(id TEXT PRIMARY KEY,role TEXT,active INTEGER,created_at TEXT);INSERT INTO users VALUES('admin2','admin',1,'2026-02-01'),('admin1','admin',1,'2026-01-01'),('ed','editor',1,'2025-01-01');CREATE TABLE audit_logs(id TEXT,user_id TEXT,action TEXT,entity TEXT,entity_id TEXT,details TEXT,created_at TEXT);");
+  for (const sql of SCHEMA_RELATORIOS) db.exec(sql);
+  assert.equal(agendarReprocessamento(db, agenda, new Date(2026, 10, 3, 6, 29)), null);
+  const id = agendarReprocessamento(db, agenda, new Date(2026, 10, 3, 6, 31));
+  assert.ok(id);
+  assert.equal(agendarReprocessamento(db, agenda, new Date(2026, 10, 3, 7, 0)), null);
+  assert.equal(agendarReprocessamento(db, agenda, new Date(2026, 10, 3, 10, 0)), null); // mais de 3 h: pulado
+  const job = db.prepare('SELECT * FROM report_jobs WHERE id=?').get(id);
+  assert.deepEqual([job.action, job.from_date, job.to_date, job.created_by, job.status], ['reprocessamento', '2026-10-05', '2026-11-03', 'admin1', 'queued']);
+  assert.deepEqual(comandoRelatorio(job), ['panorama/executar.py', '--inicio', '05/10/2026', '--fim', '03/11/2026']);
+  assert.match(db.prepare("SELECT details FROM audit_logs").get().details, /Reprocessamento automático da Análise \(06:30\)/);
+  assert.ok(agendarReprocessamento(db, agenda, new Date(2026, 10, 3, 19, 45)));
+  db.close();
+});

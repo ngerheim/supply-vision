@@ -57,9 +57,13 @@ export function validarDia(body: unknown): { data: string; linhas: LinhaCompra[]
 
 export type FiltrosAnalise = { de: string; ate: string; cidade: string[]; fornecedor: string[]; grupo: string[] };
 
-export function lerFiltros(params: URLSearchParams, padraoAte: string): FiltrosAnalise {
+// Sem periodo informado: ultimos 90 dias, mas nunca antes do corte de
+// vigencia. Antes dele as compras sao comparadas com a tabela atual de
+// acordos e nao medem o desempenho daquele mes.
+export function lerFiltros(params: URLSearchParams, padraoAte: string, corte: string | null = null): FiltrosAnalise {
   const ate = params.get('ate') || padraoAte;
-  const de = params.get('de') || subtrairDias(ate, 89);
+  const noventa = subtrairDias(ate, 89);
+  const de = params.get('de') || (corte && corte > noventa && corte <= ate ? corte : noventa);
   if (!DATA.test(de) || !DATA.test(ate) || de > ate) throw new EntradaInvalida('Período inválido.');
   const lista = (nome: string) => [...new Set(params.getAll(nome).filter(Boolean))].slice(0, 50);
   return { de, ate, cidade: lista('cidade'), fornecedor: lista('fornecedor'), grupo: lista('grupo') };
@@ -95,3 +99,71 @@ export function curvaAbc<T extends { gasto: number }>(linhas: readonly T[]) {
     return { ...l, pct, acumulado: total ? acumulado / total : 0, classe };
   });
 }
+
+// Mediana, nunca media: lancamentos errados no sistema (unidade trocada, mao
+// de obra embutida) deformam a media e mal mexem na mediana.
+export function mediana(valores: readonly number[]): number | null {
+  const v = valores.filter(Number.isFinite).sort((a, b) => a - b);
+  if (!v.length) return null;
+  const meio = Math.floor(v.length / 2);
+  return v.length % 2 ? v[meio] : (v[meio - 1] + v[meio]) / 2;
+}
+
+// Pareto 20/80: quanto do gasto vem dos 20% maiores e quantos fazem 80%.
+export function pareto(gastos: readonly number[]) {
+  const v = gastos.filter(g => g > 0).sort((a, b) => b - a);
+  const total = v.reduce((s, g) => s + g, 0);
+  const top20 = Math.ceil(v.length * 0.2);
+  let acumulado = 0, ate80 = 0;
+  for (const g of v) {
+    if (total && acumulado / total >= 0.8) break;
+    acumulado += g;
+    ate80++;
+  }
+  return {
+    total: v.length,
+    top20: { quantidade: top20, participacao: total ? v.slice(0, top20).reduce((s, g) => s + g, 0) / total : null },
+    ate80: { quantidade: ate80, percentual: v.length ? ate80 / v.length : null },
+  };
+}
+
+export const MINIMO_COMPRAS_PRECO = 3;
+type PrecoLinha = { item: string; modelo: string; cidade: string; preco: number };
+// Mesmo item e modelo, mediana do preco unitario por cidade. Cidade com menos
+// de tres compras fica de fora: um lancamento so nao vira referencia.
+export function variacaoPorCidade(linhas: readonly PrecoLinha[], limite = 10) {
+  const grupos = new Map<string, { item: string; modelo: string; cidades: Map<string, number[]> }>();
+  for (const l of linhas) {
+    if (!(l.preco > 0) || !l.item || !l.cidade) continue;
+    const chave = `${l.item}\u0000${l.modelo ?? ''}`;
+    if (!grupos.has(chave)) grupos.set(chave, { item: l.item, modelo: l.modelo, cidades: new Map() });
+    const g = grupos.get(chave)!;
+    if (!g.cidades.has(l.cidade)) g.cidades.set(l.cidade, []);
+    g.cidades.get(l.cidade)!.push(l.preco);
+  }
+  const resultado = [];
+  for (const g of grupos.values()) {
+    const cidades = [...g.cidades].filter(([, p]) => p.length >= MINIMO_COMPRAS_PRECO)
+      .map(([cidade, p]) => ({ cidade, preco: mediana(p)!, compras: p.length }))
+      .sort((a, b) => a.preco - b.preco);
+    if (cidades.length < 2 || !cidades[0].preco) continue;
+    const menor = cidades[0], maior = cidades[cidades.length - 1];
+    resultado.push({ item: g.item, modelo: g.modelo, cidades: cidades.length, menor, maior, variacao: maior.preco / menor.preco - 1 });
+  }
+  return resultado.sort((a, b) => b.variacao - a.variacao).slice(0, limite);
+}
+
+export const SCHEMA_ANALISE_ACOES = [
+  'CREATE TABLE IF NOT EXISTS analise_parametros (chave TEXT PRIMARY KEY, valor TEXT NOT NULL, atualizado_em TEXT NOT NULL)',
+  `CREATE TABLE IF NOT EXISTS analise_acoes (
+    id TEXT PRIMARY KEY, chave TEXT NOT NULL UNIQUE, tipo TEXT NOT NULL, titulo TEXT NOT NULL, detalhe TEXT NOT NULL,
+    impacto REAL NOT NULL, filtro TEXT NOT NULL,
+    status TEXT NOT NULL CHECK(status IN ('pendente','feita','pulada','rejeitada','encerrada')),
+    adiada_ate TEXT, motivo TEXT, criada_em TEXT NOT NULL, atualizada_em TEXT NOT NULL, vista_em TEXT NOT NULL,
+    resolvida_em TEXT, resolvida_por TEXT REFERENCES users(id))`,
+  'CREATE INDEX IF NOT EXISTS idx_analise_acoes_status ON analise_acoes(status, impacto DESC)',
+  `CREATE TABLE IF NOT EXISTS analise_acoes_eventos (
+    id TEXT PRIMARY KEY, acao_id TEXT NOT NULL REFERENCES analise_acoes(id) ON DELETE CASCADE,
+    user_id TEXT REFERENCES users(id), de TEXT, para TEXT NOT NULL, motivo TEXT, criado_em TEXT NOT NULL)`,
+  'CREATE INDEX IF NOT EXISTS idx_analise_acoes_eventos_recentes ON analise_acoes_eventos(criado_em DESC)',
+];

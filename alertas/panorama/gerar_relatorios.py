@@ -97,6 +97,10 @@ def gerar():
     # O recorte também preenche a Análise do Portal (histórico).
     from envio_analise import enviar_comparacao
     enviar_comparacao(df)
+    # Reprocessamento diário da Análise: só atualiza o Portal, sem planilha.
+    if os.environ.get('SUPPLY_VISION_SOMENTE_ANALISE') == '1':
+        print('\nReprocessamento da Análise concluído (sem planilha).')
+        return False
 
     stamp = os.environ.get('SUPPLY_VISION_RUN_ID') or \
             f"{datetime.now():%Y%m%d_%H%M%S}_{secrets.token_hex(3)}"

@@ -70,6 +70,7 @@ const equivalencia: Record<Acao, readonly boolean[]> = {
   'aba:alertas': [false, true, true, false],
   'alertas:consultar': [false, true, true, false],
   'alertas:destinatarios': [false, false, true, false],
+  'analise:acoes': [false, true, true, false],
 };
 
 void test('cada perfil e cada acao preservam o contrato inventariado', () => {
