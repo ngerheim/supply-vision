@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
-import { Plus, RefreshCw, Search, X } from 'lucide-react';
+import { Pencil, Plus, Power, RefreshCw, Search, X } from 'lucide-react';
 import { api, ApiError, errorText } from '@/lib/api';
 import { pode } from '@/lib/permissoes';
 import { corpoJson } from '@/lib/solicitacoes-cliente';
@@ -173,7 +173,7 @@ export function Estoques() {
                 <TableRow>
                   <TableHead>Nome</TableHead>
                   <TableHead>Situação</TableHead>
-                  <TableHead>Ações</TableHead>
+                  <TableHead className="w-24 text-right">Ações</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -185,25 +185,34 @@ export function Estoques() {
                         {c.ativo ? 'Ativo' : 'Inativo'}
                       </Badge>
                     </TableCell>
-                    <TableCell className="space-x-2">
-                      <Button
-                        variant="outline"
-                        disabled={busy || Boolean(editando)}
-                        onClick={() => {
-                          setEditando(c);
-                          setNome(c.nome);
-                          setErro('');
-                        }}
-                      >
-                        Renomear {c.nome}
-                      </Button>
-                      <Button
-                        variant="outline"
-                        disabled={busy || Boolean(editando)}
-                        onClick={() => void salvar(c, { ativo: !c.ativo })}
-                      >
-                        {c.ativo ? 'Desativar' : 'Ativar'} {c.nome}
-                      </Button>
+                    <TableCell>
+                      <div className="flex justify-end gap-1">
+                        <Button
+                          size="icon-sm"
+                          variant="ghost"
+                          aria-label={`Renomear ${c.nome}`}
+                          title="Renomear"
+                          disabled={busy || Boolean(editando)}
+                          onClick={() => {
+                            setEditando(c);
+                            setNome(c.nome);
+                            setErro('');
+                          }}
+                        >
+                          <Pencil />
+                        </Button>
+                        <Button
+                          size="icon-sm"
+                          variant="ghost"
+                          aria-label={`${c.ativo ? 'Desativar' : 'Ativar'} ${c.nome}`}
+                          title={c.ativo ? 'Desativar' : 'Ativar'}
+                          className={c.ativo ? 'text-destructive hover:bg-destructive/10' : 'text-emerald-700 hover:bg-emerald-50'}
+                          disabled={busy || Boolean(editando)}
+                          onClick={() => void salvar(c, { ativo: !c.ativo })}
+                        >
+                          <Power />
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -239,7 +248,6 @@ export function EntradaEstoque() {
         day: '2-digit',
       }).format(new Date()),
     ),
-    [documento, setDocumento] = useState(''),
     [observacao, setObservacao] = useState(''),
     [busca, setBusca] = useState(''),
     [itens, setItens] = useState<AnyRow[]>([]),
@@ -316,7 +324,6 @@ export function EntradaEstoque() {
     setAbrir(false);
     setErro('');
     setEstoqueId('');
-    setDocumento('');
     setObservacao('');
     setBusca('');
     setItens([]);
@@ -346,7 +353,6 @@ export function EntradaEstoque() {
         ...corpoJson('POST', {
           estoqueId,
           dataMovimento: data,
-          documento,
           observacao,
           itens: linhas.map((l) => ({
             itemId: l.id,
@@ -403,7 +409,7 @@ export function EntradaEstoque() {
           <Input
             className="pl-9"
             aria-label="Buscar entradas"
-            placeholder="Buscar por documento ou item"
+            placeholder="Pesquisar"
             value={q}
             onChange={(e) => setQ(e.target.value)}
           />
@@ -450,7 +456,6 @@ export function EntradaEstoque() {
               <TableRow>
                 <TableHead>Data</TableHead>
                 <TableHead>Estoque</TableHead>
-                <TableHead>Documento</TableHead>
                 <TableHead>Itens</TableHead>
                 <TableHead>Registrado por</TableHead>
                 <TableHead>Observação</TableHead>
@@ -461,7 +466,6 @@ export function EntradaEstoque() {
                 <TableRow key={r.origem_id}>
                   <TableCell>{r.data_movimento}</TableCell>
                   <TableCell>{r.estoque}</TableCell>
-                  <TableCell>{r.documento || '—'}</TableCell>
                   <TableCell title={r.resumo}>
                     {r.itens} {r.itens === 1 ? 'item' : 'itens'}
                   </TableCell>
@@ -490,7 +494,7 @@ export function EntradaEstoque() {
             open
             aria-modal="true"
             aria-labelledby="titulo-entrada"
-            className="m-0 max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-xl border bg-card p-0 shadow-xl"
+            className="relative m-0 max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-xl border bg-card p-0 shadow-xl"
           >
             <header className="flex items-center justify-between border-b p-5">
               <h2 id="titulo-entrada" className="text-lg font-semibold">
@@ -509,6 +513,7 @@ export function EntradaEstoque() {
               <fieldset disabled={busy} className="grid gap-4 sm:grid-cols-2">
                 <Field label="Estoque">
                   <NativeSelect
+                    className="w-full"
                     aria-label="Estoque da entrada"
                     required
                     value={estoqueId}
@@ -532,14 +537,7 @@ export function EntradaEstoque() {
                     onChange={(e) => setData(e.target.value)}
                   />
                 </Field>
-                <Field label="Documento">
-                  <Input
-                    maxLength={60}
-                    value={documento}
-                    onChange={(e) => setDocumento(e.target.value)}
-                  />
-                </Field>
-                <Field label="Observação">
+                <Field label="Observação" className="sm:col-span-2">
                   <Input
                     maxLength={300}
                     value={observacao}
@@ -754,7 +752,7 @@ export function SaldoEstoque({ user }: { user: AnyRow }) {
           <Input
             className="pl-9"
             aria-label="Buscar item"
-            placeholder="Buscar item"
+            placeholder="Pesquisar"
             value={q}
             onChange={(e) => setQ(e.target.value)}
           />

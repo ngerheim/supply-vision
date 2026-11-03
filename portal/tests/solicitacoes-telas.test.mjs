@@ -37,7 +37,8 @@ const button = (h, label) =>
   h.one(
     'Button',
     (p) =>
-      (Array.isArray(p.children) ? p.children.join('') : p.children) === label,
+      (Array.isArray(p.children) ? p.children.join('') : p.children) === label ||
+      p['aria-label'] === label,
   );
 const input = (h, name) => h.one('Input', (p) => p.name === name);
 const change = (h, name, value) => {

@@ -56,6 +56,12 @@ export function PageHeader({
   const visivel =
     title ??
     (unica.length === 1 && aba.subabas.length > 1 ? unica[0].label : null);
+  // Sem titulo proprio: as acoes ficam na mesma linha das subabas.
+  if (!visivel && actions && contexto && !back && !status)
+    return <>
+      <LinhaDeAba actions={actions} />
+      {description && <p className="patio-header-description">{description}</p>}
+    </>;
   return (
     <header className="patio-page-header">
       {back && (

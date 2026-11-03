@@ -254,13 +254,13 @@ void test('falha ao inspecionar colunas bloqueia inicializacao e retomada migra 
     END`);
   falhar = false;
   await ensureDatabase();
-  assert.deepEqual((await db.prepare('SELECT version FROM ordem_migracoes ORDER BY posicao').all()).results.map(r => r.version), [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19]);
+  assert.deepEqual((await db.prepare('SELECT version FROM ordem_migracoes ORDER BY posicao').all()).results.map(r => r.version), [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]);
   const antes = (await db.prepare('SELECT * FROM schema_migrations ORDER BY version').all()).results;
   const usuarios = (await db.prepare('SELECT * FROM users ORDER BY id').all()).results;
   await (await carregar('reinicio')).ensureDatabase();
   assert.deepEqual((await db.prepare('SELECT * FROM schema_migrations ORDER BY version').all()).results, antes);
   assert.deepEqual((await db.prepare('SELECT * FROM users ORDER BY id').all()).results, usuarios);
-  assert.equal(await db.prepare('SELECT COUNT(*) FROM ordem_migracoes').first('COUNT(*)'), 19);
+  assert.equal(await db.prepare('SELECT COUNT(*) FROM ordem_migracoes').first('COUNT(*)'), 20);
   assert.deepEqual((await db.prepare('PRAGMA foreign_key_check').all()).results, []);
   assert.equal(await db.prepare('PRAGMA foreign_keys').first('foreign_keys'), 1);
 });
@@ -311,4 +311,41 @@ void test('migração 14 cria movimentos de estoque atomicamente, retoma e prese
   await assert.rejects(db.prepare("UPDATE movimentos_estoque SET observacao='Alteração' WHERE id='mov-m14'").run(),/imutaveis/);
   await assert.rejects(db.prepare("DELETE FROM movimentos_estoque WHERE id='mov-m14'").run(),/imutaveis/);
   assert.deepEqual((await db.prepare('PRAGMA foreign_key_check').all()).results,[]);
+});
+
+void test('migração 20 deixa a solicitação de pagamento só com link e anexos, preservando códigos e vínculos', async t => {
+  const pasta=fs.mkdtempSync(path.join(os.tmpdir(),'sv-pagamentos-migracao-'));
+  const db=bancoSqliteLocal({pastaPrivada:pasta,criar:true}),chave=Symbol.for('supply-vision:banco'),anterior=globalThis[chave],senha=env.INITIAL_ADMIN_PASSWORD;
+  globalThis[chave]=db;env.INITIAL_ADMIN_PASSWORD='senha-ficticia-migracao-pagamentos';
+  t.after(()=>{globalThis[chave]=anterior;env.INITIAL_ADMIN_PASSWORD=senha;db.fechar();fs.rmSync(pasta,{recursive:true,force:true});});
+  await (await carregar('pagamentos-novo')).ensureDatabase();
+  const admin=(await db.prepare('SELECT id FROM users LIMIT 1').first()).id;
+  // Recria a tabela como ate a 3.4.2 (campos obrigatorios), com duas solicitacoes.
+  await db.exec(`PRAGMA foreign_keys=OFF; DROP TABLE pagamentos;
+    CREATE TABLE pagamentos (sequencia INTEGER PRIMARY KEY AUTOINCREMENT, id TEXT NOT NULL UNIQUE,
+    codigo TEXT GENERATED ALWAYS AS ('PAG-' || printf('%04d',sequencia)) STORED UNIQUE,
+    fornecedor TEXT NOT NULL CHECK(length(fornecedor) BETWEEN 1 AND 120), cnpj TEXT,
+    numero_oc TEXT NOT NULL, numero_nf TEXT NOT NULL, valor_centavos INTEGER NOT NULL CHECK(valor_centavos>0), vencimento TEXT NOT NULL, link TEXT,
+    observacao TEXT, status TEXT NOT NULL DEFAULT 'aberta', motivo_recusa TEXT, solicitante_id TEXT NOT NULL REFERENCES users(id), atendente_id TEXT REFERENCES users(id),
+    criado_em TEXT NOT NULL, atualizado_em TEXT NOT NULL, revision INTEGER NOT NULL DEFAULT 0, request_key TEXT, request_hash TEXT, UNIQUE(solicitante_id,request_key));
+    PRAGMA foreign_keys=ON;`);
+  for(const n of [1,2,3])await db.prepare("INSERT INTO pagamentos(id,fornecedor,numero_oc,numero_nf,valor_centavos,vencimento,solicitante_id,criado_em,atualizado_em) VALUES(?,?,?,?,?,?,?,?,?)").bind(`pag${n}`,'Fornecedor ficticio','OC-1','NF-1',100,'2026-12-01',admin,'2026-10-01T00:00:00Z','2026-10-01T00:00:00Z').run();
+  await db.prepare("DELETE FROM pagamentos WHERE id='pag3'").run();
+  await db.prepare("INSERT INTO pagamento_andamentos(id,pagamento_id,user_id,para_status,criado_em) VALUES('pan1','pag2',?,'aberta','2026-10-01T00:00:00Z')").bind(admin).run();
+  await db.prepare('DELETE FROM schema_migrations WHERE version=20').run();
+  await (await carregar('pagamentos-antigo')).ensureDatabase();
+  const colunas=(await db.prepare('PRAGMA table_info(pagamentos)').all()).results;
+  assert.equal(colunas.find(c=>c.name==='fornecedor').notnull,0);
+  assert.equal(colunas.find(c=>c.name==='vencimento').notnull,0);
+  assert.deepEqual((await db.prepare('SELECT id,codigo FROM pagamentos ORDER BY sequencia').all()).results.map(r=>[r.id,r.codigo]),[['pag1','PAG-0001'],['pag2','PAG-0002']]);
+  // A sequencia continua de onde parou (PAG-0003 foi usado e apagado).
+  await db.prepare("INSERT INTO pagamentos(id,link,solicitante_id,criado_em,atualizado_em) VALUES('pag4','https://example.com/x',?,?,?)").bind(admin,'2026-11-01T00:00:00Z','2026-11-01T00:00:00Z').run();
+  assert.equal(await db.prepare("SELECT codigo FROM pagamentos WHERE id='pag4'").first('codigo'),'PAG-0004');
+  assert.equal(await db.prepare("SELECT pagamento_id FROM pagamento_andamentos WHERE id='pan1'").first('pagamento_id'),'pag2');
+  assert.ok(await db.prepare("SELECT 1 ok FROM sqlite_schema WHERE type='index' AND name='idx_pagamentos_solicitante'").first());
+  assert.equal(await db.prepare("SELECT COUNT(*) n FROM sqlite_schema WHERE sql LIKE '%pagamentos_nova%' OR name LIKE '%_nova'").first('n'),0);
+  assert.equal(await db.prepare("SELECT COUNT(*) n FROM sqlite_schema WHERE type='trigger' AND tbl_name='pagamento_andamentos'").first('n'),2);
+  await assert.rejects(db.prepare("INSERT INTO pagamento_andamentos(id,pagamento_id,user_id,para_status,criado_em) VALUES('pan2','inexistente',?,'aberta','2026-10-01T00:00:00Z')").bind(admin).run(),/FOREIGN KEY/);
+  assert.deepEqual((await db.prepare('PRAGMA foreign_key_check').all()).results, []);
+  assert.equal(await db.prepare('SELECT COUNT(*) n FROM schema_migrations WHERE version=20').first('n'),1);
 });

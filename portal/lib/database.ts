@@ -2,7 +2,7 @@ import { portalPrivado } from '../scripts/configuracao.mjs';
 import { SCHEMA_CENTRAL } from './central-notificacoes.ts';
 import { SCHEMA_SOLICITACOES } from './solicitacoes-schema.ts';
 import { SCHEMA_BAIXAS } from './baixas-schema.ts';
-import { SCHEMA_PAGAMENTOS } from './pagamentos-schema.ts';
+import { SCHEMA_PAGAMENTOS, ddlPagamentos, ddlPagamentoAnexos, ddlPagamentoAndamentos, COMPLEMENTOS_PAGAMENTOS } from './pagamentos-schema.ts';
 import { MIGRAR_FILA_SOLICITACOES } from './fila-email-schema.ts';
 import { bancoSqliteLocal } from './sqlite-local.ts';
 import { SESSAO_INATIVIDADE_MS } from './politica-sessao.ts';
@@ -416,6 +416,43 @@ async function initialize() {
       ...SCHEMA_ANALISE_ACOES.map(sql => db.prepare(sql)),
       db.prepare('INSERT OR IGNORE INTO schema_migrations(version,applied_at) VALUES(19,?)').bind(now()),
     ]);
+  }
+  // Solicitacao de pagamento so com link e anexos: fornecedor, OC, NF, valor e
+  // vencimento deixam de ser obrigatorios. O SQLite nao altera NOT NULL, entao a
+  // tabela e reconstruida junto com as filhas (anexos e andamentos), para nenhuma
+  // linha ficar orfa no meio da transacao. A sequencia (e o codigo PAG-xxxx) e
+  // os vinculos das solicitacoes existentes sao preservados.
+  if (!await db.prepare('SELECT 1 ok FROM schema_migrations WHERE version=20').first()) {
+    await db.batchConstruir((consultar) => {
+      const colunas=consultar({sql:'PRAGMA table_info(pagamentos)',values:[]}).results as Array<{name:string;notnull:number}>;
+      const marcar={sql:'INSERT OR IGNORE INTO schema_migrations(version,applied_at) VALUES(20,?)',values:[now()]};
+      if(!colunas.some(c=>c.name==='fornecedor'&&c.notnull))return [marcar];
+      const seq=Number((consultar({sql:"SELECT seq FROM sqlite_sequence WHERE name='pagamentos'",values:[]}).results[0] as {seq?:number}|undefined)?.seq||0);
+      const cPag='sequencia,id,fornecedor,cnpj,numero_oc,numero_nf,valor_centavos,vencimento,link,observacao,status,motivo_recusa,solicitante_id,atendente_id,criado_em,atualizado_em,revision,request_key,request_hash';
+      const cAnx='id,pagamento_id,tipo,nome_arquivo,mime,tamanho,sha256,conteudo,criado_em,user_id';
+      const cAnd='id,pagamento_id,user_id,de_status,para_status,texto,criado_em,request_key,request_hash';
+      const c=(sql:string,values:unknown[]=[])=>({sql,values});
+      return [
+        c(ddlPagamentos('pagamentos_nova')),
+        c(`INSERT INTO pagamentos_nova(${cPag}) SELECT ${cPag} FROM pagamentos ORDER BY sequencia`),
+        c(ddlPagamentoAnexos('pagamento_anexos_nova','pagamentos_nova')),
+        c(`INSERT INTO pagamento_anexos_nova(${cAnx}) SELECT ${cAnx} FROM pagamento_anexos ORDER BY rowid`),
+        c(ddlPagamentoAndamentos('pagamento_andamentos_nova','pagamentos_nova')),
+        c(`INSERT INTO pagamento_andamentos_nova(${cAnd}) SELECT ${cAnd} FROM pagamento_andamentos ORDER BY rowid`),
+        c('DROP TRIGGER IF EXISTS pagamento_andamentos_imutavel_update'),
+        c('DROP TRIGGER IF EXISTS pagamento_andamentos_imutavel_delete'),
+        c('DROP TABLE pagamento_andamentos'),
+        c('DROP TABLE pagamento_anexos'),
+        c('DROP TABLE pagamentos'),
+        // Renomear o pai atualiza a referencia das filhas novas para "pagamentos".
+        c('ALTER TABLE pagamentos_nova RENAME TO pagamentos'),
+        c('ALTER TABLE pagamento_anexos_nova RENAME TO pagamento_anexos'),
+        c('ALTER TABLE pagamento_andamentos_nova RENAME TO pagamento_andamentos'),
+        c("UPDATE sqlite_sequence SET seq=? WHERE name='pagamentos' AND seq<?",[seq,seq]),
+        ...COMPLEMENTOS_PAGAMENTOS.map(sql=>c(sql)),
+        marcar,
+      ];
+    });
   }
   await db.prepare('PRAGMA optimize').run();
 }

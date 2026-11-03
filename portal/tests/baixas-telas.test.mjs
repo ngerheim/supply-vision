@@ -45,7 +45,7 @@ const textoVisivel = (children) => {
     : '';
 };
 const button = (h, nome) =>
-  h.one('Button', (p) => textoVisivel(p.children).trim() === nome);
+  h.one('Button', (p) => textoVisivel(p.children).trim() === nome || p['aria-label'] === nome);
 const change = (h, nome, value, tipo = 'Input') => {
   h.one(tipo, (p) => p.name === nome).onChange({ target: { value } });
   h.render();
@@ -320,7 +320,7 @@ void test('estoques inclui, renomeia e alterna ativo com revision e erro 409', a
 void test('entrada e saldo de estoque listam, filtram, validam e registram entradas',async t=>{
   const h=await mount('portal-estoques','EntradaEstoque',{},modules,{crypto});t.after(()=>h.unmount());
   h.requests.find(r=>r.path==='/api/estoques').resolve({estoques:[estoque]});h.requests.find(r=>r.path.startsWith('/api/estoque/entradas?')).resolve({entradas:[{origem_id:'orig',data_movimento:'2026-10-27',estoque:'Estoque fictício',documento:'NF-1',itens:1,usuario:'Pessoa fictícia',observacao:'Nota'}],total:1});await flush(h);
-  assert.ok(h.find(n=>n.type==='TableHead').some(n=>n.props.children==='Registrado por'));assert.ok(h.find(n=>n.type==='TableCell').some(n=>n.props.children==='NF-1'));
+  assert.ok(h.find(n=>n.type==='TableHead').some(n=>n.props.children==='Registrado por'));assert.ok(h.find(n=>n.type==='TableCell').some(n=>n.props.children==='Nota'));assert.equal(h.find(n=>n.type==='TableHead').some(n=>n.props.children==='Documento'),false);
   h.one('Input',p=>p['aria-label']==='Buscar entradas').onChange({target:{value:'Filtro'}});h.render();assert.match(h.requests.at(-1).path,/q=Filtro/);
   button(h,'Nova entrada').onClick();h.render();
   h.one('Input',p=>p['aria-label']==='Buscar item no catálogo').onChange({target:{value:'Óleo'}});h.render();await new Promise(resolve=>setTimeout(resolve,200));await flush(h);

@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
-import { RefreshCw } from 'lucide-react';
+import { Pencil, Power, RefreshCw } from 'lucide-react';
 import { api, ApiError, errorText } from '@/lib/api';
 import {
   corpoJson,
@@ -169,7 +169,7 @@ export function CategoriasFornecedor() {
                 <TableRow>
                   <TableHead>Nome</TableHead>
                   <TableHead>Situação</TableHead>
-                  <TableHead>Ações</TableHead>
+                  <TableHead className="w-24 text-right">Ações</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -181,25 +181,34 @@ export function CategoriasFornecedor() {
                         {c.ativo ? 'Ativa' : 'Inativa'}
                       </Badge>
                     </TableCell>
-                    <TableCell className="space-x-2">
-                      <Button
-                        variant="outline"
-                        disabled={busy || Boolean(editando)}
-                        onClick={() => {
-                          setEditando(c);
-                          setNome(c.nome);
-                          setErro('');
-                        }}
-                      >
-                        Renomear {c.nome}
-                      </Button>
-                      <Button
-                        variant="outline"
-                        disabled={busy || Boolean(editando)}
-                        onClick={() => void salvar(c, { ativo: !c.ativo })}
-                      >
-                        {c.ativo ? 'Desativar' : 'Ativar'} {c.nome}
-                      </Button>
+                    <TableCell>
+                      <div className="flex justify-end gap-1">
+                        <Button
+                          size="icon-sm"
+                          variant="ghost"
+                          aria-label={`Renomear ${c.nome}`}
+                          title="Renomear"
+                          disabled={busy || Boolean(editando)}
+                          onClick={() => {
+                            setEditando(c);
+                            setNome(c.nome);
+                            setErro('');
+                          }}
+                        >
+                          <Pencil />
+                        </Button>
+                        <Button
+                          size="icon-sm"
+                          variant="ghost"
+                          aria-label={`${c.ativo ? 'Desativar' : 'Ativar'} ${c.nome}`}
+                          title={c.ativo ? 'Desativar' : 'Ativar'}
+                          className={c.ativo ? 'text-destructive hover:bg-destructive/10' : 'text-emerald-700 hover:bg-emerald-50'}
+                          disabled={busy || Boolean(editando)}
+                          onClick={() => void salvar(c, { ativo: !c.ativo })}
+                        >
+                          <Power />
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}

@@ -82,14 +82,17 @@ h1, h2, h3, h4, [data-slot='card-title'], [data-slot='dialog-title'] { font-stre
 .patio-subabas [role='tab'] { min-width: auto; }
 .patio-subabas .patio-subaba-ativa { color: var(--marinho); }
 .patio-codigo { font-family: var(--font-mono, ui-monospace, monospace); font-weight: 600; white-space: nowrap; }
+/* Coluna de codigo (SUP-0001, PAG-0001...) so com a largura do codigo; o resto vai para as colunas de texto. */
+table:has(> tbody > tr > td:first-child .patio-codigo) > thead > tr > th:first-child { width: 120px; }
+td:has(.patio-codigo) { white-space: nowrap; }
 .patio-placa { display: inline-block; max-width: 100%; vertical-align: middle; border: 2px solid var(--marinho); border-top: 6px solid var(--faixa-placa); border-radius: 3px; background: var(--branco); color: var(--marinho); padding: 1px 8px 2px; font-stretch: 70%; font-weight: 800; line-height: 1.2; text-align: center; overflow-wrap: anywhere; }
 @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
 
-/* Notebook grid: the inner content is at most 1440 px, with 24/32 px gutters. */
+/* O conteudo ocupa toda a largura disponivel, com margens de 24/32 px. */
 body { min-width: 1100px; }
 .patio-canvas { margin-left: 224px; transition: margin-left 180ms ease; }
 .patio-canvas-collapsed { margin-left: 64px; }
-.patio-container { width: 100%; max-width: 1504px; margin-inline: auto; padding: 32px; }
+.patio-container { width: 100%; max-width: none; margin-inline: auto; padding: 32px; }
 @media (max-width: 1399px) { .patio-container { padding: 24px; } }
 .patio-page { display: flex; flex-direction: column; gap: 24px; min-width: 0; }
 .patio-page-header { min-width: 0; }

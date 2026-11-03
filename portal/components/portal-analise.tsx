@@ -246,20 +246,21 @@ export function Analise({ verAcoes }: { verAcoes: () => void }) {
 
       <div className={`space-y-4 transition-opacity ${carregando ? 'pointer-events-none opacity-50' : ''}`} aria-busy={carregando}>
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <Indicador titulo="Conformidade (R$)" valor={pct(ind.conformidadeRs)} detalhe={`${pct(ind.conformidadeQtd)} das linhas com acordo`} />
-          <Indicador titulo="Utilização dos acordos" valor={pct(ind.utilizacao)} detalhe={`${rs(ind.gastoComAcordo)} de ${rs(ind.gasto)}`} />
-          <Indicador titulo="Pago acima do acordo" valor={rs(ind.pagoAcima)} detalhe={`${inteiro.format(ind.linhasAcima)} linhas`} />
-          <Indicador titulo="Economia teórica (teto)" valor={rs(ind.economiaPotencial)} detalhe="Com o acordo mais barato da cidade" />
           <Indicador titulo="Gasto no período" valor={rs(ind.gasto)}
             detalhe={ant.gasto ? `${variacao(ind.gasto, ant.gasto)} sobre o mesmo período de ${ant.de.slice(0, 4)}` : undefined} />
+          <Indicador titulo="Conformidade (R$)" valor={pct(ind.conformidadeRs)} detalhe={`${pct(ind.conformidadeQtd)} das linhas com acordo`} />
+          <Indicador titulo="Utilização dos acordos" valor={pct(ind.utilizacao)} detalhe={`${rs(ind.gastoComAcordo)} de ${rs(ind.gasto)}`} />
           <Indicador titulo="Compras sem acordo" valor={rs(ind.gastoSemAcordo)} detalhe={`${inteiro.format(ind.linhasSemAcordo)} linhas`} />
-          <Indicador titulo="Sem acordo, havendo acordo" valor={rs(ind.semAcordoComOpcao)} detalhe="Fora do fornecedor com acordo" />
-          <Indicador titulo="Pago abaixo do acordo" valor={rs(ind.pagoAbaixo)} />
+        </div>
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
+          <Indicador titulo="Pago acima do acordo" valor={rs(ind.pagoAcima)} detalhe={`${inteiro.format(ind.linhasAcima)} linhas`} />
+          <Indicador titulo="Fuga de contrato" valor={rs(ind.semAcordoComOpcao)} />
+          <Indicador titulo="Economia projetada" valor={rs(ind.economiaPotencial)} detalhe="Com o acordo mais barato da cidade" />
         </div>
 
         <Bloco titulo="Evolução mensal" vazio={!dados.mensal.length}
           rodape={temAntesDoCorte ? '* Antes do corte de vigência: comparado com a tabela atual de acordos.' : undefined}>
-          <TableHeader><TableRow><TableHead>Mês</TableHead><TableHead className="w-1/3">Gasto</TableHead><TableHead className="text-right">Gasto</TableHead><TableHead className="text-right">Utilização</TableHead><TableHead className="text-right">Conformidade (R$)</TableHead><TableHead className="text-right">Pago acima</TableHead><TableHead className="text-right">Economia teórica</TableHead></TableRow></TableHeader>
+          <TableHeader><TableRow><TableHead>Mês</TableHead><TableHead className="w-1/3">Gasto</TableHead><TableHead className="text-right">Gasto</TableHead><TableHead className="text-right">Utilização</TableHead><TableHead className="text-right">Conformidade (R$)</TableHead><TableHead className="text-right">Pago acima</TableHead><TableHead className="text-right">Economia projetada</TableHead></TableRow></TableHeader>
           <TableBody>{dados.mensal.map((m: AnyRow) => (
             <TableRow key={m.mes} className={m.antesDoCorte ? 'text-muted-foreground' : ''}>
               <TableCell className="whitespace-nowrap">{mesLabel(m.mes)}{m.antesDoCorte ? ' *' : ''}</TableCell>
