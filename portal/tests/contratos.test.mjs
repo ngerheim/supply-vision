@@ -57,22 +57,15 @@ void test('contrato: extenso, data e CNPJ', () => {
   assert.equal(contratos.formatarCnpj('12345678000199'), '12.345.678/0001-99');
 });
 
-void test('contrato: preenche campos com escape, anexa a tabela antes do sectPr e recusa campo desconhecido', () => {
+void test('contrato: preenche campos com escape, sem anexo, e recusa campo desconhecido', () => {
   const campos = Object.fromEntries(CAMPOS.map(c => [c, `Valor ${c}`]));
   campos.FORNECEDOR_RAZAO_SOCIAL = 'Oficina <Teste> & Filhos';
-  const itens = [
-    { cidade: 'Cidade A', uf: 'MG', modelo: 'Modelo X', item: 'Troca de óleo', unidade: 'UN', preco: 1234.5, cortesia: false, marcas: null },
-    { cidade: 'Cidade B', uf: 'PA', modelo: 'Modelo Y', item: 'Alinhamento', unidade: 'UN', preco: 0, cortesia: true, marcas: 'Marca Z' },
-  ];
-  const xml = lerDocumento(contratos.gerarContrato(templateFicticio(), campos, itens));
+  const xml = lerDocumento(contratos.gerarContrato(templateFicticio(), campos));
   assert.doesNotMatch(xml, /\{\{/);
   assert.match(xml, /Oficina &lt;Teste&gt; &amp; Filhos/);
-  assert.match(xml, /ANEXO I – TABELA DE VALORES/);
-  assert.match(xml, /R\$\s1\.234,50/);
-  assert.match(xml, /Cortesia/);
-  assert.ok(xml.indexOf('ANEXO I') < xml.lastIndexOf('<w:sectPr'), 'anexo antes do sectPr final');
-  assert.throws(() => contratos.gerarContrato(templateFicticio('<w:p><w:r><w:t>{{CAMPO_NOVO}}</w:t></w:r></w:p>'), campos, []), /CAMPO_NOVO/);
-  assert.throws(() => contratos.gerarContrato(new Uint8Array([1, 2, 3]), campos, []), contratos.TemplateInvalido);
+  assert.doesNotMatch(xml, /ANEXO I/);
+  assert.throws(() => contratos.gerarContrato(templateFicticio('<w:p><w:r><w:t>{{CAMPO_NOVO}}</w:t></w:r></w:p>'), campos), /CAMPO_NOVO/);
+  assert.throws(() => contratos.gerarContrato(new Uint8Array([1, 2, 3]), campos), contratos.TemplateInvalido);
   assert.deepEqual(contratos.camposDoTemplate(templateFicticio()).sort(), [...CAMPOS].sort());
 });
 
@@ -104,16 +97,14 @@ void test('contrato: rota gera o .docx com permissao, valida campos e audita', a
   };
   const campos = Object.fromEntries(['FORNECEDOR_RAZAO_SOCIAL', 'FORNECEDOR_CNPJ'].map(c => [c, `Valor ${c}`]));
   const endereco = { logradouro: 'Rua Ficticia', numero: '100', complemento: '', bairro: 'Centro', cidade: 'Cidade A', uf: 'mg', cep: '30100000' };
-  const corpo = { acordoId: 'ag1', campos, endereco, prazoDias: 60, data: '2026-10-30' };
+  const corpo = { campos, endereco, prazoDias: 60, data: '2026-10-30' };
 
   assert.equal((await pedir('GET', 'contratos', 'viewer')).status, 403);
   assert.equal((await pedir('POST', 'contratos', 'viewer', corpo)).status, 403);
   // Sem template: a tela avisa e a geracao recusa.
-  const semTemplate = await pedir('GET', 'contratos?acordo=ag1', admin);
+  const semTemplate = await pedir('GET', 'contratos', admin);
   assert.equal(semTemplate.data.template, false);
-  assert.equal(semTemplate.data.acordo.cnpj, '12.345.678/0001-99');
-  // Sem solicitacao de cadastro, o endereco vem so com cidade e UF do fornecedor.
-  assert.deepEqual([semTemplate.data.acordo.endereco.cidade, semTemplate.data.acordo.endereco.uf, semTemplate.data.acordo.endereco.logradouro], ['Cidade A', 'MG', '']);
+  assert.equal(semTemplate.data.acordo, undefined);
   assert.equal((await pedir('POST', 'contratos', admin, corpo)).status, 409);
 
   fs.mkdirSync(path.dirname(caminhoTemplateContrato()), { recursive: true });
@@ -124,16 +115,15 @@ void test('contrato: rota gera o .docx com permissao, valida campos e audita', a
   assert.equal((await pedir('POST', 'contratos', admin, { ...corpo, campos: { ...campos, FORNECEDOR_RAZAO_SOCIAL: ' ' } })).status, 400);
   assert.equal((await pedir('POST', 'contratos', admin, { ...corpo, endereco: { ...endereco, bairro: '' } })).status, 400);
   assert.equal((await pedir('POST', 'contratos', admin, { ...corpo, endereco: { ...endereco, cep: '123' } })).status, 400);
-  assert.equal((await pedir('POST', 'contratos', admin, { ...corpo, acordoId: 'nao-existe' })).status, 404);
 
   const gerado = await pedir('POST', 'contratos', admin, corpo);
   assert.equal(gerado.status, 200);
-  assert.match(gerado.headers.get('content-disposition'), /Contrato_LF-900_Fornecedor_Ficticio\.docx/);
+  assert.match(gerado.headers.get('content-disposition'), /Contrato_Valor_FORNECEDOR_RAZAO_SOCIAL\.docx/);
   const xml = lerDocumento(gerado.data);
   assert.match(xml, /PRAZO_PAGAMENTO_DIAS: 60/);
   assert.match(xml, /PRAZO_PAGAMENTO_EXTENSO: sessenta/);
   assert.match(xml, /DATA_ASSINATURA: 30 de outubro de 2026/);
   assert.match(xml, /FORNECEDOR_ENDERECO: Rua Ficticia, 100, Centro, Cidade A\/MG, CEP 30100-000/);
-  assert.match(xml, /Acordo sem itens na versão vigente/);
-  assert.match(sql.prepare("SELECT details FROM audit_logs WHERE entity_id='ag1' ORDER BY created_at DESC").get().details, /Contrato de fornecimento gerado: LF-900 \(prazo 60 dias/);
+  assert.doesNotMatch(xml, /ANEXO I/);
+  assert.match(sql.prepare("SELECT details FROM audit_logs WHERE entity='contrato' ORDER BY created_at DESC").get().details, /Contrato de fornecimento gerado: Valor FORNECEDOR_RAZAO_SOCIAL \(prazo 60 dias/);
 });

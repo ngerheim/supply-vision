@@ -3,8 +3,8 @@ import { isIsoDate } from './domain.ts';
 
 // Preenche o template .docx do contrato de fornecimento. O template fica na
 // pasta privada (nunca no Git): campos no formato {{NOME}}, cada um inteiro
-// dentro de um unico trecho de texto do Word. O Anexo I (tabela de valores)
-// e montado a partir dos itens da versao vigente do acordo.
+// dentro de um unico trecho de texto do Word. Os dados do fornecedor sao
+// digitados na tela; a tabela de valores segue a parte, fora do Portal.
 
 // Os dados da contratante (cidade, representante) sao sempre os mesmos e ficam
 // escritos direto no template. A assinatura e digital: o template nao tem bloco
@@ -25,11 +25,6 @@ export function montarEndereco(e: EnderecoContrato): string {
     .map(p => p.trim()).filter(Boolean).join(', ');
 }
 export type CampoContrato = (typeof CAMPOS_CONTRATO)[number];
-
-export type ItemAnexo = {
-  cidade: string; uf: string; modelo: string; item: string; unidade: string;
-  preco: number; cortesia: boolean; marcas: string | null;
-};
 
 export class TemplateInvalido extends Error {}
 
@@ -69,41 +64,6 @@ export function formatarCnpj(cnpj: string): string {
 
 const xml = (texto: string) => texto
   .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-const moeda = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
-
-function paragrafo(texto: string, { negrito = false, centro = false, quebraPagina = false, tamanho = 0 } = {}) {
-  const pPr = `<w:pPr>${centro ? '<w:jc w:val="center"/>' : ''}<w:spacing w:before="0" w:after="0"/></w:pPr>`;
-  const rPr = negrito || tamanho ? `<w:rPr>${negrito ? '<w:b/>' : ''}${tamanho ? `<w:sz w:val="${tamanho}"/>` : ''}</w:rPr>` : '';
-  const quebra = quebraPagina ? '<w:r><w:br w:type="page"/></w:r>' : '';
-  return `<w:p>${pPr}${quebra}${texto ? `<w:r>${rPr}<w:t xml:space="preserve">${xml(texto)}</w:t></w:r>` : ''}</w:p>`;
-}
-
-function celula(texto: string, largura: number, { cabecalho = false, direita = false } = {}) {
-  const fundo = cabecalho ? '<w:shd w:val="clear" w:color="auto" w:fill="D9D9D9"/>' : '';
-  const jc = direita ? '<w:jc w:val="right"/>' : '';
-  return `<w:tc><w:tcPr><w:tcW w:w="${largura}" w:type="dxa"/>${fundo}</w:tcPr>`
-    + `<w:p><w:pPr>${jc}<w:spacing w:before="0" w:after="0"/></w:pPr><w:r><w:rPr>${cabecalho ? '<w:b/>' : ''}<w:sz w:val="16"/></w:rPr>`
-    + `<w:t xml:space="preserve">${xml(texto)}</w:t></w:r></w:p></w:tc>`;
-}
-
-// Anexo I em pagina propria, no fim do corpo do contrato.
-export function anexoTabelaValores(itens: readonly ItemAnexo[]): string {
-  const colunas: [string, number][] = [['Localidade', 1900], ['Modelo', 1700], ['Peça ou serviço', 2700], ['Unid.', 600], ['Preço', 1100], ['Marcas', 1300]];
-  const borda = (lado: string) => `<w:${lado} w:val="single" w:sz="4" w:space="0" w:color="808080"/>`;
-  const bordas = `<w:tblBorders>${['top', 'left', 'bottom', 'right', 'insideH', 'insideV'].map(borda).join('')}</w:tblBorders>`;
-  const cabecalho = `<w:tr><w:trPr><w:tblHeader/></w:trPr>${colunas.map(([t, l]) => celula(t, l, { cabecalho: true })).join('')}</w:tr>`;
-  const linhas = itens.map(i => `<w:tr><w:trPr><w:cantSplit/></w:trPr>${[
-    celula(`${i.cidade}/${i.uf}`, 1900), celula(i.modelo, 1700), celula(i.item, 2700), celula(i.unidade, 600),
-    celula(i.cortesia ? 'Cortesia' : moeda.format(i.preco), 1100, { direita: true }), celula(i.marcas || '', 1300),
-  ].join('')}</w:tr>`).join('');
-  const tabela = `<w:tbl><w:tblPr><w:tblW w:w="9300" w:type="dxa"/>${bordas}<w:tblLayout w:type="fixed"/></w:tblPr>`
-    + `<w:tblGrid>${colunas.map(([, l]) => `<w:gridCol w:w="${l}"/>`).join('')}</w:tblGrid>${cabecalho}${linhas}</w:tbl>`;
-  return paragrafo('ANEXO I – TABELA DE VALORES', { negrito: true, centro: true, quebraPagina: true })
-    + paragrafo('')
-    + (itens.length ? tabela : paragrafo('Acordo sem itens na versão vigente.'))
-    + paragrafo('');
-}
-
 function lerEntrada(zip: ContainerZip, caminho: string) {
   const indice = zip.FullPaths.findIndex((p: string) => p.endsWith(`/${caminho}`));
   return indice < 0 ? null : zip.FileIndex[indice];
@@ -119,7 +79,7 @@ export function camposDoTemplate(template: Uint8Array): string[] {
   return [...new Set([...texto.matchAll(/\{\{([A-Z0-9_]+)\}\}/g)].map(m => m[1]))];
 }
 
-export function gerarContrato(template: Uint8Array, campos: Record<CampoContrato, string>, itens: readonly ItemAnexo[]): Uint8Array {
+export function gerarContrato(template: Uint8Array, campos: Record<CampoContrato, string>): Uint8Array {
   let zip: ContainerZip;
   try { zip = XLSX.CFB.read(template, { type: 'buffer' }) as ContainerZip; }
   catch { throw new TemplateInvalido('O template não é um documento do Word válido.'); }
@@ -130,12 +90,6 @@ export function gerarContrato(template: Uint8Array, campos: Record<CampoContrato
     Object.hasOwn(campos, nome) ? xml(campos[nome as CampoContrato]) : inteiro);
   const restantes = [...texto.matchAll(/\{\{([A-Z0-9_]+)\}\}/g)].map(m => m[1]);
   if (restantes.length) throw new TemplateInvalido(`O template tem campos desconhecidos: ${[...new Set(restantes)].join(', ')}.`);
-  // O ultimo sectPr do corpo define a ultima secao; o anexo entra antes dele.
-  const fimCorpo = texto.lastIndexOf('<w:sectPr');
-  const fechamento = texto.lastIndexOf('</w:body>');
-  const ponto = fimCorpo > 0 && fimCorpo < fechamento ? fimCorpo : fechamento;
-  if (ponto < 0) throw new TemplateInvalido('O template não tem o corpo do documento.');
-  texto = texto.slice(0, ponto) + anexoTabelaValores(itens) + texto.slice(ponto);
   doc.content = Buffer.from(texto, 'utf8');
   doc.size = doc.content.length;
   return XLSX.CFB.write(zip, { type: 'buffer', fileType: 'zip', compression: true }) as Uint8Array;

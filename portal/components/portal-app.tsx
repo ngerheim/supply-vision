@@ -166,7 +166,7 @@ function PortalSession({ message, endSession }: { message: string; endSession: (
       {pode(user, 'aba:suppliers')&&nav==='suppliers'&&(pode(user, 'fornecedor:gerenciar')
         ?<CatalogPage type="suppliers" rows={catalogs.suppliers} onAdd={()=>setCatalogModal({type:'suppliers'})} onEdit={(row:AnyRow)=>setCatalogModal({type:'suppliers',...row,expectedRevision:row.revision})} onDelete={(row:AnyRow)=>removeCatalog('suppliers',row)}/>
         :<CatalogPage type="suppliers" rows={catalogs.suppliers}/>)}
-      {pode(user, 'acordo:consultar-completo')&&nav==='contratos'&&<Contratos acordos={data?.agreements||[]} busy={busy}/>}
+      {pode(user, 'acordo:consultar-completo')&&nav==='contratos'&&<Contratos busy={busy}/>}
       {pode(user, 'aba:imports')&&nav==='imports'&&<Imports data={data} canManageMappings={pode(user, 'mapeamento:gerenciar')} initialAgreement={importAgreement} onUpdated={refresh} onCatalog={(type,values)=>setCatalogModal({type,...values})}/>}
       {pode(user, 'aba:mappings')&&nav==='mappings'&&<Mappings catalogs={catalogs} run={run}/>}
       {pode(user, 'aba:catalogs')&&nav==='catalogs'&&<Catalogs data={data} podeEditar={pode(user, 'catalogo:gerenciar')} onAdd={(type:string)=>setCatalogModal({type})} onEdit={(type:string,row:AnyRow)=>setCatalogModal({type,...row,expectedRevision:row.revision})} onDelete={removeCatalog}/>}
