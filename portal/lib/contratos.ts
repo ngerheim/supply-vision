@@ -5,12 +5,23 @@ import * as XLSX from 'xlsx';
 // dentro de um unico trecho de texto do Word. O Anexo I (tabela de valores)
 // e montado a partir dos itens da versao vigente do acordo.
 
+// Os dados da contratante (representante, cidade, testemunhas) sao sempre os
+// mesmos: ficam escritos direto no template, sem campo no Portal.
 export const CAMPOS_CONTRATO = [
   'FORNECEDOR_RAZAO_SOCIAL', 'FORNECEDOR_ENDERECO', 'FORNECEDOR_CNPJ', 'FORNECEDOR_REPRESENTANTE',
-  'PRAZO_PAGAMENTO_DIAS', 'PRAZO_PAGAMENTO_EXTENSO',
-  'CIDADE_ASSINATURA', 'DATA_ASSINATURA', 'CONTRATANTE_REPRESENTANTE',
-  'TESTEMUNHA_1', 'TESTEMUNHA_2', 'TESTEMUNHA_3',
+  'PRAZO_PAGAMENTO_DIAS', 'PRAZO_PAGAMENTO_EXTENSO', 'DATA_ASSINATURA',
 ] as const;
+// Campos de versoes anteriores do template, hoje escritos a mao nele.
+export const CAMPOS_FIXOS_ANTIGOS = ['CIDADE_ASSINATURA', 'CONTRATANTE_REPRESENTANTE', 'TESTEMUNHA_1', 'TESTEMUNHA_2', 'TESTEMUNHA_3'] as const;
+
+export const PARTES_ENDERECO = ['logradouro', 'numero', 'complemento', 'bairro', 'cidade', 'uf', 'cep'] as const;
+export type EnderecoContrato = Record<(typeof PARTES_ENDERECO)[number], string>;
+// "Rua X, 123, Sala 4, Bairro Y, Cidade/UF, CEP 00000-000".
+export function montarEndereco(e: EnderecoContrato): string {
+  const cep = e.cep.replace(/\D/g, '');
+  return [e.logradouro, e.numero, e.complemento, e.bairro, `${e.cidade}/${e.uf.toUpperCase()}`, `CEP ${cep.slice(0, 5)}-${cep.slice(5)}`]
+    .map(p => p.trim()).filter(Boolean).join(', ');
+}
 export type CampoContrato = (typeof CAMPOS_CONTRATO)[number];
 
 export type ItemAnexo = {

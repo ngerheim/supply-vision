@@ -73,6 +73,13 @@ void test('contrato: preenche campos com escape, anexa a tabela antes do sectPr 
   assert.deepEqual(contratos.camposDoTemplate(templateFicticio()).sort(), [...CAMPOS].sort());
 });
 
+void test('contrato: template com campos fixos antigos da contratante e avisado', async () => {
+  const antigo = templateFicticio('<w:p><w:r><w:t>{{TESTEMUNHA_1}} {{CONTRATANTE_REPRESENTANTE}}</w:t></w:r></w:p>');
+  assert.deepEqual(contratos.camposDoTemplate(antigo).filter(c => contratos.CAMPOS_FIXOS_ANTIGOS.includes(c)).sort(), ['CONTRATANTE_REPRESENTANTE', 'TESTEMUNHA_1']);
+  assert.equal(contratos.montarEndereco({ logradouro: 'Av. Brasil', numero: '10', complemento: 'Sala 2', bairro: 'Funcionários', cidade: 'Belo Horizonte', uf: 'mg', cep: '30.140-000' }),
+    'Av. Brasil, 10, Sala 2, Funcionários, Belo Horizonte/MG, CEP 30140-000');
+});
+
 void test('contrato: rota gera o .docx com permissao, valida campos e audita', async t => {
   const db = bancoSqliteLocal({ pastaPrivada: privado, criar: true }), sql = new DatabaseSync(db.arquivo);
   const chave = Symbol.for('supply-vision:banco'), anterior = globalThis[chave], senha = env.INITIAL_ADMIN_PASSWORD;
@@ -92,8 +99,9 @@ void test('contrato: rota gera o .docx com permissao, valida campos e audita', a
     const r = await rota[method](new NextRequest(`http://fixture/api/${url}`, { method, headers, ...(body ? { body: JSON.stringify(body) } : {}) }));
     return { status: r.status, headers: r.headers, data: r.headers.get('content-type')?.includes('json') ? await r.json() : new Uint8Array(await r.arrayBuffer()) };
   };
-  const campos = Object.fromEntries(['FORNECEDOR_RAZAO_SOCIAL', 'FORNECEDOR_ENDERECO', 'FORNECEDOR_CNPJ', 'FORNECEDOR_REPRESENTANTE', 'CIDADE_ASSINATURA', 'CONTRATANTE_REPRESENTANTE', 'TESTEMUNHA_1', 'TESTEMUNHA_2', 'TESTEMUNHA_3'].map(c => [c, `Valor ${c}`]));
-  const corpo = { acordoId: 'ag1', campos, prazoDias: 60, data: '2026-10-30' };
+  const campos = Object.fromEntries(['FORNECEDOR_RAZAO_SOCIAL', 'FORNECEDOR_CNPJ', 'FORNECEDOR_REPRESENTANTE'].map(c => [c, `Valor ${c}`]));
+  const endereco = { logradouro: 'Rua Ficticia', numero: '100', complemento: '', bairro: 'Centro', cidade: 'Cidade A', uf: 'mg', cep: '30100000' };
+  const corpo = { acordoId: 'ag1', campos, endereco, prazoDias: 60, data: '2026-10-30' };
 
   assert.equal((await pedir('GET', 'contratos', 'viewer')).status, 403);
   assert.equal((await pedir('POST', 'contratos', 'viewer', corpo)).status, 403);
@@ -101,6 +109,8 @@ void test('contrato: rota gera o .docx com permissao, valida campos e audita', a
   const semTemplate = await pedir('GET', 'contratos?acordo=ag1', admin);
   assert.equal(semTemplate.data.template, false);
   assert.equal(semTemplate.data.acordo.cnpj, '12.345.678/0001-99');
+  // Sem solicitacao de cadastro, o endereco vem so com cidade e UF do fornecedor.
+  assert.deepEqual([semTemplate.data.acordo.endereco.cidade, semTemplate.data.acordo.endereco.uf, semTemplate.data.acordo.endereco.logradouro], ['Cidade A', 'MG', '']);
   assert.equal((await pedir('POST', 'contratos', admin, corpo)).status, 409);
 
   fs.mkdirSync(path.dirname(caminhoTemplateContrato()), { recursive: true });
@@ -108,7 +118,9 @@ void test('contrato: rota gera o .docx com permissao, valida campos e audita', a
   assert.equal((await pedir('GET', 'contratos', admin)).data.template, true);
   assert.equal((await pedir('POST', 'contratos', admin, { ...corpo, prazoDias: 0 })).status, 400);
   assert.equal((await pedir('POST', 'contratos', admin, { ...corpo, data: '2026-02-30x' })).status, 400);
-  assert.equal((await pedir('POST', 'contratos', admin, { ...corpo, campos: { ...campos, TESTEMUNHA_3: ' ' } })).status, 400);
+  assert.equal((await pedir('POST', 'contratos', admin, { ...corpo, campos: { ...campos, FORNECEDOR_REPRESENTANTE: ' ' } })).status, 400);
+  assert.equal((await pedir('POST', 'contratos', admin, { ...corpo, endereco: { ...endereco, bairro: '' } })).status, 400);
+  assert.equal((await pedir('POST', 'contratos', admin, { ...corpo, endereco: { ...endereco, cep: '123' } })).status, 400);
   assert.equal((await pedir('POST', 'contratos', admin, { ...corpo, acordoId: 'nao-existe' })).status, 404);
 
   const gerado = await pedir('POST', 'contratos', admin, corpo);
@@ -118,6 +130,7 @@ void test('contrato: rota gera o .docx com permissao, valida campos e audita', a
   assert.match(xml, /PRAZO_PAGAMENTO_DIAS: 60/);
   assert.match(xml, /PRAZO_PAGAMENTO_EXTENSO: sessenta/);
   assert.match(xml, /DATA_ASSINATURA: 30 de outubro de 2026/);
+  assert.match(xml, /FORNECEDOR_ENDERECO: Rua Ficticia, 100, Centro, Cidade A\/MG, CEP 30100-000/);
   assert.match(xml, /Acordo sem itens na versão vigente/);
   assert.match(sql.prepare("SELECT details FROM audit_logs WHERE entity_id='ag1' ORDER BY created_at DESC").get().details, /Contrato de fornecimento gerado: LF-900 \(prazo 60 dias/);
 });

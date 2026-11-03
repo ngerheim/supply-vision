@@ -7,8 +7,8 @@ import { dataDeNegocio } from './data-negocio.ts';
 import { isRecord } from './domain.ts';
 import { type ContextoApi, type User } from './api-compartilhada.ts';
 import {
-  CAMPOS_CONTRATO, TemplateInvalido, camposDoTemplate, dataPorExtenso, formatarCnpj, gerarContrato,
-  numeroPorExtenso, type CampoContrato, type ItemAnexo,
+  CAMPOS_CONTRATO, CAMPOS_FIXOS_ANTIGOS, PARTES_ENDERECO, TemplateInvalido, camposDoTemplate, dataPorExtenso, formatarCnpj, gerarContrato,
+  montarEndereco, numeroPorExtenso, type CampoContrato, type EnderecoContrato, type ItemAnexo,
 } from './contratos.ts';
 
 // O template contem dados da empresa: mora so na pasta privada do servidor.
@@ -58,15 +58,23 @@ export function contratosApi(contexto: ContextoApi) {
     if (template) {
       try { campos = camposDoTemplate(template); }
       catch (erro) { if (erro instanceof TemplateInvalido) erroTemplate = erro.message; else throw erro; }
+      const fixos = CAMPOS_FIXOS_ANTIGOS.filter(c => campos.includes(c));
+      if (fixos.length) erroTemplate = `No template, escreva os dados fixos da contratante no lugar de ${fixos.map(c => `{{${c}}}`).join(', ')}. O Portal não pergunta mais esses dados.`;
     }
     const resposta: Record<string, unknown> = { template: !!template && !erroTemplate, erroTemplate, campos, hoje: dataDeNegocio() };
     if (acordoId) {
       const a = await acordo(acordoId);
       if (!a) return fail('Acordo não encontrado.', 404);
       const lista = await itens(acordoId);
+      // Endereco da ultima solicitacao de cadastro do fornecedor, se houver.
+      const sol = await first<Partial<EnderecoContrato>>(`SELECT logradouro,numero,complemento,bairro,cidade,uf,cep FROM solicitacoes
+        WHERE cnpj=? ORDER BY atualizado_em DESC LIMIT 1`, [a.cnpj.replace(/\D/g, '')]);
+      const endereco = Object.fromEntries(PARTES_ENDERECO.map(p => [p, sol?.[p] ?? ''])) as EnderecoContrato;
+      if (!endereco.cidade) endereco.cidade = a.city ?? '';
+      if (!endereco.uf) endereco.uf = a.state ?? '';
       resposta.acordo = {
         id: a.id, numero: a.number, razaoSocial: a.legal_name, fantasia: a.trade_name, cnpj: formatarCnpj(a.cnpj),
-        endereco: [a.city, a.state].filter(Boolean).join(' - '), itens: lista.length,
+        endereco, itens: lista.length,
       };
     }
     return ok(resposta);
@@ -75,7 +83,7 @@ export function contratosApi(contexto: ContextoApi) {
   async function gerar(request: Request, user: User) {
     return comAcaoEscrita('acordo:consultar-completo', async () => {
       if (!pode(user, 'acordo:consultar-completo')) return fail('Seu perfil não permite gerar contratos.', 403);
-      const body = await jsonBody<{ acordoId?: unknown; campos?: unknown; prazoDias?: unknown; data?: unknown }>(request);
+      const body = await jsonBody<{ acordoId?: unknown; campos?: unknown; endereco?: unknown; prazoDias?: unknown; data?: unknown }>(request);
       if (typeof body.acordoId !== 'string' || !isRecord(body.campos)) return fail('Escolha o acordo e preencha os campos.');
       const prazo = Number(body.prazoDias);
       if (!Number.isInteger(prazo) || prazo < 1 || prazo > 365) return fail('Informe o prazo de pagamento em dias (1 a 365).');
@@ -87,8 +95,7 @@ export function contratosApi(contexto: ContextoApi) {
       const template = await lerTemplate();
       if (!template) return fail('Template do contrato não encontrado na pasta privada do servidor.', 409);
 
-      const editaveis: CampoContrato[] = ['FORNECEDOR_RAZAO_SOCIAL', 'FORNECEDOR_ENDERECO', 'FORNECEDOR_CNPJ', 'FORNECEDOR_REPRESENTANTE',
-        'CIDADE_ASSINATURA', 'CONTRATANTE_REPRESENTANTE', 'TESTEMUNHA_1', 'TESTEMUNHA_2', 'TESTEMUNHA_3'];
+      const editaveis: CampoContrato[] = ['FORNECEDOR_RAZAO_SOCIAL', 'FORNECEDOR_CNPJ', 'FORNECEDOR_REPRESENTANTE'];
       const campos = {} as Record<CampoContrato, string>;
       for (const nome of editaveis) {
         const valor = body.campos[nome];
@@ -96,6 +103,17 @@ export function contratosApi(contexto: ContextoApi) {
         if (valor.length > LIMITE_CAMPO) return fail('Campo do contrato acima do limite.');
         campos[nome] = valor.trim();
       }
+      const e = isRecord(body.endereco) ? body.endereco : {};
+      const endereco = {} as EnderecoContrato;
+      for (const parte of PARTES_ENDERECO) {
+        const valor = e[parte];
+        if (valor !== undefined && typeof valor !== 'string') return fail('Endereço inválido.');
+        endereco[parte] = String(valor ?? '').trim().slice(0, 120);
+        if (parte !== 'complemento' && !endereco[parte]) return fail('Preencha o endereço do fornecedor (só o complemento é opcional).');
+      }
+      if (!/^[A-Za-z]{2}$/.test(endereco.uf)) return fail('Informe a UF com 2 letras.');
+      if (!/^\d{8}$/.test(endereco.cep.replace(/\D/g, ''))) return fail('Informe o CEP com 8 dígitos.');
+      campos.FORNECEDOR_ENDERECO = montarEndereco(endereco);
       campos.PRAZO_PAGAMENTO_DIAS = String(prazo);
       campos.PRAZO_PAGAMENTO_EXTENSO = numeroPorExtenso(prazo);
       campos.DATA_ASSINATURA = dataExtenso;
