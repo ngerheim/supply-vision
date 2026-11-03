@@ -271,26 +271,26 @@ exit $LASTEXITCODE
     'ci-pr-verde' {'CI da PR #123 (3333333) verde, conteudo identico ao da main (2222222)'}
     'ci-pr-queued' {'CI da PR #123 (3333333) verde, conteudo identico ao da main (2222222)'}
     'ci-pr-arvore' {'arvore diferente da PR #123'}
-    'ci-pr-falho' {'check da PR nao aprovado: Portal (completed/failure)'}
-    'ci-pr-pendente' {'check da PR nao aprovado: Portal (in_progress/)'}
+    'ci-pr-falho' {'check da PR nao aprovado: Portal - testes e build (completed/failure)'}
+    'ci-pr-pendente' {'check da PR nao aprovado: Portal - testes e build (in_progress/)'}
     'ci-pr-ausente' {'PR de origem mesclada nao encontrada ou ambigua'}
     'ci-pr-erro' {'rate limit simulado HTTP 403'}
-    'ci-pr-skipped' {'check da PR nao aprovado: Portal (completed/skipped)'}
+    'ci-pr-skipped' {'check da PR nao aprovado: Portal - testes e build (completed/skipped)'}
     'ci-pr-push-only' {'check da main sem cobertura unica na PR (bloqueia): Somente push main'}
-    'ci-pr-sem-check' {'check da main sem cobertura unica na PR (bloqueia): PowerShell'}
-    'ci-pr-app' {'check da main sem cobertura unica na PR (bloqueia): Portal'}
+    'ci-pr-sem-check' {'check da main sem cobertura unica na PR (bloqueia): Scripts do servidor'}
+    'ci-pr-app' {'check da main sem cobertura unica na PR (bloqueia): Portal - testes e build'}
     'ci-pr-ambigua' {'PR de origem mesclada nao encontrada ou ambigua'}
     'ci-pr-main-falho' {'check nao aprovado: Alertas (completed/failure)'}
     'ci-pr-main-cancelado' {'check nao aprovado: Alertas (completed/cancelled)'}
     'ci-pr-tree-api' {'rede simulada na consulta de arvore'}
-    'ci-pr-sha' {'SHA inesperado no check: Portal (completed/success)'}
+    'ci-pr-sha' {'SHA inesperado no check: Portal - testes e build (completed/success)'}
     'ci-pendente' {'Prazo de 30 min aguardando CI da main esgotado; modo completo; check pendente: Alertas (in_progress)'}
-    'ci-ausente' {'check obrigatorio ausente: PowerShell'}
-    'ci-falho' {'check nao aprovado: Portal (completed/failure)'}
-    'ci-timeout' {'check nao aprovado: Portal (completed/timed_out)'}
-    'ci-cancelado' {'check nao aprovado: Portal (completed/cancelled)'}
-    'ci-skipped' {'check nao aprovado: Portal (completed/skipped)'}
-    'ci-sha' {'SHA inesperado no check: Portal (completed/success)'}
+    'ci-ausente' {'check obrigatorio ausente: Scripts do servidor'}
+    'ci-falho' {'check nao aprovado: Portal - testes e build (completed/failure)'}
+    'ci-timeout' {'check nao aprovado: Portal - testes e build (completed/timed_out)'}
+    'ci-cancelado' {'check nao aprovado: Portal - testes e build (completed/cancelled)'}
+    'ci-skipped' {'check nao aprovado: Portal - testes e build (completed/skipped)'}
+    'ci-sha' {'SHA inesperado no check: Portal - testes e build (completed/success)'}
    }
    if($motivoEsperado-and(!$tempos.Contains($motivoEsperado)-or!($saida-join"`n").Contains($motivoEsperado)-or!($linhasTempos-join"`n").Contains($motivoEsperado))){throw "Motivo do modo completo sem check/estado: $caso"}
 

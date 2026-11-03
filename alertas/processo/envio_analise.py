@@ -36,6 +36,8 @@ COLUNAS = {
 }
 NUMERICOS = {"qtd", "precoOs", "precoAcordo", "totalOs", "totalAcordo", "difTotal", "menorPreco", "difMenor"}
 LIMITE_LINHAS_DIA = 20000
+# Curto de proposito: o alerta nao pode esperar um Portal fora do ar.
+TEMPO_LIMITE_S = 20
 
 
 def _valor(campo, v):
@@ -76,7 +78,7 @@ def enviar_dia(endpoint, token, data, linhas):
     requisicao = urllib.request.Request(endpoint, data=corpo, method="POST", headers={
         "Authorization": f"Bearer {token}", "Content-Type": "application/json", "Accept": "application/json",
     })
-    with portal_conexao.abrir(requisicao, timeout=120) as resposta:
+    with portal_conexao.abrir(requisicao, timeout=TEMPO_LIMITE_S) as resposta:
         return json.loads(resposta.read().decode("utf-8"))
 
 
@@ -94,7 +96,8 @@ def enviar_comparacao(df, url=None, token=None):
         return 0, 0
     endpoint = f"{base}/api/internal/compras"
     enviados = falhas = 0
-    for data, linhas in sorted(linhas_por_dia(df).items()):
+    dias = sorted(linhas_por_dia(df).items())
+    for indice, (data, linhas) in enumerate(dias):
         if len(linhas) > LIMITE_LINHAS_DIA:
             print(f"AVISO: {data} tem {len(linhas):,} linhas; acima do limite da Análise, não enviado.")
             falhas += 1
@@ -103,7 +106,10 @@ def enviar_comparacao(df, url=None, token=None):
             enviar_dia(endpoint, token, data, linhas)
             enviados += 1
         except (OSError, ValueError, urllib.error.URLError) as erro:
-            falhas += 1
-            print(f"AVISO: compras de {data} não enviadas para a Análise: {erro}")
+            # Portal indisponivel ou recusando: nao insiste dia a dia. O
+            # proximo alerta ou recorte reenvia os dias inteiros.
+            falhas += len(dias) - indice
+            print(f"AVISO: compras de {data} em diante não enviadas para a Análise: {erro}")
+            break
     print(f"  Análise: {enviados} dia(s) enviado(s) ao Portal" + (f", {falhas} com falha" if falhas else "") + ".")
     return enviados, falhas
