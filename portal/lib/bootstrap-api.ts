@@ -22,7 +22,7 @@ export function bootstrapApi(contexto: ContextoApi, acordos: Pick<ReturnType<typ
         all('SELECT id,name FROM vehicle_models ORDER BY name'),
         all('SELECT id,revision,city,state FROM locations ORDER BY state,city'),
       ]);
-      return ok({ user, agreements: [], totalAcordos: 0, catalogs: { suppliers, items, models, locations, units: [] }, imports: [], manutencao: relatorioManutencao() });
+      return ok({ user, agreements: [], totalAcordos: 0, catalogs: { suppliers, items, models, locations, units: [] }, imports: [], manutencao: pode(user, 'aba:maintenance') ? relatorioManutencao() : '' });
     }
     const [agreements, suppliers, items, models, units, locations, imports] = await Promise.all([
       agreementList(), all('SELECT id,revision,legal_name AS legalName,trade_name AS tradeName,cnpj,city,state,active FROM suppliers ORDER BY trade_name'),
@@ -30,7 +30,7 @@ export function bootstrapApi(contexto: ContextoApi, acordos: Pick<ReturnType<typ
       all('SELECT id,revision,code,name,active FROM units ORDER BY code'),
       all('SELECT id,revision,city,state FROM locations ORDER BY state,city'), pode(user, 'importacao:consultar') ? importList() : Promise.resolve([]),
     ]);
-    return ok({ user, agreements, totalAcordos: agreements.length, catalogs: { suppliers, items, models, units, locations }, imports, totalImports: pode(user, 'importacao:consultar') ? await totalImportacoes() : 0, manutencao: relatorioManutencao() });
+    return ok({ user, agreements, totalAcordos: agreements.length, catalogs: { suppliers, items, models, units, locations }, imports, totalImports: pode(user, 'importacao:consultar') ? await totalImportacoes() : 0, manutencao: pode(user, 'aba:maintenance') ? relatorioManutencao() : '' });
   }
 
   return { bootstrap };

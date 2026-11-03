@@ -64,9 +64,11 @@ export function CatalogPage({
     <div className="patio-page">
       <PageHeader
         actions={
-          <Button variant="create" onClick={onAdd}>
-            <Plus /> Novo
-          </Button>
+          onAdd && (
+            <Button variant="create" onClick={onAdd}>
+              <Plus /> Novo
+            </Button>
+          )
         }
       />
       {tabs}
@@ -139,14 +141,16 @@ export function CatalogPage({
                   ))}
                   <TableCell>
                     <div className="flex justify-end gap-1">
-                      <Button
-                        size="icon-sm"
-                        variant="ghost"
-                        aria-label="Editar"
-                        onClick={() => onEdit(r)}
-                      >
-                        <Pencil />
-                      </Button>
+                      {onEdit && (
+                        <Button
+                          size="icon-sm"
+                          variant="ghost"
+                          aria-label="Editar"
+                          onClick={() => onEdit(r)}
+                        >
+                          <Pencil />
+                        </Button>
+                      )}
                       {onDelete && (
                         <Button
                           size="icon-sm"
@@ -190,7 +194,7 @@ export function CatalogPage({
     </div>
   );
 }
-export function Catalogs({ data, onAdd, onEdit, onDelete }: JsonData) {
+export function Catalogs({ data, onAdd, onEdit, onDelete, podeEditar }: JsonData) {
   const [type, setType] = useState('items');
   const labels: AnyRow = {
     items: 'Peças e serviços',
@@ -215,9 +219,9 @@ export function Catalogs({ data, onAdd, onEdit, onDelete }: JsonData) {
       }
       type={type}
       rows={data.catalogs[type]}
-      onAdd={() => onAdd(type)}
-      onEdit={(row: AnyRow) => onEdit(type, row)}
-      onDelete={(row: AnyRow) => onDelete(type, row)}
+      onAdd={podeEditar ? () => onAdd(type) : undefined}
+      onEdit={podeEditar ? (row: AnyRow) => onEdit(type, row) : undefined}
+      onDelete={podeEditar ? (row: AnyRow) => onDelete(type, row) : undefined}
     />
   );
 }

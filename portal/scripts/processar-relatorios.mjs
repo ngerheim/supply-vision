@@ -12,6 +12,7 @@ import { pathToFileURL } from 'node:url';
 import { abrirBancoLocal } from './banco-local.mjs';
 import { privado, lerConfigEfetiva, lerArquivo } from './configuracao.mjs';
 import { validarPedidoRelatorio } from '../lib/relatorios.ts';
+import { lerPermissoes, pode } from '../lib/permissoes.ts';
 import { VALIDADE_HISTORICO_MS, prazoArquivoHistorico, arquivoHistoricoExpirado } from '../lib/retencao-relatorios.ts';
 
 export function redigirLog(texto, segredos = []) {
@@ -103,6 +104,16 @@ export function agendarReprocessamento(db, agenda, agora = new Date()) {
     throw erro;
   }
 }
+// Permissao efetiva de quem pediu, com os ajustes do painel (Relatorios pode
+// ser concedido a quem nao e admin).
+function solicitantePodeExecutar(db, userId) {
+  const pessoa = db.prepare('SELECT id,role,active FROM users WHERE id=? AND active=1').get(userId);
+  if (!pessoa) return false;
+  let ajustes = [];
+  try { ajustes = db.prepare('SELECT area,nivel FROM permissoes_usuario WHERE user_id=?').all(userId); }
+  catch (erro) { if (!String(erro?.message).includes('no such table')) throw erro; }
+  return pode({ ...pessoa, permissoes: lerPermissoes(ajustes) }, 'relatorio:executar');
+}
 export function reservarRelatorio(db) {
   if (validacaoAtiva(db)) return null;
   // Leitura antes da transação de escrita: o ciclo roda a cada 3 s e a fila
@@ -122,14 +133,12 @@ export function reservarRelatorio(db) {
       .get();
     if (
       job &&
-      !db
-        .prepare("SELECT 1 FROM users WHERE id=? AND role='admin' AND active=1")
-        .get(job.created_by)
+      !solicitantePodeExecutar(db, job.created_by)
     ) {
       db.prepare(
         "UPDATE report_jobs SET status='review',log=log||? WHERE id=?",
       ).run(
-        '\nO solicitante perdeu a permissão de administrador. Outro administrador deve revisar este pedido.',
+        '\nO solicitante perdeu a permissão de executar relatórios. Um administrador deve revisar este pedido.',
         job.id,
       );
       db.exec('COMMIT');

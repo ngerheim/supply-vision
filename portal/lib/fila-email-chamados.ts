@@ -1,4 +1,6 @@
 import { id, now, rawDb } from './database.ts';
+import { pode } from './permissoes.ts';
+import { pessoasAtivas } from './pessoas-permissoes.ts';
 import { prepararNotificacaoUsuario } from './central-notificacoes.ts';
 import { planejarNotificacoesChamado, type DestinatarioChamado, type EstadoNotificacaoChamado, type MudancaChamado } from './notificacoes-chamados.ts';
 import { type DadosEmailChamado } from './email-chamados.ts';
@@ -14,20 +16,31 @@ export type ContextoNotificacaoChamado = {
   responsavel: DestinatarioChamado | null;
 };
 
+const consultar = async <T,>(sql: string, valores: unknown[] = []) => (await rawDb().prepare(sql).bind(...valores).all<T>()).results;
+
+// Aviso de chamado so para quem pode consultar chamados, com os ajustes do painel.
+async function podeReceber(ids: readonly (string | null)[]) {
+  const validos = ids.filter((i): i is string => !!i);
+  return new Set((await pessoasAtivas(consultar, validos)).filter(p => pode(p, 'chamado:consultar')).map(p => p.id));
+}
+
 export async function pessoaNotificacao(userId: string | null) {
   if (!userId) return null;
-  const pessoa = await rawDb().prepare("SELECT id,name,email FROM users WHERE id=? AND active=1 AND role IN ('admin','editor')").bind(userId)
+  const pessoa = await rawDb().prepare('SELECT id,name,email FROM users WHERE id=? AND active=1').bind(userId)
     .first<{ id: string; name: string; email: string }>();
-  return pessoa ? { id: pessoa.id, nome: pessoa.name, email: pessoa.email } : null;
+  return pessoa && (await podeReceber([pessoa.id])).has(pessoa.id) ? { id: pessoa.id, nome: pessoa.name, email: pessoa.email } : null;
 }
 
 export async function contextoNotificacaoChamado(ticketId: string): Promise<ContextoNotificacaoChamado | null> {
   const registro = await rawDb().prepare(`SELECT t.id,t.code,t.supplier_name,t.priority,t.status,
     r.id requested_id,r.name requested_name,r.email requested_email,
     a.id assigned_id,a.name assigned_name,a.email assigned_email
-    FROM tickets t LEFT JOIN users r ON r.id=t.requested_by AND r.active=1 AND r.role IN ('admin','editor') LEFT JOIN users a ON a.id=t.assigned_to AND a.active=1 AND a.role IN ('admin','editor') WHERE t.id=?`)
+    FROM tickets t LEFT JOIN users r ON r.id=t.requested_by AND r.active=1 LEFT JOIN users a ON a.id=t.assigned_to AND a.active=1 WHERE t.id=?`)
     .bind(ticketId).first<Record<string, string | null>>();
   if (!registro) return null;
+  const recebem = await podeReceber([registro.requested_id, registro.assigned_id]);
+  if (registro.requested_id && !recebem.has(registro.requested_id)) registro.requested_id = null;
+  if (registro.assigned_id && !recebem.has(registro.assigned_id)) registro.assigned_id = null;
   return {
     id: registro.id!, codigo: registro.code!, fornecedor: registro.supplier_name!,
     prioridade: registro.priority!, status: registro.status as EstadoNotificacaoChamado['status'],

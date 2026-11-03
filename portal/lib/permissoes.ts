@@ -23,7 +23,7 @@ export const ACOES = [
   'aba:permissoes', 'permissao:gerenciar',
   'aba:analise', 'analise:consultar',
   'aba:alertas', 'alertas:consultar', 'alertas:destinatarios',
-  'analise:acoes',
+  'analise:acoes', 'fornecedor:gerenciar',
 ] as const;
 export type Acao = (typeof ACOES)[number];
 
@@ -42,7 +42,7 @@ const suprimentos: readonly Acao[] = [
   'solicitacao:ver_todas', 'solicitacao:atender',
   'baixa:ver_todas', 'baixa:atender',
   'pagamento:ver_todas', 'pagamento:atender', 'estoque:lancar',
-  'aba:analise', 'analise:consultar', 'analise:acoes', 'aba:alertas', 'alertas:consultar',
+  'aba:analise', 'analise:consultar', 'analise:acoes', 'aba:alertas', 'alertas:consultar', 'fornecedor:gerenciar',
 ];
 const acoesPorPerfil: Record<Role, readonly Acao[]> = {
   viewer: consulta,
@@ -110,7 +110,7 @@ export const EXIGENCIAS: Partial<Record<Acao, Exigencia>> = {
   'aba:agreements': L('acordos'), 'acordo:consultar-completo': L('acordos'),
   'acordo:exportar': L('acordos'), 'acordo:editar': E('acordos'),
   'aba:imports': L('importacoes'), 'importacao:consultar': L('importacoes'), 'importacao:executar': E('importacoes'),
-  'aba:suppliers': L('fornecedores'),
+  'aba:suppliers': L('fornecedores'), 'fornecedor:gerenciar': E('fornecedores'),
   'aba:catalogs': L('catalogos'), 'catalogo:gerenciar': E('catalogos'),
   'aba:mappings': L('depara'), 'mapeamento:consultar': L('depara'), 'mapeamento:gerenciar': E('depara'),
   'aba:categorias': L('categorias'), 'categoria:gerenciar': E('categorias'),
