@@ -10,7 +10,7 @@ import { NextRequest } from 'vinext/shims/server';
 import { bancoSqliteLocal } from '../lib/sqlite-local.ts';
 import { env } from '../scripts/configuracao-servidor.mjs';
 import { PORTAL_BUILD } from '../lib/portal-build.ts';
-import { lerFiltros, mediana, pareto, variacaoPorCidade } from '../lib/analise.ts';
+import { lerFiltros, mediana, medianaContada, pareto, variacaoPorCidade } from '../lib/analise.ts';
 import { conciliar } from '../lib/analise-acoes.ts';
 
 const hooks = registerHooks({ resolve(s, c, next) {
@@ -26,6 +26,10 @@ void test('analise: mediana, pareto 20/80, variacao sem lancamento isolado e cor
   assert.equal(mediana([3, 1, 1000]), 3);
   assert.equal(mediana([1, 2, 3, 4]), 2.5);
   assert.equal(mediana([]), null);
+  // Mediana de precos agrupados e a mesma da lista expandida.
+  assert.equal(medianaContada([[10, 3], [1000, 1]]), mediana([10, 10, 10, 1000]));
+  assert.equal(medianaContada([[1, 1], [2, 1], [3, 1], [4, 1]]), 2.5);
+  assert.equal(medianaContada([[5, 2], [7, 2]]), 6);
   const p = pareto([50, 20, 10, 5, 5, 4, 3, 1, 1, 1]);
   assert.deepEqual([p.total, p.top20.quantidade, p.top20.participacao, p.ate80.quantidade], [10, 2, 0.7, 3]);
   const linhas = [];

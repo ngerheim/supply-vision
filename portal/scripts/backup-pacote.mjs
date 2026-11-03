@@ -17,8 +17,11 @@ function exigirCaminhoFisico(caminho, base) {
     if (!path.relative(limite, atual)) break;
   }
 }
+// Arquivos operacionais privados fora do Git (template do contrato e marca).
+// Restaurar um pacote antigo, que nao os tem, mantem os atuais.
+export const ATIVOS_PRIVADOS = ['portal/contratos/contrato-fornecimento.docx', 'portal/marca/logo.svg'];
 export function configuracaoPermitida(nome) {
-  return /^(comum\/[^/]+\.env|portal\/configuracao\/[^/]+\.env|alertas\/(config|parametros)\/.+|alertas\/estado-envios\/[^/]+\.json|operacao\/estado\.json)$/.test(nome)
+  return (ATIVOS_PRIVADOS.includes(nome) || /^(comum\/[^/]+\.env|portal\/configuracao\/[^/]+\.env|alertas\/(config|parametros)\/.+|alertas\/estado-envios\/[^/]+\.json|operacao\/estado\.json)$/.test(nome))
     && !/(?:\.log(?:\.|$)|\.(?:sqlite|7z|zip|bak|tmp)$)/i.test(nome)
     && !nome.split('/').some(p => !p || p === '.' || p === '..' || /[:\\\0]/.test(p)
       || pastasExcluidas.has(p.toLowerCase()));
@@ -48,7 +51,14 @@ export function listarConfiguracao(raiz = privado) {
       return nome;
     });
   });
-  return [...recursivos, ...diretos].filter(configuracaoPermitida);
+  const ativos = ATIVOS_PRIVADOS.filter(nome => {
+    const arquivo = path.join(raiz, nome);
+    exigirCaminhoFisico(arquivo, raiz);
+    if (!fs.existsSync(arquivo)) return false;
+    if (fs.lstatSync(arquivo).isSymbolicLink() || !fs.lstatSync(arquivo).isFile()) throw new FalhaBackup('Arquivo operacional invalido.');
+    return true;
+  });
+  return [...recursivos, ...diretos, ...ativos].filter(configuracaoPermitida);
 }
 function validarEstado(nome, arquivo) {
   if (nome !== 'operacao/estado.json' && !nome.startsWith('alertas/estado-envios/')) return;

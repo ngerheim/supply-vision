@@ -127,24 +127,35 @@ export function pareto(gastos: readonly number[]) {
   };
 }
 
+// Mediana de precos que chegam agrupados (preco, quantas vezes): o banco
+// devolve uma linha por preco distinto, nao uma por compra.
+export function medianaContada(pares: readonly (readonly [number, number])[]): number | null {
+  const v = pares.filter(([p, n]) => Number.isFinite(p) && n > 0).sort((a, b) => a[0] - b[0]);
+  const total = v.reduce((s, [, n]) => s + n, 0);
+  if (!total) return null;
+  const valorNa = (posicao: number) => { let acumulado = 0; for (const [p, n] of v) { acumulado += n; if (acumulado > posicao) return p; } return v[v.length - 1][0]; };
+  return total % 2 ? valorNa((total - 1) / 2) : (valorNa(total / 2 - 1) + valorNa(total / 2)) / 2;
+}
+
 export const MINIMO_COMPRAS_PRECO = 3;
-type PrecoLinha = { item: string; modelo: string; cidade: string; preco: number };
+type PrecoLinha = { item: string; modelo: string; cidade: string; preco: number; n?: number };
 // Mesmo item e modelo, mediana do preco unitario por cidade. Cidade com menos
 // de tres compras fica de fora: um lancamento so nao vira referencia.
 export function variacaoPorCidade(linhas: readonly PrecoLinha[], limite = 10) {
-  const grupos = new Map<string, { item: string; modelo: string; cidades: Map<string, number[]> }>();
+  const grupos = new Map<string, { item: string; modelo: string; cidades: Map<string, [number, number][]> }>();
   for (const l of linhas) {
     if (!(l.preco > 0) || !l.item || !l.cidade) continue;
     const chave = `${l.item}\u0000${l.modelo ?? ''}`;
     if (!grupos.has(chave)) grupos.set(chave, { item: l.item, modelo: l.modelo, cidades: new Map() });
     const g = grupos.get(chave)!;
     if (!g.cidades.has(l.cidade)) g.cidades.set(l.cidade, []);
-    g.cidades.get(l.cidade)!.push(l.preco);
+    g.cidades.get(l.cidade)!.push([l.preco, Number(l.n ?? 1)]);
   }
   const resultado = [];
+  const compras = (p: [number, number][]) => p.reduce((s, [, n]) => s + n, 0);
   for (const g of grupos.values()) {
-    const cidades = [...g.cidades].filter(([, p]) => p.length >= MINIMO_COMPRAS_PRECO)
-      .map(([cidade, p]) => ({ cidade, preco: mediana(p)!, compras: p.length }))
+    const cidades = [...g.cidades].filter(([, p]) => compras(p) >= MINIMO_COMPRAS_PRECO)
+      .map(([cidade, p]) => ({ cidade, preco: medianaContada(p)!, compras: compras(p) }))
       .sort((a, b) => a.preco - b.preco);
     if (cidades.length < 2 || !cidades[0].preco) continue;
     const menor = cidades[0], maior = cidades[cidades.length - 1];

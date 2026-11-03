@@ -12,7 +12,7 @@ import { prepararRestauracao } from './restauracao-segura.mjs';
 import { localizarBanco, destinoBanco } from './banco-local.mjs';
 import { travarRestauracao } from './trava-restauracao.mjs';
 import { comBackupExclusivo } from './backup-exclusivo.mjs';
-import { comBackupDaRede, exigirDestinoSeguro, configuracaoPermitida, listarConfiguracao } from './backup-pacote.mjs';
+import { ATIVOS_PRIVADOS, comBackupDaRede, exigirDestinoSeguro, configuracaoPermitida, listarConfiguracao } from './backup-pacote.mjs';
 import { listarHistorico } from './retencao-backup.mjs';
 import { FalhaBackup } from './backup-7z.mjs';
 import { arquivoCorteRestauracao } from './corte-restauracao.mjs';
@@ -82,7 +82,11 @@ export async function restaurarCopia(origem, { raiz = privado, configuracao = fa
       try {
         for (const item of alvos) {
           escritos.push(item);
-          if (!item.presente) { fs.rmSync(item.alvo, { force: true }); continue; }
+          if (!item.presente) {
+            // Pacote anterior a inclusao do template e da marca: mantem os atuais.
+            if (!ATIVOS_PRIVADOS.includes(item.nome)) fs.rmSync(item.alvo, { force: true });
+            continue;
+          }
           fs.mkdirSync(path.dirname(item.alvo), { recursive: true });
           fs.copyFileSync(path.join(pasta, item.nome), `${item.alvo}.restaurando`);
           fs.renameSync(`${item.alvo}.restaurando`, item.alvo);

@@ -103,8 +103,10 @@ export function analiseApi(contexto: ContextoApi) {
         SUM(CASE WHEN ${COM} THEN c.total_os END) comAcordo, SUM(CASE WHEN ${ACIMA} THEN c.dif_total END) pagoAcima
         ${de} AND c.fornecedor IS NOT NULL GROUP BY c.fornecedor HAVING SUM(c.total_os)>0 ORDER BY gasto DESC`, values),
       // Preco unitario de cada compra; a mediana por cidade e calculada abaixo.
-      all<{ item: string; modelo: string; cidade: string; preco: number }>(`SELECT c.item, c.modelo, c.cidade, c.preco_os preco
-        ${de} AND c.qtd>0 AND c.preco_os>0 AND c.item IS NOT NULL AND c.cidade IS NOT NULL`, values),
+      // Uma linha por preco distinto, com a contagem: a mediana sai igual e o
+      // processo nao carrega cada compra do periodo.
+      all<{ item: string; modelo: string; cidade: string; preco: number; n: number }>(`SELECT c.item, c.modelo, c.cidade, c.preco_os preco, COUNT(*) n
+        ${de} AND c.qtd>0 AND c.preco_os>0 AND c.item IS NOT NULL AND c.cidade IS NOT NULL GROUP BY c.item, c.modelo, c.cidade, c.preco_os`, values),
       all<{ campo: string; valor: string }>(`SELECT 'cidade' campo, cidade valor FROM compras_comparadas WHERE cidade IS NOT NULL GROUP BY cidade
         UNION ALL SELECT 'fornecedor', fornecedor FROM compras_comparadas WHERE fornecedor IS NOT NULL GROUP BY fornecedor
         UNION ALL SELECT 'grupo', grupo FROM compras_comparadas WHERE grupo IS NOT NULL GROUP BY grupo ORDER BY 1,2`),
@@ -120,7 +122,7 @@ export function analiseApi(contexto: ContextoApi) {
     });
     const abc = curvaAbc(fornecedores.map(l => ({ ...l, gasto: Number(l.gasto), comAcordo: n(l.comAcordo), pagoAcima: n(l.pagoAcima) })));
     const abcItens = curvaAbc(itens.map(l => ({ ...l, gasto: Number(l.gasto), comAcordo: n(l.comAcordo) })));
-    const variacaoPreco = variacaoPorCidade(precos.map(p => ({ ...p, preco: Number(p.preco) })));
+    const variacaoPreco = variacaoPorCidade(precos.map(p => ({ ...p, preco: Number(p.preco), n: Number(p.n) })));
     const antesDoCorte = (mes: string) => Boolean(corte && `${mes}-01` < corte);
 
     const listas: Record<string, string[]> = { cidade: [], fornecedor: [], grupo: [] };
