@@ -7,8 +7,8 @@ import { dataDeNegocio } from './data-negocio.ts';
 import { isRecord } from './domain.ts';
 import { type ContextoApi, type User } from './api-compartilhada.ts';
 import {
-  CAMPOS_CONTRATO, CAMPOS_FIXOS_ANTIGOS, PARTES_ENDERECO, TemplateInvalido, camposDoTemplate, dataPorExtenso, formatarCnpj, gerarContrato,
-  montarEndereco, numeroPorExtenso, type CampoContrato, type EnderecoContrato, type ItemAnexo,
+  CAMPOS_CONTRATO, CAMPOS_FIXOS_ANTIGOS, PARTES_ENDERECO, TemplateInvalido, camposDoTemplate, dataPorExtenso, gerarContrato,
+  montarEndereco, numeroPorExtenso, type CampoContrato, type EnderecoContrato,
 } from './contratos.ts';
 
 // O template contem dados da empresa: mora so na pasta privada do servidor.
@@ -16,8 +16,6 @@ const NOME_TEMPLATE = 'contrato-fornecimento';
 export const caminhoTemplateContrato = () => path.join(portalPrivado, 'contratos', `${NOME_TEMPLATE}.docx`);
 const LIMITE_TEMPLATE = 5 * 1024 * 1024;
 const LIMITE_CAMPO = 300;
-
-type Acordo = { id: string; number: string; legal_name: string; trade_name: string; cnpj: string; city: string | null; state: string | null };
 
 async function lerTemplate(): Promise<Uint8Array | null> {
   try {
@@ -33,24 +31,10 @@ async function lerTemplate(): Promise<Uint8Array | null> {
 const nomeArquivo = (texto: string) => texto.normalize('NFD').replace(/\p{M}/gu, '').replace(/[^A-Za-z0-9-]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 60) || 'fornecedor';
 
 export function contratosApi(contexto: ContextoApi) {
-  const { NextResponse, ok, fail, first, all, jsonBody, audit } = contexto;
+  const { NextResponse, ok, fail, jsonBody, audit } = contexto;
 
-  async function acordo(acordoId: string) {
-    return first<Acordo>(`SELECT a.id,a.number,s.legal_name,s.trade_name,s.cnpj,s.city,s.state
-      FROM agreements a JOIN suppliers s ON s.id=a.supplier_id WHERE a.id=?`, [acordoId]);
-  }
-
-  async function itens(acordoId: string) {
-    return all<Omit<ItemAnexo, 'cortesia'> & { cortesia: number }>(`SELECT l.city cidade,l.state uf,vm.name modelo,ci.name item,un.code unidade,
-      ai.price preco,ai.courtesy cortesia,ai.brands_text marcas
-      FROM agreements a JOIN agreement_items ai ON ai.version_id=a.current_version_id
-      JOIN catalog_items ci ON ci.id=ai.catalog_item_id JOIN vehicle_models vm ON vm.id=ai.vehicle_model_id
-      JOIN units un ON un.id=ai.unit_id JOIN locations l ON l.id=ai.location_id
-      WHERE a.id=? ORDER BY l.state,l.city,vm.name,ci.name,ai.id`, [acordoId]);
-  }
-
-  // Situacao do template e dados do acordo para preencher o formulario.
-  async function preparar(user: User, acordoId: string | null) {
+  // Situacao do template para a tela.
+  async function preparar(user: User) {
     if (!pode(user, 'acordo:consultar-completo')) return fail('Seu perfil não permite gerar contratos.', 403);
     const template = await lerTemplate();
     let campos: string[] = [];
@@ -62,36 +46,19 @@ export function contratosApi(contexto: ContextoApi) {
       if (fixos.length) erroTemplate = `No template, tire ou escreva o texto fixo no lugar de ${fixos.map(c => `{{${c}}}`).join(', ')}. O Portal não preenche mais esses campos.`;
     }
     const resposta: Record<string, unknown> = { template: !!template && !erroTemplate, erroTemplate, campos, hoje: dataDeNegocio() };
-    if (acordoId) {
-      const a = await acordo(acordoId);
-      if (!a) return fail('Acordo não encontrado.', 404);
-      const lista = await itens(acordoId);
-      // Endereco da ultima solicitacao de cadastro do fornecedor, se houver.
-      const sol = await first<Partial<EnderecoContrato>>(`SELECT logradouro,numero,complemento,bairro,cidade,uf,cep FROM solicitacoes
-        WHERE cnpj=? ORDER BY atualizado_em DESC LIMIT 1`, [a.cnpj.replace(/\D/g, '')]);
-      const endereco = Object.fromEntries(PARTES_ENDERECO.map(p => [p, sol?.[p] ?? ''])) as EnderecoContrato;
-      if (!endereco.cidade) endereco.cidade = a.city ?? '';
-      if (!endereco.uf) endereco.uf = a.state ?? '';
-      resposta.acordo = {
-        id: a.id, numero: a.number, razaoSocial: a.legal_name, fantasia: a.trade_name, cnpj: formatarCnpj(a.cnpj),
-        endereco, itens: lista.length,
-      };
-    }
     return ok(resposta);
   }
 
   async function gerar(request: Request, user: User) {
     return comAcaoEscrita('acordo:consultar-completo', async () => {
       if (!pode(user, 'acordo:consultar-completo')) return fail('Seu perfil não permite gerar contratos.', 403);
-      const body = await jsonBody<{ acordoId?: unknown; campos?: unknown; endereco?: unknown; prazoDias?: unknown; data?: unknown }>(request);
-      if (typeof body.acordoId !== 'string' || !isRecord(body.campos)) return fail('Escolha o acordo e preencha os campos.');
+      const body = await jsonBody<{ campos?: unknown; endereco?: unknown; prazoDias?: unknown; data?: unknown }>(request);
+      if (!isRecord(body.campos)) return fail('Preencha os campos do contrato.');
       const prazo = Number(body.prazoDias);
       if (!Number.isInteger(prazo) || prazo < 1 || prazo > 365) return fail('Informe o prazo de pagamento em dias (1 a 365).');
       const data = typeof body.data === 'string' ? body.data : '';
       let dataExtenso: string;
       try { dataExtenso = dataPorExtenso(data); } catch { return fail('Informe uma data de assinatura válida.'); }
-      const a = await acordo(body.acordoId);
-      if (!a) return fail('Acordo não encontrado.', 404);
       const template = await lerTemplate();
       if (!template) return fail('Template do contrato não encontrado na pasta privada do servidor.', 409);
 
@@ -119,15 +86,15 @@ export function contratosApi(contexto: ContextoApi) {
       campos.DATA_ASSINATURA = dataExtenso;
       for (const nome of CAMPOS_CONTRATO) if (campos[nome] === undefined) return fail('Campo do contrato ausente.');
 
-      const lista = (await itens(a.id)).map(i => ({ ...i, cortesia: !!i.cortesia }));
       let arquivo: Uint8Array;
-      try { arquivo = gerarContrato(template, campos, lista); }
+      try { arquivo = gerarContrato(template, campos); }
       catch (erro) { if (erro instanceof TemplateInvalido) return fail(erro.message, 409); throw erro; }
-      await audit(user.id, 'EXPORT', 'agreement', a.id, `Contrato de fornecimento gerado: ${a.number} (prazo ${prazo} dias, ${lista.length} itens no Anexo I)`);
+      const cnpj = campos.FORNECEDOR_CNPJ.replace(/\D/g, '');
+      await audit(user.id, 'EXPORT', 'contrato', cnpj || null, `Contrato de fornecimento gerado: ${campos.FORNECEDOR_RAZAO_SOCIAL} (prazo ${prazo} dias)`);
       return new NextResponse(Buffer.from(arquivo), { headers: {
         'cache-control': 'no-store',
         'content-type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-        'content-disposition': `attachment; filename="Contrato_${nomeArquivo(a.number)}_${nomeArquivo(a.trade_name)}.docx"`,
+        'content-disposition': `attachment; filename="Contrato_${nomeArquivo(campos.FORNECEDOR_RAZAO_SOCIAL)}.docx"`,
         'x-content-type-options': 'nosniff',
       } });
     });
