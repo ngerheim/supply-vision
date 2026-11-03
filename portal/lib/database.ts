@@ -8,6 +8,7 @@ import { bancoSqliteLocal } from './sqlite-local.ts';
 import { SESSAO_INATIVIDADE_MS } from './politica-sessao.ts';
 import { lerPermissoes } from './permissoes.ts';
 import { SCHEMA_ANALISE } from './analise.ts';
+import { SCHEMA_ALERTAS } from './alertas-rodadas.ts';
 
 export { SESSAO_INATIVIDADE_MS } from './politica-sessao.ts';
 import { CRIAR_CONTADOR_CHAMADOS_SQL, MIGRAR_CONTADOR_CHAMADOS_SQL, migrarBuscaChamados, migrarIndicesListasGlobais } from './operacao-dados.ts';
@@ -400,6 +401,13 @@ async function initialize() {
     await db.batchConstruir(() => [
       ...SCHEMA_ANALISE.map(sql => db.prepare(sql)),
       db.prepare('INSERT OR IGNORE INTO schema_migrations(version,applied_at) VALUES(17,?)').bind(now()),
+    ]);
+  }
+  // Rodadas do alerta de conformidade publicadas no Portal (aba Alertas).
+  if (!await db.prepare('SELECT 1 ok FROM schema_migrations WHERE version=18').first()) {
+    await db.batchConstruir(() => [
+      ...SCHEMA_ALERTAS.map(sql => db.prepare(sql)),
+      db.prepare('INSERT OR IGNORE INTO schema_migrations(version,applied_at) VALUES(18,?)').bind(now()),
     ]);
   }
   await db.prepare('PRAGMA optimize').run();

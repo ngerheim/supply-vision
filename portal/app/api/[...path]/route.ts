@@ -21,6 +21,7 @@ import { usuariosApi } from '@/lib/usuarios-api';
 import { permissoesApi } from '@/lib/permissoes-api';
 import { contratosApi } from '@/lib/contratos-api';
 import { analiseApi } from '@/lib/analise-api';
+import { alertasApi } from '@/lib/alertas-api';
 import { auditoriaApi } from '@/lib/auditoria-api';
 import { notificacoesApi } from '@/lib/notificacoes-api';
 import { logoMarca } from '@/lib/marca-api';
@@ -141,6 +142,7 @@ const usuarios = usuariosApi(contexto);
 const permissoes = permissoesApi(contexto);
 const contratos = contratosApi(contexto);
 const analise = analiseApi(contexto);
+const alertas = alertasApi(contexto);
 const auditoria = auditoriaApi(contexto);
 const notificacoes = notificacoesApi(contexto);
 const central = centralApi(contexto);
@@ -284,6 +286,11 @@ async function GETInterno(request: NextRequest) {
 
   if (parts[0] === 'permissoes') return parts.length === 1 ? permissoes.matriz(user) : fail('Rota não encontrada.', 404);
   if (parts[0] === 'analise') return parts.length === 1 ? analise.painel(user, request.nextUrl.searchParams) : fail('Rota não encontrada.', 404);
+  if (parts[0] === 'alertas') {
+    if (parts.length === 1) return alertas.listar(user);
+    if (parts.length === 2) return parts[1] === 'destinatarios' ? alertas.destinatarios(user) : alertas.detalhe(user, parts[1]);
+    return fail('Rota não encontrada.', 404);
+  }
   if (parts[0] === 'contratos') return parts.length === 1 ? contratos.preparar(user, request.nextUrl.searchParams.get('acordo')) : fail('Rota não encontrada.', 404);
 
   // Guarda geral antes das permissoes especificas; preserva as respostas HTTP.
@@ -349,6 +356,10 @@ async function POSTInterno(request: NextRequest) {
   if (parts[0] === 'internal' && parts[1] === 'compras' && parts.length === 2) {
     if (!tokenInternoValido(request)) return fail('Credencial interna inválida.', 401);
     return analise.receberDia(request);
+  }
+  if (parts[0] === 'internal' && parts[1] === 'alertas' && parts.length === 2) {
+    if (!tokenInternoValido(request)) return fail('Credencial interna inválida.', 401);
+    return alertas.receberRodada(request);
   }
   const user = await requireUser(request);
   if (!user) {
@@ -453,6 +464,10 @@ async function PUTInterno(request: NextRequest) {
   if (partesSolicitacao[0] === 'categorias-fornecedor') {
     if (!pode(user, 'categoria:gerenciar')) return denyWrite(request, 'Seu perfil não permite gerenciar categorias.');
     return partesSolicitacao.length === 2 ? solicitacoes.gravarCategoria(request, user, partesSolicitacao[1]) : fail('Rota não encontrada.', 404);
+  }
+  if (partesSolicitacao[0] === 'alertas') {
+    if (!pode(user, 'alertas:destinatarios')) return denyWrite(request, 'Seu perfil não permite escolher quem recebe os alertas.');
+    return partesSolicitacao.length === 2 && partesSolicitacao[1] === 'destinatarios' ? alertas.salvarDestinatarios(request, user) : fail('Rota não encontrada.', 404);
   }
   if (partesSolicitacao[0] === 'permissoes') {
     if (!pode(user, 'permissao:gerenciar')) return denyWrite(request, 'Somente administradores podem alterar as permissões.');

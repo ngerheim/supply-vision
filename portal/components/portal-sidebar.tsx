@@ -18,6 +18,7 @@ import {
   PanelLeftOpen,
   Settings,
   ChartColumn,
+  TriangleAlert,
   Boxes,
   Wrench,
 } from "lucide-react";
@@ -34,6 +35,7 @@ const navItems: Record<Aba, { label: string; icon: typeof PackageSearch }> = {
   acordos: { label: "Acordos", icon: Handshake },
   cadastros: { label: "Cadastros", icon: Database },
   analise: { label: "Análise", icon: ChartColumn },
+  alertas: { label: "Alertas", icon: TriangleAlert },
   administracao: { label: "Administração", icon: Settings },
 };
 export function Sidebar({

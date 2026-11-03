@@ -229,3 +229,34 @@ def test_falha_apos_envio_respeita_estado_persistido(monkeypatch, tmp_path, capl
         with pytest.raises(SystemExit) as saida:
             mod.main()
         assert saida.value.code == codigo
+
+
+def test_rodada_vai_ao_portal_antes_do_email_e_falha_nao_segura_o_envio(monkeypatch, tmp_path, caplog):
+    import logging
+
+    caplog.set_level(logging.INFO)
+    mod = carregar_pipeline(monkeypatch, tmp_path)
+    monkeypatch.setenv("MODO_ENSAIO", "0")
+    monkeypatch.delenv("SUPPLY_VISION_SEM_ENVIO", raising=False)
+    monkeypatch.setattr(sys, "argv", ["pipeline.py"])
+    monkeypatch.setattr(mod, "adquirir_lock", lambda: None)
+    monkeypatch.setattr(mod, "configurar_log", lambda: "teste.log")
+    monkeypatch.setattr(mod.estado_entrega, "consultar_entrega", lambda: None)
+    eventos = []
+    resumo = {"total_elegivel": 1, "contagens": {"ACIMA DO ACORDO": 1, "ABAIXO DO ACORDO": 0}}
+    respostas = iter([(True, "CONTEXTO_EMAIL=parcial\nDATAS_EMAIL=15/09/2026"),
+                      (True, "RESUMO_JSON=" + json.dumps(resumo) + "\nRELATORIO_COM_ACORDO=c.xlsx"),
+                      (True, "")])
+    monkeypatch.setattr(mod, "rodar_script", lambda caminho, nome, args=None: eventos.append(nome) or next(respostas))
+    falso = types.ModuleType("envio_alertas")
+
+    def publicar(contexto, datas, r, com, qualidade):
+        eventos.append(("portal", contexto, tuple(datas), r["total_elegivel"], com, qualidade))
+        raise OSError("Portal fora do ar")
+    falso.publicar_rodada = publicar
+    monkeypatch.setitem(sys.modules, "envio_alertas", falso)
+    mod.main()
+    assert eventos[2] == ("portal", "parcial", ("15/09/2026",), 1, "c.xlsx", "")
+    assert eventos[3] == "Envio de e-mail"
+    assert "rodada não publicada na aba Alertas" in caplog.text
+    assert "PIPELINE CONCLUÍDO COM SUCESSO" in caplog.text

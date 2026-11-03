@@ -137,6 +137,19 @@ def extrair_qualidade(output):
     return m.group(1).strip() if m else ""
 
 
+def publicar_no_portal(contexto, datas, resumo, caminho_com, caminho_qualidade):
+    try:
+        from envio_alertas import publicar_rodada
+        aceita, mensagem = publicar_rodada(contexto, datas, resumo, caminho_com, caminho_qualidade)
+    except Exception as erro:  # qualquer falha aqui fica no log; o e-mail segue
+        aceita, mensagem = False, f"rodada não publicada na aba Alertas do Portal: {mascarar(str(erro), str(getattr(sv_paths, 'PORTAL_API_TOKEN', '')))}"
+    if aceita:
+        logging.info(f"  {mensagem}")
+    else:
+        logging.warning(f"AVISO: {mensagem}")
+    return aceita
+
+
 def adquirir_lock():
     """Mantém um lock exclusivo do Windows até o processo terminar."""
     import msvcrt
@@ -286,6 +299,11 @@ def main():
     caminho_com = extrair_relatorio(output_rodar)
     caminho_qualidade = extrair_qualidade(output_rodar)
     logging.info(f"  Anexos desta execução: divergencias={caminho_com or '(não gerado)'} | qualidade={caminho_qualidade or '(sem pendencias)'}")
+
+    # A aba Alertas do Portal recebe a mesma rodada do e-mail, antes dele.
+    # Portal fora do ar não segura o e-mail: só fica o aviso no log.
+    if os.environ.get('SUPPLY_VISION_SEM_ENVIO') != '1':
+        publicar_no_portal(contexto, datas, resumo, caminho_com, caminho_qualidade)
 
     # A saída do rodar.py ia inteira como argumento de linha de comando. O
     # Windows corta a linha em ~32 mil caracteres: num dia com muitos avisos
