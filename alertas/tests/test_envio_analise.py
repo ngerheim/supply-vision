@@ -34,7 +34,7 @@ def test_agrupa_por_dia_sem_nome_de_quem_criou_e_sem_nan():
     assert dias["2026-10-01"][0]["difMenor"] == 40.0
 
 
-def test_envia_um_dia_por_requisicao_e_continua_apos_falha(monkeypatch, capsys):
+def test_envia_um_dia_por_requisicao_e_para_no_primeiro_erro(monkeypatch, capsys):
     pedidos = []
 
     class Resposta(io.BytesIO):
@@ -47,17 +47,24 @@ def test_envia_um_dia_por_requisicao_e_continua_apos_falha(monkeypatch, capsys):
     def abrir(requisicao, timeout=60):
         corpo = json.loads(requisicao.data.decode("utf-8"))
         pedidos.append((requisicao.full_url, requisicao.get_header("Authorization"), corpo["data"], len(corpo["linhas"])))
-        if corpo["data"] == "2026-10-01":
+        assert timeout == envio_analise.TEMPO_LIMITE_S
+        if falhar:
             raise OSError("Portal fora do ar")
         return Resposta(b'{"success": true}')
 
     monkeypatch.setattr(portal_conexao, "abrir", abrir)
+    falhar = False
     enviados, falhas = envio_analise.enviar_comparacao(_df(), url="http://localhost:3000", token="token-ficticio")
-    assert (enviados, falhas) == (1, 1)
+    assert (enviados, falhas) == (2, 0)
     assert [p[2] for p in pedidos] == ["2026-10-01", "2026-10-02"]
     assert pedidos[0][0] == "http://localhost:3000/api/internal/compras"
     assert pedidos[0][1] == "Bearer token-ficticio"
-    assert "não enviadas para a Análise" in capsys.readouterr().out
+    # Portal fora do ar: para no primeiro erro, sem esperar dia a dia.
+    pedidos.clear()
+    falhar = True
+    assert envio_analise.enviar_comparacao(_df(), url="http://localhost:3000", token="token-ficticio") == (0, 2)
+    assert len(pedidos) == 1
+    assert "em diante não enviadas para a Análise" in capsys.readouterr().out
 
 
 def test_sem_portal_configurado_nao_envia(monkeypatch):

@@ -255,7 +255,7 @@ try{
   foreach($modo in @('rapido','completo')){
    $motivo=Formatar-MotivoPreparo 'check nao aprovado: Atualizacao do servidor - ${{ matrix.nome }} (completed/skipped); modo completo'
    $linha="PREPARAR: modo $modo - motivo: $motivo"
-   Exigir-Supv ((Mascarar-Homologacao $linha)-eq$linha-and$linha.Contains('(matrix.grupo)')) 'linha do modo PREPARAR preserva motivo nos logs'
+   Exigir-Supv ((Mascarar-Homologacao $linha)-eq$linha-and$linha.Contains('(matrix.nome)')) 'linha do modo PREPARAR preserva motivo nos logs'
    $a=@{numero=1;total=37;nome='PREPARAR / Build do Portal';modo=$modo;motivoModo='check nao aprovado: Atualizacao do servidor - ${{ matrix.nome }} (completed/skipped)';estado='andamento';etapaSegundos=0;totalSegundos=0;restanteSegundos=$null}
    $texto=Capturar-Supv {Mostrar-ProgressoSupv $a @{}}
    Exigir-Supv ($texto.Contains("Modo ${modo}: check nao aprovado: Atualizacao do servidor - (matrix.nome)")-and$texto-notlike'*conteudo omitido*') 'status preserva motivo do modo com rotulo de matriz'
