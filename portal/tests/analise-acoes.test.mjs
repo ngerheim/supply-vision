@@ -135,11 +135,11 @@ void test('analise: sugestoes geradas no fim do envio, resolvidas com historico 
 
   // Decisao humana no meio da conciliacao prevalece (sem evento contraditorio).
   sql.prepare("UPDATE analise_acoes SET status='pulada',adiada_ate='2026-01-01',atualizada_em='2026-01-01T00:00:00.000Z' WHERE id=?").run(direcionar.id);
-  const loteOriginal = db.batch;
+  const loteOriginal = db.batch.bind(db);
   db.batch = async (...args) => {
     db.batch = loteOriginal;
     sql.prepare("UPDATE analise_acoes SET status='rejeitada',motivo='Decidido durante a conciliacao',atualizada_em='2026-11-03T12:00:00.000Z' WHERE id=?").run(direcionar.id);
-    return loteOriginal.apply(db, args);
+    return loteOriginal(...args);
   };
   await interno('analise/concluir', {});
   assert.equal(sql.prepare('SELECT status FROM analise_acoes WHERE id=?').get(direcionar.id).status, 'rejeitada');
@@ -150,7 +150,7 @@ void test('analise: sugestoes geradas no fim do envio, resolvidas com historico 
   db.batch = async (...args) => {
     db.batch = loteOriginal;
     sql.prepare("UPDATE analise_acoes SET status='feita',atualizada_em='2026-11-03T12:30:00.000Z' WHERE id=?").run(fechar.id);
-    return loteOriginal.apply(db, args);
+    return loteOriginal(...args);
   };
   assert.equal((await pedir('POST', `analise/acoes/${fechar.id}`, 'editor', { de: 'pendente', para: 'rejeitada', motivo: 'Outra decisão' })).status, 409);
   assert.equal(sql.prepare("SELECT COUNT(*) n FROM audit_logs WHERE entity='analise_acao'").get().n, auditoriasAntes);

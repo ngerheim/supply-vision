@@ -199,14 +199,19 @@ function acaoConsulta(parts: string[]): Acao {
     case 'tickets': return 'chamado:consultar';
     case 'users': return 'usuario:consultar';
     case 'export': if (parts[1] === 'agreements') return 'acordo:exportar';
+      break;
+    case 'reports': return 'relatorio:consultar';
   }
   return 'portal:consultar-gestao';
 }
 function acaoEscrita(parts: string[]): Acao {
   switch (parts[0]) {
     case 'agreements': case 'items': return 'acordo:editar';
-    case 'catalogs': return 'catalogo:gerenciar';
+    // Fornecedores tem area propria no painel; os demais cadastros sao Catalogos.
+    case 'catalogs': return parts[1] === 'suppliers' ? 'fornecedor:gerenciar' : 'catalogo:gerenciar';
     case 'tickets': return 'chamado:editar';
+    // As guardas especificas (executar, cancelar) vem depois.
+    case 'reports': return 'relatorio:consultar';
     case 'imports': return 'importacao:executar';
     case 'mappings': return 'mapeamento:gerenciar';
   }
@@ -277,12 +282,19 @@ async function GETInterno(request: NextRequest) {
     return fail('Rota não encontrada.', 404);
   }
   if (parts[0] === 'bootstrap') return bootstrap(user);
-  if (parts[0] === 'search') return parts[1] === 'options' ? searchOptions(request.nextUrl.searchParams) : search(request.nextUrl.searchParams);
+  if (parts[0] === 'search') {
+    if (!pode(user, 'aba:search')) return fail('Seu perfil não tem acesso a Buscar.', 403);
+    return parts[1] === 'options' ? searchOptions(request.nextUrl.searchParams) : search(request.nextUrl.searchParams);
+  }
   if (parts[0] === 'agreements' && parts[1] === 'options') {
     if (!pode(user, 'portal:consultar-gestao')) return fail('Seu perfil não permite consultar acordos.', 403);
     return acordos.agreementOptions(request.nextUrl.searchParams);
   }
-  if (parts[0] === 'agreements' && parts[1]) return agreementDetail(parts[1], user, request.nextUrl.searchParams);
+  if (parts[0] === 'agreements' && parts[1]) {
+    // O detalhe abre pela Buscar ou pela aba Acordos.
+    if (!pode(user, 'aba:search') && !pode(user, 'aba:agreements')) return fail('Seu perfil não tem acesso aos acordos.', 403);
+    return agreementDetail(parts[1], user, request.nextUrl.searchParams);
+  }
 
   if (parts[0] === 'permissoes') return parts.length === 1 ? permissoes.matriz(user) : fail('Rota não encontrada.', 404);
   if (parts[0] === 'analise') {

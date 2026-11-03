@@ -10,6 +10,7 @@ import {
 } from './limites-entrada.ts';
 import { normalizeImportText, normalizeText } from './domain.ts';
 import { prepararNotificacaoCondicional } from './central-notificacoes.ts';
+import { pessoasAtivas } from './pessoas-permissoes.ts';
 import { intervaloDatasNegocio } from './periodo-auditoria.ts';
 import { paginaSolicitada } from './paginacao.ts';
 import { linkBaixa, normalizarPlaca, SITUACOES_BAIXA } from './baixas.ts';
@@ -90,14 +91,12 @@ export function baixasApi(contexto: ContextoApi) {
     texto: string,
     timestamp: string,
   ) {
-    const pessoas = await all<User & { active: number }>(
-      'SELECT id,name,email,role,active FROM users WHERE active=1',
-    );
+    const pessoas = await pessoasAtivas(all);
     return pessoas
       .filter(
         (p) =>
           p.id !== autor.id &&
-          (atual ? p.id === atual.solicitante_id : pode(p, 'baixa:atender')),
+          (atual ? p.id === atual.solicitante_id && pode(p, 'baixa:abrir') : pode(p, 'baixa:atender')),
       )
       .map((p) => {
         const mensagem = `${SITUACOES_BAIXA[para as keyof typeof SITUACOES_BAIXA]}${texto ? `; ${texto}` : ''}`;

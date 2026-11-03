@@ -92,24 +92,34 @@ export function enderecoParaBusca({ aba, subaba }: EnderecoNavegacao): string {
   if (subaba !== null) params.set('sub', subaba);
   return `?${params}`;
 }
+// Pagina de entrada: Buscar, ou a primeira (sub)aba permitida quando o painel
+// de permissoes tirou o acesso a Buscar.
+export function chaveInicial(usuario: UsuarioPermissao): Nav {
+  if (podeAcessarAba(usuario, 'search')) return 'search';
+  return gruposVisiveis(usuario)[0]?.abas[0]?.subabas[0]?.chave ?? 'search';
+}
+const inicial = (usuario: UsuarioPermissao) => {
+  const nav = chaveInicial(usuario);
+  return { nav, endereco: nav === 'search' ? { ...BUSCAR } : enderecoDaChave(nav) };
+};
 export function resolverEndereco(usuario: UsuarioPermissao, busca: string) {
   const baixa = new URLSearchParams(busca).get('baixa');
   if (baixa) {
     return podeAcessarAba(usuario, 'baixas')
       ? { nav: 'baixas' as Nav, endereco: enderecoDaChave('baixas'), chamado: null, solicitacao: null, baixa, aviso: '' }
-      : { nav: 'search' as Nav, endereco: { ...BUSCAR }, chamado: null, solicitacao: null, baixa: null, aviso: AVISO_AREA_RESTRITA };
+      : { ...inicial(usuario), chamado: null, solicitacao: null, baixa: null, aviso: AVISO_AREA_RESTRITA };
   }
   const solicitacao = new URLSearchParams(busca).get('solicitacao');
   if (solicitacao) {
     return podeAcessarAba(usuario, 'solicitacoes')
       ? { nav: 'solicitacoes' as Nav, endereco: enderecoDaChave('solicitacoes'), chamado: null, solicitacao, aviso: '' }
-      : { nav: 'search' as Nav, endereco: { ...BUSCAR }, chamado: null, solicitacao: null, aviso: AVISO_AREA_RESTRITA };
+      : { ...inicial(usuario), chamado: null, solicitacao: null, aviso: AVISO_AREA_RESTRITA };
   }
   const chamado = new URLSearchParams(busca).get('chamado');
   if (chamado) {
     return podeAcessarAba(usuario, 'tickets')
       ? { nav: 'tickets' as Nav, endereco: enderecoDaChave('tickets'), chamado, solicitacao: null, aviso: '' }
-      : { nav: 'search' as Nav, endereco: { ...BUSCAR }, chamado: null, solicitacao: null, aviso: AVISO_CHAMADO_RESTRITO };
+      : { ...inicial(usuario), chamado: null, solicitacao: null, aviso: AVISO_CHAMADO_RESTRITO };
   }
   const endereco = lerEndereco(busca);
   const aba = ABAS_NAVEGACAO.find(item => item.aba === endereco.aba)!;
@@ -117,7 +127,7 @@ export function resolverEndereco(usuario: UsuarioPermissao, busca: string) {
   const sub = endereco.subaba === null ? permitidas[0] : permitidas.find(item => item.slug === endereco.subaba);
   return sub
     ? { nav: sub.chave, endereco: enderecoDaChave(sub.chave), chamado: null, solicitacao: null, aviso: '' }
-    : { nav: 'search' as Nav, endereco: { ...BUSCAR }, chamado: null, solicitacao: null, aviso: AVISO_AREA_RESTRITA };
+    : { ...inicial(usuario), chamado: null, solicitacao: null, aviso: AVISO_AREA_RESTRITA };
 }
 export const NOMES_PERFIL: Record<Role, string> = {
   viewer: 'Consulta',

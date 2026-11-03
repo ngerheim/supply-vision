@@ -60,3 +60,16 @@ for (const caso of ['desativado', 'viewer', 'email alterado', 'identidade altera
     }finally{db.close()}
   });
 }
+
+void test('aviso de chamado segue o painel de permissoes: area revogada nao envia, leitura concedida envia', async () => {
+  for (const [caso, esperado] of [['revogado', 0], ['concedido', 1]]) {
+    const db=banco(), t=transporte();
+    try {
+      db.exec('CREATE TABLE permissoes_usuario(user_id TEXT,area TEXT,nivel TEXT)');
+      if(caso==='revogado')db.exec("INSERT INTO permissoes_usuario VALUES('bia','parcerias','sem')");
+      else db.exec("UPDATE users SET role='viewer'; INSERT INTO permissoes_usuario VALUES('bia','parcerias','leitura')");
+      await processarNotificacoes(db,config,t);
+      assert.equal(t.enviados,esperado,caso);
+    }finally{db.close()}
+  }
+});

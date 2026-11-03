@@ -11,7 +11,20 @@ import { pathToFileURL } from 'node:url';
 
 import { montarEmailChamado, proximaTentativa } from '../lib/email-chamados.ts';
 import { montarEmailSolicitacao } from '../lib/email-solicitacoes.ts';
-import { pode } from '../lib/permissoes.ts';
+import { lerPermissoes, pode } from '../lib/permissoes.ts';
+
+// Pessoa ativa com os ajustes do painel; o perfil sozinho nao basta.
+function pessoaAtiva(db, id) {
+  const pessoa = id ? db.prepare('SELECT id,role,active FROM users WHERE id=? AND active=1').get(id) : null;
+  if (!pessoa) return null;
+  let ajustes = [];
+  // Base anterior ao painel de permissoes: sem ajustes, vale o perfil.
+  try { ajustes = db.prepare('SELECT area,nivel FROM permissoes_usuario WHERE user_id=?').all(id); }
+  catch (erro) { if (!String(erro?.message).includes('no such table')) throw erro; }
+  return { ...pessoa, permissoes: lerPermissoes(ajustes) };
+}
+// O relatorio diario resume os chamados: so para quem pode consultá-los.
+const recebeRelatorio = (db, id) => { const p = pessoaAtiva(db, id); return !!p && pode(p, 'chamado:consultar'); };
 import { montarEmailRelatorioDiario } from '../lib/email-relatorio-diario.ts';
 import { criarTransportador, lerConfig, portalPrivado } from './configuracao.mjs';
 export { criarTransportador, lerConfig } from './configuracao.mjs';
@@ -156,7 +169,8 @@ function garantirPeriodoRelatorio(db){
 // depois disso nunca era relatado.
 export function prepararRelatoriosDiarios(db,agora=null,raiz){
   garantirPeriodoRelatorio(db);
-  const consultarUsuariosEm=(local)=>db.prepare("SELECT id FROM users u WHERE active=1 AND role IN ('admin','editor') AND daily_report_enabled=1 AND daily_report_time<=? AND NOT EXISTS (SELECT 1 FROM daily_report_deliveries d WHERE d.user_id=u.id AND d.report_date=?) LIMIT 1").get(local.horario,local.data);
+  const devidos=(local)=>db.prepare("SELECT id,daily_report_time FROM users u WHERE active=1 AND daily_report_enabled=1 AND daily_report_time<=? AND NOT EXISTS (SELECT 1 FROM daily_report_deliveries d WHERE d.user_id=u.id AND d.report_date=?)").all(local.horario,local.data).filter(u=>recebeRelatorio(db,u.id));
+  const consultarUsuariosEm=(local)=>devidos(local)[0];
   const existeConteudoPendente=()=>db.prepare("SELECT 1 FROM daily_report_deliveries WHERE status='pending' AND payload_json IS NULL LIMIT 1").get();
   // Sondagem sem reserva: evita disputar o escritor quando nada precisa ser
   // preparado. A decisão e repetida sob a trava porque outra execução pode
@@ -182,7 +196,7 @@ export function prepararRelatoriosDiarios(db,agora=null,raiz){
   if(!consultarUsuariosEm(local)&&!existeConteudoPendente()){
     db.exec('ROLLBACK');return local.data;
   }
-  const usuarios=db.prepare("SELECT id,daily_report_time FROM users u WHERE active=1 AND role IN ('admin','editor') AND daily_report_enabled=1 AND daily_report_time<=? AND NOT EXISTS (SELECT 1 FROM daily_report_deliveries d WHERE d.user_id=u.id AND d.report_date=?)").all(local.horario,local.data);
+  const usuarios=devidos(local);
   const ultimo=db.prepare("SELECT report_date,period_end,sent_at,created_at FROM daily_report_deliveries WHERE user_id=? AND report_date<? ORDER BY report_date DESC LIMIT 1");
   const inserir=db.prepare("INSERT OR IGNORE INTO daily_report_deliveries (id,user_id,report_date,status,attempts,next_attempt_at,created_at,updated_at,period_start,period_end,last_error) VALUES (?,?,?,?,0,?,?,?,?,?,?)");
   for(const usuario of usuarios){
@@ -214,8 +228,10 @@ export function reservarRelatoriosDiarios(db,agora=new Date()){
   try{
     db.prepare("UPDATE daily_report_deliveries SET status='failed',locked_at=NULL,last_error=?,updated_at=? WHERE status='processing' AND (locked_at<? OR locked_at IS NULL)").run(MENSAGEM_INTERROMPIDO,agoraIso,travaVencida);
     db.prepare("UPDATE daily_report_deliveries SET status='failed',locked_at=NULL,last_error=COALESCE(last_error,'Envio interrompido no limite de tentativas.'),updated_at=? WHERE status='pending' AND attempts>=?").run(agoraIso,maxTentativas);
-    db.prepare("UPDATE daily_report_deliveries SET status='failed',locked_at=NULL,last_error='Permissão de relatório revogada.',updated_at=? WHERE status IN ('pending','processing') AND NOT EXISTS (SELECT 1 FROM users u WHERE u.id=user_id AND u.active=1 AND u.role IN ('admin','editor') AND u.daily_report_enabled=1)").run(agoraIso);
-    const itens=db.prepare("SELECT d.*,u.name recipient_name,u.email recipient_email FROM daily_report_deliveries d JOIN users u ON u.id=d.user_id WHERE d.status='pending' AND d.attempts<? AND d.next_attempt_at<=? AND u.active=1 AND u.role IN ('admin','editor') AND u.daily_report_enabled=1 ORDER BY d.created_at LIMIT 1").all(maxTentativas,agoraIso);
+    const revogar=db.prepare("UPDATE daily_report_deliveries SET status='failed',locked_at=NULL,last_error='Permissão de relatório revogada.',updated_at=? WHERE id=? AND status IN ('pending','processing')");
+    for(const d of db.prepare("SELECT d.id,d.user_id,u.daily_report_enabled habilitado FROM daily_report_deliveries d LEFT JOIN users u ON u.id=d.user_id WHERE d.status IN ('pending','processing')").all())
+      if(d.habilitado!==1||!recebeRelatorio(db,d.user_id))revogar.run(agoraIso,d.id);
+    const itens=db.prepare("SELECT d.*,u.name recipient_name,u.email recipient_email FROM daily_report_deliveries d JOIN users u ON u.id=d.user_id WHERE d.status='pending' AND d.attempts<? AND d.next_attempt_at<=? AND u.active=1 AND u.daily_report_enabled=1 ORDER BY d.created_at LIMIT 1").all(maxTentativas,agoraIso);
     const reservar=db.prepare("UPDATE daily_report_deliveries SET status='processing',attempts=attempts+1,locked_at=?,updated_at=? WHERE id=? AND status='pending'");
     const escolhidos=[];
     for(const item of itens)if(reservar.run(agoraIso,agoraIso,item.id).changes===1)escolhidos.push({...item,attempts:Number(item.attempts)+1,locked_at:agoraIso});
@@ -250,7 +266,7 @@ export async function processarRelatoriosDiarios(db,config,transportador,{conclu
   for(let indice=0;indice<5;indice++){
     const [item]=reservarRelatoriosDiarios(db);if(!item)break;
     try{
-      if(!db.prepare("SELECT 1 FROM users WHERE id=? AND active=1 AND role IN ('admin','editor') AND daily_report_enabled=1").get(item.user_id)){
+      if(!db.prepare("SELECT 1 FROM users WHERE id=? AND active=1 AND daily_report_enabled=1").get(item.user_id)||!recebeRelatorio(db,item.user_id)){
         db.prepare("UPDATE daily_report_deliveries SET status='failed',locked_at=NULL,last_error='Permissão de relatório revogada.' WHERE id=? AND status='processing' AND locked_at=?").run(item.id,item.locked_at);
         continue;
       }
@@ -284,12 +300,13 @@ export async function processarNotificacoes(db, config, transportador, { conclui
       try {
         // Revalida imediatamente antes do SMTP; uma fila antiga nao concede acesso.
         const solicitacao = item.type === 'solicitacao_abertura' || item.type === 'solicitacao_andamento';
-        const pessoa = solicitacao ? db.prepare('SELECT id,role,active FROM users WHERE id=? AND lower(email)=lower(?) AND active=1').get(item.recipient_user_id, item.recipient_email) : null;
+        const id = item.recipient_user_id ?? db.prepare('SELECT id FROM users WHERE lower(email)=lower(?) AND active=1').get(item.recipient_email)?.id;
+        const pessoa = pessoaAtiva(db, id);
+        const mesmoEmail = pessoa && !!db.prepare('SELECT 1 FROM users WHERE id=? AND lower(email)=lower(?)').get(pessoa.id, item.recipient_email);
         const registro = solicitacao ? db.prepare('SELECT solicitante_id FROM solicitacoes WHERE id=?').get(item.solicitacao_id) : null;
-        const destinatario = solicitacao
-          ? pessoa && registro && (item.type === 'solicitacao_abertura' ? pode(pessoa, 'solicitacao:atender') : registro.solicitante_id === pessoa.id && pode(pessoa, 'solicitacao:abrir'))
-          : db.prepare("SELECT id FROM users WHERE lower(email)=lower(?) AND active=1 AND role IN ('admin','editor') AND (? IS NULL OR id=?)")
-            .get(item.recipient_email, item.recipient_user_id ?? null, item.recipient_user_id ?? null);
+        const destinatario = mesmoEmail && (solicitacao
+          ? registro && (item.type === 'solicitacao_abertura' ? pode(pessoa, 'solicitacao:atender') : registro.solicitante_id === pessoa.id && pode(pessoa, 'solicitacao:abrir'))
+          : pode(pessoa, 'chamado:consultar'));
         if (!destinatario) {
           db.prepare("UPDATE email_notifications SET status='failed',locked_at=NULL,last_error=?,updated_at=? WHERE id=? AND status='processing' AND attempts=? AND locked_at=?")
             .run(solicitacao ? 'Permissão de solicitação revogada ou destinatário alterado.' : 'Permissão de chamado revogada ou destinatário alterado.', new Date().toISOString(), item.id, item.attempts, item.locked_at);

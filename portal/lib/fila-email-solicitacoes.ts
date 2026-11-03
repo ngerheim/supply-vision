@@ -1,6 +1,7 @@
 import type { ContextoApi, User } from './api-compartilhada.ts';
 import { prepararNotificacaoCondicional } from './central-notificacoes.ts';
 import { pode } from './permissoes.ts';
+import { pessoasAtivas } from './pessoas-permissoes.ts';
 import { linkSolicitacao, situacaoSolicitacao } from './email-solicitacoes.ts';
 
 type Pessoa = User & { active: number };
@@ -12,7 +13,7 @@ export async function prepararAvisosSolicitacao(contexto: ContextoApi, {
 }: { solicitacaoId: string; evento: string; autor: User; anterior: string | null; para: string; timestamp: string }) {
   if (anterior === para) return []; // Reconsulta na Receita nao e andamento.
   const { all, first, rawDb, id } = contexto;
-  const pessoas = await all<Pessoa>('SELECT id,name,email,role,active FROM users WHERE active=1');
+  const pessoas: Pessoa[] = await pessoasAtivas(all);
   const atendentes = pessoas.filter(pessoa => pode(pessoa, 'solicitacao:atender'));
   const atual = anterior === null ? null : await first<{ solicitante_id: string }>('SELECT solicitante_id FROM solicitacoes WHERE id=?', [solicitacaoId]);
   let destinatarios: Pessoa[];
@@ -21,7 +22,7 @@ export async function prepararAvisosSolicitacao(contexto: ContextoApi, {
     const devolucao = await first<{ user_id: string }>("SELECT user_id FROM solicitacao_andamentos WHERE solicitacao_id=? AND de_status='em_analise' AND para_status='devolvida' ORDER BY rowid DESC LIMIT 1", [solicitacaoId]);
     const devolveu = pessoas.find(pessoa => pessoa.id === devolucao?.user_id && pode(pessoa, 'solicitacao:atender'));
     destinatarios = devolveu ? [devolveu] : atendentes;
-  } else destinatarios = pessoas.filter(pessoa => pessoa.id === atual?.solicitante_id);
+  } else destinatarios = pessoas.filter(pessoa => pessoa.id === atual?.solicitante_id && pode(pessoa, 'solicitacao:abrir'));
   return destinatarios.filter(pessoa => pessoa.id !== autor.id).flatMap(pessoa => {
     const condicao = `EXISTS(SELECT 1 FROM solicitacao_andamentos WHERE id=? AND solicitacao_id=s.id)
       AND ? IN (SELECT role FROM users WHERE id=? AND active=1)`;

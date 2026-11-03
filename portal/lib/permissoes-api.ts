@@ -70,24 +70,31 @@ export function permissoesApi(contexto: ContextoApi) {
         }
         pedidos.set(item.id, niveis);
       }
-      const ts = now(), statements = [];
+      const ts = now();
       let alterados = 0;
-      for (const [userId, niveis] of pedidos) {
-        const atual = atuais.get(userId)!;
-        // Admin tem sempre acesso total; o painel nao o rebaixa.
-        if (atual.total) continue;
-        const novos = ajustesDiferentesDoPadrao(atual.role, { ...atual.ajustes, ...niveis });
-        if (mesmosAjustes(novos, atual.ajustes)) continue;
-        alterados++;
-        statements.push(rawDb().prepare('DELETE FROM permissoes_usuario WHERE user_id=?').bind(userId));
-        for (const [area, nivel] of Object.entries(novos)) {
-          statements.push(rawDb().prepare('INSERT INTO permissoes_usuario (user_id,area,nivel,atualizado_em,atualizado_por) VALUES (?,?,?,?,?)').bind(userId, area, nivel, ts, user.id));
+      // Os ajustes atuais sao relidos dentro da transacao de escrita: outro
+      // salvamento concluido no meio tempo nao e desfeito. So as areas que este
+      // pedido mudou sao aplicadas sobre o estado gravado.
+      await rawDb().batchConstruir(consultar => {
+        const statements = [];
+        for (const [userId, niveis] of pedidos) {
+          const atual = atuais.get(userId)!;
+          // Admin tem sempre acesso total; o painel nao o rebaixa.
+          if (atual.total) continue;
+          const gravados = lerPermissoes(consultar({ sql: 'SELECT area,nivel FROM permissoes_usuario WHERE user_id=?', values: [userId] }).results as Ajuste[]);
+          const novos = ajustesDiferentesDoPadrao(atual.role, { ...gravados, ...niveis });
+          if (mesmosAjustes(novos, gravados)) continue;
+          alterados++;
+          statements.push(rawDb().prepare('DELETE FROM permissoes_usuario WHERE user_id=?').bind(userId));
+          for (const [area, nivel] of Object.entries(novos)) {
+            statements.push(rawDb().prepare('INSERT INTO permissoes_usuario (user_id,area,nivel,atualizado_em,atualizado_por) VALUES (?,?,?,?,?)').bind(userId, area, nivel, ts, user.id));
+          }
+          statements.push(rawDb().prepare('DELETE FROM sessions WHERE user_id=?').bind(userId));
+          const mudancas = descreverMudancas(atual.role, gravados, novos);
+          statements.push(auditoriaNoLote(contexto, user.id, 'UPDATE', 'user', userId, `${atual.email}: permissões alteradas (${mudancas.join('; ')}); sessões encerradas`));
         }
-        statements.push(rawDb().prepare('DELETE FROM sessions WHERE user_id=?').bind(userId));
-        const mudancas = descreverMudancas(atual.role, atual.ajustes, novos);
-        statements.push(auditoriaNoLote(contexto, user.id, 'UPDATE', 'user', userId, `${atual.email}: permissões alteradas (${mudancas.join('; ')}); sessões encerradas`));
-      }
-      if (statements.length) await rawDb().batch(statements);
+        return statements;
+      });
       return ok({ success: true, alterados });
     });
   }

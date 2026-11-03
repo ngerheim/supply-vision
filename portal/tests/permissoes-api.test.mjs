@@ -102,8 +102,33 @@ void test('painel de permissoes: matriz, gravacao, bloqueio na API, sessoes e au
   assert.ok(Array.isArray(bootstrap.data.agreements));
   assert.equal((await pedir('POST', 'agreements', 'viewer', { number: 'X' })).status, 403);
 
+  // Salvamento concorrente: outro admin gravou Cadastros enquanto este revogava Baixa.
+  const construirOriginal = db.batchConstruir.bind(db);
+  db.batchConstruir = async (...args) => {
+    db.batchConstruir = construirOriginal;
+    sql.prepare("INSERT INTO permissoes_usuario(user_id,area,nivel,atualizado_em) VALUES('editor','solicitacoes','sem',?)").run(banco.now());
+    return construirOriginal(...args);
+  };
+  assert.equal((await pedir('PUT', 'permissoes', admin, { usuarios: [{ id: 'editor', niveis: { baixas: 'sem' } }] })).status, 200);
+  assert.deepEqual(sql.prepare("SELECT area,nivel FROM permissoes_usuario WHERE user_id='editor' AND area IN ('baixas','solicitacoes') ORDER BY area").all().map(r => ({ ...r })),
+    [{ area: 'baixas', nivel: 'sem' }, { area: 'solicitacoes', nivel: 'sem' }]);
+  sql.prepare("DELETE FROM permissoes_usuario WHERE user_id='editor' AND area IN ('baixas','solicitacoes')").run();
+
+  // Cada area vale na API: Buscar, Manutencao, Fornecedores e Relatorios.
+  assert.equal((await pedir('PUT', 'permissoes', admin, { usuarios: [
+    { id: 'viewer', niveis: { buscar: 'sem', manutencao: 'sem', relatorios: 'leitura' } },
+    { id: 'editor', niveis: { fornecedores: 'leitura' } },
+  ] })).status, 200);
+  await abrirSessoes();
+  assert.equal((await pedir('GET', 'search', 'viewer')).status, 403);
+  assert.equal((await pedir('GET', 'search/options', 'viewer')).status, 403);
+  assert.equal((await pedir('GET', 'bootstrap', 'viewer')).data.manutencao, '');
+  assert.equal((await pedir('GET', 'reports', 'viewer')).status, 200);
+  assert.equal((await pedir('POST', 'catalogs/suppliers', 'editor', { legalName: 'X', tradeName: 'X', cnpj: '11222333000181' })).status, 403);
+  assert.notEqual((await pedir('POST', 'catalogs/models', 'editor', { name: 'Modelo ficticio' })).status, 403);
+
   // Voltar ao padrao remove os ajustes.
-  const reverter = await pedir('PUT', 'permissoes', admin, { usuarios: [{ id: 'editor', niveis: { pagamentos: 'edicao', relatorios: 'sem' } }] });
+  const reverter = await pedir('PUT', 'permissoes', admin, { usuarios: [{ id: 'editor', niveis: { pagamentos: 'edicao', relatorios: 'sem', fornecedores: 'edicao' } }] });
   assert.equal(reverter.status, 200);
   assert.equal(sql.prepare("SELECT COUNT(*) n FROM permissoes_usuario WHERE user_id='editor'").get().n, 0);
 });

@@ -337,3 +337,16 @@ void test('reprocessamento diario da Analise: agenda valida, uma vez por horario
   assert.ok(agendarReprocessamento(db, agenda, new Date(2026, 10, 3, 19, 45)));
   db.close();
 });
+
+void test('fila de relatorios aceita quem recebeu Relatorios pelo painel e barra quem perdeu', () => {
+  const ctx = preparar();
+  try {
+    ctx.db.exec("INSERT INTO users VALUES('ed','editor',1); CREATE TABLE permissoes_usuario(user_id TEXT,area TEXT,nivel TEXT); INSERT INTO permissoes_usuario VALUES('ed','relatorios','edicao')");
+    ctx.db.prepare("UPDATE report_jobs SET created_by='ed',status='queued'").run();
+    assert.equal(reservarRelatorio(ctx.db)?.id, 'rpt_teste');
+    ctx.db.prepare("UPDATE report_jobs SET status='queued'").run();
+    ctx.db.exec("DELETE FROM permissoes_usuario");
+    assert.equal(reservarRelatorio(ctx.db), null);
+    assert.equal(ctx.db.prepare('SELECT status FROM report_jobs').get().status, 'review');
+  } finally { ctx.close(); }
+});
