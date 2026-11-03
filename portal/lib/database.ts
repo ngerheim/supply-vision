@@ -7,7 +7,7 @@ import { MIGRAR_FILA_SOLICITACOES } from './fila-email-schema.ts';
 import { bancoSqliteLocal } from './sqlite-local.ts';
 import { SESSAO_INATIVIDADE_MS } from './politica-sessao.ts';
 import { lerPermissoes } from './permissoes.ts';
-import { SCHEMA_ANALISE } from './analise.ts';
+import { SCHEMA_ANALISE, SCHEMA_ANALISE_ACOES } from './analise.ts';
 import { SCHEMA_ALERTAS } from './alertas-rodadas.ts';
 
 export { SESSAO_INATIVIDADE_MS } from './politica-sessao.ts';
@@ -408,6 +408,13 @@ async function initialize() {
     await db.batchConstruir(() => [
       ...SCHEMA_ALERTAS.map(sql => db.prepare(sql)),
       db.prepare('INSERT OR IGNORE INTO schema_migrations(version,applied_at) VALUES(18,?)').bind(now()),
+    ]);
+  }
+  // Parametros da Analise (corte de vigencia) e proximas acoes com historico.
+  if (!await db.prepare('SELECT 1 ok FROM schema_migrations WHERE version=19').first()) {
+    await db.batchConstruir(() => [
+      ...SCHEMA_ANALISE_ACOES.map(sql => db.prepare(sql)),
+      db.prepare('INSERT OR IGNORE INTO schema_migrations(version,applied_at) VALUES(19,?)').bind(now()),
     ]);
   }
   await db.prepare('PRAGMA optimize').run();

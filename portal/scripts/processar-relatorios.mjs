@@ -7,10 +7,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import http from 'node:http';
 import { spawn, execFile } from 'node:child_process';
-import { timingSafeEqual } from 'node:crypto';
+import { createHash, timingSafeEqual } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 import { abrirBancoLocal } from './banco-local.mjs';
-import { privado, lerConfigEfetiva } from './configuracao.mjs';
+import { privado, lerConfigEfetiva, lerArquivo } from './configuracao.mjs';
 import { validarPedidoRelatorio } from '../lib/relatorios.ts';
 import { VALIDADE_HISTORICO_MS, prazoArquivoHistorico, arquivoHistoricoExpirado } from '../lib/retencao-relatorios.ts';
 
@@ -43,7 +43,7 @@ export function comandoRelatorio(job) {
     requestKey: job.request_key,
   });
   const brasileira = (valor) => valor.split('-').reverse().join('/');
-  if (pedido.action === 'recorte')
+  if (pedido.action === 'recorte' || pedido.action === 'reprocessamento')
     return [
       'panorama/executar.py',
       '--inicio',
@@ -57,6 +57,51 @@ export function comandoRelatorio(job) {
     'processo/pipeline.py',
     ...(pedido.action === 'paralelo' ? ['--sem-envio'] : []),
   ];
+}
+// Reprocessamento diario da Analise: nos horarios de operacao.env, refaz os
+// ultimos N dias com os acordos, cadastros e De/Para atuais. Entra na fila
+// como qualquer recorte (um por vez, atras do que ja estiver na fila) e so
+// atualiza o Portal, sem planilha. Horario perdido por mais de 3 h e pulado.
+export function lerAgendaReprocessamento(config) {
+  const horarios = String(config.ANALISE_REPROCESSAMENTO_HORARIOS ?? '').split(',').map(h => h.trim()).filter(Boolean);
+  for (const h of horarios) if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(h)) throw new Error(`Horario invalido em ANALISE_REPROCESSAMENTO_HORARIOS: ${h}`);
+  const dias = Number(config.ANALISE_REPROCESSAMENTO_DIAS || 400);
+  if (!Number.isInteger(dias) || dias < 1 || dias > 1100) throw new Error('ANALISE_REPROCESSAMENTO_DIAS deve ser um numero de 1 a 1100.');
+  return { horarios: [...new Set(horarios)].sort(), dias };
+}
+const doisDigitos = (n) => String(n).padStart(2, '0');
+const dataLocal = (d) => `${d.getFullYear()}-${doisDigitos(d.getMonth() + 1)}-${doisDigitos(d.getDate())}`;
+export function chaveReprocessamento(dia, hora) {
+  const h = createHash('sha256').update(`reprocessamento-analise:${dia}:${hora}`).digest('hex');
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-4${h.slice(13, 16)}-8${h.slice(17, 20)}-${h.slice(20, 32)}`;
+}
+export function agendarReprocessamento(db, agenda, agora = new Date()) {
+  const minutos = agora.getHours() * 60 + agora.getMinutes();
+  const hora = agenda.horarios.filter(h => {
+    const [hh, mm] = h.split(':').map(Number);
+    return minutos >= hh * 60 + mm && minutos < hh * 60 + mm + 180;
+  }).pop();
+  if (!hora) return null;
+  const dia = dataLocal(agora), chave = chaveReprocessamento(dia, hora);
+  if (db.prepare('SELECT 1 FROM report_jobs WHERE request_key=?').get(chave)) return null;
+  // A fila exige um administrador ativo como solicitante; o Historico
+  // registra que o pedido foi automatico.
+  const admin = db.prepare("SELECT id FROM users WHERE role='admin' AND active=1 ORDER BY created_at, id LIMIT 1").get();
+  if (!admin) return null;
+  const inicio = new Date(agora.getFullYear(), agora.getMonth(), agora.getDate() - (agenda.dias - 1));
+  const id = `rpt_${crypto.randomUUID().replaceAll('-', '')}`, ts = agora.toISOString();
+  db.exec('BEGIN IMMEDIATE');
+  try {
+    const r = db.prepare("INSERT OR IGNORE INTO report_jobs(id,request_key,action,from_date,to_date,created_by,created_at) VALUES(?,?,'reprocessamento',?,?,?,?)")
+      .run(id, chave, dataLocal(inicio), dia, admin.id, ts);
+    if (r.changes) db.prepare("INSERT INTO audit_logs(id,user_id,action,entity,entity_id,details,created_at) VALUES(?,?,'CREATE','report_job',?,?,?)")
+      .run(`aud_${crypto.randomUUID()}`, admin.id, id, `Reprocessamento automático da Análise (${hora}): ${dataLocal(inicio)} a ${dia}`, ts);
+    db.exec('COMMIT');
+    return r.changes ? id : null;
+  } catch (erro) {
+    db.exec('ROLLBACK');
+    throw erro;
+  }
 }
 export function reservarRelatorio(db) {
   if (validacaoAtiva(db)) return null;
@@ -259,6 +304,7 @@ function executarPython(db, job, segredo) {
         SUPPLY_VISION_PRIVADO: privado,
         SUPPLY_VISION_RUN_ID: identificadorExecucao(job.id),
         SUPPLY_VISION_SEM_ENVIO: job.action === 'paralelo' ? '1' : '0',
+        SUPPLY_VISION_SOMENTE_ANALISE: job.action === 'reprocessamento' ? '1' : '0',
         PYTHONUTF8: '1',
         PYTHONUNBUFFERED: '1',
       },
@@ -398,9 +444,16 @@ async function principal() {
         .map((l) => l.trim())
         .filter((l) => l && !l.startsWith('#'))
     : [];
+  let agendaAnalise = { horarios: [], dias: 0 };
+  try {
+    agendaAnalise = lerAgendaReprocessamento(lerArquivo(path.join(privado, 'comum', 'operacao.env')));
+  } catch (erro) {
+    console.error(`Reprocessamento da Análise desligado: ${erro.message}`);
+  }
   let inicializado = false,
     ocupado = false,
     ultimaLimpeza = 0,
+    ultimaAgenda = 0,
     ultimoPulso = 0;
   const ciclo = async () => {
     if (ocupado) return;
@@ -461,6 +514,11 @@ async function principal() {
         const removidos = limparHistoricosExpirados(db);
         ultimaLimpeza = Date.now();
         if (removidos) console.log(`${removidos} arquivo(s) histórico(s) expirado(s) excluído(s).`);
+      }
+      if (agendaAnalise.horarios.length && Date.now() - ultimaAgenda >= 60_000 && !validacaoAtiva(db)) {
+        ultimaAgenda = Date.now();
+        const agendado = agendarReprocessamento(db, agendaAnalise);
+        if (agendado) console.log(`Reprocessamento da Análise na fila (${agendado}).`);
       }
     } catch (erro) {
       console.error('Disponibilidade/limpeza dos relatórios:', erro.message);

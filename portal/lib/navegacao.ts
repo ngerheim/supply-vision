@@ -26,7 +26,10 @@ export const ABAS_NAVEGACAO = [
     { chave: 'categorias', slug: 'categorias', label: 'Categorias' },
     { chave: 'estoques', slug: 'estoques', label: 'Estoques' },
   ] },
-  { aba: 'analise', label: 'Análise', subabas: [{ chave: 'analise', slug: null, label: 'Análise' }] },
+  { aba: 'analise', label: 'Análise', subabas: [
+    { chave: 'analise', slug: 'painel', label: 'Painel' },
+    { chave: 'analise-acoes', slug: 'acoes', label: 'Próximas ações' },
+  ] },
   { aba: 'alertas', label: 'Alertas', subabas: [
     { chave: 'alertas', slug: 'rodadas', label: 'Rodadas' },
     { chave: 'alertas-destinatarios', slug: 'destinatarios', label: 'Destinatários' },
@@ -53,7 +56,7 @@ export const AVISO_AREA_RESTRITA = 'Seu perfil não tem acesso a esta área.';
 export const AVISO_CHAMADO_RESTRITO = 'Seu perfil permite consultar preços e acordos. O acesso a chamados é restrito.';
 const BUSCAR: EnderecoNavegacao = { aba: 'buscar', subaba: null };
 
-const ACAO_ABA: Partial<Record<Nav, Acao>> = { 'estoque-saldo': 'aba:estoque', 'estoque-entradas': 'aba:estoque', contratos: 'acordo:consultar-completo', 'alertas-destinatarios': 'alertas:destinatarios' };
+const ACAO_ABA: Partial<Record<Nav, Acao>> = { 'estoque-saldo': 'aba:estoque', 'estoque-entradas': 'aba:estoque', contratos: 'acordo:consultar-completo', 'alertas-destinatarios': 'alertas:destinatarios', 'analise-acoes': 'aba:analise' };
 export function podeAcessarAba(usuario: UsuarioPermissao, chave: Nav): boolean {
   return pode(usuario, ACAO_ABA[chave] ?? (`aba:${chave}` as Acao));
 

@@ -285,7 +285,12 @@ async function GETInterno(request: NextRequest) {
   if (parts[0] === 'agreements' && parts[1]) return agreementDetail(parts[1], user, request.nextUrl.searchParams);
 
   if (parts[0] === 'permissoes') return parts.length === 1 ? permissoes.matriz(user) : fail('Rota não encontrada.', 404);
-  if (parts[0] === 'analise') return parts.length === 1 ? analise.painel(user, request.nextUrl.searchParams) : fail('Rota não encontrada.', 404);
+  if (parts[0] === 'analise') {
+    if (parts.length === 1) return analise.painel(user, request.nextUrl.searchParams);
+    if (parts.length === 2 && parts[1] === 'fornecedor') return analise.fornecedor(user, request.nextUrl.searchParams);
+    if (parts.length === 2 && parts[1] === 'acoes') return analise.listarAcoes(user, request.nextUrl.searchParams);
+    return fail('Rota não encontrada.', 404);
+  }
   if (parts[0] === 'alertas') {
     if (parts.length === 1) return alertas.listar(user);
     if (parts.length === 2) return parts[1] === 'destinatarios' ? alertas.destinatarios(user) : alertas.detalhe(user, parts[1]);
@@ -357,6 +362,10 @@ async function POSTInterno(request: NextRequest) {
     if (!tokenInternoValido(request)) return fail('Credencial interna inválida.', 401);
     return analise.receberDia(request);
   }
+  if (parts[0] === 'internal' && parts[1] === 'analise' && parts[2] === 'concluir' && parts.length === 3) {
+    if (!tokenInternoValido(request)) return fail('Credencial interna inválida.', 401);
+    return analise.concluirEnvio(request);
+  }
   if (parts[0] === 'internal' && parts[1] === 'alertas' && parts.length === 2) {
     if (!tokenInternoValido(request)) return fail('Credencial interna inválida.', 401);
     return alertas.receberRodada(request);
@@ -371,6 +380,10 @@ async function POSTInterno(request: NextRequest) {
     return fail('Sessão expirada.', 401);
   }
   if (await first(VALIDACAO_ATIVA_SQL)) return denyWrite(request, 'Sistema em atualização, aguarde alguns instantes', 503, 'validacao');
+  if (parts[0] === 'analise' && parts[1] === 'acoes' && parts.length === 3) {
+    if (!pode(user, 'analise:acoes')) return denyWrite(request, 'Seu perfil não permite resolver as próximas ações.');
+    return analise.resolverAcao(request, user, parts[2]);
+  }
   if (partsOf(request)[0] === 'contratos') {
     if (!pode(user, 'acordo:consultar-completo')) return denyWrite(request, 'Seu perfil não permite gerar contratos.');
     return partsOf(request).length === 1 ? contratos.gerar(request, user) : fail('Rota não encontrada.', 404);

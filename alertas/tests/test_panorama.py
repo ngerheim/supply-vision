@@ -148,3 +148,21 @@ def test_metadado_legado_sem_hash_continua_aceito_se_periodo_confere(historico):
     pd.DataFrame([linha_base()]).to_excel(baixar.SAIDA, index=False)
     Path(baixar.META).write_text('PERIODO=28/02/2024;01/03/2024\nLINHAS=1\n', encoding='utf-8')
     assert gerar._verificar_base() is None
+
+
+def test_reprocessamento_da_analise_nao_gera_planilha(historico, monkeypatch, tmp_path):
+    baixar, gerar = historico
+    base_atomica.salvar_base(pd.DataFrame([linha_base()]), Path(baixar.SAIDA), Path(baixar.META), 'PERIODO=28/02/2024;01/03/2024\n')
+    df = pd.DataFrame([{'Status': 'CONFORME'}])
+    enviados = []
+    for nome, funcao in {'carregar_base': lambda *a: df, 'carregar_acordos_portal': lambda: df, 'processar': lambda a, b: df,
+                         'resumir_status': lambda d: {}, 'imprimir_resumo': lambda r: None,
+                         'preparar_recorte_historico': lambda d: pytest.fail('Nao deve montar planilha')}.items():
+        monkeypatch.setattr(gerar.rodar, nome, funcao, raising=False)
+    falso = types.ModuleType('envio_analise')
+    falso.enviar_comparacao = lambda d: enviados.append(len(d))
+    monkeypatch.setitem(sys.modules, 'envio_analise', falso)
+    monkeypatch.setenv('SUPPLY_VISION_SOMENTE_ANALISE', '1')
+    assert gerar.gerar() is False
+    assert enviados == [1]
+    assert not (tmp_path / 'historicos').exists()

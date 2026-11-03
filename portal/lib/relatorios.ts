@@ -8,6 +8,7 @@ export const ACOES_RELATORIO = [
   'debug',
   'recorte',
   'limpeza',
+  'reprocessamento',
 ] as const;
 export type AcaoRelatorio = (typeof ACOES_RELATORIO)[number];
 export const NOMES_ACAO: Record<AcaoRelatorio, string> = {
@@ -16,6 +17,7 @@ export const NOMES_ACAO: Record<AcaoRelatorio, string> = {
   debug: 'Executar com diagnóstico',
   recorte: 'Recorte histórico',
   limpeza: 'Limpeza de arquivos antigos',
+  reprocessamento: 'Reprocessamento da Análise',
 };
 export type PedidoRelatorio = {
   action: AcaoRelatorio;
@@ -55,7 +57,7 @@ export function validarPedidoRelatorio(
   let from: string | null = null,
     to: string | null = null;
   const recipient = null;
-  if (action === 'recorte') {
+  if (action === 'recorte' || action === 'reprocessamento') {
     if (
       typeof body.from !== 'string' ||
       typeof body.to !== 'string' ||

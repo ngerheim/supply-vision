@@ -91,7 +91,8 @@ void test('analise: recebe dias pelo token, substitui a data e calcula os indica
   assert.equal(r.data.acimaPorFornecedor[0].fornecedor, 'Oficina Y');
   assert.equal(r.data.semAcordoFornecedores[0].fornecedor, 'Oficina W');
   assert.deepEqual(r.data.mensal.map(m => m.mes), ['2026-10']);
-  assert.ok(r.data.variacaoPreco.some(v => v.item === 'Troca de oleo' && v.cidades === 2));
+  // Cidade com menos de tres compras nao vira referencia de preco.
+  assert.deepEqual(r.data.variacaoPreco, []);
   assert.deepEqual(r.data.opcoes.cidade, ['Cidade A', 'Cidade B']);
 
   const filtrado = await consultar(admin, '?de=2026-10-01&ate=2026-10-31&fornecedor=Oficina%20Y');

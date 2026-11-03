@@ -353,7 +353,7 @@ export function Reports() {
                 <p className="text-xs text-muted-foreground">
                   {horario(job.createdAt)} · {job.requestedBy}
                 </p>
-                {job.action === 'recorte' && (
+                {(job.action === 'recorte' || job.action === 'reprocessamento') && (
                   <p className="mt-1 text-sm">
                     {job.from?.split('-').reverse().join('/')} a{' '}
                     {job.to?.split('-').reverse().join('/')}

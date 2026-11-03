@@ -23,6 +23,7 @@ export const ACOES = [
   'aba:permissoes', 'permissao:gerenciar',
   'aba:analise', 'analise:consultar',
   'aba:alertas', 'alertas:consultar', 'alertas:destinatarios',
+  'analise:acoes',
 ] as const;
 export type Acao = (typeof ACOES)[number];
 
@@ -41,7 +42,7 @@ const suprimentos: readonly Acao[] = [
   'solicitacao:ver_todas', 'solicitacao:atender',
   'baixa:ver_todas', 'baixa:atender',
   'pagamento:ver_todas', 'pagamento:atender', 'estoque:lancar',
-  'aba:analise', 'analise:consultar', 'aba:alertas', 'alertas:consultar',
+  'aba:analise', 'analise:consultar', 'analise:acoes', 'aba:alertas', 'alertas:consultar',
 ];
 const acoesPorPerfil: Record<Role, readonly Acao[]> = {
   viewer: consulta,
@@ -121,7 +122,8 @@ export const EXIGENCIAS: Partial<Record<Acao, Exigencia>> = {
   'portal:consultar-gestao': L('acordos', 'importacoes', 'fornecedores', 'catalogos', 'depara'),
   'portal:escrever': E('acordos', 'fornecedores', 'catalogos'),
   'usuario:consultar': L('parcerias'),
-  'aba:analise': L('analise'), 'analise:consultar': L('analise'),
+  // Leitura: painel e sugestoes. Edicao: marcar sugestao como feita, pular ou rejeitar.
+  'aba:analise': L('analise'), 'analise:consultar': L('analise'), 'analise:acoes': E('analise'),
   // Leitura: ver as rodadas e receber o aviso. Edicao: escolher quem recebe.
   'aba:alertas': L('alertas'), 'alertas:consultar': L('alertas'), 'alertas:destinatarios': E('alertas'),
 };

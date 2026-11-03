@@ -46,16 +46,24 @@ def test_envia_um_dia_por_requisicao_e_para_no_primeiro_erro(monkeypatch, capsys
 
     def abrir(requisicao, timeout=60):
         corpo = json.loads(requisicao.data.decode("utf-8"))
+        if requisicao.full_url.endswith("/analise/concluir"):
+            concluidos.append(corpo)
+            return Resposta(b'{"success": true, "novas": 2, "encerradas": 0}')
         pedidos.append((requisicao.full_url, requisicao.get_header("Authorization"), corpo["data"], len(corpo["linhas"])))
         assert timeout == envio_analise.TEMPO_LIMITE_S
         if falhar:
             raise OSError("Portal fora do ar")
         return Resposta(b'{"success": true}')
 
+    concluidos = []
     monkeypatch.setattr(portal_conexao, "abrir", abrir)
+    monkeypatch.setattr(envio_analise.sv_paths, "CORTE_VIGENCIA_ACORDOS", date(2026, 9, 18), raising=False)
     falhar = False
     enviados, falhas = envio_analise.enviar_comparacao(_df(), url="http://localhost:3000", token="token-ficticio")
     assert (enviados, falhas) == (2, 0)
+    # No fim, um aviso só ao Portal, com o corte de vigência.
+    assert concluidos == [{"corteVigencia": "2026-09-18"}]
+    assert "Próximas ações: 2 nova(s)" in capsys.readouterr().out
     assert [p[2] for p in pedidos] == ["2026-10-01", "2026-10-02"]
     assert pedidos[0][0] == "http://localhost:3000/api/internal/compras"
     assert pedidos[0][1] == "Bearer token-ficticio"
@@ -63,7 +71,7 @@ def test_envia_um_dia_por_requisicao_e_para_no_primeiro_erro(monkeypatch, capsys
     pedidos.clear()
     falhar = True
     assert envio_analise.enviar_comparacao(_df(), url="http://localhost:3000", token="token-ficticio") == (0, 2)
-    assert len(pedidos) == 1
+    assert len(pedidos) == 1 and len(concluidos) == 1  # nada enviado: sem novo aviso
     assert "em diante não enviadas para a Análise" in capsys.readouterr().out
 
 
