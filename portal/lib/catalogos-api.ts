@@ -124,7 +124,14 @@ export function catalogosApi(contexto: ContextoApi) {
         if (!textValue(body.name)) return fail('Informe o nome da peça ou serviço.');
         const unidadeEstoque = body.unidadeEstoque === undefined ? existing.unidade_estoque || 'un' : textValue(body.unidadeEstoque) || 'un';
         if (!['un','L','m','kg'].includes(unidadeEstoque)) return fail('Selecione uma unidade de estoque válida.');
-        escrita = rawDb().prepare('UPDATE catalog_items SET name=?,active=?,unidade_estoque=? WHERE id=? AND revision=?').bind(normalizeText(body.name), active, unidadeEstoque, recordId,existing.revision);
+        // Unidade de item com historico no estoque nao muda: 10 L viraria 10 kg
+        // no saldo e nos movimentos antigos. A condicao repete no UPDATE.
+        const USADO = 'EXISTS(SELECT 1 FROM movimentos_estoque WHERE item_id=?) OR EXISTS(SELECT 1 FROM baixa_itens WHERE item_id=?)';
+        if (unidadeEstoque !== (existing.unidade_estoque || 'un') && await first(`SELECT 1 ok WHERE ${USADO}`, [recordId, recordId])) {
+          return fail('Este item já tem movimento ou baixa no estoque, e a unidade não pode mudar. Cadastre outro item com a nova unidade.', 409);
+        }
+        escrita = rawDb().prepare(`UPDATE catalog_items SET name=?,active=?,unidade_estoque=? WHERE id=? AND revision=? AND (unidade_estoque=? OR NOT (${USADO}))`)
+          .bind(normalizeText(body.name), active, unidadeEstoque, recordId, existing.revision, unidadeEstoque, recordId, recordId);
       } else if (type === 'models') {
         if (!textValue(body.name)) return fail('Informe o modelo.');
         escrita = rawDb().prepare('UPDATE vehicle_models SET name=?,active=? WHERE id=? AND revision=?').bind(normalizeText(body.name), active, recordId,existing.revision);
