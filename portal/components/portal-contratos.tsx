@@ -23,7 +23,7 @@ function lerPrazo() { try { return localStorage.getItem(CHAVE_LOCAL) || '45'; } 
 function gravarPrazo(prazo: string) { try { localStorage.setItem(CHAVE_LOCAL, prazo); } catch { /* opcional */ } }
 
 const CAMPOS_FORNECEDOR: [string, string][] = [
-  ['FORNECEDOR_RAZAO_SOCIAL', 'Razão social'], ['FORNECEDOR_CNPJ', 'CNPJ'], ['FORNECEDOR_REPRESENTANTE', 'Representante do fornecedor'],
+  ['FORNECEDOR_RAZAO_SOCIAL', 'Razão social'], ['FORNECEDOR_CNPJ', 'CNPJ'],
 ];
 // Endereco por partes, na ordem em que vai no contrato.
 const PARTES: [keyof Endereco, string, string][] = [
@@ -64,7 +64,7 @@ export function Contratos({ acordos, busy }: { acordos: AnyRow[]; busy: boolean 
       setErro('');
       const a = dados.acordo;
       if (a) {
-        setValores({ FORNECEDOR_RAZAO_SOCIAL: a.razaoSocial, FORNECEDOR_CNPJ: a.cnpj, FORNECEDOR_REPRESENTANTE: '' });
+        setValores({ FORNECEDOR_RAZAO_SOCIAL: a.razaoSocial, FORNECEDOR_CNPJ: a.cnpj });
         setEndereco({ ...VAZIO, ...a.endereco });
       }
     }).catch(falha => { if (!controller.signal.aborted) setErro(errorText(falha)); });

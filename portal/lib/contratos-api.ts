@@ -59,7 +59,7 @@ export function contratosApi(contexto: ContextoApi) {
       try { campos = camposDoTemplate(template); }
       catch (erro) { if (erro instanceof TemplateInvalido) erroTemplate = erro.message; else throw erro; }
       const fixos = CAMPOS_FIXOS_ANTIGOS.filter(c => campos.includes(c));
-      if (fixos.length) erroTemplate = `No template, escreva os dados fixos da contratante no lugar de ${fixos.map(c => `{{${c}}}`).join(', ')}. O Portal não pergunta mais esses dados.`;
+      if (fixos.length) erroTemplate = `No template, tire ou escreva o texto fixo no lugar de ${fixos.map(c => `{{${c}}}`).join(', ')}. O Portal não preenche mais esses campos.`;
     }
     const resposta: Record<string, unknown> = { template: !!template && !erroTemplate, erroTemplate, campos, hoje: dataDeNegocio() };
     if (acordoId) {
@@ -95,7 +95,7 @@ export function contratosApi(contexto: ContextoApi) {
       const template = await lerTemplate();
       if (!template) return fail('Template do contrato não encontrado na pasta privada do servidor.', 409);
 
-      const editaveis: CampoContrato[] = ['FORNECEDOR_RAZAO_SOCIAL', 'FORNECEDOR_CNPJ', 'FORNECEDOR_REPRESENTANTE'];
+      const editaveis: CampoContrato[] = ['FORNECEDOR_RAZAO_SOCIAL', 'FORNECEDOR_CNPJ'];
       const campos = {} as Record<CampoContrato, string>;
       for (const nome of editaveis) {
         const valor = body.campos[nome];
