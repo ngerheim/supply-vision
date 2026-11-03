@@ -35,8 +35,10 @@ void test('rede testa antes de publicar; hash divergente e nome existente preser
   t.after(() => { if (ensaioAnterior === undefined) delete process.env.MODO_ENSAIO; else process.env.MODO_ENSAIO = ensaioAnterior; });
   const dir = criarTemporarioTeste('sv-rede-segura-'); t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const rede = path.join(dir, 'rede'); fs.mkdirSync(rede);
-  const origem = path.join(dir, 'supply-vision-2026-10-16_2059.7z'); fs.writeFileSync(origem, 'novo');
-  const anterior = path.join(rede, 'supply-vision-2026-10-16_1330.7z'); fs.writeFileSync(anterior, 'anterior');
+  // Datas de hoje: a retencao de 14 dias apagaria nomes fixos com o passar do tempo.
+  const hoje = new Date().toISOString().slice(0, 10);
+  const origem = path.join(dir, `supply-vision-${hoje}_2059.7z`); fs.writeFileSync(origem, 'novo');
+  const anterior = path.join(rede, `supply-vision-${hoje}_1330.7z`); fs.writeFileSync(anterior, 'anterior');
   assert.throws(() => replicarCopiaNaRede(origem, rede, { testar(exe, senha, args) { fs.writeFileSync(args[1], 'corrompido'); } }), /Hash/);
   assert.deepEqual(fs.readdirSync(rede), [path.basename(anterior)]);
   assert.equal(fs.readFileSync(anterior, 'utf8'), 'anterior');
