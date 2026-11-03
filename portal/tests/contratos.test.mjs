@@ -77,8 +77,8 @@ void test('contrato: preenche campos com escape, anexa a tabela antes do sectPr 
 });
 
 void test('contrato: template com campos fixos antigos da contratante e avisado', async () => {
-  const antigo = templateFicticio('<w:p><w:r><w:t>{{TESTEMUNHA_1}} {{CONTRATANTE_REPRESENTANTE}}</w:t></w:r></w:p>');
-  assert.deepEqual(contratos.camposDoTemplate(antigo).filter(c => contratos.CAMPOS_FIXOS_ANTIGOS.includes(c)).sort(), ['CONTRATANTE_REPRESENTANTE', 'TESTEMUNHA_1']);
+  const antigo = templateFicticio('<w:p><w:r><w:t>{{TESTEMUNHA_1}} {{CONTRATANTE_REPRESENTANTE}} {{FORNECEDOR_REPRESENTANTE}}</w:t></w:r></w:p>');
+  assert.deepEqual(contratos.camposDoTemplate(antigo).filter(c => contratos.CAMPOS_FIXOS_ANTIGOS.includes(c)).sort(), ['CONTRATANTE_REPRESENTANTE', 'FORNECEDOR_REPRESENTANTE', 'TESTEMUNHA_1']);
   assert.equal(contratos.montarEndereco({ logradouro: 'Av. Brasil', numero: '10', complemento: 'Sala 2', bairro: 'Funcionários', cidade: 'Belo Horizonte', uf: 'mg', cep: '30.140-000' }),
     'Av. Brasil, 10, Sala 2, Funcionários, Belo Horizonte/MG, CEP 30140-000');
 });
@@ -102,7 +102,7 @@ void test('contrato: rota gera o .docx com permissao, valida campos e audita', a
     const r = await rota[method](new NextRequest(`http://fixture/api/${url}`, { method, headers, ...(body ? { body: JSON.stringify(body) } : {}) }));
     return { status: r.status, headers: r.headers, data: r.headers.get('content-type')?.includes('json') ? await r.json() : new Uint8Array(await r.arrayBuffer()) };
   };
-  const campos = Object.fromEntries(['FORNECEDOR_RAZAO_SOCIAL', 'FORNECEDOR_CNPJ', 'FORNECEDOR_REPRESENTANTE'].map(c => [c, `Valor ${c}`]));
+  const campos = Object.fromEntries(['FORNECEDOR_RAZAO_SOCIAL', 'FORNECEDOR_CNPJ'].map(c => [c, `Valor ${c}`]));
   const endereco = { logradouro: 'Rua Ficticia', numero: '100', complemento: '', bairro: 'Centro', cidade: 'Cidade A', uf: 'mg', cep: '30100000' };
   const corpo = { acordoId: 'ag1', campos, endereco, prazoDias: 60, data: '2026-10-30' };
 
@@ -121,7 +121,7 @@ void test('contrato: rota gera o .docx com permissao, valida campos e audita', a
   assert.equal((await pedir('GET', 'contratos', admin)).data.template, true);
   assert.equal((await pedir('POST', 'contratos', admin, { ...corpo, prazoDias: 0 })).status, 400);
   assert.equal((await pedir('POST', 'contratos', admin, { ...corpo, data: '2026-02-30x' })).status, 400);
-  assert.equal((await pedir('POST', 'contratos', admin, { ...corpo, campos: { ...campos, FORNECEDOR_REPRESENTANTE: ' ' } })).status, 400);
+  assert.equal((await pedir('POST', 'contratos', admin, { ...corpo, campos: { ...campos, FORNECEDOR_RAZAO_SOCIAL: ' ' } })).status, 400);
   assert.equal((await pedir('POST', 'contratos', admin, { ...corpo, endereco: { ...endereco, bairro: '' } })).status, 400);
   assert.equal((await pedir('POST', 'contratos', admin, { ...corpo, endereco: { ...endereco, cep: '123' } })).status, 400);
   assert.equal((await pedir('POST', 'contratos', admin, { ...corpo, acordoId: 'nao-existe' })).status, 404);

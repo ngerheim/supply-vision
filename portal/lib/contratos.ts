@@ -6,14 +6,15 @@ import { isIsoDate } from './domain.ts';
 // dentro de um unico trecho de texto do Word. O Anexo I (tabela de valores)
 // e montado a partir dos itens da versao vigente do acordo.
 
-// Os dados da contratante (representante, cidade, testemunhas) sao sempre os
-// mesmos: ficam escritos direto no template, sem campo no Portal.
+// Os dados da contratante (cidade, representante) sao sempre os mesmos e ficam
+// escritos direto no template. A assinatura e digital: o template nao tem bloco
+// de assinaturas nem representante do fornecedor.
 export const CAMPOS_CONTRATO = [
-  'FORNECEDOR_RAZAO_SOCIAL', 'FORNECEDOR_ENDERECO', 'FORNECEDOR_CNPJ', 'FORNECEDOR_REPRESENTANTE',
+  'FORNECEDOR_RAZAO_SOCIAL', 'FORNECEDOR_ENDERECO', 'FORNECEDOR_CNPJ',
   'PRAZO_PAGAMENTO_DIAS', 'PRAZO_PAGAMENTO_EXTENSO', 'DATA_ASSINATURA',
 ] as const;
-// Campos de versoes anteriores do template, hoje escritos a mao nele.
-export const CAMPOS_FIXOS_ANTIGOS = ['CIDADE_ASSINATURA', 'CONTRATANTE_REPRESENTANTE', 'TESTEMUNHA_1', 'TESTEMUNHA_2', 'TESTEMUNHA_3'] as const;
+// Campos de versoes anteriores do template, que o Portal nao preenche mais.
+export const CAMPOS_FIXOS_ANTIGOS = ['CIDADE_ASSINATURA', 'CONTRATANTE_REPRESENTANTE', 'TESTEMUNHA_1', 'TESTEMUNHA_2', 'TESTEMUNHA_3', 'FORNECEDOR_REPRESENTANTE'] as const;
 
 export const PARTES_ENDERECO = ['logradouro', 'numero', 'complemento', 'bairro', 'cidade', 'uf', 'cep'] as const;
 export type EnderecoContrato = Record<(typeof PARTES_ENDERECO)[number], string>;
