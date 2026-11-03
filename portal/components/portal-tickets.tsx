@@ -224,7 +224,7 @@ export function Tickets({ busy, users, run, initialDetail }: JsonData) {
       <TabelaPadrao contador={`${data.total ?? rows.length} ${(data.total ?? rows.length) === 1 ? 'chamado' : 'chamados'}`} pagina={<PaginacaoDeLista pagina={currentPage} paginas={pageCount} alterar={setPage} />} vazio={!rows.length ? <Empty icon={MessageSquare} title="Nenhum chamado" /> : undefined}>
       <Table className="w-full min-w-[900px] table-fixed">
               <colgroup>
-                {[12, 27, 10, 22, 14, 15].map((largura, indice) => (
+                {[9, 38, 9, 14, 12, 18].map((largura, indice) => (
                   <col key={indice} style={{ width: `${largura}%` }} />
                 ))}
               </colgroup>
