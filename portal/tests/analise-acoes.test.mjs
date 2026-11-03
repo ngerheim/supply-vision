@@ -133,6 +133,35 @@ void test('analise: sugestoes geradas no fim do envio, resolvidas com historico 
   assert.equal((await pedir('GET', 'analise/acoes', 'viewer')).data.podeResolver, false);
   assert.equal((await pedir('POST', `analise/acoes/${fechar.id}`, 'viewer', { de: 'pendente', para: 'feita' })).status, 403);
 
+  // Decisao humana no meio da conciliacao prevalece (sem evento contraditorio).
+  sql.prepare("UPDATE analise_acoes SET status='pulada',adiada_ate='2026-01-01',atualizada_em='2026-01-01T00:00:00.000Z' WHERE id=?").run(direcionar.id);
+  const loteOriginal = db.batch;
+  db.batch = async (...args) => {
+    db.batch = loteOriginal;
+    sql.prepare("UPDATE analise_acoes SET status='rejeitada',motivo='Decidido durante a conciliacao',atualizada_em='2026-11-03T12:00:00.000Z' WHERE id=?").run(direcionar.id);
+    return loteOriginal.apply(db, args);
+  };
+  await interno('analise/concluir', {});
+  assert.equal(sql.prepare('SELECT status FROM analise_acoes WHERE id=?').get(direcionar.id).status, 'rejeitada');
+  assert.equal(sql.prepare("SELECT COUNT(*) n FROM analise_acoes_eventos WHERE acao_id=? AND motivo='Fim do adiamento.'").get(direcionar.id).n, 0);
+
+  // Resolucao que perde a disputa: 409, sem evento nem auditoria de sucesso.
+  const auditoriasAntes = sql.prepare("SELECT COUNT(*) n FROM audit_logs WHERE entity='analise_acao'").get().n;
+  db.batch = async (...args) => {
+    db.batch = loteOriginal;
+    sql.prepare("UPDATE analise_acoes SET status='feita',atualizada_em='2026-11-03T12:30:00.000Z' WHERE id=?").run(fechar.id);
+    return loteOriginal.apply(db, args);
+  };
+  assert.equal((await pedir('POST', `analise/acoes/${fechar.id}`, 'editor', { de: 'pendente', para: 'rejeitada', motivo: 'Outra decisão' })).status, 409);
+  assert.equal(sql.prepare("SELECT COUNT(*) n FROM audit_logs WHERE entity='analise_acao'").get().n, auditoriasAntes);
+  assert.equal(sql.prepare("SELECT COUNT(*) n FROM analise_acoes_eventos WHERE acao_id=? AND motivo='Outra decisão'").get(fechar.id).n, 0);
+  sql.prepare("UPDATE analise_acoes SET status='pendente' WHERE id=?").run(fechar.id);
+
+  // Datas civis inexistentes sao recusadas.
+  assert.equal((await interno('analise/concluir', { corteVigencia: '2026-02-30' })).status, 400);
+  assert.equal((await interno('compras', { data: '2026-02-31', linhas: [] })).status, 400);
+  assert.equal((await pedir('GET', 'analise?de=2026-02-31&ate=2026-03-31', 'editor')).status, 400);
+
   // Painel: corte, meses anteriores marcados, pareto e fornecedor.
   const painel = await pedir('GET', 'analise?de=2026-08-01&ate=2026-10-31', 'editor');
   assert.equal(painel.data.corteVigencia, '2026-09-18');

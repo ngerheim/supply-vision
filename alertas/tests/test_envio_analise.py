@@ -78,3 +78,29 @@ def test_envia_um_dia_por_requisicao_e_para_no_primeiro_erro(monkeypatch, capsys
 def test_sem_portal_configurado_nao_envia(monkeypatch):
     monkeypatch.setattr(portal_conexao, "abrir", lambda *a, **k: (_ for _ in ()).throw(AssertionError("não deveria enviar")))
     assert envio_analise.enviar_comparacao(_df(), url="", token="") == (0, 0)
+
+
+def test_periodo_envia_todos_os_dias_inclusive_vazios(monkeypatch):
+    pedidos = []
+
+    class Resposta(io.BytesIO):
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+    def abrir(requisicao, timeout=60):
+        corpo = json.loads(requisicao.data.decode("utf-8"))
+        if requisicao.full_url.endswith("/concluir"):
+            raise OSError("Portal caiu no fim")
+        pedidos.append((corpo["data"], len(corpo["linhas"])))
+        return Resposta(b'{"success": true}')
+
+    monkeypatch.setattr(portal_conexao, "abrir", abrir)
+    # So 01/10 tem compra; 30/09 e 02/10 vao vazios e o Portal apaga o que havia.
+    enviados, falhas = envio_analise.enviar_comparacao(_df().iloc[:1], url="http://localhost:3000", token="t",
+                                                       periodo=(date(2026, 9, 30), date(2026, 10, 2)))
+    assert pedidos == [("2026-09-30", 0), ("2026-10-01", 1), ("2026-10-02", 0)]
+    # Falha ao refazer as proximas acoes conta como falha.
+    assert (enviados, falhas) == (3, 1)

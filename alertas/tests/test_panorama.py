@@ -160,9 +160,21 @@ def test_reprocessamento_da_analise_nao_gera_planilha(historico, monkeypatch, tm
                          'preparar_recorte_historico': lambda d: pytest.fail('Nao deve montar planilha')}.items():
         monkeypatch.setattr(gerar.rodar, nome, funcao, raising=False)
     falso = types.ModuleType('envio_analise')
-    falso.enviar_comparacao = lambda d: enviados.append(len(d))
+    resultado = [(3, 0)]
+    falso.enviar_comparacao = lambda d, periodo=None: enviados.append((len(d), periodo)) or resultado[0]
     monkeypatch.setitem(sys.modules, 'envio_analise', falso)
     monkeypatch.setenv('SUPPLY_VISION_SOMENTE_ANALISE', '1')
     assert gerar.gerar() is False
-    assert enviados == [1]
+    assert enviados == [(1, (date(2024, 2, 28), date(2024, 3, 1)))]
     assert not (tmp_path / 'historicos').exists()
+    # Falha no envio: o processo termina com erro, e a fila nao mostra concluido.
+    resultado[0] = (0, 3)
+    with pytest.raises(SystemExit) as erro:
+        gerar.gerar()
+    assert erro.value.code == 1
+    # Base vazia depois dos filtros: a Analise do periodo tambem esvazia.
+    resultado[0] = (3, 0)
+    monkeypatch.setattr(gerar.rodar, 'carregar_base', lambda *a: pd.DataFrame(), raising=False)
+    enviados.clear()
+    assert gerar.gerar() is False
+    assert enviados == [(0, (date(2024, 2, 28), date(2024, 3, 1)))]

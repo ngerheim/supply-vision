@@ -51,6 +51,9 @@ void test('contrato: extenso, data e CNPJ', () => {
   assert.equal(contratos.dataPorExtenso('2026-10-30'), '30 de outubro de 2026');
   assert.equal(contratos.dataPorExtenso('2026-01-05'), '5 de janeiro de 2026');
   assert.throws(() => contratos.dataPorExtenso('2026-13-01'), RangeError);
+  assert.throws(() => contratos.dataPorExtenso('2026-02-31'), RangeError);
+  assert.throws(() => contratos.dataPorExtenso('2026-11-00'), RangeError);
+  assert.equal(contratos.dataPorExtenso('2028-02-29'), '29 de fevereiro de 2028');
   assert.equal(contratos.formatarCnpj('12345678000199'), '12.345.678/0001-99');
 });
 

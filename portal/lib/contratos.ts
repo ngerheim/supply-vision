@@ -1,4 +1,5 @@
 import * as XLSX from 'xlsx';
+import { isIsoDate } from './domain.ts';
 
 // Preenche o template .docx do contrato de fornecimento. O template fica na
 // pasta privada (nunca no Git): campos no formato {{NOME}}, cada um inteiro
@@ -56,7 +57,7 @@ const MESES = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julh
 // Data civil AAAA-MM-DD → "30 de outubro de 2026".
 export function dataPorExtenso(data: string): string {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(data);
-  if (!m || Number(m[2]) < 1 || Number(m[2]) > 12) throw new RangeError('Data inválida.');
+  if (!m || !isIsoDate(data)) throw new RangeError('Data inválida.');
   return `${Number(m[3])} de ${MESES[Number(m[2]) - 1]} de ${m[1]}`;
 }
 
