@@ -21,7 +21,8 @@ const unc = /(?:^|[\s="'`])\\{2,4}([a-z0-9._-]+)\\{1,4}([a-z0-9_$.-]+)/gi;
 const uncAlternativo = /(?:^|[\s="'`([{<])\\{2,}([a-z0-9](?:[a-z0-9._-]*[a-z0-9])?)\\+([a-z0-9_$.-]+)/gi;
 const redeUrl = /(?:\b(?:file|smb):\/{2}|(?:^|[\s="'`([{<])\/{2})([a-z0-9._-]+)\/+([a-z0-9_$.-]+)/gi;
 const email = /(?<![a-z0-9._%+-])[a-z0-9_%+-](?:[a-z0-9._%+-]*[a-z0-9_%+-])?@((?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,})(?![a-z0-9.-])/gi;
-const emailsNoreply = new Set(['noreply@openai.com', 'noreply@anthropic.com', 'noreply@github.com']);
+// support@github.com: assinatura publica do Dependabot (Signed-off-by), nunca um dominio inteiro.
+const emailsNoreply = new Set(['noreply@openai.com', 'noreply@anthropic.com', 'noreply@github.com', 'support@github.com']);
 const maquina = /\b[a-z]{2}-\d{4}\b/i;
 // Delimitadores evitam confundir chamadas/propriedades JS com uma conta literal.
 const conta = /(?:^|[\s="'`\\])([a-z][a-z0-9_-]+\.[a-z][a-z0-9_-]+)(?=$|[\s"'`,;\\])/gi;

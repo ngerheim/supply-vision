@@ -9,10 +9,10 @@ import { arquivosComInfraInterna, lerTermosProibidos, contemInfra, commitsComInf
 
 const fixtureProibida = ['10', '23', '45', '67'].join('.');
 const padroesFicticios = [fixtureProibida, 'ZZ-4321', 'pessoa.ficticia'];
-const noreplyPermitidos = ['noreply@openai.com', 'noreply@anthropic.com', 'noreply@github.com', '12345+fixture-user@users.noreply.github.com'];
+const noreplyPermitidos = ['noreply@openai.com', 'noreply@anthropic.com', 'noreply@github.com', 'support@github.com', '12345+fixture-user@users.noreply.github.com'];
 const noreplyRecusados = [
   'contato' + '@openai.com', 'contato' + '@anthropic.com', 'contato' + '@github.com',
-  'noreply' + '@openai.com.br', 'noreply' + '@users.noreply.github.com',
+  'noreply' + '@openai.com.br', 'noreply' + '@users.noreply.github.com', 'support' + '@github.com.br', 'suporte' + '@github.com',
   'alguem' + '@empresa.com.br', 'abc+fixture' + '@users.noreply.github.com',
   '12345+' + '@users.noreply.github.com', '12345+fixture_user' + '@users.noreply.github.com',
   '12345+fixture+extra' + '@users.noreply.github.com',
