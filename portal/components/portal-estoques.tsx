@@ -5,6 +5,7 @@ import { api, ApiError, errorText } from '@/lib/api';
 import { pode } from '@/lib/permissoes';
 import { corpoJson } from '@/lib/solicitacoes-cliente';
 import { Button } from '@/components/ui/button';
+import { gerarChaveRelatorio } from '@/lib/relatorios';
 import { Input } from '@/components/ui/input';
 import { CampoData } from './campo-data';
 import { Badge } from '@/components/ui/badge';
@@ -252,9 +253,8 @@ export function EntradaEstoque() {
     [observacao, setObservacao] = useState(''),
     [busca, setBusca] = useState(''),
     [itens, setItens] = useState<AnyRow[]>([]),
-    [linhas, setLinhas] = useState<{ id: string; quantidade: string }[]>([
-      { id: '', quantidade: '' },
-    ]),
+    // As linhas nascem da busca do catalogo; nao ha linha vazia a preencher.
+    [linhas, setLinhas] = useState<{ id: string; quantidade: string }[]>([]),
     [erro, setErro] = useState(''),
     [busy, setBusy] = useState(false);
   const consultaEntradas = new URLSearchParams({
@@ -328,7 +328,7 @@ export function EntradaEstoque() {
     setObservacao('');
     setBusca('');
     setItens([]);
-    setLinhas([{ id: '', quantidade: '' }]);
+    setLinhas([]);
     tentativa.current = null;
   };
   const salvar = async (e: React.SyntheticEvent<HTMLFormElement>) => {
@@ -346,9 +346,11 @@ export function EntradaEstoque() {
       );
       return;
     }
+    // randomUUID so existe em HTTPS; no HTTP da rede interna ele quebrava
+    // antes do try e deixava o formulario travado em "ocupado".
+    tentativa.current ??= gerarChaveRelatorio();
     setBusy(true);
     setErro('');
-    tentativa.current ??= crypto.randomUUID();
     try {
       await api('/api/estoque/entradas', {
         ...corpoJson('POST', {
@@ -593,28 +595,13 @@ export function EntradaEstoque() {
                         type="button"
                         variant="outline"
                         aria-label={`Remover linha ${n + 1}`}
-                        onClick={() =>
-                          setLinhas(
-                            linhas.length === 1
-                              ? [{ id: '', quantidade: '' }]
-                              : linhas.filter((_, i) => i !== n),
-                          )
-                        }
+                        onClick={() => setLinhas(linhas.filter((_, i) => i !== n))}
                       >
                         Remover
                       </Button>
                     </div>
                   );
                 })}
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() =>
-                    setLinhas([...linhas, { id: '', quantidade: '' }])
-                  }
-                >
-                  + Adicionar item
-                </Button>
               </div>
               {erro && <p role="alert">{erro}</p>}
               <footer className="flex justify-end gap-2 border-t pt-4">
@@ -696,8 +683,8 @@ export function SaldoEstoque({ user }: { user: AnyRow }) {
     }
   };
   const salvarAjuste = async (body: AnyRow) => {
+    tentativaAjuste.current ??= gerarChaveRelatorio();
     setBusy(true);
-    tentativaAjuste.current ??= crypto.randomUUID();
     try {
       await api('/api/estoque/ajustes', {
         ...corpoJson('POST', body),
