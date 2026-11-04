@@ -18,9 +18,11 @@ const inteiro = new Intl.NumberFormat('pt-BR');
 const rs = (v: unknown) => (v === null || v === undefined ? '—' : moeda.format(Number(v)));
 const dataBr = (d: string | null) => (d ? d.split('-').reverse().join('/') : '—');
 const LIMITE_TELA = 500;
-// Colunas curtas encolhem ao conteudo; fornecedor e item ficam com o resto.
-const CURTA = 'w-px px-1.5';
-const ESTREITAS = new Set(['Data', 'OS', 'Cidade']);
+// A tabela do Portal usa table-layout fixed: as colunas curtas tem largura
+// fixa e fornecedor e item dividem o espaco que sobra.
+const LARGURA: Record<string, number> = { Data: 96, OS: 76, Criador: 120, Cidade: 120, Modelo: 110, Qtd: 52,
+  'Preço OS': 112, 'Preço acordo': 112, 'Dif. unit.': 104, 'Dif. total': 112, Situação: 130 };
+const NUM = 'patio-num tabular-nums';
 
 const SITUACAO: Record<string, { rotulo: string; classe: string }> = {
   'ACIMA DO ACORDO': { rotulo: 'Acima do acordo', classe: 'bg-destructive/10 text-destructive' },
@@ -167,24 +169,24 @@ export function Alertas({ inicial }: { inicial: string | null }) {
                 vazio={!filtradas.length ? <p className="p-4 text-sm text-muted-foreground">{linhas.length ? 'Nenhum registro com esses filtros.' : 'Nenhum registro fora do acordo nesta rodada.'}</p> : undefined}
               >
                 <TableHeader><TableRow>
-                  {['Data', 'OS', 'Criador', 'Cidade', 'Fornecedor', 'Modelo', 'Item'].map(t => <TableHead key={t} className={ESTREITAS.has(t) ? CURTA : undefined}>{t}</TableHead>)}
-                  {['Qtd', 'Preço OS', 'Preço acordo', 'Dif. unit.', 'Dif. total'].map(t => <TableHead key={t} className={`${CURTA} whitespace-normal text-right leading-tight`}>{t}</TableHead>)}
-                  <TableHead>Situação</TableHead>
+                  {['Data', 'OS', 'Criador', 'Cidade', 'Fornecedor', 'Modelo', 'Item'].map(t => <TableHead key={t} style={LARGURA[t] ? { width: LARGURA[t] } : undefined}>{t}</TableHead>)}
+                  {['Qtd', 'Preço OS', 'Preço acordo', 'Dif. unit.', 'Dif. total'].map(t => <TableHead key={t} className="patio-num text-right" style={{ width: LARGURA[t] }}>{t}</TableHead>)}
+                  <TableHead style={{ width: LARGURA['Situação'] }}>Situação</TableHead>
                 </TableRow></TableHeader>
                 <TableBody>{filtradas.slice(0, LIMITE_TELA).map((l, i) => (
                   <TableRow key={`${l.os}-${l.item}-${i}`}>
-                    <TableCell className={`${CURTA} tabular-nums`}>{dataBr(l.data)}</TableCell>
-                    <TableCell className={`${CURTA} tabular-nums`}>{l.os ?? '—'}</TableCell>
-                    <TableCell className="max-w-36 truncate" title={l.criador ?? ''}>{l.criador ?? '—'}</TableCell>
-                    <TableCell className={CURTA}>{l.cidade ?? '—'}</TableCell>
-                    <TableCell className="min-w-48 whitespace-normal break-words">{l.fornecedor ?? '—'}</TableCell>
-                    <TableCell className="max-w-36 truncate" title={l.modelo ?? ''}>{l.modelo ?? '—'}</TableCell>
-                    <TableCell className="min-w-56 whitespace-normal break-words">{l.item ?? '—'}</TableCell>
-                    <TableCell className={`${CURTA} text-right tabular-nums`}>{l.qtd === null ? '—' : Number(l.qtd).toLocaleString('pt-BR')}</TableCell>
-                    <TableCell className={`${CURTA} text-right tabular-nums`}>{rs(l.precoOs)}</TableCell>
-                    <TableCell className={`${CURTA} text-right tabular-nums`}>{rs(l.precoAcordo)}</TableCell>
-                    <TableCell className={`${CURTA} text-right tabular-nums`}>{rs(l.difUnit)}</TableCell>
-                    <TableCell className={`${CURTA} text-right font-medium tabular-nums`}>{rs(l.difTotal)}</TableCell>
+                    <TableCell className={NUM}>{dataBr(l.data)}</TableCell>
+                    <TableCell className={NUM}>{l.os ?? '—'}</TableCell>
+                    <TableCell className="truncate" title={l.criador ?? ''}>{l.criador ?? '—'}</TableCell>
+                    <TableCell>{l.cidade ?? '—'}</TableCell>
+                    <TableCell>{l.fornecedor ?? '—'}</TableCell>
+                    <TableCell className="truncate" title={l.modelo ?? ''}>{l.modelo ?? '—'}</TableCell>
+                    <TableCell>{l.item ?? '—'}</TableCell>
+                    <TableCell className={`${NUM} text-right`}>{l.qtd === null ? '—' : Number(l.qtd).toLocaleString('pt-BR')}</TableCell>
+                    <TableCell className={`${NUM} text-right`}>{rs(l.precoOs)}</TableCell>
+                    <TableCell className={`${NUM} text-right`}>{rs(l.precoAcordo)}</TableCell>
+                    <TableCell className={`${NUM} text-right`}>{rs(l.difUnit)}</TableCell>
+                    <TableCell className={`${NUM} text-right font-medium`}>{rs(l.difTotal)}</TableCell>
                     <TableCell><span className={`inline-flex rounded px-1.5 py-0.5 text-xs font-medium ${SITUACAO[l.status]?.classe ?? ''}`}>{SITUACAO[l.status]?.rotulo ?? l.status}</span></TableCell>
                   </TableRow>
                 ))}</TableBody>
