@@ -18,6 +18,9 @@ const inteiro = new Intl.NumberFormat('pt-BR');
 const rs = (v: unknown) => (v === null || v === undefined ? '—' : moeda.format(Number(v)));
 const dataBr = (d: string | null) => (d ? d.split('-').reverse().join('/') : '—');
 const LIMITE_TELA = 500;
+// Colunas curtas encolhem ao conteudo; fornecedor e item ficam com o resto.
+const CURTA = 'w-px px-1.5';
+const ESTREITAS = new Set(['Data', 'OS', 'Cidade']);
 
 const SITUACAO: Record<string, { rotulo: string; classe: string }> = {
   'ACIMA DO ACORDO': { rotulo: 'Acima do acordo', classe: 'bg-destructive/10 text-destructive' },
@@ -27,7 +30,7 @@ const SITUACAO: Record<string, { rotulo: string; classe: string }> = {
 function Indicador({ titulo, valor, detalhe }: { titulo: string; valor: string; detalhe?: string }) {
   return (
     <Card className="min-w-0">
-      <CardContent className="space-y-1 pt-4">
+      <CardContent className="space-y-1">
         <p className="text-xs font-medium text-muted-foreground">{titulo}</p>
         <p className="text-2xl font-semibold tabular-nums">{valor}</p>
         {detalhe && <p className="text-xs text-muted-foreground">{detalhe}</p>}
@@ -154,35 +157,34 @@ export function Alertas({ inicial }: { inicial: string | null }) {
                 </Aviso>
               )}
               {rodada.qualidadePendente && <Aviso>A base de acordos tem pendências a corrigir. O relatório de qualidade dos acordos foi gerado nesta rodada.</Aviso>}
-              <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+              <div className="grid grid-cols-3 gap-3">
                 <Indicador titulo="Acima do acordo" valor={inteiro.format(rodada.acima)} detalhe={`${rs(rodada.difAcima)} pagos a mais`} />
                 <Indicador titulo="Abaixo do acordo" valor={inteiro.format(rodada.abaixo)} detalhe={`${rs(Math.abs(Number(rodada.difAbaixo)))} abaixo do acordo`} />
                 <Indicador titulo="Linhas comparáveis" valor={inteiro.format(resumo.totalElegivel ?? 0)} detalhe={`${inteiro.format(resumo.conformes ?? 0)} conformes · ${inteiro.format(resumo.semAcordo ?? 0)} sem acordo`} />
-                <Indicador titulo="Pendências" valor={inteiro.format(resumo.pendencias ?? 0)} detalhe={`${String(resumo.percentualPendencias ?? 0).replace('.', ',')}% das compras brutas`} />
               </div>
               <TabelaPadrao
                 contador={`${inteiro.format(filtradas.length)} ${filtradas.length === 1 ? 'registro' : 'registros'} · diferença ${rs(difFiltro)}${filtradas.length > LIMITE_TELA ? ` · mostrando os primeiros ${LIMITE_TELA}; baixe a planilha para ver todos` : ''}`}
                 vazio={!filtradas.length ? <p className="p-4 text-sm text-muted-foreground">{linhas.length ? 'Nenhum registro com esses filtros.' : 'Nenhum registro fora do acordo nesta rodada.'}</p> : undefined}
               >
                 <TableHeader><TableRow>
-                  {['Data', 'OS', 'Criador', 'Cidade', 'Fornecedor', 'Modelo', 'Item'].map(t => <TableHead key={t}>{t}</TableHead>)}
-                  {['Qtd', 'Preço OS', 'Preço acordo', 'Dif. unit.', 'Dif. total'].map(t => <TableHead key={t} className="text-right">{t}</TableHead>)}
+                  {['Data', 'OS', 'Criador', 'Cidade', 'Fornecedor', 'Modelo', 'Item'].map(t => <TableHead key={t} className={ESTREITAS.has(t) ? CURTA : undefined}>{t}</TableHead>)}
+                  {['Qtd', 'Preço OS', 'Preço acordo', 'Dif. unit.', 'Dif. total'].map(t => <TableHead key={t} className={`${CURTA} whitespace-normal text-right leading-tight`}>{t}</TableHead>)}
                   <TableHead>Situação</TableHead>
                 </TableRow></TableHeader>
                 <TableBody>{filtradas.slice(0, LIMITE_TELA).map((l, i) => (
                   <TableRow key={`${l.os}-${l.item}-${i}`}>
-                    <TableCell className="tabular-nums">{dataBr(l.data)}</TableCell>
-                    <TableCell className="tabular-nums">{l.os ?? '—'}</TableCell>
+                    <TableCell className={`${CURTA} tabular-nums`}>{dataBr(l.data)}</TableCell>
+                    <TableCell className={`${CURTA} tabular-nums`}>{l.os ?? '—'}</TableCell>
                     <TableCell className="max-w-36 truncate" title={l.criador ?? ''}>{l.criador ?? '—'}</TableCell>
-                    <TableCell>{l.cidade ?? '—'}{l.uf ? ` / ${l.uf}` : ''}</TableCell>
-                    <TableCell className="max-w-48 truncate" title={l.fornecedor ?? ''}>{l.fornecedor ?? '—'}</TableCell>
+                    <TableCell className={CURTA}>{l.cidade ?? '—'}</TableCell>
+                    <TableCell className="min-w-48 whitespace-normal break-words">{l.fornecedor ?? '—'}</TableCell>
                     <TableCell className="max-w-36 truncate" title={l.modelo ?? ''}>{l.modelo ?? '—'}</TableCell>
-                    <TableCell className="max-w-64 truncate" title={l.item ?? ''}>{l.item ?? '—'}</TableCell>
-                    <TableCell className="text-right tabular-nums">{l.qtd === null ? '—' : Number(l.qtd).toLocaleString('pt-BR')}</TableCell>
-                    <TableCell className="text-right tabular-nums">{rs(l.precoOs)}</TableCell>
-                    <TableCell className="text-right tabular-nums">{rs(l.precoAcordo)}</TableCell>
-                    <TableCell className="text-right tabular-nums">{rs(l.difUnit)}</TableCell>
-                    <TableCell className="text-right font-medium tabular-nums">{rs(l.difTotal)}</TableCell>
+                    <TableCell className="min-w-56 whitespace-normal break-words">{l.item ?? '—'}</TableCell>
+                    <TableCell className={`${CURTA} text-right tabular-nums`}>{l.qtd === null ? '—' : Number(l.qtd).toLocaleString('pt-BR')}</TableCell>
+                    <TableCell className={`${CURTA} text-right tabular-nums`}>{rs(l.precoOs)}</TableCell>
+                    <TableCell className={`${CURTA} text-right tabular-nums`}>{rs(l.precoAcordo)}</TableCell>
+                    <TableCell className={`${CURTA} text-right tabular-nums`}>{rs(l.difUnit)}</TableCell>
+                    <TableCell className={`${CURTA} text-right font-medium tabular-nums`}>{rs(l.difTotal)}</TableCell>
                     <TableCell><span className={`inline-flex rounded px-1.5 py-0.5 text-xs font-medium ${SITUACAO[l.status]?.classe ?? ''}`}>{SITUACAO[l.status]?.rotulo ?? l.status}</span></TableCell>
                   </TableRow>
                 ))}</TableBody>

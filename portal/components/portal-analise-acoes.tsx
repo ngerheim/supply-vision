@@ -95,7 +95,7 @@ export function ProximaAcao({ verTodas, abrirFornecedor }: { verTodas: () => voi
   if (!dados) return null;
   return (
     <Card className="border-primary/40">
-      <CardContent className="flex flex-col gap-3 pt-4 md:flex-row md:items-center md:justify-between">
+      <CardContent className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div className="flex min-w-0 gap-3">
           <Lightbulb aria-hidden="true" className="mt-0.5 size-5 shrink-0 text-primary" />
           <div className="min-w-0 space-y-0.5">

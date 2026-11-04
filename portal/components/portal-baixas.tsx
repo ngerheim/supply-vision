@@ -13,6 +13,7 @@ import { corpoJson, dataHoraSolicitacao } from "@/lib/solicitacoes-cliente";
 import { gerarChaveRelatorio } from "@/lib/relatorios";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { CampoData } from "./campo-data";
 import { PageHeader, LinhaDeAba } from "./page-header";
 import { BarraFiltros, TabelaPadrao } from "./tela-padrao";
 import { Plaquinha } from "./plaquinha";
@@ -169,8 +170,8 @@ export function ListaBaixas({
                 </option>
               ))}
           </select>
-          <Input aria-label="Período: De" name="de" type="date" value={filtros.de} onChange={(e) => filtrar("de", e.target.value)} />
-          <Input aria-label="Período: Até" name="ate" type="date" min={filtros.de} value={filtros.ate} onChange={(e) => filtrar("ate", e.target.value)} />
+          <CampoData aria-label="Período: De" value={filtros.de} onChange={(v) => filtrar("de", v)} />
+          <CampoData aria-label="Período: Até" min={filtros.de} value={filtros.ate} onChange={(v) => filtrar("ate", v)} />
       </BarraFiltros>
       {estoques.erro && <p role="alert">{estoques.erro}</p>}
       {erro ? (

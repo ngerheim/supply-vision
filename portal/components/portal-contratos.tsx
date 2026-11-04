@@ -5,6 +5,7 @@ import { LinhaDeAba } from './page-header';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { CampoData } from './campo-data';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { api, baixarArquivo, errorText } from '@/lib/api';
 import { Field, Loading } from './portal-presentation';
@@ -87,7 +88,7 @@ export function Contratos({ busy }: { busy: boolean }) {
           <Input inputMode="numeric" value={prazo} onChange={e => setPrazo(e.target.value.replace(/\D/g, '').slice(0, 3))} />
         </Field>
         <Field label="Data da assinatura" className="md:col-span-1">
-          <Input type="date" value={data} onChange={e => setData(e.target.value)} />
+          <CampoData value={data} onChange={setData} />
         </Field>
         {PARTES.map(([parte, rotulo, coluna]) => (
           <Field key={parte} label={rotulo} className={coluna}>

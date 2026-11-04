@@ -4,13 +4,15 @@ import { dataBrasileiraParaIso, exibirDataBrasileira, mascararDataBrasileira } f
 import { Input } from './ui/input';
 
 /** Displays a Brazilian date while preserving the ISO value used by the API. */
-export function CampoData({ value, onChange, min, required, disabled, id }: {
+export function CampoData({ value, onChange, min, required, disabled, id, className, 'aria-label': ariaLabel }: {
   value: string;
   onChange: (iso: string) => void;
   min?: string;
   required?: boolean;
   disabled?: boolean;
   id?: string;
+  className?: string;
+  'aria-label'?: string;
 }) {
   const [draft, setDraft] = useState({ iso: value, text: exibirDataBrasileira(value) });
   const text = draft.iso === value ? draft.text : exibirDataBrasileira(value);
@@ -22,7 +24,7 @@ export function CampoData({ value, onChange, min, required, disabled, id }: {
     } catch { return 'Informe uma data válida em dd/mm/aaaa.'; }
   }
   const error = validar(text);
-  return <Input id={id} type="text" inputMode="numeric" placeholder="dd/mm/aaaa" maxLength={10}
+  return <Input id={id} className={className} aria-label={ariaLabel} type="text" inputMode="numeric" placeholder="dd/mm/aaaa" maxLength={10}
     required={required} disabled={disabled} value={text} aria-invalid={!!text && !!error}
     ref={node => { node?.setCustomValidity(error); }}
     onBlur={event => { event.currentTarget.reportValidity(); }}

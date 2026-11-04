@@ -177,3 +177,21 @@ void test('analise: sugestoes geradas no fim do envio, resolvidas com historico 
   assert.equal(f.data.indicadores.pagoAcima, 500);
   assert.equal(f.data.itens.find(i => i.modelo === 'M1').medianaPreco, 100);
 });
+
+void test('acoes: item sem acordo em muitas cidades aponta o fornecedor que mais vendeu', async () => {
+  const { candidatas } = await import('../lib/analise-acoes.ts');
+  const db = new DatabaseSync(':memory:');
+  db.exec(`CREATE TABLE compras_comparadas (data TEXT, status TEXT, total_os REAL, fornecedor TEXT, cidade TEXT, motivo TEXT,
+    tinha_acordo INTEGER, item TEXT, modelo TEXT, dif_menor REAL, dif_total REAL, fornecedor_acordo TEXT)`);
+  const inserir = db.prepare("INSERT INTO compras_comparadas VALUES ('2026-10-20','SEM ACORDO',?,?,?,'Sinonimo',0,'OLEO FICTICIO','M',0,0,NULL)");
+  for (let i = 0; i < 12; i++) inserir.run(5000, 'Fornecedor A', `Cidade ${i}`);
+  for (let i = 0; i < 3; i++) inserir.run(1000, 'Fornecedor B', `Cidade ${i}`);
+  const all = async (sql, values = []) => db.prepare(sql).all(...values);
+  const amplo = (await candidatas(all, '2026-10-31')).filter(c => c.tipo === 'acordo_amplo');
+  assert.equal(amplo.length, 1);
+  assert.equal(amplo[0].chave, 'acordo_amplo|OLEO FICTICIO|Fornecedor A');
+  assert.equal(amplo[0].titulo, 'Negociar acordo de OLEO FICTICIO com Fornecedor A');
+  assert.deepEqual(amplo[0].filtro, { fornecedor: 'Fornecedor A' });
+  assert.equal(amplo[0].impacto, 60000);
+  db.close();
+});

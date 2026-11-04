@@ -1,12 +1,12 @@
 'use client';
 import { useEffect, useState, type ReactNode } from 'react';
-import { Loader2, RefreshCw } from 'lucide-react';
+import { Copy, Loader2, RefreshCw } from 'lucide-react';
+import { CampoData } from './campo-data';
 import { LinhaDeAba } from './page-header';
 import { ProximaAcao } from './portal-analise-acoes';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { api, errorText } from '@/lib/api';
@@ -32,7 +32,7 @@ const LINHAS_VISIVEIS = 20;
 function Indicador({ titulo, valor, detalhe }: { titulo: string; valor: string; detalhe?: ReactNode }) {
   return (
     <Card className="min-w-0">
-      <CardContent className="space-y-1 pt-4">
+      <CardContent className="space-y-1">
         <p className="text-xs font-medium text-muted-foreground">{titulo}</p>
         <p className="text-2xl font-semibold tabular-nums">{valor}</p>
         {detalhe && <p className="text-xs text-muted-foreground">{detalhe}</p>}
@@ -162,6 +162,32 @@ export function DetalheFornecedor({ nome, consulta = '', fechar }: { nome: strin
   );
 }
 
+// Termos das compras que nao casam com nenhum item de acordo: um por linha,
+// para colar no De/Para ou nos filtros de exclusao.
+function Sinonimos({ termos, fechar }: { termos: AnyRow[] | null; fechar: () => void }) {
+  const [copiado, setCopiado] = useState(false);
+  if (!termos) return null;
+  const copiar = () => void navigator.clipboard.writeText(termos.map(t => t.termo).join('\n')).then(() => setCopiado(true));
+  return (
+    <Dialog open onOpenChange={aberto => { if (!aberto) { setCopiado(false); fechar(); } }}>
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
+        <DialogHeader><DialogTitle>Sinônimos sem De/Para ({inteiro.format(termos.length)})</DialogTitle></DialogHeader>
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-xs text-muted-foreground">Termos do período filtrado, do maior gasto para o menor.</p>
+          <Button size="sm" variant="outline" disabled={!termos.length} onClick={copiar}><Copy /> {copiado ? 'Copiado' : 'Copiar termos'}</Button>
+        </div>
+        <Table>
+          <TableHeader><TableRow><TableHead>Termo</TableHead><TableHead className="text-right">Gasto</TableHead><TableHead className="text-right">Linhas</TableHead></TableRow></TableHeader>
+          <TableBody>{termos.map(t => (
+            <TableRow key={t.termo}><TableCell className="whitespace-normal break-words select-all">{t.termo}</TableCell>
+              <TableCell className="text-right tabular-nums">{rs(t.gasto)}</TableCell><TableCell className="text-right tabular-nums">{inteiro.format(t.linhas)}</TableCell></TableRow>
+          ))}</TableBody>
+        </Table>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 const consultaDe = (f: Filtros) => {
   const params = new URLSearchParams();
   for (const [chave, valor] of Object.entries(f)) if (valor) params.set(chave, valor);
@@ -179,6 +205,7 @@ export function Analise({ verAcoes }: { verAcoes: () => void }) {
   const [fornecedorAberto, setFornecedorAberto] = useState<string | null>(null);
   const [concentracao, setConcentracao] = useState<'fornecedores' | 'itens'>('fornecedores');
   const [todos, setTodos] = useState(false);
+  const [verSinonimos, setVerSinonimos] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -187,7 +214,6 @@ export function Analise({ verAcoes }: { verAcoes: () => void }) {
       if (controller.signal.aborted) return;
       setDados(resposta);
       setErro('');
-      setRascunho(atual => ({ ...atual, de: atual.de || resposta.filtros.de, ate: atual.ate || resposta.filtros.ate }));
     }).catch(falha => { if (!controller.signal.aborted) setErro(errorText(falha)); })
       .finally(() => { if (!controller.signal.aborted) setCarregando(false); });
     return () => controller.abort();
@@ -198,7 +224,8 @@ export function Analise({ verAcoes }: { verAcoes: () => void }) {
 
   const ind = dados.indicadores, ant = dados.anoAnterior;
   const efetivos: Filtros = { ...aplicados, de: dados.filtros.de, ate: dados.filtros.ate };
-  const alterado = (Object.keys(VAZIO) as (keyof Filtros)[]).some(k => (rascunho[k] || '') !== (efetivos[k] || ''));
+  // Datas em branco = período padrão do servidor (mostrado na linha abaixo).
+  const alterado = (Object.keys(VAZIO) as (keyof Filtros)[]).some(k => (rascunho[k] || '') !== (aplicados[k] || ''));
   const atualizar = () => { if (alterado) setAplicados({ ...rascunho }); else setTentativa(t => t + 1); };
   const maxMes = Math.max(0, ...dados.mensal.map((m: AnyRow) => Number(m.gasto || 0)));
   const maxAcima = Math.max(0, ...dados.acimaPorFornecedor.map((l: AnyRow) => Number(l.pagoAcima || 0)));
@@ -218,8 +245,8 @@ export function Analise({ verAcoes }: { verAcoes: () => void }) {
       <LinhaDeAba />
       <ProximaAcao verTodas={verAcoes} abrirFornecedor={setFornecedorAberto} />
       <form className="patio-filters patio-filters-rotulados" onSubmit={e => { e.preventDefault(); atualizar(); }}>
-        <Field label="De"><Input type="date" value={rascunho.de} onChange={e => setRascunho(r => ({ ...r, de: e.target.value }))} /></Field>
-        <Field label="Até"><Input type="date" value={rascunho.ate} onChange={e => setRascunho(r => ({ ...r, ate: e.target.value }))} /></Field>
+        <Field label="De"><CampoData value={rascunho.de} onChange={de => setRascunho(r => ({ ...r, de }))} /></Field>
+        <Field label="Até"><CampoData value={rascunho.ate} min={rascunho.de || undefined} onChange={ate => setRascunho(r => ({ ...r, ate }))} /></Field>
         {(['cidade', 'fornecedor', 'grupo'] as const).map(campo => (
           <Field key={campo} label={campo === 'grupo' ? 'Grupo de despesa' : campo === 'cidade' ? 'Cidade' : 'Fornecedor'}>
             <NativeSelect value={rascunho[campo]} onChange={e => setRascunho(r => ({ ...r, [campo]: e.target.value }))}>
@@ -233,7 +260,7 @@ export function Analise({ verAcoes }: { verAcoes: () => void }) {
         </Button>
       </form>
       <p className="text-xs text-muted-foreground" aria-live="polite">
-        {semDados ? 'Ainda não há compras recebidas do Alertas.' : `${inteiro.format(ind.linhas)} linhas no filtro`}
+        {semDados ? 'Ainda não há compras recebidas do Alertas.' : `${dataBr(dados.filtros.de)} a ${dataBr(dados.filtros.ate)} · ${inteiro.format(ind.linhas)} linhas no filtro`}
         {dados.disponivel.atualizadoEm && ` · dados atualizados em ${dataHoraSolicitacao(dados.disponivel.atualizadoEm)}`}
         {dados.corteVigencia && (
           <span title="Antes do corte, as compras são comparadas com a tabela atual de acordos, não com a que valia na época.">
@@ -302,11 +329,13 @@ export function Analise({ verAcoes }: { verAcoes: () => void }) {
               </TableRow>
             ))}</TableBody>
           </Bloco>
-          <Bloco titulo="Por que ficou sem acordo" vazio={!dados.motivosSemAcordo.length} rodape="Passe o mouse no motivo para ver o que fazer.">
+          <Bloco titulo="Por que ficou sem acordo" vazio={!dados.motivosSemAcordo.length} rodape="Passe o mouse no motivo para ver o que fazer. Clique em Sinônimo para ver e copiar os termos.">
             <TableHeader><TableRow><TableHead>Motivo</TableHead><TableHead className="text-right">Gasto</TableHead><TableHead className="text-right">Linhas</TableHead></TableRow></TableHeader>
             <TableBody>{dados.motivosSemAcordo.map((l: AnyRow) => (
               <TableRow key={l.motivo} title={MOTIVOS[l.motivo]}>
-                <TableCell className="underline decoration-dotted underline-offset-4">{l.motivo === 'Sinonimo' ? 'Sinônimo' : l.motivo}</TableCell>
+                <TableCell className="underline decoration-dotted underline-offset-4">{l.motivo === 'Sinonimo'
+                  ? <button type="button" className="text-link underline decoration-dotted underline-offset-4" onClick={() => setVerSinonimos(true)}>Sinônimo</button>
+                  : l.motivo}</TableCell>
                 <TableCell className="text-right tabular-nums">{rs(l.gasto)}</TableCell><TableCell className="text-right tabular-nums">{inteiro.format(l.linhas)}</TableCell>
               </TableRow>
             ))}</TableBody>
@@ -356,6 +385,7 @@ export function Analise({ verAcoes }: { verAcoes: () => void }) {
           ))}</TableBody>
         </Bloco>
       </div>
+      <Sinonimos termos={verSinonimos ? (dados.sinonimos ?? []) : null} fechar={() => setVerSinonimos(false)} />
       <DetalheFornecedor nome={fornecedorAberto} consulta={consultaDe(efetivos)} fechar={() => setFornecedorAberto(null)} />
     </div>
   );

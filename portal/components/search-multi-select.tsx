@@ -90,7 +90,7 @@ export function SearchMultiSelect({
         isItemEqualToValue={(a, b) => a.id === b.id}
         filter={(o, q) => correspondeBusca(o.name, q)}
       >
-        <Combobox.Chips ref={control} className="patio-multicontrol">
+        <Combobox.Chips ref={control} className="patio-multicontrol patio-combo">
           {selected.slice(0, visibleCount).map((o) => (
             <Combobox.Chip
               key={o.id}
@@ -140,8 +140,9 @@ export function SearchMultiSelect({
           </Combobox.Trigger>
         </Combobox.Chips>
         <Combobox.Portal>
-          <Combobox.Positioner sideOffset={4} className="z-[150]">
-            <Combobox.Popup className="max-h-64 w-[var(--anchor-width)] min-w-48 overflow-y-auto rounded-lg border bg-popover p-1 text-popover-foreground shadow-lg">
+          {/* Ancorado no campo inteiro (chips + busca + seta), não só no input. */}
+          <Combobox.Positioner anchor={control} align="start" sideOffset={4} className="z-[150]">
+            <Combobox.Popup className="max-h-72 w-[var(--anchor-width)] min-w-48 overflow-y-auto rounded-lg border bg-popover p-1 text-popover-foreground shadow-lg">
               {loading && (
                 <output className="block p-2 text-sm text-muted-foreground">
                   Atualizando opções…

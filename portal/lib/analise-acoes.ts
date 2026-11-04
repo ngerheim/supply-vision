@@ -10,7 +10,7 @@ export const TIPOS_ACAO = {
   ampliar_item: 'Incluir item no acordo',
   ampliar_modelo: 'Incluir modelo no acordo',
   ampliar_cidade: 'Estender acordo para a cidade',
-  acordo_amplo: 'Negociar acordo amplo',
+  acordo_amplo: 'Negociar acordo do item',
   sinonimo: 'Atualizar De/Para',
 } as const;
 export type TipoAcao = keyof typeof TIPOS_ACAO;
@@ -97,12 +97,23 @@ export async function candidatas(all: Consultar, ultimoDia: string): Promise<Can
     }
   }
 
-  for (const r of await all<{ item: string; n: number; gasto: number; cidades: number }>(`SELECT c.item, COUNT(*) n, SUM(c.total_os) gasto,
-    COUNT(DISTINCT c.cidade) cidades FROM compras_comparadas c WHERE ${SEM} AND c.item IS NOT NULL
-    GROUP BY c.item HAVING COUNT(DISTINCT c.cidade)>=10 AND SUM(c.total_os)>=?`, [...p, limiar * 5])) {
-    lista.push({ chave: `acordo_amplo|${r.item}`, tipo: 'acordo_amplo', titulo: `Negociar acordo amplo para ${r.item}`,
-      detalhe: `${brl(r.gasto)} sem acordo em ${int(r.cidades)} cidades nos últimos ${JANELA_ACOES_DIAS} dias: cabe negociação com distribuidor ou rede.`,
-      impacto: r.gasto, filtro: {} });
+  // Item sem acordo espalhado por muitas cidades: a sugestao aponta o fornecedor
+  // que mais vendeu o item sem acordo, para a negociacao ter um alvo concreto.
+  const jaSugerido = new Set(lista.map(c => c.chave));
+  type A = { item: string; gasto: number; cidades: number; fornecedor: string | null; gastoFornecedor: number | null; cidadesFornecedor: number | null; cidadeFornecedor: string | null };
+  for (const r of await all<A>(`WITH sem AS (SELECT c.item, c.fornecedor, c.cidade, c.total_os FROM compras_comparadas c WHERE ${SEM} AND c.item IS NOT NULL),
+    itens AS (SELECT item, SUM(total_os) gasto, COUNT(DISTINCT cidade) cidades FROM sem GROUP BY item
+      HAVING COUNT(DISTINCT cidade)>=10 AND SUM(total_os)>=?),
+    porFornecedor AS (SELECT item, fornecedor, SUM(total_os) gasto, COUNT(DISTINCT cidade) cidades, MIN(cidade) cidade,
+      ROW_NUMBER() OVER (PARTITION BY item ORDER BY SUM(total_os) DESC, fornecedor) ordem
+      FROM sem WHERE fornecedor IS NOT NULL AND item IN (SELECT item FROM itens) GROUP BY item, fornecedor)
+    SELECT i.item, i.gasto, i.cidades, f.fornecedor, f.gasto gastoFornecedor, f.cidades cidadesFornecedor, f.cidade cidadeFornecedor
+    FROM itens i LEFT JOIN porFornecedor f ON f.item=i.item AND f.ordem=1`, [...p, limiar * 5])) {
+    if (!r.fornecedor || Number(r.gastoFornecedor) < limiar) continue;
+    if (jaSugerido.has(`ampliar_item|${r.fornecedor}|${r.item}`)) continue;
+    lista.push({ chave: `acordo_amplo|${r.item}|${r.fornecedor}`, tipo: 'acordo_amplo', titulo: `Negociar acordo de ${r.item} com ${r.fornecedor}`,
+      detalhe: `${r.fornecedor} vendeu ${brl(r.gastoFornecedor)} sem acordo ${ondeCidades(r.cidadesFornecedor, r.cidadeFornecedor)} nos últimos ${JANELA_ACOES_DIAS} dias, de ${brl(r.gasto)} do item sem acordo em ${int(r.cidades)} cidades.`.replace('  ', ' '),
+      impacto: Number(r.gastoFornecedor), filtro: { fornecedor: r.fornecedor } });
   }
 
   // Sinonimo faltando: o termo da compra nao casa com nenhum acordo. Ou o
