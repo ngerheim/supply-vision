@@ -8,6 +8,13 @@ import { Button } from '@/components/ui/button';
 import { gerarChaveRelatorio } from '@/lib/relatorios';
 import { Input } from '@/components/ui/input';
 import { CampoData } from './campo-data';
+import { exibirDataBrasileira } from '@/lib/data-brasileira';
+
+const quantidadeBr = (q: unknown) => Number(q).toLocaleString('pt-BR', { maximumFractionDigits: 2 });
+// Itens da entrada, um por linha; a API manda a lista em JSON.
+function itensDaEntrada(r: AnyRow): { descricao: string; quantidade: number; unidade: string }[] {
+  try { return JSON.parse(r.itens_json || '[]'); } catch { return []; }
+}
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { CardHeader } from '@/components/ui/card';
@@ -250,7 +257,6 @@ export function EntradaEstoque() {
         day: '2-digit',
       }).format(new Date()),
     ),
-    [observacao, setObservacao] = useState(''),
     [busca, setBusca] = useState(''),
     [itens, setItens] = useState<AnyRow[]>([]),
     // As linhas nascem da busca do catalogo; nao ha linha vazia a preencher.
@@ -325,7 +331,6 @@ export function EntradaEstoque() {
     setAbrir(false);
     setErro('');
     setEstoqueId('');
-    setObservacao('');
     setBusca('');
     setItens([]);
     setLinhas([]);
@@ -356,7 +361,6 @@ export function EntradaEstoque() {
         ...corpoJson('POST', {
           estoqueId,
           dataMovimento: data,
-          observacao,
           itens: linhas.map((l) => ({
             itemId: l.id,
             quantidade: Number(l.quantidade),
@@ -449,21 +453,21 @@ export function EntradaEstoque() {
                 <TableHead>Estoque</TableHead>
                 <TableHead>Itens</TableHead>
                 <TableHead>Registrado por</TableHead>
-                <TableHead>Observação</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {rows?.map((r) => (
                 <TableRow key={r.origem_id}>
-                  <TableCell>{r.data_movimento}</TableCell>
+                  <TableCell>{exibirDataBrasileira(r.data_movimento)}</TableCell>
                   <TableCell>{r.estoque}</TableCell>
-                  <TableCell title={r.resumo}>
-                    {r.itens} {r.itens === 1 ? 'item' : 'itens'}
+                  <TableCell className="whitespace-normal">
+                    {itensDaEntrada(r).map((i, k) => (
+                      <div key={k}>
+                        {i.descricao} · {quantidadeBr(i.quantidade)} {i.unidade}
+                      </div>
+                    ))}
                   </TableCell>
                   <TableCell>{r.usuario || '—'}</TableCell>
-                  <TableCell className="max-w-72 truncate">
-                    {r.observacao || '—'}
-                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -522,13 +526,6 @@ export function EntradaEstoque() {
                 </Field>
                 <Field label="Data">
                   <CampoData required value={data} onChange={setData} />
-                </Field>
-                <Field label="Observação" className="sm:col-span-2">
-                  <Input
-                    maxLength={300}
-                    value={observacao}
-                    onChange={(e) => setObservacao(e.target.value)}
-                  />
                 </Field>
               </fieldset>
               <div className="space-y-3">
@@ -806,7 +803,7 @@ export function SaldoEstoque({ user }: { user: AnyRow }) {
               <TableBody>
                 {movs.map((m) => (
                   <TableRow key={m.id}>
-                    <TableCell>{m.data_movimento}</TableCell>
+                    <TableCell>{exibirDataBrasileira(m.data_movimento)}</TableCell>
                     <TableCell>
                       {m.tipo}
                       {m.baixa_codigo && (
