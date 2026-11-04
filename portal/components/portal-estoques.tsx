@@ -573,7 +573,9 @@ export function EntradaEstoque() {
                         <Input
                           aria-label={`Quantidade da linha ${n + 1}`}
                           type="number"
-                          min="0.01"
+                          // min e step andam juntos: com min 0.01 e step 1 o
+                          // navegador so aceitava 1,01, 2,01...
+                          min={item?.unidade === 'un' ? '1' : '0.01'}
                           step={item?.unidade === 'un' ? '1' : '0.01'}
                           value={l.quantidade}
                           onChange={(e) =>
