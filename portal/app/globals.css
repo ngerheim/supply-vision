@@ -245,3 +245,5 @@ input:not([type='checkbox']):not([type='radio']):not([type='range']), select, [d
 .patio-choice-tabs { display: flex; align-items: center; gap: 24px; border-bottom: 1px solid var(--borda); }
 .patio-choice-tabs [data-slot='button'] { height: 40px; min-height: 40px; padding: 8px 0; border: 0; border-bottom: 3px solid transparent; border-radius: 0; background: transparent; color: var(--aco); font-size: 15px; font-weight: 500; }
 .patio-choice-tabs [data-slot='button'][class~='bg-primary'] { border-bottom-color: var(--marinho); color: var(--marinho); }
+/* Numeros e datas em tabela: nao quebram e usam respiro menor. */
+[data-slot='table-cell'].patio-num, [data-slot='table-head'].patio-num { white-space: nowrap; overflow-wrap: normal; padding-inline: 8px; }
