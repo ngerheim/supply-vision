@@ -7,6 +7,7 @@ import { exibirDataBrasileira } from '@/lib/data-brasileira';
 import { dataHoraSolicitacao } from '@/lib/solicitacoes-cliente';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { CampoData } from './campo-data';
 import { PageHeader, LinhaDeAba } from './page-header';
 import { BarraFiltros, TabelaPadrao } from './tela-padrao';
 import { TableBody, TableCell, TableHeader, TableHead, TableRow } from '@/components/ui/table';
@@ -49,7 +50,7 @@ export function Lista({ onNew, onOpen }: { onNew: () => void; onOpen: (id: strin
   useEffect(carregar, [carregar, versao]);
   const filtro = (set: (v: string) => void) => (v: string) => { set(v); setPagina(1); setDados(null); setErro(''); };
   return <div className="patio-page"><LinhaDeAba actions={<><Button variant="outline" onClick={() => {setErro('');setVersao(v => v + 1)}}>Atualizar</Button><Button variant="create" onClick={onNew}>Nova solicitação</Button></>} />
-    <BarraFiltros busca={busca} onBusca={filtro(setBusca)} placeholder="Pesquisar"><select aria-label="Situação" className="rounded-md border bg-background p-2" value={status} onChange={(e) => filtro(setStatus)(e.target.value)}><option value="">Todas as situações</option>{Object.entries(estado).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select><Input aria-label="Período: De" type="date" value={de} onChange={(e) => filtro(setDe)(e.target.value)} /><Input aria-label="Período: Até" type="date" value={ate} onChange={(e) => filtro(setAte)(e.target.value)} /></BarraFiltros>
+    <BarraFiltros busca={busca} onBusca={filtro(setBusca)} placeholder="Pesquisar"><select aria-label="Situação" className="rounded-md border bg-background p-2" value={status} onChange={(e) => filtro(setStatus)(e.target.value)}><option value="">Todas as situações</option>{Object.entries(estado).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select><CampoData aria-label="Período: De" value={de} onChange={filtro(setDe)} /><CampoData aria-label="Período: Até" value={ate} onChange={filtro(setAte)} /></BarraFiltros>
     {erro && <p role="alert">{erro}</p>}{!dados ? <Loading label="Carregando pagamentos…" /> : <TabelaPadrao contador={`${dados.total ?? (dados.pagamentos || []).length} ${(dados.total ?? (dados.pagamentos || []).length) === 1 ? 'pagamento' : 'pagamentos'}`} pagina={<PaginacaoDeLista pagina={dados.page} paginas={dados.pageCount} alterar={setPagina} />}><TableHeader><TableRow>{['Código','Solicitante','Link','Situação','Aberta em'].map(t=><TableHead key={t}>{t}</TableHead>)}</TableRow></TableHeader><TableBody>{(dados.pagamentos || []).map((p: AnyRow)=><TableRow key={p.id}><TableCell><button className="text-link hover:underline" onClick={()=>onOpen(p.id)}><Plaquinha>{p.codigo}</Plaquinha></button></TableCell><TableCell>{p.solicitante || '—'}</TableCell><TableCell className="max-w-md truncate">{p.link ? <a href={p.link} target="_blank" rel="noopener noreferrer" className="text-link hover:underline" title={p.link}>{p.link}</a> : (p.fornecedor || '—')}</TableCell><TableCell><Status value={p.status}>{estado[p.status]}</Status></TableCell><TableCell>{p.criado_em ? dataHoraSolicitacao(p.criado_em) : '—'}</TableCell></TableRow>)}</TableBody></TabelaPadrao>}
   </div>;
 }

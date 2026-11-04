@@ -96,8 +96,10 @@ for (const role of ['viewer', 'editor', 'admin'])
     assert.deepEqual(opened, ['b']);
     change(h, 'status', 'recusada', 'select');
     change(h, 'estoque', 'e', 'select');
-    change(h, 'de', '2026-10-25');
-    change(h, 'ate', '2026-10-26');
+    h.one('CampoData', (p) => p['aria-label'] === 'Período: De').onChange('2026-10-25');
+    h.render();
+    h.one('CampoData', (p) => p['aria-label'] === 'Período: Até').onChange('2026-10-26');
+    h.render();
     const params = new URL(h.requests.at(-1).path, 'http://fixture')
       .searchParams;
     assert.equal(params.get('status'), 'recusada');

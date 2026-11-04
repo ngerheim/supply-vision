@@ -9,7 +9,7 @@ import {
 } from '@/lib/solicitacoes-cliente';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Input } from '@/components/ui/input';
+import { CampoData } from './campo-data';
 import { LinhaDeAba } from './page-header';
 import { BarraFiltros, TabelaPadrao } from './tela-padrao';
 import { Plaquinha } from './plaquinha';
@@ -159,8 +159,8 @@ export function ListaSolicitacoes({
               <option value="normal">Normal</option>
               <option value="urgente">Urgente</option>
             </select>
-          <Input aria-label="Período: De" type="date" value={filtros.de} onChange={(e) => { setFiltros({ ...filtros, de: e.target.value }); setPagina(1); }} />
-          <Input aria-label="Período: Até" type="date" value={filtros.ate} min={filtros.de} onChange={(e) => { setFiltros({ ...filtros, ate: e.target.value }); setPagina(1); }} />
+          <CampoData aria-label="Período: De" value={filtros.de} onChange={(v) => { setFiltros({ ...filtros, de: v }); setPagina(1); }} />
+          <CampoData aria-label="Período: Até" value={filtros.ate} min={filtros.de} onChange={(v) => { setFiltros({ ...filtros, ate: v }); setPagina(1); }} />
           <label className="flex items-center gap-2 whitespace-nowrap text-sm">
             <input
               type="checkbox"

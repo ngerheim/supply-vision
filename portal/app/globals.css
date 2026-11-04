@@ -213,7 +213,10 @@ input:not([type='checkbox']):not([type='radio']):not([type='range']), select, [d
 .patio-login-form form > * { margin: 0; }
 .patio-login-submit, .patio-login-submit:disabled { height: 44px; background: var(--marinho); color: var(--branco); border-color: var(--marinho); }
 .patio-multicontrol { display: flex; align-items: center; gap: 4px; position: relative; height: 40px; padding: 0 40px 0 8px; border: 1px solid var(--borda); border-radius: 4px; background: var(--branco); }
-.patio-multicontrol input { width: 0; min-width: 28px; flex: 1; background: transparent; outline: none; }
+.patio-multicontrol input, .patio-filters .patio-multicontrol input { width: 0; min-width: 28px; flex: 1; background: transparent; outline: none; }
+/* Campo de busca dos filtros: o contorno de foco e do campo inteiro, nao do input interno. */
+.patio-combo input:focus-visible { outline: none !important; }
+.patio-combo:has(input:focus-visible) { outline: 2px solid var(--marinho); outline-offset: 2px; }
 .patio-multitrigger { position: absolute; right: 0; top: 0; display: grid; place-items: center; width: 40px; height: 38px; min-width: 40px; min-height: 38px; }
 .patio-chip { display: inline-flex; flex-shrink: 0; align-items: center; gap: 4px; height: 28px; padding-left: 6px; border-radius: 3px; background: var(--chao); font-size: 12px; white-space: nowrap; }
 .patio-chip > button { display: grid; place-items: center; width: 24px; min-width: 24px; height: 28px; min-height: 28px; }

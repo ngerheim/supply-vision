@@ -130,12 +130,10 @@ for (const role of ['viewer', 'editor', 'admin'])
       target: { value: 'urgente' },
     });
     h.render();
-    const dates = h.find((n) => n.type === 'Input' && n.props.type === 'date');
-    dates[0].props.onChange({ target: { value: '2026-10-01' } });
+    const dates = h.find((n) => n.type === 'CampoData');
+    dates[0].props.onChange('2026-10-01');
     h.render();
-    h.one('Input', (p) => p.type === 'date' && p.min).onChange({
-      target: { value: '2026-10-23' },
-    });
+    h.one('CampoData', (p) => p.min).onChange('2026-10-23');
     h.render();
     h.one('input', (p) => p.type === 'checkbox').onChange({
       target: { checked: true },

@@ -85,7 +85,7 @@ export function analiseApi(contexto: ContextoApi) {
 
     const fAnterior: FiltrosAnalise = { ...f, de: anoAntes(f.de), ate: anoAntes(f.ate) };
     const anterior = filtroSql(fAnterior);
-    const [mensal, acima, semFornecedores, semItens, motivos, fornecedores, precos, opcoes, itens, [passado]] = await Promise.all([
+    const [mensal, acima, semFornecedores, semItens, motivos, sinonimos, fornecedores, precos, opcoes, itens, [passado]] = await Promise.all([
       all(`SELECT substr(c.data,1,7) mes, SUM(c.total_os) gasto, SUM(CASE WHEN ${COM} THEN c.total_os END) comAcordo,
         SUM(CASE WHEN ${CONF} THEN c.total_os END) conforme, SUM(CASE WHEN ${ACIMA} THEN c.dif_total END) pagoAcima,
         SUM(${ECON}) economia ${de} GROUP BY mes ORDER BY mes`, values),
@@ -98,6 +98,9 @@ export function analiseApi(contexto: ContextoApi) {
         ${de} AND c.status='SEM ACORDO' GROUP BY c.item ORDER BY gasto DESC LIMIT 10`, values),
       all(`SELECT COALESCE(c.motivo,'Não informado') motivo, COUNT(*) linhas, SUM(c.total_os) gasto
         ${de} AND c.status='SEM ACORDO' GROUP BY 1 ORDER BY gasto DESC`, values),
+      // Termos de compra sem item de acordo correspondente (motivo Sinonimo).
+      all(`SELECT c.item termo, COUNT(*) linhas, SUM(c.total_os) gasto
+        ${de} AND c.status='SEM ACORDO' AND c.motivo='Sinonimo' AND c.item IS NOT NULL GROUP BY c.item ORDER BY gasto DESC LIMIT 1000`, values),
       all<{ fornecedor: string; gasto: number; linhas: number; comAcordo: Num; pagoAcima: Num }>(`SELECT c.fornecedor, SUM(c.total_os) gasto, COUNT(*) linhas,
         SUM(CASE WHEN ${COM} THEN c.total_os END) comAcordo, SUM(CASE WHEN ${ACIMA} THEN c.dif_total END) pagoAcima
         ${de} AND c.fornecedor IS NOT NULL GROUP BY c.fornecedor HAVING SUM(c.total_os)>0 ORDER BY gasto DESC`, values),
@@ -132,7 +135,7 @@ export function analiseApi(contexto: ContextoApi) {
       disponivel: { de: limites?.min ?? null, ate: limites?.max ?? null, atualizadoEm: limites?.recebido ?? null },
       indicadores, anoAnterior: { de: fAnterior.de, ate: fAnterior.ate, linhas: n(passado?.linhas), gasto: n(passado?.gasto) },
       mensal: mensal.map(m => ({ ...m, antesDoCorte: antesDoCorte(String(m.mes)) })),
-      acimaPorFornecedor: acima, semAcordoFornecedores: semFornecedores, semAcordoItens: semItens, motivosSemAcordo: motivos,
+      acimaPorFornecedor: acima, semAcordoFornecedores: semFornecedores, semAcordoItens: semItens, motivosSemAcordo: motivos, sinonimos,
       abc: { classes: classesDe(abc), fornecedores: abc.slice(0, 1000) },
       abcItens: { classes: classesDe(abcItens), itens: abcItens.slice(0, 1000) },
       pareto: { fornecedores: pareto(abc.map(l => l.gasto)), itens: pareto(abcItens.map(l => l.gasto)) },

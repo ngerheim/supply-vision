@@ -6,6 +6,7 @@ import { pode } from '@/lib/permissoes';
 import { corpoJson } from '@/lib/solicitacoes-cliente';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { CampoData } from './campo-data';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { CardHeader } from '@/components/ui/card';
@@ -427,20 +428,8 @@ export function EntradaEstoque() {
             </NativeSelectOption>
           ))}
         </NativeSelect>
-        <Input
-          className="w-40"
-          aria-label="Data inicial"
-          type="date"
-          value={de}
-          onChange={(e) => setDe(e.target.value)}
-        />
-        <Input
-          className="w-40"
-          aria-label="Data final"
-          type="date"
-          value={ate}
-          onChange={(e) => setAte(e.target.value)}
-        />
+        <CampoData className="w-40" aria-label="Data inicial" value={de} onChange={setDe} />
+        <CampoData className="w-40" aria-label="Data final" value={ate} onChange={setAte} />
       </div>
       {erro && !abrir && <p role="alert">{erro}</p>}
       <Card>
@@ -530,12 +519,7 @@ export function EntradaEstoque() {
                   </NativeSelect>
                 </Field>
                 <Field label="Data">
-                  <Input
-                    type="date"
-                    required
-                    value={data}
-                    onChange={(e) => setData(e.target.value)}
-                  />
+                  <CampoData required value={data} onChange={setData} />
                 </Field>
                 <Field label="Observação" className="sm:col-span-2">
                   <Input
