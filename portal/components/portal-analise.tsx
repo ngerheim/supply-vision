@@ -201,13 +201,25 @@ export function Analise({ verAcoes }: { verAcoes: () => void }) {
   const [dados, setDados] = useState<AnyRow | null>(null);
   const [erro, setErro] = useState('');
   const [tentativa, setTentativa] = useState(0);
-  const [carregando, setCarregando] = useState(true);
+  const [carregando, setCarregando] = useState(false);
+  // Opcoes dos filtros e datas disponiveis: carregam sem consultar periodo.
+  const [base, setBase] = useState<AnyRow | null>(null);
   const [fornecedorAberto, setFornecedorAberto] = useState<string | null>(null);
   const [concentracao, setConcentracao] = useState<'fornecedores' | 'itens'>('fornecedores');
   const [todos, setTodos] = useState(false);
   const [verSinonimos, setVerSinonimos] = useState(false);
 
   useEffect(() => {
+    const controller = new AbortController();
+    void api('/api/analise?opcoes=1', { signal: controller.signal })
+      .then((resposta: AnyRow) => { if (!controller.signal.aborted) setBase(resposta); })
+      .catch(falha => { if (!controller.signal.aborted) setErro(errorText(falha)); });
+    return () => controller.abort();
+  }, []);
+
+  // So consulta com De e Ate informados e depois de clicar em Atualizar.
+  useEffect(() => {
+    if (!aplicados.de || !aplicados.ate) return;
     const controller = new AbortController();
     queueMicrotask(() => { if (!controller.signal.aborted) setCarregando(true); });
     void api(`/api/analise?${consultaDe(aplicados)}`, { signal: controller.signal }).then((resposta: AnyRow) => {
@@ -219,14 +231,49 @@ export function Analise({ verAcoes }: { verAcoes: () => void }) {
     return () => controller.abort();
   }, [aplicados, tentativa]);
 
-  if (erro && !dados) return <FalhaDeCarregamento erro={erro} tentar={() => setTentativa(t => t + 1)} />;
-  if (!dados) return <Loading label="Carregando análise…" compact />;
+  const consultado = Boolean(aplicados.de && aplicados.ate);
+  const completo = Boolean(rascunho.de && rascunho.ate);
+  const alterado = (Object.keys(VAZIO) as (keyof Filtros)[]).some(k => (rascunho[k] || '') !== (aplicados[k] || ''));
+  const atualizar = () => { if (!completo) return; if (alterado) setAplicados({ ...rascunho }); else setTentativa(t => t + 1); };
+  const opcoes: Record<string, string[]> = (dados ?? base)?.opcoes ?? { cidade: [], fornecedor: [], grupo: [] };
+  const disponivel = (dados ?? base)?.disponivel;
+  const formulario = (
+      <form className="patio-filters patio-filters-rotulados" onSubmit={e => { e.preventDefault(); atualizar(); }}>
+        <Field label="De"><CampoData value={rascunho.de} onChange={de => setRascunho(r => ({ ...r, de }))} /></Field>
+        <Field label="Até"><CampoData value={rascunho.ate} min={rascunho.de || undefined} onChange={ate => setRascunho(r => ({ ...r, ate }))} /></Field>
+        {(['cidade', 'fornecedor', 'grupo'] as const).map(campo => (
+          <Field key={campo} label={campo === 'grupo' ? 'Grupo de despesa' : campo === 'cidade' ? 'Cidade' : 'Fornecedor'}>
+            <NativeSelect value={rascunho[campo]} onChange={e => setRascunho(r => ({ ...r, [campo]: e.target.value }))}>
+              <NativeSelectOption value="">Todos</NativeSelectOption>
+              {opcoes[campo].map(v => <NativeSelectOption key={v} value={v}>{v}</NativeSelectOption>)}
+            </NativeSelect>
+          </Field>
+        ))}
+        <Button type="submit" variant={alterado ? 'default' : 'outline'} disabled={carregando || !completo}>
+          {carregando ? <Loader2 className="animate-spin" /> : <RefreshCw />} {carregando ? 'Atualizando…' : 'Atualizar'}
+        </Button>
+      </form>
+  );
+  const casca = (conteudo: ReactNode) => (
+    <div className="patio-page space-y-4">
+      <LinhaDeAba />
+      <ProximaAcao verTodas={verAcoes} abrirFornecedor={setFornecedorAberto} />
+      {formulario}
+      {conteudo}
+      <DetalheFornecedor nome={fornecedorAberto} fechar={() => setFornecedorAberto(null)} />
+    </div>
+  );
+  if (!consultado) return casca(
+    <p className="text-sm text-muted-foreground" aria-live="polite">
+      {erro || (!base ? 'Carregando…' : !disponivel?.ate ? 'Ainda não há compras recebidas do Alertas.'
+        : `Informe De e Até e clique em Atualizar. Dados disponíveis de ${dataBr(disponivel.de)} a ${dataBr(disponivel.ate)}.`)}
+    </p>,
+  );
+  if (erro && !dados) return casca(<FalhaDeCarregamento erro={erro} tentar={() => setTentativa(t => t + 1)} />);
+  if (!dados) return casca(<Loading label="Carregando análise…" compact />);
 
   const ind = dados.indicadores, ant = dados.anoAnterior;
   const efetivos: Filtros = { ...aplicados, de: dados.filtros.de, ate: dados.filtros.ate };
-  // Datas em branco = período padrão do servidor (mostrado na linha abaixo).
-  const alterado = (Object.keys(VAZIO) as (keyof Filtros)[]).some(k => (rascunho[k] || '') !== (aplicados[k] || ''));
-  const atualizar = () => { if (alterado) setAplicados({ ...rascunho }); else setTentativa(t => t + 1); };
   const maxMes = Math.max(0, ...dados.mensal.map((m: AnyRow) => Number(m.gasto || 0)));
   const maxAcima = Math.max(0, ...dados.acimaPorFornecedor.map((l: AnyRow) => Number(l.pagoAcima || 0)));
   const maxSem = Math.max(0, ...dados.semAcordoFornecedores.map((l: AnyRow) => Number(l.gasto || 0)));
@@ -244,21 +291,7 @@ export function Analise({ verAcoes }: { verAcoes: () => void }) {
     <div className="patio-page space-y-4">
       <LinhaDeAba />
       <ProximaAcao verTodas={verAcoes} abrirFornecedor={setFornecedorAberto} />
-      <form className="patio-filters patio-filters-rotulados" onSubmit={e => { e.preventDefault(); atualizar(); }}>
-        <Field label="De"><CampoData value={rascunho.de} onChange={de => setRascunho(r => ({ ...r, de }))} /></Field>
-        <Field label="Até"><CampoData value={rascunho.ate} min={rascunho.de || undefined} onChange={ate => setRascunho(r => ({ ...r, ate }))} /></Field>
-        {(['cidade', 'fornecedor', 'grupo'] as const).map(campo => (
-          <Field key={campo} label={campo === 'grupo' ? 'Grupo de despesa' : campo === 'cidade' ? 'Cidade' : 'Fornecedor'}>
-            <NativeSelect value={rascunho[campo]} onChange={e => setRascunho(r => ({ ...r, [campo]: e.target.value }))}>
-              <NativeSelectOption value="">Todos</NativeSelectOption>
-              {(dados.opcoes[campo] as string[]).map(v => <NativeSelectOption key={v} value={v}>{v}</NativeSelectOption>)}
-            </NativeSelect>
-          </Field>
-        ))}
-        <Button type="submit" variant={alterado ? 'default' : 'outline'} disabled={carregando}>
-          {carregando ? <Loader2 className="animate-spin" /> : <RefreshCw />} {carregando ? 'Atualizando…' : 'Atualizar'}
-        </Button>
-      </form>
+      {formulario}
       <p className="text-xs text-muted-foreground" aria-live="polite">
         {semDados ? 'Ainda não há compras recebidas do Alertas.' : `${dataBr(dados.filtros.de)} a ${dataBr(dados.filtros.ate)} · ${inteiro.format(ind.linhas)} linhas no filtro`}
         {dados.disponivel.atualizadoEm && ` · dados atualizados em ${dataHoraSolicitacao(dados.disponivel.atualizadoEm)}`}
