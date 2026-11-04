@@ -328,7 +328,7 @@ void test('entrada e saldo de estoque listam, filtram, validam e registram entra
   h.one('Input',p=>p['aria-label']==='Buscar item no catálogo').onChange({target:{value:'Óleo'}});h.render();await new Promise(resolve=>setTimeout(resolve,200));await flush(h);
   const pesquisa=h.requests.at(-1);assert.match(pesquisa.path,/catalogs\/items\?q=/);pesquisa.resolve({itens:[{id:'itm',descricao:'Óleo fictício',unidade:'L',ativo:1}]});await flush(h);
   h.one('button',p=>textoVisivel(p.children).includes('Óleo fictício')).onClick();h.render();
-  h.one('form').onSubmit({preventDefault(){}});h.render();assert.match(alerts(h),/quantidades maiores que zero/);h.one('Button',p=>p['aria-label']==='Remover linha 1').onClick();h.render();
+  h.one('form').onSubmit({preventDefault(){}});h.render();assert.match(alerts(h),/quantidades maiores que zero/);assert.equal(h.find(n=>n.type==='Button'&&n.props['aria-label']?.startsWith('Remover linha')).length,1);
 
   h.one('NativeSelect',p=>p['aria-label']==='Estoque da entrada').onChange({target:{value:'e'}});h.render();h.one('Input',p=>p['aria-label']==='Quantidade da linha 1').onChange({target:{value:'1.25'}});h.render();submit(h);
   const envio=h.requests.at(-1);assert.equal(envio.path,'/api/estoque/entradas');assert.deepEqual(body(envio).itens,[{itemId:'itm',quantidade:1.25}]);assert.ok(envio.options.headers['idempotency-key']);envio.resolve({});await flush(h);assert.equal(h.find(n=>n.type==='dialog').length,0);
