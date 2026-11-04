@@ -172,6 +172,16 @@ void test('analise: sugestoes geradas no fim do envio, resolvidas com historico 
   assert.equal(painel.data.pareto.fornecedores.total, 3);
   assert.equal(painel.data.abc.fornecedores[0].fornecedor, 'Pneus Sem Acordo');
   assert.equal((await pedir('GET', 'analise', 'editor')).data.filtros.de, '2026-09-18');
+  // Com o periodo comecando no corte, setembro nao e marcado como anterior a ele.
+  const doCorte = await pedir('GET', 'analise?de=2026-09-18&ate=2026-10-31', 'editor');
+  assert.equal(doCorte.data.mensal.find(m => m.mes === '2026-09')?.antesDoCorte ?? false, false);
+  assert.equal(painel.data.mensal.find(m => m.mes === '2026-09')?.antesDoCorte ?? true, true);
+  // Abertura da aba: so opcoes e datas disponiveis, sem indicadores.
+  const abertura = await pedir('GET', 'analise?opcoes=1', 'editor');
+  assert.equal(abertura.status, 200);
+  assert.equal(abertura.data.indicadores, undefined);
+  assert.ok(Array.isArray(abertura.data.opcoes.fornecedor) && abertura.data.opcoes.fornecedor.length > 0);
+  assert.ok(abertura.data.disponivel.ate);
   const f = await pedir('GET', 'analise/fornecedor?nome=Oficina%20X&de=2026-10-01&ate=2026-10-31', 'editor');
   assert.equal(f.status, 200, JSON.stringify(f.data));
   assert.equal(f.data.indicadores.pagoAcima, 500);

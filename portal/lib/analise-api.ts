@@ -50,6 +50,17 @@ export function analiseApi(contexto: ContextoApi) {
     const limites = await first<{ min: string | null; max: string | null; recebido: string | null }>(
       'SELECT MIN(data) min,MAX(data) max,MAX(recebido_em) recebido FROM compras_comparadas');
     const corte = await parametro('corte_vigencia');
+    const disponivel = { de: limites?.min ?? null, ate: limites?.max ?? null, atualizadoEm: limites?.recebido ?? null };
+    const consultarOpcoes = () => all<{ campo: string; valor: string }>(`SELECT 'cidade' campo, cidade valor FROM compras_comparadas WHERE cidade IS NOT NULL GROUP BY cidade
+        UNION ALL SELECT 'fornecedor', fornecedor FROM compras_comparadas WHERE fornecedor IS NOT NULL GROUP BY fornecedor
+        UNION ALL SELECT 'grupo', grupo FROM compras_comparadas WHERE grupo IS NOT NULL GROUP BY grupo ORDER BY 1,2`);
+    const agruparOpcoes = (opcoes: { campo: string; valor: string }[]) => {
+      const listas: Record<string, string[]> = { cidade: [], fornecedor: [], grupo: [] };
+      for (const o of opcoes) listas[o.campo]?.push(o.valor);
+      return listas;
+    };
+    // Abertura da aba: so filtros e datas disponiveis, sem consultar periodo.
+    if (params.get('opcoes') === '1') return ok({ corteVigencia: corte, disponivel, opcoes: agruparOpcoes(await consultarOpcoes()) });
     const f = lerFiltros(params, limites?.max || dataDeNegocio(), corte);
     const { where, values } = filtroSql(f);
     const de = `FROM compras_comparadas c WHERE ${where}`;
@@ -109,9 +120,7 @@ export function analiseApi(contexto: ContextoApi) {
       // processo nao carrega cada compra do periodo.
       all<{ item: string; modelo: string; cidade: string; preco: number; n: number }>(`SELECT c.item, c.modelo, c.cidade, c.preco_os preco, COUNT(*) n
         ${de} AND c.qtd>0 AND c.preco_os>0 AND c.item IS NOT NULL AND c.cidade IS NOT NULL GROUP BY c.item, c.modelo, c.cidade, c.preco_os`, values),
-      all<{ campo: string; valor: string }>(`SELECT 'cidade' campo, cidade valor FROM compras_comparadas WHERE cidade IS NOT NULL GROUP BY cidade
-        UNION ALL SELECT 'fornecedor', fornecedor FROM compras_comparadas WHERE fornecedor IS NOT NULL GROUP BY fornecedor
-        UNION ALL SELECT 'grupo', grupo FROM compras_comparadas WHERE grupo IS NOT NULL GROUP BY grupo ORDER BY 1,2`),
+      consultarOpcoes(),
       all<{ item: string; gasto: number; linhas: number; comAcordo: Num; cidades: number }>(`SELECT c.item, SUM(c.total_os) gasto, COUNT(*) linhas,
         SUM(CASE WHEN ${COM} THEN c.total_os END) comAcordo, COUNT(DISTINCT c.cidade) cidades
         ${de} AND c.item IS NOT NULL GROUP BY c.item HAVING SUM(c.total_os)>0 ORDER BY gasto DESC`, values),
@@ -125,14 +134,13 @@ export function analiseApi(contexto: ContextoApi) {
     const abc = curvaAbc(fornecedores.map(l => ({ ...l, gasto: Number(l.gasto), comAcordo: n(l.comAcordo), pagoAcima: n(l.pagoAcima) })));
     const abcItens = curvaAbc(itens.map(l => ({ ...l, gasto: Number(l.gasto), comAcordo: n(l.comAcordo) })));
     const variacaoPreco = variacaoPorCidade(precos.map(p => ({ ...p, preco: Number(p.preco), n: Number(p.n) })));
-    const antesDoCorte = (mes: string) => Boolean(corte && `${mes}-01` < corte);
+    const antesDoCorte = (mes: string) => Boolean(corte && (`${mes}-01` > f.de ? `${mes}-01` : f.de) < corte);
 
-    const listas: Record<string, string[]> = { cidade: [], fornecedor: [], grupo: [] };
-    for (const o of opcoes) listas[o.campo]?.push(o.valor);
+    const listas = agruparOpcoes(opcoes);
 
     return ok({
       filtros: f, corteVigencia: corte,
-      disponivel: { de: limites?.min ?? null, ate: limites?.max ?? null, atualizadoEm: limites?.recebido ?? null },
+      disponivel,
       indicadores, anoAnterior: { de: fAnterior.de, ate: fAnterior.ate, linhas: n(passado?.linhas), gasto: n(passado?.gasto) },
       mensal: mensal.map(m => ({ ...m, antesDoCorte: antesDoCorte(String(m.mes)) })),
       acimaPorFornecedor: acima, semAcordoFornecedores: semFornecedores, semAcordoItens: semItens, motivosSemAcordo: motivos, sinonimos,
