@@ -7,6 +7,7 @@ import { semearChamados } from './chamados.mjs';
 import { semearSolicitacoes } from './solicitacoes.mjs';
 import { semearBaixas } from './baixas.mjs';
 import { semearPagamentos } from './pagamentos.mjs';
+import { semearRede } from './rede.mjs';
 
 export const exemplo = JSON.parse(fs.readFileSync(new URL('./usuarios.exemplo.json', import.meta.url), 'utf8'));
 export function clienteApi(base) {
@@ -27,7 +28,8 @@ export async function semear(base, pasta) {
   const estado = fs.existsSync(progresso) ? JSON.parse(fs.readFileSync(progresso, 'utf8')) : {};
   const salvar = () => { const tmp = `${progresso}.tmp`; fs.writeFileSync(tmp, JSON.stringify(estado)); fs.renameSync(tmp, progresso); };
   fs.writeFileSync(path.join(pasta, 'credenciais.json'), JSON.stringify(exemplo, null, 2));
-  if (estado.concluido && estado.solicitacoesConcluidas && estado.baixasConcluidas && estado.pagamentosConcluidos) return;
+  const token = process.env.PORTAL_API_TOKEN || '';
+  if (estado.concluido && estado.solicitacoesConcluidas && estado.baixasConcluidas && estado.pagamentosConcluidos && (estado.redeConcluida || !token)) return;
   const api = clienteApi(base);
   await api('/login', 'POST', exemplo.inicial);
   try {
@@ -38,6 +40,7 @@ export async function semear(base, pasta) {
     await semearSolicitacoes(clienteApi, base, exemplo, estado, salvar);
     await semearBaixas(clienteApi, base, exemplo, estado, salvar);
     await semearPagamentos(base, exemplo, estado, salvar);
+    await semearRede(base, token, estado, salvar);
     estado.pagamentosConcluidos = true;
     estado.baixasConcluidas = true;
     estado.solicitacoesConcluidas = true;

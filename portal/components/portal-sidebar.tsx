@@ -11,6 +11,7 @@ import {
 import {
   Database,
   Handshake,
+  MapPinned,
   LogOut,
   MessageSquare,
   PackageSearch,
@@ -29,6 +30,7 @@ const { version } = packageInfo;
 
 const navItems: Record<Aba, { label: string; icon: typeof PackageSearch }> = {
   buscar: { label: "Buscar", icon: PackageSearch },
+  rede: { label: "Rede", icon: MapPinned },
   manutencao: { label: "Manutenção", icon: Wrench },
   chamados: { label: "Chamados", icon: MessageSquare },
   estoque: { label: "Estoque", icon: Boxes },

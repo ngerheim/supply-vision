@@ -26,6 +26,7 @@ Guidance for coding agents working in this repository. Code and tests define the
 | `alertas/processo/pipeline.py`, `rodar.py`, `leitura_dados.py` | Daily run, comparison, data reading |
 | `alertas/processo/{contrato_base,contrato_comparacao,regras_comparacao,vigencia_acordos,qualidade_acordos}.py` | Source extraction, rules, validity periods, data-quality issues |
 | `alertas/processo/{resumo_comparacao,planilhas_comparacao,limpeza}.py`, `alertas/panorama/` | Outputs, retention, send-free views |
+| `alertas/processo/baixar_fornecedores.py`, `portal/lib/rede{,-api}.ts`, `portal/lib/municipios-ibge.ts` | Rede tab: daily ERP supplier copy from Qlik (status A only, once a day after the alert), distance by IBGE coordinates, admin exclusions |
 | `scripts/verificar-infra-publica.mjs`, `portal/tests/`, `alertas/tests/`, `scripts/testar-*.ps1`, `.github/workflows/ci.yml` | Public-data detector, tests, CI |
 
 Abbreviated paths in a cell share the directory of the first file.

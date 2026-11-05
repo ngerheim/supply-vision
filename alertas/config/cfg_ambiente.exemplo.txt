@@ -2,6 +2,10 @@
 QLIK_TENANT = tenant.example.com
 QLIK_APP_ID = 00000000-0000-0000-0000-000000000000
 QLIK_OBJ_ID = objeto-exemplo
+# Aba Rede do Portal: app e pasta (sheet) com a tabela de fornecedores do ERP,
+# como aparecem na URL do Qlik (.../app/<APP>/sheet/<PASTA>/...). Opcionais.
+# QLIK_REDE_APP_ID = 00000000-0000-0000-0000-000000000000
+# QLIK_REDE_SHEET_ID = pasta-exemplo
 DESTINATARIO_ALERTA = usuario@example.com
 PIPELINE_TIMEOUT_S = 1800
 

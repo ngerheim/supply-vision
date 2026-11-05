@@ -80,8 +80,13 @@ void test('dados publicos de demonstracao passam no mesmo detector; CNPJs tem DV
 });
 
 void test('semeadura usa API real, cria perfis/acordos/chamados/Central e preserva dados ao repetir', async t => {
-  const modo = process.env.MODO_ENSAIO; process.env.MODO_ENSAIO = '1';
-  t.after(() => { if (modo === undefined) delete process.env.MODO_ENSAIO; else process.env.MODO_ENSAIO = modo; });
+  const modo = process.env.MODO_ENSAIO, credencial = process.env.PORTAL_API_TOKEN, credencialServidor = env.PORTAL_API_TOKEN;
+  process.env.MODO_ENSAIO = '1'; process.env.PORTAL_API_TOKEN = env.PORTAL_API_TOKEN = 'token-ficticio-demonstracao-rede';
+  t.after(() => {
+    if (modo === undefined) delete process.env.MODO_ENSAIO; else process.env.MODO_ENSAIO = modo;
+    if (credencial === undefined) delete process.env.PORTAL_API_TOKEN; else process.env.PORTAL_API_TOKEN = credencial;
+    env.PORTAL_API_TOKEN = credencialServidor;
+  });
   const { base: temporario, pasta, opcoes } = fixture(t, false); prepararPasta(pasta, opcoes);
   const db = bancoSqliteLocal({ pastaPrivada: path.join(pasta, 'portal'), criar: true });
   const chave = Symbol.for('supply-vision:banco'), anterior = globalThis[chave], senha = env.INITIAL_ADMIN_PASSWORD;
@@ -114,6 +119,8 @@ void test('semeadura usa API real, cria perfis/acordos/chamados/Central e preser
   assert.equal(leitura.prepare('SELECT COUNT(*) n FROM tickets WHERE assigned_to IS NULL').get().n, 0);
   assert.ok(contar('ticket_events') >= 11); assert.ok(contar('audit_logs') > 30);
   assert.equal(contar('solicitacoes'),6);
+  assert.equal(contar('rede_fornecedores'),43);
+  assert.equal(leitura.prepare("SELECT COUNT(*) n FROM rede_fornecedores WHERE ibge IS NULL").get().n,0);
   assert.deepEqual(leitura.prepare('SELECT DISTINCT status FROM solicitacoes ORDER BY status').all().map(r => r.status),['aberta','cadastrado','devolvida','em_analise','recusado']);
   assert.equal(leitura.prepare("SELECT COUNT(*) n FROM solicitacoes WHERE urgencia='urgente'").get().n,1);
   assert.equal(leitura.prepare('SELECT COUNT(*) n FROM solicitacoes WHERE nao_verificado=1').get().n,1);
@@ -129,7 +136,7 @@ void test('semeadura usa API real, cria perfis/acordos/chamados/Central e preser
     assert.ok((await sessao('/central/nao-lidas')).naoLidas > 0);
     await sessao('/logout', 'POST');
   }
-  const antes = ['users','agreements','agreement_items','tickets','ticket_events','audit_logs','notificacoes_usuario','solicitacoes','solicitacao_andamentos','consultas_cnpj','email_notifications'].map(tabela => [tabela, contar(tabela)]);
+  const antes = ['rede_fornecedores','users','agreements','agreement_items','tickets','ticket_events','audit_logs','notificacoes_usuario','solicitacoes','solicitacao_andamentos','consultas_cnpj','email_notifications'].map(tabela => [tabela, contar(tabela)]);
   await semear(base, pasta); assert.deepEqual(antes.map(([tabela]) => [tabela, contar(tabela)]), antes);
   // Retoma sem o marco final: cadastros e acordos tambem sao idempotentes.
   const progresso = path.join(pasta, 'semeadura.json'), estado = JSON.parse(fs.readFileSync(progresso)); delete estado.concluido;

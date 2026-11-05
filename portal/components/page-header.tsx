@@ -25,6 +25,7 @@ export function CabecalhoProvider({
 }
 const titulos = {
   buscar: "Buscar preços",
+  rede: "Rede",
   manutencao: "Manutenção",
   chamados: "Chamados",
   estoque: "Estoque",

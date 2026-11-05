@@ -22,6 +22,7 @@ import { permissoesApi } from '@/lib/permissoes-api';
 import { contratosApi } from '@/lib/contratos-api';
 import { analiseApi } from '@/lib/analise-api';
 import { alertasApi } from '@/lib/alertas-api';
+import { redeApi } from '@/lib/rede-api';
 import { auditoriaApi } from '@/lib/auditoria-api';
 import { notificacoesApi } from '@/lib/notificacoes-api';
 import { logoMarca } from '@/lib/marca-api';
@@ -143,6 +144,7 @@ const permissoes = permissoesApi(contexto);
 const contratos = contratosApi(contexto);
 const analise = analiseApi(contexto);
 const alertas = alertasApi(contexto);
+const rede = redeApi(contexto);
 const auditoria = auditoriaApi(contexto);
 const notificacoes = notificacoesApi(contexto);
 const central = centralApi(contexto);
@@ -282,6 +284,12 @@ async function GETInterno(request: NextRequest) {
     return fail('Rota não encontrada.', 404);
   }
   if (parts[0] === 'bootstrap') return bootstrap(user);
+  if (parts[0] === 'rede') {
+    if (parts.length === 1) return rede.consultar(user, request.nextUrl.searchParams);
+    if (parts.length === 2 && parts[1] === 'cidades') return rede.cidades(user);
+    if (parts.length === 2 && parts[1] === 'exclusoes') return rede.exclusoes(user);
+    return fail('Rota não encontrada.', 404);
+  }
   if (parts[0] === 'search') {
     if (!pode(user, 'aba:search')) return fail('Seu perfil não tem acesso a Buscar.', 403);
     return parts[1] === 'options' ? searchOptions(request.nextUrl.searchParams) : search(request.nextUrl.searchParams);
@@ -382,6 +390,10 @@ async function POSTInterno(request: NextRequest) {
     if (!tokenInternoValido(request)) return fail('Credencial interna inválida.', 401);
     return alertas.receberRodada(request);
   }
+  if (parts[0] === 'internal' && parts[1] === 'rede' && parts.length === 2) {
+    if (!tokenInternoValido(request)) return fail('Credencial interna inválida.', 401);
+    return rede.receber(request);
+  }
   const user = await requireUser(request);
   if (!user) {
     if (parts[0] === 'pagamentos' && request.body) {
@@ -392,6 +404,12 @@ async function POSTInterno(request: NextRequest) {
     return fail('Sessão expirada.', 401);
   }
   if (await first(VALIDACAO_ATIVA_SQL)) return denyWrite(request, 'Sistema em atualização, aguarde alguns instantes', 503, 'validacao');
+  if (parts[0] === 'rede') {
+    if (!pode(user, 'rede:gerenciar')) return denyWrite(request, 'Seu perfil não permite desconsiderar fornecedores da Rede.');
+    if (parts.length === 3 && parts[1] === 'exclusoes' && parts[2] === 'fornecedores') return rede.desconsiderarFornecedor(request, user);
+    if (parts.length === 3 && parts[1] === 'exclusoes' && parts[2] === 'segmentos') return rede.desconsiderarSegmento(request, user);
+    return fail('Rota não encontrada.', 404);
+  }
   if (parts[0] === 'analise' && parts[1] === 'acoes' && parts.length === 3) {
     if (!pode(user, 'analise:acoes')) return denyWrite(request, 'Seu perfil não permite resolver as próximas ações.');
     return analise.resolverAcao(request, user, parts[2]);
@@ -520,6 +538,14 @@ async function DELETEInterno(request: NextRequest) {
   const user = await requireUser(request);
   if (!user) return fail('Sessão expirada.', 401);
   if (await first(VALIDACAO_ATIVA_SQL)) return denyWrite(request, 'Sistema em atualização, aguarde alguns instantes', 503, 'validacao');
+  const partesRede = partsOf(request);
+  if (partesRede[0] === 'rede') {
+    if (!pode(user, 'rede:gerenciar')) return fail('Seu perfil não permite desconsiderar fornecedores da Rede.', 403);
+    const busca = new URL(request.url).searchParams;
+    if (partesRede.length === 3 && partesRede[1] === 'exclusoes' && partesRede[2] === 'fornecedores') return rede.reconsiderarFornecedor(user, busca.get('codigo') || '');
+    if (partesRede.length === 3 && partesRede[1] === 'exclusoes' && partesRede[2] === 'segmentos') return rede.reconsiderarSegmento(user, busca.get('segmento') || '');
+    return fail('Rota não encontrada.', 404);
+  }
   if (!pode(user, acaoEscrita(partsOf(request)))) return fail('Seu perfil permite somente consulta.', 403);
   const parts = partsOf(request);
   if (parts[0] === 'items' && parts[1]) {
