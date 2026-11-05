@@ -1,27 +1,23 @@
 import { EntradaInvalida } from './limites-entrada.ts';
 import { isIsoDate } from './domain.ts';
 
-// Historico de OS para a calculadora de reembolso: uma linha por item de OS,
-// copiada do mesmo objeto do Qlik que o Alertas usa. O Alertas reenvia dias
-// inteiros e o Portal troca as linhas daquelas datas de uma vez, entao
-// repetir um envio nunca duplica nada.
+// Historico de OS para a calculadora de reembolso: consultado no Qlik sob
+// demanda, uma placa por vez, e guardado por algumas horas. O cache guarda a
+// resposta inteira; os filtros valem na hora de responder, entao mudar um
+// filtro vale ate para o que ja esta no cache.
 export const SCHEMA_REEMBOLSO_HISTORICO = [
-  `CREATE TABLE IF NOT EXISTS reembolso_historico (
-    id INTEGER PRIMARY KEY, data TEXT NOT NULL, placa TEXT NOT NULL, os TEXT, produto TEXT NOT NULL,
-    qtd REAL, valor_unit REAL, total REAL, reembolso REAL, km INTEGER, fornecedor TEXT, grupo TEXT, modelo TEXT, cliente TEXT)`,
-  'CREATE INDEX IF NOT EXISTS idx_reembolso_historico_placa ON reembolso_historico(placa, data)',
-  'CREATE INDEX IF NOT EXISTS idx_reembolso_historico_data ON reembolso_historico(data)',
-  `CREATE TABLE IF NOT EXISTS reembolso_historico_dias (
-    data TEXT PRIMARY KEY, linhas INTEGER NOT NULL, recebido_em TEXT NOT NULL)`,
+  `CREATE TABLE IF NOT EXISTS reembolso_historico_cache (
+    placa TEXT PRIMARY KEY, linhas TEXT NOT NULL, itens INTEGER NOT NULL, consultado_em TEXT NOT NULL, user_id TEXT REFERENCES users(id))`,
+  'CREATE INDEX IF NOT EXISTS idx_reembolso_historico_cache_data ON reembolso_historico_cache(consultado_em)',
   // O que nao entra no historico. Valor guardado como digitado e tambem
   // normalizado (sem acento/caixa), que e como a comparacao e feita.
   `CREATE TABLE IF NOT EXISTS reembolso_historico_filtros (
     id TEXT PRIMARY KEY, coluna TEXT NOT NULL CHECK(coluna IN ('grupo','produto','fornecedor','modelo','cliente')),
     modo TEXT NOT NULL CHECK(modo IN ('igual','contem')), valor TEXT NOT NULL, valor_norm TEXT NOT NULL,
-    removidos INTEGER NOT NULL DEFAULT 0, user_id TEXT REFERENCES users(id), criado_em TEXT NOT NULL, UNIQUE(coluna, modo, valor_norm))`,
+    user_id TEXT REFERENCES users(id), criado_em TEXT NOT NULL, UNIQUE(coluna, modo, valor_norm))`,
 ];
 
-// Colunas que aceitam filtro: chave = coluna da tabela do historico.
+// Colunas que aceitam filtro.
 export const COLUNAS_FILTRO = {
   grupo: 'Grupo de despesa', produto: 'Descrição (produto)', fornecedor: 'Fornecedor', modelo: 'Modelo do veículo', cliente: 'Cliente',
 } as const;
@@ -29,18 +25,18 @@ export type ColunaFiltro = keyof typeof COLUNAS_FILTRO;
 export type ModoFiltro = 'igual' | 'contem';
 export type FiltroHistorico = { coluna: ColunaFiltro; modo: ModoFiltro; valor: string; valorNorm: string };
 
-export const LIMITE_DIAS_ENVIO = 62;
-export const LIMITE_LINHAS_ENVIO = 60000;
-export const LIMITE_LINHAS_PLACA = 5000;
+export const LIMITE_LINHAS_PLACA = 20000;
+export const VALIDADE_CACHE_MS = 6 * 60 * 60 * 1000;
 
 export type LinhaHistorico = {
-  data: string; placa: string; os: string | null; produto: string; qtd: number | null; valorUnit: number | null;
+  data: string; os: string | null; produto: string; qtd: number | null; valorUnit: number | null;
   total: number | null; reembolso: number | null; km: number | null; fornecedor: string | null;
   grupo: string | null; modelo: string | null; cliente: string | null;
 };
 
 const comoTexto = (v: unknown) => (typeof v === 'string' ? v : typeof v === 'number' ? String(v) : '');
 export const placaNormalizada = (v: unknown) => comoTexto(v).toUpperCase().replace(/[^A-Z0-9]/g, '');
+export const placaValida = (placa: string) => /^[A-Z0-9]{5,10}$/.test(placa);
 
 const texto = (v: unknown, max: number, campo: string) => {
   if (v === null || v === undefined) return null;
@@ -54,29 +50,22 @@ const numero = (v: unknown, campo: string) => {
   return v;
 };
 
-export function validarEnvioHistorico(body: unknown): { datas: string[]; linhas: LinhaHistorico[] } {
-  if (!body || typeof body !== 'object') throw new EntradaInvalida('Corpo inválido.');
-  const { datas, linhas } = body as { datas?: unknown; linhas?: unknown };
-  if (!Array.isArray(datas) || !datas.length || datas.length > LIMITE_DIAS_ENVIO || !datas.every(isIsoDate)) {
-    throw new EntradaInvalida(`Informe de 1 a ${LIMITE_DIAS_ENVIO} datas válidas.`);
-  }
-  if (!Array.isArray(linhas) || linhas.length > LIMITE_LINHAS_ENVIO) throw new EntradaInvalida('Linhas do histórico inválidas.');
-  const periodo = new Set(datas as string[]);
-  const validas = linhas.map((x): LinhaHistorico => {
+// Resposta da consulta ao Qlik: confere cada linha antes de guardar.
+export function validarLinhasConsulta(linhas: unknown): LinhaHistorico[] {
+  if (!Array.isArray(linhas) || linhas.length > LIMITE_LINHAS_PLACA) throw new EntradaInvalida('Resposta do Qlik inválida.');
+  return linhas.map((x): LinhaHistorico => {
     if (!x || typeof x !== 'object') throw new EntradaInvalida('Linha do histórico inválida.');
     const l = x as Record<string, unknown>;
-    if (typeof l.data !== 'string' || !periodo.has(l.data)) throw new EntradaInvalida('Linha do histórico fora das datas enviadas.');
-    const placa = placaNormalizada(l.placa), produto = texto(l.produto, 200, 'produto');
-    if (placa.length < 5 || placa.length > 10 || !produto) throw new EntradaInvalida('Linha do histórico sem placa ou produto.');
+    const produto = texto(l.produto, 200, 'produto');
+    if (!isIsoDate(l.data) || !produto) throw new EntradaInvalida('Linha do histórico sem data ou produto.');
     const km = numero(l.km, 'km');
     return {
-      data: l.data, placa, os: texto(l.os, 30, 'os'), produto, qtd: numero(l.qtd, 'qtd'), valorUnit: numero(l.valorUnit, 'valorUnit'),
+      data: l.data as string, os: texto(l.os, 30, 'os'), produto, qtd: numero(l.qtd, 'qtd'), valorUnit: numero(l.valorUnit, 'valorUnit'),
       total: numero(l.total, 'total'), reembolso: numero(l.reembolso, 'reembolso'), km: km !== null && km > 0 ? Math.round(km) : null,
       fornecedor: texto(l.fornecedor, 200, 'fornecedor'), grupo: texto(l.grupo, 200, 'grupo'),
       modelo: texto(l.modelo, 200, 'modelo'), cliente: texto(l.cliente, 200, 'cliente'),
     };
   });
-  return { datas: [...periodo].sort(), linhas: validas };
 }
 
 // ---- filtros do historico ----
