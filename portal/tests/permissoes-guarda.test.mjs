@@ -12,7 +12,11 @@ const excecoes = {
     "role<>'admin'", "outro.role='admin'", 'role=?', 'role=?',
     'body.role === undefined', "role!=='viewer'", "role!=='admin'",
     'role!==target.role', 'role!==target.role', "role='viewer'",
+    // Troca de perfil limpa os ajustes individuais do painel.
+    'role!==target.role', 'role=?',
   ],
+  // Troca de perfil pendente na tela (nao decide acesso).
+  'components/portal-permissoes.tsx': ['role === usuario.role'],
   'components/portal-users.tsx': ["r.role === 'admin'", "r.role === 'editor'", "form.role === 'viewer'", "form.role !== 'viewer'"],
 };
 

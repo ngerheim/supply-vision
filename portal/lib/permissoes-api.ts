@@ -4,7 +4,7 @@ import { isRecord, type Role } from './domain.ts';
 import { type ContextoApi, type User } from './api-compartilhada.ts';
 import { auditoriaNoLote } from './auditoria-api.ts';
 
-type Linha = { id: string; name: string; email: string; role: Role };
+type Linha = { id: string; name: string; email: string; role: Role; revision: number };
 type Ajuste = { user_id: string; area: string; nivel: string };
 
 const rotuloArea = (area: Area) => {
@@ -30,7 +30,7 @@ export function permissoesApi(contexto: ContextoApi) {
 
   async function carregar() {
     const [usuarios, ajustes] = await Promise.all([
-      all<Linha>('SELECT id,name,email,role FROM users WHERE active=1 ORDER BY name'),
+      all<Linha>('SELECT id,name,email,role,revision FROM users WHERE active=1 ORDER BY name'),
       all<Ajuste>('SELECT user_id,area,nivel FROM permissoes_usuario'),
     ]);
     // Acesso total (admin) nao passa pelo painel.
@@ -44,7 +44,7 @@ export function permissoesApi(contexto: ContextoApi) {
       areas: AREAS,
       niveis: NIVEIS.map(nivel => ({ nivel, label: ROTULO_NIVEL[nivel] })),
       usuarios: usuarios.map(u => ({
-        id: u.id, name: u.name, email: u.email, role: u.role, acessoTotal: u.total,
+        id: u.id, name: u.name, email: u.email, role: u.role, revision: u.revision, proprio: u.id === user.id, acessoTotal: u.total,
         niveis: Object.fromEntries(AREAS_IDS.map(area => [area, u.total ? 'edicao' : u.ajustes[area] ?? nivelPadrao(u.role, area)])),
         padrao: Object.fromEntries(AREAS_IDS.map(area => [area, u.total ? 'edicao' : nivelPadrao(u.role, area)])),
       })),

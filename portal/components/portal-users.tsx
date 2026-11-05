@@ -31,7 +31,6 @@ import {
   type JsonData,
   type AnyRow,
   Field,
-  SelectField,
   roleName,
   Loading,
   FalhaDeCarregamento,
@@ -261,24 +260,6 @@ function UserEditDialog({
               onChange={(e) => setForm({ ...form, name: e.target.value })}
             />
           </Field>
-          <SelectField
-            label="Perfil"
-            disabled={busy || isSelf}
-            value={form.role || 'viewer'}
-            onChange={(v: string) =>
-              setForm({
-                ...form,
-                role: v,
-                dailyReportEnabled:
-                  v === 'viewer' ? false : form.dailyReportEnabled,
-              })
-            }
-            rows={[
-              { id: 'viewer', name: 'Consulta' },
-              { id: 'editor', name: 'Suprimentos' },
-              { id: 'admin', name: 'Administrador' },
-            ]}
-          />
           <Field label="Nova senha">
             <Input
               type="password"
@@ -362,7 +343,6 @@ function UserDialog({ open, busy, onClose, onSave }: JsonData) {
     name: '',
     email: '',
     password: '',
-    role: 'viewer',
   });
   const passwordError = validatePassword(form.password);
   return (
@@ -370,6 +350,7 @@ function UserDialog({ open, busy, onClose, onSave }: JsonData) {
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Novo usuário autorizado</DialogTitle>
+          <DialogDescription>Entra com o perfil Consulta. Perfil e acessos se ajustam em Administração › Permissões.</DialogDescription>
         </DialogHeader>
         <fieldset disabled={busy} className="space-y-4">
           <Field label="Nome *">
@@ -400,17 +381,6 @@ function UserDialog({ open, busy, onClose, onSave }: JsonData) {
               </p>
             )}
           </Field>
-          <SelectField
-            label="Perfil"
-            disabled={busy}
-            value={form.role}
-            onChange={(v: string) => setForm({ ...form, role: v })}
-            rows={[
-              { id: 'viewer', name: 'Consulta' },
-              { id: 'editor', name: 'Suprimentos' },
-              { id: 'admin', name: 'Administrador' },
-            ]}
-          />
         </fieldset>
         <DialogFooter>
           <Button disabled={busy} variant="outline" onClick={onClose}>

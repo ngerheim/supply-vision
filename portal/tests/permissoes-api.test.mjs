@@ -131,4 +131,19 @@ void test('painel de permissoes: matriz, gravacao, bloqueio na API, sessoes e au
   const reverter = await pedir('PUT', 'permissoes', admin, { usuarios: [{ id: 'editor', niveis: { pagamentos: 'edicao', relatorios: 'sem', fornecedores: 'edicao' } }] });
   assert.equal(reverter.status, 200);
   assert.equal(sql.prepare("SELECT COUNT(*) n FROM permissoes_usuario WHERE user_id='editor'").get().n, 0);
+
+  // Perfil se troca pela aba Permissoes (rota de usuarios): ajustes antigos
+  // voltam ao padrao do novo perfil e a propria conta nao muda.
+  await abrirSessoes();
+  assert.equal((await pedir('PUT', 'permissoes', admin, { usuarios: [{ id: 'viewer', niveis: { acordos: 'leitura' } }] })).status, 200);
+  const comPerfil = (await pedir('GET', 'permissoes', admin)).data.usuarios;
+  const alvo = comPerfil.find(u => u.id === 'viewer');
+  assert.equal(typeof alvo.revision, 'number');
+  assert.deepEqual(comPerfil.filter(u => u.proprio).map(u => u.id), [admin]);
+  assert.equal((await pedir('PUT', 'users/viewer', admin, { role: 'editor', expectedRevision: alvo.revision })).status, 200);
+  assert.equal(sql.prepare("SELECT role FROM users WHERE id='viewer'").get().role, 'editor');
+  assert.equal(sql.prepare("SELECT COUNT(*) n FROM permissoes_usuario WHERE user_id='viewer'").get().n, 0);
+  assert.match(sql.prepare("SELECT details FROM audit_logs WHERE entity='user' AND entity_id='viewer' ORDER BY rowid DESC LIMIT 1").get().details, /perfil: viewer → editor; acessos individuais voltam ao padrão/);
+  const proprio = comPerfil.find(u => u.id === admin);
+  assert.equal((await pedir('PUT', 'users/' + String(admin), admin, { role: 'editor', expectedRevision: proprio.revision })).status, 400);
 });
