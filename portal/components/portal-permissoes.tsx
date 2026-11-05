@@ -6,16 +6,18 @@ import { TabelaPadrao } from './tela-padrao';
 import { Button } from '@/components/ui/button';
 import { TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { api, errorText } from '@/lib/api';
-import { roleName, Loading, FalhaDeCarregamento } from './portal-presentation';
+import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
+import { Loading, FalhaDeCarregamento } from './portal-presentation';
 
 type Matriz = {
   areas: { area: string; aba: string; label: string }[];
   niveis: { nivel: string; label: string }[];
-  usuarios: { id: string; name: string; email: string; role: string; acessoTotal: boolean; niveis: Record<string, string>; padrao: Record<string, string> }[];
+  usuarios: { id: string; name: string; email: string; role: string; revision: number; proprio: boolean; acessoTotal: boolean; niveis: Record<string, string>; padrao: Record<string, string> }[];
 };
 
 // Celula compacta: um clique avanca Sem acesso → Leitura → Edição. O rotulo
 // completo fica no title e no aria-label.
+const PERFIS = [['viewer', 'Consulta'], ['editor', 'Suprimentos'], ['admin', 'Administrador']];
 const CURTO: Record<string, string> = { sem: '—', leitura: 'Ler', edicao: 'Editar' };
 const PROXIMO: Record<string, string> = { sem: 'leitura', leitura: 'edicao', edicao: 'sem' };
 const ESTILO: Record<string, string> = {
@@ -27,6 +29,8 @@ const ESTILO: Record<string, string> = {
 export function Permissoes({ busy, run }: { busy: boolean; run: (acao: () => Promise<unknown>, mensagem?: string) => unknown }) {
   const [matriz, setMatriz] = useState<Matriz | null>(null);
   const [edicao, setEdicao] = useState<Record<string, Record<string, string>>>({});
+  // Troca de perfil pendente, por usuario. O perfil e definido so aqui.
+  const [perfis, setPerfis] = useState<Record<string, string>>({});
   const [erro, setErro] = useState('');
 
   const carregar = useCallback(async (signal?: AbortSignal) => {
@@ -34,6 +38,7 @@ export function Permissoes({ busy, run }: { busy: boolean; run: (acao: () => Pro
     if (signal?.aborted) return;
     setMatriz(dados);
     setEdicao({});
+    setPerfis({});
     setErro('');
   }, []);
 
@@ -48,7 +53,7 @@ export function Permissoes({ busy, run }: { busy: boolean; run: (acao: () => Pro
     return () => controller.abort();
   }, [carregar]);
 
-  const pendentes = useMemo(() => Object.values(edicao).reduce((n, areas) => n + Object.keys(areas).length, 0), [edicao]);
+  const pendentes = useMemo(() => Object.values(edicao).reduce((n, areas) => n + Object.keys(areas).length, 0) + Object.keys(perfis).length, [edicao, perfis]);
 
   useEffect(() => {
     if (!pendentes) return;
@@ -82,11 +87,34 @@ export function Permissoes({ busy, run }: { busy: boolean; run: (acao: () => Pro
     });
   };
 
+  const trocarPerfil = (usuario: Matriz['usuarios'][number], role: string) => {
+    setPerfis((atual) => {
+      const proximo = { ...atual };
+      if (role === usuario.role) delete proximo[usuario.id];
+      else proximo[usuario.id] = role;
+      return proximo;
+    });
+    // Os acessos do novo perfil so aparecem depois de salvar.
+    setEdicao((atual) => {
+      const proximo = { ...atual };
+      delete proximo[usuario.id];
+      return proximo;
+    });
+  };
+
   const salvar = () =>
     run(async () => {
-      const usuarios = Object.entries(edicao).map(([id, areas]) => ({ id, niveis: areas }));
-      await api('/api/permissoes', { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ usuarios }) });
-      await carregar();
+      try {
+        // Perfil pela rota de usuarios: mesmas guardas (propria conta, ultimo admin).
+        for (const [id, role] of Object.entries(perfis)) {
+          const usuario = matriz.usuarios.find((u) => u.id === id)!;
+          await api(`/api/users/${id}`, { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ role, expectedRevision: usuario.revision }) });
+        }
+        const usuarios = Object.entries(edicao).map(([id, areas]) => ({ id, niveis: areas }));
+        if (usuarios.length) await api('/api/permissoes', { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ usuarios }) });
+      } finally {
+        await carregar().catch(() => {});
+      }
     }, 'Permissões salvas. Quem teve acesso alterado precisa entrar novamente.');
 
   const rotulo = (nivel: string) => matriz.niveis.find((n) => n.nivel === nivel)?.label ?? nivel;
@@ -97,7 +125,7 @@ export function Permissoes({ busy, run }: { busy: boolean; run: (acao: () => Pro
         actions={
           <>
             {pendentes > 0 && (
-              <Button variant="outline" disabled={busy} onClick={() => setEdicao({})}>
+              <Button variant="outline" disabled={busy} onClick={() => { setEdicao({}); setPerfis({}); }}>
                 Descartar
               </Button>
             )}
@@ -110,7 +138,7 @@ export function Permissoes({ busy, run }: { busy: boolean; run: (acao: () => Pro
       <TabelaPadrao contador={`${matriz.usuarios.length} usuários${pendentes ? ` · ${pendentes} alteração(ões) não salva(s)` : ''}`}>
         <TableHeader>
           <TableRow>
-            <TableHead rowSpan={2} className="align-bottom" style={{ width: 180 }}>Usuário</TableHead>
+            <TableHead rowSpan={2} className="align-bottom" style={{ width: 200 }}>Usuário e perfil</TableHead>
             {grupos.map((grupo) => (
               <TableHead key={grupo.aba} colSpan={grupo.areas.length} className="border-l text-center">
                 {grupo.aba}
@@ -132,9 +160,23 @@ export function Permissoes({ busy, run }: { busy: boolean; run: (acao: () => Pro
             <TableRow key={usuario.id}>
               <TableCell className="font-medium">
                 <div className="truncate" title={`${usuario.name} · ${usuario.email}`}>{usuario.name}</div>
-                <div className="text-xs text-muted-foreground">{roleName(usuario.role)}</div>
+                <NativeSelect
+                  size="sm"
+                  aria-label={`Perfil de ${usuario.name}`}
+                  title={usuario.proprio ? 'Não é possível trocar o perfil da própria conta.' : undefined}
+                  className={`mt-1 ${perfis[usuario.id] ? 'ring-2 ring-primary' : ''}`}
+                  disabled={busy || usuario.proprio}
+                  value={perfis[usuario.id] ?? usuario.role}
+                  onChange={(e) => trocarPerfil(usuario, e.target.value)}
+                >
+                  {PERFIS.map(([valor, nome]) => <NativeSelectOption key={valor} value={valor}>{nome}</NativeSelectOption>)}
+                </NativeSelect>
               </TableCell>
-              {usuario.acessoTotal ? (
+              {perfis[usuario.id] ? (
+                <TableCell colSpan={matriz.areas.length} className="border-l text-sm text-muted-foreground">
+                  Novo perfil: os acessos voltam ao padrão dele ao salvar.
+                </TableCell>
+              ) : usuario.acessoTotal ? (
                 <TableCell colSpan={matriz.areas.length} className="border-l text-sm text-muted-foreground">
                   Acesso total
                 </TableCell>

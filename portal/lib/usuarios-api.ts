@@ -81,7 +81,7 @@ export function usuariosApi(contexto: ContextoApi) {
     if(!revisaoConfere(body.expectedRevision,target.revision)) return fail('Este usuario foi alterado. Feche a edicao e atualize a lista antes de tentar novamente.',409);
     const changes:string[]=[];
     if(name!==target.name) changes.push(`nome: ${target.name} → ${name}`);
-    if(role!==target.role) changes.push(`perfil: ${target.role} → ${role}`);
+    if(role!==target.role) changes.push(`perfil: ${target.role} → ${role}; acessos individuais voltam ao padrão do perfil`);
     if(active!==target.active) changes.push(active?'reativado':'desativado');
     if(dailyReportEnabled!==target.dailyReportEnabled) changes.push(dailyReportEnabled?'relatório diário ativado':'relatório diário desativado');
     if(dailyReportTime!==target.dailyReportTime) changes.push(`horário do relatório: ${target.dailyReportTime} → ${dailyReportTime}`);
@@ -99,6 +99,9 @@ export function usuariosApi(contexto: ContextoApi) {
     // Desativar ou trocar o perfil derruba as sessoes abertas: o acesso antigo
     // nao pode continuar valendo ate o fim do prazo da sessao.
     if(password === null && encerrarSessoes) statements.push(rawDb().prepare(ENCERRAR_SESSOES_ALTERADAS_SQL).bind(userId,userId,role,active));
+    // Ajustes do painel eram relativos ao perfil antigo; o novo parte do padrao.
+    if(role!==target.role) statements.push(rawDb().prepare('DELETE FROM permissoes_usuario WHERE user_id=? AND EXISTS (SELECT 1 FROM users WHERE id=? AND revision=? AND role=?)')
+      .bind(userId,userId,target.revision+1,role));
     statements.push(rawDb().prepare(`UPDATE daily_report_deliveries SET status='failed',locked_at=NULL,last_error='Permissão de relatório revogada.',updated_at=?
     WHERE user_id=? AND status IN ('pending','processing') AND EXISTS
     (SELECT 1 FROM users WHERE id=? AND revision=? AND (active<>1 OR role='viewer' OR daily_report_enabled<>1))`)
