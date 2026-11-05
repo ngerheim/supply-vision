@@ -22,6 +22,9 @@ PORTAL_CONFIG = PRIVADO / "portal" / "configuracao" / "portal.env"
 SCRIPT_BAIXAR = PROCESSO_DIR / "baixar_base.py"
 SCRIPT_RODAR = PROCESSO_DIR / "rodar.py"
 SCRIPT_EMAIL = PROCESSO_DIR / "enviar_email.py"
+SCRIPT_REDE = PROCESSO_DIR / "baixar_fornecedores.py"
+# Data (AAAA-MM-DD) da ultima copia da Rede aceita pelo Portal.
+REDE_MARCADOR = DADOS_DIR / "rede_fornecedores.ok"
 PARAMETROS_SRC = ALERTAS
 PARAMETROS_DIR = OPERACAO / "parametros"
 
@@ -60,6 +63,10 @@ QLIK_TENANT = _exigir(AMBIENTE, "QLIK_TENANT", CFG_AMBIENTE)
 QLIK_APP_ID = _exigir(AMBIENTE, "QLIK_APP_ID", CFG_AMBIENTE)
 QLIK_OBJ_ID = _exigir(AMBIENTE, "QLIK_OBJ_ID", CFG_AMBIENTE)
 DESTINATARIO_ALERTA = _exigir(AMBIENTE, "DESTINATARIO_ALERTA", CFG_AMBIENTE)
+# Aba Rede do Portal: app e pasta (sheet) do Qlik com o cadastro de
+# fornecedores. Opcionais: sem eles a copia diaria simplesmente nao roda.
+QLIK_REDE_APP_ID = AMBIENTE.get("QLIK_REDE_APP_ID", "")
+QLIK_REDE_SHEET_ID = AMBIENTE.get("QLIK_REDE_SHEET_ID", "")
 PORTAL_URL = PORTAL.get("PORTAL_URL", "").rstrip("/")
 PORTAL_INTERNAL_URL = PORTAL.get("PORTAL_INTERNAL_URL", "").rstrip("/")
 PORTAL_API_TOKEN = PORTAL.get("PORTAL_API_TOKEN", "")

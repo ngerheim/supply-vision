@@ -24,13 +24,14 @@ export const ACOES = [
   'aba:analise', 'analise:consultar',
   'aba:alertas', 'alertas:consultar', 'alertas:destinatarios',
   'analise:acoes', 'fornecedor:gerenciar',
+  'aba:rede', 'rede:gerenciar',
 ] as const;
 export type Acao = (typeof ACOES)[number];
 
 // Guardas gerais preservam a ordem e as mensagens do roteador, inclusive 404.
 const consulta: readonly Acao[] = [
   'aba:search', 'aba:maintenance', 'central:marcar', 'solicitacao:abrir', 'aba:solicitacoes', 'baixa:abrir', 'aba:baixas',
-  'aba:pagamentos', 'pagamento:abrir', 'aba:estoque', 'estoque:consultar',
+  'aba:pagamentos', 'pagamento:abrir', 'aba:estoque', 'estoque:consultar', 'aba:rede',
 ];
 const suprimentos: readonly Acao[] = [
   ...consulta, 'aba:tickets', 'aba:agreements', 'aba:suppliers', 'aba:imports',
@@ -54,7 +55,7 @@ const acoesPorPerfil: Record<Role, readonly Acao[]> = {
     'email:consultar', 'email:reenviar', 'base:exportar',
     'categoria:gerenciar', 'aba:categorias',
     'estoque:gerenciar', 'aba:estoques',
-    'aba:permissoes', 'permissao:gerenciar', 'alertas:destinatarios',
+    'aba:permissoes', 'permissao:gerenciar', 'alertas:destinatarios', 'rede:gerenciar',
   ],
 };
 
@@ -65,6 +66,7 @@ export const ROTULO_NIVEL: Record<Nivel, string> = { sem: 'Sem acesso', leitura:
 
 export const AREAS = [
   { area: 'buscar', aba: 'Buscar', label: 'Buscar' },
+  { area: 'rede', aba: 'Rede', label: 'Rede' },
   { area: 'manutencao', aba: 'Manutenção', label: 'Manutenção' },
   { area: 'parcerias', aba: 'Chamados', label: 'Acordos' },
   { area: 'solicitacoes', aba: 'Chamados', label: 'Cadastros' },
@@ -126,6 +128,8 @@ export const EXIGENCIAS: Partial<Record<Acao, Exigencia>> = {
   'aba:analise': L('analise'), 'analise:consultar': L('analise'), 'analise:acoes': E('analise'),
   // Leitura: ver as rodadas e receber o aviso. Edicao: escolher quem recebe.
   'aba:alertas': L('alertas'), 'alertas:consultar': L('alertas'), 'alertas:destinatarios': E('alertas'),
+  // Leitura: consultar a rede. Edicao: desconsiderar fornecedores e segmentos.
+  'aba:rede': L('rede'), 'rede:gerenciar': E('rede'),
 };
 // Fora do painel: so o perfil admin. Evita que alguem amplie os proprios poderes.
 // central:marcar nao pertence a area nenhuma e segue o perfil.

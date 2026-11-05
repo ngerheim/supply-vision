@@ -28,6 +28,7 @@ import { Contratos } from './portal-contratos';
 import { Analise } from './portal-analise';
 import { PaginaAcoesAnalise } from './portal-analise-pagina-acoes';
 import { Alertas, DestinatariosAlertas } from './portal-alertas';
+import { Rede, RedeDesconsiderados } from './portal-rede';
 import { Administration } from './portal-users';
 import { Mappings } from './portal-mappings';
 import { CabecalhoProvider } from './page-header';
@@ -162,6 +163,8 @@ function PortalSession({ message, endSession }: { message: string; endSession: (
       <div id="portal-conteudo" role={abaDaChave(nav).subabas.length > 1 && !agreementId ? 'tabpanel' : undefined} aria-labelledby={abaDaChave(nav).subabas.length > 1 && !agreementId ? `subaba-${nav}` : undefined}>
       {nav==='search'&&(!agreementId||verAcordos)&&<SearchPage catalogs={catalogs} openAgreement={openAgreement} filters={searchFilters} setFilters={setSearchFilters}/>}
       {((verAcordos&&nav==='agreements')||(!verAcordos&&nav==='search'&&agreementId))&&(agreementId?<AgreementDetail busy={busy} revision={data} id={agreementId} canWrite={canWrite} canDelete={pode(user, 'acordo:excluir')} onDelete={removerAcordo} onBack={()=>setAgreementId(null)} onEdit={(a:AnyRow)=>setAgreementModal({...a,expectedRevision:a.revision})} onItem={(i:AnyRow)=>setItemModal({...i,agreementId,expectedRevision:i.revision})} onImport={()=>{navigate('imports');setImportAgreement(agreementId)}} run={run}/>:<Agreements data={data} catalogs={catalogs} canWrite={canWrite} onOpen={setAgreementId} onNew={()=>setAgreementModal({locationIds:[],status:'active',startDate:dataDeNegocio()})}/>)}
+      {podeAcessarAba(user,'rede')&&nav==='rede'&&<Rede podeGerenciar={pode(user, 'rede:gerenciar')} busy={busy} run={run}/>}
+      {pode(user, 'rede:gerenciar')&&nav==='rede-exclusoes'&&<RedeDesconsiderados busy={busy} run={run}/>}
       {nav==='maintenance'&&<Maintenance url={String(data.manutencao||'')}/>}
       {pode(user, 'aba:suppliers')&&nav==='suppliers'&&(pode(user, 'fornecedor:gerenciar')
         ?<CatalogPage type="suppliers" rows={catalogs.suppliers} onAdd={()=>setCatalogModal({type:'suppliers'})} onEdit={(row:AnyRow)=>setCatalogModal({type:'suppliers',...row,expectedRevision:row.revision})} onDelete={(row:AnyRow)=>removeCatalog('suppliers',row)}/>

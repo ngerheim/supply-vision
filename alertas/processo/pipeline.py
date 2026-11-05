@@ -5,7 +5,7 @@ import re
 import logging
 import os
 import secrets
-from datetime import datetime
+from datetime import date, datetime
 
 
 import sv_paths
@@ -28,6 +28,7 @@ PYTHON = sys.executable.lower().replace("pythonw.exe", "python.exe")
 SCRIPT_BAIXAR = str(sv_paths.SCRIPT_BAIXAR)
 SCRIPT_RODAR  = str(sv_paths.SCRIPT_RODAR)
 SCRIPT_EMAIL  = str(sv_paths.SCRIPT_EMAIL)
+SCRIPT_REDE   = getattr(sv_paths, "SCRIPT_REDE", None)
 
 
 def configurar_log():
@@ -150,6 +151,34 @@ def publicar_no_portal(contexto, datas, resumo, caminho_com, caminho_qualidade):
     return aceita
 
 
+def rede_pendente(hoje=None):
+    """A cópia da Rede roda uma vez por dia, na primeira execução que a conclua.
+
+    Só com app e pasta configurados, e nunca sem envio (ensaio, --sem-envio).
+    """
+    marcador = getattr(sv_paths, "REDE_MARCADOR", None)
+    if not SCRIPT_REDE or marcador is None or os.environ.get("SUPPLY_VISION_SEM_ENVIO") == "1":
+        return False
+    if not getattr(sv_paths, "QLIK_REDE_APP_ID", "") or not getattr(sv_paths, "QLIK_REDE_SHEET_ID", ""):
+        return False
+    try:
+        return pathlib.Path(marcador).read_text(encoding="utf-8").strip() != (hoje or date.today().isoformat())
+    except OSError:
+        return True
+
+
+def atualizar_rede():
+    """Depois do alerta, com o lock ainda nosso. Falha só fica no log."""
+    try:
+        if not rede_pendente():
+            return
+        ok, _ = rodar_script(str(SCRIPT_REDE), "Rede de fornecedores (Qlik)")
+        if not ok:
+            logging.warning("AVISO: Rede de fornecedores não atualizada; nova tentativa na próxima execução.")
+    except Exception as erro:
+        logging.warning(f"AVISO: Rede de fornecedores não atualizada: {mascarar(str(erro), str(getattr(sv_paths, 'PORTAL_API_TOKEN', '')))}")
+
+
 def adquirir_lock():
     """Mantém um lock exclusivo do Windows até o processo terminar."""
     import msvcrt
@@ -269,6 +298,15 @@ def main():
             logging.error(f'ERRO: {exc}')
             sys.exit(3)
 
+    # A Rede vem depois do alerta (inclusive nas saídas antecipadas), para
+    # nunca atrasar o e-mail.
+    try:
+        executar_alerta()
+    finally:
+        atualizar_rede()
+
+
+def executar_alerta():
     ok, output_baixar = rodar_script(SCRIPT_BAIXAR, "Download Qlik (filtrado)")
     if not ok:
         logging.error("Pipeline interrompido em: Download Qlik")

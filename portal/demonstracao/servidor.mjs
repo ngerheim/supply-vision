@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import crypto from 'node:crypto';
 import path from 'node:path';
 import { modoEnsaio } from '../scripts/modo-ensaio.mjs';
 import { validarPasta, marcarBancoNovo } from './pasta.mjs';
@@ -12,6 +13,9 @@ const { criar, sentinela } = validarPasta(pasta, { privadoAmbiente: null });
 if (!sentinela) throw new Error('Sentinela obrigatoria.');
 process.env.PORTAL_CRIAR_BANCO = criar ? '1' : '0';
 process.env.INITIAL_ADMIN_PASSWORD = exemplo.inicial.password;
+// Credencial interna so desta execucao: a demonstracao semeia a Rede pela
+// mesma rota que o Alertas usa.
+process.env.PORTAL_API_TOKEN ||= crypto.randomBytes(24).toString('hex');
 const { iniciarPortal } = await import('../scripts/iniciar-portal.mjs');
 const runtime = await iniciarPortal('local');
 for (const sinal of ['SIGINT', 'SIGTERM']) process.once(sinal, () => { void runtime.encerrar(); });

@@ -35,6 +35,15 @@ def serial(d):
     return (d - date(1899, 12, 30)).days
 
 
+def _cabecalhos(hc):
+    """Títulos das colunas na ordem exibida, e o nº de colunas do hipercubo."""
+    natural = [d.get('qFallbackTitle') for d in hc.get('qDimensionInfo', [])] + \
+              [m.get('qFallbackTitle') for m in hc.get('qMeasureInfo', [])]
+    ordem = hc.get('qColumnOrder') or list(range(len(natural)))
+    headers = [natural[k] for k in ordem] if len(ordem) == len(natural) else natural
+    return headers, hc['qSize']['qcx']
+
+
 class Sessao:
     """Sessão aberta com um app do Qlik. Use como context manager."""
 
@@ -122,13 +131,36 @@ class Sessao:
         """Abre o objeto e devolve (handle, cabeçalhos, nº de colunas)."""
         h = self.call('GetObject', 1, [obj_id])['qReturn']['qHandle']
         hc = self.call('GetLayout', h, [])['qLayout']['qHyperCube']
-        qcx = hc['qSize']['qcx']
+        return (h, *_cabecalhos(hc))
 
-        natural = [d.get('qFallbackTitle') for d in hc.get('qDimensionInfo', [])] + \
-                  [m.get('qFallbackTitle') for m in hc.get('qMeasureInfo', [])]
-        ordem = hc.get('qColumnOrder') or list(range(len(natural)))
-        headers = [natural[k] for k in ordem] if len(ordem) == len(natural) else natural
-        return h, headers, qcx
+    def tabela_da_pasta(self, pasta_id, obrigatorias):
+        """Acha na pasta (sheet) a única tabela com todas as colunas pedidas.
+
+        Pela pasta, e não pelo id do objeto, para a configuração ser o que se
+        vê na URL do Qlik. Desce também em contêineres. Nenhuma ou mais de uma
+        tabela candidata é erro: escolher às cegas poderia trazer outra lista.
+        Devolve (handle, cabeçalhos, nº de colunas).
+        """
+        candidatos, vistos, fila = [], set(), [pasta_id]
+        while fila:
+            obj = fila.pop(0)
+            if obj in vistos:
+                continue
+            vistos.add(obj)
+            h = self.call('GetObject', 1, [obj])['qReturn'].get('qHandle')
+            if h is None:
+                raise QlikErro(f'Objeto {obj} não encontrado no app do Qlik.')
+            layout = self.call('GetLayout', h, [])['qLayout']
+            hc = layout.get('qHyperCube')
+            if hc:
+                headers, qcx = _cabecalhos(hc)
+                if set(obrigatorias) <= set(headers):
+                    candidatos.append((h, headers, qcx))
+            fila.extend(item['qInfo']['qId'] for item in (layout.get('qChildList') or {}).get('qItems', []))
+        if len(candidatos) != 1:
+            raise QlikErro(f'A pasta {pasta_id} tem {len(candidatos)} tabela(s) com as colunas '
+                           f'{", ".join(obrigatorias)}; esperada exatamente uma.')
+        return candidatos[0]
 
     def linhas(self, h):
         """Quantas linhas o objeto expõe no estado de seleção atual."""
