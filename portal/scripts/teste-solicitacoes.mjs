@@ -32,7 +32,7 @@ assert.equal((await pedir(`solicitacoes/${id}/transicao`, { method: 'POST', body
 assert.equal((await pedir(`solicitacoes/${id}/transicao`, { method: 'POST', body: { para: 'cadastrado', expectedRevision: 4 } })).status, 200);
 const detalhe = (await pedir(`solicitacoes/${id}`, { cookie: viewer })).data;
 assert.equal(detalhe.solicitacao.status, 'cadastrado'); assert.equal(detalhe.andamentos.length, 6); assert.equal('relacionados' in detalhe, false);
-const outra = await pedir('solicitacoes', { method: 'POST', body: { cnpj: cnpjFicticio(90), razao_social: 'Fornecedor Manual Fictício' } });
+const outra = await pedir('solicitacoes', { method: 'POST', body: { cnpj: cnpjFicticio(90), razao_social: 'Fornecedor Manual Fictício', forma_pagamento: 'Pix à vista' } });
 assert.equal(outra.status, 201);
 assert.equal((await pedir(`solicitacoes/${outra.data.id}`, { cookie: viewer })).status, 404);
 assert.equal((await pedir('solicitacoes', { cookie: viewer })).data.solicitacoes.some(s => s.id === outra.data.id), false);
