@@ -9,7 +9,7 @@ export const SCHEMA_SOLICITACOES = [
     cnae_codigo TEXT, cnae_descricao TEXT, consulta_fonte TEXT, consultada_em TEXT,
     nao_verificado INTEGER NOT NULL CHECK(nao_verificado IN (0,1)),
     logradouro TEXT, numero TEXT, complemento TEXT, bairro TEXT, cidade TEXT, uf TEXT, cep TEXT,
-    telefone TEXT, email TEXT, atendimento_cidade TEXT, atendimento_uf TEXT,
+    telefone TEXT, email TEXT, atendimento_cidade TEXT, atendimento_uf TEXT, forma_pagamento TEXT,
     urgencia TEXT NOT NULL CHECK(urgencia IN ('normal','urgente')),
     status TEXT NOT NULL DEFAULT 'aberta' CHECK(status IN ('aberta','em_analise','devolvida','cadastrado','recusado')),
     solicitante_id TEXT NOT NULL REFERENCES users(id), atendente_id TEXT REFERENCES users(id), motivo_recusa TEXT,

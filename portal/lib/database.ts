@@ -462,6 +462,17 @@ async function initialize() {
       db.prepare('INSERT OR IGNORE INTO schema_migrations(version,applied_at) VALUES(21,?)').bind(now()),
     ]);
   }
+  // Forma de pagamento na solicitacao de cadastro. Bancos novos ja criam a
+  // coluna no CREATE TABLE; os existentes ganham a coluna aqui.
+  if (!await db.prepare('SELECT 1 ok FROM schema_migrations WHERE version=22').first()) {
+    await db.batchConstruir((consultar) => {
+      const colunas = consultar({ sql: 'PRAGMA table_info(solicitacoes)', values: [] }).results as Array<{ name: string }>;
+      return [
+        ...(colunas.some(c => c.name === 'forma_pagamento') ? [] : [{ sql: 'ALTER TABLE solicitacoes ADD COLUMN forma_pagamento TEXT', values: [] }]),
+        { sql: 'INSERT OR IGNORE INTO schema_migrations(version,applied_at) VALUES(22,?)', values: [now()] },
+      ];
+    });
+  }
   await db.prepare('PRAGMA optimize').run();
 }
 

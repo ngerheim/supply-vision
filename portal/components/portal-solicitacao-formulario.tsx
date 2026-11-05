@@ -438,6 +438,16 @@ export function FormularioSolicitacao({
                         onChange={(e) => mudar('email', e.target.value)}
                       />
                     </Field>
+                    <Field label="Forma de pagamento" className="sm:col-span-2">
+                      <Input
+                        name="forma_pagamento"
+                        maxLength={200}
+                        required
+                        placeholder="Ex.: boleto 30 dias, Pix à vista, cartão via link"
+                        value={campos.forma_pagamento || ''}
+                        onChange={(e) => mudar('forma_pagamento', e.target.value)}
+                      />
+                    </Field>
                     <Field label="Cidade de atendimento (opcional)">
                       <Input
                         name="atendimento_cidade"

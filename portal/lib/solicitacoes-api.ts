@@ -12,7 +12,7 @@ import { prepararAvisosSolicitacao } from './fila-email-solicitacoes.ts';
 
 const STATUS = ['aberta', 'em_analise', 'devolvida', 'cadastrado', 'recusado'];
 const RECEITA = ['cnpj', 'razao_social', 'nome_fantasia', 'situacao_cadastral', 'cnae_codigo', 'cnae_descricao', 'consulta_fonte', 'consultada_em', 'nao_verificado'] as const;
-const EDITAVEIS = ['logradouro', 'numero', 'complemento', 'bairro', 'cidade', 'uf', 'cep', 'telefone', 'email', 'atendimento_cidade', 'atendimento_uf', 'urgencia'] as const;
+const EDITAVEIS = ['logradouro', 'numero', 'complemento', 'bairro', 'cidade', 'uf', 'cep', 'telefone', 'email', 'atendimento_cidade', 'atendimento_uf', 'forma_pagamento', 'urgencia'] as const;
 type Solicitacao = Row & { id: string; codigo: string; cnpj: string; status: string; solicitante_id: string; revision: number; nao_verificado: number };
 type Corpo = Record<string, unknown>;
 
@@ -33,6 +33,8 @@ function editaveis(body: Corpo, anterior: Corpo = {}) {
   }
   if (dados.cep && !/^\d{8}$/.test(String(dados.cep))) throw new EntradaInvalida('Informe um CEP com 8 dígitos.');
   if (dados.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(dados.email))) throw new EntradaInvalida('Informe um e-mail válido.');
+  // Obrigatoria: Suprimentos precisa saber como o fornecedor recebe antes de cadastrar.
+  if (!dados.forma_pagamento) throw new EntradaInvalida('Informe a forma de pagamento do fornecedor.');
   return dados;
 }
 

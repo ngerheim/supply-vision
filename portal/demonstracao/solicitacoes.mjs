@@ -20,7 +20,7 @@ export async function semearSolicitacoes(clienteApi, base, exemplo, estado, salv
         const receita = i === 5 ? {} : await consulta(`/solicitacoes/cnpj/${cnpj}`);
         const criada = await consulta('/solicitacoes', 'POST', {
           ...(i === 5 ? { cnpj, razao_social: 'Fornecedor Manual Exemplo' } : { consultaId: receita.consultaId }),
-          urgencia: i === 0 ? 'urgente' : 'normal', categorias: ['categoria_semente_1'],
+          urgencia: i === 0 ? 'urgente' : 'normal', categorias: ['categoria_semente_1'], forma_pagamento: 'Boleto 30 dias',
         }, `demonstracao-solicitacao-${i}`);
         registro = (await consulta(`/solicitacoes/${criada.id}`)).solicitacao;
       }
