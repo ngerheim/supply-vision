@@ -7,6 +7,12 @@ export const ABAS_NAVEGACAO = [
     { chave: 'rede', slug: 'disponiveis', label: 'Disponíveis' },
     { chave: 'rede-exclusoes', slug: 'desconsiderados', label: 'Desconsiderados' },
   ] },
+  { aba: 'reembolso', label: 'Reembolso', subabas: [
+    { chave: 'reembolso', slug: 'calculadora', label: 'Calculadora' },
+    { chave: 'reembolso-salvos', slug: 'salvos', label: 'Salvos' },
+    { chave: 'reembolso-tabelas', slug: 'tabelas', label: 'Tabelas MTBF' },
+    { chave: 'reembolso-config', slug: 'configuracao', label: 'Configuração' },
+  ] },
   { aba: 'manutencao', label: 'Manutenção', subabas: [{ chave: 'maintenance', slug: null, label: 'Manutenção' }] },
   { aba: 'chamados', label: 'Chamados', subabas: [
     { chave: 'tickets', slug: 'parcerias', label: 'Acordos' },
@@ -52,7 +58,7 @@ export type DefinicaoSubaba = DefinicaoAba['subabas'][number];
 export type Nav = DefinicaoSubaba['chave'];
 export type EnderecoNavegacao = { aba: Aba; subaba: DefinicaoSubaba['slug'] };
 export const GRUPOS_NAVEGACAO = [
-  { nome: 'Consulta', abas: ['buscar', 'rede', 'manutencao', 'chamados', 'estoque'] },
+  { nome: 'Consulta', abas: ['buscar', 'rede', 'reembolso', 'manutencao', 'chamados', 'estoque'] },
   { nome: 'Suprimentos', abas: ['acordos', 'cadastros', 'analise', 'alertas'] },
   { nome: 'Administração', abas: ['administracao'] },
 ] as const;
@@ -60,7 +66,8 @@ export const AVISO_AREA_RESTRITA = 'Seu perfil não tem acesso a esta área.';
 export const AVISO_CHAMADO_RESTRITO = 'Seu perfil permite consultar preços e acordos. O acesso a chamados é restrito.';
 const BUSCAR: EnderecoNavegacao = { aba: 'buscar', subaba: null };
 
-const ACAO_ABA: Partial<Record<Nav, Acao>> = { 'estoque-saldo': 'aba:estoque', 'estoque-entradas': 'aba:estoque', contratos: 'acordo:consultar-completo', 'alertas-destinatarios': 'alertas:destinatarios', 'analise-acoes': 'aba:analise', 'rede-exclusoes': 'rede:gerenciar' };
+const ACAO_ABA: Partial<Record<Nav, Acao>> = { 'estoque-saldo': 'aba:estoque', 'estoque-entradas': 'aba:estoque', contratos: 'acordo:consultar-completo', 'alertas-destinatarios': 'alertas:destinatarios', 'analise-acoes': 'aba:analise', 'rede-exclusoes': 'rede:gerenciar',
+  'reembolso-salvos': 'aba:reembolso', 'reembolso-tabelas': 'aba:reembolso', 'reembolso-config': 'reembolso:configurar' };
 export function podeAcessarAba(usuario: UsuarioPermissao, chave: Nav): boolean {
   return pode(usuario, ACAO_ABA[chave] ?? (`aba:${chave}` as Acao));
 

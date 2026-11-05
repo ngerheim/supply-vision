@@ -10,6 +10,7 @@ import { lerPermissoes } from './permissoes.ts';
 import { SCHEMA_ANALISE, SCHEMA_ANALISE_ACOES } from './analise.ts';
 import { SCHEMA_ALERTAS } from './alertas-rodadas.ts';
 import { SCHEMA_REDE } from './rede.ts';
+import { SCHEMA_REEMBOLSO } from './reembolso.ts';
 
 export { SESSAO_INATIVIDADE_MS } from './politica-sessao.ts';
 import { CRIAR_CONTADOR_CHAMADOS_SQL, MIGRAR_CONTADOR_CHAMADOS_SQL, migrarBuscaChamados, migrarIndicesListasGlobais } from './operacao-dados.ts';
@@ -472,6 +473,13 @@ async function initialize() {
         { sql: 'INSERT OR IGNORE INTO schema_migrations(version,applied_at) VALUES(22,?)', values: [now()] },
       ];
     });
+  }
+  // Aba Reembolso: clientes, taxas, tabelas MTBF e calculos salvos.
+  if (!await db.prepare('SELECT 1 ok FROM schema_migrations WHERE version=23').first()) {
+    await db.batchConstruir(() => [
+      ...SCHEMA_REEMBOLSO.map(sql => db.prepare(sql)),
+      db.prepare('INSERT OR IGNORE INTO schema_migrations(version,applied_at) VALUES(23,?)').bind(now()),
+    ]);
   }
   await db.prepare('PRAGMA optimize').run();
 }

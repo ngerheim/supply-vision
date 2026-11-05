@@ -17,12 +17,13 @@ const rotas: Array<[Nav, string, string | null]> = [
   ['analise','analise','painel'], ['analise-acoes','analise','acoes'],
   ['alertas','alertas','rodadas'], ['alertas-destinatarios','alertas','destinatarios'],
   ['rede','rede','disponiveis'], ['rede-exclusoes','rede','desconsiderados'],
+  ['reembolso','reembolso','calculadora'], ['reembolso-salvos','reembolso','salvos'], ['reembolso-tabelas','reembolso','tabelas'], ['reembolso-config','reembolso','configuracao'],
 ];
-void test('todas as 27 chaves e dez abas fazem ida e volta com slugs estaveis', () => {
-  assert.equal(ABAS_NAVEGACAO.length,10);
+void test('todas as 31 chaves e onze abas fazem ida e volta com slugs estaveis', () => {
+  assert.equal(ABAS_NAVEGACAO.length,11);
   assert.deepEqual(ABAS_NAVEGACAO.find(a => a.aba === 'chamados')?.subabas.map(s => s.label), ['Acordos','Cadastros','Baixa','Pagamentos']);
   assert.deepEqual(GRUPOS_NAVEGACAO.map(g => [g.nome,[...g.abas]]),[
-    ['Consulta',['buscar','rede','manutencao','chamados','estoque']],['Suprimentos',['acordos','cadastros','analise','alertas']],['Administração',['administracao']],
+    ['Consulta',['buscar','rede','reembolso','manutencao','chamados','estoque']],['Suprimentos',['acordos','cadastros','analise','alertas']],['Administração',['administracao']],
   ]);
   for (const [chave,aba,subaba] of rotas) {
     const query = `?aba=${aba}${subaba ? `&sub=${subaba}` : ''}`;
@@ -44,9 +45,9 @@ void test('enderecos desconhecidos voltam para buscar sem erro', () => {
   }
 });
 const visibilidade = {
-  viewer: [['buscar',['search']],['rede',['rede']],['manutencao',['maintenance']],['chamados',['solicitacoes','baixas','pagamentos']],['estoque',['estoque-saldo','estoque-entradas']]],
-  editor: [['buscar',['search']],['rede',['rede']],['manutencao',['maintenance']],['chamados',['tickets','solicitacoes','baixas','pagamentos']],['estoque',['estoque-saldo','estoque-entradas']],['acordos',['agreements','imports','contratos']],['cadastros',['suppliers','catalogs','mappings']],['analise',['analise','analise-acoes']],['alertas',['alertas']]],
-  admin: [['buscar',['search']],['rede',['rede','rede-exclusoes']],['manutencao',['maintenance']],['chamados',['tickets','solicitacoes','baixas','pagamentos']],['estoque',['estoque-saldo','estoque-entradas']],['acordos',['agreements','imports','contratos']],['cadastros',['suppliers','catalogs','mappings','categorias','estoques']],['analise',['analise','analise-acoes']],['alertas',['alertas','alertas-destinatarios']],['administracao',['reports','history','emails','admin','permissoes']]],
+  viewer: [['buscar',['search']],['rede',['rede']],['reembolso',['reembolso','reembolso-salvos','reembolso-tabelas']],['manutencao',['maintenance']],['chamados',['solicitacoes','baixas','pagamentos']],['estoque',['estoque-saldo','estoque-entradas']]],
+  editor: [['buscar',['search']],['rede',['rede']],['reembolso',['reembolso','reembolso-salvos','reembolso-tabelas','reembolso-config']],['manutencao',['maintenance']],['chamados',['tickets','solicitacoes','baixas','pagamentos']],['estoque',['estoque-saldo','estoque-entradas']],['acordos',['agreements','imports','contratos']],['cadastros',['suppliers','catalogs','mappings']],['analise',['analise','analise-acoes']],['alertas',['alertas']]],
+  admin: [['buscar',['search']],['rede',['rede','rede-exclusoes']],['reembolso',['reembolso','reembolso-salvos','reembolso-tabelas','reembolso-config']],['manutencao',['maintenance']],['chamados',['tickets','solicitacoes','baixas','pagamentos']],['estoque',['estoque-saldo','estoque-entradas']],['acordos',['agreements','imports','contratos']],['cadastros',['suppliers','catalogs','mappings','categorias','estoques']],['analise',['analise','analise-acoes']],['alertas',['alertas','alertas-destinatarios']],['administracao',['reports','history','emails','admin','permissoes']]],
 };
 for (const role of ['viewer','editor','admin'] as const) {
   void test(`${role}: abas e subabas permitidas; acesso por endereco nao amplia permissoes`, () => {

@@ -25,6 +25,7 @@ export const ACOES = [
   'aba:alertas', 'alertas:consultar', 'alertas:destinatarios',
   'analise:acoes', 'fornecedor:gerenciar',
   'aba:rede', 'rede:gerenciar',
+  'aba:reembolso', 'reembolso:salvar', 'reembolso:configurar',
 ] as const;
 export type Acao = (typeof ACOES)[number];
 
@@ -32,6 +33,7 @@ export type Acao = (typeof ACOES)[number];
 const consulta: readonly Acao[] = [
   'aba:search', 'aba:maintenance', 'central:marcar', 'solicitacao:abrir', 'aba:solicitacoes', 'baixa:abrir', 'aba:baixas',
   'aba:pagamentos', 'pagamento:abrir', 'aba:estoque', 'estoque:consultar', 'aba:rede',
+  'aba:reembolso', 'reembolso:salvar',
 ];
 const suprimentos: readonly Acao[] = [
   ...consulta, 'aba:tickets', 'aba:agreements', 'aba:suppliers', 'aba:imports',
@@ -44,6 +46,7 @@ const suprimentos: readonly Acao[] = [
   'baixa:ver_todas', 'baixa:atender',
   'pagamento:ver_todas', 'pagamento:atender', 'estoque:lancar',
   'aba:analise', 'analise:consultar', 'analise:acoes', 'aba:alertas', 'alertas:consultar', 'fornecedor:gerenciar',
+  'reembolso:configurar',
 ];
 const acoesPorPerfil: Record<Role, readonly Acao[]> = {
   viewer: consulta,
@@ -67,6 +70,7 @@ export const ROTULO_NIVEL: Record<Nivel, string> = { sem: 'Sem acesso', leitura:
 export const AREAS = [
   { area: 'buscar', aba: 'Buscar', label: 'Buscar' },
   { area: 'rede', aba: 'Rede', label: 'Rede' },
+  { area: 'reembolso', aba: 'Reembolso', label: 'Reembolso' },
   { area: 'manutencao', aba: 'Manutenção', label: 'Manutenção' },
   { area: 'parcerias', aba: 'Chamados', label: 'Acordos' },
   { area: 'solicitacoes', aba: 'Chamados', label: 'Cadastros' },
@@ -130,6 +134,8 @@ export const EXIGENCIAS: Partial<Record<Acao, Exigencia>> = {
   'aba:alertas': L('alertas'), 'alertas:consultar': L('alertas'), 'alertas:destinatarios': E('alertas'),
   // Leitura: consultar a rede. Edicao: desconsiderar fornecedores e segmentos.
   'aba:rede': L('rede'), 'rede:gerenciar': E('rede'),
+  // Leitura: usar a calculadora e salvar calculos. Edicao: clientes, taxas e tabelas MTBF.
+  'aba:reembolso': L('reembolso'), 'reembolso:salvar': L('reembolso'), 'reembolso:configurar': E('reembolso'),
 };
 // Fora do painel: so o perfil admin. Evita que alguem amplie os proprios poderes.
 // central:marcar nao pertence a area nenhuma e segue o perfil.
