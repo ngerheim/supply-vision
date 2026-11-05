@@ -19,7 +19,7 @@ assert.equal(login.status, 200);
 const viewer = login.headers.get('set-cookie').split(';')[0];
 const consulta = await pedir(`solicitacoes/cnpj/${CNPJS_ENSAIO.ativa}`, { cookie: viewer });
 assert.equal(consulta.status, 200); assert.ok(consulta.data.consultaId);
-const aberta = await pedir('solicitacoes', { method: 'POST', cookie: viewer, body: { consultaId: consulta.data.consultaId, razao_social: 'Adulterado', categorias: ['categoria_semente_1'], urgencia: 'urgente' } });
+const aberta = await pedir('solicitacoes', { method: 'POST', cookie: viewer, body: { consultaId: consulta.data.consultaId, razao_social: 'Adulterado', categorias: ['categoria_semente_1'], urgencia: 'urgente', forma_pagamento: 'Boleto 30 dias' } });
 assert.equal(aberta.status, 201); assert.match(aberta.data.codigo, /^SOL-[1-9]\d*$/);
 const id = aberta.data.id;
 assert.equal((await pedir('solicitacoes', { cookie: viewer })).data.solicitacoes.some(s => s.id === id), true);

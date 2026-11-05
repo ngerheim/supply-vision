@@ -17,7 +17,7 @@ export const CONSULTAS_EXPORTACAO = {
   tickets: 'SELECT * FROM tickets ORDER BY created_at',
   ticketEvents: 'SELECT * FROM ticket_events ORDER BY created_at',
   emailNotifications: 'SELECT * FROM email_notifications ORDER BY created_at',
-  solicitacoes: 'SELECT id,codigo,tipo,cnpj,razao_social,nome_fantasia,situacao_cadastral,cnae_codigo,cnae_descricao,consulta_fonte,consultada_em,nao_verificado,logradouro,numero,complemento,bairro,cidade,uf,cep,telefone,email,atendimento_cidade,atendimento_uf,urgencia,status,solicitante_id,atendente_id,motivo_recusa,criado_em,atualizado_em,revision FROM solicitacoes ORDER BY criado_em,id',
+  solicitacoes: 'SELECT id,codigo,tipo,cnpj,razao_social,nome_fantasia,situacao_cadastral,cnae_codigo,cnae_descricao,consulta_fonte,consultada_em,nao_verificado,logradouro,numero,complemento,bairro,cidade,uf,cep,telefone,email,atendimento_cidade,atendimento_uf,forma_pagamento,urgencia,status,solicitante_id,atendente_id,motivo_recusa,criado_em,atualizado_em,revision FROM solicitacoes ORDER BY criado_em,id',
   categoriasFornecedor: 'SELECT * FROM categorias_fornecedor ORDER BY nome',
   solicitacaoCategorias: 'SELECT * FROM solicitacao_categorias ORDER BY solicitacao_id,categoria_id',
   solicitacaoAndamentos: 'SELECT id,solicitacao_id,user_id,de_status,para_status,texto,criado_em FROM solicitacao_andamentos ORDER BY criado_em,id',

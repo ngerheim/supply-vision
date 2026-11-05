@@ -42,7 +42,9 @@ void test('Cadastro de fornecedor pelo roteador e SQLite reais', async t => {
   const req = (method, caminho, user = admin, body, headers = {}) => new NextRequest(`http://fixture/api/${caminho}`, { method, headers: { cookie: `acordos_session=${String(user)}`, 'content-type': 'application/json', 'x-portal-build': PORTAL_BUILD, ...headers }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
   const pedir = async (method, caminho, user, body, headers) => { const r = await rota[method](req(method, caminho, user, body, headers)); return { status: r.status, data: await r.json() }; };
   const get = (caminho, user) => pedir('GET', caminho, user);
-  const post = (caminho, body, user = admin, headers) => pedir('POST', caminho, user, body, headers);
+  // Forma de pagamento e obrigatoria na abertura; os casos abaixo tratam de outros campos.
+  const comPagamento = (caminho, body) => caminho === 'solicitacoes' && body && typeof body === 'object' && !('forma_pagamento' in body) ? { ...body, forma_pagamento: 'Boleto 30 dias' } : body;
+  const post = (caminho, body, user = admin, headers) => pedir('POST', caminho, user, comPagamento(caminho, body), headers);
   const put = (caminho, body, user = admin) => pedir('PUT', caminho, user, body);
   let numero = 100;
   const manual = (extras = {}) => ({ cnpj: cnpjFicticio(numero++), razao_social: 'Fornecedor Manual Fictício', ...extras });
@@ -434,6 +436,17 @@ void test('Cadastro de fornecedor pelo roteador e SQLite reais', async t => {
       assert.deepEqual(contagens(),antes);
     } finally { globalThis[chave]=db; sql.prepare("UPDATE categorias_fornecedor SET ativo=1 WHERE id='categoria_semente_2'").run(); }
   });
+  await t.test('forma de pagamento e obrigatoria e limitada a 200 caracteres', async () => {
+    const antes = contagens();
+    for (const forma of [undefined, '', '   ']) {
+      const r = await pedir('POST', 'solicitacoes', 'viewer', { ...manual(), ...(forma === undefined ? {} : { forma_pagamento: forma }) });
+      assert.equal(r.status, 400); assert.match(r.data.error, /forma de pagamento/);
+    }
+    assert.deepEqual(contagens(), antes);
+    const criada = await abrir(manual({ forma_pagamento: '  Pix à vista  ' }));
+    assert.equal(registro(criada.id).forma_pagamento, 'Pix à vista');
+    assert.equal((await pedir('POST', 'solicitacoes', 'viewer', manual({ forma_pagamento: 'x'.repeat(201) }))).status, 400);
+  });
   await t.test('build, validacao ativa, rollback do lote e sessao revogada barram escritas', async () => {
     const existente = await abrir(), body = manual(), antes = contagens();
     assert.equal((await post('solicitacoes', body, 'viewer', { 'x-portal-build': 'antigo' })).status, 409); assert.deepEqual(contagens(), antes);
@@ -465,7 +478,7 @@ void test('Cadastro de fornecedor pelo roteador e SQLite reais', async t => {
     const antesRevogar = contagens();
     const stream = new ReadableStream({ pull(c) {
       sql.prepare('DELETE FROM sessions WHERE user_id=?').run('viewer');
-      c.enqueue(new TextEncoder().encode(JSON.stringify(manual()))); c.close();
+      c.enqueue(new TextEncoder().encode(JSON.stringify(manual({ forma_pagamento: 'Boleto 30 dias' })))); c.close();
     } }, { highWaterMark: 0 });
     const resposta = await rota.POST(new NextRequest('http://fixture/api/solicitacoes', { method: 'POST', headers: { cookie: 'acordos_session=viewer', 'content-type': 'application/json', 'x-portal-build': PORTAL_BUILD }, body: stream, duplex: 'half' }));
     assert.equal(resposta.status, 403); assert.deepEqual(contagens(), antesRevogar);

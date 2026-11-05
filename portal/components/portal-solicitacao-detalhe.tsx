@@ -171,6 +171,7 @@ export function DetalheSolicitacao({
         [
           ["Telefone", s.telefone ? mascaraTelefone(s.telefone) : ""],
           ["E-mail", s.email],
+          ["Forma de pagamento", s.forma_pagamento],
           [
             "Categorias",
             dados.categorias.map((c: AnyRow) => c.nome).join(", "),
