@@ -8,12 +8,16 @@ import {
   calcularItem, calcularTotais, centavos, lerCalculadoraHtml, validarCalculo, validarCliente, validarItensTabela,
   type ItemMtbf,
 } from './reembolso.ts';
-import { aplicarFiltros, COLUNAS_FILTRO, LIMITE_LINHAS_PLACA, placaNormalizada, validarEnvioHistorico, validarFiltro, valorCasa, type ColunaFiltro, type FiltroHistorico } from './reembolso-historico.ts';
+import {
+  aplicarFiltros, COLUNAS_FILTRO, normalizarFiltro, placaNormalizada, placaValida, VALIDADE_CACHE_MS, validarFiltro, validarLinhasConsulta,
+  type ColunaFiltro, type FiltroHistorico, type LinhaHistorico,
+} from './reembolso-historico.ts';
+import { ConsultaIndisponivel, consultarPlacaQlik } from './reembolso-qlik.ts';
+import { EntradaInvalida } from './limites-entrada.ts';
 
 type TabelaRow = { id: string; nome: string; padrao: number; revision: number };
 type ClienteRow = { id: string; nome: string; taxa: number | null; pneu_km: number | null; observacao: string | null; executivo: string | null; tabela_id: string | null; ativo: number; revision: number };
 const POR_PAGINA = 50;
-const LOTE_HISTORICO = 50;
 export const SEM_CONFIG = 'Seu perfil não permite alterar a configuração do Reembolso.';
 const pct = (t: number | null) => (t === null ? 'sem taxa' : `${centavos(t * 100).toLocaleString('pt-BR')}%`);
 
@@ -251,91 +255,89 @@ export function reembolsoApi(contexto: ContextoApi) {
   const filtrosAtivos = async () => (await all<{ coluna: ColunaFiltro; modo: 'igual' | 'contem'; valor: string; valor_norm: string }>(
     'SELECT coluna,modo,valor,valor_norm FROM reembolso_historico_filtros')).map(f => ({ coluna: f.coluna, modo: f.modo, valor: f.valor, valorNorm: f.valor_norm }));
 
-  // Copia do historico de OS enviada pelo Alertas: troca os dias inteiros.
-  // Os filtros da tela valem aqui, entao o que esta filtrado nunca e gravado.
-  async function receberHistorico(request: Request) {
-    const { datas, linhas: recebidas } = validarEnvioHistorico(await jsonBody(request, 32 * 1024 * 1024));
-    const { mantidas: linhas, filtradas } = aplicarFiltros(recebidas, await filtrosAtivos());
-    const ts = now(), statements = [];
-    for (let i = 0; i < datas.length; i += LOTE_HISTORICO) {
-      const lote = datas.slice(i, i + LOTE_HISTORICO);
-      statements.push(db().prepare(`DELETE FROM reembolso_historico WHERE data IN (${lote.map(() => '?').join(',')})`).bind(...lote));
+  // Itens de OS de uma placa para a busca da ultima troca. Usa o cache de
+  // ate 6 h; sem cache valido, consulta o Qlik na hora. Se o Qlik falhar e
+  // houver cache vencido, devolve o cache com aviso.
+  async function historicoPlaca(user: User, params: URLSearchParams) {
+    if (!pode(user, 'aba:reembolso')) return fail('Seu perfil não tem acesso ao Reembolso.', 403);
+    const placa = placaNormalizada(params.get('placa'));
+    if (!placaValida(placa)) return fail('Placa inválida.');
+    const cache = await first<{ linhas: string; consultado_em: string }>('SELECT linhas,consultado_em FROM reembolso_historico_cache WHERE placa=?', [placa]);
+    const fresco = cache && Date.now() - Date.parse(cache.consultado_em) < VALIDADE_CACHE_MS && params.get('atualizar') !== '1';
+    let linhas: LinhaHistorico[], consultadoEm: string, aviso: string | null = null;
+    if (cache && fresco) {
+      linhas = JSON.parse(cache.linhas) as LinhaHistorico[]; consultadoEm = cache.consultado_em;
+    } else {
+      try {
+        linhas = validarLinhasConsulta(await consultarPlacaQlik(placa));
+        consultadoEm = now();
+        const corte = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+        await comAcaoEscrita('aba:reembolso', () => db().batch([
+          db().prepare(`INSERT INTO reembolso_historico_cache(placa,linhas,itens,consultado_em,user_id) VALUES (?,?,?,?,?)
+            ON CONFLICT(placa) DO UPDATE SET linhas=excluded.linhas,itens=excluded.itens,consultado_em=excluded.consultado_em,user_id=excluded.user_id`)
+            .bind(placa, JSON.stringify(linhas), linhas.length, consultadoEm, user.id),
+          db().prepare('DELETE FROM reembolso_historico_cache WHERE consultado_em<?').bind(corte),
+        ]));
+      } catch (erro) {
+        if (!(erro instanceof ConsultaIndisponivel) && !(erro instanceof EntradaInvalida)) throw erro;
+        if (!cache) return fail(`Histórico de OS indisponível: ${erro.message} Preencha a última troca à mão.`, 503);
+        linhas = JSON.parse(cache.linhas) as LinhaHistorico[]; consultadoEm = cache.consultado_em;
+        aviso = `Qlik indisponível agora; mostrando a consulta de ${consultadoEm}.`;
+      }
     }
-    for (let i = 0; i < linhas.length; i += LOTE_HISTORICO) {
-      const lote = linhas.slice(i, i + LOTE_HISTORICO);
-      statements.push(db().prepare(`INSERT INTO reembolso_historico(data,placa,os,produto,qtd,valor_unit,total,reembolso,km,fornecedor,grupo,modelo,cliente)
-        VALUES ${lote.map(() => '(?,?,?,?,?,?,?,?,?,?,?,?,?)').join(',')}`).bind(...lote.flatMap(l => [l.data, l.placa, l.os, l.produto, l.qtd, l.valorUnit,
-        l.total, l.reembolso, l.km, l.fornecedor, l.grupo, l.modelo, l.cliente])));
-    }
-    const porDia = new Map(datas.map(d => [d, 0]));
-    for (const l of linhas) porDia.set(l.data, (porDia.get(l.data) ?? 0) + 1);
-    for (const [data, n] of porDia) {
-      statements.push(db().prepare(`INSERT INTO reembolso_historico_dias(data,linhas,recebido_em) VALUES(?,?,?)
-        ON CONFLICT(data) DO UPDATE SET linhas=excluded.linhas,recebido_em=excluded.recebido_em`).bind(data, n, ts));
-    }
-    await db().batch(statements);
-    return ok({ success: true, dias: datas.length, linhas: linhas.length, filtradas });
+    const { mantidas, filtradas } = aplicarFiltros(linhas, await filtrosAtivos());
+    mantidas.sort((x, y) => y.data.localeCompare(x.data));
+    return ok({ placa, consultadoEm, aviso, filtradas, linhas: mantidas });
   }
 
-  // Tela de filtros: filtros atuais, grupos ja gravados e cobertura da base.
+  // Tela de filtros: filtros atuais e as consultas recentes.
   async function filtrosHistorico(user: User) {
     if (!pode(user, 'reembolso:configurar')) return fail(SEM_CONFIG, 403);
-    const [filtros, grupos, cobertura] = await Promise.all([
-      all<{ id: string; coluna: string; modo: string; valor: string; removidos: number; criado_em: string; autor: string | null }>(
-        'SELECT f.id,f.coluna,f.modo,f.valor,f.removidos,f.criado_em,u.name autor FROM reembolso_historico_filtros f LEFT JOIN users u ON u.id=f.user_id ORDER BY f.coluna,f.valor'),
-      all<{ valor: string; n: number }>('SELECT grupo valor, COUNT(*) n FROM reembolso_historico WHERE grupo IS NOT NULL GROUP BY grupo ORDER BY n DESC LIMIT 300'),
-      first<{ de: string | null; ate: string | null; dias: number; itens: number; recebido: string | null }>(
-        'SELECT MIN(data) de,MAX(data) ate,COUNT(*) dias,(SELECT COUNT(*) FROM reembolso_historico) itens,MAX(recebido_em) recebido FROM reembolso_historico_dias'),
+    const [filtros, recentes] = await Promise.all([
+      all<{ id: string; coluna: string; modo: string; valor: string; criado_em: string; autor: string | null }>(
+        'SELECT f.id,f.coluna,f.modo,f.valor,f.criado_em,u.name autor FROM reembolso_historico_filtros f LEFT JOIN users u ON u.id=f.user_id ORDER BY f.coluna,f.valor'),
+      all<{ placa: string; itens: number; consultado_em: string; autor: string | null }>(
+        'SELECT c.placa,c.itens,c.consultado_em,u.name autor FROM reembolso_historico_cache c LEFT JOIN users u ON u.id=c.user_id ORDER BY c.consultado_em DESC LIMIT 20'),
     ]);
     return ok({
       colunas: COLUNAS_FILTRO,
-      filtros: filtros.map(f => ({ id: f.id, coluna: f.coluna, modo: f.modo, valor: f.valor, removidos: f.removidos, criadoEm: f.criado_em, autor: f.autor })),
-      grupos, cobertura: cobertura?.de ? { de: cobertura.de, ate: cobertura.ate, dias: cobertura.dias, itens: cobertura.itens, atualizadoEm: cobertura.recebido } : null,
+      filtros: filtros.map(f => ({ id: f.id, coluna: f.coluna, modo: f.modo, valor: f.valor, criadoEm: f.criado_em, autor: f.autor })),
+      recentes: recentes.map(r => ({ placa: r.placa, itens: r.itens, consultadoEm: r.consultado_em, autor: r.autor })),
     });
   }
 
-  // Sugestoes para o campo de valor: valores mais frequentes da coluna.
+  // Sugestoes para o campo de valor: valores vistos nas consultas recentes.
   async function valoresHistorico(user: User, params: URLSearchParams) {
     if (!pode(user, 'reembolso:configurar')) return fail(SEM_CONFIG, 403);
     const coluna = params.get('coluna') ?? '';
     if (!(coluna in COLUNAS_FILTRO)) return fail('Coluna inválida.');
-    const q = (params.get('q') ?? '').trim().slice(0, 100);
-    // coluna vem da lista fechada acima; o termo vai como parametro.
-    const valores = await all<{ valor: string; n: number }>(`SELECT ${coluna} valor, COUNT(*) n FROM reembolso_historico
-      WHERE ${coluna} IS NOT NULL ${q ? `AND ${coluna} LIKE ?` : ''} GROUP BY ${coluna} ORDER BY n DESC LIMIT 30`, q ? [`%${q}%`] : []);
-    return ok({ valores });
+    const q = normalizarFiltro(params.get('q') ?? '').slice(0, 100);
+    const contagem = new Map<string, number>();
+    for (const c of await all<{ linhas: string }>('SELECT linhas FROM reembolso_historico_cache ORDER BY consultado_em DESC LIMIT 200')) {
+      for (const l of JSON.parse(c.linhas) as Record<string, string | null>[]) {
+        const v = l[coluna];
+        if (v && (!q || normalizarFiltro(v).includes(q))) contagem.set(v, (contagem.get(v) ?? 0) + 1);
+      }
+    }
+    return ok({ valores: [...contagem].sort((a, b) => b[1] - a[1]).slice(0, 30).map(([valor, n]) => ({ valor, n })) });
   }
 
-  // Filtro novo apaga na hora o que ja estava gravado e passa a valer.
   async function criarFiltro(request: Request, user: User) {
     return comAcaoEscrita('reembolso:configurar', async () => {
       const f: FiltroHistorico = validarFiltro(await jsonBody(request, 16 * 1024));
-      const novo = id('rhf'), ts = now();
-      let removidos = 0;
+      const novo = id('rhf');
       try {
-        await db().batchConstruir(consultar => {
-          const valores = consultar({ sql: `SELECT ${f.coluna} valor, COUNT(*) n FROM reembolso_historico WHERE ${f.coluna} IS NOT NULL GROUP BY ${f.coluna}`, values: [] })
-            .results as { valor: string; n: number }[];
-          const casados = valores.filter(v => valorCasa(v.valor, f));
-          removidos = casados.reduce((soma, v) => soma + v.n, 0);
-          const apagar = [];
-          for (let i = 0; i < casados.length; i += LOTE_HISTORICO) {
-            const lote = casados.slice(i, i + LOTE_HISTORICO).map(v => v.valor);
-            apagar.push(db().prepare(`DELETE FROM reembolso_historico WHERE ${f.coluna} IN (${lote.map(() => '?').join(',')})`).bind(...lote));
-          }
-          return [
-            db().prepare('INSERT INTO reembolso_historico_filtros(id,coluna,modo,valor,valor_norm,removidos,user_id,criado_em) VALUES (?,?,?,?,?,?,?,?)')
-              .bind(novo, f.coluna, f.modo, f.valor, f.valorNorm, removidos, user.id, ts),
-            ...apagar,
-            auditoriaNoLote(contexto, user.id, 'CREATE', 'reembolso_historico_filtro', novo,
-              `Histórico de OS: ${COLUNAS_FILTRO[f.coluna]} ${f.modo === 'igual' ? 'igual a' : 'contém'} "${f.valor}" fica fora (${removidos} itens apagados)`),
-          ];
-        });
+        await db().batch([
+          db().prepare('INSERT INTO reembolso_historico_filtros(id,coluna,modo,valor,valor_norm,user_id,criado_em) VALUES (?,?,?,?,?,?,?)')
+            .bind(novo, f.coluna, f.modo, f.valor, f.valorNorm, user.id, now()),
+          auditoriaNoLote(contexto, user.id, 'CREATE', 'reembolso_historico_filtro', novo,
+            `Histórico de OS: ${COLUNAS_FILTRO[f.coluna]} ${f.modo === 'igual' ? 'igual a' : 'contém'} "${f.valor}" fica fora`),
+        ]);
       } catch (erro) {
         if (ehErroUnique(erro)) return fail('Esse filtro já existe.', 409);
         throw erro;
       }
-      return ok({ id: novo, removidos }, { status: 201 });
+      return ok({ id: novo }, { status: 201 });
     });
   }
 
@@ -352,24 +354,7 @@ export function reembolsoApi(contexto: ContextoApi) {
     });
   }
 
-  // Itens de OS de uma placa, para a busca da ultima troca na calculadora.
-  async function historicoPlaca(user: User, params: URLSearchParams) {
-    if (!pode(user, 'aba:reembolso')) return fail('Seu perfil não tem acesso ao Reembolso.', 403);
-    const placa = placaNormalizada(params.get('placa'));
-    if (placa.length < 5 || placa.length > 10) return fail('Placa inválida.');
-    const [cobertura, linhas] = await Promise.all([
-      first<{ de: string | null; ate: string | null; recebido: string | null }>('SELECT MIN(data) de,MAX(data) ate,MAX(recebido_em) recebido FROM reembolso_historico_dias'),
-      all<{ data: string; os: string | null; produto: string; qtd: number | null; valor_unit: number | null; total: number | null; reembolso: number | null; km: number | null; fornecedor: string | null }>(
-        'SELECT data,os,produto,qtd,valor_unit,total,reembolso,km,fornecedor FROM reembolso_historico WHERE placa=? ORDER BY data DESC, id DESC LIMIT ?',
-        [placa, LIMITE_LINHAS_PLACA]),
-    ]);
-    return ok({
-      placa, cobertura: cobertura?.de ? { de: cobertura.de, ate: cobertura.ate, atualizadoEm: cobertura.recebido } : null,
-      linhas: linhas.map(l => ({ data: l.data, os: l.os, produto: l.produto, qtd: l.qtd, valorUnit: l.valor_unit, total: l.total, reembolso: l.reembolso, km: l.km, fornecedor: l.fornecedor })),
-    });
-  }
-
-  return { receberHistorico, historicoPlaca, filtrosHistorico, valoresHistorico, criarFiltro, excluirFiltro, config, importar, salvarCliente, excluirCliente, salvarTabela, excluirTabela, salvarCalculo, listarCalculos, detalheCalculo, excluirCalculo };
+  return { historicoPlaca, filtrosHistorico, valoresHistorico, criarFiltro, excluirFiltro, config, importar, salvarCliente, excluirCliente, salvarTabela, excluirTabela, salvarCalculo, listarCalculos, detalheCalculo, excluirCalculo };
 }
 
 class ConflitoTabela extends Error {}

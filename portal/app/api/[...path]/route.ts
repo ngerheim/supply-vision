@@ -401,10 +401,6 @@ async function POSTInterno(request: NextRequest) {
     if (!tokenInternoValido(request)) return fail('Credencial interna inválida.', 401);
     return alertas.receberRodada(request);
   }
-  if (parts[0] === 'internal' && parts[1] === 'reembolso-historico' && parts.length === 2) {
-    if (!tokenInternoValido(request)) return fail('Credencial interna inválida.', 401);
-    return reembolso.receberHistorico(request);
-  }
   if (parts[0] === 'internal' && parts[1] === 'rede' && parts.length === 2) {
     if (!tokenInternoValido(request)) return fail('Credencial interna inválida.', 401);
     return rede.receber(request);

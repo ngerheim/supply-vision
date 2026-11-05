@@ -30,7 +30,7 @@ type Foto = { url: string; nome: string; video: boolean };
 type ModoUltimaTroca = '' | 'auto' | 'escolhido' | 'manual' | 'salvo';
 type ItemForm = { chave: number; peca: string; referencia: string; tipo: Tipo; kmTroca: string; ultimaTroca: string; qtd: string; valorUnit: string; diferencaPneu: string; dica: string; fotos: Foto[];
   utModo: ModoUltimaTroca; utRotulo: string; termos: string; termosEditados: boolean };
-type Historico = { placa: string; carregando?: boolean; erro?: string; cobertura?: { de: string; ate: string; atualizadoEm: string } | null; linhas: LinhaPlaca[] };
+type Historico = { placa: string; carregando?: boolean; erro?: string; consultadoEm?: string; aviso?: string | null; filtradas?: number; linhas: LinhaPlaca[] };
 type Form = { clienteId: string; clienteNome: string; taxaPct: string; categoria: string; modelo: string; placa: string; kmAtual: string; osAtual: string; observacao: string };
 
 const moeda = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -168,20 +168,21 @@ function Calculadora({ config, form, setForm, itens, setItens, busy, run, vazio 
   const [hoje] = useState(() => new Date().toLocaleDateString('pt-BR'));
   const [hojeIso] = useState(() => new Date().toLocaleDateString('sv-SE'));
 
-  // Historico de OS da placa: busca com pausa curta enquanto a placa e digitada.
+  // Historico de OS da placa, consultado no Qlik (ou no cache do Portal) com
+  // pausa curta enquanto a placa e digitada. "Atualizar" forca nova consulta.
   const placa = placaNormalizada(form.placa);
-  const [historico, setHistorico] = useState<Historico | null>(null);
+  const [historico, setHistorico] = useState<Historico | null>(null), [forcar, setForcar] = useState(0);
   useEffect(() => {
     if (placa.length < 7) return;
     const controller = new AbortController();
     const t = setTimeout(() => {
       setHistorico({ placa, carregando: true, linhas: [] });
-      void api(`/api/reembolso/historico?placa=${encodeURIComponent(placa)}`, { signal: controller.signal })
-        .then((r: AnyRow) => { if (!controller.signal.aborted) setHistorico({ placa, cobertura: r.cobertura, linhas: r.linhas }); })
+      void api(`/api/reembolso/historico?${new URLSearchParams({ placa, ...(forcar ? { atualizar: '1' } : {}) })}`, { signal: controller.signal })
+        .then((r: AnyRow) => { if (!controller.signal.aborted) setHistorico({ placa, consultadoEm: r.consultadoEm, aviso: r.aviso, filtradas: r.filtradas, linhas: r.linhas }); })
         .catch(f => { if (!controller.signal.aborted) setHistorico({ placa, erro: errorText(f), linhas: [] }); });
-    }, 400);
+    }, forcar ? 0 : 400);
     return () => { clearTimeout(t); controller.abort(); };
-  }, [placa]);
+  }, [placa, forcar]);
   const linhasPlaca = useMemo(() => (historico?.placa === placa ? historico.linhas : []), [historico, placa]);
   const osAtual = form.osAtual;
   const contexto = { kmAtual, osAtual, hoje: hojeIso };
@@ -207,12 +208,12 @@ function Calculadora({ config, form, setForm, itens, setItens, busy, run, vazio 
   const resumo = useMemo(() => resumoPlaca(linhasPlaca), [linhasPlaca]);
   const statusHistorico = (() => {
     if (placa.length < 7) return 'Informe a placa para buscar a última troca de cada item no histórico de OS.';
-    if (!historico || historico.placa !== placa || historico.carregando) return 'Consultando o histórico de OS…';
-    if (historico.erro) return `Histórico indisponível: ${historico.erro}. Preencha a última troca à mão.`;
-    if (!historico.cobertura) return 'O histórico de OS ainda não foi carregado no Portal. Preencha a última troca à mão.';
-    const base = `base de ${dataBr(historico.cobertura.de)} a ${dataBr(historico.cobertura.ate)}`;
-    if (!resumo) return `Placa ${placa} sem OS no histórico (${base}). Confira a digitação.`;
-    return `Histórico: ${resumo.os} OS de ${dataBr(resumo.primeira)} a ${dataBr(resumo.ultima)}${resumo.ultimoKm ? ` · último KM registrado ${inteiro.format(resumo.ultimoKm)} em ${dataBr(resumo.dataUltimoKm)}` : ''} (${base}).`;
+    if (!historico || historico.placa !== placa || historico.carregando) return 'Consultando o histórico de OS no Qlik… (alguns segundos)';
+    if (historico.erro) return historico.erro;
+    const quando = `consulta de ${dataHoraSolicitacao(historico.consultadoEm ?? '')}${historico.filtradas ? ` · ${inteiro.format(historico.filtradas)} itens fora pelos filtros` : ''}`;
+    const aviso = historico.aviso ? `${historico.aviso} ` : '';
+    if (!resumo) return `${aviso}Placa ${placa} sem OS no Qlik (${quando}). Confira a digitação.`;
+    return `${aviso}Histórico: ${resumo.os} OS de ${dataBr(resumo.primeira)} a ${dataBr(resumo.ultima)}${resumo.ultimoKm ? ` · último KM registrado ${inteiro.format(resumo.ultimoKm)} em ${dataBr(resumo.dataUltimoKm)}` : ''} (${quando}).`;
   })();
 
   return <div className="patio-page space-y-4">
@@ -241,7 +242,8 @@ function Calculadora({ config, form, setForm, itens, setItens, busy, run, vazio 
           {`MTBF: ${tabela ? tabela.nome : '—'}${cliente?.executivo ? ` · Comercial: ${cliente.executivo}` : ''}${cliente?.observacao ? ` · ${cliente.observacao}` : ''}`}
           {cliente && cliente.taxa === null ? ' · cliente sem taxa cadastrada: preencha à mão' : ''}
         </p>
-        <p className="reembolso-info reembolso-historico-status text-xs">{statusHistorico}</p>
+        <p className="reembolso-info reembolso-historico-status text-xs">{statusHistorico}
+          {historico?.placa === placa && !historico.carregando && <> <button type="button" className="text-link hover:underline" onClick={() => setForcar(v => v + 1)}>Consultar o Qlik de novo</button></>}</p>
       </CardContent></Card>
 
       <div className="space-y-3">{itens.map((i, n) => {
@@ -276,7 +278,7 @@ function Calculadora({ config, form, setForm, itens, setItens, busy, run, vazio 
             <div className="reembolso-resultado destaque"><span>Reembolso</span><b>{moeda.format(r.reembolso)}</b></div>
           </div>
           {i.dica && <p className="text-xs text-muted-foreground">{i.dica}</p>}
-          <HistoricoItem item={i} linhas={linhasPlaca} disponivel={!!historico?.cobertura && historico.placa === placa && !!resumo} contexto={contexto}
+          <HistoricoItem item={i} linhas={linhasPlaca} disponivel={historico?.placa === placa && !historico.carregando && !historico.erro && !!resumo} contexto={contexto}
             origem={origemTexto(i)} mudar={dados => mudarItem(i.chave, dados)} />
           <div className="flex flex-wrap items-center gap-2">
             <label className="inline-flex cursor-pointer items-center gap-1 text-xs font-medium text-link">
@@ -484,8 +486,8 @@ function Tabelas({ config }: { config: Config }) {
   </div>;
 }
 
-// O que nao entra no historico de OS. Filtro novo apaga na hora o que ja
-// estava gravado; tirar o filtro so traz os itens de volta na proxima carga.
+// O que nao entra no historico de OS. A calculadora consulta o Qlik por
+// placa; os filtros valem na resposta, inclusive para consultas em cache.
 function FiltrosHistorico({ busy, run }: { busy: boolean; run: Executar }) {
   const [dados, setDados] = useState<AnyRow | null>(null), [erro, setErro] = useState(''), [versao, setVersao] = useState(0);
   const [coluna, setColuna] = useState('grupo'), [modo, setModo] = useState<'igual' | 'contem'>('igual'), [valor, setValor] = useState('');
@@ -504,28 +506,20 @@ function FiltrosHistorico({ busy, run }: { busy: boolean; run: Executar }) {
     }, 300);
     return () => { clearTimeout(t); controller.abort(); };
   }, [coluna, valor, versao]);
-  const criar = (corpo: { coluna: string; modo: string; valor: string }) => {
-    const rotulo = `${dados?.colunas?.[corpo.coluna] ?? corpo.coluna} ${corpo.modo === 'igual' ? 'igual a' : 'contém'} "${corpo.valor}"`;
-    if (!confirm(`Tirar do histórico os itens com ${rotulo}? Os que já estão gravados são apagados agora.`)) return;
-    void run(async () => {
-      const r = await api('/api/reembolso/historico/filtros', json('POST', corpo)) as AnyRow;
-      setValor(''); setVersao(v => v + 1);
-      return r;
-    }, 'Filtro incluído; itens já gravados foram apagados.');
-  };
+  const criar = () => void run(async () => {
+    await api('/api/reembolso/historico/filtros', json('POST', { coluna, modo, valor }));
+    setValor(''); setVersao(v => v + 1);
+  }, 'Filtro incluído; vale a partir da próxima busca na calculadora.');
   const remover = (f: AnyRow) => {
-    if (!confirm('Remover este filtro? Os itens apagados só voltam na próxima carga completa do histórico.')) return;
+    if (!confirm('Remover este filtro? Os itens voltam a aparecer na calculadora.')) return;
     void run(async () => { await api(`/api/reembolso/historico/filtros/${encodeURIComponent(f.id)}`, { method: 'DELETE' }); setVersao(v => v + 1); }, 'Filtro removido.');
   };
   if (erro && !dados) return <FalhaDeCarregamento erro={erro} tentar={() => setVersao(v => v + 1)} />;
   if (!dados) return <Loading label="Carregando filtros…" compact />;
-  const colunas = dados.colunas as Record<string, string>, cob = dados.cobertura as AnyRow | null;
-  const filtrosGrupo = new Set((dados.filtros as AnyRow[]).filter(f => f.coluna === 'grupo' && f.modo === 'igual').map(f => String(f.valor).toLowerCase()));
+  const colunas = dados.colunas as Record<string, string>;
   return <div className="patio-page space-y-4">
     <LinhaDeAba actions={<Button variant="outline" size="icon" aria-label="Atualizar" title="Atualizar" onClick={() => setVersao(v => v + 1)}><RefreshCw /></Button>} />
-    <p className="text-sm text-muted-foreground">{cob
-      ? `Base: ${inteiro.format(cob.itens)} itens de OS de ${dataBr(cob.de)} a ${dataBr(cob.ate)} (${inteiro.format(cob.dias)} dias carregados) · última atualização ${dataHoraSolicitacao(cob.atualizadoEm)}.`
-      : 'O histórico de OS ainda não foi carregado. Os filtros incluídos aqui já valem para a primeira carga.'}</p>
+    <p className="text-sm text-muted-foreground">A calculadora consulta o Qlik na hora, pela placa, e guarda cada consulta por 6 horas. Os filtros tiram itens da resposta, inclusive das consultas já guardadas.</p>
     <Card><CardContent className="space-y-3">
       <p className="font-medium">Novo filtro: o que não entra no histórico</p>
       <div className="reembolso-filtro-novo">
@@ -535,31 +529,30 @@ function FiltrosHistorico({ busy, run }: { busy: boolean; run: Executar }) {
         <Field label="Condição"><NativeSelect value={modo} onChange={e => setModo(e.target.value as 'igual' | 'contem')}>
           <NativeSelectOption value="igual">é igual a</NativeSelectOption><NativeSelectOption value="contem">contém</NativeSelectOption>
         </NativeSelect></Field>
-        <Field label="Valor"><Input list="reembolso-filtro-sugestoes" value={valor} maxLength={200} placeholder="digite ou escolha um valor já gravado" onChange={e => setValor(e.target.value)} />
-          <datalist id="reembolso-filtro-sugestoes">{sugestoes.map(v => <option key={v.valor} value={v.valor}>{`${inteiro.format(v.n)} itens`}</option>)}</datalist></Field>
-        <Button variant="create" disabled={busy || !valor.trim()} onClick={() => criar({ coluna, modo, valor })}><Plus /> Incluir filtro</Button>
+        <Field label="Valor"><Input list="reembolso-filtro-sugestoes" value={valor} maxLength={200} placeholder="digite ou escolha um valor visto nas consultas" onChange={e => setValor(e.target.value)} />
+          <datalist id="reembolso-filtro-sugestoes">{sugestoes.map(v => <option key={v.valor} value={v.valor}>{`${inteiro.format(v.n)} itens nas consultas recentes`}</option>)}</datalist></Field>
+        <Button variant="create" disabled={busy || !valor.trim()} onClick={criar}><Plus /> Incluir filtro</Button>
       </div>
-      <p className="text-xs text-muted-foreground">Sem diferença de acento ou maiúsculas. Itens que casarem são apagados na hora e deixam de entrar nas próximas cargas; ao remover o filtro, eles voltam na próxima carga completa.</p>
+      <p className="text-xs text-muted-foreground">Sem diferença de acento ou maiúsculas. &quot;É igual a&quot; compara o valor inteiro; &quot;contém&quot;, um trecho (ao menos 3 letras).</p>
     </CardContent></Card>
     <TabelaPadrao contador={`${inteiro.format(dados.filtros.length)} ${dados.filtros.length === 1 ? 'filtro' : 'filtros'}`}
-      vazio={!dados.filtros.length ? <p className="p-6 text-center text-muted-foreground">Nenhum filtro: tudo o que vem do Qlik entra no histórico.</p> : undefined}>
-      <TableHeader><TableRow><TableHead style={{ width: 180 }}>Coluna</TableHead><TableHead style={{ width: 100 }}>Condição</TableHead><TableHead>Valor</TableHead>
-        <TableHead className="patio-num text-right" style={{ width: 120 }}>Itens apagados</TableHead><TableHead style={{ width: 190 }}>Incluído em</TableHead><TableHead style={{ width: 60 }}><span className="sr-only">Ações</span></TableHead></TableRow></TableHeader>
+      vazio={!dados.filtros.length ? <p className="p-6 text-center text-muted-foreground">Nenhum filtro: tudo o que vem do Qlik aparece na calculadora.</p> : undefined}>
+      <TableHeader><TableRow><TableHead style={{ width: 200 }}>Coluna</TableHead><TableHead style={{ width: 110 }}>Condição</TableHead><TableHead>Valor</TableHead>
+        <TableHead style={{ width: 190 }}>Incluído em</TableHead><TableHead style={{ width: 60 }}><span className="sr-only">Ações</span></TableHead></TableRow></TableHeader>
       <TableBody>{(dados.filtros as AnyRow[]).map(f => <TableRow key={f.id}>
         <TableCell>{colunas[f.coluna] ?? f.coluna}</TableCell><TableCell>{f.modo === 'igual' ? 'é igual a' : 'contém'}</TableCell><TableCell className="font-medium">{f.valor}</TableCell>
-        <TableCell className="patio-num text-right tabular-nums">{inteiro.format(f.removidos)}</TableCell>
         <TableCell className="text-xs"><div>{dataHoraSolicitacao(f.criadoEm)}</div><div className="text-muted-foreground">{f.autor ?? '—'}</div></TableCell>
         <TableCell><div className="flex justify-end"><Button variant="ghost" size="icon" disabled={busy} aria-label={`Remover filtro ${f.valor}`} title="Remover filtro" onClick={() => remover(f)}><Trash2 /></Button></div></TableCell>
       </TableRow>)}</TableBody>
     </TabelaPadrao>
-    {dados.grupos.length > 0 && <TabelaPadrao contador={`${inteiro.format(dados.grupos.length)} grupos de despesa no histórico`}>
-      <TableHeader><TableRow><TableHead>Grupo de despesa</TableHead><TableHead className="patio-num text-right" style={{ width: 120 }}>Itens</TableHead><TableHead style={{ width: 170 }}><span className="sr-only">Ações</span></TableHead></TableRow></TableHeader>
-      <TableBody>{(dados.grupos as AnyRow[]).map(g => <TableRow key={g.valor}>
-        <TableCell>{g.valor}</TableCell><TableCell className="patio-num text-right tabular-nums">{inteiro.format(g.n)}</TableCell>
-        <TableCell><div className="flex justify-end">{!filtrosGrupo.has(String(g.valor).toLowerCase()) &&
-          <Button variant="ghost" disabled={busy} onClick={() => criar({ coluna: 'grupo', modo: 'igual', valor: g.valor })}><X /> Tirar do histórico</Button>}</div></TableCell>
+    <TabelaPadrao contador="Consultas recentes ao Qlik"
+      vazio={!dados.recentes.length ? <p className="p-6 text-center text-muted-foreground">Nenhuma consulta nos últimos 7 dias.</p> : undefined}>
+      <TableHeader><TableRow><TableHead style={{ width: 120 }}>Placa</TableHead><TableHead className="patio-num text-right" style={{ width: 120 }}>Itens de OS</TableHead><TableHead>Consultada em</TableHead></TableRow></TableHeader>
+      <TableBody>{(dados.recentes as AnyRow[]).map(r => <TableRow key={r.placa}>
+        <TableCell className="patio-num font-medium">{r.placa}</TableCell><TableCell className="patio-num text-right tabular-nums">{inteiro.format(r.itens)}</TableCell>
+        <TableCell className="text-xs">{`${dataHoraSolicitacao(r.consultadoEm)} · ${r.autor ?? '—'}`}</TableCell>
       </TableRow>)}</TableBody>
-    </TabelaPadrao>}
+    </TabelaPadrao>
   </div>;
 }
 

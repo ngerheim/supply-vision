@@ -23,10 +23,8 @@ SCRIPT_BAIXAR = PROCESSO_DIR / "baixar_base.py"
 SCRIPT_RODAR = PROCESSO_DIR / "rodar.py"
 SCRIPT_EMAIL = PROCESSO_DIR / "enviar_email.py"
 SCRIPT_REDE = PROCESSO_DIR / "baixar_fornecedores.py"
-SCRIPT_HISTORICO_OS = PROCESSO_DIR / "baixar_historico_os.py"
 # Data (AAAA-MM-DD) da ultima copia da Rede aceita pelo Portal.
 REDE_MARCADOR = DADOS_DIR / "rede_fornecedores.ok"
-HISTORICO_OS_MARCADOR = DADOS_DIR / "historico_os.ok"
 PARAMETROS_SRC = ALERTAS
 PARAMETROS_DIR = OPERACAO / "parametros"
 

@@ -11,7 +11,7 @@ em contrato_base.py.
 import json
 import pathlib
 import time
-from datetime import date, timedelta
+from datetime import date
 
 import websocket
 from segredos import mascarar
@@ -196,24 +196,30 @@ class Sessao:
         dim = self.call('GetLayout', lb, [])['qLayout']['qListObject']['qDimensionInfo']
         return dim['qStateCounts']['qSelected']
 
-    def primeira_data(self, campo):
-        """Menor data do campo no app inteiro (para a carga completa).
+    def campo_da_coluna(self, h, titulo):
+        """Campo do modelo por trás da dimensão `titulo` do objeto."""
+        hc = self.call('GetLayout', h, [])['qLayout']['qHyperCube']
+        for d in hc.get('qDimensionInfo', []):
+            if d.get('qFallbackTitle') == titulo and d.get('qGroupFieldDefs'):
+                return d['qGroupFieldDefs'][0]
+        raise QlikErro(f'Coluna {titulo} não é uma dimensão do objeto do Qlik.')
 
-        Ordena os valores do campo por número, sem considerar seleção, e
-        pega o menor serial válido entre os primeiros. None se não houver.
+    def selecionar_textos(self, campo, valores):
+        """Seleciona valores de texto e devolve quantos casaram (0 = nenhum).
+
+        Mesma sonda de selecionar_datas: sem casar nada, o campo ficaria sem
+        seleção e o objeto mostraria a base inteira.
         """
+        self.call('ClearAll', 1, [False])
         lb = self.call('CreateSessionObject', 1, [{
-            'qInfo': {'qType': 'lb-primeira-data'},
-            'qListObjectDef': {
-                'qDef': {'qFieldDefs': [campo],
-                         'qSortCriterias': [{'qSortByState': 0, 'qSortByNumeric': 1}]},
-                'qInitialDataFetch': [{'qTop': 0, 'qLeft': 0, 'qHeight': 50, 'qWidth': 1}],
-            },
+            'qInfo': {'qType': 'lb-textos'},
+            'qListObjectDef': {'qDef': {'qFieldDefs': [campo]}},
         }])['qReturn']['qHandle']
-        paginas = self.call('GetLayout', lb, [])['qLayout']['qListObject'].get('qDataPages') or [{}]
-        seriais = [c[0].get('qNum') for c in paginas[0].get('qMatrix', []) if c]
-        seriais = [n for n in seriais if isinstance(n, (int, float)) and n == n and n > 0]
-        return date(1899, 12, 30) + timedelta(days=int(min(seriais))) if seriais else None
+        fh = self.call('GetField', 1, {'qFieldName': campo})['qReturn']['qHandle']
+        if not self.call('SelectValues', fh, {'qFieldValues': [{'qText': v, 'qIsNumeric': False} for v in valores],
+                                              'qToggleMode': False, 'qSoftLock': True})['qReturn']:
+            raise QlikErro('Qlik recusou a seleção')
+        return self.call('GetLayout', lb, [])['qLayout']['qListObject']['qDimensionInfo']['qStateCounts']['qSelected']
 
     def ler(self, h, headers, qcx, colunas_numericas, progresso_a_cada=0):
         """Lê o objeto inteiro, paginado, e devolve a lista de linhas.

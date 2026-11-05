@@ -11,7 +11,7 @@ import { bancoSqliteLocal } from '../lib/sqlite-local.ts';
 import { env } from '../scripts/configuracao-servidor.mjs';
 import { PORTAL_BUILD } from '../lib/portal-build.ts';
 import { calcularItem, calcularTotais, lerCalculadoraHtml, validarCalculo, valorMtbf } from '../lib/reembolso.ts';
-import { aplicarFiltros, candidatos, resumoPlaca, termosPadrao, validarEnvioHistorico, validarFiltro } from '../lib/reembolso-historico.ts';
+import { aplicarFiltros, candidatos, resumoPlaca, termosPadrao, validarFiltro, validarLinhasConsulta } from '../lib/reembolso-historico.ts';
 
 const hooks = registerHooks({ resolve(s, c, next) {
   if (s === 'next/server') return next('vinext/shims/server', c);
@@ -172,15 +172,13 @@ void test('reembolso: termos padrao e escolha da ultima troca no historico', () 
   assert.equal(resumoPlaca([]), null);
 });
 
-void test('reembolso: envio do historico exige linhas dentro das datas enviadas', () => {
-  const l = { data: '2026-10-01', placa: 'exe-1a23', os: '1', produto: ' Filtro ', qtd: 1, valorUnit: 2, total: 2, reembolso: 0, km: 0, fornecedor: null };
-  const ok = validarEnvioHistorico({ datas: ['2026-10-02', '2026-10-01'], linhas: [l] });
-  assert.deepEqual(ok.datas, ['2026-10-01', '2026-10-02']);
-  assert.deepEqual([ok.linhas[0].placa, ok.linhas[0].produto, ok.linhas[0].km], ['EXE1A23', 'Filtro', null]);
-  assert.throws(() => validarEnvioHistorico({ datas: ['2026-10-02'], linhas: [l] }), /fora das datas/);
-  assert.throws(() => validarEnvioHistorico({ datas: [], linhas: [] }), /datas/);
-  assert.throws(() => validarEnvioHistorico({ datas: ['2026-10-01'], linhas: [{ ...l, placa: '-' }] }), /placa/);
-  assert.throws(() => validarEnvioHistorico({ datas: ['2026-10-01'], linhas: [{ ...l, km: '10' }] }), /km/);
+void test('reembolso: resposta do Qlik e conferida antes de ir para o cache', () => {
+  const l = { data: '2026-10-01', os: '1', produto: ' Filtro ', qtd: 1, valorUnit: 2, total: 2, reembolso: 0, km: 0, fornecedor: null, grupo: 'G', modelo: null, cliente: null };
+  const [ok] = validarLinhasConsulta([l]);
+  assert.deepEqual([ok.produto, ok.km, ok.grupo], ['Filtro', null, 'G']);
+  assert.throws(() => validarLinhasConsulta([{ ...l, data: '01/10/2026' }]), /data ou produto/);
+  assert.throws(() => validarLinhasConsulta([{ ...l, km: '10' }]), /km/);
+  assert.throws(() => validarLinhasConsulta('x'), /Qlik/);
 });
 
 void test('reembolso: filtros do historico ignoram acento e caixa', () => {
