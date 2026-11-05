@@ -963,7 +963,7 @@ function AjusteForm({
               onChange={(e) => setObservacao(e.target.value)}
             />
           </Field>
-          <Button disabled={busy}>Salvar ajuste</Button>
+          <Button type="submit" disabled={busy}>Salvar ajuste</Button>
         </form>
       </CardContent>
     </Card>
