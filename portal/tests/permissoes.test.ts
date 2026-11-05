@@ -75,6 +75,10 @@ const equivalencia: Record<Acao, readonly boolean[]> = {
   // Rede: todos consultam; so o admin desconsidera fornecedores e segmentos.
   'aba:rede': [true, true, true, false],
   'rede:gerenciar': [false, false, true, false],
+  // Reembolso: todos usam e salvam; Suprimentos e admin configuram.
+  'aba:reembolso': [true, true, true, false],
+  'reembolso:salvar': [true, true, true, false],
+  'reembolso:configurar': [false, true, true, false],
 };
 
 void test('cada perfil e cada acao preservam o contrato inventariado', () => {

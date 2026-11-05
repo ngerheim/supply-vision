@@ -120,6 +120,7 @@ void test('semeadura usa API real, cria perfis/acordos/chamados/Central e preser
   assert.ok(contar('ticket_events') >= 11); assert.ok(contar('audit_logs') > 30);
   assert.equal(contar('solicitacoes'),6);
   assert.equal(contar('rede_fornecedores'),43);
+  assert.deepEqual(['reembolso_tabelas','reembolso_itens','reembolso_clientes','reembolso_calculos'].map(contar),[2,20,6,1]);
   assert.equal(leitura.prepare("SELECT COUNT(*) n FROM rede_fornecedores WHERE ibge IS NULL").get().n,0);
   assert.deepEqual(leitura.prepare('SELECT DISTINCT status FROM solicitacoes ORDER BY status').all().map(r => r.status),['aberta','cadastrado','devolvida','em_analise','recusado']);
   assert.equal(leitura.prepare("SELECT COUNT(*) n FROM solicitacoes WHERE urgencia='urgente'").get().n,1);
@@ -136,7 +137,7 @@ void test('semeadura usa API real, cria perfis/acordos/chamados/Central e preser
     assert.ok((await sessao('/central/nao-lidas')).naoLidas > 0);
     await sessao('/logout', 'POST');
   }
-  const antes = ['rede_fornecedores','users','agreements','agreement_items','tickets','ticket_events','audit_logs','notificacoes_usuario','solicitacoes','solicitacao_andamentos','consultas_cnpj','email_notifications'].map(tabela => [tabela, contar(tabela)]);
+  const antes = ['rede_fornecedores','reembolso_clientes','reembolso_calculos','users','agreements','agreement_items','tickets','ticket_events','audit_logs','notificacoes_usuario','solicitacoes','solicitacao_andamentos','consultas_cnpj','email_notifications'].map(tabela => [tabela, contar(tabela)]);
   await semear(base, pasta); assert.deepEqual(antes.map(([tabela]) => [tabela, contar(tabela)]), antes);
   // Retoma sem o marco final: cadastros e acordos tambem sao idempotentes.
   const progresso = path.join(pasta, 'semeadura.json'), estado = JSON.parse(fs.readFileSync(progresso)); delete estado.concluido;
