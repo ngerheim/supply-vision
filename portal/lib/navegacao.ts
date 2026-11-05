@@ -11,6 +11,7 @@ export const ABAS_NAVEGACAO = [
     { chave: 'reembolso', slug: 'calculadora', label: 'Calculadora' },
     { chave: 'reembolso-salvos', slug: 'salvos', label: 'Salvos' },
     { chave: 'reembolso-tabelas', slug: 'tabelas', label: 'Tabelas MTBF' },
+    { chave: 'reembolso-historico', slug: 'historico', label: 'Histórico de OS' },
     { chave: 'reembolso-config', slug: 'configuracao', label: 'Configuração' },
   ] },
   { aba: 'manutencao', label: 'Manutenção', subabas: [{ chave: 'maintenance', slug: null, label: 'Manutenção' }] },
@@ -67,7 +68,7 @@ export const AVISO_CHAMADO_RESTRITO = 'Seu perfil permite consultar preços e ac
 const BUSCAR: EnderecoNavegacao = { aba: 'buscar', subaba: null };
 
 const ACAO_ABA: Partial<Record<Nav, Acao>> = { 'estoque-saldo': 'aba:estoque', 'estoque-entradas': 'aba:estoque', contratos: 'acordo:consultar-completo', 'alertas-destinatarios': 'alertas:destinatarios', 'analise-acoes': 'aba:analise', 'rede-exclusoes': 'rede:gerenciar',
-  'reembolso-salvos': 'aba:reembolso', 'reembolso-tabelas': 'aba:reembolso', 'reembolso-config': 'reembolso:configurar' };
+  'reembolso-salvos': 'aba:reembolso', 'reembolso-tabelas': 'aba:reembolso', 'reembolso-config': 'reembolso:configurar', 'reembolso-historico': 'reembolso:configurar' };
 export function podeAcessarAba(usuario: UsuarioPermissao, chave: Nav): boolean {
   return pode(usuario, ACAO_ABA[chave] ?? (`aba:${chave}` as Acao));
 

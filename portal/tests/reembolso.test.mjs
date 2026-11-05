@@ -11,6 +11,7 @@ import { bancoSqliteLocal } from '../lib/sqlite-local.ts';
 import { env } from '../scripts/configuracao-servidor.mjs';
 import { PORTAL_BUILD } from '../lib/portal-build.ts';
 import { calcularItem, calcularTotais, lerCalculadoraHtml, validarCalculo, valorMtbf } from '../lib/reembolso.ts';
+import { aplicarFiltros, candidatos, resumoPlaca, termosPadrao, validarEnvioHistorico, validarFiltro } from '../lib/reembolso-historico.ts';
 
 const hooks = registerHooks({ resolve(s, c, next) {
   if (s === 'next/server') return next('vinext/shims/server', c);
@@ -144,4 +145,53 @@ void test('reembolso: importacao, configuracao com historico, calculos e permiss
   assert.equal((await pedir('GET', 'reembolso/config', 'viewer2')).status, 403);
   sql.prepare("INSERT INTO permissoes_usuario(user_id,area,nivel,atualizado_em) VALUES('viewer','reembolso','edicao',?)").run(banco.now());
   assert.equal((await pedir('DELETE', `reembolso/clientes/${novo.data.id}`, 'viewer')).status, 200);
+});
+
+void test('reembolso: termos padrao e escolha da ultima troca no historico', () => {
+  assert.equal(termosPadrao('Filtro de ar'), 'filtro ar -condicionado -cabine -polen -antipolen | elemento ar -condicionado');
+  assert.equal(termosPadrao('Pastilha de freio dianteira'), 'pastilha');
+  assert.equal(termosPadrao('Peça desconhecida XPTO 2000 componentes'), 'descon xpto');
+  const linha = (data, os, produto, km) => ({ data, os, produto, km, qtd: 1, valorUnit: 10, total: 10, reembolso: 0, fornecedor: 'Oficina Exemplo' });
+  const linhas = [
+    linha('2026-10-30', '900', 'FILTRO DE AR MOTOR', 50000),
+    linha('2026-07-01', '800', 'FILTRO AR CONDICIONADO', 41000),
+    linha('2026-06-01', '700', 'FILTRO DE AR', null), linha('2026-06-01', '700', 'OLEO MOTOR', 40000),
+    linha('2025-01-10', '600', 'ELEMENTO FILTRO AR', 20000),
+  ];
+  const q = termosPadrao('Filtro de ar'), hoje = '2026-11-05';
+  // Sem a OS atual, a OS de 6 dias atras pode ser a propria e nao vira automatica.
+  let lista = candidatos(linhas, q, { kmAtual: 52000, osAtual: '', hoje });
+  assert.deepEqual(lista.map(c => [c.os, c.km, c.serve]), [['900', 50000, false], ['700', 40000, true], ['600', 20000, true]]);
+  assert.equal(lista[0].recente, true);
+  // Com a OS atual informada, a OS 900 vale; OS com km acima do atual nao.
+  lista = candidatos(linhas, q, { kmAtual: 45000, osAtual: '901', hoje });
+  assert.deepEqual(lista.map(c => [c.os, c.acimaDoKm, c.serve]), [['900', true, false], ['700', false, true], ['600', false, true]]);
+  assert.equal(candidatos(linhas, q, { kmAtual: 52000, osAtual: 'OS 900', hoje })[0].atual, true);
+  assert.deepEqual(candidatos(linhas, '', { kmAtual: 1, osAtual: '', hoje }), []);
+  assert.deepEqual(resumoPlaca(linhas), { os: 4, primeira: '2025-01-10', ultima: '2026-10-30', ultimoKm: 50000, dataUltimoKm: '2026-10-30' });
+  assert.equal(resumoPlaca([]), null);
+});
+
+void test('reembolso: envio do historico exige linhas dentro das datas enviadas', () => {
+  const l = { data: '2026-10-01', placa: 'exe-1a23', os: '1', produto: ' Filtro ', qtd: 1, valorUnit: 2, total: 2, reembolso: 0, km: 0, fornecedor: null };
+  const ok = validarEnvioHistorico({ datas: ['2026-10-02', '2026-10-01'], linhas: [l] });
+  assert.deepEqual(ok.datas, ['2026-10-01', '2026-10-02']);
+  assert.deepEqual([ok.linhas[0].placa, ok.linhas[0].produto, ok.linhas[0].km], ['EXE1A23', 'Filtro', null]);
+  assert.throws(() => validarEnvioHistorico({ datas: ['2026-10-02'], linhas: [l] }), /fora das datas/);
+  assert.throws(() => validarEnvioHistorico({ datas: [], linhas: [] }), /datas/);
+  assert.throws(() => validarEnvioHistorico({ datas: ['2026-10-01'], linhas: [{ ...l, placa: '-' }] }), /placa/);
+  assert.throws(() => validarEnvioHistorico({ datas: ['2026-10-01'], linhas: [{ ...l, km: '10' }] }), /km/);
+});
+
+void test('reembolso: filtros do historico ignoram acento e caixa', () => {
+  const f = validarFiltro({ coluna: 'grupo', modo: 'igual', valor: '  Lava   Játo ' });
+  assert.deepEqual(f, { coluna: 'grupo', modo: 'igual', valor: 'Lava Játo', valorNorm: 'lava jato' });
+  const contem = validarFiltro({ coluna: 'produto', modo: 'contem', valor: 'TAXA' });
+  const l = (grupo, produto) => ({ grupo, produto, data: '2026-10-01', placa: 'EXE1A23' });
+  const { mantidas, filtradas } = aplicarFiltros([l('LAVA JATO', 'LAVAGEM'), l('Lava jato extra', 'X'), l('Manutenção', 'Taxa de entrega'), l(null, 'Filtro')], [f, contem]);
+  assert.equal(filtradas, 2);
+  assert.deepEqual(mantidas.map(x => x.produto), ['X', 'Filtro']);
+  assert.throws(() => validarFiltro({ coluna: 'placa', modo: 'igual', valor: 'x' }), /Coluna/);
+  assert.throws(() => validarFiltro({ coluna: 'grupo', modo: 'contem', valor: 'ab' }), /3 letras/);
+  assert.throws(() => validarFiltro({ coluna: 'grupo', modo: 'igual', valor: '   ' }), /valor/);
 });

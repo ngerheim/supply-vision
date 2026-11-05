@@ -120,7 +120,7 @@ void test('semeadura usa API real, cria perfis/acordos/chamados/Central e preser
   assert.ok(contar('ticket_events') >= 11); assert.ok(contar('audit_logs') > 30);
   assert.equal(contar('solicitacoes'),6);
   assert.equal(contar('rede_fornecedores'),43);
-  assert.deepEqual(['reembolso_tabelas','reembolso_itens','reembolso_clientes','reembolso_calculos'].map(contar),[2,20,6,1]);
+  assert.deepEqual(['reembolso_tabelas','reembolso_itens','reembolso_clientes','reembolso_calculos','reembolso_historico','reembolso_historico_dias'].map(contar),[2,20,6,1,15,5]);
   assert.equal(leitura.prepare("SELECT COUNT(*) n FROM rede_fornecedores WHERE ibge IS NULL").get().n,0);
   assert.deepEqual(leitura.prepare('SELECT DISTINCT status FROM solicitacoes ORDER BY status').all().map(r => r.status),['aberta','cadastrado','devolvida','em_analise','recusado']);
   assert.equal(leitura.prepare("SELECT COUNT(*) n FROM solicitacoes WHERE urgencia='urgente'").get().n,1);
