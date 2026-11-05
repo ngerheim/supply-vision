@@ -130,7 +130,7 @@ export function validarCliente(v: unknown): ClienteEntrada {
   };
 }
 
-export type ItemCalculo = EntradaItem & { peca: string | null; referencia: string | null };
+export type ItemCalculo = EntradaItem & { peca: string | null; referencia: string | null; origemUltimaTroca: string | null };
 export type CalculoEntrada = {
   placa: string | null; cliente: string | null; taxa: number; categoria: Categoria; modelo: string | null; kmAtual: number;
   osAtual: string | null; observacao: string | null; tabela: string | null; itens: ItemCalculo[];
@@ -149,6 +149,7 @@ export function validarCalculo(v: unknown): CalculoEntrada {
       tipo: tipoValido(i.tipo) ?? 'PROPORCIONAL', kmTroca: numero(i.kmTroca, 'KM de troca', { max: 1e7 }),
       ultimaTroca: numero(i.ultimaTroca, 'última troca', { max: 1e8 }), qtd: numero(i.qtd, 'quantidade', { max: 1e5 }),
       valorUnit: numero(i.valorUnit, 'valor unitário', { max: 1e8 }), diferencaPneu: numero(i.diferencaPneu, 'diferença de pneu', { min: -1e8, max: 1e8 }),
+      origemUltimaTroca: texto(i.origemUltimaTroca, 80, 'Origem da última troca'),
     };
   });
   const placa = texto(c.placa, 10, 'Placa')?.toUpperCase().replace(/[^A-Z0-9]/g, '') || null;

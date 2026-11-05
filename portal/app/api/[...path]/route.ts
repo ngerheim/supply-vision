@@ -288,6 +288,9 @@ async function GETInterno(request: NextRequest) {
   if (parts[0] === 'bootstrap') return bootstrap(user);
   if (parts[0] === 'reembolso') {
     if (parts.length === 2 && parts[1] === 'config') return reembolso.config(user);
+    if (parts.length === 2 && parts[1] === 'historico') return reembolso.historicoPlaca(user, request.nextUrl.searchParams);
+    if (parts.length === 3 && parts[1] === 'historico' && parts[2] === 'filtros') return reembolso.filtrosHistorico(user);
+    if (parts.length === 3 && parts[1] === 'historico' && parts[2] === 'valores') return reembolso.valoresHistorico(user, request.nextUrl.searchParams);
     if (parts.length === 2 && parts[1] === 'calculos') return reembolso.listarCalculos(user, request.nextUrl.searchParams);
     if (parts.length === 3 && parts[1] === 'calculos') return reembolso.detalheCalculo(user, parts[2]);
     return fail('Rota não encontrada.', 404);
@@ -398,6 +401,10 @@ async function POSTInterno(request: NextRequest) {
     if (!tokenInternoValido(request)) return fail('Credencial interna inválida.', 401);
     return alertas.receberRodada(request);
   }
+  if (parts[0] === 'internal' && parts[1] === 'reembolso-historico' && parts.length === 2) {
+    if (!tokenInternoValido(request)) return fail('Credencial interna inválida.', 401);
+    return reembolso.receberHistorico(request);
+  }
   if (parts[0] === 'internal' && parts[1] === 'rede' && parts.length === 2) {
     if (!tokenInternoValido(request)) return fail('Credencial interna inválida.', 401);
     return rede.receber(request);
@@ -421,6 +428,7 @@ async function POSTInterno(request: NextRequest) {
     if (parts.length === 2 && parts[1] === 'importar') return reembolso.importar(request, user);
     if (parts.length === 2 && parts[1] === 'clientes') return reembolso.salvarCliente(request, user);
     if (parts.length === 2 && parts[1] === 'tabelas') return reembolso.salvarTabela(request, user);
+    if (parts.length === 3 && parts[1] === 'historico' && parts[2] === 'filtros') return reembolso.criarFiltro(request, user);
     return fail('Rota não encontrada.', 404);
   }
   if (parts[0] === 'rede') {
@@ -564,6 +572,9 @@ async function DELETEInterno(request: NextRequest) {
   if (!user) return fail('Sessão expirada.', 401);
   if (await first(VALIDACAO_ATIVA_SQL)) return denyWrite(request, 'Sistema em atualização, aguarde alguns instantes', 503, 'validacao');
   const partesRede = partsOf(request);
+  if (partesRede[0] === 'reembolso' && partesRede.length === 4 && partesRede[1] === 'historico' && partesRede[2] === 'filtros') {
+    return pode(user, 'reembolso:configurar') ? reembolso.excluirFiltro(user, partesRede[3]) : fail(SEM_CONFIG, 403);
+  }
   if (partesRede[0] === 'reembolso' && partesRede.length === 3) {
     if (partesRede[1] === 'calculos') return pode(user, 'reembolso:salvar') ? reembolso.excluirCalculo(user, partesRede[2]) : fail('Seu perfil não permite excluir cálculos.', 403);
     if (!pode(user, 'reembolso:configurar')) return fail(SEM_CONFIG, 403);

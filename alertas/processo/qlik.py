@@ -11,7 +11,7 @@ em contrato_base.py.
 import json
 import pathlib
 import time
-from datetime import date
+from datetime import date, timedelta
 
 import websocket
 from segredos import mascarar
@@ -195,6 +195,25 @@ class Sessao:
 
         dim = self.call('GetLayout', lb, [])['qLayout']['qListObject']['qDimensionInfo']
         return dim['qStateCounts']['qSelected']
+
+    def primeira_data(self, campo):
+        """Menor data do campo no app inteiro (para a carga completa).
+
+        Ordena os valores do campo por número, sem considerar seleção, e
+        pega o menor serial válido entre os primeiros. None se não houver.
+        """
+        lb = self.call('CreateSessionObject', 1, [{
+            'qInfo': {'qType': 'lb-primeira-data'},
+            'qListObjectDef': {
+                'qDef': {'qFieldDefs': [campo],
+                         'qSortCriterias': [{'qSortByState': 0, 'qSortByNumeric': 1}]},
+                'qInitialDataFetch': [{'qTop': 0, 'qLeft': 0, 'qHeight': 50, 'qWidth': 1}],
+            },
+        }])['qReturn']['qHandle']
+        paginas = self.call('GetLayout', lb, [])['qLayout']['qListObject'].get('qDataPages') or [{}]
+        seriais = [c[0].get('qNum') for c in paginas[0].get('qMatrix', []) if c]
+        seriais = [n for n in seriais if isinstance(n, (int, float)) and n == n and n > 0]
+        return date(1899, 12, 30) + timedelta(days=int(min(seriais))) if seriais else None
 
     def ler(self, h, headers, qcx, colunas_numericas, progresso_a_cada=0):
         """Lê o objeto inteiro, paginado, e devolve a lista de linhas.

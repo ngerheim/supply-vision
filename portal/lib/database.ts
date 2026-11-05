@@ -11,6 +11,7 @@ import { SCHEMA_ANALISE, SCHEMA_ANALISE_ACOES } from './analise.ts';
 import { SCHEMA_ALERTAS } from './alertas-rodadas.ts';
 import { SCHEMA_REDE } from './rede.ts';
 import { SCHEMA_REEMBOLSO } from './reembolso.ts';
+import { SCHEMA_REEMBOLSO_HISTORICO } from './reembolso-historico.ts';
 
 export { SESSAO_INATIVIDADE_MS } from './politica-sessao.ts';
 import { CRIAR_CONTADOR_CHAMADOS_SQL, MIGRAR_CONTADOR_CHAMADOS_SQL, migrarBuscaChamados, migrarIndicesListasGlobais } from './operacao-dados.ts';
@@ -479,6 +480,13 @@ async function initialize() {
     await db.batchConstruir(() => [
       ...SCHEMA_REEMBOLSO.map(sql => db.prepare(sql)),
       db.prepare('INSERT OR IGNORE INTO schema_migrations(version,applied_at) VALUES(23,?)').bind(now()),
+    ]);
+  }
+  // Historico de OS por placa para a ultima troca da calculadora.
+  if (!await db.prepare('SELECT 1 ok FROM schema_migrations WHERE version=24').first()) {
+    await db.batchConstruir(() => [
+      ...SCHEMA_REEMBOLSO_HISTORICO.map(sql => db.prepare(sql)),
+      db.prepare('INSERT OR IGNORE INTO schema_migrations(version,applied_at) VALUES(24,?)').bind(now()),
     ]);
   }
   await db.prepare('PRAGMA optimize').run();

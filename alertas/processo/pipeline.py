@@ -29,6 +29,7 @@ SCRIPT_BAIXAR = str(sv_paths.SCRIPT_BAIXAR)
 SCRIPT_RODAR  = str(sv_paths.SCRIPT_RODAR)
 SCRIPT_EMAIL  = str(sv_paths.SCRIPT_EMAIL)
 SCRIPT_REDE   = getattr(sv_paths, "SCRIPT_REDE", None)
+SCRIPT_HISTORICO_OS = getattr(sv_paths, "SCRIPT_HISTORICO_OS", None)
 
 
 def configurar_log():
@@ -179,6 +180,34 @@ def atualizar_rede():
         logging.warning(f"AVISO: Rede de fornecedores não atualizada: {mascarar(str(erro), str(getattr(sv_paths, 'PORTAL_API_TOKEN', '')))}")
 
 
+def historico_os_pendente(hoje=None):
+    """Histórico de OS do Reembolso: uma vez por dia, como a Rede.
+
+    Usa o mesmo objeto do Qlik do alerta; exige só o Portal configurado.
+    """
+    marcador = getattr(sv_paths, "HISTORICO_OS_MARCADOR", None)
+    if not SCRIPT_HISTORICO_OS or marcador is None or os.environ.get("SUPPLY_VISION_SEM_ENVIO") == "1":
+        return False
+    if not getattr(sv_paths, "PORTAL_URL", "") or not getattr(sv_paths, "PORTAL_API_TOKEN", ""):
+        return False
+    try:
+        return pathlib.Path(marcador).read_text(encoding="utf-8").strip() != (hoje or date.today().isoformat())
+    except OSError:
+        return True
+
+
+def atualizar_historico_os():
+    """Depois do alerta e da Rede, com o lock ainda nosso. Falha só fica no log."""
+    try:
+        if not historico_os_pendente():
+            return
+        ok, _ = rodar_script(str(SCRIPT_HISTORICO_OS), "Histórico de OS do Reembolso (Qlik)")
+        if not ok:
+            logging.warning("AVISO: histórico de OS não atualizado; nova tentativa na próxima execução.")
+    except Exception as erro:
+        logging.warning(f"AVISO: histórico de OS não atualizado: {mascarar(str(erro), str(getattr(sv_paths, 'PORTAL_API_TOKEN', '')))}")
+
+
 def adquirir_lock():
     """Mantém um lock exclusivo do Windows até o processo terminar."""
     import msvcrt
@@ -298,12 +327,13 @@ def main():
             logging.error(f'ERRO: {exc}')
             sys.exit(3)
 
-    # A Rede vem depois do alerta (inclusive nas saídas antecipadas), para
+    # Rede e histórico de OS vêm depois do alerta (inclusive nas saídas antecipadas), para
     # nunca atrasar o e-mail.
     try:
         executar_alerta()
     finally:
         atualizar_rede()
+        atualizar_historico_os()
 
 
 def executar_alerta():

@@ -15,6 +15,7 @@ import { TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/compon
 import { api, errorText } from '@/lib/api';
 import { dataHoraSolicitacao } from '@/lib/solicitacoes-cliente';
 import { CATEGORIAS, calcularItem, type Tipo } from '@/lib/reembolso';
+import { candidatos, placaNormalizada, resumoPlaca, termosPadrao, type Candidato, type LinhaPlaca } from '@/lib/reembolso-historico';
 import { type AnyRow, Field, Loading, FalhaDeCarregamento, PaginacaoDeLista } from './portal-presentation';
 
 type Executar = (acao: () => Promise<unknown>, mensagem?: string) => unknown;
@@ -23,19 +24,33 @@ type Tabela = { id: string; nome: string; padrao: boolean; revision: number; ite
 type Cliente = { id: string; nome: string; taxa: number | null; pneuKm: number | null; observacao: string | null; executivo: string | null; tabelaId: string | null; ativo: boolean; revision: number };
 type Config = { podeConfigurar: boolean; tabelas: Tabela[]; clientes: Cliente[] };
 type Foto = { url: string; nome: string; video: boolean };
-type ItemForm = { chave: number; peca: string; referencia: string; tipo: Tipo; kmTroca: string; ultimaTroca: string; qtd: string; valorUnit: string; diferencaPneu: string; dica: string; fotos: Foto[] };
+// utModo: de onde veio a ultima troca. auto = melhor OS do historico (muda
+// com placa, km e termos); escolhido = OS clicada; manual = digitado;
+// salvo = veio de um calculo salvo. So "auto" e vazio sao recalculados.
+type ModoUltimaTroca = '' | 'auto' | 'escolhido' | 'manual' | 'salvo';
+type ItemForm = { chave: number; peca: string; referencia: string; tipo: Tipo; kmTroca: string; ultimaTroca: string; qtd: string; valorUnit: string; diferencaPneu: string; dica: string; fotos: Foto[];
+  utModo: ModoUltimaTroca; utRotulo: string; termos: string; termosEditados: boolean };
+type Historico = { placa: string; carregando?: boolean; erro?: string; cobertura?: { de: string; ate: string; atualizadoEm: string } | null; linhas: LinhaPlaca[] };
 type Form = { clienteId: string; clienteNome: string; taxaPct: string; categoria: string; modelo: string; placa: string; kmAtual: string; osAtual: string; observacao: string };
 
 const moeda = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 const inteiro = new Intl.NumberFormat('pt-BR');
 const ROTULO_CAT: Record<string, string> = Object.fromEntries(CATEGORIAS);
 const num = (v: string | number | null | undefined) => { const n = Number(String(v ?? '').replace(',', '.')); return Number.isFinite(n) ? n : 0; };
+const fracao = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 4 });
+const decimal = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const pct = (t: number | null) => (t === null ? '—' : `${inteiro.format(Math.round(t * 10000) / 100)}%`);
 const valorTxt = (v: number | string | null | undefined) => (typeof v === 'number' ? `${inteiro.format(v)} km` : v ? String(v) : '—');
 const json = (method: string, corpo: unknown) => ({ method, headers: { 'content-type': 'application/json' }, body: JSON.stringify(corpo) });
 const formVazio = (): Form => ({ clienteId: '', clienteNome: '', taxaPct: '', categoria: 'HATCH_SEDAN', modelo: '', placa: '', kmAtual: '', osAtual: '', observacao: '' });
 let proximaChave = 1;
-const itemVazio = (): ItemForm => ({ chave: proximaChave++, peca: '', referencia: '', tipo: 'PROPORCIONAL', kmTroca: '', ultimaTroca: '', qtd: '1', valorUnit: '', diferencaPneu: '0', dica: '', fotos: [] });
+const itemVazio = (): ItemForm => ({ chave: proximaChave++, peca: '', referencia: '', tipo: 'PROPORCIONAL', kmTroca: '', ultimaTroca: '', qtd: '1', valorUnit: '', diferencaPneu: '0', dica: '', fotos: [],
+  utModo: '', utRotulo: '', termos: '', termosEditados: false });
+const dataBr = (iso: string | null | undefined) => (iso && /^\d{4}-\d{2}-\d{2}/.test(iso) ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}` : '—');
+const dataCurta = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(2, 4)}`;
+const rotuloOs = (c: Candidato) => `OS ${c.os ?? '?'} · ${dataCurta(c.data)}`;
+const termosDoItem = (i: ItemForm) => (i.termosEditados ? i.termos : termosPadrao(i.referencia || i.peca));
+const ROTULO_TIPO: Record<Tipo, string> = { INTEGRAL: 'Integral', PROPORCIONAL: 'Proporcional' };
 
 function tabelaAtiva(config: Config | null, clienteId: string) {
   if (!config) return null;
@@ -77,7 +92,8 @@ export function Reembolso({ nav, busy, run }: { nav: string; busy: boolean; run:
     setForm({ clienteId: cliente?.id ?? '', clienteNome: calc.cliente ?? '', taxaPct: String(Math.round(calc.taxa * 10000) / 100), categoria: calc.categoria,
       modelo: calc.modelo ?? '', placa: calc.placa ?? '', kmAtual: String(calc.kmAtual ?? ''), osAtual: calc.osAtual ?? '', observacao: calc.observacao ?? '' });
     setItens((calc.itens as AnyRow[]).map(i => ({ ...itemVazio(), peca: i.peca ?? '', referencia: i.referencia ?? '', tipo: i.tipo, kmTroca: String(i.kmTroca || ''),
-      ultimaTroca: String(i.ultimaTroca || ''), qtd: String(i.qtd ?? 1), valorUnit: String(i.valorUnit || ''), diferencaPneu: String(i.diferencaPneu ?? 0) })));
+      ultimaTroca: String(i.ultimaTroca || ''), qtd: String(i.qtd ?? 1), valorUnit: String(i.valorUnit || ''), diferencaPneu: String(i.diferencaPneu ?? 0),
+      utModo: i.ultimaTroca ? 'salvo' : '', utRotulo: i.origemUltimaTroca ?? '' })));
   };
 
   if (erro && !config) return <FalhaDeCarregamento erro={erro} tentar={() => void carregar().catch(f => setErro(errorText(f)))} />;
@@ -89,6 +105,7 @@ export function Reembolso({ nav, busy, run }: { nav: string; busy: boolean; run:
     </div>
     {nav === 'reembolso-salvos' && <Salvos busy={busy} run={run} abrir={abrirCalculo} />}
     {nav === 'reembolso-tabelas' && <Tabelas config={config} />}
+    {nav === 'reembolso-historico' && config.podeConfigurar && <FiltrosHistorico busy={busy} run={run} />}
     {nav === 'reembolso-config' && config.podeConfigurar && <Configuracao config={config} recarregar={() => carregar()} busy={busy} run={run} />}
   </>;
 }
@@ -132,9 +149,12 @@ function Calculadora({ config, form, setForm, itens, setItens, busy, run, vazio 
     await api('/api/reembolso/calculos', json('POST', {
       placa: form.placa, cliente: form.clienteNome || null, taxa, categoria: form.categoria, modelo: form.modelo, kmAtual, osAtual: form.osAtual,
       observacao: form.observacao, tabela: tabela?.nome ?? null,
-      itens: itens.map(i => ({ peca: i.peca, referencia: i.referencia, tipo: i.tipo, kmTroca: num(i.kmTroca), ultimaTroca: num(i.ultimaTroca), qtd: num(i.qtd), valorUnit: num(i.valorUnit), diferencaPneu: num(i.diferencaPneu) })),
+      itens: itens.map(i => ({ peca: i.peca, referencia: i.referencia, tipo: i.tipo, kmTroca: num(i.kmTroca), ultimaTroca: num(i.ultimaTroca), qtd: num(i.qtd), valorUnit: num(i.valorUnit), diferencaPneu: num(i.diferencaPneu),
+        origemUltimaTroca: i.ultimaTroca ? origemTexto(i) : null })),
     }));
   }, 'Cálculo salvo. Ele aparece em Reembolso › Salvos.');
+  const origemTexto = (i: ItemForm) => (i.utModo === 'auto' ? `automático · ${i.utRotulo}` : i.utModo === 'escolhido' ? `escolhido · ${i.utRotulo}`
+    : i.utModo === 'salvo' ? i.utRotulo : i.utModo === 'manual' ? 'digitado' : '');
   const anexar = (chave: number, arquivos: FileList | null) => {
     const fotos = [...(arquivos ?? [])].filter(a => /^(image|video)\//.test(a.type)).map(a => ({ url: URL.createObjectURL(a), nome: a.name, video: a.type.startsWith('video/') }));
     setItens(lista => lista.map(i => (i.chave === chave ? { ...i, fotos: [...i.fotos, ...fotos] } : i)));
@@ -146,6 +166,54 @@ function Calculadora({ config, form, setForm, itens, setItens, busy, run, vazio 
   });
   const podeSalvar = itens.some(i => num(i.valorUnit) > 0) && !busy;
   const [hoje] = useState(() => new Date().toLocaleDateString('pt-BR'));
+  const [hojeIso] = useState(() => new Date().toLocaleDateString('sv-SE'));
+
+  // Historico de OS da placa: busca com pausa curta enquanto a placa e digitada.
+  const placa = placaNormalizada(form.placa);
+  const [historico, setHistorico] = useState<Historico | null>(null);
+  useEffect(() => {
+    if (placa.length < 7) return;
+    const controller = new AbortController();
+    const t = setTimeout(() => {
+      setHistorico({ placa, carregando: true, linhas: [] });
+      void api(`/api/reembolso/historico?placa=${encodeURIComponent(placa)}`, { signal: controller.signal })
+        .then((r: AnyRow) => { if (!controller.signal.aborted) setHistorico({ placa, cobertura: r.cobertura, linhas: r.linhas }); })
+        .catch(f => { if (!controller.signal.aborted) setHistorico({ placa, erro: errorText(f), linhas: [] }); });
+    }, 400);
+    return () => { clearTimeout(t); controller.abort(); };
+  }, [placa]);
+  const linhasPlaca = useMemo(() => (historico?.placa === placa ? historico.linhas : []), [historico, placa]);
+  const osAtual = form.osAtual;
+  const contexto = { kmAtual, osAtual, hoje: hojeIso };
+  const chaveAuto = itens.map(i => `${i.chave}:${i.utModo}:${i.ultimaTroca === '' ? 0 : 1}:${termosDoItem(i)}`).join('|');
+  // Ultima troca automatica: so em item vazio ou ja automatico; nunca sobre o
+  // que foi digitado, escolhido ou salvo. Sem KM atual a formula passaria do
+  // custo da peca, entao so preenche depois do KM atual informado.
+  useEffect(() => {
+    const ctx = { kmAtual, osAtual, hoje: hojeIso };
+    setItens(lista => {
+      let mudou = false;
+      const nova = lista.map(i => {
+        if (!(i.utModo === 'auto' || (i.utModo === '' && i.ultimaTroca === ''))) return i;
+        const melhor = ctx.kmAtual > 0 ? candidatos(linhasPlaca, termosDoItem(i), ctx).find(c => c.serve) : undefined;
+        const alvo = melhor?.km ? { ultimaTroca: String(melhor.km), utModo: 'auto' as const, utRotulo: rotuloOs(melhor) } : { ultimaTroca: '', utModo: '' as const, utRotulo: '' };
+        if (alvo.ultimaTroca === i.ultimaTroca && alvo.utModo === i.utModo && alvo.utRotulo === i.utRotulo) return i;
+        mudou = true;
+        return { ...i, ...alvo };
+      });
+      return mudou ? nova : lista;
+    });
+  }, [linhasPlaca, kmAtual, osAtual, hojeIso, chaveAuto, setItens]);
+  const resumo = useMemo(() => resumoPlaca(linhasPlaca), [linhasPlaca]);
+  const statusHistorico = (() => {
+    if (placa.length < 7) return 'Informe a placa para buscar a última troca de cada item no histórico de OS.';
+    if (!historico || historico.placa !== placa || historico.carregando) return 'Consultando o histórico de OS…';
+    if (historico.erro) return `Histórico indisponível: ${historico.erro}. Preencha a última troca à mão.`;
+    if (!historico.cobertura) return 'O histórico de OS ainda não foi carregado no Portal. Preencha a última troca à mão.';
+    const base = `base de ${dataBr(historico.cobertura.de)} a ${dataBr(historico.cobertura.ate)}`;
+    if (!resumo) return `Placa ${placa} sem OS no histórico (${base}). Confira a digitação.`;
+    return `Histórico: ${resumo.os} OS de ${dataBr(resumo.primeira)} a ${dataBr(resumo.ultima)}${resumo.ultimoKm ? ` · último KM registrado ${inteiro.format(resumo.ultimoKm)} em ${dataBr(resumo.dataUltimoKm)}` : ''} (${base}).`;
+  })();
 
   return <div className="patio-page space-y-4">
     <div className="no-print space-y-4">
@@ -173,6 +241,7 @@ function Calculadora({ config, form, setForm, itens, setItens, busy, run, vazio 
           {`MTBF: ${tabela ? tabela.nome : '—'}${cliente?.executivo ? ` · Comercial: ${cliente.executivo}` : ''}${cliente?.observacao ? ` · ${cliente.observacao}` : ''}`}
           {cliente && cliente.taxa === null ? ' · cliente sem taxa cadastrada: preencha à mão' : ''}
         </p>
+        <p className="reembolso-info reembolso-historico-status text-xs">{statusHistorico}</p>
       </CardContent></Card>
 
       <div className="space-y-3">{itens.map((i, n) => {
@@ -198,7 +267,7 @@ function Calculadora({ config, form, setForm, itens, setItens, busy, run, vazio 
               </NativeSelect>
             </Field>
             <Field label="KM de troca"><Input type="number" min="0" value={i.kmTroca} title={i.dica} onChange={e => mudarItem(i.chave, { kmTroca: e.target.value, dica: '' })} /></Field>
-            <Field label="Última troca (km)"><Input type="number" min="0" value={i.ultimaTroca} onChange={e => mudarItem(i.chave, { ultimaTroca: e.target.value })} /></Field>
+            <Field label="Última troca (km)"><Input type="number" min="0" value={i.ultimaTroca} title={origemTexto(i)} onChange={e => mudarItem(i.chave, { ultimaTroca: e.target.value, utModo: e.target.value === '' ? '' : 'manual', utRotulo: '' })} /></Field>
             <Field label="Qtd"><Input type="number" min="0" value={i.qtd} onChange={e => mudarItem(i.chave, { qtd: e.target.value })} /></Field>
             <Field label="Valor unit. (R$)"><Input type="number" min="0" step="0.01" value={i.valorUnit} onChange={e => mudarItem(i.chave, { valorUnit: e.target.value })} /></Field>
             <Field label="Dif. pneu MT/AT (R$)"><Input type="number" step="0.01" value={i.diferencaPneu} title="Só para pneus; demais itens, 0" onChange={e => mudarItem(i.chave, { diferencaPneu: e.target.value })} /></Field>
@@ -207,6 +276,8 @@ function Calculadora({ config, form, setForm, itens, setItens, busy, run, vazio 
             <div className="reembolso-resultado destaque"><span>Reembolso</span><b>{moeda.format(r.reembolso)}</b></div>
           </div>
           {i.dica && <p className="text-xs text-muted-foreground">{i.dica}</p>}
+          <HistoricoItem item={i} linhas={linhasPlaca} disponivel={!!historico?.cobertura && historico.placa === placa && !!resumo} contexto={contexto}
+            origem={origemTexto(i)} mudar={dados => mudarItem(i.chave, dados)} />
           <div className="flex flex-wrap items-center gap-2">
             <label className="inline-flex cursor-pointer items-center gap-1 text-xs font-medium text-link">
               <input type="file" accept="image/*,video/*" multiple hidden onChange={e => { anexar(i.chave, e.target.files); e.target.value = ''; }} />
@@ -230,22 +301,111 @@ function Calculadora({ config, form, setForm, itens, setItens, busy, run, vazio 
       </p>
     </div>
 
-    <section className="so-impressao reembolso-impressao">
-      <h1>Cálculo de manutenção reembolsável — Leves</h1>
-      <p>{`Cliente: ${form.clienteNome || '—'} · Taxa: ${pct(taxa)} · Categoria: ${ROTULO_CAT[form.categoria]} · Modelo: ${form.modelo || '—'} · Placa: ${form.placa || '—'} · KM atual: ${form.kmAtual ? inteiro.format(kmAtual) : '—'}${form.osAtual ? ` · OS ${form.osAtual}` : ''} · MTBF: ${tabela?.nome ?? '—'} · ${hoje}`}</p>
-      <table>
-        <thead><tr><th>#</th><th>Peça / M.O.</th><th>Referência MTBF</th><th>Tipo</th><th>KM troca</th><th>Última troca</th><th>KM restante</th><th>Qtd</th><th>Val. unit.</th><th>Val. total</th><th>Dif. pneu</th><th>Avaria s/ T.A.</th><th>Taxa</th><th>Reembolso</th></tr></thead>
-        <tbody>{itens.map((i, n) => { const r = resultados[n]; return <tr key={i.chave}>
-          <td>{n + 1}</td><td>{i.peca}</td><td>{i.referencia}</td><td>{i.tipo === 'INTEGRAL' ? 'Integral' : 'Proporcional'}</td><td>{i.kmTroca}</td><td>{i.ultimaTroca}</td>
-          <td>{num(i.kmTroca) > 0 ? inteiro.format(Math.round(r.kmRestante)) : ''}</td><td>{i.qtd}</td><td>{moeda.format(num(i.valorUnit))}</td><td>{moeda.format(r.valorTotal)}</td>
-          <td>{moeda.format(num(i.diferencaPneu))}</td><td>{moeda.format(r.avaria)}</td><td>{moeda.format(r.valorTaxa)}</td><td>{moeda.format(r.reembolso)}</td></tr>; })}</tbody>
+    <section className="so-impressao reembolso-papel">
+      <header className="rp-topo">
+        <div>
+          <h1>Cálculo de manutenção reembolsável — Leves</h1>
+          <p>Reembolso proporcional / integral de peças por MTBF · Hatch/Sedan · Pick-up leve · SUV · Pick-up 4x4 · Van</p>
+        </div>
+        <div className="rp-marca">
+          {/* oxlint-disable-next-line next/no-img-element -- logo privado servido pelo proprio Portal */}
+          <img src="/api/marca/logo" alt="" onError={e => { e.currentTarget.style.display = 'none'; }} />
+          <span>Data do cálculo</span><b>{hoje}</b>
+        </div>
+      </header>
+
+      <h2><span>01</span>Dados do cliente e veículo</h2>
+      <div className="rp-caixa rp-dados">
+        <Campo rotulo="Cliente" valor={form.clienteNome} />
+        <Campo rotulo="Taxa administrativa" valor={fracao.format(taxa)} dica={`em fração, ex. 0,25 = 25% · aqui ${pct(taxa)}`} />
+        <Campo rotulo="Categoria" valor={ROTULO_CAT[form.categoria]} />
+        <Campo rotulo="Modelo" valor={form.modelo} />
+        <Campo rotulo="Placa" valor={form.placa} />
+        <Campo rotulo="KM atual do veículo" valor={kmAtual ? inteiro.format(kmAtual) : ''} />
+        <Campo rotulo="MTBF vinculada" valor={tabela?.nome ?? ''} dica={cliente && !cliente.tabelaId ? 'cliente sem tabela própria — usando a MTBF padrão' : undefined} />
+        <Campo rotulo="OS atual" valor={form.osAtual} />
+        <Campo rotulo="Observações" largo valor={[cliente?.observacao, cliente?.executivo ? `Comercial: ${cliente.executivo}` : null].filter(Boolean).join(' · ')} />
+      </div>
+
+      <h2><span>02</span>Itens de manutenção</h2>
+      <table className="rp-tabela">
+        <thead><tr><th>#</th><th>Peça / M.O.</th><th>Referência MTBF</th><th>Tipo</th><th>KM de troca</th><th>Última troca</th><th>KM restante</th><th>Qtd</th>
+          <th>Val. unit.</th><th>Val. total</th><th>Diferença pneu MT/AT</th><th>Avaria s/ T.A.</th><th>Total da taxa</th><th>Total reembolso</th></tr></thead>
+        <tbody>{itens.map((i, n) => {
+          const r = resultados[n], kmTroca = num(i.kmTroca);
+          return <tr key={i.chave}>
+            <td>{n + 1}</td><td>{i.peca || '—'}</td>
+            <td className="rp-ref">{i.referencia ? `${i.referencia} — ${kmTroca > 0 ? `${inteiro.format(kmTroca)} km` : 'sem MTBF em km'} · ${ROTULO_TIPO[i.tipo]}` : '—'}</td>
+            <td>{ROTULO_TIPO[i.tipo]}</td>
+            <td className="rp-num">{kmTroca > 0 ? `${inteiro.format(kmTroca)} km` : '—'}</td>
+            <td className="rp-num">{num(i.ultimaTroca) > 0 ? <>{inteiro.format(num(i.ultimaTroca))}{i.utRotulo && <small>{i.utRotulo}</small>}</> : '—'}</td>
+            <td className="rp-num">{kmTroca > 0 ? inteiro.format(Math.round(r.kmRestante)) : '—'}</td>
+            <td className="rp-num">{inteiro.format(num(i.qtd))}</td>
+            <td className="rp-num">{decimal.format(num(i.valorUnit))}</td>
+            <td className="rp-num">{moeda.format(r.valorTotal)}</td>
+            <td className="rp-num">{moeda.format(num(i.diferencaPneu))}</td>
+            <td className="rp-num">{moeda.format(r.avaria)}</td>
+            <td className="rp-num">{moeda.format(r.valorTaxa)}</td>
+            <td className="rp-num"><b>{moeda.format(r.reembolso)}</b></td>
+          </tr>;
+        })}</tbody>
       </table>
-      <p><b>{`Custo total: ${moeda.format(totalCusto)} · Total do reembolso: ${moeda.format(totalReembolso)}`}</b></p>
-      {form.observacao && <p>{`Observações: ${form.observacao}`}</p>}
-      <div className="reembolso-evidencias">{itens.flatMap((i, n) => i.fotos.filter(f => !f.video).map(f => <figure key={f.url}>
-        {/* oxlint-disable-next-line next/no-img-element -- foto local (blob:) so para impressao */}
-        <img src={f.url} alt={f.nome} /><figcaption>{`Item ${n + 1}: ${f.nome}`}</figcaption></figure>))}</div>
+
+      <h2><span>03</span>Resumo</h2>
+      <div className="rp-resumo">
+        <div className="rp-caixa"><span>Custo total da manutenção</span><b>{moeda.format(totalCusto)}</b></div>
+        <div className="rp-caixa rp-destaque"><span>Total do reembolso ao cliente</span><b>{moeda.format(totalReembolso)}</b></div>
+      </div>
+
+      <h2><span>04</span>Observações</h2>
+      <div className="rp-caixa rp-texto">{form.observacao || <i>— sem observações —</i>}</div>
+
+      <h2><span>05</span>Evidências da avaria</h2>
+      <div className="rp-caixa">{itens.some(i => i.fotos.some(f => !f.video))
+        ? <div className="rp-fotos">{itens.flatMap((i, n) => i.fotos.filter(f => !f.video).map(f => <figure key={f.url}>
+          {/* oxlint-disable-next-line next/no-img-element -- foto local (blob:) so para impressao */}
+          <img src={f.url} alt={f.nome} /><figcaption>{`Item ${n + 1} · ${i.peca || i.referencia || 'sem descrição'}`}</figcaption></figure>))}</div>
+        : <i>— sem fotos anexadas —</i>}</div>
     </section>
+  </div>;
+}
+
+function Campo({ rotulo, valor, dica, largo }: { rotulo: string; valor: string | null | undefined; dica?: string; largo?: boolean }) {
+  return <div className={largo ? 'rp-campo rp-largo' : 'rp-campo'}><span>{rotulo}</span><b>{valor || '—'}</b>{dica && <small>{dica}</small>}</div>;
+}
+
+// Busca da ultima troca de um item no historico da placa: termos editaveis e
+// as OS encontradas; clicar numa OS usa o KM dela.
+function HistoricoItem({ item, linhas, disponivel, contexto, origem, mudar }: {
+  item: ItemForm; linhas: LinhaPlaca[]; disponivel: boolean; contexto: { kmAtual: number; osAtual: string; hoje: string }; origem: string;
+  mudar: (dados: Partial<ItemForm>) => void;
+}) {
+  const termos = termosDoItem(item);
+  const lista = useMemo(() => (disponivel ? candidatos(linhas, termos, contexto) : []), [disponivel, linhas, termos, contexto]);
+  if (!disponivel) return null;
+  const motivo = (c: Candidato) => (c.atual ? 'é a OS atual' : c.acimaDoKm ? 'KM igual ou acima do KM atual' : c.recente ? 'OS dos últimos 30 dias: informe a OS atual para liberar' : !c.km ? 'OS sem KM' : '');
+  const aviso = !termos ? 'selecione a Referência MTBF ou digite termos de busca'
+    : !lista.length ? 'nenhuma troca encontrada nesta placa; ajuste os termos ou preencha à mão'
+    : !(contexto.kmAtual > 0) ? `${lista.length} OS encontrada(s) — informe o KM atual para preencher a última troca`
+    : `${lista.length} OS encontrada(s)${lista.some(c => c.serve) ? '' : ' — nenhuma serve automaticamente, confira abaixo'}`;
+  return <div className="reembolso-historico space-y-2">
+    <div className="flex flex-wrap items-center gap-2 text-xs">
+      <span className="font-medium">Última troca no histórico</span>
+      <Input aria-label="Termos de busca no histórico" className="h-8 max-w-md flex-1 text-xs" value={termos} maxLength={300}
+        title='palavras = todas precisam aparecer; "|" = alternativa; "-palavra" = excluir'
+        onChange={e => mudar({ termos: e.target.value, termosEditados: true })} />
+      {item.termosEditados && <Button variant="ghost" size="sm" onClick={() => mudar({ termos: '', termosEditados: false })}>Termos padrão</Button>}
+      {item.utModo !== 'auto' && item.utModo !== '' && <Button variant="ghost" size="sm" onClick={() => mudar({ ultimaTroca: '', utModo: '', utRotulo: '' })}>Usar automático</Button>}
+      <span className="text-muted-foreground">{origem ? `${origem} · ` : ''}{aviso}</span>
+    </div>
+    {lista.length > 0 && <div className="flex flex-wrap gap-1.5">{lista.slice(0, 8).map(c => {
+      const escolhida = !!c.km && String(c.km) === item.ultimaTroca;
+      return <button type="button" key={`${c.os}-${c.data}`} title={[c.produtos.join(' · '), c.fornecedor, motivo(c)].filter(Boolean).join('\n')}
+        className={`reembolso-os ${escolhida ? 'escolhida' : ''} ${c.serve ? '' : 'nao-serve'}`}
+        onClick={() => c.km && mudar({ ultimaTroca: String(c.km), utModo: 'escolhido', utRotulo: rotuloOs(c) })}>
+        <b>{rotuloOs(c)}</b> · {c.km ? `${inteiro.format(c.km)} km` : 'sem KM'} · {c.produtos[0]}{c.produtos.length > 1 ? ` +${c.produtos.length - 1}` : ''}
+      </button>;
+    })}</div>}
   </div>;
 }
 
@@ -321,6 +481,85 @@ function Tabelas({ config }: { config: Config }) {
         {CATEGORIAS.map(([id]) => <TableCell key={id} className="patio-num text-right text-xs tabular-nums">{valorTxt(i.valores[id])}</TableCell>)}
       </TableRow>)}</TableBody>
     </TabelaPadrao>
+  </div>;
+}
+
+// O que nao entra no historico de OS. Filtro novo apaga na hora o que ja
+// estava gravado; tirar o filtro so traz os itens de volta na proxima carga.
+function FiltrosHistorico({ busy, run }: { busy: boolean; run: Executar }) {
+  const [dados, setDados] = useState<AnyRow | null>(null), [erro, setErro] = useState(''), [versao, setVersao] = useState(0);
+  const [coluna, setColuna] = useState('grupo'), [modo, setModo] = useState<'igual' | 'contem'>('igual'), [valor, setValor] = useState('');
+  const [sugestoes, setSugestoes] = useState<{ valor: string; n: number }[]>([]);
+  useEffect(() => {
+    const controller = new AbortController();
+    void api('/api/reembolso/historico/filtros', { signal: controller.signal }).then((r: AnyRow) => { if (!controller.signal.aborted) { setDados(r); setErro(''); } })
+      .catch(f => { if (!controller.signal.aborted) setErro(errorText(f)); });
+    return () => controller.abort();
+  }, [versao]);
+  useEffect(() => {
+    const controller = new AbortController();
+    const t = setTimeout(() => {
+      void api(`/api/reembolso/historico/valores?${new URLSearchParams({ coluna, q: valor.trim() })}`, { signal: controller.signal })
+        .then((r: AnyRow) => { if (!controller.signal.aborted) setSugestoes(r.valores); }).catch(() => undefined);
+    }, 300);
+    return () => { clearTimeout(t); controller.abort(); };
+  }, [coluna, valor, versao]);
+  const criar = (corpo: { coluna: string; modo: string; valor: string }) => {
+    const rotulo = `${dados?.colunas?.[corpo.coluna] ?? corpo.coluna} ${corpo.modo === 'igual' ? 'igual a' : 'contém'} "${corpo.valor}"`;
+    if (!confirm(`Tirar do histórico os itens com ${rotulo}? Os que já estão gravados são apagados agora.`)) return;
+    void run(async () => {
+      const r = await api('/api/reembolso/historico/filtros', json('POST', corpo)) as AnyRow;
+      setValor(''); setVersao(v => v + 1);
+      return r;
+    }, 'Filtro incluído; itens já gravados foram apagados.');
+  };
+  const remover = (f: AnyRow) => {
+    if (!confirm('Remover este filtro? Os itens apagados só voltam na próxima carga completa do histórico.')) return;
+    void run(async () => { await api(`/api/reembolso/historico/filtros/${encodeURIComponent(f.id)}`, { method: 'DELETE' }); setVersao(v => v + 1); }, 'Filtro removido.');
+  };
+  if (erro && !dados) return <FalhaDeCarregamento erro={erro} tentar={() => setVersao(v => v + 1)} />;
+  if (!dados) return <Loading label="Carregando filtros…" compact />;
+  const colunas = dados.colunas as Record<string, string>, cob = dados.cobertura as AnyRow | null;
+  const filtrosGrupo = new Set((dados.filtros as AnyRow[]).filter(f => f.coluna === 'grupo' && f.modo === 'igual').map(f => String(f.valor).toLowerCase()));
+  return <div className="patio-page space-y-4">
+    <LinhaDeAba actions={<Button variant="outline" size="icon" aria-label="Atualizar" title="Atualizar" onClick={() => setVersao(v => v + 1)}><RefreshCw /></Button>} />
+    <p className="text-sm text-muted-foreground">{cob
+      ? `Base: ${inteiro.format(cob.itens)} itens de OS de ${dataBr(cob.de)} a ${dataBr(cob.ate)} (${inteiro.format(cob.dias)} dias carregados) · última atualização ${dataHoraSolicitacao(cob.atualizadoEm)}.`
+      : 'O histórico de OS ainda não foi carregado. Os filtros incluídos aqui já valem para a primeira carga.'}</p>
+    <Card><CardContent className="space-y-3">
+      <p className="font-medium">Novo filtro: o que não entra no histórico</p>
+      <div className="reembolso-filtro-novo">
+        <Field label="Coluna"><NativeSelect value={coluna} onChange={e => { setColuna(e.target.value); setValor(''); }}>
+          {Object.entries(colunas).map(([id, nome]) => <NativeSelectOption key={id} value={id}>{nome}</NativeSelectOption>)}
+        </NativeSelect></Field>
+        <Field label="Condição"><NativeSelect value={modo} onChange={e => setModo(e.target.value as 'igual' | 'contem')}>
+          <NativeSelectOption value="igual">é igual a</NativeSelectOption><NativeSelectOption value="contem">contém</NativeSelectOption>
+        </NativeSelect></Field>
+        <Field label="Valor"><Input list="reembolso-filtro-sugestoes" value={valor} maxLength={200} placeholder="digite ou escolha um valor já gravado" onChange={e => setValor(e.target.value)} />
+          <datalist id="reembolso-filtro-sugestoes">{sugestoes.map(v => <option key={v.valor} value={v.valor}>{`${inteiro.format(v.n)} itens`}</option>)}</datalist></Field>
+        <Button variant="create" disabled={busy || !valor.trim()} onClick={() => criar({ coluna, modo, valor })}><Plus /> Incluir filtro</Button>
+      </div>
+      <p className="text-xs text-muted-foreground">Sem diferença de acento ou maiúsculas. Itens que casarem são apagados na hora e deixam de entrar nas próximas cargas; ao remover o filtro, eles voltam na próxima carga completa.</p>
+    </CardContent></Card>
+    <TabelaPadrao contador={`${inteiro.format(dados.filtros.length)} ${dados.filtros.length === 1 ? 'filtro' : 'filtros'}`}
+      vazio={!dados.filtros.length ? <p className="p-6 text-center text-muted-foreground">Nenhum filtro: tudo o que vem do Qlik entra no histórico.</p> : undefined}>
+      <TableHeader><TableRow><TableHead style={{ width: 180 }}>Coluna</TableHead><TableHead style={{ width: 100 }}>Condição</TableHead><TableHead>Valor</TableHead>
+        <TableHead className="patio-num text-right" style={{ width: 120 }}>Itens apagados</TableHead><TableHead style={{ width: 190 }}>Incluído em</TableHead><TableHead style={{ width: 60 }}><span className="sr-only">Ações</span></TableHead></TableRow></TableHeader>
+      <TableBody>{(dados.filtros as AnyRow[]).map(f => <TableRow key={f.id}>
+        <TableCell>{colunas[f.coluna] ?? f.coluna}</TableCell><TableCell>{f.modo === 'igual' ? 'é igual a' : 'contém'}</TableCell><TableCell className="font-medium">{f.valor}</TableCell>
+        <TableCell className="patio-num text-right tabular-nums">{inteiro.format(f.removidos)}</TableCell>
+        <TableCell className="text-xs"><div>{dataHoraSolicitacao(f.criadoEm)}</div><div className="text-muted-foreground">{f.autor ?? '—'}</div></TableCell>
+        <TableCell><div className="flex justify-end"><Button variant="ghost" size="icon" disabled={busy} aria-label={`Remover filtro ${f.valor}`} title="Remover filtro" onClick={() => remover(f)}><Trash2 /></Button></div></TableCell>
+      </TableRow>)}</TableBody>
+    </TabelaPadrao>
+    {dados.grupos.length > 0 && <TabelaPadrao contador={`${inteiro.format(dados.grupos.length)} grupos de despesa no histórico`}>
+      <TableHeader><TableRow><TableHead>Grupo de despesa</TableHead><TableHead className="patio-num text-right" style={{ width: 120 }}>Itens</TableHead><TableHead style={{ width: 170 }}><span className="sr-only">Ações</span></TableHead></TableRow></TableHeader>
+      <TableBody>{(dados.grupos as AnyRow[]).map(g => <TableRow key={g.valor}>
+        <TableCell>{g.valor}</TableCell><TableCell className="patio-num text-right tabular-nums">{inteiro.format(g.n)}</TableCell>
+        <TableCell><div className="flex justify-end">{!filtrosGrupo.has(String(g.valor).toLowerCase()) &&
+          <Button variant="ghost" disabled={busy} onClick={() => criar({ coluna: 'grupo', modo: 'igual', valor: g.valor })}><X /> Tirar do histórico</Button>}</div></TableCell>
+      </TableRow>)}</TableBody>
+    </TabelaPadrao>}
   </div>;
 }
 
