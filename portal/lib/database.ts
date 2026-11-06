@@ -489,6 +489,17 @@ async function initialize() {
       db.prepare('INSERT OR IGNORE INTO schema_migrations(version,applied_at) VALUES(24,?)').bind(now()),
     ]);
   }
+  // Valor unitario nas entradas de estoque (centavos). Entradas antigas ficam
+  // sem valor e nao entram no custo medio do saldo.
+  if (!await db.prepare('SELECT 1 ok FROM schema_migrations WHERE version=25').first()) {
+    await db.batchConstruir((consultar) => {
+      const colunas = consultar({ sql: 'PRAGMA table_info(movimentos_estoque)', values: [] }).results as Array<{ name: string }>;
+      return [
+        ...(colunas.some(c => c.name === 'valor_unitario_centavos') ? [] : [{ sql: 'ALTER TABLE movimentos_estoque ADD COLUMN valor_unitario_centavos INTEGER CHECK(valor_unitario_centavos IS NULL OR valor_unitario_centavos>0)', values: [] }]),
+        { sql: 'INSERT OR IGNORE INTO schema_migrations(version,applied_at) VALUES(25,?)', values: [now()] },
+      ];
+    });
+  }
   await db.prepare('PRAGMA optimize').run();
 }
 
