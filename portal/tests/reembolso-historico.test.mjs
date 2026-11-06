@@ -36,6 +36,7 @@ void test('reembolso: historico de OS consultado no Qlik sob demanda, com cache 
       .bind(await banco.tokenHash(id), id, new Date(Date.now() + 3600000).toISOString(), banco.now()).run();
   }
   sql.prepare("INSERT INTO permissoes_usuario(user_id,area,nivel,atualizado_em) VALUES('bloqueado','reembolso','sem',?)").run(banco.now());
+  sql.prepare("INSERT INTO reembolso_clientes(id,nome,taxa,ativo,atualizado_em) VALUES('cli-1','Cliente Exemplo',0.2,1,?)").run(banco.now());
   const pedir = async (method, url, user, body) => {
     const headers = { cookie: `acordos_session=${user}`, 'x-portal-build': PORTAL_BUILD, ...(body ? { 'content-type': 'application/json' } : {}) };
     const r = await rota[method](new NextRequest(`http://fixture/api/${url}`, { method, headers, ...(body ? { body: JSON.stringify(body) } : {}) }));
@@ -52,6 +53,9 @@ void test('reembolso: historico de OS consultado no Qlik sob demanda, com cache 
   assert.deepEqual(primeira.data.linhas.map(x => [x.data, x.produto]), [['2026-10-05', 'LAVAGEM'], ['2026-10-05', 'PALHETA'], ['2026-10-01', 'FILTRO DE AR']]);
   assert.equal((await pedir('GET', 'reembolso/historico?placa=EXE1A23', 'viewer')).data.linhas.length, 3);
   assert.deepEqual(consultas, ['EXE1A23']);
+  assert.deepEqual(primeira.data.veiculo, { cliente: 'Cliente Exemplo', modelo: 'Picape', data: '2026-10-05', clienteId: 'cli-1' });
+  assert.equal((await pedir('GET', 'reembolso/historico/aquecer', 'viewer')).status, 202);
+  assert.equal((await pedir('GET', 'reembolso/historico/aquecer', 'bloqueado')).status, 403);
   assert.equal((await pedir('GET', 'reembolso/historico?placa=EXE1A23', 'bloqueado')).status, 403);
   assert.equal((await pedir('GET', 'reembolso/historico?placa=X', 'viewer')).status, 400);
 

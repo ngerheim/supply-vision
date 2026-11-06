@@ -108,3 +108,42 @@ def test_campo_da_coluna_e_selecao_de_texto():
         s.campo_da_coluna(7, "Modelo")
     assert s.selecionar_textos("VEICULO.PLACA", ["EXE1A23"]) == 1
     assert chamadas[-5:] == ["ClearAll", "CreateSessionObject", "GetField", "SelectValues", "GetLayout"]
+
+
+class SessaoContada(SessaoFalsa):
+    abertas = 0
+    falhar_uma = False
+
+    def __enter__(self):
+        SessaoContada.abertas += 1
+        return self
+
+    def ler(self, h, headers, qcx, numericas):
+        if SessaoContada.falhar_uma:
+            SessaoContada.falhar_uma = False
+            raise qlik.QlikErro("sessão encerrada pelo Qlik")
+        return [linha()]
+
+
+def test_servidor_reaproveita_a_sessao_e_reabre_depois_de_falha():
+    import io
+    SessaoFalsa.casadas = 1
+    SessaoContada.abertas = 0
+    pedidos = io.StringIO("\n".join([
+        json.dumps({"id": 1, "aquecer": True}), json.dumps({"id": 2, "placa": "exe1a23"}), json.dumps({"id": 3, "placa": "EXE1A23"}),
+        json.dumps({"id": 4, "placa": "x"}), "isto nao e json", "",
+    ]) + "\n")
+    saida = io.StringIO()
+    consultor = consulta.Consultor(fabrica=SessaoContada)
+    consulta.servir(pedidos, saida, consultor)
+    respostas = [json.loads(l.split("=", 1)[1]) for l in saida.getvalue().splitlines()]
+    assert respostas[0] == {"id": 1, "pronto": True}
+    assert [len(r.get("linhas", [])) for r in respostas[1:3]] == [1, 1]
+    assert SessaoContada.abertas == 1  # aquecer abriu; as consultas reaproveitaram
+    assert respostas[3]["id"] == 4 and "Placa" in respostas[3]["erro"]
+    assert respostas[4]["id"] is None and "erro" in respostas[4]
+    # Sessão que caiu: fecha, reabre e responde na mesma consulta.
+    SessaoContada.falhar_uma = True
+    consultor = consulta.Consultor(fabrica=SessaoContada)
+    assert len(consultor.consultar("EXE1A23")[0]) == 1
+    assert SessaoContada.abertas == 3

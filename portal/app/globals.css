@@ -251,7 +251,8 @@ input:not([type='checkbox']):not([type='radio']):not([type='range']), select, [d
 [data-slot='table-cell'].patio-num, [data-slot='table-head'].patio-num { white-space: nowrap; overflow-wrap: normal; padding-inline: 8px; }
 
 /* Reembolso: cabecalho e itens da calculadora em grade compacta. */
-.reembolso-cabecalho { display: grid; grid-template-columns: minmax(0,2fr) repeat(3,minmax(0,1fr)); gap: 12px 16px; align-items: end; }
+.reembolso-cabecalho { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 12px 16px; align-items: end; }
+.reembolso-cabecalho .reembolso-cliente { grid-column: span 2; }
 .reembolso-cabecalho .reembolso-info { grid-column: 1 / -1; }
 .reembolso-item { display: grid; grid-template-columns: repeat(6,minmax(0,1fr)) repeat(3,minmax(0,0.9fr)); gap: 12px; align-items: end; }
 .reembolso-resultado { display: flex; flex-direction: column; gap: 2px; padding-bottom: 6px; }
