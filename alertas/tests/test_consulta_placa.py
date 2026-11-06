@@ -147,3 +147,54 @@ def test_servidor_reaproveita_a_sessao_e_reabre_depois_de_falha():
     consultor = consulta.Consultor(fabrica=SessaoContada)
     assert len(consultor.consultar("EXE1A23")[0]) == 1
     assert SessaoContada.abertas == 3
+
+
+class SocketFechado(Exception):
+    """Como o websocket-client: não é OSError nem QlikErro."""
+
+
+class SessaoQueCai(SessaoContada):
+    def ler(self, h, headers, qcx, numericas):
+        if SessaoContada.falhar_uma:
+            SessaoContada.falhar_uma = False
+            raise SocketFechado("socket is already closed.")
+        return [linha()]
+
+    def call(self, metodo, handle, params):
+        assert (metodo, handle) == ("EngineVersion", -1)
+        if getattr(self, "caiu", False):
+            raise SocketFechado("socket is already closed.")
+        return {"qVersion": {"qComponentVersion": "x"}}
+
+
+def test_sessao_derrubada_pelo_qlik_e_reaberta_e_ping_mantem_viva():
+    import io
+    import time as relogio
+    SessaoFalsa.casadas = 1
+    SessaoContada.abertas = 0
+    consultor = consulta.Consultor(fabrica=SessaoQueCai)
+    consultor.abrir()
+    SessaoContada.falhar_uma = True
+    assert len(consultor.consultar("EXE1A23")[0]) == 1
+    assert SessaoContada.abertas == 2
+    consultor.manter_viva()
+    assert consultor.sessao is not None
+    consultor.sessao.caiu = True
+    consultor.manter_viva()
+    assert consultor.sessao is None  # descartada; a próxima consulta reabre
+
+    # Servidor parado faz ping; pedido depois do ping usa a mesma sessão.
+    class Entrada:
+        def __iter__(self):
+            yield json.dumps({"id": 1, "aquecer": True}) + "\n"
+            relogio.sleep(0.25)
+            yield json.dumps({"id": 2, "placa": "EXE1A23"}) + "\n"
+    pings = []
+    consultor = consulta.Consultor(fabrica=SessaoQueCai)
+    original = consultor.manter_viva
+    consultor.manter_viva = lambda: pings.append(1) or original()
+    saida = io.StringIO()
+    consulta.servir(Entrada(), saida, consultor, intervalo_ping=0.05)
+    respostas = [json.loads(l.split("=", 1)[1]) for l in saida.getvalue().splitlines()]
+    assert respostas[0]["pronto"] and len(respostas[1]["linhas"]) == 1
+    assert pings and SessaoContada.abertas == 3

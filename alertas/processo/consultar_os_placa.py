@@ -17,8 +17,10 @@ lê o Qlik e não grava nada.
     python processo/consultar_os_placa.py ABC1D23
 """
 import json
+import queue
 import re
 import sys
+import threading
 import time
 from datetime import date, timedelta
 
@@ -26,6 +28,8 @@ import qlik
 import sv_paths
 
 COLUNA_PLACA = "Placa"
+# Chamada leve ao Qlik quando parado, para a sessão não ser encerrada.
+PING_S = 60
 # coluna do objeto do Qlik → campo devolvido ao Portal
 OBRIGATORIAS = ("Data Abertura", "Placa", "Codigo OS", "Descrição", "KM OS")
 OPCIONAIS = {
@@ -152,11 +156,23 @@ class Consultor:
         return preparar(headers, s.ler(h, headers, qcx, NUMERICAS), placa)
 
     def consultar(self, placa):
+        # Qualquer falha (inclusive "socket is already closed", que não é
+        # OSError) descarta a sessão: sem isso, uma sessão derrubada pelo Qlik
+        # fazia todas as consultas seguintes falharem até o processo fechar.
         try:
             return self._uma_vez(placa)
-        except (qlik.QlikErro, OSError, ValueError, KeyError, TypeError):
+        except Exception:  # noqa: BLE001 - a segunda tentativa decide
             self.fechar()
             return self._uma_vez(placa)
+
+    def manter_viva(self):
+        """Pergunta algo leve ao Qlik para a sessão parada não cair."""
+        if self.sessao is None:
+            return
+        try:
+            self.sessao.call("EngineVersion", -1, {})
+        except Exception:  # noqa: BLE001 - sessão ruim é só descartada
+            self.fechar()
 
 
 def consultar(placa):
@@ -167,11 +183,35 @@ def consultar(placa):
         c.fechar()
 
 
-def servir(entrada, saida, consultor=None):
-    """Atende pedidos, um por linha, até a entrada fechar."""
+def _linhas_em_fila(entrada):
+    """Lê a entrada numa thread: o laço principal pode esperar com prazo."""
+    fila = queue.Queue()
+
+    def ler():
+        for linha in entrada:
+            fila.put(linha)
+        fila.put(None)
+    threading.Thread(target=ler, daemon=True).start()
+    return fila
+
+
+def servir(entrada, saida, consultor=None, intervalo_ping=PING_S):
+    """Atende pedidos, um por linha, até a entrada fechar.
+
+    Sem pedido por `intervalo_ping` segundos, mantém a sessão viva com uma
+    chamada leve ao Qlik, para a próxima placa não pagar a reconexão.
+    """
     consultor = consultor or Consultor()
+    fila = _linhas_em_fila(entrada)
     try:
-        for bruto in entrada:
+        while True:
+            try:
+                bruto = fila.get(timeout=intervalo_ping)
+            except queue.Empty:
+                consultor.manter_viva()
+                continue
+            if bruto is None:
+                break
             if not bruto.strip():
                 continue
             pedido_id = None

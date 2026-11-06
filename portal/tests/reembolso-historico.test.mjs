@@ -78,16 +78,16 @@ void test('reembolso: historico de OS consultado no Qlik sob demanda, com cache 
   assert.equal((await pedir('DELETE', `reembolso/historico/filtros/${criado.data.id}`, 'editor')).status, 200);
   assert.equal((await pedir('GET', 'reembolso/historico?placa=EXE1A23', 'viewer')).data.linhas.length, 3);
 
-  // Atualizar forca o Qlik; Qlik fora do ar devolve o cache com aviso, e sem cache, 503.
+  // Atualizar forca o Qlik; Qlik fora do ar devolve o cache com aviso, e sem cache, 502 com a causa.
   resposta = [l('2026-11-01', '30', 'PASTILHA', 40000)];
   assert.deepEqual((await pedir('GET', 'reembolso/historico?placa=EXE1A23&atualizar=1', 'viewer')).data.linhas.map(x => x.produto), ['PASTILHA']);
   resposta = new ConsultaIndisponivel('O Qlik demorou demais para responder.');
   const velha = (await pedir('GET', 'reembolso/historico?placa=EXE1A23&atualizar=1', 'viewer')).data;
   assert.deepEqual([velha.linhas.map(x => x.produto), /Qlik indisponível/.test(velha.aviso)], [['PASTILHA'], true]);
   const semCache = await pedir('GET', 'reembolso/historico?placa=OUT9Z99', 'viewer');
-  assert.deepEqual([semCache.status, /demorou demais.*à mão/.test(semCache.data.error)], [503, true]);
+  assert.deepEqual([semCache.status, /demorou demais.*à mão/.test(semCache.data.error)], [502, true]);
   // Resposta fora do formato nao vai para o cache.
   resposta = [{ data: 'ontem', produto: 'X' }];
-  assert.equal((await pedir('GET', 'reembolso/historico?placa=NOV0A00', 'viewer')).status, 503);
+  assert.equal((await pedir('GET', 'reembolso/historico?placa=NOV0A00', 'viewer')).status, 502);
   assert.equal(sql.prepare("SELECT COUNT(*) n FROM reembolso_historico_cache WHERE placa='NOV0A00'").get().n, 0);
 });
