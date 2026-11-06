@@ -332,13 +332,16 @@ void test('entrada e saldo de estoque listam, filtram, validam e registram entra
   h.one('button',p=>textoVisivel(p.children).includes('Óleo fictício')).onClick();h.render();
   h.one('form').onSubmit({preventDefault(){}});h.render();assert.match(alerts(h),/quantidades maiores que zero/);assert.equal(h.find(n=>n.type==='Button'&&n.props['aria-label']?.startsWith('Remover linha')).length,1);
 
-  h.one('NativeSelect',p=>p['aria-label']==='Estoque da entrada').onChange({target:{value:'e'}});h.render();h.one('Input',p=>p['aria-label']==='Quantidade da linha 1').onChange({target:{value:'1.25'}});h.render();submit(h);
-  const envio=h.requests.at(-1);assert.equal(envio.path,'/api/estoque/entradas');assert.deepEqual(body(envio).itens,[{itemId:'itm',quantidade:1.25}]);assert.ok(envio.options.headers['idempotency-key']);envio.resolve({});await flush(h);assert.equal(h.find(n=>n.type==='dialog').length,0);
+  h.one('NativeSelect',p=>p['aria-label']==='Estoque da entrada').onChange({target:{value:'e'}});h.render();h.one('Input',p=>p['aria-label']==='Quantidade da linha 1').onChange({target:{value:'1.25'}});h.render();
+  h.one('Input',p=>p['aria-label']==='Valor unitário da linha 1').onChange({target:{value:'12.5'}});h.render();assert.ok(h.find(n=>n.type==='b').some(n=>textoVisivel(n.props.children).replace(/\s/g,' ')==='R$ 15,63'));submit(h);
+  const envio=h.requests.at(-1);assert.equal(envio.path,'/api/estoque/entradas');assert.deepEqual(body(envio).itens,[{itemId:'itm',quantidade:1.25,valorUnitario:12.5}]);assert.ok(envio.options.headers['idempotency-key']);envio.resolve({});await flush(h);assert.equal(h.find(n=>n.type==='dialog').length,0);
   const saldo=await mount('portal-estoques','SaldoEstoque',{user:{role:'admin'}},modules);t.after(()=>saldo.unmount());
-  saldo.requests.find(r=>r.path==='/api/estoques').resolve({estoques:[estoque]});saldo.requests.find(r=>r.path.startsWith('/api/estoque/saldos')).resolve({saldos:[{estoque_id:'e',estoque:'Estoque fictício',item_id:'itm',descricao:'Óleo fictício',unidade:'L',saldo:-0.25}]});await flush(saldo);
+  saldo.requests.find(r=>r.path==='/api/estoques').resolve({estoques:[estoque]});saldo.requests.find(r=>r.path.startsWith('/api/estoque/saldos')).resolve({saldos:[{estoque_id:'e',estoque:'Estoque fictício',item_id:'itm',descricao:'Óleo fictício',unidade:'L',saldo:-0.25,valor_unitario:null,valor_total:null},{estoque_id:'e',estoque:'Estoque fictício',item_id:'itm2',descricao:'Filtro fictício',unidade:'un',saldo:4,valor_unitario:12.5,valor_total:50}],valorTotal:50,semValor:1});await flush(saldo);
   assert.ok(saldo.find(n=>n.type==='TableCell').some(n=>n.props.children===-0.25));
+  const celulas=saldo.find(n=>n.type==='TableCell').map(n=>textoVisivel(n.props.children).replace(/\s/g,' '));assert.ok(celulas.includes('R$ 12,50')&&celulas.includes('R$ 50,00')&&celulas.includes('—'));
+  assert.match(textoVisivel(saldo.one('p',p=>p.className==='patio-result-count').children).replace(/\s/g,' '),/valor em estoque R\$ 50,00 \(1 item sem valor de entrada\)/);
   saldo.one('Input',p=>p['aria-label']==='Buscar item').onChange({target:{value:'Óleo'}});saldo.render();saldo.requests.at(-1).resolve({saldos:[{estoque_id:'e',estoque:'Estoque fictício',item_id:'itm',descricao:'Óleo fictício',unidade:'L',saldo:2}]});await flush(saldo);
-  saldo.one('TableRow',p=>typeof p.onClick==='function').onClick();saldo.render();
+  saldo.find(n=>n.type==='TableRow'&&typeof n.props.onClick==='function')[0].props.onClick();saldo.render();
   saldo.requests.at(-1).resolve({movimentos:[{id:'m',tipo:'saida',quantidade:-1,unidade:'L',data_movimento:'2026-10-27',baixa_id:'b',baixa_codigo:'BX-8'}]});await flush(saldo);
   assert.equal(saldo.one('a').href,'/?aba=chamados&baixa=b');assert.equal(saldo.one('a').children,'BX-8');
 });

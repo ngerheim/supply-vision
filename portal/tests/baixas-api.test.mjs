@@ -233,6 +233,27 @@ void test('Baixa no estoque pelo roteador e SQLite reais', async (t) => {
     const recusada=await abrir(entrada({itens:[{itemId:'item_teste',quantidade:1}]}));assert.equal((await mover(recusada.id,'recusada','Recusa fictícia')).status,200);
     assert.equal(sql.prepare("SELECT COUNT(*) n FROM movimentos_estoque WHERE origem_id IN (SELECT id FROM baixa_itens WHERE baixa_id=?)").get(recusada.id).n,0);
   });
+  await t.test('entradas com valor unitário dão custo médio e valor total no saldo',async()=>{
+    const hoje=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+    const entradaValor=(quantidade,valorUnitario,doc)=>post('estoque/entradas',{estoqueId:estoqueB.id,dataMovimento:hoje,documento:doc,itens:[{itemId:'item_teste',quantidade,...(valorUnitario===undefined?{}:{valorUnitario})}]},'editor');
+    for(const ruim of [0,-1,1.234,'12'])assert.equal((await entradaValor(1,ruim,'NF valor inválido')).status,400);
+    assert.equal((await post('estoque/ajustes',{estoqueId:estoqueB.id,dataMovimento:hoje,observacao:'Inventário fictício',itens:[{itemId:'item_teste',quantidade:1,valorUnitario:10}]},admin)).status,400);
+    assert.equal((await entradaValor(10,12.5,'NF valor 1')).status,200);
+    assert.equal((await entradaValor(10,15,'NF valor 2')).status,200);
+    const saldo=async()=>(await get(`estoque/saldos?estoqueId=${estoqueB.id}&q=Filtro`,'viewer')).data;
+    let s1=await saldo();
+    assert.deepEqual([s1.saldos[0].saldo,s1.saldos[0].valor_unitario,s1.saldos[0].valor_total,s1.valorTotal,s1.semValor],[20,13.75,275,275,0]);
+    const entradas=(await get(`estoque/entradas?estoqueId=${estoqueB.id}&q=NF%20valor`,'viewer')).data.entradas;
+    assert.deepEqual(entradas.map(e=>e.valor_total).sort((a,b)=>a-b),[125,150]);
+    assert.equal(JSON.parse(entradas.find(e=>e.documento==='NF valor 1').itens_json)[0].valor_unitario,12.5);
+    // Entrada estornada sai do custo medio; entrada sem valor so soma quantidade.
+    const segunda=(await get(`estoque/movimentos?estoqueId=${estoqueB.id}&itemId=item_teste`,'viewer')).data.movimentos.find(m=>m.documento==='NF valor 2');
+    assert.equal(segunda.valor_unitario,15);
+    assert.equal((await post(`estoque/movimentos/${segunda.id}/estorno`,{motivo:'Estorno fictício'},'editor')).status,200);
+    assert.equal((await entradaValor(5,undefined,'NF sem valor')).status,200);
+    s1=await saldo();
+    assert.deepEqual([s1.saldos[0].saldo,s1.saldos[0].valor_unitario,s1.saldos[0].valor_total],[15,12.5,187.5]);
+  });
   await t.test('histórico localiza cada baixa pelo código e mostra a OS', async () => {
     for (const os of ['981001', '981002']) {
       const aberta = await abrir(entrada({ numero_os: os }));

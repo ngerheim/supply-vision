@@ -11,8 +11,15 @@ import { CampoData } from './campo-data';
 import { exibirDataBrasileira } from '@/lib/data-brasileira';
 
 const quantidadeBr = (q: unknown) => Number(q).toLocaleString('pt-BR', { maximumFractionDigits: 2 });
+const moedaBr = (v: unknown) => (v === null || v === undefined || v === '' || !Number.isFinite(Number(v)) ? '—'
+  : Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }));
+// Total da linha em centavos inteiros, como a API grava.
+const totalLinha = (quantidade: string, valor: string) => {
+  const q = Number(quantidade), v = Number(valor);
+  return q > 0 && v > 0 ? Math.round(Math.round(q * 100) * Math.round(v * 100) / 100) / 100 : 0;
+};
 // Itens da entrada, um por linha; a API manda a lista em JSON.
-function itensDaEntrada(r: AnyRow): { descricao: string; quantidade: number; unidade: string }[] {
+function itensDaEntrada(r: AnyRow): { descricao: string; quantidade: number; unidade: string; valor_unitario?: number | null }[] {
   try { return JSON.parse(r.itens_json || '[]'); } catch { return []; }
 }
 import { Badge } from '@/components/ui/badge';
@@ -260,7 +267,7 @@ export function EntradaEstoque() {
     [busca, setBusca] = useState(''),
     [itens, setItens] = useState<AnyRow[]>([]),
     // As linhas nascem da busca do catalogo; nao ha linha vazia a preencher.
-    [linhas, setLinhas] = useState<{ id: string; quantidade: string }[]>([]),
+    [linhas, setLinhas] = useState<{ id: string; quantidade: string; valor: string }[]>([]),
     [erro, setErro] = useState(''),
     [busy, setBusy] = useState(false);
   const consultaEntradas = new URLSearchParams({
@@ -351,6 +358,10 @@ export function EntradaEstoque() {
       );
       return;
     }
+    if (linhas.some((l) => l.valor.trim() && !(Number(l.valor) > 0 && /^\d+(?:[.,]\d{1,2})?$/.test(l.valor.trim())))) {
+      setErro('Valor unitário inválido: use reais com até 2 casas decimais.');
+      return;
+    }
     // randomUUID so existe em HTTPS; no HTTP da rede interna ele quebrava
     // antes do try e deixava o formulario travado em "ocupado".
     tentativa.current ??= gerarChaveRelatorio();
@@ -364,6 +375,7 @@ export function EntradaEstoque() {
           itens: linhas.map((l) => ({
             itemId: l.id,
             quantidade: Number(l.quantidade),
+            ...(l.valor.trim() ? { valorUnitario: Number(l.valor) } : {}),
           })),
         }),
         headers: {
@@ -391,7 +403,7 @@ export function EntradaEstoque() {
       return;
     }
     setItens([...itens, item]);
-    setLinhas([...linhas, { id: item.id, quantidade: '' }]);
+    setLinhas([...linhas, { id: item.id, quantidade: '', valor: '' }]);
     setBusca('');
     setErro('');
   };
@@ -452,6 +464,7 @@ export function EntradaEstoque() {
                 <TableHead>Data</TableHead>
                 <TableHead>Estoque</TableHead>
                 <TableHead>Itens</TableHead>
+                <TableHead className="text-right">Valor total</TableHead>
                 <TableHead>Registrado por</TableHead>
               </TableRow>
             </TableHeader>
@@ -464,9 +477,11 @@ export function EntradaEstoque() {
                     {itensDaEntrada(r).map((i, k) => (
                       <div key={k}>
                         {i.descricao} · {quantidadeBr(i.quantidade)} {i.unidade}
+                        {i.valor_unitario ? ` · ${moedaBr(i.valor_unitario)}/${i.unidade}` : ''}
                       </div>
                     ))}
                   </TableCell>
+                  <TableCell className="text-right tabular-nums">{moedaBr(r.valor_total)}</TableCell>
                   <TableCell>{r.usuario || '—'}</TableCell>
                 </TableRow>
               ))}
@@ -561,7 +576,7 @@ export function EntradaEstoque() {
                   return (
                     <div
                       key={`${l.id}:${n}`}
-                      className="grid items-end gap-3 sm:grid-cols-[1fr_10rem_auto]"
+                      className="grid items-end gap-3 sm:grid-cols-[1fr_8rem_9rem_8rem_auto]"
                     >
                       <p className="pb-2 font-medium">
                         {item
@@ -588,6 +603,27 @@ export function EntradaEstoque() {
                           }
                         />
                       </Field>
+                      <Field label="Valor unit. (R$)">
+                        <Input
+                          aria-label={`Valor unitário da linha ${n + 1}`}
+                          type="number"
+                          min="0.01"
+                          step="0.01"
+                          placeholder="opcional"
+                          value={l.valor}
+                          onChange={(e) =>
+                            setLinhas(
+                              linhas.map((x, i) =>
+                                i === n ? { ...x, valor: e.target.value } : x,
+                              ),
+                            )
+                          }
+                        />
+                      </Field>
+                      <div className="pb-2 text-right">
+                        <span className="block text-xs text-muted-foreground">Valor total</span>
+                        <b className="tabular-nums">{l.valor ? moedaBr(totalLinha(l.quantidade, l.valor)) : '—'}</b>
+                      </div>
                       <Button
                         type="button"
                         variant="outline"
@@ -600,6 +636,14 @@ export function EntradaEstoque() {
                   );
                 })}
               </div>
+              {linhas.some((l) => l.valor) && (
+                <p className="text-right text-sm">
+                  Total da entrada:{' '}
+                  <b className="tabular-nums">
+                    {moedaBr(linhas.reduce((t, l) => t + totalLinha(l.quantidade, l.valor), 0))}
+                  </b>
+                </p>
+              )}
               {erro && <p role="alert">{erro}</p>}
               <footer className="flex justify-end gap-2 border-t pt-4">
                 <Button type="button" variant="outline" onClick={reset}>
@@ -620,6 +664,7 @@ export function EntradaEstoque() {
 export function SaldoEstoque({ user }: { user: AnyRow }) {
   const tentativaAjuste = useRef<string | null>(null);
   const [rows, setRows] = useState<AnyRow[]>([]),
+    [resumoValor, setResumoValor] = useState<{ valorTotal: number; semValor: number } | null>(null),
     [estoques, setEstoques] = useState<AnyRow[]>([]),
     [estoqueId, setEstoqueId] = useState(''),
     [q, setQ] = useState(''),
@@ -641,6 +686,7 @@ export function SaldoEstoque({ user }: { user: AnyRow }) {
       .then(([e, s]) => {
         setEstoques(e.estoques);
         setRows(s.saldos);
+        setResumoValor({ valorTotal: s.valorTotal ?? 0, semValor: s.semValor ?? 0 });
       })
       .catch((e) => setErro(errorText(e)));
   }, [versao, estoqueId, q]);
@@ -749,6 +795,8 @@ export function SaldoEstoque({ user }: { user: AnyRow }) {
         <CardHeader className="border-b">
           <p className="patio-result-count">
             {rows.length} {rows.length === 1 ? 'item' : 'itens'}
+            {resumoValor && <> · valor em estoque <b className="tabular-nums">{moedaBr(resumoValor.valorTotal)}</b>
+              {resumoValor.semValor > 0 && <span className="text-muted-foreground">{` (${resumoValor.semValor} ${resumoValor.semValor === 1 ? 'item' : 'itens'} sem valor de entrada)`}</span>}</>}
           </p>
         </CardHeader>
         <CardContent className="px-0 pb-0">
@@ -759,6 +807,8 @@ export function SaldoEstoque({ user }: { user: AnyRow }) {
                 <TableHead>Item</TableHead>
                 <TableHead>Saldo</TableHead>
                 <TableHead>Unidade</TableHead>
+                <TableHead className="text-right" title="Custo médio das entradas com valor">Valor unit. (médio)</TableHead>
+                <TableHead className="text-right">Valor total</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -772,6 +822,8 @@ export function SaldoEstoque({ user }: { user: AnyRow }) {
                   <TableCell>{r.descricao}</TableCell>
                   <TableCell>{r.saldo}</TableCell>
                   <TableCell>{r.unidade}</TableCell>
+                  <TableCell className="text-right tabular-nums">{moedaBr(r.valor_unitario)}</TableCell>
+                  <TableCell className="text-right tabular-nums">{moedaBr(r.valor_total)}</TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -817,6 +869,7 @@ export function SaldoEstoque({ user }: { user: AnyRow }) {
                     </TableCell>
                     <TableCell>
                       {m.quantidade} {m.unidade}
+                      {m.valor_unitario ? ` · ${moedaBr(m.valor_unitario)}/${m.unidade}` : ''}
                     </TableCell>
                     <TableCell>
                       {m.documento || ''} {m.observacao || ''}
