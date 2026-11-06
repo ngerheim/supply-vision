@@ -280,7 +280,9 @@ export function reembolsoApi(contexto: ContextoApi) {
         ]));
       } catch (erro) {
         if (!(erro instanceof ConsultaIndisponivel) && !(erro instanceof EntradaInvalida)) throw erro;
-        if (!cache) return fail(`Histórico de OS indisponível: ${erro.message} Preencha a última troca à mão.`, 503);
+        // 502 e nao 503: o cliente troca qualquer 503 por "servidor ocupado" e a
+        // causa real sumia da tela.
+        if (!cache) return fail(`Histórico de OS indisponível: ${erro.message} Preencha a última troca à mão.`, 502);
         linhas = JSON.parse(cache.linhas) as LinhaHistorico[]; consultadoEm = cache.consultado_em;
         aviso = `Qlik indisponível agora; mostrando a consulta de ${consultadoEm}.`;
       }
