@@ -11,7 +11,7 @@ import { bancoSqliteLocal } from '../lib/sqlite-local.ts';
 import { env } from '../scripts/configuracao-servidor.mjs';
 import { PORTAL_BUILD } from '../lib/portal-build.ts';
 import { calcularItem, calcularTotais, lerCalculadoraHtml, validarCalculo, valorMtbf } from '../lib/reembolso.ts';
-import { aplicarFiltros, candidatos, resumoPlaca, termosPadrao, validarFiltro, validarLinhasConsulta } from '../lib/reembolso-historico.ts';
+import { acharCliente, aplicarFiltros, candidatos, resumoPlaca, termosPadrao, validarFiltro, validarLinhasConsulta, veiculoDaPlaca } from '../lib/reembolso-historico.ts';
 
 const hooks = registerHooks({ resolve(s, c, next) {
   if (s === 'next/server') return next('vinext/shims/server', c);
@@ -192,4 +192,18 @@ void test('reembolso: filtros do historico ignoram acento e caixa', () => {
   assert.throws(() => validarFiltro({ coluna: 'placa', modo: 'igual', valor: 'x' }), /Coluna/);
   assert.throws(() => validarFiltro({ coluna: 'grupo', modo: 'contem', valor: 'ab' }), /3 letras/);
   assert.throws(() => validarFiltro({ coluna: 'grupo', modo: 'igual', valor: '   ' }), /valor/);
+});
+
+void test('reembolso: cliente e modelo da placa vem da OS mais recente e casam com a configuracao', () => {
+  const l = (data, os, cliente, modelo) => ({ data, os, cliente, modelo });
+  assert.deepEqual(veiculoDaPlaca([l('2026-01-01', '1', 'Cliente Antigo', 'Modelo A'), l('2026-10-01', '9', 'Construtora Exemplo Ltda', null), l('2026-10-01', '8', null, 'Picape Exemplo 1.3')]),
+    { cliente: 'Construtora Exemplo Ltda', modelo: 'Picape Exemplo 1.3', data: '2026-10-01' });
+  assert.deepEqual(veiculoDaPlaca([]), { cliente: null, modelo: null, data: null });
+  const clientes = [{ id: 'a', nome: 'Construtora Exemplo E Montage' }, { id: 'b', nome: 'Exemplo Agro S/A' }, { id: 'c', nome: 'Mineração Exemplo' }, { id: 'd', nome: 'Mineracao Exemplo Norte' }];
+  assert.equal(acharCliente('CONSTRUTORA EXEMPLO E MONTAGEM LTDA', clientes)?.id, 'a');  // nome abreviado na configuracao
+  assert.equal(acharCliente('Exemplo Agro SA', clientes)?.id, 'b');
+  assert.equal(acharCliente('Mineração Exemplo Ltda', clientes)?.id, 'c');
+  assert.equal(acharCliente('Transportes Sem Cadastro', clientes), null);
+  assert.equal(acharCliente(null, clientes), null);
+  assert.equal(acharCliente('Exemplo', [{ id: 'x', nome: 'Exemplo Um' }, { id: 'y', nome: 'Exemplo Dois' }]), null);  // empate
 });

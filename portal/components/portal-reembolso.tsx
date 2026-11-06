@@ -30,8 +30,12 @@ type Foto = { url: string; nome: string; video: boolean };
 type ModoUltimaTroca = '' | 'auto' | 'escolhido' | 'manual' | 'salvo';
 type ItemForm = { chave: number; peca: string; referencia: string; tipo: Tipo; kmTroca: string; ultimaTroca: string; qtd: string; valorUnit: string; diferencaPneu: string; dica: string; fotos: Foto[];
   utModo: ModoUltimaTroca; utRotulo: string; termos: string; termosEditados: boolean };
-type Historico = { placa: string; carregando?: boolean; erro?: string; consultadoEm?: string; aviso?: string | null; filtradas?: number; linhas: LinhaPlaca[] };
-type Form = { clienteId: string; clienteNome: string; taxaPct: string; categoria: string; modelo: string; placa: string; kmAtual: string; osAtual: string; observacao: string };
+type Veiculo = { cliente: string | null; modelo: string | null; data: string | null; clienteId: string | null };
+type Historico = { placa: string; carregando?: boolean; erro?: string; consultadoEm?: string; aviso?: string | null; filtradas?: number; veiculo?: Veiculo; linhas: LinhaPlaca[] };
+// Origem de cliente e modelo: "qlik" = veio da placa e pode ser trocado por
+// outra placa; "manual" = escolhido pela pessoa e nunca e sobrescrito.
+type Origem = '' | 'qlik' | 'manual';
+type Form = { clienteId: string; clienteNome: string; taxaPct: string; categoria: string; modelo: string; placa: string; kmAtual: string; osAtual: string; observacao: string; clienteOrigem: Origem; modeloOrigem: Origem };
 
 const moeda = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 const inteiro = new Intl.NumberFormat('pt-BR');
@@ -42,7 +46,10 @@ const decimal = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maxim
 const pct = (t: number | null) => (t === null ? '—' : `${inteiro.format(Math.round(t * 10000) / 100)}%`);
 const valorTxt = (v: number | string | null | undefined) => (typeof v === 'number' ? `${inteiro.format(v)} km` : v ? String(v) : '—');
 const json = (method: string, corpo: unknown) => ({ method, headers: { 'content-type': 'application/json' }, body: JSON.stringify(corpo) });
-const formVazio = (): Form => ({ clienteId: '', clienteNome: '', taxaPct: '', categoria: 'HATCH_SEDAN', modelo: '', placa: '', kmAtual: '', osAtual: '', observacao: '' });
+const formVazio = (): Form => ({ clienteId: '', clienteNome: '', taxaPct: '', categoria: 'HATCH_SEDAN', modelo: '', placa: '', kmAtual: '', osAtual: '', observacao: '', clienteOrigem: '', modeloOrigem: '' });
+// Placa antiga (ABC1234) ou Mercosul (ABC1D23): consulta na hora, sem esperar a digitacao.
+const PLACA_COMPLETA = /^[A-Z]{3}[0-9][A-Z0-9][0-9]{2}$/;
+const taxaTexto = (t: number | null) => (t === null ? '' : String(Math.round(t * 10000) / 100));
 let proximaChave = 1;
 const itemVazio = (): ItemForm => ({ chave: proximaChave++, peca: '', referencia: '', tipo: 'PROPORCIONAL', kmTroca: '', ultimaTroca: '', qtd: '1', valorUnit: '', diferencaPneu: '0', dica: '', fotos: [],
   utModo: '', utRotulo: '', termos: '', termosEditados: false });
@@ -90,7 +97,8 @@ export function Reembolso({ nav, busy, run }: { nav: string; busy: boolean; run:
     for (const i of itens) for (const f of i.fotos) URL.revokeObjectURL(f.url);
     const cliente = config?.clientes.find(c => c.nome.toLowerCase() === String(calc.cliente ?? '').toLowerCase());
     setForm({ clienteId: cliente?.id ?? '', clienteNome: calc.cliente ?? '', taxaPct: String(Math.round(calc.taxa * 10000) / 100), categoria: calc.categoria,
-      modelo: calc.modelo ?? '', placa: calc.placa ?? '', kmAtual: String(calc.kmAtual ?? ''), osAtual: calc.osAtual ?? '', observacao: calc.observacao ?? '' });
+      modelo: calc.modelo ?? '', placa: calc.placa ?? '', kmAtual: String(calc.kmAtual ?? ''), osAtual: calc.osAtual ?? '', observacao: calc.observacao ?? '',
+      clienteOrigem: 'manual', modeloOrigem: 'manual' });
     setItens((calc.itens as AnyRow[]).map(i => ({ ...itemVazio(), peca: i.peca ?? '', referencia: i.referencia ?? '', tipo: i.tipo, kmTroca: String(i.kmTroca || ''),
       ultimaTroca: String(i.ultimaTroca || ''), qtd: String(i.qtd ?? 1), valorUnit: String(i.valorUnit || ''), diferencaPneu: String(i.diferencaPneu ?? 0),
       utModo: i.ultimaTroca ? 'salvo' : '', utRotulo: i.origemUltimaTroca ?? '' })));
@@ -137,7 +145,7 @@ function Calculadora({ config, form, setForm, itens, setItens, busy, run, vazio 
   };
   const escolherCliente = (id: string) => {
     const c = config.clientes.find(x => x.id === id);
-    setForm(f => ({ ...f, clienteId: id, clienteNome: c?.nome ?? '', taxaPct: c && c.taxa !== null ? String(Math.round(c.taxa * 10000) / 100) : '' }));
+    setForm(f => ({ ...f, clienteId: id, clienteNome: c?.nome ?? '', taxaPct: c ? taxaTexto(c.taxa) : '', clienteOrigem: id ? 'manual' : '' }));
     reaplicar(id, form.categoria);
   };
   const limpar = () => {
@@ -168,6 +176,8 @@ function Calculadora({ config, form, setForm, itens, setItens, busy, run, vazio 
   const [hoje] = useState(() => new Date().toLocaleDateString('pt-BR'));
   const [hojeIso] = useState(() => new Date().toLocaleDateString('sv-SE'));
 
+  // Abrir a calculadora ja prepara a sessao com o Qlik para a primeira placa.
+  useEffect(() => { void api('/api/reembolso/historico/aquecer').catch(() => undefined); }, []);
   // Historico de OS da placa, consultado no Qlik (ou no cache do Portal) com
   // pausa curta enquanto a placa e digitada. "Atualizar" forca nova consulta.
   const placa = placaNormalizada(form.placa);
@@ -178,12 +188,28 @@ function Calculadora({ config, form, setForm, itens, setItens, busy, run, vazio 
     const t = setTimeout(() => {
       setHistorico({ placa, carregando: true, linhas: [] });
       void api(`/api/reembolso/historico?${new URLSearchParams({ placa, ...(forcar ? { atualizar: '1' } : {}) })}`, { signal: controller.signal })
-        .then((r: AnyRow) => { if (!controller.signal.aborted) setHistorico({ placa, consultadoEm: r.consultadoEm, aviso: r.aviso, filtradas: r.filtradas, linhas: r.linhas }); })
+        .then((r: AnyRow) => { if (!controller.signal.aborted) setHistorico({ placa, consultadoEm: r.consultadoEm, aviso: r.aviso, filtradas: r.filtradas, veiculo: r.veiculo, linhas: r.linhas }); })
         .catch(f => { if (!controller.signal.aborted) setHistorico({ placa, erro: errorText(f), linhas: [] }); });
-    }, forcar ? 0 : 400);
+    }, forcar || PLACA_COMPLETA.test(placa) ? 0 : 400);
     return () => { clearTimeout(t); controller.abort(); };
   }, [placa, forcar]);
   const linhasPlaca = useMemo(() => (historico?.placa === placa ? historico.linhas : []), [historico, placa]);
+  // Cliente (com a taxa da configuracao) e modelo vem da OS mais recente da
+  // placa, so onde estiver vazio ou ja tiver vindo do Qlik.
+  const veiculo = historico?.placa === placa && !historico.carregando ? historico.veiculo : undefined;
+  const clienteQlik = veiculo?.clienteId ? config.clientes.find(c => c.id === veiculo.clienteId && c.ativo) : undefined;
+  const modeloQlik = veiculo?.modelo?.slice(0, 80) ?? '';
+  const trocaCliente = !!clienteQlik && clienteQlik.id !== form.clienteId && (!form.clienteId || form.clienteOrigem === 'qlik');
+  const trocaModelo = !!modeloQlik && modeloQlik !== form.modelo && (!form.modelo || form.modeloOrigem === 'qlik');
+  useEffect(() => {
+    if (!trocaCliente && !trocaModelo) return;
+    setForm(f => ({
+      ...f,
+      ...(trocaCliente && clienteQlik ? { clienteId: clienteQlik.id, clienteNome: clienteQlik.nome, taxaPct: taxaTexto(clienteQlik.taxa), clienteOrigem: 'qlik' as const } : {}),
+      ...(trocaModelo ? { modelo: modeloQlik, modeloOrigem: 'qlik' as const } : {}),
+    }));
+    if (trocaCliente && clienteQlik) reaplicar(clienteQlik.id, form.categoria);
+  });
   const osAtual = form.osAtual;
   const contexto = { kmAtual, osAtual, hoje: hojeIso };
   const chaveAuto = itens.map(i => `${i.chave}:${i.utModo}:${i.ultimaTroca === '' ? 0 : 1}:${termosDoItem(i)}`).join('|');
@@ -213,7 +239,8 @@ function Calculadora({ config, form, setForm, itens, setItens, busy, run, vazio 
     const quando = `consulta de ${dataHoraSolicitacao(historico.consultadoEm ?? '')}${historico.filtradas ? ` · ${inteiro.format(historico.filtradas)} itens fora pelos filtros` : ''}`;
     const aviso = historico.aviso ? `${historico.aviso} ` : '';
     if (!resumo) return `${aviso}Placa ${placa} sem OS no Qlik (${quando}). Confira a digitação.`;
-    return `${aviso}Histórico: ${resumo.os} OS de ${dataBr(resumo.primeira)} a ${dataBr(resumo.ultima)}${resumo.ultimoKm ? ` · último KM registrado ${inteiro.format(resumo.ultimoKm)} em ${dataBr(resumo.dataUltimoKm)}` : ''} (${quando}).`;
+    const doQlik = veiculo?.cliente ? `Qlik: ${veiculo.cliente}${veiculo.clienteId ? '' : ' (não está na configuração do Reembolso: escolha o cliente à mão)'}${veiculo.modelo ? ` · ${veiculo.modelo}` : ''} · `: '';
+    return `${aviso}${doQlik}Histórico: ${resumo.os} OS de ${dataBr(resumo.primeira)} a ${dataBr(resumo.ultima)}${resumo.ultimoKm ? ` · último KM registrado ${inteiro.format(resumo.ultimoKm)} em ${dataBr(resumo.dataUltimoKm)}` : ''} (${quando}).`;
   })();
 
   return <div className="patio-page space-y-4">
@@ -225,6 +252,11 @@ function Calculadora({ config, form, setForm, itens, setItens, busy, run, vazio 
       </>} />
       {vazio && <p className="text-sm text-muted-foreground">Ainda não há clientes nem tabelas MTBF. Suprimentos importa a calculadora antiga em Reembolso › Configuração.</p>}
       <Card><CardContent className="reembolso-cabecalho">
+        <Field label="Placa"><Input value={form.placa} maxLength={10} placeholder="digite a placa: cliente, modelo e taxa vêm do Qlik"
+          onChange={e => mudar('placa', e.target.value.toUpperCase())} /></Field>
+        <Field label="KM atual do veículo"><Input type="number" min="0" step="1" value={form.kmAtual} onChange={e => mudar('kmAtual', e.target.value)} /></Field>
+        <Field label="OS atual (opcional)"><Input value={form.osAtual} maxLength={30} inputMode="numeric" onChange={e => mudar('osAtual', e.target.value)} /></Field>
+        <Field label="Modelo"><Input value={form.modelo} maxLength={80} onChange={e => setForm(f => ({ ...f, modelo: e.target.value, modeloOrigem: e.target.value ? 'manual' : '' }))} placeholder="ex. STRADA" /></Field>
         <div className="reembolso-cliente">
           <SearchSelect label="Cliente" value={form.clienteId} limit={80} options={config.clientes.filter(c => c.ativo).map(c => ({ id: c.id, name: c.nome }))} onChange={escolherCliente} />
         </div>
@@ -234,10 +266,6 @@ function Calculadora({ config, form, setForm, itens, setItens, busy, run, vazio 
             {CATEGORIAS.map(([id, nome]) => <NativeSelectOption key={id} value={id}>{nome}</NativeSelectOption>)}
           </NativeSelect>
         </Field>
-        <Field label="Modelo"><Input value={form.modelo} maxLength={80} onChange={e => mudar('modelo', e.target.value)} placeholder="ex. STRADA" /></Field>
-        <Field label="Placa"><Input value={form.placa} maxLength={10} onChange={e => mudar('placa', e.target.value.toUpperCase())} /></Field>
-        <Field label="KM atual do veículo"><Input type="number" min="0" step="1" value={form.kmAtual} onChange={e => mudar('kmAtual', e.target.value)} /></Field>
-        <Field label="OS atual (opcional)"><Input value={form.osAtual} maxLength={30} inputMode="numeric" onChange={e => mudar('osAtual', e.target.value)} /></Field>
         <p className="reembolso-info text-xs text-muted-foreground">
           {`MTBF: ${tabela ? tabela.nome : '—'}${cliente?.executivo ? ` · Comercial: ${cliente.executivo}` : ''}${cliente?.observacao ? ` · ${cliente.observacao}` : ''}`}
           {cliente && cliente.taxa === null ? ' · cliente sem taxa cadastrada: preencha à mão' : ''}

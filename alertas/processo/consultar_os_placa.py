@@ -2,14 +2,18 @@
 Consulta sob demanda: itens de OS de uma placa, para a calculadora de
 Reembolso do Portal.
 
-O Portal chama este script quando alguém digita a placa (e guarda o
-resultado por algumas horas). Lê o mesmo objeto do Qlik que o alerta usa
-(QLIK_APP_ID/QLIK_OBJ_ID), seleciona só a placa, sem filtro de data, e
-devolve as linhas numa única linha de saída:
-    RESULTADO_JSON={"placa": "...", "linhas": [...]}
-Não toma o lock do pipeline: só lê o Qlik e não grava nada.
+O Portal mantém este script aberto em modo --servidor: a sessão com o Qlik
+fica aberta entre as consultas, então só a primeira paga a abertura do app.
+Cada pedido chega numa linha JSON pela entrada padrão e cada resposta sai
+numa linha da saída:
+    {"id": 1, "placa": "ABC1D23"}      → RESULTADO_JSON={"id": 1, "placa": ..., "linhas": [...]}
+    {"id": 2, "aquecer": true}         → RESULTADO_JSON={"id": 2, "pronto": true}
+Erro de um pedido vira {"id": ..., "erro": "..."} e o processo continua.
+Lê o mesmo objeto do Qlik que o alerta usa (QLIK_APP_ID/QLIK_OBJ_ID) e
+seleciona só a placa, sem filtro de data. Não toma o lock do pipeline: só
+lê o Qlik e não grava nada.
 
-À mão (para medir o tempo):
+À mão (uma consulta, para medir o tempo):
     python processo/consultar_os_placa.py ABC1D23
 """
 import json
@@ -106,18 +110,96 @@ def preparar(headers, rows, placa):
     return linhas, fora
 
 
-def consultar(placa):
-    with qlik.Sessao(sv_paths.QLIK_TENANT, sv_paths.QLIK_APP_ID, str(sv_paths.CFG_QLIK)) as s:
-        h, headers, qcx = s.abrir_objeto(sv_paths.QLIK_OBJ_ID)
-        campo = s.campo_da_coluna(h, COLUNA_PLACA)
+class Consultor:
+    """Sessão do Qlik aberta sob demanda e reaproveitada entre consultas.
+
+    Falha numa consulta fecha a sessão e tenta mais uma vez com uma nova:
+    o Qlik encerra sessões ociosas e a próxima consulta não pode herdar isso.
+    """
+
+    def __init__(self, fabrica=None):
+        self.fabrica = fabrica or (lambda: qlik.Sessao(sv_paths.QLIK_TENANT, sv_paths.QLIK_APP_ID, str(sv_paths.CFG_QLIK)))
+        self.sessao = None
+        self.objeto = None
+
+    def abrir(self):
+        if self.sessao is None:
+            s = self.fabrica()
+            s.__enter__()
+            try:
+                h, headers, qcx = s.abrir_objeto(sv_paths.QLIK_OBJ_ID)
+                self.objeto = (h, headers, qcx, s.campo_da_coluna(h, COLUNA_PLACA))
+            except Exception:
+                s.__exit__(None, None, None)
+                raise
+            self.sessao = s
+        return self.sessao
+
+    def fechar(self):
+        if self.sessao is not None:
+            try:
+                self.sessao.__exit__(None, None, None)
+            except Exception:  # noqa: BLE001 - fechar nunca derruba a próxima tentativa
+                pass
+        self.sessao = self.objeto = None
+
+    def _uma_vez(self, placa):
+        s = self.abrir()
+        h, headers, qcx, campo = self.objeto
         # Zero casadas deixaria o campo sem seleção, isto é, a base inteira.
         if not s.selecionar_textos(campo, [placa]):
             return [], 0
         return preparar(headers, s.ler(h, headers, qcx, NUMERICAS), placa)
 
+    def consultar(self, placa):
+        try:
+            return self._uma_vez(placa)
+        except (qlik.QlikErro, OSError, ValueError, KeyError, TypeError):
+            self.fechar()
+            return self._uma_vez(placa)
+
+
+def consultar(placa):
+    c = Consultor()
+    try:
+        return c.consultar(placa)
+    finally:
+        c.fechar()
+
+
+def servir(entrada, saida, consultor=None):
+    """Atende pedidos, um por linha, até a entrada fechar."""
+    consultor = consultor or Consultor()
+    try:
+        for bruto in entrada:
+            if not bruto.strip():
+                continue
+            pedido_id = None
+            try:
+                pedido = json.loads(bruto)
+                pedido_id = pedido.get("id")
+                if pedido.get("aquecer"):
+                    consultor.abrir()
+                    resposta = {"id": pedido_id, "pronto": True}
+                else:
+                    placa = placa_valida(pedido.get("placa"))
+                    inicio = time.monotonic()
+                    linhas, fora = consultor.consultar(placa)
+                    print(f"Placa {placa}: {len(linhas):,} itens em {time.monotonic() - inicio:.1f} s ({fora:,} descartados).", file=sys.stderr)
+                    resposta = {"id": pedido_id, "placa": placa, "linhas": linhas}
+            except Exception as erro:  # noqa: BLE001 - um pedido ruim não derruba o servidor
+                resposta = {"id": pedido_id, "erro": str(erro)[:300]}
+            saida.write("RESULTADO_JSON=" + json.dumps(resposta, ensure_ascii=False) + "\n")
+            saida.flush()
+    finally:
+        consultor.fechar()
+
 
 def main(argv=None):
     argv = sys.argv[1:] if argv is None else argv
+    if argv[:1] == ["--servidor"]:
+        servir(sys.stdin, sys.stdout)
+        return 0
     placa = placa_valida(argv[0] if argv else "")
     inicio = time.monotonic()
     linhas, fora = consultar(placa)
@@ -127,7 +209,7 @@ def main(argv=None):
 
 
 if __name__ == "__main__":
-    for _s in (sys.stdout, sys.stderr):
+    for _s in (sys.stdin, sys.stdout, sys.stderr):
         try:
             _s.reconfigure(encoding="utf-8", errors="replace")
         except (AttributeError, ValueError):

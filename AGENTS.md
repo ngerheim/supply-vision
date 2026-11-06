@@ -27,7 +27,7 @@ Guidance for coding agents working in this repository. Code and tests define the
 | `alertas/processo/{contrato_base,contrato_comparacao,regras_comparacao,vigencia_acordos,qualidade_acordos}.py` | Source extraction, rules, validity periods, data-quality issues |
 | `alertas/processo/{resumo_comparacao,planilhas_comparacao,limpeza}.py`, `alertas/panorama/` | Outputs, retention, send-free views |
 | `alertas/processo/baixar_fornecedores.py`, `portal/lib/rede{,-api}.ts`, `portal/lib/municipios-ibge.ts` | Rede tab: daily ERP supplier copy from Qlik (status A only, once a day after the alert), distance by IBGE coordinates, admin exclusions |
-| `alertas/processo/consultar_os_placa.py`, `portal/lib/reembolso{,-api,-historico,-qlik}.ts` | Reembolso tab: calculator, clients/rates/MTBF tables imported from the old HTML; per-plate OS history queried from the alert's Qlik object on demand (Portal runs the Alertas Python, 6 h cache) suggests the last replacement; exclusion filters by column in Reembolso › Histórico de OS apply to every answer |
+| `alertas/processo/consultar_os_placa.py`, `portal/lib/reembolso{,-api,-historico,-qlik}.ts` | Reembolso tab: calculator, clients/rates/MTBF tables imported from the old HTML; per-plate OS history queried from the alert's Qlik object on demand (Portal keeps the Alertas Python open with the Qlik session, 6 h cache) fills client, model and rate and suggests the last replacement; exclusion filters by column in Reembolso › Histórico de OS apply to every answer |
 | `scripts/verificar-infra-publica.mjs`, `portal/tests/`, `alertas/tests/`, `scripts/testar-*.ps1`, `.github/workflows/ci.yml` | Public-data detector, tests, CI |
 
 Abbreviated paths in a cell share the directory of the first file.

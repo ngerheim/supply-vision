@@ -290,6 +290,7 @@ async function GETInterno(request: NextRequest) {
     if (parts.length === 2 && parts[1] === 'config') return reembolso.config(user);
     if (parts.length === 2 && parts[1] === 'historico') return reembolso.historicoPlaca(user, request.nextUrl.searchParams);
     if (parts.length === 3 && parts[1] === 'historico' && parts[2] === 'filtros') return reembolso.filtrosHistorico(user);
+    if (parts.length === 3 && parts[1] === 'historico' && parts[2] === 'aquecer') return reembolso.aquecerHistorico(user);
     if (parts.length === 3 && parts[1] === 'historico' && parts[2] === 'valores') return reembolso.valoresHistorico(user, request.nextUrl.searchParams);
     if (parts.length === 2 && parts[1] === 'calculos') return reembolso.listarCalculos(user, request.nextUrl.searchParams);
     if (parts.length === 3 && parts[1] === 'calculos') return reembolso.detalheCalculo(user, parts[2]);

@@ -9,10 +9,10 @@ import {
   type ItemMtbf,
 } from './reembolso.ts';
 import {
-  aplicarFiltros, COLUNAS_FILTRO, normalizarFiltro, placaNormalizada, placaValida, VALIDADE_CACHE_MS, validarFiltro, validarLinhasConsulta,
+  acharCliente, aplicarFiltros, COLUNAS_FILTRO, veiculoDaPlaca, normalizarFiltro, placaNormalizada, placaValida, VALIDADE_CACHE_MS, validarFiltro, validarLinhasConsulta,
   type ColunaFiltro, type FiltroHistorico, type LinhaHistorico,
 } from './reembolso-historico.ts';
-import { ConsultaIndisponivel, consultarPlacaQlik } from './reembolso-qlik.ts';
+import { aquecerQlik, ConsultaIndisponivel, consultarPlacaQlik } from './reembolso-qlik.ts';
 import { EntradaInvalida } from './limites-entrada.ts';
 
 type TabelaRow = { id: string; nome: string; padrao: number; revision: number };
@@ -285,9 +285,20 @@ export function reembolsoApi(contexto: ContextoApi) {
         aviso = `Qlik indisponível agora; mostrando a consulta de ${consultadoEm}.`;
       }
     }
+    // Cliente e modelo vem da OS mais recente, antes dos filtros (um grupo
+    // filtrado nao muda de quem e o carro); o cliente e casado com a configuracao.
+    const veiculo = veiculoDaPlaca(linhas);
+    const cliente = acharCliente(veiculo.cliente, await all<{ id: string; nome: string }>('SELECT id,nome FROM reembolso_clientes WHERE ativo=1'));
     const { mantidas, filtradas } = aplicarFiltros(linhas, await filtrosAtivos());
     mantidas.sort((x, y) => y.data.localeCompare(x.data));
-    return ok({ placa, consultadoEm, aviso, filtradas, linhas: mantidas });
+    return ok({ placa, consultadoEm, aviso, filtradas, veiculo: { ...veiculo, clienteId: cliente?.id ?? null }, linhas: mantidas });
+  }
+
+  // Abrir a calculadora ja abre a sessao com o Qlik para a primeira placa.
+  function aquecerHistorico(user: User) {
+    if (!pode(user, 'aba:reembolso')) return fail('Seu perfil não tem acesso ao Reembolso.', 403);
+    aquecerQlik();
+    return ok({ success: true }, { status: 202 });
   }
 
   // Tela de filtros: filtros atuais e as consultas recentes.
@@ -354,7 +365,7 @@ export function reembolsoApi(contexto: ContextoApi) {
     });
   }
 
-  return { historicoPlaca, filtrosHistorico, valoresHistorico, criarFiltro, excluirFiltro, config, importar, salvarCliente, excluirCliente, salvarTabela, excluirTabela, salvarCalculo, listarCalculos, detalheCalculo, excluirCalculo };
+  return { historicoPlaca, aquecerHistorico, filtrosHistorico, valoresHistorico, criarFiltro, excluirFiltro, config, importar, salvarCliente, excluirCliente, salvarTabela, excluirTabela, salvarCalculo, listarCalculos, detalheCalculo, excluirCalculo };
 }
 
 class ConflitoTabela extends Error {}

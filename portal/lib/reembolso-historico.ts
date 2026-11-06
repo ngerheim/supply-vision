@@ -259,3 +259,38 @@ export function candidatos(linhas: LinhaPlaca[], q: string, contexto: { kmAtual:
     return { ...c, atual, acimaDoKm, recente, serve: !atual && !acimaDoKm && !recente && !!c.km };
   }).sort((a, b) => b.data.localeCompare(a.data) || (b.km ?? 0) - (a.km ?? 0));
 }
+
+// ---- cliente e modelo do veiculo, pela OS mais recente da placa ----
+export type VeiculoPlaca = { cliente: string | null; modelo: string | null; data: string | null };
+export function veiculoDaPlaca(linhas: Pick<LinhaHistorico, 'data' | 'os' | 'cliente' | 'modelo'>[]): VeiculoPlaca {
+  const recentes = [...linhas].sort((a, b) => b.data.localeCompare(a.data) || Number(b.os ?? 0) - Number(a.os ?? 0));
+  const comCliente = recentes.find(l => l.cliente);
+  return { cliente: comCliente?.cliente ?? null, modelo: recentes.find(l => l.modelo)?.modelo ?? null, data: comCliente?.data ?? recentes[0]?.data ?? null };
+}
+
+// Nome do cliente no Qlik x nome na configuracao do Reembolso (importada da
+// calculadora antiga, as vezes abreviada). Igual sem acento/pontuacao/sufixo
+// societario; senao um comeca com o outro; senao a maioria das palavras em
+// comum. Empate ou nada parecido = sem cliente (preenche a mao).
+const SUFIXOS = new Set(['ltda', 'sa', 's', 'a', 'eireli', 'me', 'epp', 'cia', 'e', 'de', 'do', 'da', 'dos', 'das']);
+const palavrasNome = (s: string) => normalizar(s).split(' ').filter(p => p && !SUFIXOS.has(p));
+export function acharCliente<T extends { id: string; nome: string }>(nome: string | null, clientes: T[]): T | null {
+  const alvo = palavrasNome(nome ?? '');
+  if (!alvo.length) return null;
+  const junto = alvo.join(' ');
+  let melhor: T | null = null, nota = 0, empate = false;
+  for (const c of clientes) {
+    const p = palavrasNome(c.nome), outro = p.join(' ');
+    if (!p.length) continue;
+    let n = 0;
+    if (outro === junto) n = 3;
+    else if (Math.min(outro.length, junto.length) >= 8 && (outro.startsWith(junto) || junto.startsWith(outro))) n = 2;
+    else {
+      const comuns = p.filter(x => alvo.includes(x)).length;
+      const jaccard = comuns / new Set([...p, ...alvo]).size;
+      if (jaccard >= 0.6) n = 1 + jaccard / 2;
+    }
+    if (n > nota) { melhor = c; nota = n; empate = false; } else if (n && n === nota) empate = true;
+  }
+  return empate ? null : melhor;
+}
