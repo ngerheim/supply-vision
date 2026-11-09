@@ -36,10 +36,27 @@ function templateFicticio(extra = '') {
   XLSX.CFB.utils.cfb_add(zip, 'word/document.xml', Buffer.from(documento));
   return new Uint8Array(XLSX.CFB.write(zip, { type: 'buffer', fileType: 'zip' }));
 }
-const lerDocumento = bytes => {
-  const zip = XLSX.CFB.read(bytes, { type: 'buffer' });
-  return Buffer.from(zip.FileIndex[zip.FullPaths.findIndex(p => p.endsWith('/word/document.xml'))].content).toString('utf8');
-};
+// Texto corrido da folha impressa: um paragrafo por linha.
+const textoFolha = contrato => contrato.paragrafos.map(p => p.trechos.map(t => t.texto).join('')).join('\n');
+// Template com cabecalho (logo) e rodape ligados pelo sectPr, formatacao e lista.
+function templateCompleto({ ligarCabecalho = true } = {}) {
+  const w = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"';
+  const corpo = '<w:p><w:pPr><w:jc w:val="center"/></w:pPr><w:r><w:rPr><w:b/><w:sz w:val="26"/></w:rPr><w:t>CONTRATO</w:t></w:r></w:p>'
+    + '<w:p><w:pPr><w:pStyle w:val="Ttulo1"/></w:pPr><w:r><w:t>CLÁUSULA PRIMEIRA</w:t></w:r></w:p>'
+    + '<w:p><w:r><w:rPr><w:b/></w:rPr><w:t>1.1</w:t></w:r><w:r><w:t xml:space="preserve"> Texto de </w:t></w:r><w:r><w:t>{{FORNECEDOR_RAZAO_SOCIAL}}</w:t></w:r><w:r><w:rPr><w:b w:val="0"/></w:rPr><w:t>.</w:t></w:r></w:p>'
+    + '<w:p><w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr></w:pPr><w:r><w:t>Item</w:t></w:r></w:p>'
+    + `<w:sectPr>${ligarCabecalho ? '<w:headerReference w:type="default" r:id="rId9"/><w:footerReference w:type="default" r:id="rId10"/>' : ''}</w:sectPr>`;
+  const zip = XLSX.CFB.utils.cfb_new();
+  const add = (nome, texto) => XLSX.CFB.utils.cfb_add(zip, nome, Buffer.from(texto));
+  add('word/document.xml', `<?xml version="1.0"?><w:document ${w}><w:body>${corpo}</w:body></w:document>`);
+  const tipo = t => `http://schemas.openxmlformats.org/officeDocument/2006/relationships/${t}`;
+  add('word/_rels/document.xml.rels', `<Relationships><Relationship Id="rId9" Type="${tipo('header')}" Target="header1.xml"/><Relationship Id="rId10" Type="${tipo('footer')}" Target="footer1.xml"/></Relationships>`);
+  add('word/header1.xml', `<w:hdr ${w} xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><w:p><w:r><w:drawing><a:blip r:embed="rId1"/></w:drawing></w:r></w:p></w:hdr>`);
+  add('word/_rels/header1.xml.rels', '<Relationships><Relationship Id="rId1" Target="media/image1.png"/></Relationships>');
+  XLSX.CFB.utils.cfb_add(zip, 'word/media/image1.png', Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+  add('word/footer1.xml', `<w:ftr ${w}><w:p><w:r><w:t>Rodapé fictício</w:t></w:r></w:p><w:p/></w:ftr>`);
+  return new Uint8Array(XLSX.CFB.write(zip, { type: 'buffer', fileType: 'zip' }));
+}
 
 void test('contrato: extenso, data e CNPJ', () => {
   assert.equal(contratos.numeroPorExtenso(45), 'quarenta e cinco');
@@ -57,26 +74,41 @@ void test('contrato: extenso, data e CNPJ', () => {
   assert.equal(contratos.formatarCnpj('12345678000199'), '12.345.678/0001-99');
 });
 
-void test('contrato: preenche campos com escape, sem anexo, e recusa campo desconhecido', () => {
+void test('contrato: preenche campos sem perder caracteres, sem anexo, e recusa campo desconhecido', () => {
   const campos = Object.fromEntries(CAMPOS.map(c => [c, `Valor ${c}`]));
   campos.FORNECEDOR_RAZAO_SOCIAL = 'Oficina <Teste> & Filhos';
-  const xml = lerDocumento(contratos.gerarContrato(templateFicticio(), campos));
-  assert.doesNotMatch(xml, /\{\{/);
-  assert.match(xml, /Oficina &lt;Teste&gt; &amp; Filhos/);
-  assert.doesNotMatch(xml, /ANEXO I/);
-  assert.throws(() => contratos.gerarContrato(templateFicticio('<w:p><w:r><w:t>{{CAMPO_NOVO}}</w:t></w:r></w:p>'), campos), /CAMPO_NOVO/);
-  assert.throws(() => contratos.gerarContrato(new Uint8Array([1, 2, 3]), campos), contratos.TemplateInvalido);
+  const texto = textoFolha(contratos.lerContrato(templateFicticio(), campos));
+  assert.doesNotMatch(texto, /\{\{/);
+  assert.match(texto, /FORNECEDOR_RAZAO_SOCIAL: Oficina <Teste> & Filhos/);
+  assert.doesNotMatch(texto, /ANEXO I/);
+  assert.throws(() => contratos.lerContrato(templateFicticio('<w:p><w:r><w:t>{{CAMPO_NOVO}}</w:t></w:r></w:p>'), campos), /CAMPO_NOVO/);
+  assert.throws(() => contratos.lerContrato(new Uint8Array([1, 2, 3]), campos), contratos.TemplateInvalido);
   assert.deepEqual(contratos.camposDoTemplate(templateFicticio()).sort(), [...CAMPOS].sort());
 });
 
+void test('contrato: folha impressa segue formatacao, cabecalho e rodape do template', () => {
+  const campos = Object.fromEntries(CAMPOS.map(c => [c, 'Fornecedor Fictício']));
+  const folha = contratos.lerContrato(templateCompleto(), campos);
+  assert.deepEqual(folha.paragrafos.map(p => p.tipo), ['texto', 'clausula', 'texto', 'item']);
+  assert.deepEqual(folha.paragrafos[0], { tipo: 'texto', centro: true, trechos: [{ texto: 'CONTRATO', negrito: true, tamanhoPt: 13 }] });
+  assert.deepEqual(folha.paragrafos[2].trechos, [{ texto: '1.1', negrito: true }, { texto: ' Texto de Fornecedor Fictício.' }]);
+  assert.match(folha.logo, /^data:image\/png;base64,/);
+  assert.deepEqual(folha.rodape, ['Rodapé fictício']);
+  // Template que perdeu a ligacao do cabecalho/rodape: a folha usa os arquivos que existem.
+  const solta = contratos.lerContrato(templateCompleto({ ligarCabecalho: false }), campos);
+  assert.equal(solta.logo, folha.logo);
+  assert.deepEqual(solta.rodape, ['Rodapé fictício']);
+  assert.equal(contratos.lerContrato(templateFicticio(), campos).logo, null);
+});
+
 void test('contrato: template com campos fixos antigos da contratante e avisado', async () => {
-  const antigo = templateFicticio('<w:p><w:r><w:t>{{TESTEMUNHA_1}} {{CONTRATANTE_REPRESENTANTE}} {{FORNECEDOR_REPRESENTANTE}}</w:t></w:r></w:p>');
-  assert.deepEqual(contratos.camposDoTemplate(antigo).filter(c => contratos.CAMPOS_FIXOS_ANTIGOS.includes(c)).sort(), ['CONTRATANTE_REPRESENTANTE', 'FORNECEDOR_REPRESENTANTE', 'TESTEMUNHA_1']);
+  const antigo = templateFicticio('<w:p><w:r><w:t>{{TESTEMUNHA_1}} {{CONTRATANTE_REPRESENTANTE}}</w:t></w:r></w:p>');
+  assert.deepEqual(contratos.camposDoTemplate(antigo).filter(c => contratos.CAMPOS_FIXOS_ANTIGOS.includes(c)).sort(), ['CONTRATANTE_REPRESENTANTE', 'TESTEMUNHA_1']);
   assert.equal(contratos.montarEndereco({ logradouro: 'Av. Brasil', numero: '10', complemento: 'Sala 2', bairro: 'Funcionários', cidade: 'Belo Horizonte', uf: 'mg', cep: '30.140-000' }),
     'Av. Brasil, 10, Sala 2, Funcionários, Belo Horizonte/MG, CEP 30140-000');
 });
 
-void test('contrato: rota gera o .docx com permissao, valida campos e audita', async t => {
+void test('contrato: rota gera a folha com permissao, valida campos, consulta o CNPJ e audita', async t => {
   const db = bancoSqliteLocal({ pastaPrivada: privado, criar: true }), sql = new DatabaseSync(db.arquivo);
   const chave = Symbol.for('supply-vision:banco'), anterior = globalThis[chave], senha = env.INITIAL_ADMIN_PASSWORD;
   globalThis[chave] = db; env.INITIAL_ADMIN_PASSWORD = 'senha-ficticia-contratos';
@@ -95,7 +127,7 @@ void test('contrato: rota gera o .docx com permissao, valida campos e audita', a
     const r = await rota[method](new NextRequest(`http://fixture/api/${url}`, { method, headers, ...(body ? { body: JSON.stringify(body) } : {}) }));
     return { status: r.status, headers: r.headers, data: r.headers.get('content-type')?.includes('json') ? await r.json() : new Uint8Array(await r.arrayBuffer()) };
   };
-  const campos = Object.fromEntries(['FORNECEDOR_RAZAO_SOCIAL', 'FORNECEDOR_CNPJ'].map(c => [c, `Valor ${c}`]));
+  const campos = Object.fromEntries(['FORNECEDOR_RAZAO_SOCIAL', 'FORNECEDOR_CNPJ', 'FORNECEDOR_REPRESENTANTE'].map(c => [c, `Valor ${c}`]));
   const endereco = { logradouro: 'Rua Ficticia', numero: '100', complemento: '', bairro: 'Centro', cidade: 'Cidade A', uf: 'mg', cep: '30100000' };
   const corpo = { campos, endereco, prazoDias: 60, data: '2026-10-30' };
 
@@ -113,17 +145,30 @@ void test('contrato: rota gera o .docx com permissao, valida campos e audita', a
   assert.equal((await pedir('POST', 'contratos', admin, { ...corpo, prazoDias: 0 })).status, 400);
   assert.equal((await pedir('POST', 'contratos', admin, { ...corpo, data: '2026-02-30x' })).status, 400);
   assert.equal((await pedir('POST', 'contratos', admin, { ...corpo, campos: { ...campos, FORNECEDOR_RAZAO_SOCIAL: ' ' } })).status, 400);
+  assert.equal((await pedir('POST', 'contratos', admin, { ...corpo, campos: { ...campos, FORNECEDOR_REPRESENTANTE: '' } })).status, 400);
   assert.equal((await pedir('POST', 'contratos', admin, { ...corpo, endereco: { ...endereco, bairro: '' } })).status, 400);
   assert.equal((await pedir('POST', 'contratos', admin, { ...corpo, endereco: { ...endereco, cep: '123' } })).status, 400);
 
   const gerado = await pedir('POST', 'contratos', admin, corpo);
   assert.equal(gerado.status, 200);
-  assert.match(gerado.headers.get('content-disposition'), /Contrato_Valor_FORNECEDOR_RAZAO_SOCIAL\.docx/);
-  const xml = lerDocumento(gerado.data);
+  assert.equal(gerado.data.arquivo, 'Contrato_Valor_FORNECEDOR_RAZAO_SOCIAL');
+  const xml = textoFolha(gerado.data);
+  assert.match(xml, /FORNECEDOR_REPRESENTANTE: Valor FORNECEDOR_REPRESENTANTE/);
   assert.match(xml, /PRAZO_PAGAMENTO_DIAS: 60/);
   assert.match(xml, /PRAZO_PAGAMENTO_EXTENSO: sessenta/);
   assert.match(xml, /DATA_ASSINATURA: 30 de outubro de 2026/);
   assert.match(xml, /FORNECEDOR_ENDERECO: Rua Ficticia, 100, Centro, Cidade A\/MG, CEP 30100-000/);
   assert.doesNotMatch(xml, /ANEXO I/);
   assert.match(sql.prepare("SELECT details FROM audit_logs WHERE entity='contrato' ORDER BY created_at DESC").get().details, /Contrato de fornecimento gerado: Valor FORNECEDOR_RAZAO_SOCIAL \(prazo 60 dias/);
+  // CNPJ: preenche razao social e endereco (provedor ficticio do modo ensaio); sem permissao, recusa.
+  const ensaio = process.env.MODO_ENSAIO; process.env.MODO_ENSAIO = '1'; t.after(() => { if (ensaio === undefined) delete process.env.MODO_ENSAIO; else process.env.MODO_ENSAIO = ensaio; });
+  const { CNPJS_ENSAIO } = await import('../lib/consultas-fornecedor-ensaio.ts');
+  assert.equal((await pedir('GET', `contratos/cnpj/${CNPJS_ENSAIO.ativa}`, 'viewer')).status, 403);
+  const consulta = await pedir('GET', `contratos/cnpj/${CNPJS_ENSAIO.ativa}`, admin);
+  assert.equal(consulta.status, 200);
+  assert.equal(consulta.data.razaoSocial, 'FORNECEDOR FICTÍCIO');
+  assert.equal(consulta.data.situacao, 'ATIVA');
+  assert.deepEqual(consulta.data.endereco, { logradouro: 'Rua Fictícia', numero: '10', complemento: '', bairro: 'Bairro Fictício', cidade: 'Cidade Fictícia', uf: 'SP', cep: '00000000' });
+  assert.equal((await pedir('GET', `contratos/cnpj/${CNPJS_ENSAIO.inexistente}`, admin)).status, 404);
+  assert.equal((await pedir('GET', 'contratos/cnpj/123', admin)).status, 400);
 });

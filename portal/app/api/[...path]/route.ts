@@ -328,7 +328,11 @@ async function GETInterno(request: NextRequest) {
     if (parts.length === 2) return parts[1] === 'destinatarios' ? alertas.destinatarios(user) : alertas.detalhe(user, parts[1]);
     return fail('Rota não encontrada.', 404);
   }
-  if (parts[0] === 'contratos') return parts.length === 1 ? contratos.preparar(user) : fail('Rota não encontrada.', 404);
+  if (parts[0] === 'contratos') {
+    if (parts.length === 1) return contratos.preparar(user);
+    if (parts.length === 3 && parts[1] === 'cnpj') return excedeuLimiteConsultas(user.id) ? fail(LIMITE_CONSULTAS_MENSAGEM, 429) : contratos.consultarCnpj(user, parts[2]);
+    return fail('Rota não encontrada.', 404);
+  }
 
   // Guarda geral antes das permissoes especificas; preserva as respostas HTTP.
   // Consulta simples permanece disponivel acima desta guarda.
