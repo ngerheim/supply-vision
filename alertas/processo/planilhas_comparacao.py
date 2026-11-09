@@ -185,7 +185,9 @@ def _gerar_tabela_simples(df, path, drop, nome_tabela, nome_aba):
         largura = min(max(largura_base, max(amostra, default=0) + 2), 45)
         ws.set_column(c, c, largura)
     ws.set_default_row(18)
-    ws.set_row(0, 20)
+    # 20,25 pt = 27 px exatos: o XlsxWriter 3.3 arredonda a altura para pixels inteiros
+    # (20 viraria 20,25); com o valor ja exato o resultado e o mesmo em qualquer versao.
+    ws.set_row(0, 20.25)
     ws.freeze_panes(1, 0)
     wb.close()
     print(f"  Salvo: {path}")
