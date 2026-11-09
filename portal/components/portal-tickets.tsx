@@ -210,6 +210,7 @@ export function Tickets({ busy, users, run, initialDetail }: JsonData) {
             className={group === key ? 'bg-primary text-primary-foreground' : 'bg-background text-foreground'}
             role="tab"
             aria-selected={group === key}
+            aria-label={`${label}: ${Number(count || 0)}`}
             onClick={() => {
               setGroup(key);
               setPage(1);

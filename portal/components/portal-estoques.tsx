@@ -795,7 +795,10 @@ export function SaldoEstoque({ user }: { user: AnyRow }) {
         <CardHeader className="border-b">
           <p className="patio-result-count">
             {rows.length} {rows.length === 1 ? 'item' : 'itens'}
-            {resumoValor && <> · valor em estoque <b className="tabular-nums">{moedaBr(resumoValor.valorTotal)}</b>
+            {/* Sem nenhum valor de entrada, "R$ 0,00" sugeriria estoque sem valor; diz o que falta. */}
+            {resumoValor && rows.length > 0 && resumoValor.semValor >= rows.length
+              ? <span className="text-muted-foreground"> · nenhum item com valor de entrada</span>
+              : resumoValor && <> · valor em estoque <b className="tabular-nums">{moedaBr(resumoValor.valorTotal)}</b>
               {resumoValor.semValor > 0 && <span className="text-muted-foreground">{` (${resumoValor.semValor} ${resumoValor.semValor === 1 ? 'item' : 'itens'} sem valor de entrada)`}</span>}</>}
           </p>
         </CardHeader>

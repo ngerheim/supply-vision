@@ -48,6 +48,18 @@ const statusName: Record<string, string> = {
 type AcaoDisponivel = Extract<AcaoRelatorio, 'relatorio' | 'recorte'>;
 const horario = (valor: string) =>
   new Date(valor).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+const NOMES_ARQUIVO: Record<string, string> = {
+  com_acordo: 'Compras com acordo',
+  qualidade_acordos: 'Qualidade dos acordos',
+  pendencias_comparacao: 'Pendências da comparação',
+};
+// O botao mostra o nome legivel; o nome real (data, hora e id do pedido) fica no title.
+function rotuloArquivo(nome: string) {
+  const extensao = /\.([a-z0-9]+)$/i.exec(nome)?.[1]?.toUpperCase();
+  const base = nome.replace(/\.[^.]+$/, '').replace(/_\d{8}_\d{6}.*$/, '').replace(/_rpt_?[0-9a-f]+$/i, '');
+  const rotulo = NOMES_ARQUIVO[base] ?? (base.replace(/[_-]+/g, ' ').trim().replace(/^./, c => c.toUpperCase()) || nome);
+  return extensao ? `${rotulo} (${extensao})` : rotulo;
+}
 
 export function Reports() {
   const [action, setAction] = useState<AcaoDisponivel>('relatorio');
@@ -433,7 +445,7 @@ export function Reports() {
                       onClick={() => void download(job, file.name)}
                     >
                       <Download />
-                      <span className="truncate">{file.name}</span>
+                      <span className="truncate" title={file.name}>{rotuloArquivo(file.name)}</span>
                     </Button>
                     {file.expiresAt && (
                       <p
