@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
+import { SearchSelect } from '@/components/search-select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { api, errorText } from '@/lib/api';
 import { dataHoraSolicitacao } from '@/lib/solicitacoes-cliente';
@@ -241,14 +242,17 @@ export function Analise({ verAcoes }: { verAcoes: () => void }) {
       <form className="patio-filters patio-filters-rotulados" onSubmit={e => { e.preventDefault(); atualizar(); }}>
         <Field label="De"><CampoData value={rascunho.de} onChange={de => setRascunho(r => ({ ...r, de }))} /></Field>
         <Field label="Até"><CampoData value={rascunho.ate} min={rascunho.de || undefined} onChange={ate => setRascunho(r => ({ ...r, ate }))} /></Field>
-        {(['cidade', 'fornecedor', 'grupo'] as const).map(campo => (
-          <Field key={campo} label={campo === 'grupo' ? 'Grupo de despesa' : campo === 'cidade' ? 'Cidade' : 'Fornecedor'}>
-            <NativeSelect value={rascunho[campo]} onChange={e => setRascunho(r => ({ ...r, [campo]: e.target.value }))}>
-              <NativeSelectOption value="">Todos</NativeSelectOption>
-              {opcoes[campo].map(v => <NativeSelectOption key={v} value={v}>{v}</NativeSelectOption>)}
-            </NativeSelect>
-          </Field>
+        {/* Cidade e fornecedor tem centenas de opcoes: campo com busca, vazio = todos. */}
+        {(['cidade', 'fornecedor'] as const).map(campo => (
+          <SearchSelect key={campo} label={campo === 'cidade' ? 'Cidade' : 'Fornecedor'} value={rascunho[campo]} limit={80}
+            options={opcoes[campo].map(v => ({ id: v, name: v }))} onChange={valor => setRascunho(r => ({ ...r, [campo]: valor }))} />
         ))}
+        <Field label="Grupo de despesa">
+          <NativeSelect value={rascunho.grupo} onChange={e => setRascunho(r => ({ ...r, grupo: e.target.value }))}>
+            <NativeSelectOption value="">Todos</NativeSelectOption>
+            {opcoes.grupo.map(v => <NativeSelectOption key={v} value={v}>{v}</NativeSelectOption>)}
+          </NativeSelect>
+        </Field>
         <Button type="submit" variant={alterado ? 'default' : 'outline'} disabled={carregando || !completo}>
           {carregando ? <Loader2 className="animate-spin" /> : <RefreshCw />} {carregando ? 'Atualizando…' : 'Atualizar'}
         </Button>

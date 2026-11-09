@@ -17,6 +17,7 @@ const moeda = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL
 const inteiro = new Intl.NumberFormat('pt-BR');
 const rs = (v: unknown) => (v === null || v === undefined ? '—' : moeda.format(Number(v)));
 const dataBr = (d: string | null) => (d ? d.split('-').reverse().join('/') : '—');
+const horaBr = (v: string) => new Date(v).toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' });
 const LIMITE_TELA = 500;
 // A tabela do Portal usa table-layout fixed: as colunas curtas tem largura
 // fixa e fornecedor e item dividem o espaco que sobra.
@@ -108,6 +109,8 @@ export function Alertas({ inicial }: { inicial: string | null }) {
   if (!lista) return <Loading label="Carregando alertas…" compact />;
 
   const rodadas = lista.rodadas as AnyRow[];
+  // Reexecucao manual gera outra rodada com o mesmo titulo; o horario as distingue.
+  const repetidas = new Set(rodadas.map(r => r.titulo).filter((t, i, todos) => todos.indexOf(t) !== i));
   const rodada = detalhe?.rodada?.id === selecionada ? detalhe?.rodada : null;
   const resumo = rodada?.resumo ?? {};
   const difFiltro = filtradas.reduce((s, l) => s + Number(l.difTotal || 0), 0);
@@ -126,7 +129,7 @@ export function Alertas({ inicial }: { inicial: string | null }) {
               <NativeSelect value={selecionada ?? ''} onChange={e => { setSelecionada(e.target.value); setBusca(''); setSituacao(''); setCidade(''); }}>
                 {rodadas.some(r => r.id === selecionada) || !selecionada ? null : <NativeSelectOption value={selecionada}>Rodada do aviso</NativeSelectOption>}
                 {rodadas.map(r => (
-                  <NativeSelectOption key={r.id} value={r.id}>{`${r.titulo} · ${inteiro.format(r.linhas)} fora do acordo`}</NativeSelectOption>
+                  <NativeSelectOption key={r.id} value={r.id}>{`${r.titulo}${repetidas.has(r.titulo) ? ` · ${horaBr(r.recebidaEm)}` : ''} · ${inteiro.format(r.linhas)} fora do acordo`}</NativeSelectOption>
                 ))}
               </NativeSelect>
             </Field>

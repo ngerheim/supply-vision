@@ -125,14 +125,18 @@ function Calculadora({ config, form, setForm, itens, setItens, busy, run, vazio 
   const tabela = tabelaAtiva(config, form.clienteId);
   const cliente = config.clientes.find(c => c.id === form.clienteId);
   const taxa = num(form.taxaPct) / 100, kmAtual = num(form.kmAtual);
-  const opcoes = useMemo(() => {
+  const opcoesMtbf = useMemo(() => {
     const grupos = new Map<string, { ordem: number; itens: ItemTabela[] }>();
     for (const it of tabela?.itens ?? []) {
       const g = grupoValor(it.valores[form.categoria]);
       const atual = grupos.get(g.rotulo) ?? { ordem: g.ordem, itens: [] };
       atual.itens.push(it); grupos.set(g.rotulo, atual);
     }
-    return [...grupos].sort((a, b) => a[1].ordem - b[1].ordem).map(([rotulo, g]) => ({ rotulo, itens: g.itens.sort((a, b) => a.descricao.localeCompare(b.descricao, 'pt-BR')) }));
+    // Mesma ordem de antes (grupo de MTBF, depois descricao); a descricao e o valor, entao nao se repete.
+    const vistas = new Set<string>();
+    return [...grupos].sort((a, b) => a[1].ordem - b[1].ordem).flatMap(([rotulo, g]) => g.itens.sort((a, b) => a.descricao.localeCompare(b.descricao, 'pt-BR'))
+      .filter(it => !vistas.has(it.descricao) && Boolean(vistas.add(it.descricao)))
+      .map(it => ({ id: it.descricao, name: `${it.descricao} — ${rotulo}${it.tipo ? ` · ${it.tipo === 'INTEGRAL' ? 'Integral' : 'Proporcional'}` : ''}` })));
   }, [tabela, form.categoria]);
   const resultados = itens.map(i => calcularItem({ tipo: i.tipo, kmTroca: num(i.kmTroca), ultimaTroca: num(i.ultimaTroca), qtd: num(i.qtd), valorUnit: num(i.valorUnit), diferencaPneu: num(i.diferencaPneu) }, kmAtual, taxa));
   const totalCusto = resultados.reduce((s, r) => s + r.valorTotal, 0), totalReembolso = resultados.reduce((s, r) => s + r.reembolso, 0);
@@ -280,13 +284,11 @@ function Calculadora({ config, form, setForm, itens, setItens, busy, run, vazio 
           <div className="flex items-end gap-3">
             <span className="patio-codigo pb-2">{n + 1}</span>
             <Field label="Peça / M.O." className="flex-1"><Input value={i.peca} maxLength={200} placeholder="ex. Pneu 205/60 R16" onChange={e => mudarItem(i.chave, { peca: e.target.value })} /></Field>
-            <Field label="Referência MTBF" className="flex-[1.4]">
-              <NativeSelect className="w-full" value={i.referencia} onChange={e => setItens(lista => lista.map(x => (x.chave === i.chave ? aplicarReferencia(x, tabela?.itens.find(r => r.descricao === e.target.value), form.categoria) : x)))}>
-                <NativeSelectOption value="">— selecionar peça/serviço —</NativeSelectOption>
-                {opcoes.map(g => <optgroup key={g.rotulo} label={`MTBF ${g.rotulo}`}>{g.itens.map(it => (
-                  <NativeSelectOption key={it.id} value={it.descricao}>{`${it.descricao} — ${g.rotulo}${it.tipo ? ` · ${it.tipo === 'INTEGRAL' ? 'Integral' : 'Proporcional'}` : ''}`}</NativeSelectOption>))}</optgroup>)}
-              </NativeSelect>
-            </Field>
+            {/* Mais de 100 referencias: campo com busca em vez de lista longa. */}
+            <div className="min-w-0 flex-[1.4]">
+              <SearchSelect label="Referência MTBF" value={i.referencia} options={opcoesMtbf}
+                onChange={valor => setItens(lista => lista.map(x => (x.chave === i.chave ? aplicarReferencia(x, tabela?.itens.find(r => r.descricao === valor), form.categoria) : x)))} />
+            </div>
             <Button variant="ghost" size="icon" aria-label={`Remover item ${n + 1}`} title="Remover item" onClick={() => remover(i.chave)}><Trash2 /></Button>
           </div>
           <div className="reembolso-item">
