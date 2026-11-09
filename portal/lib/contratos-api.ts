@@ -7,9 +7,10 @@ import { dataDeNegocio } from './data-negocio.ts';
 import { isRecord } from './domain.ts';
 import { type ContextoApi, type User } from './api-compartilhada.ts';
 import {
-  CAMPOS_CONTRATO, CAMPOS_FIXOS_ANTIGOS, PARTES_ENDERECO, TemplateInvalido, camposDoTemplate, dataPorExtenso, gerarContrato,
-  montarEndereco, numeroPorExtenso, type CampoContrato, type EnderecoContrato,
+  CAMPOS_CONTRATO, CAMPOS_FIXOS_ANTIGOS, PARTES_ENDERECO, TemplateInvalido, camposDoTemplate, dataPorExtenso, lerContrato,
+  montarEndereco, numeroPorExtenso, type CampoContrato, type ContratoLeitura, type EnderecoContrato,
 } from './contratos.ts';
+import { criarConsultasFornecedor, FalhaConsulta } from './consultas-fornecedor.ts';
 
 // O template contem dados da empresa: mora so na pasta privada do servidor.
 const NOME_TEMPLATE = 'contrato-fornecimento';
@@ -30,8 +31,21 @@ async function lerTemplate(): Promise<Uint8Array | null> {
 
 const nomeArquivo = (texto: string) => texto.normalize('NFD').replace(/\p{M}/gu, '').replace(/[^A-Za-z0-9-]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 60) || 'fornecedor';
 
-export function contratosApi(contexto: ContextoApi) {
-  const { NextResponse, ok, fail, jsonBody, audit } = contexto;
+export function contratosApi(contexto: ContextoApi, consultas = criarConsultasFornecedor()) {
+  const { ok, fail, jsonBody, audit } = contexto;
+
+  // CNPJ -> razao social, endereco e socios (sugestao do responsavel legal).
+  // Nao grava nada: os dados so preenchem a tela, que continua editavel.
+  async function consultarCnpj(user: User, numero: string) {
+    if (!pode(user, 'acordo:consultar-completo')) return fail('Seu perfil não permite gerar contratos.', 403);
+    try {
+      const { dados } = await consultas.cnpj(numero);
+      return ok({
+        razaoSocial: dados.razao_social, situacao: dados.situacao_cadastral, socios: dados.socios ?? [],
+        endereco: { logradouro: dados.logradouro, numero: dados.numero, complemento: dados.complemento, bairro: dados.bairro, cidade: dados.cidade, uf: dados.uf, cep: dados.cep },
+      });
+    } catch (erro) { if (erro instanceof FalhaConsulta) return fail(erro.message, erro.status); throw erro; }
+  }
 
   // Situacao do template para a tela.
   async function preparar(user: User) {
@@ -45,7 +59,9 @@ export function contratosApi(contexto: ContextoApi) {
       const fixos = CAMPOS_FIXOS_ANTIGOS.filter(c => campos.includes(c));
       if (fixos.length) erroTemplate = `No template, tire ou escreva o texto fixo no lugar de ${fixos.map(c => `{{${c}}}`).join(', ')}. O Portal não preenche mais esses campos.`;
     }
-    const resposta: Record<string, unknown> = { template: !!template && !erroTemplate, erroTemplate, campos, hoje: dataDeNegocio() };
+    // Sem {{FORNECEDOR_REPRESENTANTE}} no template o responsavel nao aparece no contrato: a tela avisa.
+    const resposta: Record<string, unknown> = { template: !!template && !erroTemplate, erroTemplate, campos, hoje: dataDeNegocio(),
+      semRepresentante: !!template && !campos.includes('FORNECEDOR_REPRESENTANTE') };
     return ok(resposta);
   }
 
@@ -62,7 +78,7 @@ export function contratosApi(contexto: ContextoApi) {
       const template = await lerTemplate();
       if (!template) return fail('Template do contrato não encontrado na pasta privada do servidor.', 409);
 
-      const editaveis: CampoContrato[] = ['FORNECEDOR_RAZAO_SOCIAL', 'FORNECEDOR_CNPJ'];
+      const editaveis: CampoContrato[] = ['FORNECEDOR_RAZAO_SOCIAL', 'FORNECEDOR_CNPJ', 'FORNECEDOR_REPRESENTANTE'];
       const campos = {} as Record<CampoContrato, string>;
       for (const nome of editaveis) {
         const valor = body.campos[nome];
@@ -86,19 +102,15 @@ export function contratosApi(contexto: ContextoApi) {
       campos.DATA_ASSINATURA = dataExtenso;
       for (const nome of CAMPOS_CONTRATO) if (campos[nome] === undefined) return fail('Campo do contrato ausente.');
 
-      let arquivo: Uint8Array;
-      try { arquivo = gerarContrato(template, campos); }
+      let contrato: ContratoLeitura;
+      try { contrato = lerContrato(template, campos); }
       catch (erro) { if (erro instanceof TemplateInvalido) return fail(erro.message, 409); throw erro; }
       const cnpj = campos.FORNECEDOR_CNPJ.replace(/\D/g, '');
       await audit(user.id, 'EXPORT', 'contrato', cnpj || null, `Contrato de fornecimento gerado: ${campos.FORNECEDOR_RAZAO_SOCIAL} (prazo ${prazo} dias)`);
-      return new NextResponse(Buffer.from(arquivo), { headers: {
-        'cache-control': 'no-store',
-        'content-type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-        'content-disposition': `attachment; filename="Contrato_${nomeArquivo(campos.FORNECEDOR_RAZAO_SOCIAL)}.docx"`,
-        'x-content-type-options': 'nosniff',
-      } });
+      // O nome vira o titulo da pagina e, com ele, o nome sugerido do PDF.
+      return ok({ ...contrato, arquivo: `Contrato_${nomeArquivo(campos.FORNECEDOR_RAZAO_SOCIAL)}` });
     });
   }
 
-  return { preparar, gerar };
+  return { preparar, gerar, consultarCnpj };
 }
