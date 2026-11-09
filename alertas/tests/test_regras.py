@@ -294,7 +294,7 @@ def test_planilha_historica_e_unica_e_contem_coluna_com_acordo(rodar, tmp_path, 
     assert tabela.tableStyleInfo.name == "TableStyleMedium15"
     coluna_cnpj = cabecalhos.index("CNPJ") + 1
     assert ws.cell(2, coluna_cnpj).value == CNPJ
-    assert ws.row_dimensions[1].height == 20
+    assert ws.row_dimensions[1].height == 20.25
     assert ws.sheet_format.defaultRowHeight == 18
     coluna_item = ws.cell(1, cabecalhos.index("Item") + 1).column_letter
     coluna_fornecedor = ws.cell(1, cabecalhos.index("Fornecedor") + 1).column_letter
