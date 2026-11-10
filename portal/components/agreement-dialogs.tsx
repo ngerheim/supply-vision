@@ -65,8 +65,18 @@ export function AgreementDialog({
         ? selected.filter((value) => value !== id)
         : [...selected, id],
     });
+  // Outros CNPJs do mesmo acordo (filiais): cada um atende todas as cidades
+  // do acordo ou so as marcadas.
+  const outros: AnyRow[] = form.cnpjs || [];
+  const cidadesDoAcordo = catalogs.locations.filter((row: AnyRow) => selected.includes(row.id));
+  const fornecedor = (supplierId: string) => catalogs.suppliers.find((row: AnyRow) => row.id === supplierId);
+  const mudarCnpj = (supplierId: string, dados: AnyRow) =>
+    setForm({ ...form, cnpjs: outros.map((c) => (c.supplierId === supplierId ? { ...c, ...dados } : c)) });
+  const cnpjsProntos = outros.every((c) => c.todasCidades !== false || c.locationIds?.some((l: string) => selected.includes(l)));
   const ready =
-    form.number?.trim() && form.supplierId && form.startDate && selected.length;
+    form.number?.trim() && form.supplierId && form.startDate && selected.length && cnpjsProntos;
+  const salvar = () => onSave({ ...form, cnpjs: outros.map((c) => ({ supplierId: c.supplierId, todasCidades: c.todasCidades !== false,
+    locationIds: c.todasCidades === false ? (c.locationIds || []).filter((l: string) => selected.includes(l)) : [] })) });
   return (
     <Dialog open={open} onOpenChange={(next) => !next && !busy && onClose()}>
       <DialogContent
@@ -79,7 +89,7 @@ export function AgreementDialog({
         <form
           onSubmit={(event) => {
             event.preventDefault();
-            if (ready && !busy) onSave(form);
+            if (ready && !busy) salvar();
           }}
         >
           <fieldset disabled={busy} className="space-y-4">
@@ -98,7 +108,7 @@ export function AgreementDialog({
                 disabled={busy}
                 label="Fornecedor / CNPJ *"
                 value={form.supplierId || ''}
-                onChange={(supplierId) => setForm({ ...form, supplierId })}
+                onChange={(supplierId) => setForm({ ...form, supplierId, cnpjs: outros.filter((c) => c.supplierId !== supplierId) })}
                 options={catalogs.suppliers
                   .filter(
                     (row: AnyRow) => row.active || row.id === form.supplierId,
@@ -182,6 +192,57 @@ export function AgreementDialog({
                   </p>
                 )}
               </div>
+            </div>
+            <div className="space-y-2">
+              <p className="text-sm font-medium">Outros CNPJs do fornecedor</p>
+              {outros.map((c) => {
+                const f = fornecedor(c.supplierId);
+                return (
+                  <div key={c.supplierId} className="space-y-2 rounded-xl border p-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-sm">{f ? `${f.tradeName} · ${f.cnpj}` : c.supplierId}</span>
+                      <Button type="button" variant="ghost" size="sm" onClick={() => setForm({ ...form, cnpjs: outros.filter((x) => x.supplierId !== c.supplierId) })}>
+                        Retirar
+                      </Button>
+                    </div>
+                    <div className="flex items-center gap-2 text-sm">
+                      <Checkbox
+                        id={`todas-${c.supplierId}`}
+                        checked={c.todasCidades !== false}
+                        onCheckedChange={(v) => mudarCnpj(c.supplierId, { todasCidades: v === true, locationIds: c.locationIds || [] })}
+                      />
+                      <label htmlFor={`todas-${c.supplierId}`}>Atende todas as cidades do acordo</label>
+                    </div>
+                    {c.todasCidades === false && (
+                      <div className="grid gap-1 sm:grid-cols-2">
+                        {cidadesDoAcordo.map((row: AnyRow) => {
+                          const marcadas: string[] = c.locationIds || [];
+                          return (
+                            <label key={row.id} className="flex items-center gap-2 text-sm">
+                              <Checkbox checked={marcadas.includes(row.id)} onCheckedChange={() => mudarCnpj(c.supplierId, {
+                                locationIds: marcadas.includes(row.id) ? marcadas.filter((l) => l !== row.id) : [...marcadas, row.id] })} />
+                              <span>{row.city} / {row.state}</span>
+                            </label>
+                          );
+                        })}
+                        {!cidadesDoAcordo.length && <p className="text-sm text-muted-foreground">Marque as cidades do acordo acima.</p>}
+                      </div>
+                    )}
+                    {c.todasCidades === false && !c.locationIds?.some((l: string) => selected.includes(l)) && (
+                      <p className="text-sm text-destructive">Marque ao menos uma cidade para este CNPJ.</p>
+                    )}
+                  </div>
+                );
+              })}
+              <SearchSelect
+                disabled={busy}
+                label="Incluir CNPJ"
+                value=""
+                onChange={(supplierId) => supplierId && setForm({ ...form, cnpjs: [...outros, { supplierId, todasCidades: true, locationIds: [] }] })}
+                options={catalogs.suppliers
+                  .filter((row: AnyRow) => row.active && row.id !== form.supplierId && !outros.some((c) => c.supplierId === row.id))
+                  .map((row: AnyRow) => ({ id: row.id, name: `${row.tradeName} · ${row.cnpj}` }))}
+              />
             </div>
             {!catalogs.suppliers.length && (
               <p className="text-sm text-muted-foreground">

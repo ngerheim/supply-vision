@@ -3,6 +3,7 @@ import { comAcaoEscrita } from './autor-escrita.ts';
 import { type ContextoApi, type User } from './api-compartilhada.ts';
 import { auditoriaNoLote } from './auditoria-api.ts';
 import { SITUACAO_EFETIVA_SQL } from './situacao-acordos.ts';
+import { CNPJS_DO_ACORDO_SQL } from './acordos-cnpjs.ts';
 import { dataDeNegocio } from './data-negocio.ts';
 import { inteiroPositivo } from './paginacao.ts';
 import {
@@ -65,7 +66,8 @@ export function redeApi(contexto: ContextoApi) {
       all<FornecedorRow>('SELECT f.* FROM rede_fornecedores f WHERE NOT EXISTS (SELECT 1 FROM rede_exclusoes e WHERE e.codigo=f.codigo)'),
       all<{ codigo: string; segmento: string }>('SELECT codigo,segmento FROM rede_segmentos ORDER BY segmento'),
       all<{ segmento: string }>('SELECT segmento FROM rede_segmentos_excluidos'),
-      all<{ cnpj: string; numero: string }>(`SELECT s.cnpj cnpj, a.number numero FROM agreements a JOIN suppliers s ON s.id=a.supplier_id
+      all<{ cnpj: string; numero: string }>(`SELECT DISTINCT s.cnpj cnpj, a.number numero FROM agreements a JOIN ${CNPJS_DO_ACORDO_SQL} ca ON ca.agreement_id=a.id
+        JOIN suppliers s ON s.id=ca.supplier_id
         WHERE (${SITUACAO_EFETIVA_SQL}) IN ('active','expiring') ORDER BY a.number`, [dataDeNegocio()]),
     ]);
     const fora = new Set(segmentosExcluidos.map(s => s.segmento));

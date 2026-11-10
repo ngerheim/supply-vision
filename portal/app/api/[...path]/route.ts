@@ -158,7 +158,7 @@ const exportacoes = exportacoesApi(contexto);
 const inicializacao = bootstrapApi(contexto, acordos, importacoes);
 
 const { login, logout } = sessao;
-const { agreementDetail, createAgreement, updateAgreement, addAgreementItems, updateItem, deleteItem, deleteAgreement, comTravaDoAcordo, acordoDaCondicao, search, searchOptions, internalAgreements } = acordos;
+const { agreementDetail, createAgreement, updateAgreement, addAgreementItems, updateItem, deleteItem, deleteAgreement, comTravaDoAcordo, acordoDaCondicao, search, searchOptions, internalAgreements, unirAcordos } = acordos;
 const { createCatalog, updateCatalog, deleteCatalog } = catalogos;
 const { mappingList, createMapping, updateMapping, deleteMapping } = mapeamentos;
 const { importWorkbook, importDetail, importList, totalImportacoes } = importacoes;
@@ -496,6 +496,7 @@ async function POSTInterno(request: NextRequest) {
 
   if (parts[0] === 'agreements' && parts.length === 1) return createAgreement(request, user);
   if (parts[0] === 'agreements' && parts[2] === 'items') return comTravaDoAcordo(request, parts[1], () => addAgreementItems(request, user, parts[1]));
+  if (parts[0] === 'agreements' && parts[2] === 'unir' && parts.length === 3) return comTravaDoAcordo(request, parts[1], () => unirAcordos(request, user, parts[1]));
   if (parts[0] === 'catalogs' && parts[1]) return createCatalog(request, user, parts[1]);
   if (parts[0] === 'users') return createUser(request, user);
   if (parts[0] === 'tickets' && parts[1] && parts[2] === 'events') return comTravaDoChamado(request, parts[1], () => addTicketEvent(request, user, parts[1]));

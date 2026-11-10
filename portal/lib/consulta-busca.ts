@@ -26,6 +26,11 @@ export function consultasOpcoesBusca(params: URLSearchParams, hoje: string) {
     // restringir a lista à primeira opção marcada. Os demais campos se cruzam.
     const consulta = consultaBusca(params, hoje, campo);
     const [id, nome] = colunas[campo];
+    // Os outros CNPJs dos acordos encontrados tambem entram na lista de fornecedores.
+    // ?1 (o dia) se repete na segunda copia; so os filtros entram de novo.
+    if (campo === 'supplier') return { campo, sql: `SELECT DISTINCT id,name FROM (SELECT s.id AS id,s.trade_name AS name ${consulta.sql}
+      UNION SELECT s2.id,s2.trade_name FROM agreement_cnpjs ac JOIN suppliers s2 ON s2.id=ac.supplier_id
+      WHERE ac.agreement_id IN (SELECT a.id ${consulta.sql})) ORDER BY name COLLATE NOCASE,id`, values: [...consulta.values, ...consulta.values.slice(1)] };
     return { campo, sql: `SELECT DISTINCT ${id} AS id,${nome} AS name ${consulta.sql} ORDER BY name COLLATE NOCASE,id`, values: consulta.values };
   });
 }

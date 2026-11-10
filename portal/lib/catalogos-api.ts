@@ -22,7 +22,7 @@ export function catalogosApi(contexto: ContextoApi) {
   // exclusao deixaria acordos e condicoes apontando para um registro inexistente,
   // entao o portal explica o que trava e sugere inativar.
   const catalogConfig: Record<string, { table: string; queries: Array<[string, string]> }> = {
-    suppliers: { table: 'suppliers', queries: [['acordo(s)', 'SELECT COUNT(*) n FROM agreements WHERE supplier_id=?']] },
+    suppliers: { table: 'suppliers', queries: [['acordo(s)', 'SELECT COUNT(*) n FROM agreements WHERE supplier_id=?'], ['acordo(s) como outro CNPJ', 'SELECT COUNT(*) n FROM agreement_cnpjs WHERE supplier_id=?']] },
     items: { table: 'catalog_items', queries: [['condição(ões)', 'SELECT COUNT(*) n FROM agreement_items WHERE catalog_item_id=?'], ['baixa(s)', 'SELECT COUNT(*) n FROM baixa_itens WHERE item_id=?'], ['movimento(s) de estoque', 'SELECT COUNT(*) n FROM movimentos_estoque WHERE item_id=?'], ['correspondência(s) de De/Para', 'SELECT COUNT(*) n FROM import_item_mappings WHERE target_id=?']] },
     models: { table: 'vehicle_models', queries: [['condição(ões)', 'SELECT COUNT(*) n FROM agreement_items WHERE vehicle_model_id=?'], ['correspondência(s) de De/Para', 'SELECT COUNT(*) n FROM import_model_mappings WHERE target_id=?']] },
     units: { table: 'units', queries: [['condição(ões)', 'SELECT COUNT(*) n FROM agreement_items WHERE unit_id=?'], ['correspondência(s) de De/Para', 'SELECT COUNT(*) n FROM import_unit_mappings WHERE target_id=?']] },

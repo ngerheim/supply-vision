@@ -22,7 +22,14 @@ export function condicoesBusca(params: URLSearchParams, ignorarCampo?: typeof CA
     totalSelecionado += selected.length;
     if (totalSelecionado > MAX_FILTROS_BUSCA) throw new EntradaInvalida(`Selecione no máximo ${MAX_FILTROS_BUSCA} opções entre os filtros.`);
     if (!selected.length || key === ignorarCampo) continue;
-    conditions.push(`${columns[key]} IN (${selected.map(() => '?').join(',')})`);
+    const marcadores = selected.map(() => '?').join(',');
+    // Fornecedor: o principal do acordo ou qualquer um dos outros CNPJs dele.
+    if (key === 'supplier') {
+      conditions.push(`(s.id IN (${marcadores}) OR EXISTS (SELECT 1 FROM agreement_cnpjs acf WHERE acf.agreement_id=a.id AND acf.supplier_id IN (${marcadores})))`);
+      values.push(...selected, ...selected);
+      continue;
+    }
+    conditions.push(`${columns[key]} IN (${marcadores})`);
     values.push(...selected.map(value => key === 'state' ? value.trim().toUpperCase() : value));
   }
   return { conditions, values };

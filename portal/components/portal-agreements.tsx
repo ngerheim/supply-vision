@@ -8,7 +8,8 @@ import { correspondeSituacaoAcordo } from '@/lib/situacao-acordos';
 import { api, errorText, baixarArquivo } from '@/lib/api';
 import { correspondeBusca } from '@/lib/busca';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Download, Pencil, Plus, Search, Trash2, Upload } from 'lucide-react';
+import { Download, Merge, Pencil, Plus, Search, Trash2, Upload } from 'lucide-react';
+import { UnirAcordosDialog } from './unir-acordos';
 import { Status as PatioStatus } from './status';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -186,7 +187,7 @@ function AgreementTable({ rows, onOpen, title }: JsonData) {
                   <TableCell>
                     <p className="font-medium">{r.supplier}</p>
                     <p className="text-xs text-muted-foreground">
-                      {cnpj(r.cnpj)}
+                      {cnpj(r.cnpj)}{r.extraCnpjs > 0 && ` · +${r.extraCnpjs} ${r.extraCnpjs === 1 ? 'CNPJ' : 'CNPJs'}`}
                     </p>
                   </TableCell>
                   <TableCell className="max-w-72 truncate">
@@ -223,7 +224,8 @@ export function AgreementDetail({
     [q, setQ] = useState(''),
     [loadError, setLoadError] = useState(''),
     [moreBusy, setMoreBusy] = useState(false),
-    [ordem, setOrdem] = useState({ coluna: 0, direcao: 1 });
+    [ordem, setOrdem] = useState({ coluna: 0, direcao: 1 }),
+    [unindo, setUnindo] = useState(false);
   const sortKeys = ['item', 'model', 'location', 'brands', 'unit', 'price'];
   const querySort = `sort=${sortKeys[ordem.coluna]}&direction=${ordem.direcao === 1 ? 'asc' : 'desc'}`;
   const key = `${id}?${querySort}`;
@@ -357,6 +359,7 @@ export function AgreementDetail({
                       supplierId: a.supplier_id,
                       startDate: a.start_date,
                       endDate: a.end_date,
+                      cnpjs: (detail.cnpjs || []).map((c: AnyRow) => ({ supplierId: c.supplierId, todasCidades: c.todasCidades, locationIds: c.locationIds })),
                     })
                   }
                 >
@@ -364,6 +367,9 @@ export function AgreementDetail({
                 </Button>
                 <Button variant="outline" onClick={onImport}>
                   <Upload /> Substituir tabela
+                </Button>
+                <Button variant="outline" disabled={busy} onClick={() => setUnindo(true)}>
+                  <Merge /> Unir com outro acordo
                 </Button>
                 {canDelete && (
                   <Button
@@ -403,6 +409,22 @@ export function AgreementDetail({
         <Info label="Início" value={date(a.start_date)} />
         <Info label="Fim" value={date(a.end_date)} />
       </section>
+      {detail.cnpjs?.length > 0 && (
+        <Card size="sm">
+          <CardContent>
+            <p className="text-xs font-medium text-muted-foreground">Outros CNPJs deste acordo</p>
+            <ul className="mt-1 space-y-1">
+              {detail.cnpjs.map((c: AnyRow) => (
+                <li key={c.cnpj} className="text-sm">
+                  <span className="font-medium">{c.supplier}</span> · {cnpj(c.cnpj)} —{' '}
+                  {c.todasCidades ? 'todas as cidades do acordo' : c.cidades?.length ? c.cidades.join(', ') : <span className="text-destructive">nenhuma cidade (edite o acordo)</span>}
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
+      {unindo && <UnirAcordosDialog acordo={a} revision={detail.revision} busy={busy} run={run} onClose={() => setUnindo(false)} />}
       {a.notes && (
         <Card size="sm">
           <CardContent>

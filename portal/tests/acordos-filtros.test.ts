@@ -13,6 +13,8 @@ void test('lista filtra localidades, fornecedor e condições da versão vigente
       CREATE TABLE suppliers (id TEXT, trade_name TEXT, cnpj TEXT);
       CREATE TABLE locations (id TEXT, city TEXT, state TEXT);
       CREATE TABLE agreement_locations (agreement_id TEXT, location_id TEXT);
+      CREATE TABLE agreement_cnpjs (agreement_id TEXT, supplier_id TEXT, todas_cidades INTEGER);
+      CREATE TABLE agreement_cnpj_locations (agreement_id TEXT, supplier_id TEXT, location_id TEXT);
       CREATE TABLE catalog_items (id TEXT, name TEXT);
       CREATE TABLE vehicle_models (id TEXT, name TEXT);
       CREATE TABLE agreement_items (version_id TEXT, catalog_item_id TEXT, vehicle_model_id TEXT);
