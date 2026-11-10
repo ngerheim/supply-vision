@@ -75,7 +75,7 @@ Abbreviated paths in a cell share the directory of the first file.
 - The launcher shares build/start helpers with the end-to-end fixture, always forces `MODO_ENSAIO=1`, creates a database only on first startup, and binds only to `127.0.0.1`. It starts no supervisor, Alertas or scheduled tasks. Real private roots, installations, the checkout, foreign databases and links/junctions are refused. Recreating requires the demo sentinel and database identity. A per-directory mutex prevents concurrent launch/recreation; cleanup verifies PID, start time and entry point before stopping its own process tree.
 
 ## Versioning
-- `3.0` = a new module or a change in how the Portal is used; `2.x` = a closed set of improvements; `2.9.x` = a fix worth recording. Day-to-day updates get no number.
+- Major (`X.0`) = a new module or a change in how the Portal is used; minor (`X.Y`) = a closed set of improvements; patch (`X.Y.Z`) = a fix worth recording. Day-to-day updates get no number.
 - The version lives in `portal/package.json` and changes in the PR that closes the version. The `vX.Y.Z` tag goes on the `main` commit deployed to the server. `supv status` and the Portal sidebar show it.
 
 ## Changes and validation
@@ -92,7 +92,6 @@ Abbreviated paths in a cell share the directory of the first file.
 - When changing tests or CI, check references in the workflow and in the `scripts/ci/` drivers, including PowerShell names built in loops: `node scripts/ci/verificar-testes.mjs`.
 - In tests, scan HTML by index (as in `portal/tests/csp-nonce-smoke.test.mjs`); CodeQL flags HTML-matching regular expressions.
 
-## Expurgo e cabeçalho de build (2.10)
-- Com EXPURGO_HABILITADO=1, o processo conta os candidatos antes do backup; sem candidatos, registra "nada a expurgar" e não faz backup. Quando houver exclusões, exige backup de rede confirmado. Limpa consultas_cnpj em 7 dias e notificacoes_usuario; notificações lidas vencem em 90 dias e não lidas em 365 dias, ajustáveis por EXPURGO_NOTIFICACOES_NAO_LIDAS_DIAS. A antiga trava "nenhum prazo configurado" deixou de existir.
-- Toda resposta da API (inclusive erros e sem login) envia o cabeçalho x-portal-build com versão e commit. O repositório é público, então isso é aceito. Requisições sem o cabeçalho (scripts) continuam aceitas; com versão diferente a API responde 409 build_desatualizado.
-- Abas abertas em versão anterior à 2.10 não recebem o aviso de atualização na primeira atualização: atualizar fora do expediente.
+## Purge and build header
+- With `EXPURGO_HABILITADO=1`, the purge counts candidates before the backup; with none it logs "nada a expurgar" and takes no backup. Deletions require a confirmed network backup. It clears `consultas_cnpj` after 7 days and `notificacoes_usuario`: read notifications expire after 90 days and unread ones after 365 days (`EXPURGO_NOTIFICACOES_NAO_LIDAS_DIAS`). `audit_logs` and `ticket_events` are never purged.
+- Every API response (errors and unauthenticated ones included) carries `x-portal-build` with version and commit; accepted because the repository is public. Requests without the header (scripts) are accepted; a write with a different build gets `409 build_desatualizado`.

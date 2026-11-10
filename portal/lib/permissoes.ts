@@ -179,11 +179,6 @@ export function pode(usuario: UsuarioPermissao | null | undefined, acao: Acao): 
   return exigencia.some(([area, minimo]) => atende(ajustes[area] ?? nivelPadrao(role, area), minimo));
 }
 
-export function nivelEfetivo(usuario: { role: Role; permissoes?: Permissoes | null }, area: Area): Nivel {
-  if (usuario.role === 'admin') return 'edicao';
-  return usuario.permissoes?.[area] ?? nivelPadrao(usuario.role, area);
-}
-
 // Ajustes que fogem do padrao do perfil; so eles sao gravados.
 export function ajustesDiferentesDoPadrao(role: Role, niveis: Permissoes): Permissoes {
   const resultado: Permissoes = {};

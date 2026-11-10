@@ -12,7 +12,14 @@ export function parametrosBusca(filters: FiltrosBusca) {
   return params;
 }
 
-export function condicoesBusca(params: URLSearchParams, ignorarCampo?: typeof CAMPOS_BUSCA[number]) {
+// Outro CNPJ do acordo (alias) atende a cidade da condicao: todas as cidades
+// do acordo ou a cidade listada para ele. Mesma regra da planilha e do Alertas.
+export const outroCnpjAtendeSql = (alias: string, cidade: string) => `(${alias}.todas_cidades=1 OR EXISTS (SELECT 1 FROM agreement_cnpj_locations acl
+  WHERE acl.agreement_id=${alias}.agreement_id AND acl.supplier_id=${alias}.supplier_id AND acl.location_id=${cidade}))`;
+
+// cidadeDaCondicao: coluna com a cidade de cada preco (Buscar). Sem ela, o
+// filtro vale para o acordo inteiro (lista de Acordos).
+export function condicoesBusca(params: URLSearchParams, ignorarCampo?: typeof CAMPOS_BUSCA[number], cidadeDaCondicao?: string) {
   const conditions: string[] = [], values: string[] = [];
   let totalSelecionado = 0;
   const columns = { state: 'l.state', location: 'l.id', item: 'ci.id', model: 'vm.id', supplier: 's.id' };
@@ -25,7 +32,7 @@ export function condicoesBusca(params: URLSearchParams, ignorarCampo?: typeof CA
     const marcadores = selected.map(() => '?').join(',');
     // Fornecedor: o principal do acordo ou qualquer um dos outros CNPJs dele.
     if (key === 'supplier') {
-      conditions.push(`(s.id IN (${marcadores}) OR EXISTS (SELECT 1 FROM agreement_cnpjs acf WHERE acf.agreement_id=a.id AND acf.supplier_id IN (${marcadores})))`);
+      conditions.push(`(s.id IN (${marcadores}) OR EXISTS (SELECT 1 FROM agreement_cnpjs acf WHERE acf.agreement_id=a.id AND acf.supplier_id IN (${marcadores})${cidadeDaCondicao ? ` AND ${outroCnpjAtendeSql('acf', cidadeDaCondicao)}` : ''}))`);
       values.push(...selected, ...selected);
       continue;
     }

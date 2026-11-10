@@ -1,8 +1,8 @@
-import { CAMPOS_BUSCA, condicoesBusca } from './filtros-busca.ts';
+import { CAMPOS_BUSCA, condicoesBusca, outroCnpjAtendeSql } from './filtros-busca.ts';
 
 // Busca e opções precisam usar a mesma versão e as mesmas regras de vigência.
 export function consultaBusca(params: URLSearchParams, hoje: string, ignorarCampo?: typeof CAMPOS_BUSCA[number]) {
-  const filtros = condicoesBusca(params, ignorarCampo);
+  const filtros = condicoesBusca(params, ignorarCampo, 'ai.location_id');
   const conditions = [
     "a.status='active'", 'date(a.start_date)<=date(?1)',
     '(a.end_date IS NULL OR date(a.end_date)>=date(?1))', ...filtros.conditions,
@@ -26,11 +26,12 @@ export function consultasOpcoesBusca(params: URLSearchParams, hoje: string) {
     // restringir a lista à primeira opção marcada. Os demais campos se cruzam.
     const consulta = consultaBusca(params, hoje, campo);
     const [id, nome] = colunas[campo];
-    // Os outros CNPJs dos acordos encontrados tambem entram na lista de fornecedores.
+    // Os outros CNPJs dos acordos encontrados tambem entram na lista de
+    // fornecedores, desde que atendam a cidade de algum preco encontrado.
     // ?1 (o dia) se repete na segunda copia; so os filtros entram de novo.
     if (campo === 'supplier') return { campo, sql: `SELECT DISTINCT id,name FROM (SELECT s.id AS id,s.trade_name AS name ${consulta.sql}
       UNION SELECT s2.id,s2.trade_name FROM agreement_cnpjs ac JOIN suppliers s2 ON s2.id=ac.supplier_id
-      WHERE ac.agreement_id IN (SELECT a.id ${consulta.sql})) ORDER BY name COLLATE NOCASE,id`, values: [...consulta.values, ...consulta.values.slice(1)] };
+      WHERE EXISTS (SELECT 1 ${consulta.sql} AND a.id=ac.agreement_id AND ${outroCnpjAtendeSql('ac', 'ai.location_id')})) ORDER BY name COLLATE NOCASE,id`, values: [...consulta.values, ...consulta.values.slice(1)] };
     return { campo, sql: `SELECT DISTINCT ${id} AS id,${nome} AS name ${consulta.sql} ORDER BY name COLLATE NOCASE,id`, values: consulta.values };
   });
 }

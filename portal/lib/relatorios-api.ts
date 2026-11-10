@@ -132,7 +132,7 @@ export async function solicitarRelatorio(body: unknown, userId: string) {
     .first<{ heartbeatAt: string }>();
   if (!runner || Date.now() - Date.parse(runner.heartbeatAt) >= 30_000)
     return resposta(
-      { error: 'Inicie a operação na central para habilitar os relatórios.' },
+      { error: 'Inicie a operação no servidor (supv iniciar) para habilitar os relatórios.' },
       503,
     );
   const jobId = id('rpt'),
