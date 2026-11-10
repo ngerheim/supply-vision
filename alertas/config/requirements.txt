@@ -5,7 +5,7 @@
 # mudou a altura das linhas). O Dependabot propoe as atualizacoes,
 # respeitando a carencia configurada.
 websocket-client==1.9.2
-pandas==3.0.6
+pandas==3.1.0
 numpy==2.5.4
 openpyxl==3.1.5
-xlsxwriter==3.2.9
+xlsxwriter==3.3.0
