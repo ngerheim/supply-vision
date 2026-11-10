@@ -82,10 +82,14 @@ void test('acordo com varios CNPJs: cadastro, Alertas, busca, abrangencia, exclu
   const detalhe = (await pedir('GET', `agreements/${a}`)).data;
   assert.deepEqual(detalhe.cnpjs.map(c => [c.supplierId, c.todasCidades, c.locationIds, c.cidades]), [['f2', false, ['l1'], ['Cidade A/MG']]]);
   assert.deepEqual((await pedir('GET', 'agreements?supplier=f2')).data.agreements.map(r => [r.id, r.extraCnpjs]), [[a, 1]]);
+  // Na Buscar o outro CNPJ so vale nas cidades que atende, como no Alertas.
   const busca = (await pedir('GET', 'search?supplier=f2')).data;
-  assert.equal(busca.rows.length, 2);
-  assert.ok(busca.rows.every(r => r.extraCnpjs === 1 && r.supplier === 'Matriz Ficticia'));
+  assert.deepEqual(busca.rows.map(r => [r.city, r.extraCnpjs, r.supplier]), [['Cidade A', 1, 'Matriz Ficticia']]);
+  assert.deepEqual((await pedir('GET', 'search')).data.rows.map(r => [r.city, r.extraCnpjs]), [['Cidade A', 1], ['Cidade B', 0]]);
+  assert.deepEqual((await pedir('GET', 'search?supplier=f2&location=l2')).data.rows, []);
   assert.ok((await pedir('GET', 'search/options')).data.options.supplier.some(o => o.id === 'f2'));
+  assert.ok(!(await pedir('GET', 'search/options?location=l2')).data.options.supplier.some(o => o.id === 'f2'));
+  assert.ok((await pedir('GET', 'search/options?location=l1')).data.options.supplier.some(o => o.id === 'f2'));
   assert.ok((await pedir('GET', 'agreements/options')).data.options.supplier.some(o => o.id === 'f2'));
 
   // Tirar a unica cidade do CNPJ adicional e recusado; a tela antiga (sem a lista) tambem.

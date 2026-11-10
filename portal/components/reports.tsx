@@ -260,7 +260,7 @@ export function Reports() {
       )}
       {!online && loaded && !loadError && (
         <output className="block rounded-lg border p-3 text-sm">
-          Inicie a operação na central para executar e baixar relatórios.
+          Inicie a operação no servidor (supv iniciar) para executar e baixar relatórios.
         </output>
       )}
       {(error || loadError || logError) && (

@@ -11,13 +11,11 @@ export function isValidState(value: unknown) {
 // data de fim da vigencia, para que um acordo nunca fique marcado como vigente
 // com a data ja vencida.
 export const AGREEMENT_STATUSES = ['active', 'suspended'] as const;
-export type AgreementStatus = (typeof AGREEMENT_STATUSES)[number];
 
 export const TICKET_STATUSES = ['aberto', 'aguardando_fornecedor', 'fechado', 'cancelado'] as const;
 export type TicketStatus = (typeof TICKET_STATUSES)[number];
 
 export const TICKET_PRIORITIES = ['alta', 'media', 'baixa'] as const;
-export type TicketPriority = (typeof TICKET_PRIORITIES)[number];
 
 export const MAX_IMPORT_BYTES = 2 * 1024 * 1024;
 export const MAX_IMPORT_ROWS = 1_000;

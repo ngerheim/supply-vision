@@ -1,4 +1,4 @@
-import { CAMPOS_BUSCA, condicoesBusca } from './filtros-busca.ts';
+import { CAMPOS_BUSCA, condicoesBusca, outroCnpjAtendeSql } from './filtros-busca.ts';
 import { pode } from './permissoes.ts';
 import { consultaBusca, consultasOpcoesBusca } from './consulta-busca.ts';
 import { dataDeNegocio } from './data-negocio.ts';
@@ -498,7 +498,7 @@ export function acordosApi(contexto: ContextoApi) {
     const limit = 1000;
     const rows = await all(`SELECT ai.id,ci.name AS item,vm.name AS model,ai.price,ai.courtesy,un.code AS unit,ai.brands_text AS brands,
     l.city,l.state,s.trade_name AS supplier,s.cnpj,a.id AS agreementId,a.number,a.end_date AS endDate,
-    (SELECT COUNT(*) FROM agreement_cnpjs ac WHERE ac.agreement_id=a.id) AS extraCnpjs
+    (SELECT COUNT(*) FROM agreement_cnpjs ac WHERE ac.agreement_id=a.id AND ${outroCnpjAtendeSql('ac', 'ai.location_id')}) AS extraCnpjs
     ${sql} ORDER BY ci.name,vm.name,l.city,ai.price LIMIT ${limit}`, values);
     return ok({ rows, total, truncated: total > rows.length, limit });
   }
@@ -575,7 +575,7 @@ export function acordosApi(contexto: ContextoApi) {
       if (body.confirmar !== true) return ok(resumo);
       if (motivo) return fail(motivo, 409);
       if (!revisaoConfere(body.outroRevision, outro.revision)) return fail('O outro acordo foi alterado depois da comparação. Compare de novo antes de unir.', 409);
-      const timestamp = now(), dia = timestamp.slice(0, 10).split('-').reverse().join('/');
+      const timestamp = now(), dia = dataDeNegocio().split('-').reverse().join('/');
       const lista: CnpjAcordo[] = [...cnpjsEste.map(c => novos.get(c.supplierId) ?? { supplierId: c.supplierId, todasCidades: c.todasCidades, locationIds: c.locationIds }),
         ...[...novos.values()].filter(c => !atuais.has(c.supplierId))].map(({ supplierId, todasCidades, locationIds }) => ({ supplierId, todasCidades, locationIds }));
       const nota = `Unido ao acordo ${este.number} em ${dia}: os CNPJs deste acordo passaram para ele.`;
