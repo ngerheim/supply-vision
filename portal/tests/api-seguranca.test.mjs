@@ -186,7 +186,7 @@ void test('ordenacao de acordo usa somente colunas proprias da lista fechada', a
   const consultas = [];
   const api = acordosApi(contexto({ rawDb: () => ({
     prepare(sql) { consultas.push(sql); return { bind() { return this; } }; },
-    async batch() { return [{ results: [{ id: 'outro', totalItems: 0 }] }, ...Array.from({ length: 3 }, () => ({ results: [] }))]; },
+    async batch() { return [{ results: [{ id: 'outro', totalItems: 0 }] }, ...Array.from({ length: 4 }, () => ({ results: [] }))]; },
   }) }));
   for (const sort of ['constructor', 'toString', '__proto__', 'inexistente', 'price']) {
     consultas.length = 0;

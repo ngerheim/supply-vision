@@ -342,10 +342,12 @@ export function cnpjComparavel(valor: unknown) {
   const digitos=normalizeCnpj(valor);
   return digitos && digitos.length<=14 ? digitos.padStart(14,'0') : digitos;
 }
-export function validarFornecedorImportacao(rows: ImportRow[], fornecedor: {cnpj:string;tradeName:string;legalName:string}) {
-  const nomes=new Set([fornecedor.tradeName,fornecedor.legalName].map(normalizeImportText));
+// Vale qualquer CNPJ do acordo: o principal ou um dos outros CNPJs.
+export function validarFornecedorImportacao(rows: ImportRow[], fornecedores: {cnpj:string;tradeName:string;legalName:string}[]) {
+  const nomes=new Set(fornecedores.flatMap(f=>[f.tradeName,f.legalName]).map(normalizeImportText));
+  const cnpjs=new Set(fornecedores.map(f=>cnpjComparavel(f.cnpj)));
   for(const row of rows){
-    const erro=row.hasCnpj ? !row.cnpj ? 'CNPJ não informado. Preencha o CNPJ do fornecedor do acordo ou remova a coluna.' : cnpjComparavel(row.cnpj)!==cnpjComparavel(fornecedor.cnpj) ? 'O CNPJ da linha não corresponde ao fornecedor do acordo de destino.' : '' : row.hasSupplier && !nomes.has(row.supplier) ? 'O fornecedor da linha não corresponde ao fornecedor do acordo de destino.' : '';
+    const erro=row.hasCnpj ? !row.cnpj ? 'CNPJ não informado. Preencha o CNPJ do fornecedor do acordo ou remova a coluna.' : !cnpjs.has(cnpjComparavel(row.cnpj)) ? 'O CNPJ da linha não corresponde a nenhum CNPJ do acordo de destino.' : '' : row.hasSupplier && !nomes.has(row.supplier) ? 'O fornecedor da linha não corresponde ao fornecedor do acordo de destino.' : '';
     if(erro){row.issues.push({campo:row.hasCnpj?'CNPJ':'FORNECEDOR',valor:row.hasCnpj?row.cnpj||'(vazio)':row.supplier,erro});row.error=row.issues[0]?.erro||'';}
   }
 }

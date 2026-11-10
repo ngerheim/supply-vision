@@ -7,6 +7,7 @@ import { errorMessage, MAX_IMPORT_BYTES, safeFilename, normalizeImportText } fro
 import { type ContextoApi, type User, type Row } from './api-compartilhada.ts';
 import { TravaPerdida, revisaoConfere } from './controle-escrita.ts';
 import { impressaoPlanoImportacao, valoresItemImportado } from './plano-importacao.ts';
+import { CNPJS_DO_ACORDO_SQL } from './acordos-cnpjs.ts';
 
 export function importacoesApi(contexto: ContextoApi, acordos: Pick<ReturnType<typeof import('./acordos-api.ts').acordosApi>, 'travarAcordo' | 'soltarAcordo'>) {
   const { id, now, rawDb, TRAVA_IMPORTACAO, adquirirTrava, renovarTrava, liberarTrava, ok, fail, CorpoGrandeDemais, all, first } = contexto;
@@ -85,9 +86,9 @@ export function importacoesApi(contexto: ContextoApi, acordos: Pick<ReturnType<t
       const ausentes = colunasAusentes(sourceRows[0]);
       if (ausentes.length) throw new EntradaInvalida(`A planilha não tem ${ausentes.length === 1 ? 'a coluna' : 'as colunas'} ${ausentes.join(', ')}. Confira o cabeçalho da primeira aba.`);
       const parsed = sourceRows.map((row, index) => parseImportRow(row, leitura.numerosLinhas[index]));
-      const fornecedor=await first<{cnpj:string;tradeName:string;legalName:string}>('SELECT s.cnpj,s.trade_name AS tradeName,s.legal_name AS legalName FROM agreements a JOIN suppliers s ON s.id=a.supplier_id WHERE a.id=?',[agreementId]);
-      if(!fornecedor)throw new EntradaInvalida('Acordo de destino não encontrado.');
-      validarFornecedorImportacao(parsed,fornecedor);
+      const fornecedores=await all<{cnpj:string;tradeName:string;legalName:string}>(`SELECT s.cnpj,s.trade_name AS tradeName,s.legal_name AS legalName FROM ${CNPJS_DO_ACORDO_SQL} ca JOIN suppliers s ON s.id=ca.supplier_id WHERE ca.agreement_id=?`,[agreementId]);
+      if(!fornecedores.length)throw new EntradaInvalida('Acordo de destino não encontrado.');
+      validarFornecedorImportacao(parsed,fornecedores);
       const sourceErrors = parsed.some(row => row.error);
       await applyImportMappings(parsed);
       const errors = parsed.filter((r) => r.error);
@@ -170,9 +171,9 @@ export function importacoesApi(contexto: ContextoApi, acordos: Pick<ReturnType<t
 
   async function processAgreementImport(rows: ReturnType<typeof parseImportRow>[], user: User, importId: string, agreementId: string, publish: PublishImport) {
     const agreement = await first<{id:string;number:string}>('SELECT id,number FROM agreements WHERE id=?',[agreementId]); if(!agreement) throw new EntradaInvalida('Acordo não encontrado');
-    const fornecedor=await first<{cnpj:string;tradeName:string;legalName:string}>('SELECT s.cnpj,s.trade_name AS tradeName,s.legal_name AS legalName FROM agreements a JOIN suppliers s ON s.id=a.supplier_id WHERE a.id=?',[agreementId]);
-    if(!fornecedor)throw new EntradaInvalida('Fornecedor de destino não encontrado.');
-    validarFornecedorImportacao(rows,fornecedor);
+    const fornecedores=await all<{cnpj:string;tradeName:string;legalName:string}>(`SELECT s.cnpj,s.trade_name AS tradeName,s.legal_name AS legalName FROM ${CNPJS_DO_ACORDO_SQL} ca JOIN suppliers s ON s.id=ca.supplier_id WHERE ca.agreement_id=?`,[agreementId]);
+    if(!fornecedores.length)throw new EntradaInvalida('Fornecedor de destino não encontrado.');
+    validarFornecedorImportacao(rows,fornecedores);
     if(rows.some(row=>row.error))throw new EntradaInvalida('O fornecedor do acordo mudou durante a conferência. Confira a planilha novamente.');
     const db=rawDb(), timestamp=now();
     const max=await first<{n:number}>('SELECT COALESCE(MAX(version_number),0) n FROM agreement_versions WHERE agreement_id=?',[agreementId]);
@@ -184,6 +185,8 @@ export function importacoesApi(contexto: ContextoApi, acordos: Pick<ReturnType<t
     return publish([
       db.prepare('DELETE FROM agreement_locations WHERE agreement_id=?').bind(agreementId),
       ...Array.from(links.keys()).map((locationId)=>db.prepare('INSERT INTO agreement_locations (agreement_id,location_id) VALUES (?,?)').bind(agreementId,locationId)),
+      // Cidade que saiu do acordo sai tambem dos outros CNPJs.
+      db.prepare('DELETE FROM agreement_cnpj_locations WHERE agreement_id=? AND location_id NOT IN (SELECT location_id FROM agreement_locations WHERE agreement_id=?)').bind(agreementId,agreementId),
       db.prepare('UPDATE agreements SET current_version_id=?,updated_at=? WHERE id=?').bind(versionId,timestamp,agreementId),
       db.prepare(`UPDATE agreement_versions SET status='published',published_at=? WHERE id=?`).bind(timestamp,versionId),
     ], { agreement: agreement.number, version: versionNumber });

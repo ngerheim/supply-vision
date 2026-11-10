@@ -11,6 +11,8 @@ export const CONSULTAS_EXPORTACAO = {
   units: 'SELECT * FROM units ORDER BY code',
   agreements: 'SELECT * FROM agreements ORDER BY created_at',
   agreementLocations: 'SELECT * FROM agreement_locations',
+  agreementCnpjs: 'SELECT * FROM agreement_cnpjs ORDER BY agreement_id,supplier_id',
+  agreementCnpjLocations: 'SELECT * FROM agreement_cnpj_locations ORDER BY agreement_id,supplier_id,location_id',
   imports: 'SELECT * FROM imports ORDER BY created_at',
   agreementVersions: "SELECT * FROM agreement_versions WHERE status='published' ORDER BY agreement_id,version_number",
   agreementItems: "SELECT * FROM agreement_items WHERE version_id IN (SELECT id FROM agreement_versions WHERE status='published') ORDER BY version_id,created_at",

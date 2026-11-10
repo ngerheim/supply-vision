@@ -1,6 +1,7 @@
 import { exportarTabelas } from './exportacao-snapshot.ts';
 import { dataDeNegocio } from './data-negocio.ts';
 import { SITUACAO_EFETIVA_SQL } from './situacao-acordos.ts';
+import { CNPJS_DO_ACORDO_SQL, atendeCidadeSql } from './acordos-cnpjs.ts';
 import * as XLSX from 'xlsx';
 import { type ContextoApi, type User } from './api-compartilhada.ts';
 
@@ -30,8 +31,9 @@ export function exportacoesApi(contexto: ContextoApi) {
     const rows=await all<{modelo:string;item:string;cidade:string;uf:string;cnpj:string;preco:number;fornecedor:string;medida:string;marcas:string|null;inicio:string;fim:string|null;status:string;effectiveStatus:string}>(`SELECT
     vm.name modelo,ci.name item,l.city cidade,l.state uf,s.cnpj,ai.price preco,s.trade_name fornecedor,
     un.code medida,ai.brands_text marcas,a.start_date inicio,a.end_date fim,a.status,${SITUACAO_EFETIVA_SQL} AS effectiveStatus
-    FROM agreements a JOIN suppliers s ON s.id=a.supplier_id
-    JOIN agreement_items ai ON ai.version_id=a.current_version_id
+    FROM agreements a JOIN agreement_items ai ON ai.version_id=a.current_version_id
+    JOIN ${CNPJS_DO_ACORDO_SQL} ca ON ca.agreement_id=a.id AND ${atendeCidadeSql('ca', 'ai.location_id')}
+    JOIN suppliers s ON s.id=ca.supplier_id
     JOIN catalog_items ci ON ci.id=ai.catalog_item_id JOIN vehicle_models vm ON vm.id=ai.vehicle_model_id
     JOIN units un ON un.id=ai.unit_id JOIN locations l ON l.id=ai.location_id
     ORDER BY s.trade_name,vm.name,ci.name,l.state,l.city,ai.id`,[dataDeNegocio()]);

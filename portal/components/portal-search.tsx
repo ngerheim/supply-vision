@@ -149,7 +149,7 @@ export function SearchPage({
                     </TableCell>
                     <TableCell>{r.model}</TableCell>
                     <TableCell>
-                      <p className="font-medium">{r.supplier}</p>
+                      <p className="font-medium">{r.supplier}{r.extraCnpjs > 0 && <span className="text-xs font-normal text-muted-foreground">{` +${r.extraCnpjs} ${r.extraCnpjs === 1 ? 'CNPJ' : 'CNPJs'}`}</span>}</p>
                       <button
                         className="text-xs text-link"
                         onClick={() => openAgreement(r.agreementId)}

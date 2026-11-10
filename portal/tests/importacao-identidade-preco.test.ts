@@ -24,14 +24,27 @@ void test('identidade do fornecedor opcional deve coincidir quando informada', (
   const destino = { cnpj: cnpjDestino, tradeName: 'Oficina Ficticia', legalName: 'Oficina Ficticia Ltda' };
   for (const extra of [{}, { CNPJ: '06.391.842/0001-06' }, { FORNECEDOR: 'oficina ficticia ltda' }, { CNPJ: destino.cnpj, FORNECEDOR: 'Nome alternativo ficticio' }]) {
     const row = parseImportRow({ ...linha, ...extra }, 2);
-    validarFornecedorImportacao([row], destino);
+    validarFornecedorImportacao([row], [destino]);
     assert.equal(row.error, '');
   }
   for (const extra of [{ CNPJ: '' }, { CNPJ: cnpjOutro }, { FORNECEDOR: 'Outra Ficticia' }, { FORNECEDOR: '' }]) {
     const row = parseImportRow({ ...linha, ...extra }, 2);
-    validarFornecedorImportacao([row], destino);
+    validarFornecedorImportacao([row], [destino]);
     assert.match(row.error, /não informado|não corresponde/);
   }
+});
+
+void test('acordo com varios CNPJs aceita qualquer CNPJ ou nome do acordo', () => {
+  const principal = { cnpj: cnpjDestino, tradeName: 'Oficina Ficticia', legalName: 'Oficina Ficticia Ltda' };
+  const filial = { cnpj: cnpjOutro, tradeName: 'Oficina Ficticia Filial', legalName: 'Oficina Ficticia Filial Ltda' };
+  for (const extra of [{ CNPJ: cnpjOutro }, { CNPJ: cnpjDestino }, { FORNECEDOR: 'oficina ficticia filial' }]) {
+    const row = parseImportRow({ ...linha, ...extra }, 2);
+    validarFornecedorImportacao([row], [principal, filial]);
+    assert.equal(row.error, '');
+  }
+  const row = parseImportRow({ ...linha, CNPJ: cnpjOutro }, 2);
+  validarFornecedorImportacao([row], [principal]);
+  assert.match(row.error, /não corresponde a nenhum CNPJ/);
 });
 
 void test('CNPJ numerico recupera zero inicial e celulas vazias tem motivo proprio', () => {
@@ -41,13 +54,13 @@ void test('CNPJ numerico recupera zero inicial e celulas vazias tem motivo propr
   const destino = { cnpj: cnpjZeroInicial, tradeName: 'Oficina Ficticia', legalName: 'Oficina Ficticia Ltda' };
   for (const CNPJ of [cnpjZeroInicial, '09.364.728/0001-77', Number(cnpjZeroInicial), String(Number(cnpjZeroInicial))]) {
     const row = parseImportRow({ ...linha, CNPJ }, 2);
-    validarFornecedorImportacao([row], destino);
+    validarFornecedorImportacao([row], [destino]);
     assert.equal(row.error, '');
     assert.equal(row.cnpj.padStart(14, '0'), cnpjZeroInicial);
   }
   for (const CNPJ of ['', Number(cnpjOutro)]) {
     const row = parseImportRow({ ...linha, CNPJ }, 2);
-    validarFornecedorImportacao([row], destino);
+    validarFornecedorImportacao([row], [destino]);
     assert.match(row.error, CNPJ === '' ? /CNPJ não informado/ : /não corresponde/);
     if (CNPJ === '') assert.equal(row.issues.at(-1)?.valor, '(vazio)');
   }

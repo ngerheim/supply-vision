@@ -9,6 +9,7 @@ import { AGREEMENT_STATUSES, errorMessage, isOneOf, isValidDateRange, toNonNegat
 import { type ContextoApi, type User, type Row, textValue, nullableText, stringList } from './api-compartilhada.ts';
 import { revisaoConfere } from './controle-escrita.ts';
 import { auditoriaNoLote } from './auditoria-api.ts';
+import { CNPJS_DO_ACORDO_SQL, atendeCidadeSql, compararCondicoes, descreverCnpjs, validarCnpjsAcordo, type CnpjAcordo } from './acordos-cnpjs.ts';
 
 export function acordosApi(contexto: ContextoApi) {
   const { id, now, rawDb, adquirirTrava, liberarTrava, ok, fail, jsonBody, all, first } = contexto;
@@ -22,6 +23,7 @@ export function acordosApi(contexto: ContextoApi) {
     endDate?: unknown;
     notes?: unknown;
     locationIds?: unknown;
+    cnpjs?: unknown;
   };
 
   type AgreementItemInput = {
@@ -64,6 +66,49 @@ export function acordosApi(contexto: ContextoApi) {
     if (locationIds.length > LIMITE_LISTA) return { error: `O acordo tem ${locationIds.length} localidades, acima do limite de ${LIMITE_LISTA}.` };
     if (!locationIds.length) return { error: 'Selecione pelo menos uma localidade.' };
     return { value: { number, supplierId, status, startDate, endDate, notes: nullableText(body.notes), locationIds } };
+  }
+
+  // Outros CNPJs do acordo, com as cidades de cada um (vazio = todas).
+  type LinhaCnpj = { supplierId: string; supplier: string; legalName: string; cnpj: string; active: number; todasCidades: number; locationIds: string | null; cidades: string | null };
+  const CNPJS_SQL = `SELECT ac.supplier_id AS supplierId,s.trade_name AS supplier,s.legal_name AS legalName,s.cnpj,s.active,ac.todas_cidades AS todasCidades,
+        (SELECT json_group_array(acl.location_id) FROM agreement_cnpj_locations acl WHERE acl.agreement_id=ac.agreement_id AND acl.supplier_id=ac.supplier_id) AS locationIds,
+        (SELECT GROUP_CONCAT(l.city || '/' || l.state, ', ') FROM agreement_cnpj_locations acl JOIN locations l ON l.id=acl.location_id
+          WHERE acl.agreement_id=ac.agreement_id AND acl.supplier_id=ac.supplier_id) AS cidades
+      FROM agreement_cnpjs ac JOIN suppliers s ON s.id=ac.supplier_id WHERE ac.agreement_id=? ORDER BY s.trade_name,s.cnpj`;
+  const lerCnpjs = (linhas: LinhaCnpj[]) => linhas.map(l => ({ ...l, todasCidades: l.todasCidades === 1, locationIds: l.todasCidades === 1 ? [] : (JSON.parse(l.locationIds || '[]') as string[]).sort(),
+    cidades: l.todasCidades === 1 ? [] : String(l.cidades || '').split(', ').filter(Boolean).sort() }));
+  async function cnpjsDoAcordo(agreementId: string) {
+    return lerCnpjs(await all<LinhaCnpj>(CNPJS_SQL, [agreementId]));
+  }
+
+  // Fornecedor novo entre os outros CNPJs precisa estar ativo; o que ja estava
+  // no acordo continua aceito mesmo inativo (como o fornecedor principal).
+  async function conferirFornecedoresCnpjs(lista: CnpjAcordo[], jaNoAcordo: Set<string>) {
+    if (!lista.length) return null;
+    const achados = await all<{ id: string; active: number }>(`SELECT id,active FROM suppliers WHERE id IN (${lista.map(() => '?').join(',')})`, lista.map(c => c.supplierId));
+    const porId = new Map(achados.map(f => [f.id, f.active]));
+    for (const c of lista) {
+      if (!porId.has(c.supplierId)) return 'Um dos outros CNPJs não está cadastrado.';
+      if (porId.get(c.supplierId) !== 1 && !jaNoAcordo.has(c.supplierId)) return 'Um dos outros CNPJs está inativo no cadastro.';
+    }
+    return null;
+  }
+
+  const gravarCnpjs = (agreementId: string, lista: CnpjAcordo[], timestamp: string) => [
+    rawDb().prepare('DELETE FROM agreement_cnpj_locations WHERE agreement_id=?').bind(agreementId),
+    rawDb().prepare('DELETE FROM agreement_cnpjs WHERE agreement_id=?').bind(agreementId),
+    ...lista.flatMap(c => [
+      rawDb().prepare('INSERT INTO agreement_cnpjs (agreement_id,supplier_id,todas_cidades,created_at) VALUES (?,?,?,?)').bind(agreementId, c.supplierId, c.todasCidades ? 1 : 0, timestamp),
+      ...c.locationIds.map(l => rawDb().prepare('INSERT INTO agreement_cnpj_locations (agreement_id,supplier_id,location_id) VALUES (?,?,?)').bind(agreementId, c.supplierId, l)),
+    ]),
+  ];
+
+  async function descricaoCnpjs(lista: CnpjAcordo[]) {
+    if (!lista.length) return descreverCnpjs([]);
+    const ids = [...new Set(lista.map(c => c.supplierId))], locais = [...new Set(lista.flatMap(c => c.locationIds))];
+    const nomes = new Map((await all<{ id: string; nome: string }>(`SELECT id,trade_name || ' (' || cnpj || ')' AS nome FROM suppliers WHERE id IN (${ids.map(() => '?').join(',')})`, ids)).map(r => [r.id, r.nome]));
+    const cidades = locais.length ? new Map((await all<{ id: string; nome: string }>(`SELECT id,city || '/' || state AS nome FROM locations WHERE id IN (${locais.map(() => '?').join(',')})`, locais)).map(r => [r.id, r.nome])) : new Map<string, string>();
+    return descreverCnpjs(lista.map(c => ({ supplier: nomes.get(c.supplierId) || c.supplierId, todasCidades: c.todasCidades, cidades: c.locationIds.map(l => cidades.get(l) || l).sort() })));
   }
 
   async function deleteItem(user: User, itemId: string, expectedRevision: number | null) {
@@ -128,6 +173,8 @@ export function acordosApi(contexto: ContextoApi) {
       db.prepare('DELETE FROM agreement_items WHERE version_id IN (SELECT id FROM agreement_versions WHERE agreement_id=?)').bind(agreementId),
       db.prepare('DELETE FROM agreement_versions WHERE agreement_id=?').bind(agreementId),
       db.prepare('DELETE FROM agreement_locations WHERE agreement_id=?').bind(agreementId),
+      db.prepare('DELETE FROM agreement_cnpj_locations WHERE agreement_id=?').bind(agreementId),
+      db.prepare('DELETE FROM agreement_cnpjs WHERE agreement_id=?').bind(agreementId),
       // Independentes: perdem o vinculo, nao a existencia.
       db.prepare('UPDATE imports SET agreement_id=NULL WHERE agreement_id=?').bind(agreementId),
       db.prepare('UPDATE tickets SET agreement_id=NULL WHERE agreement_id=?').bind(agreementId),
@@ -148,7 +195,7 @@ export function acordosApi(contexto: ContextoApi) {
       const selected = filtros.values.slice(offset, offset + count);
       offset += count;
       if (condition.startsWith('l.')) locais.push(condition);
-      else if (condition.startsWith('s.')) conditions.push(condition);
+      else if (condition.startsWith('s.') || condition.startsWith('(s.')) conditions.push(condition);
       else itens.push(condition);
       values.push(...selected);
     }
@@ -169,6 +216,7 @@ export function acordosApi(contexto: ContextoApi) {
     return all(`SELECT a.id,a.number,a.status,a.start_date AS startDate,a.end_date AS endDate,a.updated_at AS updatedAt,
     ${SITUACAO_EFETIVA_SQL} AS effectiveStatus,
     s.trade_name AS supplier,s.cnpj,
+    (SELECT COUNT(*) FROM agreement_cnpjs ac WHERE ac.agreement_id=a.id) AS extraCnpjs,
     (SELECT COUNT(*) FROM agreement_locations al WHERE al.agreement_id=a.id) AS locationCount,
     (SELECT COUNT(*) FROM agreement_items ai WHERE ai.version_id=a.current_version_id) AS itemCount,
     (SELECT GROUP_CONCAT(l.city || ' / ' || l.state) FROM agreement_locations al JOIN locations l ON l.id=al.location_id WHERE al.agreement_id=a.id) AS locations
@@ -186,8 +234,8 @@ export function acordosApi(contexto: ContextoApi) {
         FROM agreement_locations al JOIN locations l ON l.id=al.location_id
         WHERE al.agreement_id IN (SELECT value FROM json_each(?))`,
       supplier: `SELECT DISTINCT s.id AS id,s.trade_name AS name
-        FROM agreements a JOIN suppliers s ON s.id=a.supplier_id
-        WHERE a.id IN (SELECT value FROM json_each(?))`,
+        FROM ${CNPJS_DO_ACORDO_SQL} ca JOIN suppliers s ON s.id=ca.supplier_id
+        WHERE ca.agreement_id IN (SELECT value FROM json_each(?))`,
       item: `SELECT DISTINCT ci.id AS id,ci.name AS name FROM agreements a
         JOIN agreement_items ai ON ai.version_id=a.current_version_id
         JOIN catalog_items ci ON ci.id=ai.catalog_item_id
@@ -218,7 +266,7 @@ export function acordosApi(contexto: ContextoApi) {
     const sortDirection = params.get('direction') === 'desc' ? 'DESC' : 'ASC';
     // Metadados e pagina sao lidos no mesmo snapshot SQLite.
     const db = rawDb();
-    const [cabecalho, locais, condicoes, historico] = await db.batch([
+    const [cabecalho, locais, condicoes, historico, outrosCnpjs] = await db.batch([
       db.prepare(`SELECT a.*,
     (SELECT COUNT(*) FROM agreement_items ai WHERE ai.version_id=a.current_version_id) AS totalItems,
     ${SITUACAO_EFETIVA_SQL} AS effectiveStatus,
@@ -231,36 +279,46 @@ export function acordosApi(contexto: ContextoApi) {
       JOIN vehicle_models vm ON vm.id=ai.vehicle_model_id JOIN units un ON un.id=ai.unit_id JOIN locations l ON l.id=ai.location_id
       WHERE a.id=? ORDER BY ${sortColumn} ${sortDirection},ai.id ASC LIMIT ? OFFSET ?`).bind(agreementId, limit, offset),
       db.prepare(`SELECT version_number AS versionNumber,status,published_at AS publishedAt,created_at AS createdAt FROM agreement_versions WHERE agreement_id=? AND status='published' ORDER BY version_number DESC`).bind(agreementId),
+      db.prepare(CNPJS_SQL).bind(agreementId),
     ]);
+    const cnpjs = lerCnpjs(outrosCnpjs.results as LinhaCnpj[]);
     const agreement = cabecalho.results[0] as Row | undefined;
     if (!agreement) return fail('Acordo não encontrado.', 404);
     const locations = locais.results as Row[], rows = condicoes.results as Row[], versions = historico.results as Row[];
     if (!pode(user, 'acordo:consultar-completo')) {
       const { id, number, status, start_date, end_date, effectiveStatus, supplier, cnpj } = agreement;
       return ok({ agreement: { id, number, status, start_date, end_date, effectiveStatus, supplier, cnpj }, locations,
+        cnpjs: cnpjs.map(({ supplier: nome, cnpj: numero, todasCidades, cidades }) => ({ supplier: nome, cnpj: numero, todasCidades, cidades })),
         totalItems: agreement.totalItems, offset, limit, revision: agreement.revision, version: agreement.current_version_id,
         items: rows.map(({ notes: _notes, ...item }) => item),
         versions: versions.map(({ versionNumber }) => ({ versionNumber })),
       });
     }
-    return ok({ agreement, locations, items: rows, versions, totalItems: agreement.totalItems, offset, limit, revision: agreement.revision, version: agreement.current_version_id });
+    return ok({ agreement, locations, cnpjs, items: rows, versions, totalItems: agreement.totalItems, offset, limit, revision: agreement.revision, version: agreement.current_version_id });
   }
 
   async function createAgreement(request: Request, user: User) {
-    const parsed = validateAgreementInput(await jsonBody<AgreementInput>(request));
+    const entradaCriacao = await jsonBody<AgreementInput>(request);
+    const parsed = validateAgreementInput(entradaCriacao);
     if (!parsed.value) return fail(parsed.error || 'Dados do acordo inválidos.');
     const body = parsed.value;
     const supplier = await first<{ id: string }>('SELECT id FROM suppliers WHERE id=? AND active=1', [body.supplierId]);
     if (!supplier) return fail('Fornecedor não encontrado ou inativo.');
     const locations = await first<{ n: number }>(`SELECT COUNT(*) n FROM locations WHERE id IN (${body.locationIds.map(() => '?').join(',')})`, body.locationIds);
     if (Number(locations?.n || 0) !== body.locationIds.length) return fail('Uma ou mais localidades não existem.');
+    const outros = validarCnpjsAcordo((entradaCriacao as AgreementInput).cnpjs, body.supplierId, body.locationIds);
+    if (outros.error) return fail(outros.error);
+    const cnpjs = outros.value ?? [];
+    const erroCnpjs = await conferirFornecedoresCnpjs(cnpjs, new Set());
+    if (erroCnpjs) return fail(erroCnpjs);
     const agreementId = id('agr'), versionId = id('ver'), timestamp = now();
     try {
       await rawDb().batch([
         rawDb().prepare(`INSERT INTO agreements (id,number,supplier_id,status,start_date,end_date,owner_user_id,notes,provisional,current_version_id,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,0,?,?,?)`).bind(agreementId, body.number, body.supplierId, body.status, body.startDate, body.endDate, user.id, body.notes, versionId, timestamp, timestamp),
         rawDb().prepare(`INSERT INTO agreement_versions (id,agreement_id,version_number,status,published_at,created_by,created_at) VALUES (?,?,1,'published',?,?,?)`).bind(versionId, agreementId, timestamp, user.id, timestamp),
         ...body.locationIds.map((locationId) => rawDb().prepare('INSERT INTO agreement_locations (agreement_id,location_id) VALUES (?,?)').bind(agreementId, locationId)),
-        auditoriaNoLote(contexto, user.id, 'CREATE', 'agreement', agreementId, `Acordo ${body.number} criado`),
+        ...gravarCnpjs(agreementId, cnpjs, timestamp),
+        auditoriaNoLote(contexto, user.id, 'CREATE', 'agreement', agreementId, `Acordo ${body.number} criado${cnpjs.length ? `; outros CNPJs: ${await descricaoCnpjs(cnpjs)}` : ''}`),
       ]);
       return ok({ id: agreementId }, { status: 201 });
     } catch (error: unknown) { if (errorMessage(error).includes('UNIQUE')) return fail('Já existe um acordo com esse número.'); throw error; }
@@ -331,11 +389,22 @@ export function acordosApi(contexto: ContextoApi) {
       const nomes = emUso.slice(0, 5).map((local) => `${local.city}/${local.state}`).join(', ') + (emUso.length > 5 ? ` e mais ${emUso.length - 5}` : '');
       return fail(`Não é possível retirar ${nomes} do acordo: há condições vigentes nessa(s) localidade(s). Remova ou substitua essas condições antes de alterar a abrangência.`, 409);
     }
+    // Outros CNPJs: a tela manda a lista inteira. Pedido sem a lista (cliente
+    // antigo) mantem os CNPJs e so tira as cidades que sairam do acordo; um
+    // CNPJ que ficaria sem nenhuma cidade bloqueia a alteracao.
+    const cnpjsAntes = (await cnpjsDoAcordo(agreementId)).map(c => ({ supplierId: c.supplierId, todasCidades: c.todasCidades, locationIds: c.locationIds }));
+    const outros = validarCnpjsAcordo(entrada.cnpjs, body.supplierId, body.locationIds);
+    if (outros.error) return fail(outros.error);
+    const cidadesNovas = new Set(body.locationIds);
+    const cnpjs = outros.value ?? cnpjsAntes.filter(c => c.supplierId !== body.supplierId).map(c => ({ ...c, locationIds: c.locationIds.filter(l => cidadesNovas.has(l)) }));
+    if (cnpjs.some(c => !c.todasCidades && !c.locationIds.length)) return fail('Um dos outros CNPJs ficaria sem nenhuma cidade. Ajuste as cidades desse CNPJ ou retire-o do acordo antes de alterar a abrangência.', 409);
+    const erroCnpjs = await conferirFornecedoresCnpjs(cnpjs, new Set(cnpjsAntes.map(c => c.supplierId)));
+    if (erroCnpjs) return fail(erroCnpjs);
     // Auditoria no mesmo formato das condicoes: {antes, depois} so dos campos
     // gerais que mudaram.
     const localidadesAntes = (await all<{ id: string }>('SELECT location_id AS id FROM agreement_locations WHERE agreement_id=? ORDER BY location_id', [agreementId])).map((l) => l.id);
-    const novo: Record<string, unknown> = { number: body.number, supplierId: body.supplierId, status: body.status, startDate: body.startDate, endDate: body.endDate, notes: body.notes, locationIds: [...body.locationIds].sort() };
-    const anterior: Record<string, unknown> = { number: existing.number, supplierId: existing.supplierId, status: existing.status, startDate: existing.startDate, endDate: existing.endDate, notes: existing.notes, locationIds: localidadesAntes };
+    const novo: Record<string, unknown> = { number: body.number, supplierId: body.supplierId, status: body.status, startDate: body.startDate, endDate: body.endDate, notes: body.notes, locationIds: [...body.locationIds].sort(), outrosCnpjs: await descricaoCnpjs(cnpjs) };
+    const anterior: Record<string, unknown> = { number: existing.number, supplierId: existing.supplierId, status: existing.status, startDate: existing.startDate, endDate: existing.endDate, notes: existing.notes, locationIds: localidadesAntes, outrosCnpjs: await descricaoCnpjs(cnpjsAntes) };
     const antes: Record<string, unknown> = {}, depois: Record<string, unknown> = {};
     for (const campo of Object.keys(novo)) {
       if (JSON.stringify(anterior[campo]) !== JSON.stringify(novo[campo])) { antes[campo] = anterior[campo]; depois[campo] = novo[campo]; }
@@ -345,6 +414,7 @@ export function acordosApi(contexto: ContextoApi) {
         rawDb().prepare('UPDATE agreements SET number=?,supplier_id=?,status=?,start_date=?,end_date=?,notes=?,updated_at=? WHERE id=?').bind(body.number, body.supplierId, body.status, body.startDate, body.endDate, body.notes, now(), agreementId),
         rawDb().prepare('DELETE FROM agreement_locations WHERE agreement_id=?').bind(agreementId),
         ...body.locationIds.map((locationId) => rawDb().prepare('INSERT INTO agreement_locations (agreement_id,location_id) VALUES (?,?)').bind(agreementId, locationId)),
+        ...gravarCnpjs(agreementId, cnpjs, now()),
         auditoriaNoLote(contexto, user.id, 'UPDATE', 'agreement', agreementId, JSON.stringify({ antes, depois })),
       ]);
       return ok({ success: true });
@@ -427,7 +497,8 @@ export function acordosApi(contexto: ContextoApi) {
     const total = Number((await first<{ n: number }>(`SELECT COUNT(*) n ${sql}`, values))?.n || 0);
     const limit = 1000;
     const rows = await all(`SELECT ai.id,ci.name AS item,vm.name AS model,ai.price,ai.courtesy,un.code AS unit,ai.brands_text AS brands,
-    l.city,l.state,s.trade_name AS supplier,s.cnpj,a.id AS agreementId,a.number,a.end_date AS endDate
+    l.city,l.state,s.trade_name AS supplier,s.cnpj,a.id AS agreementId,a.number,a.end_date AS endDate,
+    (SELECT COUNT(*) FROM agreement_cnpjs ac WHERE ac.agreement_id=a.id) AS extraCnpjs
     ${sql} ORDER BY ci.name,vm.name,l.city,ai.price LIMIT ${limit}`, values);
     return ok({ rows, total, truncated: total > rows.length, limit });
   }
@@ -443,13 +514,81 @@ export function acordosApi(contexto: ContextoApi) {
     const agreements=await all(`SELECT vm.name MODELO,ci.name PECA_SERVICO,l.city CIDADE,l.state UF,s.cnpj CNPJ,
     ai.price PRECO,s.trade_name FORNECEDOR,un.code MEDIDA,COALESCE(ai.brands_text,'') MARCAS,
     a.start_date INICIO_VIGENCIA,a.end_date FIM_VIGENCIA,a.status STATUS_ACORDO
-    FROM agreements a JOIN suppliers s ON s.id=a.supplier_id
-    JOIN agreement_items ai ON ai.version_id=a.current_version_id
+    FROM agreements a JOIN agreement_items ai ON ai.version_id=a.current_version_id
+    JOIN ${CNPJS_DO_ACORDO_SQL} ca ON ca.agreement_id=a.id AND ${atendeCidadeSql('ca', 'ai.location_id')}
+    JOIN suppliers s ON s.id=ca.supplier_id
     JOIN catalog_items ci ON ci.id=ai.catalog_item_id JOIN vehicle_models vm ON vm.id=ai.vehicle_model_id
     JOIN units un ON un.id=ai.unit_id JOIN locations l ON l.id=ai.location_id
     ORDER BY s.trade_name,vm.name,ci.name,l.state,l.city,ai.id`);
     return ok({generatedAt:now(),agreements});
   }
 
-  return { agreementList, agreementOptions, agreementDetail, createAgreement, updateAgreement, addAgreementItems, updateItem, deleteItem, deleteAgreement, comTravaDoAcordo, travarAcordo, soltarAcordo, acordoDaCondicao, search, searchOptions, internalAgreements };
+  // Unir com outro acordo: os CNPJs do outro passam a ser CNPJs deste, com as
+  // cidades que ele atendia, e o outro e suspenso (historico preservado). So
+  // une quando as condicoes vigentes dos dois sao identicas; senao devolve a
+  // lista de diferencas. Sem confirmar=true, so mostra o que vai acontecer.
+  async function unirAcordos(request: Request, user: User, agreementId: string) {
+    const body = await jsonBody<{ outroId?: unknown; expectedRevision?: unknown; outroRevision?: unknown; confirmar?: unknown }>(request);
+    const outroId = textValue(body.outroId);
+    if (!outroId) return fail('Escolha o acordo que será unido a este.');
+    if (outroId === agreementId) return fail('Escolha um acordo diferente deste.');
+    type Cab = { id: string; number: string; supplierId: string; supplier: string; cnpj: string; status: string; notes: string | null; revision: number };
+    const cabecalho = (idAcordo: string) => first<Cab>(`SELECT a.id,a.number,a.supplier_id AS supplierId,s.trade_name AS supplier,s.cnpj,a.status,a.notes,a.revision
+      FROM agreements a JOIN suppliers s ON s.id=a.supplier_id WHERE a.id=?`, [idAcordo]);
+    const [este, outro] = await Promise.all([cabecalho(agreementId), cabecalho(outroId)]);
+    if (!este || !outro) return fail('Acordo não encontrado.', 404);
+    if (!revisaoConfere(body.expectedRevision, este.revision)) return fail('Este acordo foi alterado ou a tela está desatualizada. Reabra o acordo antes de unir.', 409);
+    const dono = await travarAcordo(outroId);
+    if (!dono) return fail('Outro usuário está alterando o outro acordo neste momento. Tente de novo em instantes.', 409);
+    try {
+      const condicoes = (idAcordo: string) => all<{ locationId: string; catalogItemId: string; modelId: string; unitId: string; price: number; brands: string | null; item: string; model: string; city: string; state: string; unit: string }>(
+        `SELECT ai.location_id AS locationId,ai.catalog_item_id AS catalogItemId,ai.vehicle_model_id AS modelId,ai.unit_id AS unitId,ai.price,ai.brands_text AS brands,
+          ci.name AS item,vm.name AS model,l.city,l.state,un.code AS unit
+        FROM agreements a JOIN agreement_items ai ON ai.version_id=a.current_version_id JOIN catalog_items ci ON ci.id=ai.catalog_item_id
+        JOIN vehicle_models vm ON vm.id=ai.vehicle_model_id JOIN units un ON un.id=ai.unit_id JOIN locations l ON l.id=ai.location_id WHERE a.id=?`, [idAcordo]);
+      const cidades = async (idAcordo: string) => (await all<{ id: string }>('SELECT location_id AS id FROM agreement_locations WHERE agreement_id=?', [idAcordo])).map(r => r.id);
+      const [itensEste, itensOutro, cidadesEste, cidadesOutro, cnpjsEste, cnpjsOutro] = await Promise.all([
+        condicoes(agreementId), condicoes(outroId), cidades(agreementId), cidades(outroId), cnpjsDoAcordo(agreementId), cnpjsDoAcordo(outroId)]);
+      const diferencas = compararCondicoes(itensEste, itensOutro);
+      // CNPJs que entram neste acordo: o principal do outro (nas cidades do
+      // outro) e os adicionais do outro (nas cidades deles), sempre dentro
+      // das cidades deste acordo.
+      const deste = new Set(cidadesEste), atuais = new Map(cnpjsEste.map(c => [c.supplierId, c]));
+      const candidatos = [{ supplierId: outro.supplierId, supplier: outro.supplier, cnpj: outro.cnpj, cidades: cidadesOutro },
+        ...cnpjsOutro.map(c => ({ supplierId: c.supplierId, supplier: c.supplier, cnpj: c.cnpj, cidades: c.todasCidades ? cidadesOutro : c.locationIds }))];
+      const novos = new Map<string, CnpjAcordo & { supplier: string; cnpj: string }>();
+      for (const c of candidatos) {
+        if (c.supplierId === este.supplierId) continue;
+        const atual = atuais.get(c.supplierId), anterior = novos.get(c.supplierId);
+        if (atual?.todasCidades) continue;
+        const lista = new Set([...(atual?.locationIds ?? []), ...(anterior?.locationIds ?? []), ...c.cidades.filter(l => deste.has(l))]);
+        if (!lista.size) continue;
+        novos.set(c.supplierId, { supplierId: c.supplierId, supplier: c.supplier, cnpj: c.cnpj, todasCidades: lista.size === deste.size, locationIds: lista.size === deste.size ? [] : [...lista].sort() });
+      }
+      const nomesCidades = new Map((await all<{ id: string; nome: string }>(`SELECT id,city || '/' || state AS nome FROM locations WHERE id IN (SELECT value FROM json_each(?))`, [JSON.stringify(cidadesOutro)])).map(r => [r.id, r.nome]));
+      const cnpjsQueEntram = [...novos.values()].map(c => ({ supplier: c.supplier, cnpj: c.cnpj, todasCidades: c.todasCidades, cidades: c.locationIds.map(l => nomesCidades.get(l) || l).sort() }));
+      const motivo = diferencas.length ? 'As condições vigentes dos dois acordos não são iguais. Corrija as diferenças antes de unir.'
+        : !novos.size ? 'O outro acordo não traz nenhum CNPJ novo para as cidades deste acordo.'
+        : outro.status !== 'active' ? 'O outro acordo já está suspenso.' : '';
+      const resumo = { outro: { id: outro.id, number: outro.number, supplier: outro.supplier, cnpj: outro.cnpj, revision: outro.revision },
+        diferencas: diferencas.slice(0, 200), totalDiferencas: diferencas.length, cnpjsQueEntram, podeUnir: !motivo, motivo };
+      if (body.confirmar !== true) return ok(resumo);
+      if (motivo) return fail(motivo, 409);
+      if (!revisaoConfere(body.outroRevision, outro.revision)) return fail('O outro acordo foi alterado depois da comparação. Compare de novo antes de unir.', 409);
+      const timestamp = now(), dia = timestamp.slice(0, 10).split('-').reverse().join('/');
+      const lista: CnpjAcordo[] = [...cnpjsEste.map(c => novos.get(c.supplierId) ?? { supplierId: c.supplierId, todasCidades: c.todasCidades, locationIds: c.locationIds }),
+        ...[...novos.values()].filter(c => !atuais.has(c.supplierId))].map(({ supplierId, todasCidades, locationIds }) => ({ supplierId, todasCidades, locationIds }));
+      const nota = `Unido ao acordo ${este.number} em ${dia}: os CNPJs deste acordo passaram para ele.`;
+      await rawDb().batch([
+        ...gravarCnpjs(agreementId, lista, timestamp),
+        rawDb().prepare('UPDATE agreements SET updated_at=? WHERE id=?').bind(timestamp, agreementId),
+        rawDb().prepare("UPDATE agreements SET status='suspended',notes=?,updated_at=? WHERE id=?").bind(outro.notes ? `${outro.notes}\n${nota}` : nota, timestamp, outroId),
+        auditoriaNoLote(contexto, user.id, 'UPDATE', 'agreement', agreementId, JSON.stringify({ antes: { outrosCnpjs: await descricaoCnpjs(cnpjsEste) }, depois: { outrosCnpjs: await descricaoCnpjs(lista) } })),
+        auditoriaNoLote(contexto, user.id, 'UPDATE', 'agreement', outroId, `Acordo ${outro.number} unido ao acordo ${este.number} e suspenso; condições e histórico preservados.`),
+      ]);
+      return ok({ success: true, cnpjsQueEntram });
+    } finally { await soltarAcordo(outroId, dono); }
+  }
+
+  return { agreementList, agreementOptions, agreementDetail, createAgreement, updateAgreement, addAgreementItems, updateItem, deleteItem, deleteAgreement, comTravaDoAcordo, travarAcordo, soltarAcordo, acordoDaCondicao, search, searchOptions, internalAgreements, unirAcordos };
 }

@@ -7,8 +7,8 @@ void test('múltiplas opções usam OR no campo e AND entre campos, com parâmet
   const params = parametrosBusca(filters);
   assert.deepEqual(params.getAll('item'), ['freio', 'pneu']);
   const result = condicoesBusca(params);
-  assert.equal(result.conditions.join(' AND '), 'l.state IN (?,?) AND ci.id IN (?,?) AND s.id IN (?)');
-  assert.deepEqual(result.values, ['SP', 'RJ', 'freio', 'pneu', "x' OR 1=1 --"]);
+  assert.equal(result.conditions.join(' AND '), 'l.state IN (?,?) AND ci.id IN (?,?) AND (s.id IN (?) OR EXISTS (SELECT 1 FROM agreement_cnpjs acf WHERE acf.agreement_id=a.id AND acf.supplier_id IN (?)))');
+  assert.deepEqual(result.values, ['SP', 'RJ', 'freio', 'pneu', "x' OR 1=1 --", "x' OR 1=1 --"]);
 });
 void test('busca mantém compatibilidade com filtro único e ignora valores vazios e duplicados', () => {
   assert.deepEqual(condicoesBusca(new URLSearchParams('item=a&item=a&item=&model=b')), {
