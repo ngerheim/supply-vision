@@ -15,7 +15,7 @@ from contrato_comparacao import (
 )
 
 
-def _motivo_sem_acordo(m, df_acordo, sem_ac):
+def _motivo_sem_acordo(m, df_acordo, sem_ac, pecas_conhecidas=None):
     """Diz por que cada linha caiu em SEM ACORDO.
 
     O cruzamento é por CNPJ + cidade + modelo + item, tudo por igualdade
@@ -37,12 +37,16 @@ def _motivo_sem_acordo(m, df_acordo, sem_ac):
       - "Item sem acordo": o nome existe em outros acordos, mas não no acordo
         deste fornecedor. Não é erro de sistema, é cobertura de acordo —
         decisão comercial de negociar o item ou aceitar como fora de acordo.
+
+    "Existe em outros acordos" olha a tabela inteira (``pecas_conhecidas``),
+    não só o recorte da UF e da data da compra: um nome que está em acordo de
+    outro estado já é nome padrão, então faltou acordo, não sinônimo.
     """
     set_forn = set(df_acordo["_fornec_norm"])
     set_fc   = set(zip(df_acordo["_fornec_norm"], df_acordo["_cidade_norm"]))
     set_fcm  = set(zip(df_acordo["_fornec_norm"], df_acordo["_cidade_norm"],
                        df_acordo["_modelo_norm"]))
-    set_peca = set(df_acordo["_peca_norm"])
+    set_peca = set(df_acordo["_peca_norm"]) if pecas_conhecidas is None else pecas_conhecidas
 
     motivos = []
     for tem_acordo, nao_comp, forn, cid, mod, peca in zip(
@@ -75,10 +79,10 @@ def _uf(valor):
 
 
 
-def _processar_periodo(df_base, df_acordo):
+def _processar_periodo(df_base, df_acordo, pecas_conhecidas=None):
     # Regra da operacao: medida nao participa da comparacao nem da referencia.
     if "UF" not in df_acordo.columns or df_base.empty:
-        return _processar_periodo_compativel(df_base, df_acordo)
+        return _processar_periodo_compativel(df_base, df_acordo, pecas_conhecidas)
     if not {"Fornecedor por Estado", "UF"}.intersection(df_base.columns):
         raise ValueError("Base do Qlik sem coluna de UF (Fornecedor por Estado ou UF), obrigatória para comparar acordos por estado.")
     base = df_base.copy()
@@ -88,7 +92,7 @@ def _processar_periodo(df_base, df_acordo):
     partes = []
     for uf, grupo in base.groupby("_comparacao_uf", sort=False):
         universo = df_acordo[ufs_acordo == uf] if uf else df_acordo.iloc[:0]
-        resultado = _processar_periodo_compativel(grupo, universo)
+        resultado = _processar_periodo_compativel(grupo, universo, pecas_conhecidas)
         resultado.index = grupo.index
         if not uf:
             mascara = resultado["Status"] != STATUS_DATA_INVALIDA
@@ -102,7 +106,7 @@ def _processar_periodo(df_base, df_acordo):
 
 
 
-def _processar_periodo_compativel(df_base, df_acordo):
+def _processar_periodo_compativel(df_base, df_acordo, pecas_conhecidas=None):
     df = df_base.copy()
     df["_modelo_ac"]  = df["Modelo"].apply(_norm).map(MODELOS).fillna(df["Modelo"]).apply(_norm)
     sin_map  = {k: v for k, v in SINONIMOS.items() if v is not None}
@@ -154,7 +158,7 @@ def _processar_periodo_compativel(df_base, df_acordo):
 
     com_ac = pa.notna() & ~quarentena
     sem_ac = ~com_ac & ~quarentena
-    motivo = _motivo_sem_acordo(m, df_acordo, sem_ac)
+    motivo = _motivo_sem_acordo(m, df_acordo, sem_ac, pecas_conhecidas)
     motivo[e_ambigua]   = MOTIVO_AMBIGUO
     motivo[e_sem_preco] = MOTIVO_PRECO_INVALIDO
     motivo[e_preco_compra_invalido] = MOTIVO_PRECO_COMPRA_INVALIDO
@@ -246,11 +250,14 @@ def processar(df_base, df_acordo):
     situação e intervalo de vigência passam a ser respeitados.
     """
     _validar_parametros(df_acordo)
+    # Nomes de item da tabela inteira (todas as UFs e vigencias): separa
+    # "Sinonimo" (nome fora do padrao) de "Item" (falta acordo) no motivo.
+    pecas = set(df_acordo["_peca_norm"])
     if df_base.empty:
-        return _processar_periodo(df_base, df_acordo)
+        return _processar_periodo(df_base, df_acordo, pecas)
     campos_vigencia = {"INICIO_VIGENCIA", "FIM_VIGENCIA", "STATUS_ACORDO"}
     if not campos_vigencia.issubset(df_acordo.columns):
-        return _processar_periodo(df_base, df_acordo)
+        return _processar_periodo(df_base, df_acordo, pecas)
 
     datas = _data_vigencia(df_base["Data Abertura"])
     partes = []
@@ -270,8 +277,8 @@ def processar(df_base, df_acordo):
         indices = df_base.index[mascara]
         if not len(indices):
             continue
-        resultado = _processar_periodo(df_base.loc[indices], universo)
+        resultado = _processar_periodo(df_base.loc[indices], universo, pecas)
         resultado.index = indices
         partes.append(resultado)
-    return pd.concat(partes).sort_index() if partes else _processar_periodo(df_base, df_acordo)
+    return pd.concat(partes).sort_index() if partes else _processar_periodo(df_base, df_acordo, pecas)
 
