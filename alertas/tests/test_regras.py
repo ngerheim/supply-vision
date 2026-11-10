@@ -319,6 +319,19 @@ def test_comparacao_distingue_uf_mas_ignora_medida(rodar):
     assert resultado["Menor Preco Acordo"].tolist() == [50, 80, 50]
 
 
+def test_item_de_acordo_em_outra_uf_e_falta_de_acordo_nao_sinonimo(rodar):
+    # O fornecedor tem acordo em SP, mas so para ITEM. ITEM2 existe como nome
+    # padrao num acordo de MG: em SP falta acordo ("Item"), nao sinonimo.
+    # ITEM3 nao existe em acordo nenhum: possivel nome fora do padrao.
+    compras = base(qtd=2, preco=100); compras["Fornecedor por Estado"] = "SP"
+    compras["_desc_norm"] = ["ITEM2", "ITEM3"]; compras["Descrição"] = ["ITEM2", "ITEM3"]
+    ac = acordo([50, 60]); ac["UF"] = ["SP", "MG"]
+    ac.loc[1, ["_peca_norm", "PECA_SERVICO", "_fornec_norm", "FORNECEDOR"]] = ["ITEM2", "ITEM2", CNPJ_OUTRO.lstrip("0"), "G"]
+    resultado = rodar.processar(compras, ac)
+    assert resultado["Status"].tolist() == ["SEM ACORDO"] * 2
+    assert resultado["Motivo Sem Acordo"].tolist() == [rodar.MOTIVO_ITEM, rodar.MOTIVO_ITEM_MAPEAR]
+
+
 def test_medida_ausente_nao_impede_comparacao(rodar):
     compras = base(preco=100); compras["Fornecedor por Estado"] = "SP"
     ac = acordo([50]); ac["UF"] = "SP"; ac["MEDIDA"] = "UNIDADE"
