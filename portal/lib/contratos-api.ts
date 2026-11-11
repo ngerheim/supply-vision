@@ -34,14 +34,14 @@ const nomeArquivo = (texto: string) => texto.normalize('NFD').replace(/\p{M}/gu,
 export function contratosApi(contexto: ContextoApi, consultas = criarConsultasFornecedor()) {
   const { ok, fail, jsonBody, audit } = contexto;
 
-  // CNPJ -> razao social, endereco e socios (sugestao do responsavel legal).
+  // CNPJ -> razao social e endereco do fornecedor.
   // Nao grava nada: os dados so preenchem a tela, que continua editavel.
   async function consultarCnpj(user: User, numero: string) {
     if (!pode(user, 'acordo:consultar-completo')) return fail('Seu perfil não permite gerar contratos.', 403);
     try {
       const { dados } = await consultas.cnpj(numero);
       return ok({
-        razaoSocial: dados.razao_social, situacao: dados.situacao_cadastral, socios: dados.socios ?? [],
+        razaoSocial: dados.razao_social, situacao: dados.situacao_cadastral,
         endereco: { logradouro: dados.logradouro, numero: dados.numero, complemento: dados.complemento, bairro: dados.bairro, cidade: dados.cidade, uf: dados.uf, cep: dados.cep },
       });
     } catch (erro) { if (erro instanceof FalhaConsulta) return fail(erro.message, erro.status); throw erro; }
@@ -59,9 +59,7 @@ export function contratosApi(contexto: ContextoApi, consultas = criarConsultasFo
       const fixos = CAMPOS_FIXOS_ANTIGOS.filter(c => campos.includes(c));
       if (fixos.length) erroTemplate = `No template, tire ou escreva o texto fixo no lugar de ${fixos.map(c => `{{${c}}}`).join(', ')}. O Portal não preenche mais esses campos.`;
     }
-    // Sem {{FORNECEDOR_REPRESENTANTE}} no template o responsavel nao aparece no contrato: a tela avisa.
-    const resposta: Record<string, unknown> = { template: !!template && !erroTemplate, erroTemplate, campos, hoje: dataDeNegocio(),
-      semRepresentante: !!template && !campos.includes('FORNECEDOR_REPRESENTANTE') };
+    const resposta: Record<string, unknown> = { template: !!template && !erroTemplate, erroTemplate, campos, hoje: dataDeNegocio() };
     return ok(resposta);
   }
 
@@ -78,7 +76,7 @@ export function contratosApi(contexto: ContextoApi, consultas = criarConsultasFo
       const template = await lerTemplate();
       if (!template) return fail('Template do contrato não encontrado na pasta privada do servidor.', 409);
 
-      const editaveis: CampoContrato[] = ['FORNECEDOR_RAZAO_SOCIAL', 'FORNECEDOR_CNPJ', 'FORNECEDOR_REPRESENTANTE'];
+      const editaveis: CampoContrato[] = ['FORNECEDOR_RAZAO_SOCIAL', 'FORNECEDOR_CNPJ'];
       const campos = {} as Record<CampoContrato, string>;
       for (const nome of editaveis) {
         const valor = body.campos[nome];

@@ -46,17 +46,19 @@ export function descreverCnpjs(lista: { supplier: string; todasCidades: boolean;
 
 type ItemComparado = { locationId: string; catalogItemId: string; modelId: string; unitId: string; price: number; brands: string | null;
   item: string; model: string; city: string; state: string; unit: string };
-export type DiferencaUniao = { tipo: 'so_neste' | 'so_no_outro' | 'preco' | 'marcas'; item: string; model: string; city: string; state: string; unit: string;
+export type DiferencaUniao = { tipo: 'so_neste' | 'so_no_outro' | 'preco' | 'marcas'; chave: string; foraDaAbrangencia?: true; item: string; model: string; city: string; state: string; unit: string;
   precoNeste: number | null; precoNoOutro: number | null; marcasNeste: string | null; marcasNoOutro: string | null };
 
-// Unir so e seguro quando as condicoes vigentes dos dois acordos sao as
-// mesmas: mesma cidade, item, modelo e medida, com o mesmo preco e as mesmas
-// marcas. Qualquer diferenca vai para a lista e a uniao espera a correcao.
+// Condicao = cidade, item, modelo e medida. Preco ou marcas diferentes
+// pedem uma escolha por linha (vale o deste ou o do outro); condicao que so
+// existe no outro entra neste acordo; a que so existe neste continua.
+export const chaveCondicao = (i: Pick<ItemComparado, 'locationId' | 'catalogItemId' | 'modelId' | 'unitId'>) => [i.locationId, i.catalogItemId, i.modelId, i.unitId].join('|');
+export type EscolhaUniao = 'neste' | 'outro';
 export function compararCondicoes(neste: ItemComparado[], noOutro: ItemComparado[]): DiferencaUniao[] {
-  const chave = (i: ItemComparado) => [i.locationId, i.catalogItemId, i.modelId, i.unitId].join('|');
+  const chave = chaveCondicao;
   const marcas = (v: string | null) => (v ?? '').trim().replace(/\s+/g, ' ').toUpperCase();
   const outro = new Map(noOutro.map(i => [chave(i), i])), diferencas: DiferencaUniao[] = [];
-  const base = (i: ItemComparado) => ({ item: i.item, model: i.model, city: i.city, state: i.state, unit: i.unit });
+  const base = (i: ItemComparado) => ({ chave: chave(i), item: i.item, model: i.model, city: i.city, state: i.state, unit: i.unit });
   for (const a of neste) {
     const b = outro.get(chave(a));
     outro.delete(chave(a));
@@ -66,4 +68,18 @@ export function compararCondicoes(neste: ItemComparado[], noOutro: ItemComparado
   }
   for (const b of outro.values()) diferencas.push({ tipo: 'so_no_outro', ...base(b), precoNeste: null, precoNoOutro: b.price, marcasNeste: null, marcasNoOutro: b.brands });
   return diferencas.sort((x, y) => `${x.item}|${x.model}|${x.state}|${x.city}`.localeCompare(`${y.item}|${y.model}|${y.state}|${y.city}`, 'pt-BR'));
+}
+
+// Escolhas da tela: obrigatoria para cada diferenca de preco ou marcas.
+export function validarEscolhas(valor: unknown, diferencas: DiferencaUniao[]): { value?: Map<string, EscolhaUniao>; error?: string } {
+  const entrada = valor && typeof valor === 'object' && !Array.isArray(valor) ? valor as Record<string, unknown> : {};
+  const escolhas = new Map<string, EscolhaUniao>();
+  for (const d of diferencas) {
+    if (d.tipo !== 'preco' && d.tipo !== 'marcas') continue;
+    // '*' e a escolha geral (botoes "manter tudo deste/do outro"); a linha prevalece sobre ela.
+    const e = Object.hasOwn(entrada, d.chave) ? entrada[d.chave] : entrada['*'];
+    if (e !== 'neste' && e !== 'outro') return { error: 'Escolha qual valor prevalece em cada diferença de preço ou marcas.' };
+    escolhas.set(d.chave, e);
+  }
+  return { value: escolhas };
 }

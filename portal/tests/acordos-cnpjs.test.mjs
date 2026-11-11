@@ -108,30 +108,46 @@ void test('acordo com varios CNPJs: cadastro, Alertas, busca, abrangencia, exclu
   assert.equal(exclusao.status, 409);
   assert.match(exclusao.data.error, /outro CNPJ/);
 
-  // Uniao: acordo B (terceiro CNPJ, so na Cidade A). Preco diferente bloqueia.
+  // Uniao: acordo B (terceiro CNPJ, so na Cidade A) com preco diferente e uma
+  // condicao que A nao tem. Preco pede escolha; a condicao a mais entra em A.
   const b = (await pedir('POST', 'agreements', { ...base, number: 'LF-2', supplierId: 'f3', locationIds: ['l1'] })).data.id;
   condicao(versaoDe(b), 'l1', 99);
-  const comDiferenca = (await pedir('POST', `agreements/${a}/unir`, { outroId: b, expectedRevision: revisao(a) })).data;
-  assert.equal(comDiferenca.podeUnir, false);
-  assert.ok(comDiferenca.diferencas.some(d => d.tipo === 'preco'));
-  assert.ok(comDiferenca.diferencas.some(d => d.tipo === 'so_neste' && d.city === 'Cidade B'));
-  // B passa a ter as mesmas condicoes de A (as duas cidades).
-  sql.prepare('UPDATE agreement_items SET price=100 WHERE version_id=?').run(versaoDe(b));
-  sql.prepare("INSERT INTO agreement_locations(agreement_id,location_id) VALUES(?,'l2')").run(b);
+  sql.exec(`INSERT INTO vehicle_models(id,name) VALUES('m2','MODELO DOIS')`);
+  sql.prepare(`INSERT INTO agreement_items(id,version_id,location_id,catalog_item_id,vehicle_model_id,unit_id,price,brands_text,created_at,updated_at)
+    VALUES('it-b-m2',?,'l1','i1','m2','u1',55,'MARCA B',?,?)`).run(versaoDe(b), ts, ts);
+  // Condicao do outro numa cidade que A nao atende bloqueia a uniao.
+  const versaoA = versaoDe(a);
+  sql.prepare("DELETE FROM agreement_items WHERE version_id=? AND location_id='l2'").run(versaoA);
+  sql.prepare("DELETE FROM agreement_locations WHERE agreement_id=? AND location_id='l2'").run(a);
+  sql.prepare("UPDATE agreement_cnpjs SET todas_cidades=1 WHERE agreement_id=?").run(a);
+  sql.prepare("DELETE FROM agreement_cnpj_locations WHERE agreement_id=?").run(a);
   condicao(versaoDe(b), 'l2', 120);
-  sql.prepare("DELETE FROM agreement_locations WHERE agreement_id=? AND location_id='l2'").run(b);
+  const fora = (await pedir('POST', `agreements/${a}/unir`, { outroId: b, expectedRevision: revisao(a) })).data;
+  assert.equal(fora.podeUnir, false);
+  assert.match(fora.motivo, /Cidade B\/MG/);
+  assert.ok(fora.diferencas.some(d => d.tipo === 'so_no_outro' && d.foraDaAbrangencia));
+  sql.prepare("DELETE FROM agreement_items WHERE version_id=? AND location_id='l2'").run(versaoDe(b));
   const previa = (await pedir('POST', `agreements/${a}/unir`, { outroId: b, expectedRevision: revisao(a) })).data;
   assert.equal(previa.podeUnir, true, JSON.stringify(previa));
-  assert.deepEqual(previa.cnpjsQueEntram, [{ supplier: 'Terceira Ficticia', cnpj: '11222333000343', todasCidades: false, cidades: ['Cidade A/MG'] }]);
-  assert.equal((await pedir('POST', `agreements/${a}/unir`, { outroId: b, expectedRevision: revisao(a), outroRevision: previa.outro.revision - 1, confirmar: true })).status, 409);
-  const unido = await pedir('POST', `agreements/${a}/unir`, { outroId: b, expectedRevision: revisao(a), outroRevision: previa.outro.revision, confirmar: true });
+  assert.deepEqual(previa.diferencas.map(d => [d.tipo, d.model]).sort(), [['preco', 'MODELO FICTICIO'], ['so_no_outro', 'MODELO DOIS']]);
+  assert.deepEqual(previa.cnpjsQueEntram, [{ supplier: 'Terceira Ficticia', cnpj: '11222333000343', todasCidades: true, cidades: [] }]);
+  const confirmar = extra => pedir('POST', `agreements/${a}/unir`, { outroId: b, expectedRevision: revisao(a), outroRevision: previa.outro.revision, confirmar: true, ...extra });
+  // Sem escolha para a diferenca de preco, nada e gravado.
+  assert.equal((await confirmar({})).status, 400);
+  assert.equal((await confirmar({ escolhas: { [previa.diferencas.find(d => d.tipo === 'preco').chave]: 'talvez' } })).status, 400);
+  assert.equal((await pedir('POST', `agreements/${a}/unir`, { outroId: b, expectedRevision: revisao(a), outroRevision: previa.outro.revision - 1, confirmar: true, escolhas: { '*': 'outro' } })).status, 409);
+  const unido = await confirmar({ escolhas: { '*': 'neste', [previa.diferencas.find(d => d.tipo === 'preco').chave]: 'outro' } });
   assert.equal(unido.status, 200, JSON.stringify(unido.data));
-  assert.deepEqual(sql.prepare('SELECT supplier_id s,todas_cidades t FROM agreement_cnpjs WHERE agreement_id=? ORDER BY supplier_id').all(a).map(r => [r.s, r.t]), [['f2', 1], ['f3', 0]]);
-  assert.deepEqual(sql.prepare('SELECT location_id l FROM agreement_cnpj_locations WHERE agreement_id=? AND supplier_id=?').all(a, 'f3').map(r => r.l), ['l1']);
+  assert.equal(unido.data.doOutroValem, 1);
+  assert.equal(unido.data.trazidas, 1);
+  assert.deepEqual(sql.prepare('SELECT vehicle_model_id m,price p,brands_text b,courtesy c FROM agreement_items WHERE version_id=? ORDER BY vehicle_model_id').all(versaoA).map(r => [r.m, r.p, r.b, r.c]),
+    [['m1', 99, null, 0], ['m2', 55, 'MARCA B', 0]]);
+  assert.deepEqual(sql.prepare('SELECT supplier_id s,todas_cidades t FROM agreement_cnpjs WHERE agreement_id=? ORDER BY supplier_id').all(a).map(r => [r.s, r.t]), [['f2', 1], ['f3', 1]]);
+  assert.ok(sql.prepare("SELECT 1 FROM audit_logs WHERE entity_id=? AND details LIKE 'Condições ajustadas%'").get(a));
   const suspenso = sql.prepare('SELECT status,notes FROM agreements WHERE id=?').get(b);
   assert.equal(suspenso.status, 'suspended');
   assert.match(suspenso.notes, /Unido ao acordo LF-1/);
-  assert.equal(sql.prepare('SELECT COUNT(*) n FROM agreement_items WHERE version_id=?').get(versaoDe(b)).n, 2);
+  assert.equal(sql.prepare('SELECT COUNT(*) n FROM agreement_items WHERE version_id=?').get(versaoDe(b)).n, 2, 'o outro acordo continua com o historico');
   // Excluir o acordo leva junto os outros CNPJs dele.
   assert.equal((await pedir('DELETE', `agreements/${a}?expectedRevision=${String(revisao(a))}`)).status, 200);
   assert.equal(sql.prepare('SELECT COUNT(*) n FROM agreement_cnpjs WHERE agreement_id=?').get(a).n, 0);
