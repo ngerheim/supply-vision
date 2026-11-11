@@ -11,11 +11,11 @@ import { isIsoDate } from './domain.ts';
 // Os dados da contratante (cidade, representante) sao sempre os mesmos e ficam
 // escritos direto no template. A assinatura e digital: nao ha bloco de assinaturas.
 export const CAMPOS_CONTRATO = [
-  'FORNECEDOR_RAZAO_SOCIAL', 'FORNECEDOR_ENDERECO', 'FORNECEDOR_CNPJ', 'FORNECEDOR_REPRESENTANTE',
+  'FORNECEDOR_RAZAO_SOCIAL', 'FORNECEDOR_ENDERECO', 'FORNECEDOR_CNPJ',
   'PRAZO_PAGAMENTO_DIAS', 'PRAZO_PAGAMENTO_EXTENSO', 'DATA_ASSINATURA',
 ] as const;
 // Campos de versoes anteriores do template, que o Portal nao preenche mais.
-export const CAMPOS_FIXOS_ANTIGOS = ['CIDADE_ASSINATURA', 'CONTRATANTE_REPRESENTANTE', 'TESTEMUNHA_1', 'TESTEMUNHA_2', 'TESTEMUNHA_3'] as const;
+export const CAMPOS_FIXOS_ANTIGOS = ['CIDADE_ASSINATURA', 'CONTRATANTE_REPRESENTANTE', 'FORNECEDOR_REPRESENTANTE', 'TESTEMUNHA_1', 'TESTEMUNHA_2', 'TESTEMUNHA_3'] as const;
 
 export const PARTES_ENDERECO = ['logradouro', 'numero', 'complemento', 'bairro', 'cidade', 'uf', 'cep'] as const;
 export type EnderecoContrato = Record<(typeof PARTES_ENDERECO)[number], string>;
@@ -82,10 +82,8 @@ export function camposDoTemplate(template: Uint8Array): string[] {
 
 export type TrechoContrato = { texto: string; negrito?: true; italico?: true; sublinhado?: true; tamanhoPt?: number };
 export type ParagrafoContrato = { tipo: 'texto' | 'clausula' | 'item'; centro?: true; trechos: TrechoContrato[] };
-export type ContratoLeitura = { paragrafos: ParagrafoContrato[]; logo: string | null; rodape: string[] };
+export type ContratoLeitura = { paragrafos: ParagrafoContrato[] };
 
-const LIMITE_LOGO = 2 * 1024 * 1024;
-const MIME_IMAGEM: Record<string, string> = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif' };
 const textoXml = (texto: string) => texto
   .replace(/&#x([0-9a-f]+);/gi, (_, h: string) => String.fromCodePoint(parseInt(h, 16)))
   .replace(/&#(\d+);/g, (_, d: string) => String.fromCodePoint(Number(d)))
@@ -135,11 +133,8 @@ const conteudo = (zip: ContainerZip, caminho: string) => {
   const e = lerEntrada(zip, caminho);
   return e?.content ? Buffer.from(e.content).toString('utf8') : '';
 };
-// Alvo de um relacionamento (rId) de uma parte do documento.
-const alvo = (rels: string, id: string) => new RegExp(`<Relationship [^>]*Id="${id}"[^>]*>`).exec(rels)?.[0].match(/Target="([^"]+)"/)?.[1] ?? null;
-
-// Preenche o template e devolve o conteudo para a folha impressa, com o logo do
-// cabecalho e as linhas do rodape do template.
+// Preenche o template e devolve o conteudo para a folha impressa. O cabecalho
+// e o rodape do Word nao entram: a folha do Portal sai sem eles.
 export function lerContrato(template: Uint8Array, campos: Record<CampoContrato, string>): ContratoLeitura {
   let zip: ContainerZip;
   try { zip = XLSX.CFB.read(template, { type: 'buffer' }) as ContainerZip; }
@@ -152,27 +147,5 @@ export function lerContrato(template: Uint8Array, campos: Record<CampoContrato, 
   if (restantes.length) throw new TemplateInvalido(`O template tem campos desconhecidos: ${[...new Set(restantes)].join(', ')}.`);
 
   const corpo = /<w:body>([\s\S]*)<\/w:body>/.exec(texto)?.[1] ?? '';
-  const rels = conteudo(zip, 'word/_rels/document.xml.rels');
-  // Usa o cabecalho/rodape ligado ao documento; se o template tem o arquivo mas
-  // perdeu a ligacao (o Word entao nao o mostra), usa o primeiro que existir.
-  const referencia = (tipo: 'header' | 'footer') => {
-    const id = new RegExp(`<w:${tipo}Reference [^>]*w:type="default"[^>]*r:id="([^"]+)"|<w:${tipo}Reference [^>]*r:id="([^"]+)"[^>]*w:type="default"`).exec(corpo);
-    const caminho = (id ? alvo(rels, id[1] ?? id[2]) : null)
-      ?? new RegExp(`<Relationship [^>]*Type="[^"]*/${tipo}"[^>]*Target="([^"]+)"|<Relationship [^>]*Target="([^"]+)"[^>]*Type="[^"]*/${tipo}"`).exec(rels)?.slice(1).find(Boolean) ?? null;
-    return caminho ? caminho.replace(/^\/?(word\/)?/, '') : null;
-  };
-  let logo: string | null = null;
-  const cabecalho = referencia('header');
-  if (cabecalho) {
-    const xmlCabecalho = conteudo(zip, `word/${cabecalho}`);
-    const imagem = /<a:blip [^>]*r:embed="([^"]+)"/.exec(xmlCabecalho)?.[1];
-    const relsCabecalho = conteudo(zip, `word/_rels/${cabecalho.split('/').pop()}.rels`);
-    const arquivo = imagem ? alvo(relsCabecalho, imagem) : null;
-    const mime = arquivo ? MIME_IMAGEM[arquivo.split('.').pop()?.toLowerCase() ?? ''] : undefined;
-    const entrada = arquivo ? lerEntrada(zip, `word/${arquivo.replace(/^\/?(word\/)?/, '')}`) : null;
-    if (mime && entrada?.content && entrada.content.length <= LIMITE_LOGO) logo = `data:${mime};base64,${Buffer.from(entrada.content).toString('base64')}`;
-  }
-  const rodapeArquivo = referencia('footer');
-  const rodape = rodapeArquivo ? paragrafos(conteudo(zip, `word/${rodapeArquivo}`)).map(p => p.trechos.map(t => t.texto).join('').trim()).filter(Boolean) : [];
-  return { paragrafos: paragrafos(corpo.replace(/<w:sectPr\b[\s\S]*?<\/w:sectPr>/g, '')), logo, rodape };
+  return { paragrafos: paragrafos(corpo.replace(/<w:sectPr\b[\s\S]*?<\/w:sectPr>/g, '')) };
 }

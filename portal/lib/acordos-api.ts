@@ -9,7 +9,7 @@ import { AGREEMENT_STATUSES, errorMessage, isOneOf, isValidDateRange, toNonNegat
 import { type ContextoApi, type User, type Row, textValue, nullableText, stringList } from './api-compartilhada.ts';
 import { revisaoConfere } from './controle-escrita.ts';
 import { auditoriaNoLote } from './auditoria-api.ts';
-import { CNPJS_DO_ACORDO_SQL, atendeCidadeSql, compararCondicoes, descreverCnpjs, validarCnpjsAcordo, type CnpjAcordo } from './acordos-cnpjs.ts';
+import { CNPJS_DO_ACORDO_SQL, atendeCidadeSql, chaveCondicao, compararCondicoes, descreverCnpjs, validarCnpjsAcordo, validarEscolhas, type CnpjAcordo } from './acordos-cnpjs.ts';
 
 export function acordosApi(contexto: ContextoApi) {
   const { id, now, rawDb, adquirirTrava, liberarTrava, ok, fail, jsonBody, all, first } = contexto;
@@ -524,16 +524,17 @@ export function acordosApi(contexto: ContextoApi) {
   }
 
   // Unir com outro acordo: os CNPJs do outro passam a ser CNPJs deste, com as
-  // cidades que ele atendia, e o outro e suspenso (historico preservado). So
-  // une quando as condicoes vigentes dos dois sao identicas; senao devolve a
-  // lista de diferencas. Sem confirmar=true, so mostra o que vai acontecer.
+  // cidades que ele atendia, e o outro e suspenso (historico preservado).
+  // Preco ou marcas diferentes: a tela escolhe, por linha, qual vale (escolhas,
+  // com '*' como escolha geral). Condicao que so existe no outro entra neste,
+  // desde que a cidade pertenca a este acordo. Sem confirmar=true, so compara.
   async function unirAcordos(request: Request, user: User, agreementId: string) {
-    const body = await jsonBody<{ outroId?: unknown; expectedRevision?: unknown; outroRevision?: unknown; confirmar?: unknown }>(request);
+    const body = await jsonBody<{ outroId?: unknown; expectedRevision?: unknown; outroRevision?: unknown; confirmar?: unknown; escolhas?: unknown }>(request);
     const outroId = textValue(body.outroId);
     if (!outroId) return fail('Escolha o acordo que será unido a este.');
     if (outroId === agreementId) return fail('Escolha um acordo diferente deste.');
-    type Cab = { id: string; number: string; supplierId: string; supplier: string; cnpj: string; status: string; notes: string | null; revision: number };
-    const cabecalho = (idAcordo: string) => first<Cab>(`SELECT a.id,a.number,a.supplier_id AS supplierId,s.trade_name AS supplier,s.cnpj,a.status,a.notes,a.revision
+    type Cab = { id: string; number: string; supplierId: string; supplier: string; cnpj: string; status: string; notes: string | null; revision: number; versao: string };
+    const cabecalho = (idAcordo: string) => first<Cab>(`SELECT a.id,a.number,a.supplier_id AS supplierId,s.trade_name AS supplier,s.cnpj,a.status,a.notes,a.revision,a.current_version_id AS versao
       FROM agreements a JOIN suppliers s ON s.id=a.supplier_id WHERE a.id=?`, [idAcordo]);
     const [este, outro] = await Promise.all([cabecalho(agreementId), cabecalho(outroId)]);
     if (!este || !outro) return fail('Acordo não encontrado.', 404);
@@ -541,8 +542,8 @@ export function acordosApi(contexto: ContextoApi) {
     const dono = await travarAcordo(outroId);
     if (!dono) return fail('Outro usuário está alterando o outro acordo neste momento. Tente de novo em instantes.', 409);
     try {
-      const condicoes = (idAcordo: string) => all<{ locationId: string; catalogItemId: string; modelId: string; unitId: string; price: number; brands: string | null; item: string; model: string; city: string; state: string; unit: string }>(
-        `SELECT ai.location_id AS locationId,ai.catalog_item_id AS catalogItemId,ai.vehicle_model_id AS modelId,ai.unit_id AS unitId,ai.price,ai.brands_text AS brands,
+      const condicoes = (idAcordo: string) => all<{ locationId: string; catalogItemId: string; modelId: string; unitId: string; price: number; brands: string | null; notes: string | null; item: string; model: string; city: string; state: string; unit: string }>(
+        `SELECT ai.location_id AS locationId,ai.catalog_item_id AS catalogItemId,ai.vehicle_model_id AS modelId,ai.unit_id AS unitId,ai.price,ai.brands_text AS brands,ai.notes,
           ci.name AS item,vm.name AS model,l.city,l.state,un.code AS unit
         FROM agreements a JOIN agreement_items ai ON ai.version_id=a.current_version_id JOIN catalog_items ci ON ci.id=ai.catalog_item_id
         JOIN vehicle_models vm ON vm.id=ai.vehicle_model_id JOIN units un ON un.id=ai.unit_id JOIN locations l ON l.id=ai.location_id WHERE a.id=?`, [idAcordo]);
@@ -550,6 +551,10 @@ export function acordosApi(contexto: ContextoApi) {
       const [itensEste, itensOutro, cidadesEste, cidadesOutro, cnpjsEste, cnpjsOutro] = await Promise.all([
         condicoes(agreementId), condicoes(outroId), cidades(agreementId), cidades(outroId), cnpjsDoAcordo(agreementId), cnpjsDoAcordo(outroId)]);
       const diferencas = compararCondicoes(itensEste, itensOutro);
+      // Condicao do outro numa cidade fora deste acordo nao tem onde entrar.
+      const cidadesDeste = new Set(cidadesEste);
+      for (const d of diferencas) if (d.tipo === 'so_no_outro' && !cidadesDeste.has(d.chave.split('|')[0])) d.foraDaAbrangencia = true;
+      const fora = [...new Set(diferencas.filter(d => d.foraDaAbrangencia).map(d => `${d.city}/${d.state}`))].sort();
       // CNPJs que entram neste acordo: o principal do outro (nas cidades do
       // outro) e os adicionais do outro (nas cidades deles), sempre dentro
       // das cidades deste acordo.
@@ -567,7 +572,7 @@ export function acordosApi(contexto: ContextoApi) {
       }
       const nomesCidades = new Map((await all<{ id: string; nome: string }>(`SELECT id,city || '/' || state AS nome FROM locations WHERE id IN (SELECT value FROM json_each(?))`, [JSON.stringify(cidadesOutro)])).map(r => [r.id, r.nome]));
       const cnpjsQueEntram = [...novos.values()].map(c => ({ supplier: c.supplier, cnpj: c.cnpj, todasCidades: c.todasCidades, cidades: c.locationIds.map(l => nomesCidades.get(l) || l).sort() }));
-      const motivo = diferencas.length ? 'As condições vigentes dos dois acordos não são iguais. Corrija as diferenças antes de unir.'
+      const motivo = fora.length ? `O outro acordo tem condições em cidade(s) que este acordo não atende: ${fora.join(', ')}. Inclua a cidade neste acordo ou retire a condição do outro antes de unir.`
         : !novos.size ? 'O outro acordo não traz nenhum CNPJ novo para as cidades deste acordo.'
         : outro.status !== 'active' ? 'O outro acordo já está suspenso.' : '';
       const resumo = { outro: { id: outro.id, number: outro.number, supplier: outro.supplier, cnpj: outro.cnpj, revision: outro.revision },
@@ -575,18 +580,35 @@ export function acordosApi(contexto: ContextoApi) {
       if (body.confirmar !== true) return ok(resumo);
       if (motivo) return fail(motivo, 409);
       if (!revisaoConfere(body.outroRevision, outro.revision)) return fail('O outro acordo foi alterado depois da comparação. Compare de novo antes de unir.', 409);
+      const escolhidas = validarEscolhas(body.escolhas, diferencas);
+      if (!escolhidas.value) return fail(escolhidas.error || 'Escolhas inválidas.');
+      const doOutro = new Map(itensOutro.map(i => [chaveCondicao(i), i]));
+      const condicoesUnidas = diferencas.flatMap(d => {
+        const o = doOutro.get(d.chave);
+        if (!o) return [];
+        if (d.tipo === 'so_no_outro') return [rawDb().prepare(`INSERT INTO agreement_items (id,version_id,location_id,catalog_item_id,vehicle_model_id,unit_id,price,courtesy,brands_text,notes,created_at,updated_at)
+          VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`).bind(id('itm'), este.versao, o.locationId, o.catalogItemId, o.modelId, o.unitId, o.price, o.price === 0 ? 1 : 0, o.brands, o.notes, now(), now())];
+        if (escolhidas.value!.get(d.chave) !== 'outro') return [];
+        return [rawDb().prepare(`UPDATE agreement_items SET price=?,courtesy=?,brands_text=?,updated_at=?
+          WHERE version_id=? AND location_id=? AND catalog_item_id=? AND vehicle_model_id=? AND unit_id=?`)
+          .bind(o.price, o.price === 0 ? 1 : 0, o.brands, now(), este.versao, o.locationId, o.catalogItemId, o.modelId, o.unitId)];
+      });
+      const trazidas = diferencas.filter(d => d.tipo === 'so_no_outro').length;
+      const doOutroValem = diferencas.filter(d => (d.tipo === 'preco' || d.tipo === 'marcas') && escolhidas.value!.get(d.chave) === 'outro').length;
       const timestamp = now(), dia = dataDeNegocio().split('-').reverse().join('/');
       const lista: CnpjAcordo[] = [...cnpjsEste.map(c => novos.get(c.supplierId) ?? { supplierId: c.supplierId, todasCidades: c.todasCidades, locationIds: c.locationIds }),
         ...[...novos.values()].filter(c => !atuais.has(c.supplierId))].map(({ supplierId, todasCidades, locationIds }) => ({ supplierId, todasCidades, locationIds }));
       const nota = `Unido ao acordo ${este.number} em ${dia}: os CNPJs deste acordo passaram para ele.`;
       await rawDb().batch([
+        ...condicoesUnidas,
         ...gravarCnpjs(agreementId, lista, timestamp),
         rawDb().prepare('UPDATE agreements SET updated_at=? WHERE id=?').bind(timestamp, agreementId),
         rawDb().prepare("UPDATE agreements SET status='suspended',notes=?,updated_at=? WHERE id=?").bind(outro.notes ? `${outro.notes}\n${nota}` : nota, timestamp, outroId),
         auditoriaNoLote(contexto, user.id, 'UPDATE', 'agreement', agreementId, JSON.stringify({ antes: { outrosCnpjs: await descricaoCnpjs(cnpjsEste) }, depois: { outrosCnpjs: await descricaoCnpjs(lista) } })),
+        ...(condicoesUnidas.length ? [auditoriaNoLote(contexto, user.id, 'UPDATE', 'agreement', agreementId, `Condições ajustadas na união com o acordo ${outro.number}: ${doOutroValem} com o valor do outro acordo; ${trazidas} trazida(s) do outro acordo.`)] : []),
         auditoriaNoLote(contexto, user.id, 'UPDATE', 'agreement', outroId, `Acordo ${outro.number} unido ao acordo ${este.number} e suspenso; condições e histórico preservados.`),
       ]);
-      return ok({ success: true, cnpjsQueEntram });
+      return ok({ success: true, cnpjsQueEntram, doOutroValem, trazidas });
     } finally { await soltarAcordo(outroId, dono); }
   }
 

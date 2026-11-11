@@ -6,8 +6,6 @@ export type DadosReceita = {
   cnpj: string; razao_social: string; nome_fantasia: string; situacao_cadastral: string;
   cnae_codigo: string; cnae_descricao: string; logradouro: string; numero: string;
   complemento: string; bairro: string; cidade: string; uf: string; cep: string;
-  // Quadro societario (QSA): sugere o responsavel legal no gerador de contratos.
-  socios?: { nome: string; qualificacao: string }[];
 };
 export type ProvedorConsulta = (url: URL, signal: AbortSignal) => Promise<unknown>;
 export class FalhaConsulta extends Error {
@@ -39,14 +37,11 @@ export function normalizarReceita(valor: unknown, cnpj: string, fonte: string): 
   // A BrasilAPI separa o tipo ("RUA") do nome do logradouro; a ReceitaWS ja junta.
   const tipo = reserva ? '' : texto(valor.descricao_tipo_de_logradouro, 40), nomeLogradouro = texto(valor.logradouro);
   const logradouro = tipo && !normalizeText(nomeLogradouro).startsWith(normalizeText(tipo)) ? `${tipo} ${nomeLogradouro}`.trim() : nomeLogradouro;
-  const socios = (Array.isArray(valor.qsa) ? valor.qsa : []).filter(isRecord).slice(0, 20)
-    .map(s => ({ nome: texto(reserva ? s.nome : s.nome_socio, 120), qualificacao: texto(reserva ? s.qual : s.qualificacao_socio, 80).replace(/^\d+-/, '') }))
-    .filter(s => s.nome);
   return {
     cnpj, razao_social: razao, nome_fantasia: texto(reserva ? valor.fantasia : valor.nome_fantasia), situacao_cadastral: situacao,
     cnae_codigo: digitos(reserva ? atividade.code : valor.cnae_fiscal), cnae_descricao: texto(reserva ? atividade.text : valor.cnae_fiscal_descricao),
     logradouro, numero: texto(valor.numero, 30), complemento: texto(valor.complemento), bairro: texto(valor.bairro),
-    cidade: texto(valor.municipio, 80), uf: texto(valor.uf, 2), cep: digitos(valor.cep), ...(socios.length ? { socios } : {}),
+    cidade: texto(valor.municipio, 80), uf: texto(valor.uf, 2), cep: digitos(valor.cep),
   };
 }
 

@@ -31,17 +31,16 @@ void test('fontes normalizadas, reserva, inexistente e ambas fora', async () => 
   assert.throws(() => normalizarReceita({ cnpj: CNPJS_ENSAIO.baixada }, CNPJS_ENSAIO.ativa, 'BrasilAPI'));
 });
 
-void test('tipo de logradouro da BrasilAPI e socios das duas fontes', () => {
+void test('tipo de logradouro da BrasilAPI e da ReceitaWS', () => {
   const cnpj = CNPJS_ENSAIO.ativa, base = { cnpj, uf: 'SP', municipio: 'Cidade Fictícia' };
   const brasil = normalizarReceita({ ...base, razao_social: 'FICTÍCIA', descricao_situacao_cadastral: 'ATIVA', descricao_tipo_de_logradouro: 'RUA', logradouro: 'FICTÍCIA',
     qsa: [{ nome_socio: 'PESSOA FICTÍCIA', qualificacao_socio: 'Sócio-Administrador' }, { nome_socio: '' }] }, cnpj, 'BrasilAPI');
   assert.equal(brasil.logradouro, 'RUA FICTÍCIA');
-  assert.deepEqual(brasil.socios, [{ nome: 'PESSOA FICTÍCIA', qualificacao: 'Sócio-Administrador' }]);
   // Tipo ja presente no nome nao se repete.
   assert.equal(normalizarReceita({ ...base, razao_social: 'X', descricao_situacao_cadastral: 'ATIVA', descricao_tipo_de_logradouro: 'RUA', logradouro: 'Rua Fictícia' }, cnpj, 'BrasilAPI').logradouro, 'Rua Fictícia');
   const reserva = normalizarReceita({ ...base, nome: 'FICTÍCIA', situacao: 'ATIVA', logradouro: 'RUA FICTÍCIA', qsa: [{ nome: 'PESSOA FICTÍCIA', qual: '49-Sócio-Administrador' }] }, cnpj, 'ReceitaWS');
   assert.equal(reserva.logradouro, 'RUA FICTÍCIA');
-  assert.deepEqual(reserva.socios, [{ nome: 'PESSOA FICTÍCIA', qualificacao: 'Sócio-Administrador' }]);
+  assert.equal('socios' in reserva, false);
 });
 
 void test('cache CNPJ/CEP dura 10 minutos, clona respostas e reconsulta renova', async () => {
