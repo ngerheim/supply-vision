@@ -51,7 +51,7 @@ export function UnirAcordosDialog({ acordo, busy, run, onClose }: { acordo: AnyR
     .map((a) => ({ id: a.id, name: `${a.number} · ${a.supplier} · ${a.cnpj}` }));
   return (
     <Dialog open onOpenChange={(aberto) => !aberto && !busy && onClose()}>
-      <DialogContent showCloseButton={!busy} className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
+      <DialogContent showCloseButton={!busy} className="max-h-[90vh] overflow-y-auto sm:max-w-6xl">
         <DialogHeader><DialogTitle>Unir com outro acordo</DialogTitle></DialogHeader>
         <div className="space-y-4">
           <p className="text-sm text-muted-foreground">
@@ -95,10 +95,10 @@ export function UnirAcordosDialog({ acordo, busy, run, onClose }: { acordo: AnyR
                           <TableCell>{TIPO[d.tipo] || d.tipo}</TableCell>
                           <TableCell>{d.item}</TableCell>
                           <TableCell>{d.model}</TableCell>
-                          <TableCell>{d.city} / {d.state}</TableCell>
-                          <TableCell className="text-right">{d.tipo === 'marcas' ? d.marcasNeste || 'Livre' : rs(d.precoNeste)}</TableCell>
-                          <TableCell className="text-right">{d.tipo === 'marcas' ? d.marcasNoOutro || 'Livre' : rs(d.precoNoOutro)}</TableCell>
-                          <TableCell>
+                          <TableCell className="whitespace-nowrap">{d.city} / {d.state}</TableCell>
+                          <TableCell className="whitespace-nowrap text-right">{d.tipo === 'marcas' ? d.marcasNeste || 'Livre' : rs(d.precoNeste)}</TableCell>
+                          <TableCell className="whitespace-nowrap text-right">{d.tipo === 'marcas' ? d.marcasNoOutro || 'Livre' : rs(d.precoNoOutro)}</TableCell>
+                          <TableCell className="whitespace-nowrap">
                             {d.tipo === 'preco' || d.tipo === 'marcas' ? (
                               <fieldset aria-label={`Valor que prevalece: ${d.item} ${d.model}`} className="flex gap-1 border-0 p-0">
                                 {(['neste', 'outro'] as const).map((lado) => (

@@ -157,11 +157,15 @@ export function Contratos({ busy }: { busy: boolean }) {
   );
 }
 
-// Folha A4 do contrato: so o texto, sem cabecalho nem rodape; as margens vem
-// do @page contrato (globals.css).
+// Folha A4 do contrato: so o texto, sem cabecalho nem rodape. A pagina nomeada
+// (@page contrato) so valia nas primeiras folhas no Chrome; da 3a em diante
+// voltava a margem padrao de 12 mm. Este @page vem depois do globals.css e
+// existe so enquanto a folha esta na tela, entao vale para todas as paginas.
+const PAGINA_CONTRATO = '@media print { @page { size: A4; margin: 25mm; } }';
 function FolhaContrato({ contrato }: { contrato: ContratoLeitura }) {
   return (
     <section className="so-impressao contrato-papel">
+      <style>{PAGINA_CONTRATO}</style>
       {contrato.paragrafos.map((p, n) => {
         const Tag = p.tipo === 'clausula' ? 'h2' : 'p';
         return (
