@@ -58,4 +58,23 @@ void test('pagamentos multipart: anexos, posse, download, transicoes e permissao
   assert.ok(sql.prepare('SELECT 1 FROM notificacoes_usuario WHERE tipo=? AND link=? AND user_id=?').get('pagamento',link,'editor'));
   const recusada=await pedir('POST',`pagamentos/${criada.data.id}/transicao`,'editor',JSON.stringify({para:'recusada',texto:'Motivo ficticio de recusa',expectedRevision:1}),{'content-type':'application/json'});assert.equal(recusada.status,200);
   assert.match(sql.prepare('SELECT texto FROM notificacoes_usuario WHERE tipo=? AND link=? AND user_id=?').get('pagamento',link,'viewer').texto,/Motivo ficticio de recusa/);
+  // Varios arquivos de OC e de NF ao abrir; depois, mais arquivos enquanto aberta ou em analise.
+  const pdf=(texto)=>new Blob([`%PDF-1.7 ${texto}`],{type:'application/pdf'});
+  const varios=new FormData();varios.set('link','https://example.com/varios');varios.append('oc',pdf('oc1'),'oc1.pdf');varios.append('oc',pdf('oc2'),'oc2.pdf');varios.append('nf',pdf('nf1'),'nf1.pdf');varios.append('nf',new Blob(['<?xml version="1.0"?><nfe/>']),'nf1.xml');
+  const multi=await pedir('POST','pagamentos','viewer',varios);assert.equal(multi.status,201,JSON.stringify(multi.data));
+  const anexosMulti=(await pedir('GET',`pagamentos/${multi.data.id}`)).data.anexos;assert.deepEqual(anexosMulti.map(a=>`${a.tipo}:${a.nome_arquivo}`),['nf:nf1.pdf','nf:nf1.xml','oc:oc1.pdf','oc:oc2.pdf']);
+  const segundo=await pedir('GET',`pagamentos/${multi.data.id}/anexos/${anexosMulti[3].id}`);assert.equal(new TextDecoder().decode(segundo.data),'%PDF-1.7 oc2');
+  assert.equal((await pedir('GET',`pagamentos/${multi.data.id}/anexos/${anexosMulti[3].id}`,'outro')).status,404);
+  const semNf=new FormData();semNf.set('link','https://example.com/x');semNf.append('oc',pdf('so oc'),'oc.pdf');assert.equal((await pedir('POST','pagamentos','viewer',semNf)).status,400);
+  const mais=(...arquivos)=>{const f=new FormData();for(const[tipo,blob,nome]of arquivos)f.append(tipo,blob,nome);return f;};
+  const incluir=await pedir('POST',`pagamentos/${multi.data.id}/anexos`,'viewer',mais(['nf',pdf('nf2'),'nf2.pdf'],['oc',pdf('oc1'),'repetido.pdf']));
+  assert.equal(incluir.status,201,JSON.stringify(incluir.data));assert.equal(incluir.data.incluidos,1,'o arquivo repetido nao entra de novo');
+  assert.deepEqual((await pedir('POST',`pagamentos/${multi.data.id}/anexos`,'viewer',mais(['nf',pdf('nf2'),'nf2.pdf']))).data,{success:true,incluidos:0});
+  assert.equal((await pedir('GET',`pagamentos/${multi.data.id}`)).data.anexos.length,5);
+  assert.ok((await pedir('GET',`pagamentos/${multi.data.id}`)).data.andamentos.some(a=>/Anexos incluídos: NF nf2.pdf/.test(a.texto)));
+  assert.equal((await pedir('POST',`pagamentos/${multi.data.id}/anexos`,'outro',mais(['nf',pdf('alheio'),'a.pdf']))).status,404);
+  assert.equal((await pedir('POST',`pagamentos/${multi.data.id}/anexos`,'viewer',mais(['nf',new Blob(['texto']),'a.pdf']))).status,400);
+  assert.equal((await pedir('POST',`pagamentos/${multi.data.id}/anexos`,'editor',mais(['oc',pdf('suprimentos'),'s.pdf']))).status,201);
+  // Encerrada (recusada acima), nao recebe mais arquivos.
+  assert.equal((await pedir('POST',`pagamentos/${criada.data.id}/anexos`,'viewer',mais(['nf',pdf('tarde'),'t.pdf']))).data.codigo,'status_invalido');
 });

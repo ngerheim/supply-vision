@@ -449,6 +449,7 @@ async function POSTInterno(request: NextRequest) {
   if(partsOf(request)[0]==='pagamentos'){
     const parts=partsOf(request);
     if(parts.length===1){if(!pode(user,'pagamento:abrir'))return denyWrite(request,'Seu perfil não permite abrir solicitações.');const bytes=await corpoBinarioLimitado(request,10*1024*1024+128*1024,{drenagemBytes:1024*1024});if(bytes===null)return ok({error:'Corpo da solicitação acima do limite de 10 MB.'},{status:413,headers:{connection:'close'}});return pagamentos.criar(new Request(request.url,{method:'POST',headers:request.headers,body:bytes.buffer.slice(bytes.byteOffset,bytes.byteOffset+bytes.byteLength) as ArrayBuffer}),user);}
+    if(parts.length===3&&parts[2]==='anexos'){if(!pode(user,'pagamento:abrir'))return denyWrite(request,'Seu perfil não permite anexar arquivos.');const bytes=await corpoBinarioLimitado(request,10*1024*1024+128*1024,{drenagemBytes:1024*1024});if(bytes===null)return ok({error:'Corpo da solicitação acima do limite de 10 MB.'},{status:413,headers:{connection:'close'}});return pagamentos.adicionarAnexos(new Request(request.url,{method:'POST',headers:request.headers,body:bytes.buffer.slice(bytes.byteOffset,bytes.byteOffset+bytes.byteLength) as ArrayBuffer}),user,parts[1]);}
     if(parts.length===3&&parts[2]==='transicao'){if(!pode(user,'pagamento:atender'))return denyWrite(request,'Seu perfil não permite atender solicitações.');return pagamentos.transicionar(request,user,parts[1]);}
     return fail('Rota não encontrada.',404);
   }

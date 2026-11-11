@@ -504,6 +504,24 @@ async function initialize() {
       ];
     });
   }
+  // Varios anexos de OC e de NF por pagamento: a tabela perde UNIQUE(pagamento_id,tipo).
+  // SQLite nao remove restricao de tabela; a de anexos e reconstruida (so ela).
+  if (!await db.prepare('SELECT 1 ok FROM schema_migrations WHERE version=26').first()) {
+    await db.batchConstruir((consultar) => {
+      const marcar = { sql: 'INSERT OR IGNORE INTO schema_migrations(version,applied_at) VALUES(26,?)', values: [now()] };
+      const ddl = (consultar({ sql: "SELECT sql FROM sqlite_schema WHERE type='table' AND name='pagamento_anexos'", values: [] }).results[0] as { sql?: string } | undefined)?.sql ?? '';
+      if (!/UNIQUE\s*\(\s*pagamento_id\s*,\s*tipo\s*\)/i.test(ddl)) return [...COMPLEMENTOS_PAGAMENTOS.map(sql => ({ sql, values: [] })), marcar];
+      const colunas = 'id,pagamento_id,tipo,nome_arquivo,mime,tamanho,sha256,conteudo,criado_em,user_id';
+      return [
+        { sql: ddlPagamentoAnexos('pagamento_anexos_nova', 'pagamentos'), values: [] },
+        { sql: `INSERT INTO pagamento_anexos_nova(${colunas}) SELECT ${colunas} FROM pagamento_anexos ORDER BY rowid`, values: [] },
+        { sql: 'DROP TABLE pagamento_anexos', values: [] },
+        { sql: 'ALTER TABLE pagamento_anexos_nova RENAME TO pagamento_anexos', values: [] },
+        ...COMPLEMENTOS_PAGAMENTOS.map(sql => ({ sql, values: [] })),
+        marcar,
+      ];
+    });
+  }
   await db.prepare('PRAGMA optimize').run();
 }
 

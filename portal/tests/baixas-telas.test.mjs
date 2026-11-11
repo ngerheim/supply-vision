@@ -237,7 +237,8 @@ void test('atendimento envia revision, recusa exige motivo, conflito bloqueia at
   const nova = h.requests.at(-1);
   assert.deepEqual(body(nova), {
     expectedRevision: 4,
-    itens:[{id:'bi-1',para:'baixado',motivo:''}],
+    // O texto digitado no Motivo tambem vai na baixa (antes era descartado).
+    itens:[{id:'bi-1',para:'baixado',motivo:'Motivo fictício'}],
   });
   nova.resolve({});
   await flush(h);

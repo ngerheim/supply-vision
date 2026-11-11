@@ -441,7 +441,7 @@ export function DetalheBaixa({
   const atenderSelecionados=async(para:'baixado'|'recusado')=>{
     if(!dados||!selecionados.length||trava.current||conflito)return;
     if(para==='recusado'&&selecionados.some(i=>!motivos[i]?.trim())){setErro('Informe o motivo da recusa de cada item selecionado.');return;}
-    const body={expectedRevision:dados.baixa.revision,itens:selecionados.map(id=>({id,para,motivo:para==='recusado'?motivos[id].trim():''}))},corpo=JSON.stringify(body);
+    const body={expectedRevision:dados.baixa.revision,itens:selecionados.map(id=>({id,para,motivo:(motivos[id]||'').trim()}))},corpo=JSON.stringify(body);
     if(tentativa.current.corpo!==corpo)tentativa.current={corpo,chave:gerarChaveRelatorio()};
     trava.current=true;setBusy(true);setErro('');
     try{await api(`/api/baixas/${encodeURIComponent(id)}/atender-itens`,{...corpoJson('POST',body),headers:{'content-type':'application/json','idempotency-key':tentativa.current.chave}});setSelecionados([]);setMotivos({});setVersao(v=>v+1);}

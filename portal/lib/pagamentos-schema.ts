@@ -10,14 +10,18 @@ export const ddlPagamentos = (tabela: string) => `CREATE TABLE IF NOT EXISTS ${t
     motivo_recusa TEXT, solicitante_id TEXT NOT NULL REFERENCES users(id), atendente_id TEXT REFERENCES users(id), criado_em TEXT NOT NULL, atualizado_em TEXT NOT NULL,
     revision INTEGER NOT NULL DEFAULT 0, request_key TEXT, request_hash TEXT, UNIQUE(solicitante_id,request_key))`;
 export const ddlPagamentoAnexos = (tabela: string, pai: string) => `CREATE TABLE IF NOT EXISTS ${tabela} (id TEXT PRIMARY KEY, pagamento_id TEXT NOT NULL REFERENCES ${pai}(id), tipo TEXT NOT NULL CHECK(tipo IN ('oc','nf')),
-    nome_arquivo TEXT NOT NULL CHECK(length(nome_arquivo)<=120), mime TEXT NOT NULL, tamanho INTEGER NOT NULL, sha256 TEXT NOT NULL, conteudo BLOB NOT NULL, criado_em TEXT NOT NULL, user_id TEXT NOT NULL REFERENCES users(id), UNIQUE(pagamento_id,tipo))`;
+    nome_arquivo TEXT NOT NULL CHECK(length(nome_arquivo)<=120), mime TEXT NOT NULL, tamanho INTEGER NOT NULL, sha256 TEXT NOT NULL, conteudo BLOB NOT NULL, criado_em TEXT NOT NULL, user_id TEXT NOT NULL REFERENCES users(id))`;
 export const ddlPagamentoAndamentos = (tabela: string, pai: string) => `CREATE TABLE IF NOT EXISTS ${tabela} (id TEXT PRIMARY KEY, pagamento_id TEXT NOT NULL REFERENCES ${pai}(id), user_id TEXT NOT NULL REFERENCES users(id),
     de_status TEXT, para_status TEXT NOT NULL, texto TEXT, criado_em TEXT NOT NULL, request_key TEXT, request_hash TEXT, UNIQUE(pagamento_id,user_id,request_key))`;
+/** Varios arquivos de OC e de NF por solicitacao (antes, um de cada). */
+export const ANEXOS_POR_ENVIO = 10, ANEXOS_POR_PAGAMENTO = 20;
+export const BYTES_POR_ANEXO = 5 * 1024 * 1024, BYTES_POR_ENVIO = 10 * 1024 * 1024, BYTES_POR_PAGAMENTO = 30 * 1024 * 1024;
 /** Indices e gatilhos das tres tabelas, ja com os nomes finais. */
 export const COMPLEMENTOS_PAGAMENTOS = [
   `CREATE INDEX IF NOT EXISTS idx_pagamentos_status_atualizado ON pagamentos(status,atualizado_em DESC,id DESC)`,
   `CREATE INDEX IF NOT EXISTS idx_pagamentos_solicitante ON pagamentos(solicitante_id,atualizado_em DESC,id DESC)`,
   `CREATE INDEX IF NOT EXISTS idx_pagamento_andamentos ON pagamento_andamentos(pagamento_id,criado_em,id)`,
+  `CREATE INDEX IF NOT EXISTS idx_pagamento_anexos ON pagamento_anexos(pagamento_id,tipo,criado_em)`,
   `CREATE TRIGGER IF NOT EXISTS pagamento_andamentos_imutavel_update BEFORE UPDATE ON pagamento_andamentos BEGIN SELECT RAISE(ABORT,'Andamentos sao imutaveis'); END`,
   `CREATE TRIGGER IF NOT EXISTS pagamento_andamentos_imutavel_delete BEFORE DELETE ON pagamento_andamentos BEGIN SELECT RAISE(ABORT,'Andamentos sao imutaveis'); END`,
 ];
