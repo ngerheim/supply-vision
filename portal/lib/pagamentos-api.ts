@@ -18,6 +18,10 @@ type PagamentoRow={id:string;codigo:string;status:string;solicitante_id:string;r
 type AnexoRow={nome_arquivo:string;mime:string;conteudo:Uint8Array};
 type Anexo={tipo:'oc'|'nf';nome:string;bytes:Uint8Array;mime:string;sha:string};
 const nomeSeguro=(s:string)=>s.replaceAll('/','_').replaceAll('\\','_').replaceAll('"','_').replace(/\p{Cc}/gu,'_').replace(/^\.+/,'').slice(0,120)||'anexo';
+// Cabecalho HTTP so aceita Latin-1: um travessao ou apostrofo do Word no nome
+// derrubava o download com erro 500. ASCII como reserva e o nome real em
+// filename* (RFC 6266/5987).
+const disposicaoAnexo=(nome:string)=>`attachment; filename="${nome.replace(/[^\x20-\x7e]/g,'_')}"; filename*=UTF-8''${encodeURIComponent(nome).replace(/['()*]/g,c=>`%${c.charCodeAt(0).toString(16).toUpperCase()}`)}`;
 function validarArquivo(file:File,tipo:'oc'|'nf') {
   if(!file.size||file.size>BYTES_POR_ANEXO)throw new EntradaInvalida('Cada anexo deve ter até 5 MB.');
   const nome=nomeSeguro(file.name);
@@ -58,7 +62,7 @@ export function pagamentosApi(ctx:ContextoApi){
   async function download(user:User,pid:string,anexo:string){const p=await visivel(user,pid);if(!p)return ausente();
     // Pelo id do anexo; 'oc'/'nf' (telas antigas) baixam o primeiro daquele tipo.
     const a=['oc','nf'].includes(anexo)?await first<AnexoRow>('SELECT nome_arquivo,mime,conteudo FROM pagamento_anexos WHERE pagamento_id=? AND tipo=? ORDER BY criado_em,rowid LIMIT 1',[pid,anexo])
-      :await first<AnexoRow>('SELECT nome_arquivo,mime,conteudo FROM pagamento_anexos WHERE pagamento_id=? AND id=?',[pid,anexo]);if(!a)return ausente();const conteudo=new Uint8Array(a.conteudo).buffer;return new ctx.NextResponse(conteudo,{status:200,headers:{'content-type':a.mime,'content-disposition':`attachment; filename="${nomeSeguro(a.nome_arquivo)}"`,'x-content-type-options':'nosniff','cache-control':'no-store'}});}
+      :await first<AnexoRow>('SELECT nome_arquivo,mime,conteudo FROM pagamento_anexos WHERE pagamento_id=? AND id=?',[pid,anexo]);if(!a)return ausente();const conteudo=new Uint8Array(a.conteudo).buffer;return new ctx.NextResponse(conteudo,{status:200,headers:{'content-type':a.mime,'content-disposition':disposicaoAnexo(nomeSeguro(a.nome_arquivo)),'x-content-type-options':'nosniff','cache-control':'no-store'}});}
   async function criar(request:Request,user:User){return comAcaoEscrita('pagamento:abrir',async()=>{
     const form=await request.formData(),body:Corpo={link:form.get('link')};
     const anexos=await lerAnexos(form,true);if(!Array.isArray(anexos))return ctx.ok({error:anexos.erro},{status:anexos.status,headers:{connection:'close'}});

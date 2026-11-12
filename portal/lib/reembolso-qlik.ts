@@ -64,6 +64,9 @@ function iniciar(): ChildProcessWithoutNullStreams {
     }
   });
   filho.once('error', erro => { if (processo === filho) encerrar(`Consulta ao Qlik indisponível: ${erro.message}`); });
+  // Escrever no stdin de um Python que acabou de cair gera EPIPE/EOF no stream.
+  // Sem ouvinte, o erro vira excecao nao tratada e derruba o Portal inteiro.
+  filho.stdin.on('error', erro => { if (processo === filho) encerrar(`Consulta ao Qlik indisponível: ${erro.message}`); });
   filho.once('exit', codigo => {
     if (processo !== filho) return;
     if (codigo) console.error(`[reembolso] processo de consulta ao Qlik saiu (código ${codigo}): ${erros.trim().split(/\r?\n/).at(-1) ?? ''}`);
