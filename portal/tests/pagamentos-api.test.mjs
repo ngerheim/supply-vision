@@ -65,6 +65,13 @@ void test('pagamentos multipart: anexos, posse, download, transicoes e permissao
   const anexosMulti=(await pedir('GET',`pagamentos/${multi.data.id}`)).data.anexos;assert.deepEqual(anexosMulti.map(a=>`${a.tipo}:${a.nome_arquivo}`),['nf:nf1.pdf','nf:nf1.xml','oc:oc1.pdf','oc:oc2.pdf']);
   const segundo=await pedir('GET',`pagamentos/${multi.data.id}/anexos/${anexosMulti[3].id}`);assert.equal(new TextDecoder().decode(segundo.data),'%PDF-1.7 oc2');
   assert.equal((await pedir('GET',`pagamentos/${multi.data.id}/anexos/${anexosMulti[3].id}`,'outro')).status,404);
+  // Nome com caractere fora do Latin-1 (travessao e apostrofo do Word): o
+  // cabecalho HTTP so aceita Latin-1; o download nao pode virar erro 500.
+  const nomeWord='Nota – março’.pdf',comNomeWord=new FormData();comNomeWord.set('link','https://example.com/nome');comNomeWord.append('oc',pdf('oc nome'),nomeWord);comNomeWord.append('nf',pdf('nf nome'),'nf.pdf');
+  const criadaNome=await pedir('POST','pagamentos','viewer',comNomeWord);assert.equal(criadaNome.status,201,JSON.stringify(criadaNome.data));
+  const anexoNome=(await pedir('GET',`pagamentos/${criadaNome.data.id}`)).data.anexos.find(a=>a.tipo==='oc');assert.equal(anexoNome.nome_arquivo,nomeWord);
+  const dlNome=await pedir('GET',`pagamentos/${criadaNome.data.id}/anexos/${anexoNome.id}`);assert.equal(dlNome.status,200);
+  const disposicao=dlNome.headers.get('content-disposition');assert.match(disposicao,/^attachment; filename="[\x20-\x7e]+"; filename\*=UTF-8''/);assert.equal(decodeURIComponent(disposicao.split("UTF-8''")[1]),nomeWord);
   const semNf=new FormData();semNf.set('link','https://example.com/x');semNf.append('oc',pdf('so oc'),'oc.pdf');assert.equal((await pedir('POST','pagamentos','viewer',semNf)).status,400);
   const mais=(...arquivos)=>{const f=new FormData();for(const[tipo,blob,nome]of arquivos)f.append(tipo,blob,nome);return f;};
   const incluir=await pedir('POST',`pagamentos/${multi.data.id}/anexos`,'viewer',mais(['nf',pdf('nf2'),'nf2.pdf'],['oc',pdf('oc1'),'repetido.pdf']));

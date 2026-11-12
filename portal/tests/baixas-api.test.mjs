@@ -201,6 +201,16 @@ void test('Baixa no estoque pelo roteador e SQLite reais', async (t) => {
     const d=await get('baixas/bxa_legado_teste');assert.equal(d.status,200);assert.equal(d.data.itens[0].descricao,'Item não especificado (legado)');
     assert.equal(sql.prepare("SELECT COUNT(*) n FROM movimentos_estoque WHERE origem_id='bi_legado_teste'").get().n,0);
   });
+  await t.test('baixa histórica aberta: atender o item legado não gera saída de estoque',async()=>{
+    const timestamp=banco.now();
+    sql.prepare("INSERT INTO baixas_estoque(id,numero_os,estoque_id,placa,status,solicitante_id,criado_em,atualizado_em) VALUES('bxa_legado_aberta','981100',?,'ABC1234','aberta','viewer',?,?)").run(estoqueA.id,timestamp,timestamp);
+    sql.prepare("INSERT INTO baixa_itens(id,baixa_id,item_id,quantidade_centesimos,status,criado_em,atualizado_em) VALUES('bi_legado_aberta','bxa_legado_aberta','item_legado',100,'pendente',?,?)").run(timestamp,timestamp);
+    const revisao=sql.prepare("SELECT revision FROM baixas_estoque WHERE id='bxa_legado_aberta'").get().revision;
+    const r=await post('baixas/bxa_legado_aberta/atender-itens',{expectedRevision:revisao,itens:[{id:'bi_legado_aberta',para:'baixado'}]},'editor');
+    assert.equal(r.status,200,JSON.stringify(r.data));
+    assert.equal(sql.prepare("SELECT status FROM baixas_estoque WHERE id='bxa_legado_aberta'").get().status,'baixada');
+    assert.equal(sql.prepare("SELECT COUNT(*) n FROM movimentos_estoque WHERE origem_id='bi_legado_aberta'").get().n,0);
+  });
   await t.test('entradas, ajustes, saldo, detalhe, saídas automáticas e estorno',async()=>{
     const hoje=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date()),body={estoqueId:estoqueA.id,dataMovimento:hoje,documento:'NF fictícia',observacao:'Recebimento de teste',itens:[{itemId:'item_teste',quantidade:10}]};
     assert.equal((await post('estoque/entradas',body,'viewer')).status,403);
