@@ -2,7 +2,8 @@
 import { useEffect, useState } from "react";
 import { AlertTriangle, LoaderCircle, Search } from "lucide-react";
 import { api, errorText } from "@/lib/api";
-import { CAMPOS_BUSCA, filtrosVazios, parametrosBusca, type FiltrosBusca } from "@/lib/filtros-busca";
+import { CAMPOS_BUSCA, digitosCnpj, filtrosVazios, parametrosBusca, type FiltrosBusca } from "@/lib/filtros-busca";
+import { Input } from "@/components/ui/input";
 import { SearchMultiSelect, type SearchOption } from "@/components/search-multi-select";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -29,13 +30,14 @@ export function BarraBuscaAcordos({
   } | null>(null);
   const [optionError, setOptionError] = useState(""),
     [optionRevision, setOptionRevision] = useState(0);
-  const query = parametrosBusca(filters).toString();
+  // O CNPJ e texto livre: nao muda as opcoes dos outros filtros a cada tecla.
+  const query = parametrosBusca({ ...filters, cnpj: "" }).toString();
   const loadingOptions = optionResult?.query !== query || !!optionError;
   useEffect(() => {
     const controller = new AbortController();
     const timer = setTimeout(() => {
       setOptionError("");
-      void api<{ options: Options }>(`${optionsPath}?${query}`, {
+      void api<{ options: Options }>(`${optionsPath}${optionsPath.includes("?") ? "&" : "?"}${query}`, {
         signal: controller.signal,
       })
         .then((result) => {
@@ -94,6 +96,12 @@ export function BarraBuscaAcordos({
               />
             ),
           )}
+          <div className="min-w-0 space-y-1.5">
+            <label htmlFor="busca-cnpj" className="text-sm font-medium">CNPJ</label>
+            <Input id="busca-cnpj" inputMode="numeric" placeholder="Qualquer CNPJ do acordo" value={filters.cnpj}
+              onChange={(e) => { onChange(); setFilters({ ...filters, cnpj: e.target.value.replace(/[^\d./-]/g, "").slice(0, 18) }); }}
+              onKeyDown={(e) => { if (e.key === "Enter" && digitosCnpj(filters.cnpj)) onSearch(); }} />
+          </div>
           <div className="patio-search-actions">
             {" "}
             <Button

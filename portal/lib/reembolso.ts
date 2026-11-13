@@ -19,7 +19,7 @@ export const SCHEMA_REEMBOLSO = [
     ativo INTEGER NOT NULL DEFAULT 1 CHECK(ativo IN (0,1)), revision INTEGER NOT NULL DEFAULT 0, atualizado_em TEXT NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS reembolso_calculos (
     id TEXT PRIMARY KEY, placa TEXT, cliente TEXT, taxa REAL NOT NULL, categoria TEXT NOT NULL, modelo TEXT, km_atual INTEGER NOT NULL,
-    os_atual TEXT, observacao TEXT, tabela TEXT, itens TEXT NOT NULL, total_custo REAL NOT NULL, total_reembolso REAL NOT NULL,
+    os_atual TEXT, observacao TEXT, tabela TEXT, itens TEXT NOT NULL, total_custo REAL NOT NULL, total_reembolso REAL NOT NULL, fornecedor TEXT,
     user_id TEXT NOT NULL REFERENCES users(id), criado_em TEXT NOT NULL)`,
   'CREATE INDEX IF NOT EXISTS idx_reembolso_calculos_placa ON reembolso_calculos(placa, criado_em DESC)',
   'CREATE INDEX IF NOT EXISTS idx_reembolso_calculos_data ON reembolso_calculos(criado_em DESC, id DESC)',
@@ -130,10 +130,12 @@ export function validarCliente(v: unknown): ClienteEntrada {
   };
 }
 
-export type ItemCalculo = EntradaItem & { peca: string | null; referencia: string | null; origemUltimaTroca: string | null };
+// precoAcordado/acordo: condicao do acordo do fornecedor escolhida para a linha
+// (so conferencia interna; nao entra no calculo nem na impressao).
+export type ItemCalculo = EntradaItem & { peca: string | null; referencia: string | null; origemUltimaTroca: string | null; precoAcordado: number | null; acordo: string | null };
 export type CalculoEntrada = {
   placa: string | null; cliente: string | null; taxa: number; categoria: Categoria; modelo: string | null; kmAtual: number;
-  osAtual: string | null; observacao: string | null; tabela: string | null; itens: ItemCalculo[];
+  osAtual: string | null; observacao: string | null; tabela: string | null; fornecedor: string | null; itens: ItemCalculo[];
 };
 export function validarCalculo(v: unknown): CalculoEntrada {
   if (!v || typeof v !== 'object') throw new EntradaInvalida('Cálculo inválido.');
@@ -150,13 +152,15 @@ export function validarCalculo(v: unknown): CalculoEntrada {
       ultimaTroca: numero(i.ultimaTroca, 'última troca', { max: 1e8 }), qtd: numero(i.qtd, 'quantidade', { max: 1e5 }),
       valorUnit: numero(i.valorUnit, 'valor unitário', { max: 1e8 }), diferencaPneu: numero(i.diferencaPneu, 'diferença de pneu', { min: -1e8, max: 1e8 }),
       origemUltimaTroca: texto(i.origemUltimaTroca, 80, 'Origem da última troca'),
+      precoAcordado: i.precoAcordado === null || i.precoAcordado === undefined || i.precoAcordado === '' ? null : numero(i.precoAcordado, 'preço acordado', { max: 1e8 }),
+      acordo: texto(i.acordo, 300, 'Condição do acordo'),
     };
   });
   const placa = texto(c.placa, 10, 'Placa')?.toUpperCase().replace(/[^A-Z0-9]/g, '') || null;
   return {
     placa, cliente: texto(c.cliente, 200, 'Cliente'), taxa: numero(c.taxa, 'taxa', { max: 1 }), categoria: c.categoria as Categoria,
     modelo: texto(c.modelo, 80, 'Modelo'), kmAtual: Math.round(numero(c.kmAtual, 'KM atual', { max: 1e8 })), osAtual: texto(c.osAtual, 30, 'OS'),
-    observacao: texto(c.observacao, 2000, 'Observação'), tabela: texto(c.tabela, 200, 'Tabela MTBF'), itens,
+    observacao: texto(c.observacao, 2000, 'Observação'), tabela: texto(c.tabela, 200, 'Tabela MTBF'), fornecedor: texto(c.fornecedor, 200, 'Fornecedor'), itens,
   };
 }
 

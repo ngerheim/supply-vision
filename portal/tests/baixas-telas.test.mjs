@@ -14,6 +14,10 @@ const modules = {
   '@/lib/permissoes': permissoes,
   '@/lib/solicitacoes-cliente': cliente,
   '@/lib/data-brasileira': dataBrasileira,
+  './portal-estoques': {
+    useModelosEstoque: () => [{ id: 'mod', name: 'Modelo fictício' }],
+    comModelo: (descricao, modelo) => (modelo ? `${descricao} (${modelo})` : descricao),
+  },
   '@/lib/relatorios': {
     gerarChaveRelatorio: () =>
       gerarChaveRelatorio({

@@ -3,6 +3,7 @@ import { useEffect, useId, useRef, useState } from 'react';
 import { Combobox } from '@base-ui/react/combobox';
 import { Check, ChevronDown, X } from 'lucide-react';
 import { correspondeBusca } from '@/lib/busca';
+import { ancoraComZoom } from '@/lib/utils';
 export type SearchOption = { id: string; name: string };
 export function SearchMultiSelect({
   label,
@@ -46,7 +47,8 @@ export function SearchMultiSelect({
         sizes.children,
         (child) => child.getBoundingClientRect().width + 4,
       );
-      const available = Math.max(0, node.clientWidth - 80);
+      // Seta (40) + respiro (8) + espaco minimo para ver o que se digita (64).
+      const available = Math.max(0, node.clientWidth - 116);
       let used = 0,
         count = 0;
       for (const width of widths) {
@@ -141,7 +143,7 @@ export function SearchMultiSelect({
         </Combobox.Chips>
         <Combobox.Portal>
           {/* Ancorado no campo inteiro (chips + busca + seta), não só no input. */}
-          <Combobox.Positioner anchor={control} align="start" sideOffset={4} className="z-[150]">
+          <Combobox.Positioner anchor={() => ancoraComZoom(control)} align="start" sideOffset={4} className="z-[150]">
             <Combobox.Popup className="max-h-72 w-[var(--anchor-width)] min-w-48 overflow-y-auto rounded-lg border bg-popover p-1 text-popover-foreground shadow-lg">
               {loading && (
                 <output className="block p-2 text-sm text-muted-foreground">
@@ -185,7 +187,7 @@ export function SearchMultiSelect({
                   })}
                 </div>
               )}
-              <Combobox.Empty className="p-2 text-sm text-muted-foreground">
+              <Combobox.Empty className="p-2 text-sm text-muted-foreground empty:hidden">
                 {loading
                   ? ''
                   : 'Nenhuma opção disponível com os demais filtros'}

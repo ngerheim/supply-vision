@@ -9,6 +9,7 @@ import { gerarChaveRelatorio } from '@/lib/relatorios';
 import { Input } from '@/components/ui/input';
 import { CampoData } from './campo-data';
 import { exibirDataBrasileira } from '@/lib/data-brasileira';
+import { SearchSelect } from '@/components/search-select';
 
 const quantidadeBr = (q: unknown) => Number(q).toLocaleString('pt-BR', { maximumFractionDigits: 2 });
 const moedaBr = (v: unknown) => (v === null || v === undefined || v === '' || !Number.isFinite(Number(v)) ? '—'
@@ -19,9 +20,21 @@ const totalLinha = (quantidade: string, valor: string) => {
   return q > 0 && v > 0 ? Math.round(Math.round(q * 100) * Math.round(v * 100) / 100) / 100 : 0;
 };
 // Itens da entrada, um por linha; a API manda a lista em JSON.
-function itensDaEntrada(r: AnyRow): { descricao: string; quantidade: number; unidade: string; valor_unitario?: number | null }[] {
+function itensDaEntrada(r: AnyRow): { descricao: string; modelo?: string | null; quantidade: number; unidade: string; valor_unitario?: number | null }[] {
   try { return JSON.parse(r.itens_json || '[]'); } catch { return []; }
 }
+// Modelos ativos do catalogo: o saldo e por peca + modelo (vazio = sem modelo).
+export type ModeloEstoque = { id: string; name: string };
+export function useModelosEstoque() {
+  const [modelos, setModelos] = useState<ModeloEstoque[]>([]);
+  useEffect(() => {
+    let ativo = true;
+    void api('/api/estoques/modelos').then((x) => { if (ativo) setModelos(x.modelos); }).catch(() => { if (ativo) setModelos([]); });
+    return () => { ativo = false; };
+  }, []);
+  return modelos;
+}
+export const comModelo = (descricao: string, modelo?: string | null) => (modelo ? `${descricao} (${modelo})` : descricao);
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { CardHeader } from '@/components/ui/card';
@@ -244,6 +257,7 @@ export function Estoques() {
 
 export function EntradaEstoque() {
   const tentativa = useRef<string | null>(null);
+  const modelos = useModelosEstoque();
   const [estoques, setEstoques] = useState<AnyRow[]>([]),
     [resultadoEntradas, setResultadoEntradas] = useState<{
       chave: string;
@@ -267,7 +281,7 @@ export function EntradaEstoque() {
     [busca, setBusca] = useState(''),
     [itens, setItens] = useState<AnyRow[]>([]),
     // As linhas nascem da busca do catalogo; nao ha linha vazia a preencher.
-    [linhas, setLinhas] = useState<{ id: string; quantidade: string; valor: string }[]>([]),
+    [linhas, setLinhas] = useState<{ id: string; modelo: string; quantidade: string; valor: string }[]>([]),
     [erro, setErro] = useState(''),
     [busy, setBusy] = useState(false);
   const consultaEntradas = new URLSearchParams({
@@ -351,10 +365,10 @@ export function EntradaEstoque() {
       linhas.some(
         (l) => !l.id || !Number(l.quantidade) || Number(l.quantidade) <= 0,
       ) ||
-      new Set(linhas.map((l) => l.id)).size !== linhas.length
+      new Set(linhas.map((l) => `${l.id}|${l.modelo}`)).size !== linhas.length
     ) {
       setErro(
-        'Selecione o estoque, adicione itens únicos e informe quantidades maiores que zero.',
+        'Selecione o estoque, informe quantidades maiores que zero e não repita a mesma peça com o mesmo modelo.',
       );
       return;
     }
@@ -374,6 +388,7 @@ export function EntradaEstoque() {
           dataMovimento: data,
           itens: linhas.map((l) => ({
             itemId: l.id,
+            ...(l.modelo ? { modeloId: l.modelo } : {}),
             quantidade: Number(l.quantidade),
             ...(l.valor.trim() ? { valorUnitario: Number(l.valor) } : {}),
           })),
@@ -397,13 +412,10 @@ export function EntradaEstoque() {
       setBusy(false);
     }
   };
+  // A mesma peca pode entrar de novo para outro modelo.
   const adicionar = (item: AnyRow) => {
-    if (linhas.some((l) => l.id === item.id)) {
-      setErro('Este item já foi adicionado.');
-      return;
-    }
-    setItens([...itens, item]);
-    setLinhas([...linhas, { id: item.id, quantidade: '', valor: '' }]);
+    if (!itens.some((i) => i.id === item.id)) setItens([...itens, item]);
+    setLinhas([...linhas, { id: item.id, modelo: '', quantidade: '', valor: '' }]);
     setBusca('');
     setErro('');
   };
@@ -476,7 +488,7 @@ export function EntradaEstoque() {
                   <TableCell className="whitespace-normal">
                     {itensDaEntrada(r).map((i, k) => (
                       <div key={k}>
-                        {i.descricao} · {quantidadeBr(i.quantidade)} {i.unidade}
+                        {comModelo(i.descricao, i.modelo)} · {quantidadeBr(i.quantidade)} {i.unidade}
                         {i.valor_unitario ? ` · ${moedaBr(i.valor_unitario)}/${i.unidade}` : ''}
                       </div>
                     ))}
@@ -504,7 +516,7 @@ export function EntradaEstoque() {
             open
             aria-modal="true"
             aria-labelledby="titulo-entrada"
-            className="relative m-0 max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-xl border bg-card p-0 shadow-xl"
+            className="relative m-0 max-h-[90vh] w-full max-w-5xl overflow-y-auto rounded-xl border bg-card p-0 shadow-xl"
           >
             <header className="flex items-center justify-between border-b p-5">
               <h2 id="titulo-entrada" className="text-lg font-semibold">
@@ -576,13 +588,15 @@ export function EntradaEstoque() {
                   return (
                     <div
                       key={`${l.id}:${n}`}
-                      className="grid items-end gap-3 sm:grid-cols-[1fr_8rem_9rem_8rem_auto]"
+                      className="grid items-end gap-3 sm:grid-cols-[1fr_14rem_7rem_8rem_7rem_auto]"
                     >
                       <p className="pb-2 font-medium">
                         {item
                           ? `${item.descricao} · ${item.unidade}`
                           : 'Escolha um item na busca'}
                       </p>
+                      <SearchSelect label="Modelo (opcional)" value={l.modelo} options={modelos} limit={80}
+                        onChange={(modelo) => setLinhas(linhas.map((x, i) => (i === n ? { ...x, modelo } : x)))} />
                       <Field label="Quantidade">
                         <Input
                           aria-label={`Quantidade da linha ${n + 1}`}
@@ -695,7 +709,7 @@ export function SaldoEstoque({ user }: { user: AnyRow }) {
     setErro('');
     try {
       const x = await api(
-        `/api/estoque/movimentos?estoqueId=${encodeURIComponent(r.estoque_id)}&itemId=${encodeURIComponent(r.item_id)}`,
+        `/api/estoque/movimentos?${new URLSearchParams({ estoqueId: r.estoque_id, itemId: r.item_id, modeloId: r.modelo_id || 'sem' })}`,
       );
       setMovs(x.movimentos);
     } catch (e) {
@@ -808,6 +822,7 @@ export function SaldoEstoque({ user }: { user: AnyRow }) {
               <TableRow>
                 <TableHead>Estoque</TableHead>
                 <TableHead>Item</TableHead>
+                <TableHead>Modelo</TableHead>
                 <TableHead>Saldo</TableHead>
                 <TableHead>Unidade</TableHead>
                 <TableHead className="text-right" title="Custo médio das entradas com valor">Valor unit. (médio)</TableHead>
@@ -817,12 +832,13 @@ export function SaldoEstoque({ user }: { user: AnyRow }) {
             <TableBody>
               {rows.map((r) => (
                 <TableRow
-                  key={`${r.estoque_id}:${r.item_id}`}
+                  key={`${r.estoque_id}:${r.item_id}:${r.modelo_id ?? ''}`}
                   className="cursor-pointer"
                   onClick={() => void abrir(r)}
                 >
                   <TableCell>{r.estoque}</TableCell>
                   <TableCell>{r.descricao}</TableCell>
+                  <TableCell>{r.modelo || '—'}</TableCell>
                   <TableCell>{r.saldo}</TableCell>
                   <TableCell>{r.unidade}</TableCell>
                   <TableCell className="text-right tabular-nums">{moedaBr(r.valor_unitario)}</TableCell>
@@ -842,7 +858,7 @@ export function SaldoEstoque({ user }: { user: AnyRow }) {
         <Card>
           <CardContent>
             <h3 className="mb-3 font-semibold">
-              Movimentações: {historico.descricao} · {historico.estoque}
+              Movimentações: {comModelo(historico.descricao, historico.modelo)} · {historico.estoque}
             </h3>
             <Table>
               <TableHeader>
@@ -938,8 +954,10 @@ function AjusteForm({
   onSave: (body: AnyRow) => void;
   busy: boolean;
 }) {
+  const modelos = useModelosEstoque();
   const [estoqueId, setEstoqueId] = useState(''),
     [itemId, setItemId] = useState(''),
+    [modeloId, setModeloId] = useState(''),
     [itens, setItens] = useState<AnyRow[]>([]),
     [quantidade, setQuantidade] = useState(''),
     [observacao, setObservacao] = useState('');
@@ -962,7 +980,7 @@ function AjusteForm({
                 day: '2-digit',
               }).format(new Date()),
               observacao,
-              itens: [{ itemId, quantidade: Number(quantidade) }],
+              itens: [{ itemId, ...(modeloId ? { modeloId } : {}), quantidade: Number(quantidade) }],
             });
           }}
         >
@@ -998,6 +1016,9 @@ function AjusteForm({
               ))}
             </select>
           </Field>
+          <div className="w-56">
+            <SearchSelect label="Modelo (opcional)" value={modeloId} options={modelos} limit={80} onChange={setModeloId} />
+          </div>
           <Field label="Quantidade (+/-)">
             <Input
               required

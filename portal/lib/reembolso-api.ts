@@ -14,6 +14,9 @@ import {
 } from './reembolso-historico.ts';
 import { aquecerQlik, ConsultaIndisponivel, consultarPlacaQlik } from './reembolso-qlik.ts';
 import { EntradaInvalida } from './limites-entrada.ts';
+import { SITUACAO_EFETIVA_SQL } from './situacao-acordos.ts';
+import { CNPJS_DO_ACORDO_SQL, atendeCidadeSql } from './acordos-cnpjs.ts';
+import { dataDeNegocio } from './data-negocio.ts';
 
 type TabelaRow = { id: string; nome: string; padrao: number; revision: number };
 type ClienteRow = { id: string; nome: string; taxa: number | null; pneu_km: number | null; observacao: string | null; executivo: string | null; tabela_id: string | null; ativo: number; revision: number };
@@ -205,11 +208,32 @@ export function reembolsoApi(contexto: ContextoApi) {
     return comAcaoEscrita('reembolso:salvar', async () => {
       const c = validarCalculo(await jsonBody(request, 256 * 1024));
       const totais = calcularTotais(c.itens, c.kmAtual, c.taxa), novo = id('rmk');
-      await db().prepare(`INSERT INTO reembolso_calculos(id,placa,cliente,taxa,categoria,modelo,km_atual,os_atual,observacao,tabela,itens,total_custo,total_reembolso,user_id,criado_em)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).bind(novo, c.placa, c.cliente, c.taxa, c.categoria, c.modelo, c.kmAtual, c.osAtual, c.observacao, c.tabela,
-        JSON.stringify(c.itens), centavos(totais.custo), centavos(totais.reembolso), user.id, now()).run();
+      await db().prepare(`INSERT INTO reembolso_calculos(id,placa,cliente,taxa,categoria,modelo,km_atual,os_atual,observacao,tabela,itens,total_custo,total_reembolso,user_id,criado_em,fornecedor)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).bind(novo, c.placa, c.cliente, c.taxa, c.categoria, c.modelo, c.kmAtual, c.osAtual, c.observacao, c.tabela,
+        JSON.stringify(c.itens), centavos(totais.custo), centavos(totais.reembolso), user.id, now(), c.fornecedor).run();
       return ok({ id: novo, totalReembolso: centavos(totais.reembolso) }, { status: 201 });
     });
+  }
+
+  // Fornecedor na calculadora: quem tem acordo vigente (principal ou outro
+  // CNPJ) e as condicoes dele, para conferir o valor do reembolso com o acordado.
+  // ?1 e o dia de negocio usado por SITUACAO_EFETIVA_SQL.
+  const VIGENTE = `(${SITUACAO_EFETIVA_SQL}) IN ('active','expiring')`;
+  async function fornecedoresAcordo(user: User) {
+    if (!pode(user, 'aba:reembolso')) return fail('Seu perfil não tem acesso ao Reembolso.', 403);
+    return ok({ fornecedores: await all(`SELECT DISTINCT s.id,s.trade_name AS nome,s.cnpj FROM agreements a JOIN ${CNPJS_DO_ACORDO_SQL} ca ON ca.agreement_id=a.id
+      JOIN suppliers s ON s.id=ca.supplier_id WHERE ${VIGENTE} ORDER BY s.trade_name,s.cnpj`, [dataDeNegocio()]) });
+  }
+  async function condicoesFornecedor(user: User, params: URLSearchParams) {
+    if (!pode(user, 'aba:reembolso')) return fail('Seu perfil não tem acesso ao Reembolso.', 403);
+    const fornecedor = params.get('fornecedor') || '';
+    if (!fornecedor || fornecedor.length > 80) return fail('Escolha o fornecedor.');
+    return ok({ condicoes: await all(`SELECT ai.id,a.number AS acordo,ci.name AS item,vm.name AS modelo,l.city AS cidade,l.state AS uf,un.code AS unidade,ai.price AS preco,ai.brands_text AS marcas
+      FROM agreements a JOIN ${CNPJS_DO_ACORDO_SQL} ca ON ca.agreement_id=a.id AND ca.supplier_id=?2
+      JOIN agreement_items ai ON ai.version_id=a.current_version_id AND ${atendeCidadeSql('ca', 'ai.location_id')}
+      JOIN catalog_items ci ON ci.id=ai.catalog_item_id JOIN vehicle_models vm ON vm.id=ai.vehicle_model_id
+      JOIN locations l ON l.id=ai.location_id JOIN units un ON un.id=ai.unit_id
+      WHERE ${VIGENTE} ORDER BY ci.name,vm.name,l.state,l.city,a.number LIMIT 5000`, [dataDeNegocio(), fornecedor]) });
   }
 
   async function listarCalculos(user: User, params: URLSearchParams) {
@@ -235,7 +259,7 @@ export function reembolsoApi(contexto: ContextoApi) {
     if (!k) return fail('Cálculo não encontrado.', 404);
     const itens = (JSON.parse(k.itens) as Parameters<typeof calcularItem>[0][]).map(i => ({ ...i, ...calcularItem(i, k.km_atual, k.taxa) }));
     return ok({ calculo: { id: k.id, placa: k.placa, cliente: k.cliente, taxa: k.taxa, categoria: k.categoria, modelo: k.modelo, kmAtual: k.km_atual,
-      osAtual: k.os_atual, observacao: k.observacao, tabela: k.tabela, itens, totalCusto: k.total_custo, totalReembolso: k.total_reembolso,
+      osAtual: k.os_atual, observacao: k.observacao, tabela: k.tabela, fornecedor: k.fornecedor ?? null, itens, totalCusto: k.total_custo, totalReembolso: k.total_reembolso,
       criadoEm: k.criado_em, autor: k.autor, autorId: k.user_id } });
   }
 
@@ -367,7 +391,7 @@ export function reembolsoApi(contexto: ContextoApi) {
     });
   }
 
-  return { historicoPlaca, aquecerHistorico, filtrosHistorico, valoresHistorico, criarFiltro, excluirFiltro, config, importar, salvarCliente, excluirCliente, salvarTabela, excluirTabela, salvarCalculo, listarCalculos, detalheCalculo, excluirCalculo };
+  return { historicoPlaca, aquecerHistorico, filtrosHistorico, valoresHistorico, criarFiltro, excluirFiltro, config, importar, salvarCliente, excluirCliente, salvarTabela, excluirTabela, salvarCalculo, listarCalculos, detalheCalculo, excluirCalculo, fornecedoresAcordo, condicoesFornecedor };
 }
 
 class ConflitoTabela extends Error {}

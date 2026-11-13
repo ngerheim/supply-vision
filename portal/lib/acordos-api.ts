@@ -212,6 +212,9 @@ export function acordosApi(contexto: ContextoApi) {
         WHERE ai.version_id=a.current_version_id AND ${itens.join(' AND ')}
       )`] : []),
       ...conditions,
+      // Divisao da aba Acordos (vigentes x demais); sem ela, todos. ?1 = dia de negocio.
+      ...(params.get('divisao') === 'vigentes' ? [`(${SITUACAO_EFETIVA_SQL}) IN ('active','expiring')`]
+        : params.get('divisao') === 'demais' ? [`(${SITUACAO_EFETIVA_SQL}) NOT IN ('active','expiring')`] : []),
     ];
     return all(`SELECT a.id,a.number,a.status,a.start_date AS startDate,a.end_date AS endDate,a.updated_at AS updatedAt,
     ${SITUACAO_EFETIVA_SQL} AS effectiveStatus,
@@ -233,9 +236,11 @@ export function acordosApi(contexto: ContextoApi) {
       location: `SELECT DISTINCT l.id AS id,l.city AS name
         FROM agreement_locations al JOIN locations l ON l.id=al.location_id
         WHERE al.agreement_id IN (SELECT value FROM json_each(?))`,
+      // So o fornecedor principal: os outros CNPJs (de acordos unidos) nao
+      // viram nomes repetidos na lista; acham-se pela caixa de CNPJ.
       supplier: `SELECT DISTINCT s.id AS id,s.trade_name AS name
-        FROM ${CNPJS_DO_ACORDO_SQL} ca JOIN suppliers s ON s.id=ca.supplier_id
-        WHERE ca.agreement_id IN (SELECT value FROM json_each(?))`,
+        FROM agreements a JOIN suppliers s ON s.id=a.supplier_id
+        WHERE a.id IN (SELECT value FROM json_each(?))`,
       item: `SELECT DISTINCT ci.id AS id,ci.name AS name FROM agreements a
         JOIN agreement_items ai ON ai.version_id=a.current_version_id
         JOIN catalog_items ci ON ci.id=ai.catalog_item_id

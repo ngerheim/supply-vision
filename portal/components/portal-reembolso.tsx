@@ -13,6 +13,7 @@ import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
 import { Textarea } from '@/components/ui/textarea';
 import { TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { api, errorText } from '@/lib/api';
+import { textoBusca } from '@/lib/busca';
 import { dataHoraSolicitacao } from '@/lib/solicitacoes-cliente';
 import { CATEGORIAS, calcularItem, type Tipo } from '@/lib/reembolso';
 import { candidatos, placaNormalizada, resumoPlaca, termosPadrao, type Candidato, type LinhaPlaca } from '@/lib/reembolso-historico';
@@ -28,14 +29,21 @@ type Foto = { url: string; nome: string; video: boolean };
 // com placa, km e termos); escolhido = OS clicada; manual = digitado;
 // salvo = veio de um calculo salvo. So "auto" e vazio sao recalculados.
 type ModoUltimaTroca = '' | 'auto' | 'escolhido' | 'manual' | 'salvo';
+// acordo*: condicao do acordo do fornecedor para conferir o valor unitario.
+// acordoModo: auto = sugerida pela peca e pelo modelo (refeita quando eles
+// mudam); manual = escolhida; salvo = veio de um calculo salvo.
 type ItemForm = { chave: number; peca: string; referencia: string; tipo: Tipo; kmTroca: string; ultimaTroca: string; qtd: string; valorUnit: string; diferencaPneu: string; dica: string; fotos: Foto[];
-  utModo: ModoUltimaTroca; utRotulo: string; termos: string; termosEditados: boolean };
+  utModo: ModoUltimaTroca; utRotulo: string; termos: string; termosEditados: boolean;
+  acordoId: string; acordoPreco: number | null; acordoTexto: string; acordoModo: '' | 'auto' | 'manual' | 'salvo' };
+type Condicao = { id: string; acordo: string; item: string; modelo: string; cidade: string; uf: string; unidade: string; preco: number; marcas: string | null };
+type FornecedorAcordo = { id: string; nome: string; cnpj: string };
 type Veiculo = { cliente: string | null; modelo: string | null; data: string | null; clienteId: string | null };
 type Historico = { placa: string; carregando?: boolean; erro?: string; consultadoEm?: string; aviso?: string | null; filtradas?: number; veiculo?: Veiculo; linhas: LinhaPlaca[] };
 // Origem de cliente e modelo: "qlik" = veio da placa e pode ser trocado por
 // outra placa; "manual" = escolhido pela pessoa e nunca e sobrescrito.
 type Origem = '' | 'qlik' | 'manual';
-type Form = { clienteId: string; clienteNome: string; taxaPct: string; categoria: string; modelo: string; placa: string; kmAtual: string; osAtual: string; observacao: string; clienteOrigem: Origem; modeloOrigem: Origem };
+type Form = { clienteId: string; clienteNome: string; taxaPct: string; categoria: string; modelo: string; placa: string; kmAtual: string; osAtual: string; observacao: string; clienteOrigem: Origem; modeloOrigem: Origem;
+  fornecedorId: string; fornecedorNome: string };
 
 const moeda = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 const inteiro = new Intl.NumberFormat('pt-BR');
@@ -46,13 +54,19 @@ const decimal = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maxim
 const pct = (t: number | null) => (t === null ? '—' : `${inteiro.format(Math.round(t * 10000) / 100)}%`);
 const valorTxt = (v: number | string | null | undefined) => (typeof v === 'number' ? `${inteiro.format(v)} km` : v ? String(v) : '—');
 const json = (method: string, corpo: unknown) => ({ method, headers: { 'content-type': 'application/json' }, body: JSON.stringify(corpo) });
-const formVazio = (): Form => ({ clienteId: '', clienteNome: '', taxaPct: '', categoria: 'HATCH_SEDAN', modelo: '', placa: '', kmAtual: '', osAtual: '', observacao: '', clienteOrigem: '', modeloOrigem: '' });
+const formVazio = (): Form => ({ clienteId: '', clienteNome: '', taxaPct: '', categoria: 'HATCH_SEDAN', modelo: '', placa: '', kmAtual: '', osAtual: '', observacao: '', clienteOrigem: '', modeloOrigem: '', fornecedorId: '', fornecedorNome: '' });
 // Placa antiga (ABC1234) ou Mercosul (ABC1D23): consulta na hora, sem esperar a digitacao.
 const PLACA_COMPLETA = /^[A-Z]{3}[0-9][A-Z0-9][0-9]{2}$/;
 const taxaTexto = (t: number | null) => (t === null ? '' : String(Math.round(t * 10000) / 100));
 let proximaChave = 1;
 const itemVazio = (): ItemForm => ({ chave: proximaChave++, peca: '', referencia: '', tipo: 'PROPORCIONAL', kmTroca: '', ultimaTroca: '', qtd: '1', valorUnit: '', diferencaPneu: '0', dica: '', fotos: [],
-  utModo: '', utRotulo: '', termos: '', termosEditados: false });
+  utModo: '', utRotulo: '', termos: '', termosEditados: false, acordoId: '', acordoPreco: null, acordoTexto: '', acordoModo: '' });
+// Condicao do acordo: item e modelo com todas as palavras presentes na peca/
+// referencia e no modelo do veiculo (sem modelo informado, so a peca).
+const palavras = (t: string) => textoBusca(t).split(/[^a-z0-9.]+/).filter(w => w.length >= 3 || /\d/.test(w));
+const contido = (curto: string, longo: string) => { const ws = palavras(curto), alvo = new Set(palavras(longo)); return ws.length > 0 && ws.every(w => alvo.has(w)); };
+const condizCom = (c: Condicao, i: ItemForm, modelo: string) => contido(c.item, `${i.peca} ${i.referencia}`) && (!modelo.trim() || contido(c.modelo, modelo));
+const rotuloCondicao = (c: Condicao) => `${c.item} · ${c.modelo} · ${c.cidade}/${c.uf} · ${moeda.format(c.preco)}/${c.unidade} · ${c.acordo}`;
 const dataBr = (iso: string | null | undefined) => (iso && /^\d{4}-\d{2}-\d{2}/.test(iso) ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}` : '—');
 const dataCurta = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(2, 4)}`;
 const rotuloOs = (c: Candidato) => `OS ${c.os ?? '?'} · ${dataCurta(c.data)}`;
@@ -98,10 +112,11 @@ export function Reembolso({ nav, busy, run }: { nav: string; busy: boolean; run:
     const cliente = config?.clientes.find(c => c.nome.toLowerCase() === String(calc.cliente ?? '').toLowerCase());
     setForm({ clienteId: cliente?.id ?? '', clienteNome: calc.cliente ?? '', taxaPct: String(Math.round(calc.taxa * 10000) / 100), categoria: calc.categoria,
       modelo: calc.modelo ?? '', placa: calc.placa ?? '', kmAtual: String(calc.kmAtual ?? ''), osAtual: calc.osAtual ?? '', observacao: calc.observacao ?? '',
-      clienteOrigem: 'manual', modeloOrigem: 'manual' });
+      clienteOrigem: 'manual', modeloOrigem: 'manual', fornecedorId: '', fornecedorNome: calc.fornecedor ?? '' });
     setItens((calc.itens as AnyRow[]).map(i => ({ ...itemVazio(), peca: i.peca ?? '', referencia: i.referencia ?? '', tipo: i.tipo, kmTroca: String(i.kmTroca || ''),
       ultimaTroca: String(i.ultimaTroca || ''), qtd: String(i.qtd ?? 1), valorUnit: String(i.valorUnit || ''), diferencaPneu: String(i.diferencaPneu ?? 0),
-      utModo: i.ultimaTroca ? 'salvo' : '', utRotulo: i.origemUltimaTroca ?? '' })));
+      utModo: i.ultimaTroca ? 'salvo' : '', utRotulo: i.origemUltimaTroca ?? '',
+      ...(typeof i.precoAcordado === 'number' ? { acordoPreco: i.precoAcordado, acordoTexto: i.acordo ?? '', acordoModo: 'salvo' as const } : {}) })));
   };
 
   if (erro && !config) return <FalhaDeCarregamento erro={erro} tentar={() => void carregar().catch(f => setErro(errorText(f)))} />;
@@ -160,9 +175,10 @@ function Calculadora({ config, form, setForm, itens, setItens, busy, run, vazio 
   const salvar = () => run(async () => {
     await api('/api/reembolso/calculos', json('POST', {
       placa: form.placa, cliente: form.clienteNome || null, taxa, categoria: form.categoria, modelo: form.modelo, kmAtual, osAtual: form.osAtual,
-      observacao: form.observacao, tabela: tabela?.nome ?? null,
+      observacao: form.observacao, tabela: tabela?.nome ?? null, fornecedor: form.fornecedorNome || null,
       itens: itens.map(i => ({ peca: i.peca, referencia: i.referencia, tipo: i.tipo, kmTroca: num(i.kmTroca), ultimaTroca: num(i.ultimaTroca), qtd: num(i.qtd), valorUnit: num(i.valorUnit), diferencaPneu: num(i.diferencaPneu),
-        origemUltimaTroca: i.ultimaTroca ? origemTexto(i) : null })),
+        origemUltimaTroca: i.ultimaTroca ? origemTexto(i) : null,
+        precoAcordado: form.fornecedorNome && i.acordoPreco !== null ? i.acordoPreco : null, acordo: form.fornecedorNome && i.acordoPreco !== null ? i.acordoTexto : null })),
     }));
   }, 'Cálculo salvo. Ele aparece em Reembolso › Salvos.');
   const origemTexto = (i: ItemForm) => (i.utModo === 'auto' ? `automático · ${i.utRotulo}` : i.utModo === 'escolhido' ? `escolhido · ${i.utRotulo}`
@@ -177,6 +193,55 @@ function Calculadora({ config, form, setForm, itens, setItens, busy, run, vazio 
     return resto.length ? resto : [itemVazio()];
   });
   const podeSalvar = itens.some(i => num(i.valorUnit) > 0) && !busy;
+  // Fornecedor: so quem tem acordo vigente; as condicoes dele conferem o valor unitario.
+  const [fornecedores, setFornecedores] = useState<FornecedorAcordo[] | null>(null), [condicoes, setCondicoes] = useState<{ id: string; lista: Condicao[]; erro?: string } | null>(null);
+  useEffect(() => {
+    const controller = new AbortController();
+    void api('/api/reembolso/fornecedores', { signal: controller.signal }).then((r: AnyRow) => { if (!controller.signal.aborted) setFornecedores(r.fornecedores); }).catch(() => { if (!controller.signal.aborted) setFornecedores([]); });
+    return () => controller.abort();
+  }, []);
+  // Calculo salvo traz o nome do fornecedor; o id vem da lista atual.
+  const fornecedorSalvo = !form.fornecedorId && form.fornecedorNome ? fornecedores?.find(f => f.nome === form.fornecedorNome) : undefined;
+  useEffect(() => { if (fornecedorSalvo) setForm(f => ({ ...f, fornecedorId: fornecedorSalvo.id })); }, [fornecedorSalvo, setForm]);
+  useEffect(() => {
+    if (!form.fornecedorId) return;
+    const controller = new AbortController(), id = form.fornecedorId;
+    void api(`/api/reembolso/condicoes?${new URLSearchParams({ fornecedor: id })}`, { signal: controller.signal })
+      .then((r: AnyRow) => { if (!controller.signal.aborted) setCondicoes({ id, lista: r.condicoes }); })
+      .catch(f => { if (!controller.signal.aborted) setCondicoes({ id, lista: [], erro: errorText(f) }); });
+    return () => controller.abort();
+  }, [form.fornecedorId]);
+  const listaCondicoes = useMemo(() => (form.fornecedorId && condicoes?.id === form.fornecedorId ? condicoes.lista : []), [condicoes, form.fornecedorId]);
+  // Sugestao automatica: uma unica condicao que bate com a peca e o modelo.
+  const chaveSugestao = itens.map(i => `${i.chave}|${i.peca}|${i.referencia}|${i.acordoModo}|${i.acordoId}`).join('\n');
+  useEffect(() => {
+    if (!listaCondicoes.length) return;
+    setItens(lista => {
+      let mudou = false;
+      const nova = lista.map(i => {
+        if (i.acordoModo !== '' && i.acordoModo !== 'auto') return i;
+        const achadas = listaCondicoes.filter(c => condizCom(c, i, form.modelo)), c = achadas.length === 1 ? achadas[0] : undefined;
+        if ((c?.id ?? '') === i.acordoId && (c ? i.acordoModo === 'auto' : i.acordoModo === '')) return i;
+        mudou = true;
+        return c ? { ...i, acordoId: c.id, acordoPreco: c.preco, acordoTexto: rotuloCondicao(c), acordoModo: 'auto' as const } : { ...i, acordoId: '', acordoPreco: null, acordoTexto: '', acordoModo: '' as const };
+      });
+      return mudou ? nova : lista;
+    });
+    // chaveSugestao resume o que importa dos itens sem refazer a cada tecla em valores.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [listaCondicoes, form.modelo, chaveSugestao, setItens]);
+  const escolherFornecedor = (id: string) => {
+    const f = fornecedores?.find(x => x.id === id);
+    setForm(x => ({ ...x, fornecedorId: id, fornecedorNome: f?.nome ?? '' }));
+    setItens(lista => lista.map(i => ({ ...i, acordoId: '', acordoPreco: null, acordoTexto: '', acordoModo: '' as const })));
+  };
+  const escolherCondicao = (chave: number, id: string) => {
+    const c = listaCondicoes.find(x => x.id === id);
+    mudarItem(chave, c ? { acordoId: c.id, acordoPreco: c.preco, acordoTexto: rotuloCondicao(c), acordoModo: 'manual' } : { acordoId: '', acordoPreco: null, acordoTexto: '', acordoModo: 'manual' });
+  };
+  const acimaDoAcordo = (i: ItemForm) => (form.fornecedorNome && i.acordoPreco !== null && num(i.valorUnit) > 0 ? Math.round((num(i.valorUnit) - i.acordoPreco) * 100) / 100 : null);
+  const totalAcima = itens.reduce((s, i) => { const d = acimaDoAcordo(i); return d !== null && d > 0 ? s + d * num(i.qtd) : s; }, 0);
+  const conferidos = itens.some(i => acimaDoAcordo(i) !== null);
   const [hoje] = useState(() => new Date().toLocaleDateString('pt-BR'));
   const [hojeIso] = useState(() => new Date().toLocaleDateString('sv-SE'));
 
@@ -270,9 +335,16 @@ function Calculadora({ config, form, setForm, itens, setItens, busy, run, vazio 
             {CATEGORIAS.map(([id, nome]) => <NativeSelectOption key={id} value={id}>{nome}</NativeSelectOption>)}
           </NativeSelect>
         </Field>
+        <div className="reembolso-fornecedor">
+          <SearchSelect label="Fornecedor (conferir com o acordo)" value={form.fornecedorId} limit={80} onChange={escolherFornecedor}
+            options={(fornecedores ?? []).map(f => ({ id: f.id, name: `${f.nome} · ${String(f.cnpj ?? '').replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5')}` }))} />
+        </div>
         <p className="reembolso-info text-xs text-muted-foreground">
           {`MTBF: ${tabela ? tabela.nome : '—'}${cliente?.executivo ? ` · Comercial: ${cliente.executivo}` : ''}${cliente?.observacao ? ` · ${cliente.observacao}` : ''}`}
           {cliente && cliente.taxa === null ? ' · cliente sem taxa cadastrada: preencha à mão' : ''}
+          {form.fornecedorId && condicoes?.id === form.fornecedorId && (condicoes.erro ? ` · acordo do fornecedor indisponível: ${condicoes.erro}`
+            : ` · ${condicoes.lista.length} condição(ões) no acordo do fornecedor${condicoes.lista.length >= 5000 ? ' (mostrando as 5.000 primeiras)' : ''}`)}
+          {!form.fornecedorId && form.fornecedorNome && fornecedores && !fornecedorSalvo ? ` · fornecedor do cálculo salvo sem acordo vigente: ${form.fornecedorNome}` : ''}
         </p>
         <p className="reembolso-info reembolso-historico-status text-xs">{statusHistorico}
           {historico?.placa === placa && !historico.carregando && <> <button type="button" className="text-link hover:underline" onClick={() => setForcar(v => v + 1)}>Consultar o Qlik de novo</button></>}</p>
@@ -307,6 +379,12 @@ function Calculadora({ config, form, setForm, itens, setItens, busy, run, vazio 
             <div className="reembolso-resultado"><span>Valor total</span><b>{moeda.format(r.valorTotal)}</b></div>
             <div className="reembolso-resultado destaque"><span>Reembolso</span><b>{moeda.format(r.reembolso)}</b></div>
           </div>
+          {form.fornecedorId && <div className="reembolso-acordo">
+            <SearchSelect label="Condição do acordo" value={i.acordoId} options={[...listaCondicoes].sort((a, b) => Number(condizCom(b, i, form.modelo)) - Number(condizCom(a, i, form.modelo)))
+              .map(c => ({ id: c.id, name: rotuloCondicao(c) }))} onChange={id => escolherCondicao(i.chave, id)} />
+            <ConferenciaAcordo item={i} acima={acimaDoAcordo(i)} />
+          </div>}
+          {!form.fornecedorId && i.acordoModo === 'salvo' && <ConferenciaAcordo item={i} acima={acimaDoAcordo(i)} />}
           {i.dica && <p className="text-xs text-muted-foreground">{i.dica}</p>}
           <HistoricoItem item={i} linhas={linhasPlaca} disponivel={historico?.placa === placa && !historico.carregando && !historico.erro && !!resumo} contexto={contexto}
             origem={origemTexto(i)} mudar={dados => mudarItem(i.chave, dados)} />
@@ -323,9 +401,11 @@ function Calculadora({ config, form, setForm, itens, setItens, busy, run, vazio 
       })}</div>
       <Button variant="outline" onClick={() => setItens(lista => [...lista, itemVazio()])}><Plus /> Adicionar item</Button>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className={`grid gap-3 ${conferidos ? 'grid-cols-3' : 'grid-cols-2'}`}>
         <Card><CardContent><p className="text-xs font-medium text-muted-foreground">Custo total da manutenção</p><p className="text-2xl font-semibold tabular-nums">{moeda.format(totalCusto)}</p></CardContent></Card>
         <Card><CardContent><p className="text-xs font-medium text-muted-foreground">Total do reembolso ao cliente</p><p className="text-2xl font-semibold tabular-nums">{moeda.format(totalReembolso)}</p></CardContent></Card>
+        {conferidos && <Card><CardContent><p className="text-xs font-medium text-muted-foreground">Acima do acordado (valor unit. × qtd)</p>
+          <p className={`text-2xl font-semibold tabular-nums ${totalAcima > 0 ? 'text-destructive' : ''}`}>{moeda.format(totalAcima)}</p></CardContent></Card>}
       </div>
       <Field label="Observações"><Textarea value={form.observacao} maxLength={2000} onChange={e => mudar('observacao', e.target.value)} placeholder="Observação relevante sobre esta manutenção" /></Field>
       <p className="text-xs text-muted-foreground">
@@ -400,6 +480,15 @@ function Calculadora({ config, form, setForm, itens, setItens, busy, run, vazio 
         : <i>— sem fotos anexadas —</i>}</div>
     </section>
   </div>;
+}
+
+// Conferencia interna: nao aparece na impressao, que vai para o cliente.
+function ConferenciaAcordo({ item, acima }: { item: ItemForm; acima: number | null }) {
+  if (item.acordoPreco === null) return <p className="text-xs text-muted-foreground">Sem condição do acordo escolhida para esta peça.</p>;
+  const preco = moeda.format(item.acordoPreco), base = item.acordoModo === 'auto' ? 'sugerida pela peça e pelo modelo' : item.acordoModo === 'salvo' ? `salva: ${item.acordoTexto}` : '';
+  if (acima === null) return <p className="text-xs text-muted-foreground">Acordado: {preco} por unidade{base ? ` (${base})` : ''}. Informe o valor unitário para conferir.</p>;
+  if (acima > 0) return <p className="text-xs font-medium text-destructive">{`${moeda.format(acima)} por unidade acima do acordado (${preco}${item.acordoPreco > 0 ? `; +${inteiro.format(Math.round(acima / item.acordoPreco * 1000) / 10)}%` : ''})`}{base ? ` · ${base}` : ''}</p>;
+  return <p className="text-xs text-muted-foreground">{`Dentro do acordado (${preco} por unidade)`}{base ? ` · ${base}` : ''}</p>;
 }
 
 function Campo({ rotulo, valor, dica, largo }: { rotulo: string; valor: string | null | undefined; dica?: string; largo?: boolean }) {
