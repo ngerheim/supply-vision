@@ -2,7 +2,21 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { startProdServer } from 'vinext/server/prod-server';
 import { CABECALHOS_SEGURANCA } from '../lib/cabecalhos-seguranca.ts';
+import { monitorEventLoopDelay } from 'node:perf_hooks';
 import { conexao } from './ip-conexao.mjs';
+
+// Diagnostico de lentidao no log do Portal: pedido de API que passou de 2 s
+// (metodo, caminho sem a busca, status e tempo; nada de corpo ou usuario) e
+// fila principal travada por mais de 1 s no ultimo minuto. O health do
+// supervisor tem prazo de 5 s; estes registros mostram quem o atrasou.
+export const PEDIDO_LENTO_MS = 2000, FILA_TRAVADA_MS = 1000;
+export function registrarPedidoLento(metodo, url, status, ms, registrar = console.log) {
+  if (ms < PEDIDO_LENTO_MS) return false;
+  let caminho = '?';
+  try { caminho = new URL(url, 'http://localhost').pathname; } catch { /* caminho ilegivel fica '?' */ }
+  registrar(`[portal] pedido lento: ${metodo} ${caminho.slice(0, 200)} ${status} ${Math.round(ms)} ms`);
+  return true;
+}
 
 export async function iniciarServidorNode({ outDir = path.resolve(import.meta.dirname, '../dist'), host = '127.0.0.1', port = 3000, pararArquivo = null, pai = null } = {}) {
   const { build } = JSON.parse(fs.readFileSync(path.join(outDir, 'portal-build.json'), 'utf8'));
@@ -31,12 +45,24 @@ export async function iniciarServidorNode({ outDir = path.resolve(import.meta.di
     } catch {
       res.writeHead(404, { 'x-content-type-options': 'nosniff' });res.end();return true;
     }
+    const inicio = performance.now();
+    res.once('finish', () => registrarPedidoLento(req.method, req.url, res.statusCode, performance.now() - inicio));
     return conexao.run(req.socket.remoteAddress || 'local', () => emitir(evento, ...args));
   };
+  const atraso = monitorEventLoopDelay({ resolution: 50 });
+  atraso.enable();
+  const medidor = setInterval(() => {
+    const maximo = atraso.max / 1e6;
+    if (maximo > FILA_TRAVADA_MS) console.log(`[portal] fila principal travada por ate ${Math.round(maximo)} ms no ultimo minuto`);
+    atraso.reset();
+  }, 60_000);
+  medidor.unref();
   let encerramento;
   function encerrar() {
     if (encerramento) return encerramento;
     clearInterval(vigilancia);
+    clearInterval(medidor);
+    atraso.disable();
     encerramento = new Promise(resolve => {
       server.close(resolve);
       server.closeAllConnections();

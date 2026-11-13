@@ -5,7 +5,8 @@ import { comAcaoEscrita } from './autor-escrita.ts';
 import { EntradaInvalida } from './limites-entrada.ts';
 import { isIsoDate } from './domain.ts';
 import { curvaAbc, filtroSql, lerFiltros, mediana, pareto, validarDia, variacaoPorCidade, type FiltrosAnalise } from './analise.ts';
-import { DIAS_ADIAMENTO, STATUS_ACAO, TIPOS_ACAO, candidatas, conciliar, type AcaoAtual, type StatusAcao } from './analise-acoes.ts';
+import { DIAS_ADIAMENTO, STATUS_ACAO, TIPOS_ACAO, candidatas, conciliar, type AcaoAtual, type Consultar, type StatusAcao } from './analise-acoes.ts';
+import { lerEmParalelo } from './leitura-paralela.ts';
 
 type Num = number | null;
 const n = (v: Num | undefined) => Number(v ?? 0);
@@ -24,6 +25,12 @@ const acaoPublica = (a: AcaoRow) => ({
 
 export function analiseApi(contexto: ContextoApi) {
   const { rawDb, now, ok, fail, all, first, jsonBody } = contexto;
+  // Agregacoes da janela de acoes (fim de cada rodada dos Alertas) leem numa
+  // thread propria; se ela falhar, le na fila principal, como antes.
+  const lerParalelo: Consultar = async <T,>(sql: string, valores: unknown[] = []) => {
+    try { return await lerEmParalelo<T>(rawDb().arquivo, sql, valores); }
+    catch (erro) { console.error('[portal] leitura paralela da Analise falhou; lendo na fila principal:', erro); return all<T>(sql, valores); }
+  };
 
   const parametro = async (chave: string) => (await first<{ valor: string }>('SELECT valor FROM analise_parametros WHERE chave=?', [chave]))?.valor ?? null;
 
@@ -219,7 +226,7 @@ export function analiseApi(contexto: ContextoApi) {
     const ultimo = (await first<{ max: string | null }>('SELECT MAX(data) max FROM compras_comparadas'))?.max;
     if (!ultimo) return { novas: 0, encerradas: 0 };
     const hoje = dataDeNegocio();
-    const lista = await candidatas(all, ultimo);
+    const lista = await candidatas(lerParalelo, ultimo);
     const atuais = await all<AcaoAtual & { atualizada_em: string }>('SELECT id,chave,status,adiada_ate,resolvida_em,atualizada_em FROM analise_acoes');
     const revisao = new Map(atuais.map(a => [a.id, a]));
     const plano = conciliar(atuais, lista, hoje);
