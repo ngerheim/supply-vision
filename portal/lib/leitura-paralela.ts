@@ -18,7 +18,7 @@ const { DatabaseSync } = require('node:sqlite');
 // Uma conexao por pedido, fechada no fim: no Windows um arquivo aberto nao
 // pode ser apagado nem substituido (restauracao, limpeza de fixtures).
 parentPort.on('message', ({ id, arquivo, consultas, formato }) => {
-  let db;
+  let db, resposta;
   try {
     db = new DatabaseSync(arquivo, { readOnly: true });
     db.exec('PRAGMA busy_timeout=5000; PRAGMA query_only=ON');
@@ -27,12 +27,14 @@ parentPort.on('message', ({ id, arquivo, consultas, formato }) => {
     let resultados;
     try { resultados = consultas.map(c => db.prepare(c.sql).all(...c.valores)); }
     finally { db.exec('COMMIT'); }
-    parentPort.postMessage({ id, resultado: formato === 'json' ? JSON.stringify(resultados) : resultados });
+    resposta = { id, resultado: formato === 'json' ? JSON.stringify(resultados) : resultados };
   } catch (erro) {
-    parentPort.postMessage({ id, erro: String(erro && erro.message || erro) });
-  } finally {
-    try { db && db.close(); } catch { /* conexao ja encerrada */ }
+    resposta = { id, erro: String(erro && erro.message || erro) };
   }
+  // Fecha ANTES de responder: quem recebe a resposta pode apagar ou trocar
+  // o arquivo logo em seguida.
+  try { db && db.close(); } catch { /* conexao ja encerrada */ }
+  parentPort.postMessage(resposta);
 });
 `;
 
