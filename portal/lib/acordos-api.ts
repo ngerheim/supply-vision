@@ -1,6 +1,6 @@
 import { CAMPOS_BUSCA, condicoesBusca, outroCnpjAtendeSql } from './filtros-busca.ts';
 import { SQL_ACORDOS_INTERNOS } from './acordos-internos.ts';
-import { lerJsonEmParalelo } from './leitura-paralela.ts';
+import { LeituraParalelaIndisponivel, lerJsonEmParalelo } from './leitura-paralela.ts';
 import { pode } from './permissoes.ts';
 import { consultaBusca, consultasOpcoesBusca } from './consulta-busca.ts';
 import { dataDeNegocio } from './data-negocio.ts';
@@ -527,7 +527,7 @@ export function acordosApi(contexto: ContextoApi) {
       const texto = await lerJsonEmParalelo(rawDb().arquivo, [{ sql: SQL_ACORDOS_INTERNOS }]);
       corpo = `{"generatedAt":${JSON.stringify(generatedAt)},"agreements":${texto.slice(1, -1)}}`;
     } catch (erro) {
-      console.error('[portal] leitura paralela dos acordos falhou; lendo na fila principal:', erro);
+      if (!(erro instanceof LeituraParalelaIndisponivel)) console.error('[portal] leitura paralela dos acordos falhou; lendo na fila principal:', erro);
       corpo = JSON.stringify({ generatedAt, agreements: await all(SQL_ACORDOS_INTERNOS) });
     }
     return new NextResponse(corpo, { headers: { 'content-type': 'application/json', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' } });

@@ -6,7 +6,7 @@ import { EntradaInvalida } from './limites-entrada.ts';
 import { isIsoDate } from './domain.ts';
 import { curvaAbc, filtroSql, lerFiltros, mediana, pareto, validarDia, variacaoPorCidade, type FiltrosAnalise } from './analise.ts';
 import { DIAS_ADIAMENTO, STATUS_ACAO, TIPOS_ACAO, candidatas, conciliar, type AcaoAtual, type Consultar, type StatusAcao } from './analise-acoes.ts';
-import { lerEmParalelo } from './leitura-paralela.ts';
+import { LeituraParalelaIndisponivel, lerEmParalelo } from './leitura-paralela.ts';
 
 type Num = number | null;
 const n = (v: Num | undefined) => Number(v ?? 0);
@@ -29,7 +29,7 @@ export function analiseApi(contexto: ContextoApi) {
   // thread propria; se ela falhar, le na fila principal, como antes.
   const lerParalelo: Consultar = async <T,>(sql: string, valores: unknown[] = []) => {
     try { return await lerEmParalelo<T>(rawDb().arquivo, sql, valores); }
-    catch (erro) { console.error('[portal] leitura paralela da Analise falhou; lendo na fila principal:', erro); return all<T>(sql, valores); }
+    catch (erro) { if (!(erro instanceof LeituraParalelaIndisponivel)) console.error('[portal] leitura paralela da Analise falhou; lendo na fila principal:', erro); return all<T>(sql, valores); }
   };
 
   const parametro = async (chave: string) => (await first<{ valor: string }>('SELECT valor FROM analise_parametros WHERE chave=?', [chave]))?.valor ?? null;
