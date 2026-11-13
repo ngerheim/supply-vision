@@ -133,6 +133,15 @@ void test('reembolso: importacao, configuracao com historico, calculos e permiss
   assert.equal((await pedir('PUT', `reembolso/clientes/${beta.id}`, 'editor', { ...beta, taxa: 0.5, expectedRevision: beta.revision + 1 })).status, 200);
   const detalhe = (await pedir('GET', `reembolso/calculos/${salvo.data.id}`, 'viewer2')).data.calculo;
   assert.deepEqual([detalhe.placa, detalhe.taxa, detalhe.totalReembolso, detalhe.itens[0].reembolso], ['ABC1D23', 0.2, 1200, 1200]);
+  // Fornecedor e preco acordado ficam no calculo salvo, sem mudar os totais.
+  const comAcordo = await pedir('POST', 'reembolso/calculos', 'viewer', { ...calculo, fornecedor: 'Fornecedor Exemplo',
+    itens: [{ ...calculo.itens[0], precoAcordado: 450, acordo: 'PASTILHA · MODELO X · CIDADE/UF · R$ 450,00/UN · AC-1' }] });
+  assert.equal(comAcordo.data.totalReembolso, 1200);
+  const detalheAcordo = (await pedir('GET', `reembolso/calculos/${comAcordo.data.id}`, 'viewer')).data.calculo;
+  assert.deepEqual([detalheAcordo.fornecedor, detalheAcordo.itens[0].precoAcordado, detalheAcordo.itens[0].acordo.endsWith('AC-1')], ['Fornecedor Exemplo', 450, true]);
+  assert.equal(detalhe.fornecedor, null);
+  assert.equal((await pedir('POST', 'reembolso/calculos', 'viewer', { ...calculo, itens: [{ ...calculo.itens[0], precoAcordado: -1 }] })).status, 400);
+  assert.equal((await pedir('DELETE', `reembolso/calculos/${comAcordo.data.id}`, 'viewer')).status, 200);
   assert.equal((await pedir('GET', 'reembolso/calculos?q=abc', 'viewer2')).data.total, 1);
   assert.equal((await pedir('GET', 'reembolso/calculos?q=zzz', 'viewer2')).data.total, 0);
   // So o autor ou Suprimentos exclui.

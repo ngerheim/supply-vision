@@ -522,6 +522,48 @@ async function initialize() {
       ];
     });
   }
+  // Fornecedor escolhido na calculadora de Reembolso (conferencia com o acordo).
+  if (!await db.prepare('SELECT 1 ok FROM schema_migrations WHERE version=27').first()) {
+    await db.batchConstruir((consultar) => {
+      const colunas = consultar({ sql: 'PRAGMA table_info(reembolso_calculos)', values: [] }).results as Array<{ name: string }>;
+      return [
+        ...(colunas.some(c => c.name === 'fornecedor') ? [] : [{ sql: 'ALTER TABLE reembolso_calculos ADD COLUMN fornecedor TEXT', values: [] }]),
+        { sql: 'INSERT OR IGNORE INTO schema_migrations(version,applied_at) VALUES(27,?)', values: [now()] },
+      ];
+    });
+  }
+  // Modelo no estoque: a mesma peca do catalogo serve a varios modelos e o
+  // saldo passa a ser por estoque + peca + modelo (sem modelo = NULL, o que ja
+  // existia). baixa_itens perde UNIQUE(baixa_id,item_id) e e reconstruida.
+  if (!await db.prepare('SELECT 1 ok FROM schema_migrations WHERE version=28').first()) {
+    await db.batchConstruir((consultar) => {
+      const colunas = (tabela: string) => (consultar({ sql: `PRAGMA table_info(${tabela})`, values: [] }).results as Array<{ name: string }>).map(c => c.name);
+      const comandos: { sql: string; values: unknown[] }[] = [];
+      if (!colunas('movimentos_estoque').includes('modelo_id')) comandos.push({ sql: 'ALTER TABLE movimentos_estoque ADD COLUMN modelo_id TEXT REFERENCES vehicle_models(id)', values: [] });
+      if (!colunas('baixa_itens').includes('modelo_id')) {
+        const campos = 'id,baixa_id,item_id,quantidade_centesimos,status,motivo_recusa,atendente_id,atendido_em,criado_em,atualizado_em,revision';
+        comandos.push(
+          { sql: `CREATE TABLE baixa_itens_nova (id TEXT PRIMARY KEY, baixa_id TEXT NOT NULL REFERENCES baixas_estoque(id),
+            item_id TEXT NOT NULL REFERENCES catalog_items(id), quantidade_centesimos INTEGER NOT NULL CHECK(quantidade_centesimos > 0),
+            status TEXT NOT NULL DEFAULT 'pendente' CHECK(status IN ('pendente','baixado','recusado')), motivo_recusa TEXT,
+            atendente_id TEXT REFERENCES users(id), atendido_em TEXT, criado_em TEXT NOT NULL, atualizado_em TEXT NOT NULL,
+            revision INTEGER NOT NULL DEFAULT 0, modelo_id TEXT REFERENCES vehicle_models(id))`, values: [] },
+          { sql: `INSERT INTO baixa_itens_nova(${campos}) SELECT ${campos} FROM baixa_itens ORDER BY rowid`, values: [] },
+          { sql: 'DROP TABLE baixa_itens', values: [] },
+          { sql: 'ALTER TABLE baixa_itens_nova RENAME TO baixa_itens', values: [] },
+          { sql: 'CREATE INDEX IF NOT EXISTS idx_baixa_itens_baixa_id ON baixa_itens(baixa_id)', values: [] },
+          { sql: 'CREATE INDEX IF NOT EXISTS idx_baixa_itens_item_id ON baixa_itens(item_id)', values: [] },
+        );
+      }
+      comandos.push(
+        // A mesma peca so se repete na baixa com outro modelo.
+        { sql: "CREATE UNIQUE INDEX IF NOT EXISTS idx_baixa_itens_item_modelo ON baixa_itens(baixa_id,item_id,COALESCE(modelo_id,''))", values: [] },
+        { sql: 'CREATE INDEX IF NOT EXISTS idx_movimentos_estoque_modelo ON movimentos_estoque(estoque_id,item_id,modelo_id)', values: [] },
+        { sql: 'INSERT OR IGNORE INTO schema_migrations(version,applied_at) VALUES(28,?)', values: [now()] },
+      );
+      return comandos;
+    });
+  }
   await db.prepare('PRAGMA optimize').run();
 }
 

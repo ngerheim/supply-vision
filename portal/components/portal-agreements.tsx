@@ -44,14 +44,19 @@ export function Agreements({ data, catalogs, onOpen, onNew, canWrite }: JsonData
   const [result, setResult] = useState<{ query: string; rows: AnyRow[] } | null>(null);
   const [loadError, setLoadError] = useState('');
   const [status, setStatus] = useState('');
+  // Vigentes (inclui os que vencem em ate 60 dias) x demais (agendados,
+  // expirados, suspensos -- como os unidos a outro acordo).
+  const [divisao, setDivisao] = useState<'vigentes' | 'demais'>('vigentes');
 
   useEffect(() => {
     const readUrl = () => {
       const params = new URLSearchParams(window.location.search);
       const next = filtrosVazios();
       for (const campo of CAMPOS_BUSCA) next[campo] = params.getAll(campo);
+      next.cnpj = params.get('cnpj') || '';
       setFilters(next);
       setStatus(params.get('situacao') || '');
+      setDivisao(params.get('divisao') === 'demais' ? 'demais' : 'vigentes');
       setApplied(parametrosBusca(next).toString());
     };
     queueMicrotask(readUrl);
@@ -78,12 +83,25 @@ export function Agreements({ data, catalogs, onOpen, onNew, canWrite }: JsonData
       params.delete(campo);
       for (const value of next[campo]) params.append(campo, value);
     }
+    const cnpj = parametrosBusca(next).get('cnpj');
+    if (cnpj) params.set('cnpj', cnpj); else params.delete('cnpj');
     window.history.pushState(null, '', `${window.location.pathname}?${params}${window.location.hash}`);
     setApplied(parametrosBusca(next).toString());
   };
-  const rows = (result?.query === applied ? result.rows : []).filter((r: AnyRow) =>
-    correspondeSituacaoAcordo(r.effectiveStatus || r.status, status),
-  );
+  const vigente = (r: AnyRow) => ['active', 'expiring'].includes(r.effectiveStatus || r.status);
+  const todas = result?.query === applied ? result.rows : [];
+  const naDivisao = todas.filter((r: AnyRow) => vigente(r) === (divisao === 'vigentes'));
+  const rows = naDivisao.filter((r: AnyRow) => correspondeSituacaoAcordo(r.effectiveStatus || r.status, status));
+  const situacoes = divisao === 'vigentes'
+    ? [['active', 'Vigente'], ['expiring', 'Vence em até 60 dias']]
+    : [['scheduled', 'Agendado'], ['expired', 'Expirado'], ['suspended', 'Suspenso']];
+  const trocarDivisao = (valor: 'vigentes' | 'demais') => {
+    const params = new URLSearchParams(window.location.search);
+    if (valor === 'demais') params.set('divisao', valor); else params.delete('divisao');
+    params.delete('situacao');
+    window.history.pushState(null, '', `${window.location.pathname}?${params}${window.location.hash}`);
+    setDivisao(valor); setStatus('');
+  };
   return (
     <div className="patio-page">
       <LinhaDeAba
@@ -110,11 +128,18 @@ export function Agreements({ data, catalogs, onOpen, onNew, canWrite }: JsonData
           </>
         }
       />
-      <BarraBuscaAcordos optionsPath="/api/agreements/options" catalogs={catalogs} filters={filters} setFilters={setFilters}
+      <BarraBuscaAcordos optionsPath={`/api/agreements/options?divisao=${divisao}`} catalogs={catalogs} filters={filters} setFilters={setFilters}
         onChange={() => {}} onClear={() => apply(filtrosVazios())}
         onSearch={() => apply(filters)} loading={false} />
       {loadError && <p role="alert">{loadError}</p>}
       <BarraFiltros>
+        <fieldset className="patio-divisao" aria-label="Acordos vigentes ou demais">
+          {(['vigentes', 'demais'] as const).map((valor) => {
+            const n = todas.filter((r: AnyRow) => vigente(r) === (valor === 'vigentes')).length;
+            return <Button key={valor} variant={divisao === valor ? 'default' : 'outline'} aria-pressed={divisao === valor} onClick={() => trocarDivisao(valor)}>
+              {valor === 'vigentes' ? 'Vigentes' : 'Demais'} <span className="tabular-nums opacity-80">{n}</span></Button>;
+          })}
+        </fieldset>
         <NativeSelect
           className="w-48"
           aria-label="Situação do acordo"
@@ -129,13 +154,7 @@ export function Agreements({ data, catalogs, onOpen, onNew, canWrite }: JsonData
           }}
         >
           <NativeSelectOption value="">Todas as situações</NativeSelectOption>
-          <NativeSelectOption value="active">Vigente</NativeSelectOption>
-          <NativeSelectOption value="expiring">
-            Vence em até 60 dias
-          </NativeSelectOption>
-          <NativeSelectOption value="scheduled">Agendado</NativeSelectOption>
-          <NativeSelectOption value="expired">Expirado</NativeSelectOption>
-          <NativeSelectOption value="suspended">Suspenso</NativeSelectOption>
+          {situacoes.map(([valor, rotulo]) => <NativeSelectOption key={valor} value={valor}>{rotulo}</NativeSelectOption>)}
         </NativeSelect>
       </BarraFiltros>
       <AgreementTable

@@ -260,6 +260,7 @@ async function GETInterno(request: NextRequest) {
   }
   if (parts[0] === 'estoques') {
     if (!pode(user, 'baixa:abrir') && !pode(user, 'estoque:consultar') && !pode(user, 'estoque:gerenciar')) return fail('Seu perfil não permite consultar estoques.', 403);
+    if (parts.length === 2 && parts[1] === 'modelos') return baixas.listarModelos();
     return parts.length === 1 ? baixas.listarEstoques(user) : fail('Rota não encontrada.', 404);
   }
   if (parts[0] === 'solicitacoes') {
@@ -292,6 +293,8 @@ async function GETInterno(request: NextRequest) {
     if (parts.length === 3 && parts[1] === 'historico' && parts[2] === 'filtros') return reembolso.filtrosHistorico(user);
     if (parts.length === 3 && parts[1] === 'historico' && parts[2] === 'aquecer') return reembolso.aquecerHistorico(user);
     if (parts.length === 3 && parts[1] === 'historico' && parts[2] === 'valores') return reembolso.valoresHistorico(user, request.nextUrl.searchParams);
+    if (parts.length === 2 && parts[1] === 'fornecedores') return reembolso.fornecedoresAcordo(user);
+    if (parts.length === 2 && parts[1] === 'condicoes') return reembolso.condicoesFornecedor(user, request.nextUrl.searchParams);
     if (parts.length === 2 && parts[1] === 'calculos') return reembolso.listarCalculos(user, request.nextUrl.searchParams);
     if (parts.length === 3 && parts[1] === 'calculos') return reembolso.detalheCalculo(user, parts[2]);
     return fail('Rota não encontrada.', 404);

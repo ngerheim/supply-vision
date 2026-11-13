@@ -1,14 +1,18 @@
 import { EntradaInvalida, LIMITES_CAMPO } from './limites-entrada.ts';
 
 export const CAMPOS_BUSCA = ['state', 'location', 'item', 'model', 'supplier'] as const;
-export type FiltrosBusca = Record<typeof CAMPOS_BUSCA[number], string[]>;
-export const filtrosVazios = (): FiltrosBusca => ({ state: [], location: [], item: [], model: [], supplier: [] });
+// cnpj: digitos (parte ou todo) de qualquer CNPJ do acordo, o principal ou um dos outros.
+export type FiltrosBusca = Record<typeof CAMPOS_BUSCA[number], string[]> & { cnpj: string };
+export const filtrosVazios = (): FiltrosBusca => ({ state: [], location: [], item: [], model: [], supplier: [], cnpj: '' });
+export const digitosCnpj = (valor: string | null | undefined) => (valor ?? '').replace(/\D/g, '').slice(0, 14);
 // Uma data e ate 80 valores por consulta limitam o trabalho de cada filtro.
 export const MAX_FILTROS_BUSCA = 80;
 
 export function parametrosBusca(filters: FiltrosBusca) {
   const params = new URLSearchParams();
   for (const key of CAMPOS_BUSCA) for (const value of filters[key]) params.append(key, value);
+  const cnpj = digitosCnpj(filters.cnpj);
+  if (cnpj) params.set('cnpj', cnpj);
   return params;
 }
 
@@ -38,6 +42,12 @@ export function condicoesBusca(params: URLSearchParams, ignorarCampo?: typeof CA
     }
     conditions.push(`${columns[key]} IN (${marcadores})`);
     values.push(...selected.map(value => key === 'state' ? value.trim().toUpperCase() : value));
+  }
+  // Fica junto do fornecedor (prefixo "(s."), que a lista de Acordos agrupa.
+  const cnpj = digitosCnpj(params.get('cnpj'));
+  if (cnpj) {
+    conditions.push(`(s.cnpj LIKE ? OR EXISTS (SELECT 1 FROM agreement_cnpjs acn JOIN suppliers sn ON sn.id=acn.supplier_id WHERE acn.agreement_id=a.id AND sn.cnpj LIKE ?${cidadeDaCondicao ? ` AND ${outroCnpjAtendeSql('acn', cidadeDaCondicao)}` : ''}))`);
+    values.push(`%${cnpj}%`, `%${cnpj}%`);
   }
   return { conditions, values };
 }

@@ -264,6 +264,36 @@ void test('Baixa no estoque pelo roteador e SQLite reais', async (t) => {
     s1=await saldo();
     assert.deepEqual([s1.saldos[0].saldo,s1.saldos[0].valor_unitario,s1.saldos[0].valor_total],[15,12.5,187.5]);
   });
+  await t.test('modelo: saldo, custo e baixa separados por peça + modelo', async () => {
+    const hoje=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+    sql.exec("INSERT INTO vehicle_models(id,name,active) VALUES('mod_a','MODELO A FICTICIO',1),('mod_b','MODELO B FICTICIO',1),('mod_off','MODELO INATIVO',0)");
+    // Estoque A ja tem a mesma peca sem modelo; as contas abaixo olham so os modelos.
+    const estoqueM=estoqueA;
+    const entrada=(itens,doc)=>post('estoque/entradas',{estoqueId:estoqueM.id,dataMovimento:hoje,documento:doc,itens},'editor');
+    assert.equal((await entrada([{itemId:'item_teste',modeloId:'mod_a',quantidade:1},{itemId:'item_teste',modeloId:'mod_a',quantidade:2}],'NF repetida')).status,400);
+    assert.equal((await entrada([{itemId:'item_teste',modeloId:'mod_off',quantidade:1}],'NF inativo')).status,400);
+    assert.equal((await entrada([{itemId:'item_teste',modeloId:'mod_a',quantidade:5,valorUnitario:10},{itemId:'item_teste',modeloId:'mod_b',quantidade:3,valorUnitario:20},{itemId:'item_teste',quantidade:2}],'NF modelos')).status,200);
+    const saldos=async()=>(await get(`estoque/saldos?estoqueId=${estoqueM.id}&q=Filtro`,'viewer')).data.saldos.filter(r=>r.modelo).map(r=>[r.modelo,r.saldo,r.valor_unitario]);
+    assert.deepEqual(await saldos(),[['MODELO A FICTICIO',5,10],['MODELO B FICTICIO',3,20]]);
+    assert.deepEqual((await get(`estoque/saldos?estoqueId=${estoqueM.id}&q=modelo%20b`,'viewer')).data.saldos.map(r=>r.saldo),[3]);
+    const itensEntrada=JSON.parse((await get(`estoque/entradas?estoqueId=${estoqueM.id}&q=NF%20modelos`,'viewer')).data.entradas[0].itens_json).map(i=>i.modelo??'').sort((x,y)=>x.localeCompare(y));
+    assert.deepEqual(itensEntrada,['','MODELO A FICTICIO','MODELO B FICTICIO']);
+    // Baixa do modelo A: o saldo mostrado e a saida sao so do modelo A.
+    assert.equal((await post('baixas',{numero_os:'981500',placa:'ABC1234',estoque_id:estoqueM.id,itens:[{itemId:'item_teste',modeloId:'mod_off',quantidade:1}]},'viewer')).status,400);
+    const criada=await post('baixas',{numero_os:'981500',placa:'ABC1234',estoque_id:estoqueM.id,itens:[{itemId:'item_teste',modeloId:'mod_a',quantidade:2},{itemId:'item_teste',modeloId:'mod_b',quantidade:1}]},'viewer');
+    assert.equal(criada.status,201,JSON.stringify(criada.data));
+    const det=(await get(`baixas/${criada.data.id}`,'editor')).data;
+    assert.deepEqual(det.itens.map(i=>[i.modelo,i.saldo]),[['MODELO A FICTICIO',5],['MODELO B FICTICIO',3]]);
+    const itemA=det.itens.find(i=>i.modelo_id==='mod_a');
+    assert.equal((await post(`baixas/${criada.data.id}/atender-itens`,{expectedRevision:det.baixa.revision,itens:[{id:itemA.id,para:'baixado'}]},'editor')).status,200);
+    assert.deepEqual((await saldos()).find(r=>r[0]==='MODELO A FICTICIO'),['MODELO A FICTICIO',3,10]);
+    const saida=(await get(`estoque/movimentos?estoqueId=${estoqueM.id}&modeloId=mod_a&tipo=saida`,'viewer')).data.movimentos[0];
+    assert.deepEqual([saida.modelo,saida.quantidade],['MODELO A FICTICIO',-2]);
+    // Estorno da entrada leva o modelo junto.
+    const entB=(await get(`estoque/movimentos?estoqueId=${estoqueM.id}&modeloId=mod_b&tipo=entrada`,'viewer')).data.movimentos[0];
+    assert.equal((await post(`estoque/movimentos/${entB.id}/estorno`,{motivo:'Estorno fictício'},'editor')).status,200);
+    assert.equal((await saldos()).some(r=>r[0]==='MODELO B FICTICIO'),false);
+  });
   await t.test('histórico localiza cada baixa pelo código e mostra a OS', async () => {
     for (const os of ['981001', '981002']) {
       const aberta = await abrir(entrada({ numero_os: os }));

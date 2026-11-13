@@ -72,6 +72,16 @@ void test('acordo com varios CNPJs: cadastro, Alertas, busca, abrangencia, exclu
   const a = criado.data.id;
   condicao(versaoDe(a), 'l1', 100); condicao(versaoDe(a), 'l2', 120);
 
+  // Reembolso: fornecedor com acordo vigente e as condicoes que ele atende
+  // (o CNPJ adicional so na Cidade A).
+  const fornecedoresReembolso = (await pedir('GET', 'reembolso/fornecedores')).data.fornecedores.map(f => f.id).sort();
+  assert.deepEqual(fornecedoresReembolso, ['f1', 'f2']);
+  const condicoesDe = async f => (await pedir('GET', `reembolso/condicoes?fornecedor=${f}`)).data.condicoes.map(c => [c.acordo, c.item, c.modelo, c.cidade, c.unidade, c.preco]);
+  assert.deepEqual(await condicoesDe('f2'), [['LF-1', 'ITEM FICTICIO', 'MODELO FICTICIO', 'Cidade A', 'UNFICT', 100]]);
+  assert.equal((await condicoesDe('f1')).length, 2);
+  assert.deepEqual(await condicoesDe('f3'), []);
+  assert.equal((await pedir('GET', 'reembolso/condicoes')).status, 400);
+
   // Alertas: a linha de cada condicao sai para cada CNPJ que atende a cidade.
   const pedidoInterno = new NextRequest('http://fixture/api/internal/agreements', { headers: { authorization: 'Bearer token-ficticio-cnpjs', 'x-portal-build': PORTAL_BUILD } });
   const internas = await (await rota.GET(pedidoInterno)).json();
@@ -87,10 +97,20 @@ void test('acordo com varios CNPJs: cadastro, Alertas, busca, abrangencia, exclu
   assert.deepEqual(busca.rows.map(r => [r.city, r.extraCnpjs, r.supplier]), [['Cidade A', 1, 'Matriz Ficticia']]);
   assert.deepEqual((await pedir('GET', 'search')).data.rows.map(r => [r.city, r.extraCnpjs]), [['Cidade A', 1], ['Cidade B', 0]]);
   assert.deepEqual((await pedir('GET', 'search?supplier=f2&location=l2')).data.rows, []);
-  assert.ok((await pedir('GET', 'search/options')).data.options.supplier.some(o => o.id === 'f2'));
-  assert.ok(!(await pedir('GET', 'search/options?location=l2')).data.options.supplier.some(o => o.id === 'f2'));
-  assert.ok((await pedir('GET', 'search/options?location=l1')).data.options.supplier.some(o => o.id === 'f2'));
-  assert.ok((await pedir('GET', 'agreements/options')).data.options.supplier.some(o => o.id === 'f2'));
+  // A lista de fornecedores traz so o principal de cada acordo (acordos unidos
+  // nao repetem nomes); o outro CNPJ acha-se pela caixa de CNPJ.
+  const fornecedoresDe = async url => (await pedir('GET', url)).data.options.supplier.map(o => o.id);
+  assert.deepEqual(await fornecedoresDe('search/options'), ['f1']);
+  assert.deepEqual(await fornecedoresDe('agreements/options'), ['f1']);
+  assert.deepEqual((await pedir('GET', 'search?cnpj=11.222.333/0002-62')).data.rows.map(r => r.city), ['Cidade A']);
+  assert.deepEqual((await pedir('GET', 'search?cnpj=000262&location=l2')).data.rows, []);
+  assert.deepEqual((await pedir('GET', 'search?cnpj=0001')).data.rows.map(r => r.city), ['Cidade A', 'Cidade B']);
+  assert.deepEqual((await pedir('GET', 'agreements?cnpj=000262')).data.agreements.map(r => r.id), [a]);
+  assert.deepEqual((await pedir('GET', 'agreements?cnpj=000343')).data.agreements, []);
+  // Divisao da aba Acordos: o acordo ativo esta nos vigentes, nao nos demais.
+  assert.deepEqual(await fornecedoresDe('agreements/options?divisao=vigentes&cnpj=000262'), ['f1']);
+  assert.deepEqual(await fornecedoresDe('agreements/options?divisao=demais'), []);
+  assert.deepEqual((await pedir('GET', 'agreements?divisao=demais')).data.agreements, []);
 
   // Tirar a unica cidade do CNPJ adicional e recusado; a tela antiga (sem a lista) tambem.
   const editar = (corpo) => pedir('PUT', `agreements/${a}`, { ...base, expectedRevision: revisao(a), ...corpo });
