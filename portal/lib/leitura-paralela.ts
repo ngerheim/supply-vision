@@ -15,19 +15,13 @@ import { Worker } from 'node:worker_threads';
 const CODIGO = `
 const { parentPort } = require('node:worker_threads');
 const { DatabaseSync } = require('node:sqlite');
-const conexoes = new Map();
-function conexao(arquivo) {
-  let db = conexoes.get(arquivo);
-  if (!db) {
+// Uma conexao por pedido, fechada no fim: no Windows um arquivo aberto nao
+// pode ser apagado nem substituido (restauracao, limpeza de fixtures).
+parentPort.on('message', ({ id, arquivo, consultas, formato }) => {
+  let db;
+  try {
     db = new DatabaseSync(arquivo, { readOnly: true });
     db.exec('PRAGMA busy_timeout=5000; PRAGMA query_only=ON');
-    conexoes.set(arquivo, db);
-  }
-  return db;
-}
-parentPort.on('message', ({ id, arquivo, consultas, formato }) => {
-  try {
-    const db = conexao(arquivo);
     // Varias leituras no mesmo instantaneo, como o batch do Portal.
     db.exec('BEGIN');
     let resultados;
@@ -36,11 +30,14 @@ parentPort.on('message', ({ id, arquivo, consultas, formato }) => {
     parentPort.postMessage({ id, resultado: formato === 'json' ? JSON.stringify(resultados) : resultados });
   } catch (erro) {
     parentPort.postMessage({ id, erro: String(erro && erro.message || erro) });
+  } finally {
+    try { db && db.close(); } catch { /* conexao ja encerrada */ }
   }
 });
 `;
 
 type Consulta = { sql: string; valores?: unknown[] };
+export class LeituraParalelaIndisponivel extends Error { constructor() { super('Banco sem arquivo para leitura paralela.'); } }
 type Pendente = { resolve: (v: unknown) => void; reject: (e: Error) => void };
 let worker: Worker | null = null, proximo = 1;
 const pendentes = new Map<number, Pendente>();
@@ -70,6 +67,8 @@ function iniciar() {
 
 function pedir(arquivo: string, consultas: Consulta[], formato: 'json' | 'linhas') {
   return new Promise<unknown>((resolve, reject) => {
+    // Banco sem arquivo (adaptador de teste): quem chama le na fila principal.
+    if (typeof arquivo !== 'string' || !arquivo) { reject(new LeituraParalelaIndisponivel()); return; }
     const id = proximo++;
     pendentes.set(id, { resolve, reject });
     try { const atual = iniciar(); atual.ref(); atual.postMessage({ id, arquivo, consultas: consultas.map(c => ({ sql: c.sql, valores: c.valores ?? [] })), formato }); }
