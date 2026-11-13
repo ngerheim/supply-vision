@@ -1,4 +1,6 @@
 import { CAMPOS_BUSCA, condicoesBusca, outroCnpjAtendeSql } from './filtros-busca.ts';
+import { SQL_ACORDOS_INTERNOS } from './acordos-internos.ts';
+import { lerJsonEmParalelo } from './leitura-paralela.ts';
 import { pode } from './permissoes.ts';
 import { consultaBusca, consultasOpcoesBusca } from './consulta-busca.ts';
 import { dataDeNegocio } from './data-negocio.ts';
@@ -9,10 +11,10 @@ import { AGREEMENT_STATUSES, errorMessage, isOneOf, isValidDateRange, toNonNegat
 import { type ContextoApi, type User, type Row, textValue, nullableText, stringList } from './api-compartilhada.ts';
 import { revisaoConfere } from './controle-escrita.ts';
 import { auditoriaNoLote } from './auditoria-api.ts';
-import { CNPJS_DO_ACORDO_SQL, atendeCidadeSql, chaveCondicao, compararCondicoes, descreverCnpjs, validarCnpjsAcordo, validarEscolhas, type CnpjAcordo } from './acordos-cnpjs.ts';
+import { chaveCondicao, compararCondicoes, descreverCnpjs, validarCnpjsAcordo, validarEscolhas, type CnpjAcordo } from './acordos-cnpjs.ts';
 
 export function acordosApi(contexto: ContextoApi) {
-  const { id, now, rawDb, adquirirTrava, liberarTrava, ok, fail, jsonBody, all, first } = contexto;
+  const { id, now, rawDb, adquirirTrava, liberarTrava, ok, fail, jsonBody, all, first, NextResponse } = contexto;
 
   type AgreementInput = {
     expectedRevision?: unknown;
@@ -515,17 +517,20 @@ export function acordosApi(contexto: ContextoApi) {
     return ok({ options });
   }
 
+  // Copia pedida pelos Alertas a cada rodada: a consulta roda numa thread
+  // propria e volta como JSON pronto (ver lib/leitura-paralela.ts). Se a
+  // thread falhar, le aqui mesmo, como antes, para a rodada nao parar.
   async function internalAgreements(){
-    const agreements=await all(`SELECT vm.name MODELO,ci.name PECA_SERVICO,l.city CIDADE,l.state UF,s.cnpj CNPJ,
-    ai.price PRECO,s.trade_name FORNECEDOR,un.code MEDIDA,COALESCE(ai.brands_text,'') MARCAS,
-    a.start_date INICIO_VIGENCIA,a.end_date FIM_VIGENCIA,a.status STATUS_ACORDO
-    FROM agreements a JOIN agreement_items ai ON ai.version_id=a.current_version_id
-    JOIN ${CNPJS_DO_ACORDO_SQL} ca ON ca.agreement_id=a.id AND ${atendeCidadeSql('ca', 'ai.location_id')}
-    JOIN suppliers s ON s.id=ca.supplier_id
-    JOIN catalog_items ci ON ci.id=ai.catalog_item_id JOIN vehicle_models vm ON vm.id=ai.vehicle_model_id
-    JOIN units un ON un.id=ai.unit_id JOIN locations l ON l.id=ai.location_id
-    ORDER BY s.trade_name,vm.name,ci.name,l.state,l.city,ai.id`);
-    return ok({generatedAt:now(),agreements});
+    const generatedAt = now();
+    let corpo: string;
+    try {
+      const texto = await lerJsonEmParalelo(rawDb().arquivo, [{ sql: SQL_ACORDOS_INTERNOS }]);
+      corpo = `{"generatedAt":${JSON.stringify(generatedAt)},"agreements":${texto.slice(1, -1)}}`;
+    } catch (erro) {
+      console.error('[portal] leitura paralela dos acordos falhou; lendo na fila principal:', erro);
+      corpo = JSON.stringify({ generatedAt, agreements: await all(SQL_ACORDOS_INTERNOS) });
+    }
+    return new NextResponse(corpo, { headers: { 'content-type': 'application/json', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' } });
   }
 
   // Unir com outro acordo: os CNPJs do outro passam a ser CNPJs deste, com as
