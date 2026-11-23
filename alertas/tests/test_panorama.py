@@ -87,7 +87,7 @@ def test_download_historico_conserva_periodo_hash_e_projecao(historico, monkeypa
             assert (h, headers, qcx, numericas, kwargs) == (
                 7, OBRIGATORIAS + ['Extra'], 12,
                 {'OS Quantidade', 'Valor Unitario'}, {'progresso_a_cada': 25})
-            linha = list(linha_base().values())
+            linha = list({**linha_base(), 'Data Abertura': '29/02/2024'}.values())
             return [linha + ['a'], linha + ['b']]
     monkeypatch.setattr(baixar.qlik, 'Sessao', Sessao)
     assert baixar.baixar() == 1
@@ -178,3 +178,27 @@ def test_reprocessamento_da_analise_nao_gera_planilha(historico, monkeypatch, tm
     enviados.clear()
     assert gerar.gerar() is False
     assert enviados == [(0, (date(2024, 2, 28), date(2024, 3, 1)))]
+
+
+def test_periodo_longo_em_blocos_e_data_fora_recusada(historico, monkeypatch):
+    baixar, _ = historico
+    monkeypatch.setattr(baixar, 'BLOCO_DIAS', 2)
+    selecoes = []
+    class Sessao:
+        def __init__(self, *args): pass
+        def __enter__(self): return self
+        def __exit__(self, *args): pass
+        def abrir_objeto(self, obj): return 7, OBRIGATORIAS, 11
+        def selecionar_datas(self, campo, dias):
+            selecoes.append(list(dias))
+            return len(dias)
+        def ler(self, *args, **kwargs):
+            data = '28/02/2024' if len(selecoes) == 1 else '15/06/2023'
+            return [list({**linha_base(), 'Data Abertura': data}.values())]
+    monkeypatch.setattr(baixar.qlik, 'Sessao', Sessao)
+    base, meta = Path(baixar.SAIDA), Path(baixar.META)
+    base.write_bytes(b'base anterior'); meta.write_text('meta anterior', encoding='utf-8')
+    with pytest.raises(RuntimeError, match='fora de'):
+        baixar.baixar()
+    assert selecoes == [[date(2024, 2, 28), date(2024, 2, 29)], [date(2024, 3, 1)]]
+    assert not base.exists() and not meta.exists()
