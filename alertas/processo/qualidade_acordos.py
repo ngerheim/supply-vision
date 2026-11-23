@@ -117,7 +117,11 @@ def _qualidade_por_vigencia(df_acordo):
     validos = universo[universo["_preco_valido"]]
     stats = validos.groupby(chave_qualidade)["PRECO"].agg(["nunique", "min", "max"])
     ambiguas = set()
-    for chave, grupo in validos.groupby(chave_qualidade):
+    # Com um preço só não há ambiguidade possível: varrer só as chaves com
+    # mais de um preço válido. Antes eram ~34 mil grupos por rodada.
+    multiplos = stats.index[stats["nunique"] > 1]
+    candidatos = validos.set_index(chave_qualidade).index.isin(multiplos)
+    for chave, grupo in validos[candidatos].groupby(chave_qualidade):
         ativos, precos_ativos = [], {}
         for _, linha in grupo.sort_values("_qualidade_inicio").iterrows():
             inicio, fim, preco = linha["_qualidade_inicio"].value, linha["_qualidade_fim"].value, linha["PRECO"]
@@ -146,6 +150,13 @@ def gerar_qualidade_acordos(df_acordo, path):
     colunas = ["Tipo de pendência", "CNPJ normalizado", "Cidade", "Modelo",
                "Item", "Preço original", "Menor preço", "Maior preço", "Ocorrências"]
     linhas = []
+    # Só os grupos com pendência viram linha; varrer todos custava minutos.
+    # Chave com vazio fica na varredura: NaN não casa por igualdade no isin.
+    pendentes = list(ambiguas | set(sem_preco))
+    filtro = universo[chave_qualidade].isna().any(axis=1)
+    if pendentes:
+        filtro |= universo.set_index(chave_qualidade).index.isin(pendentes)
+    universo = universo[filtro]
     for chave, grupo in universo.groupby(chave_qualidade, dropna=False):
         tipo = STATUS_AMBIGUO if chave in ambiguas else (
             STATUS_PRECO_INVALIDO if chave in sem_preco else "")

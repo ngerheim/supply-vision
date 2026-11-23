@@ -79,6 +79,12 @@ def _uf(valor):
 
 
 
+def _chaves(df):
+    """Conjunto de tuplas da chave do acordo, sem montar matriz de objetos."""
+    return set(zip(*(df[c].tolist() for c in CHAVE_ACORDO)))
+
+
+
 def _processar_periodo(df_base, df_acordo, pecas_conhecidas=None):
     # Regra da operacao: medida nao participa da comparacao nem da referencia.
     if "UF" not in df_acordo.columns or df_base.empty:
@@ -88,7 +94,11 @@ def _processar_periodo(df_base, df_acordo, pecas_conhecidas=None):
     base = df_base.copy()
     valores = base.get("Fornecedor por Estado", base.get("UF", pd.Series("", index=base.index)))
     base["_comparacao_uf"] = valores.apply(_uf)
-    ufs_acordo = df_acordo["UF"].apply(_uf)
+    # _uf por valor distinto: a tabela de acordos tem ~40 mil linhas e poucas
+    # UFs, e esta função roda uma vez por dia do recorte.
+    cache_uf = {}
+    ufs_acordo = pd.Series([cache_uf[u] if u in cache_uf else cache_uf.setdefault(u, _uf(u))
+                            for u in df_acordo["UF"]], index=df_acordo.index)
     partes = []
     for uf, grupo in base.groupby("_comparacao_uf", sort=False):
         universo = df_acordo[ufs_acordo == uf] if uf else df_acordo.iloc[:0]
@@ -118,8 +128,8 @@ def _processar_periodo_compativel(df_base, df_acordo, pecas_conhecidas=None):
 
     n_precos = ac_valido.groupby(CHAVE_ACORDO)["PRECO"].nunique()
     chaves_ambiguas = set(n_precos[n_precos > 1].index)
-    chaves_com_preco = set(map(tuple, ac_valido[CHAVE_ACORDO].values))
-    chaves_sem_preco = set(map(tuple, df_acordo[CHAVE_ACORDO].values)) - chaves_com_preco
+    chaves_com_preco = _chaves(ac_valido)
+    chaves_sem_preco = _chaves(df_acordo) - chaves_com_preco
 
     ac = (ac_valido.sort_values("PRECO")
                    .drop_duplicates(subset=CHAVE_ACORDO, keep="first"))
@@ -188,9 +198,10 @@ def _processar_periodo_compativel(df_base, df_acordo, pecas_conhecidas=None):
     os_col = pd.to_numeric(m.get("Codigo OS", pd.Series("", index=m.index)),
                            errors="coerce")
 
-    ac_ref = ac_valido[
-        ~ac_valido[CHAVE_ACORDO].apply(tuple, axis=1).isin(chaves_ambiguas)
-    ]
+    if chaves_ambiguas:
+        ac_ref = ac_valido[~pd.MultiIndex.from_frame(ac_valido[CHAVE_ACORDO]).isin(list(chaves_ambiguas))]
+    else:
+        ac_ref = ac_valido
     ref = (ac_ref
                     .sort_values("PRECO")
                     .drop_duplicates(subset=["_cidade_norm","_modelo_norm","_peca_norm"], keep="first"))
@@ -270,9 +281,19 @@ def processar(df_base, df_acordo):
     # suspenso ou encerrado não pode servir de referência em data nenhuma.
     ativos = df_acordo[df_acordo["STATUS_ACORDO"].fillna("").astype(str).str.strip().str.lower() == "active"]
     grupos = [(anteriores | invalidas, ativos)]
+    # Dias com o mesmo conjunto de acordos vigentes são processados juntos:
+    # o resultado é o mesmo e cada chamada custa ~1 s com a tabela inteira.
+    por_universo = {}
     for data_compra in sorted(datas[~(anteriores | invalidas)].unique()):
         data_compra = pd.Timestamp(data_compra)
-        grupos.append((datas == data_compra, _acordos_vigentes_em(df_acordo, data_compra, vigencia)))
+        universo = _acordos_vigentes_em(df_acordo, data_compra, vigencia)
+        chave = tuple(universo.index)
+        if chave in por_universo:
+            mascara, _ = por_universo[chave]
+            por_universo[chave] = (mascara | (datas == data_compra), universo)
+        else:
+            por_universo[chave] = (datas == data_compra, universo)
+    grupos.extend(por_universo.values())
     for mascara, universo in grupos:
         indices = df_base.index[mascara]
         if not len(indices):
