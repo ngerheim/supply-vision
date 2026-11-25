@@ -202,3 +202,15 @@ def test_periodo_longo_em_blocos_e_data_fora_recusada(historico, monkeypatch):
         baixar.baixar()
     assert selecoes == [[date(2024, 2, 28), date(2024, 2, 29)], [date(2024, 3, 1)]]
     assert not base.exists() and not meta.exists()
+
+
+def test_falha_no_painel_nao_derruba_o_recorte(historico, monkeypatch, capsys):
+    _, gerar = historico
+    falso = types.ModuleType('painel_resultados')
+    def quebra(*args):
+        raise ValueError('coluna faltando')
+    falso.gerar_painel = quebra
+    monkeypatch.setitem(sys.modules, 'painel_resultados', falso)
+    assert gerar._gerar_painel(pd.DataFrame(), None, '20240228-20240301', 'x') is None
+    saida = capsys.readouterr().out
+    assert 'painel não gerado' in saida and 'PAINEL_RESULTADOS=' not in saida

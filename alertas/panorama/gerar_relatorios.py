@@ -127,10 +127,29 @@ def gerar():
     caminho = OUTPUT_DIR / f'recorte_historico_{tag}_{stamp}.xlsx'
     gerou = rodar.gerar_recorte_historico(df, str(caminho))
 
+    if gerou:
+        _gerar_painel(df, df_acordo, tag, stamp)
+
     print('\nConcluído.')
     if gerou:
         print(f"RELATORIO_HISTORICO={caminho}")
     return caminho if gerou else False
+
+
+def _gerar_painel(df, df_acordo, tag, stamp):
+    """Painel de resultados em paralelo ao recorte: falha aqui nunca derruba o recorte."""
+    caminho = OUTPUT_DIR / f'painel_resultados_{tag}_{stamp}.xlsx'
+    print('\nGerando PAINEL DE RESULTADOS (paralelo, em teste)...')
+    try:
+        import painel_resultados
+        if painel_resultados.gerar_painel(df, str(caminho), df_acordo):
+            print(f'  Salvo: {caminho}')
+            print(f'PAINEL_RESULTADOS={caminho}')
+            return caminho
+        print('  (sem linhas elegíveis — painel não gerado)')
+    except Exception as erro:
+        print(f'  AVISO: painel não gerado ({type(erro).__name__}: {erro}). O recorte segue válido.')
+    return None
 
 
 if __name__ == '__main__':
