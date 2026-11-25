@@ -1,9 +1,17 @@
+import importlib
+import sys
 from datetime import date
 
 import openpyxl
 import pandas as pd
+import pytest
 
-import painel_resultados as painel
+
+@pytest.fixture
+def painel(rodar, monkeypatch):
+    """Importa com os parâmetros e caminhos fictícios do conftest (como o CI)."""
+    monkeypatch.delitem(sys.modules, 'painel_resultados', raising=False)
+    return importlib.import_module('painel_resultados')
 
 
 def linha(data, preco, status='CONFORME', os_=1, item='FILTRO', fornecedor='Oficina A', qtd=1, **extra):
@@ -18,7 +26,7 @@ def linha(data, preco, status='CONFORME', os_=1, item='FILTRO', fornecedor='Ofic
     return base
 
 
-def test_limpeza_marca_duplicada_e_preco_fora_de_dois_desvios():
+def test_limpeza_marca_duplicada_e_preco_fora_da_faixa(painel):
     linhas = [linha(date(2026, 10, 1), 100, os_=i) for i in range(12)]
     linhas.append(linha(date(2026, 10, 1), 1000, os_=99))
     linhas.append(linha(date(2026, 10, 1), 100, os_=0))
@@ -30,7 +38,7 @@ def test_limpeza_marca_duplicada_e_preco_fora_de_dois_desvios():
     assert len(dados) == len(linhas)
 
 
-def test_faixa_por_uf_quantidade_atipica_e_alerta_de_unidade():
+def test_faixa_por_uf_quantidade_atipica_e_alerta_de_unidade(painel):
     mg = [linha(date(2026, 10, 1), 100 + i, os_=i, UF='MG') for i in range(12)]
     sp = [linha(date(2026, 10, 1), 160 + i, os_=100 + i, UF='SP') for i in range(12)]
     extra = [linha(date(2026, 10, 2), 205, os_=200, UF='MG'),
@@ -44,7 +52,7 @@ def test_faixa_por_uf_quantidade_atipica_e_alerta_de_unidade():
     assert motivo.loc[200] == painel.MOTIVO_DESVIO or alerta.loc[200] == painel.ALERTA_UNIDADE
 
 
-def test_indice_constante_e_acordos_so_desde_o_corte():
+def test_indice_constante_e_acordos_so_desde_o_corte(painel):
     linhas = [linha(date(2026, 8, 10), 100, os_=1), linha(date(2026, 8, 11), 100, os_=2)]
     linhas += [linha(date(2026, 10, 5), 100, os_=3),
                linha(date(2026, 10, 6), 120, status='ACIMA DO ACORDO', os_=4, item='PASTILHA'),
@@ -57,7 +65,7 @@ def test_indice_constante_e_acordos_so_desde_o_corte():
     assert round(acordos['% do gasto com acordo'].item(), 4) == round(220 / 300, 4)
 
 
-def test_painel_em_excel_tem_resumo_instrumentos_e_base(tmp_path):
+def test_painel_em_excel_tem_resumo_instrumentos_e_base(painel, tmp_path):
     linhas = [linha(date(2026, 9, 20 + i % 5), 100 + i, os_=i) for i in range(15)]
     caminho = tmp_path / 'painel.xlsx'
     assert painel.gerar_painel(pd.DataFrame(linhas), str(caminho)) is True
@@ -66,7 +74,7 @@ def test_painel_em_excel_tem_resumo_instrumentos_e_base(tmp_path):
     assert {'Índice de preço', 'Acordos', 'Qualidade dos dados'} <= set(abas)
 
 
-def test_sem_linhas_elegiveis_nao_gera(tmp_path):
+def test_sem_linhas_elegiveis_nao_gera(painel, tmp_path):
     df = pd.DataFrame([linha(date(2026, 10, 1), 100, status='ACORDO AMBÍGUO')])
     assert painel.gerar_painel(df, str(tmp_path / 'x.xlsx')) is False
     assert not (tmp_path / 'x.xlsx').exists()
