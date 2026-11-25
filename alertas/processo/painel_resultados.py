@@ -8,6 +8,10 @@ Roda ao lado do recorte atual, sem alterá-lo. Três camadas:
 O histórico de manutenção sempre traz erros de lançamento (unidade, preço,
 duplicidade); por isso os indicadores usam medianas e a limpeza estatística.
 """
+import os
+from datetime import datetime
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 import xlsxwriter
@@ -424,11 +428,75 @@ def _escrever_resumo(wb, tabela, formatos, periodo):
                 ws.write_number(r, c, float(valor), fmt)
 
 
-def gerar_painel(df, path, df_acordo=None):
-    """Gera o painel em Excel; devolve False se não houver linha elegível."""
+COLUNAS_BASE_POWERBI = [
+    "Data", "OS", "Criador", "Cidade", "UF", "Fornecedor", "CNPJ", "Modelo", "Item", "Qtd",
+    "Preco OS", "Preco Total OS", "Preco Acordo", "Diferenca Total", "Status", "Com acordo",
+    "Tinha acordo?", "Dif. p/ Menor Acordo", "Fornecedor do Acordo", MOTIVO_COLUNA, ALERTA_COLUNA,
+]
+
+
+def _csv_atomico(tabela, destino):
+    """Grava num temporário e troca de uma vez: o Power BI nunca lê meio arquivo."""
+    temporario = destino.with_suffix(destino.suffix + ".tmp")
+    tabela.to_csv(temporario, sep=";", decimal=".", index=False, encoding="utf-8-sig",
+                  date_format="%Y-%m-%d")
+    os.replace(temporario, destino)
+
+
+def exportar_powerbi(dados, ind, inicio, pasta=None, inicio_minimo=None):
+    """Base limpa e indicadores em CSV numa pasta fixa, para o Power BI.
+
+    Só recorte que comece até o início mínimo atualiza a pasta: um recorte
+    curto pedido no dia a dia não pode encolher o painel do diretor."""
+    pasta = Path(pasta or sv_paths.POWERBI_DIR)
+    inicio_minimo = inicio_minimo or sv_paths.POWERBI_INICIO
+    if inicio is None or inicio > inicio_minimo:
+        print(f"  Power BI: recorte começa depois de {inicio_minimo:%d/%m/%Y}; arquivos mantidos.")
+        return None
+    pasta.mkdir(parents=True, exist_ok=True)
+    base = dados[[c for c in COLUNAS_BASE_POWERBI if c in dados.columns]].copy()
+    base["Mantida"] = np.where(dados[MOTIVO_COLUNA] == "", "SIM", "NÃO")
+    base["Desde controle de vigência"] = np.where(dados["Data"] >= CORTE_VIGENCIA, "SIM", "NÃO")
+    _csv_atomico(base, pasta / "base_limpa.csv")
+    nomes = {
+        "Índice de preço": "indice_preco", "Custo evitado": "custo_evitado", "Acordos": "acordos_mensal",
+        "Direcionamento cidade": "direcionamento_cidade", "Direcionamento agendador": "direcionamento_agendador",
+        "Fornecedores fora da curva": "fornecedores_fora_curva", "Itens sem acordo": "itens_sem_acordo",
+        "Volume e mix": "volume_mix", "Novos fornecedores": "novos_fornecedores",
+        "Saúde da carteira": "saude_carteira", "Qualidade dos dados": "qualidade_dados",
+    }
+    for nome, arquivo in nomes.items():
+        if nome in ind:
+            _csv_atomico(ind[nome], pasta / f"{arquivo}.csv")
+    top = ind.get("Medianas top 20")
+    if top is not None and not top.empty:
+        meses = [c for c in top.columns if str(c)[:2] == "20"]
+        longo = top.melt(id_vars=CHAVE_ITEM, value_vars=meses, var_name="Mês", value_name="Mediana").dropna()
+        _csv_atomico(longo, pasta / "medianas_top20.csv")
+    datas = dados["Data"].dropna()
+    meta = pd.DataFrame([
+        {"Campo": "Início do recorte", "Valor": f"{datas.min():%Y-%m-%d}"},
+        {"Campo": "Fim do recorte", "Valor": f"{datas.max():%Y-%m-%d}"},
+        {"Campo": "Gerado em", "Valor": datetime.now().strftime("%Y-%m-%d %H:%M")},
+        {"Campo": "Controle de vigência desde", "Valor": f"{CORTE_VIGENCIA:%Y-%m-%d}"},
+        {"Campo": "Linhas na base", "Valor": str(len(dados))},
+        {"Campo": "Linhas mantidas", "Valor": str(int((dados[MOTIVO_COLUNA] == "").sum()))},
+    ] + [{"Campo": f"Método: {k}", "Valor": v} for k, v in NOTAS.items()])
+    _csv_atomico(meta, pasta / "metadados.csv")
+    print(f"  Power BI: arquivos atualizados em {pasta}")
+    return pasta
+
+
+def gerar_painel(df, path, df_acordo=None, inicio=None):
+    """Gera o painel em Excel (e os CSV do Power BI); False se não houver linha elegível."""
     dados, ind = calcular(df, df_acordo)
     if dados.empty:
         return False
+    if inicio is not None:
+        try:
+            exportar_powerbi(dados, ind, inicio)
+        except Exception as erro:
+            print(f"  AVISO: arquivos do Power BI não atualizados ({type(erro).__name__}: {erro}).")
     wb = xlsxwriter.Workbook(path, {"strings_to_formulas": False, "nan_inf_to_errors": True})
     base = {"font_name": FONTE, "font_size": 9}
     formatos = {

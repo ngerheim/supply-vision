@@ -78,3 +78,18 @@ def test_sem_linhas_elegiveis_nao_gera(painel, tmp_path):
     df = pd.DataFrame([linha(date(2026, 10, 1), 100, status='ACORDO AMBÍGUO')])
     assert painel.gerar_painel(df, str(tmp_path / 'x.xlsx')) is False
     assert not (tmp_path / 'x.xlsx').exists()
+
+
+def test_exporta_csv_do_powerbi_so_para_recorte_longo(painel, tmp_path):
+    linhas = [linha(date(2026, 9, 20 + i % 5), 100 + i, os_=i) for i in range(15)]
+    dados, ind = painel.calcular(pd.DataFrame(linhas))
+    pasta = tmp_path / 'powerbi'
+    assert painel.exportar_powerbi(dados, ind, date(2026, 9, 1), pasta, date(2025, 1, 1)) is None
+    assert not pasta.exists()
+    assert painel.exportar_powerbi(dados, ind, date(2025, 1, 1), pasta, date(2025, 1, 1)) == pasta
+    base = pd.read_csv(pasta / 'base_limpa.csv', sep=';', encoding='utf-8-sig')
+    assert len(base) == 15 and set(base['Mantida']) <= {'SIM', 'NÃO'}
+    assert base['Data'].iloc[0].startswith('2026-09-')
+    assert {'indice_preco.csv', 'acordos_mensal.csv', 'metadados.csv', 'qualidade_dados.csv'} <= {
+        p.name for p in pasta.iterdir()}
+    assert not list(pasta.glob('*.tmp'))
