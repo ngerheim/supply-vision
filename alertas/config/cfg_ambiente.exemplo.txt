@@ -12,6 +12,11 @@ PIPELINE_TIMEOUT_S = 1800
 # A partir desta data, situacao e intervalo de vigencia dos acordos passam a
 # ser respeitados no cruzamento; antes dela vale a tabela vigente atual.
 CORTE_VIGENCIA_ACORDOS = 2026-09-18
+# Painel no Power BI: pasta onde o recorte grava a base limpa e os indicadores
+# em CSV (vazio = privado\alertas\powerbi). So recorte que comece ate
+# POWERBI_INICIO atualiza os arquivos.
+# POWERBI_DIR =
+# POWERBI_INICIO = 2025-01-01
 # Expiracao da chave de API do Qlik. Serve so para avisar com antecedencia:
 # atualize ao renovar a chave.
 CHAVE_QLIK_EXPIRA = 2027-06-23
