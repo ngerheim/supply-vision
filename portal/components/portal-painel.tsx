@@ -383,7 +383,7 @@ export function Painel() {
           </Secao>
         </div>
 
-        <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+        <div>
           <Secao titulo="Confiabilidade dos dados" dica={metodo['Qualidade dos dados']}>
             <div className="space-y-2">
               {funil.map(f => (
@@ -400,19 +400,6 @@ export function Painel() {
               </ul>
             </div>
           </Secao>
-          {d.abaixo && (
-            <Secao titulo="Abaixo do acordo" dica={metodo['Abaixo do acordo']}>
-              <div className="space-y-4">
-                <dl className="grid grid-cols-[1fr_auto] gap-x-4 gap-y-1.5 text-[13px]">
-                  <dt className="text-muted-foreground">Compras abaixo</dt><dd className="text-right tabular-nums">{inteiro(d.abaixo.linhas)} ({pct(d.abaixo.pctComAcordo)} das com acordo)</dd>
-                  <dt className="text-muted-foreground">Abaixo do acordo</dt><dd className="text-right tabular-nums">{moedaCurta(d.abaixo.valor)}</dd>
-                  <dt className="text-muted-foreground">Prováveis pares lançados como unidade</dt><dd className="text-right tabular-nums">{inteiro(d.abaixo.suspeitaUnidade)} · {moedaCurta(d.abaixo.valorSuspeitaUnidade)}</dd>
-                  <dd className="col-span-2 pt-1 text-muted-foreground">Contam como conformes e não entram como economia.</dd>
-                </dl>
-                <Barras itens={d.abaixo.itens ?? []} formatar={moedaCurta} rotulo="18rem" />
-              </div>
-            </Secao>
-          )}
         </div>
           <details className="painel-surgir rounded border bg-card p-4">
           <summary className="cursor-pointer text-[15px] font-semibold">Como cada número é calculado</summary>
