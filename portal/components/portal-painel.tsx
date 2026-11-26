@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { ArrowDownRight, ArrowUpRight, Download, Info, LoaderCircle } from 'lucide-react';
 import { LinhaDeAba } from './page-header';
 import { Button } from '@/components/ui/button';
@@ -45,18 +46,27 @@ function useContagem(alvo: number | null, duracao = 900) {
   return alvo === null ? null : valor;
 }
 
-// Dica do (i) em posição fixa na tela: assim nenhum bloco vizinho a corta.
+// Dica do (i): desenhada direto no corpo da página. Os blocos do painel têm
+// animação de entrada, e posição fixa dentro deles fica presa ao bloco (some
+// ou sai do lugar); fora deles, nada a corta. Abre ao passar o mouse, ao
+// focar com o teclado e ao clicar; fecha ao sair com o mouse ou o foco.
 function Dica({ texto }: { texto?: string }) {
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
   if (!texto) return null;
-  const abrir = (e: React.SyntheticEvent<HTMLButtonElement>) => {
-    const r = e.currentTarget.getBoundingClientRect();
-    setPos({ top: r.bottom + 6, left: Math.max(8, Math.min(window.innerWidth - 328, r.left - 150)) });
+  const posicao = (el: HTMLElement) => {
+    const r = el.getBoundingClientRect();
+    const top = r.bottom + 6 + 160 > window.innerHeight ? Math.max(8, r.top - 166) : r.bottom + 6;
+    return { top, left: Math.max(8, Math.min(window.innerWidth - 328, r.left - 150)) };
   };
   return (
-    <button type="button" className="inline-flex shrink-0 items-center self-center" aria-label={texto} onMouseEnter={abrir} onFocus={abrir} onMouseLeave={() => setPos(null)} onBlur={() => setPos(null)}>
+    <button type="button" className="inline-flex shrink-0 items-center self-center" aria-label={texto} aria-expanded={!!pos}
+      onMouseEnter={e => setPos(posicao(e.currentTarget))} onMouseLeave={() => setPos(null)}
+      onFocus={e => setPos(posicao(e.currentTarget))} onBlur={() => setPos(null)}
+      onClick={e => setPos(posicao(e.currentTarget))}>
       <Info className="size-3.5 text-muted-foreground" />
-      {pos && <span role="tooltip" className="pointer-events-none fixed z-50 w-80 rounded border bg-card p-2.5 text-left text-[13px] font-normal leading-snug text-foreground shadow-lg" style={pos}>{texto}</span>}
+      {pos && typeof document !== 'undefined' && createPortal(
+        <span role="tooltip" className="pointer-events-none fixed z-[60] w-80 rounded border bg-card p-2.5 text-left text-[13px] font-normal leading-snug text-foreground shadow-lg" style={pos}>{texto}</span>,
+        document.body)}
     </button>
   );
 }
