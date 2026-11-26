@@ -37,6 +37,7 @@ export const ABAS_NAVEGACAO = [
     { chave: 'categorias', slug: 'categorias', label: 'Categorias' },
     { chave: 'estoques', slug: 'estoques', label: 'Estoques' },
   ] },
+  { aba: 'painel', label: 'Painel', subabas: [{ chave: 'painel', slug: null, label: 'Painel' }] },
   { aba: 'analise', label: 'Análise', subabas: [
     { chave: 'analise', slug: 'painel', label: 'Painel' },
     { chave: 'analise-acoes', slug: 'acoes', label: 'Próximas ações' },
@@ -60,7 +61,7 @@ export type Nav = DefinicaoSubaba['chave'];
 export type EnderecoNavegacao = { aba: Aba; subaba: DefinicaoSubaba['slug'] };
 export const GRUPOS_NAVEGACAO = [
   { nome: 'Consulta', abas: ['buscar', 'rede', 'reembolso', 'manutencao', 'chamados', 'estoque'] },
-  { nome: 'Suprimentos', abas: ['acordos', 'cadastros', 'analise', 'alertas'] },
+  { nome: 'Suprimentos', abas: ['painel', 'acordos', 'cadastros', 'analise', 'alertas'] },
   { nome: 'Administração', abas: ['administracao'] },
 ] as const;
 export const AVISO_AREA_RESTRITA = 'Seu perfil não tem acesso a esta área.';

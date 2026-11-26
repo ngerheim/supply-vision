@@ -32,6 +32,7 @@ const titulos = {
   estoque: "Estoque",
   acordos: "Acordos",
   cadastros: "Cadastros",
+  painel: "Painel",
   analise: "Análise",
   alertas: "Alertas",
   administracao: "Administração",

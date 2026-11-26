@@ -21,6 +21,7 @@ import { usuariosApi } from '@/lib/usuarios-api';
 import { permissoesApi } from '@/lib/permissoes-api';
 import { contratosApi } from '@/lib/contratos-api';
 import { analiseApi } from '@/lib/analise-api';
+import { painelApi } from '@/lib/painel-api';
 import { alertasApi } from '@/lib/alertas-api';
 import { redeApi } from '@/lib/rede-api';
 import { reembolsoApi, SEM_CONFIG } from '@/lib/reembolso-api';
@@ -144,6 +145,7 @@ const usuarios = usuariosApi(contexto);
 const permissoes = permissoesApi(contexto);
 const contratos = contratosApi(contexto);
 const analise = analiseApi(contexto);
+const painel = painelApi(contexto);
 const alertas = alertasApi(contexto);
 const rede = redeApi(contexto);
 const reembolso = reembolsoApi(contexto);
@@ -320,6 +322,11 @@ async function GETInterno(request: NextRequest) {
   }
 
   if (parts[0] === 'permissoes') return parts.length === 1 ? permissoes.matriz(user) : fail('Rota não encontrada.', 404);
+  if (parts[0] === 'painel') {
+    if (parts.length === 1) return painel.dados(user);
+    if (parts.length === 2 && parts[1] === 'base') return painel.base(user);
+    return fail('Rota não encontrada.', 404);
+  }
   if (parts[0] === 'analise') {
     if (parts.length === 1) return analise.painel(user, request.nextUrl.searchParams);
     if (parts.length === 2 && parts[1] === 'fornecedor') return analise.fornecedor(user, request.nextUrl.searchParams);
