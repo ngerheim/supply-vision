@@ -45,13 +45,19 @@ function useContagem(alvo: number | null, duracao = 900) {
   return alvo === null ? null : valor;
 }
 
+// Dica do (i) em posição fixa na tela: assim nenhum bloco vizinho a corta.
 function Dica({ texto }: { texto?: string }) {
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
   if (!texto) return null;
+  const abrir = (e: React.SyntheticEvent<HTMLButtonElement>) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    setPos({ top: r.bottom + 6, left: Math.max(8, Math.min(window.innerWidth - 328, r.left - 150)) });
+  };
   return (
-    <span className="group relative inline-flex">
-      <Info className="size-3.5 text-muted-foreground" aria-label={texto} />
-      <span role="tooltip" className="pointer-events-none absolute left-1/2 top-5 z-20 hidden w-72 -translate-x-1/2 rounded border bg-card p-2 text-xs font-normal leading-snug text-foreground shadow-md group-hover:block">{texto}</span>
-    </span>
+    <button type="button" className="inline-flex shrink-0 items-center self-center" aria-label={texto} onMouseEnter={abrir} onFocus={abrir} onMouseLeave={() => setPos(null)} onBlur={() => setPos(null)}>
+      <Info className="size-3.5 text-muted-foreground" />
+      {pos && <span role="tooltip" className="pointer-events-none fixed z-50 w-80 rounded border bg-card p-2.5 text-left text-[13px] font-normal leading-snug text-foreground shadow-lg" style={pos}>{texto}</span>}
+    </button>
   );
 }
 
@@ -61,10 +67,10 @@ function Indicador({ rotulo, valor, formatar, detalhe, dica, serie, atraso = 0 }
   const animado = useContagem(valor);
   return (
     <div className="painel-surgir min-w-0 rounded border bg-card p-3" style={{ animationDelay: `${atraso}ms` }}>
-      <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">{rotulo}<Dica texto={dica} /></div>
+      <div className="flex items-center gap-1.5 text-[13px] font-medium text-muted-foreground">{rotulo}<Dica texto={dica} /></div>
       <div className="mt-1 text-2xl font-semibold tabular-nums">{animado === null ? '—' : formatar(animado)}</div>
       <div className="mt-1 flex items-end justify-between gap-2">
-        <div className="min-h-4 text-xs text-muted-foreground">{detalhe}</div>
+        <div className="min-h-4 text-[12.5px] text-muted-foreground">{detalhe}</div>
         {serie && serie.length > 1 && <Faisca valores={serie} />}
       </div>
     </div>
@@ -80,12 +86,12 @@ function Faisca({ valores }: { valores: number[] }) {
 type Serie = { nome: string; cor: string; valores: (number | null)[] };
 // Gráfico de linhas em SVG puro: eixo Y com 3 marcas, rótulos de mês
 // espaçados, linha de referência opcional e dica no ponto mais próximo.
-function GraficoLinha({ meses, series, formatar, referencia, parcial, altura = 220 }: {
-  meses: string[]; series: Serie[]; formatar: (v: number) => string; referencia?: { valor: number; rotulo: string }; parcial?: string | null; altura?: number;
+function GraficoLinha({ meses, series, formatar, referencia, parcial, altura = 220, rotulosFinais = false, largura = 640 }: {
+  meses: string[]; series: Serie[]; formatar: (v: number) => string; referencia?: { valor: number; rotulo: string }; parcial?: string | null; altura?: number; rotulosFinais?: boolean; largura?: number;
 }) {
   const [foco, setFoco] = useState<number | null>(null);
   const caixa = useRef<SVGSVGElement>(null);
-  const L = 640, A = altura, m = { e: 56, d: 12, t: 12, b: 26 };
+  const L = largura, A = altura, m = { e: 56, d: rotulosFinais ? 150 : 12, t: 12, b: 26 };
   const todos = series.flatMap(s => s.valores).filter((v): v is number => v !== null);
   if (referencia) todos.push(referencia.valor);
   if (!meses.length || !todos.length) return <p className="py-10 text-center text-sm text-muted-foreground">Sem dados no período.</p>;
@@ -111,7 +117,7 @@ function GraficoLinha({ meses, series, formatar, referencia, parcial, altura = 2
         {marcas.map(v => (
           <g key={v}>
             <line x1={m.e} x2={L - m.d} y1={y(v)} y2={y(v)} stroke="var(--divisoria)" />
-            <text x={m.e - 6} y={y(v) + 3} textAnchor="end" className="fill-muted-foreground text-[10px]">{formatar(v)}</text>
+            <text x={m.e - 6} y={y(v) + 3} textAnchor="end" className="fill-muted-foreground text-[11px]">{formatar(v)}</text>
           </g>
         ))}
         {referencia && (
@@ -120,7 +126,7 @@ function GraficoLinha({ meses, series, formatar, referencia, parcial, altura = 2
           </g>
         )}
         {meses.map((mm, i) => (i % passo === 0 || (i === meses.length - 1 && i % passo >= passo / 2)) && (
-          <text key={mm} x={x(i)} y={A - 8} textAnchor={meses.length > 1 && i === meses.length - 1 ? 'end' : meses.length > 1 && i === 0 ? 'start' : 'middle'} className="fill-muted-foreground text-[10px]">{mes(mm)}</text>
+          <text key={mm} x={x(i)} y={A - 8} textAnchor={meses.length > 1 && i === meses.length - 1 ? 'end' : meses.length > 1 && i === 0 ? 'start' : 'middle'} className="fill-muted-foreground text-[11px]">{mes(mm)}</text>
         ))}
         {series.map(s => {
           const trechos: string[] = [];
@@ -137,6 +143,10 @@ function GraficoLinha({ meses, series, formatar, referencia, parcial, altura = 2
           return [...trechos.map(d => <path key={s.nome + d} d={d} fill="none" stroke={s.cor} strokeWidth="2.25" strokeLinejoin="round" pathLength={1} className="painel-traco" />),
             tracejar && <line key={`${s.nome}-parcial`} x1={x(ultimo - 1)} y1={y(s.valores[ultimo - 1] as number)} x2={x(ultimo)} y2={y(s.valores[ultimo] as number)} stroke={s.cor} strokeWidth="2" strokeDasharray="4 3" />];
         })}
+        {rotulosFinais && series.map(s => {
+          const i = s.valores.findLastIndex(v => v !== null);
+          return i >= 0 && <text key={`${s.nome}-fim`} x={x(i) + 8} y={y(s.valores[i] as number) + 4} className="text-[12px] font-medium" fill={s.cor}>{s.nome} {formatar(s.valores[i] as number)}</text>;
+        })}
         {foco !== null && <line x1={x(foco)} x2={x(foco)} y1={m.t} y2={A - m.b} stroke="var(--borda)" />}
         {foco !== null && series.map(s => s.valores[foco] !== null && <circle key={s.nome} cx={x(foco)} cy={y(s.valores[foco] as number)} r="3.5" fill={s.cor} />)}
       </svg>
@@ -146,9 +156,9 @@ function GraficoLinha({ meses, series, formatar, referencia, parcial, altura = 2
           {series.map(s => <div key={s.nome} className="flex items-center gap-1.5 tabular-nums"><span className="size-2 rounded-full" style={{ background: s.cor }} />{s.nome}: {s.valores[foco] === null ? '—' : formatar(s.valores[foco] as number)}</div>)}
         </div>
       )}
-      {(series.length > 1 || referencia || (parcial && meses.at(-1) === parcial)) && (
+      {((series.length > 1 && !rotulosFinais) || referencia || (parcial && meses.at(-1) === parcial)) && (
         <div className="mt-1 flex flex-wrap gap-4 text-xs text-muted-foreground">
-          {series.length > 1 && series.map(s => <span key={s.nome} className="flex items-center gap-1.5"><span className="h-0.5 w-4" style={{ background: s.cor }} />{s.nome}</span>)}
+          {series.length > 1 && !rotulosFinais && series.map(s => <span key={s.nome} className="flex items-center gap-1.5"><span className="h-0.5 w-4" style={{ background: s.cor }} />{s.nome}</span>)}
           {referencia && <span className="flex items-center gap-1.5"><span className="w-4 border-t-2 border-dashed border-[var(--ambar)]" />{referencia.rotulo}</span>}
           {parcial && meses.at(-1) === parcial && <span className="flex items-center gap-1.5"><span className="w-4 border-t-2 border-dashed border-[var(--aco)]" />{mes(parcial)} parcial</span>}
         </div>
@@ -157,21 +167,32 @@ function GraficoLinha({ meses, series, formatar, referencia, parcial, altura = 2
   );
 }
 
-function Barras({ itens, formatar, rotulo = '10rem' }: { itens: { nome: string; valor: number }[]; formatar: (v: number) => string; rotulo?: string }) {
+function Barras({ itens, formatar, rotulo = '12rem', embacar = false, barraMax }: {
+  itens: { nome: string; valor: number }[]; formatar: (v: number) => string; rotulo?: string; embacar?: boolean; barraMax?: string;
+}) {
   const [pronto, setPronto] = useState(reduzirMovimento());
+  const [todos, setTodos] = useState(false);
   useEffect(() => { const t = setTimeout(() => setPronto(true), 60); return () => clearTimeout(t); }, []);
   const max = Math.max(...itens.map(i => i.valor), 1);
   if (!itens.length) return <p className="py-6 text-center text-sm text-muted-foreground">Nada a mostrar no período.</p>;
+  const visiveis = todos ? itens : itens.slice(0, 5);
   return (
-    <ul className="space-y-1.5">
-      {itens.map(i => (
-        <li key={i.nome} className="grid items-center gap-2 text-xs" style={{ gridTemplateColumns: `minmax(0,${rotulo}) 1fr auto` }}>
-          <span className="truncate" title={i.nome}>{i.nome}</span>
-          <span className="h-2 rounded-sm bg-muted"><span className="block h-2 rounded-sm bg-primary transition-[width] duration-700 ease-out" style={{ width: pronto ? `${Math.max(2, (i.valor / max) * 100)}%` : '0%' }} /></span>
-          <span className="tabular-nums text-muted-foreground">{formatar(i.valor)}</span>
-        </li>
-      ))}
-    </ul>
+    <div>
+      <ul className="space-y-2.5">
+        {visiveis.map((i, n) => (
+          <li key={i.nome} className="grid items-center gap-3 text-[13px]" style={{ gridTemplateColumns: `minmax(0,${rotulo}) minmax(0,${barraMax ?? '1fr'}) auto` }}>
+            <span className={`truncate ${embacar ? 'select-none blur-[5px]' : ''}`} title={embacar ? undefined : i.nome} aria-label={embacar ? `Posição ${n + 1}` : undefined}>{i.nome}</span>
+            <span className="h-2.5 rounded-sm bg-muted"><span className="block h-2.5 rounded-sm bg-primary transition-[width] duration-700 ease-out" style={{ width: pronto ? `${Math.max(2, (i.valor / max) * 100)}%` : '0%' }} /></span>
+            <span className="tabular-nums text-muted-foreground">{formatar(i.valor)}</span>
+          </li>
+        ))}
+      </ul>
+      {itens.length > 5 && (
+        <button type="button" className="mt-3 text-xs font-medium text-[var(--link)] hover:underline" onClick={() => setTodos(t => !t)}>
+          {todos ? 'Ver só os 5 primeiros' : `Ver todos (${itens.length})`}
+        </button>
+      )}
+    </div>
   );
 }
 
@@ -189,9 +210,10 @@ function Secao({ titulo, dica, children, acoes, className = '' }: { titulo: stri
 
 function Variacao({ v }: { v: number | null }) {
   if (v === null || v === undefined) return <span className="text-muted-foreground">—</span>;
+  if (Math.abs(v) < 0.0005) return <span className="inline-flex w-[4.75rem] justify-end rounded px-1.5 py-0.5 tabular-nums text-muted-foreground">0,0%</span>;
   const caiu = v < 0;
   const Icone = caiu ? ArrowDownRight : ArrowUpRight;
-  return <span className={`inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 tabular-nums ${caiu ? 'bg-[var(--status-done-bg)] text-[var(--concluido)]' : 'bg-[var(--status-cancelled-bg)] text-[var(--cancelado)]'}`}><Icone className="size-3" />{sinal(v)}{pct(v)}</span>;
+  return <span className={`inline-flex w-[4.75rem] items-center justify-end gap-0.5 rounded px-1.5 py-0.5 tabular-nums ${caiu ? 'bg-[var(--status-done-bg)] text-[var(--concluido)]' : 'bg-[var(--status-cancelled-bg)] text-[var(--cancelado)]'}`}><Icone className="size-3" />{sinal(v)}{pct(v)}</span>;
 }
 
 // Faixa do topo: período, data de geração e o botão da base. Onda chapada
@@ -203,9 +225,9 @@ function Faixa({ d, baixando, baixar }: { d: AnyRow; baixando: boolean; baixar: 
         <div>
           <p className="text-xs uppercase tracking-wide text-[var(--sidebar-muted)]">Período analisado</p>
           <p className="text-lg font-semibold">{dataBr(d.periodo?.inicio)} a {dataBr(d.periodo?.fim)}</p>
-          <p className="text-xs text-[var(--sidebar-muted)]">Gerado em {dataBr(d.geradoEm?.slice(0, 10))} às {d.geradoEm?.slice(11, 16)} · controle de vigência desde {dataBr(d.controleDesde)}</p>
+          <p className="text-[13px] text-[var(--branco)]/85">Gerado em {dataBr(d.geradoEm?.slice(0, 10))} às {d.geradoEm?.slice(11, 16)} · controle de vigência desde {dataBr(d.controleDesde)}</p>
         </div>
-        <Button onClick={baixar} disabled={baixando} className="bg-[var(--ambar)] text-[var(--marinho)] hover:bg-[var(--ambar)]/90">
+        <Button onClick={baixar} disabled={baixando} variant="outline" className="border-[var(--branco)]/60 bg-transparent text-[var(--branco)] hover:bg-[var(--branco)]/10 hover:text-[var(--branco)]">
           {baixando ? <LoaderCircle className="animate-spin" /> : <Download />} Baixar base
         </Button>
       </div>
@@ -221,6 +243,7 @@ export function Painel() {
   const [erro, setErro] = useState('');
   const [baixando, setBaixando] = useState(false);
   const [itemSel, setItemSel] = useState(0);
+  const [nomesVisiveis, setNomesVisiveis] = useState(false);
   const [tentativa, setTentativa] = useState(0);
   useEffect(() => { api('/api/painel').then(setD).catch(e => setErro(errorText(e))); }, [tentativa]);
   const carregar = () => { setErro(''); setD(null); setTentativa(t => t + 1); };
@@ -239,6 +262,9 @@ export function Painel() {
   );
 
   const r = d.resumo ?? {};
+  // Cartão do índice mostra o último mês fechado; o mês em andamento fica só no gráfico.
+  const fechados = (d.indice ?? []).filter((i: AnyRow) => i.mes !== d.mesParcial);
+  const indiceFechado = fechados.at(-1);
   const indice: AnyRow[] = d.indice ?? [];
   const acordos: AnyRow[] = d.acordos ?? [];
   const itens: AnyRow[] = d.itens ?? [];
@@ -261,8 +287,8 @@ export function Painel() {
         <Faixa d={d} baixando={baixando} baixar={baixar} />
 
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6">
-          <Indicador rotulo="Índice de preço" valor={r.indice ?? null} formatar={v => v.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
-            detalhe={r.indice === null || r.indice === undefined ? null : r.indice < 100 ? `${pct(1 - r.indice / 100)} abaixo de ${d.anoBase ?? 2025}` : `${pct(r.indice / 100 - 1)} acima de ${d.anoBase ?? 2025}`}
+          <Indicador rotulo={indiceFechado ? `Índice de preço · ${mes(indiceFechado.mes)}` : 'Índice de preço'} valor={indiceFechado?.valor ?? r.indice ?? null} formatar={v => v.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
+            detalhe={(() => { const v = indiceFechado?.valor ?? r.indice; return v === null || v === undefined ? null : v < 100 ? `${pct(1 - v / 100)} abaixo de ${d.anoBase ?? 2025}` : `${pct(v / 100 - 1)} acima de ${d.anoBase ?? 2025}`; })()}
             dica={metodo['Índice de preço']} serie={indice.map(i => i.valor)} />
           <Indicador rotulo="Custo evitado (reajuste)" valor={reaj?.custoEvitado ?? null} formatar={moedaCurta} atraso={60}
             detalhe={reaj ? `oficinas com acordo ${sinal(reaj.comAcordo)}${pct(reaj.comAcordo)} · sem ${sinal(reaj.semAcordo)}${pct(reaj.semAcordo)}` : 'precisa de dois anos'} dica={metodo['Reajuste contido']} />
@@ -276,13 +302,13 @@ export function Painel() {
             detalhe="oficina sem acordo onde havia" dica={metodo['Direcionamento cidade']} />
         </div>
 
-        <div className="grid gap-3 xl:grid-cols-2">
+        <div className="grid gap-3 xl:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)]">
           <Secao titulo="Índice de preço" dica={metodo['Índice de preço']}>
             <GraficoLinha meses={indice.map(i => i.mes)} series={[{ nome: 'Índice', cor: 'var(--marinho)', valores: indice.map(i => i.valor) }]}
               formatar={v => v.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} referencia={{ valor: 100, rotulo: `100 = ${d.anoBase ?? 2025}` }} parcial={d.mesParcial} />
           </Secao>
           <Secao titulo="Acordos" dica={metodo['Acordos']}>
-            <GraficoLinha meses={acordos.map(a => a.mes)} formatar={v => pct(v, 0)} parcial={d.mesParcial}
+            <GraficoLinha meses={acordos.map(a => a.mes)} formatar={v => pct(v, 0)} parcial={d.mesParcial} rotulosFinais altura={300} largura={460}
               series={[{ nome: 'Conformidade', cor: 'var(--marinho)', valores: acordos.map(a => a.conformidade) },
                 { nome: 'Gasto com acordo', cor: 'var(--link)', valores: acordos.map(a => a.pctAcordo) }]} />
           </Secao>
@@ -299,8 +325,8 @@ export function Painel() {
                 <tbody>
                   {itens.map((it, i) => (
                     <tr key={`${it.item}|${it.modelo}`} onClick={() => setItemSel(i)} aria-selected={i === itemSel}
-                      className={`cursor-pointer border-t ${i === itemSel ? 'bg-[var(--status-open-bg)]' : 'hover:bg-muted'}`}>
-                      <td className="py-1 pr-2">{it.item}</td><td className="pr-2 text-muted-foreground">{it.modelo}</td>
+                      className={`cursor-pointer border-t ${i === itemSel ? 'bg-[var(--status-open-bg)] shadow-[inset_3px_0_0_var(--link)]' : 'hover:bg-muted'}`}>
+                      <td className="py-1 pl-2 pr-2">{it.item}</td><td className="pr-2 text-muted-foreground">{it.modelo}</td>
                       <td className="text-right tabular-nums">{moedaCurta(it.gasto)}</td><td className="text-right tabular-nums">{moeda(it.inicio)}</td>
                       <td className="text-right tabular-nums">{moeda(it.fim)}</td><td className="pr-1 text-right"><Variacao v={it.variacao} /></td>
                     </tr>
@@ -320,8 +346,9 @@ export function Painel() {
           <Secao titulo="Direcionamento por cidade" dica={metodo['Direcionamento cidade']}>
             <Barras itens={d.direcionamento?.cidades ?? []} formatar={moedaCurta} />
           </Secao>
-          <Secao titulo="Direcionamento por agendador" dica={metodo['Direcionamento agendador']}>
-            <Barras itens={d.direcionamento?.agendadores ?? []} formatar={moedaCurta} />
+          <Secao titulo="Direcionamento por agendador" dica={metodo['Direcionamento agendador']}
+            acoes={<button type="button" className="text-xs font-medium text-[var(--link)] hover:underline" onClick={() => setNomesVisiveis(v => !v)}>{nomesVisiveis ? 'Ocultar nomes' : 'Mostrar nomes'}</button>}>
+            <Barras itens={d.direcionamento?.agendadores ?? []} formatar={moedaCurta} embacar={!nomesVisiveis} />
           </Secao>
           <Secao titulo="Cobrado acima do acordo" dica={metodo['Acordos']}>
             <Barras itens={(d.fornecedoresAcima ?? []).map((f: AnyRow) => ({ nome: `${f.fornecedor} · ${f.cidade}`, valor: f.valor }))} formatar={moedaCurta} />
@@ -337,7 +364,7 @@ export function Painel() {
                 <dt className="text-muted-foreground">Prováveis pares lançados como unidade</dt><dd className="text-right tabular-nums">{inteiro(d.abaixo.suspeitaUnidade)} · {moedaCurta(d.abaixo.valorSuspeitaUnidade)}</dd>
                 <dd className="col-span-2 pt-1 text-muted-foreground">Contam como conformes e não entram como economia.</dd>
               </dl>
-              <Barras itens={d.abaixo.itens ?? []} formatar={moedaCurta} rotulo="18rem" />
+              <Barras itens={d.abaixo.itens ?? []} formatar={moedaCurta} rotulo="18rem" barraMax="22rem" />
             </div>
           </Secao>
         )}
