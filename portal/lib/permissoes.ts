@@ -21,11 +21,9 @@ export const ACOES = [
   'aba:pagamentos', 'pagamento:abrir', 'pagamento:ver_todas', 'pagamento:atender',
   'aba:estoque', 'estoque:consultar', 'estoque:lancar',
   'aba:permissoes', 'permissao:gerenciar',
-  'aba:analise', 'analise:consultar',
   'aba:alertas', 'alertas:consultar', 'alertas:destinatarios',
-  'analise:acoes', 'fornecedor:gerenciar',
+  'fornecedor:gerenciar',
   'aba:rede', 'rede:gerenciar',
-  'aba:reembolso', 'reembolso:salvar', 'reembolso:configurar',
   'aba:painel', 'painel:consultar',
 ] as const;
 export type Acao = (typeof ACOES)[number];
@@ -34,7 +32,6 @@ export type Acao = (typeof ACOES)[number];
 const consulta: readonly Acao[] = [
   'aba:search', 'aba:maintenance', 'central:marcar', 'solicitacao:abrir', 'aba:solicitacoes', 'baixa:abrir', 'aba:baixas',
   'aba:pagamentos', 'pagamento:abrir', 'aba:estoque', 'estoque:consultar', 'aba:rede',
-  'aba:reembolso', 'reembolso:salvar',
 ];
 const suprimentos: readonly Acao[] = [
   ...consulta, 'aba:tickets', 'aba:agreements', 'aba:suppliers', 'aba:imports',
@@ -46,8 +43,8 @@ const suprimentos: readonly Acao[] = [
   'solicitacao:ver_todas', 'solicitacao:atender',
   'baixa:ver_todas', 'baixa:atender',
   'pagamento:ver_todas', 'pagamento:atender', 'estoque:lancar',
-  'aba:analise', 'analise:consultar', 'analise:acoes', 'aba:alertas', 'alertas:consultar', 'fornecedor:gerenciar',
-  'reembolso:configurar', 'aba:painel', 'painel:consultar',
+  'aba:alertas', 'alertas:consultar', 'fornecedor:gerenciar',
+  'aba:painel', 'painel:consultar',
 ];
 const acoesPorPerfil: Record<Role, readonly Acao[]> = {
   viewer: consulta,
@@ -71,7 +68,6 @@ export const ROTULO_NIVEL: Record<Nivel, string> = { sem: 'Sem acesso', leitura:
 export const AREAS = [
   { area: 'buscar', aba: 'Buscar', label: 'Buscar' },
   { area: 'rede', aba: 'Rede', label: 'Rede' },
-  { area: 'reembolso', aba: 'Reembolso', label: 'Reembolso' },
   { area: 'manutencao', aba: 'Manutenção', label: 'Manutenção' },
   { area: 'parcerias', aba: 'Chamados', label: 'Acordos' },
   { area: 'solicitacoes', aba: 'Chamados', label: 'Cadastros' },
@@ -89,8 +85,7 @@ export const AREAS = [
   { area: 'historico', aba: 'Administração', label: 'Histórico' },
   { area: 'emails', aba: 'Administração', label: 'E-mails' },
   { area: 'painel', aba: 'Painel', label: 'Painel' },
-  { area: 'analise', aba: 'Análise', label: 'Análise' },
-  { area: 'alertas', aba: 'Alertas', label: 'Alertas' },
+  { area: 'alertas', aba: 'Administração', label: 'Rodadas de alertas' },
 ] as const;
 export type Area = (typeof AREAS)[number]['area'];
 export const AREAS_IDS: readonly Area[] = AREAS.map(a => a.area);
@@ -130,16 +125,12 @@ export const EXIGENCIAS: Partial<Record<Acao, Exigencia>> = {
   'portal:consultar-gestao': L('acordos', 'importacoes', 'fornecedores', 'catalogos', 'depara'),
   'portal:escrever': E('acordos', 'fornecedores', 'catalogos'),
   'usuario:consultar': L('parcerias'),
-  // Leitura: painel e sugestoes. Edicao: marcar sugestao como feita, pular ou rejeitar.
   // Leitura: ver o painel de resultados e baixar a base que o alimenta.
   'aba:painel': L('painel'), 'painel:consultar': L('painel'),
-  'aba:analise': L('analise'), 'analise:consultar': L('analise'), 'analise:acoes': E('analise'),
   // Leitura: ver as rodadas e receber o aviso. Edicao: escolher quem recebe.
   'aba:alertas': L('alertas'), 'alertas:consultar': L('alertas'), 'alertas:destinatarios': E('alertas'),
   // Leitura: consultar a rede. Edicao: desconsiderar fornecedores e segmentos.
   'aba:rede': L('rede'), 'rede:gerenciar': E('rede'),
-  // Leitura: usar a calculadora e salvar calculos. Edicao: clientes, taxas e tabelas MTBF.
-  'aba:reembolso': L('reembolso'), 'reembolso:salvar': L('reembolso'), 'reembolso:configurar': E('reembolso'),
 };
 // Fora do painel: so o perfil admin. Evita que alguem amplie os proprios poderes.
 // central:marcar nao pertence a area nenhuma e segue o perfil.

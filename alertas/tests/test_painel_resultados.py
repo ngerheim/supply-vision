@@ -95,8 +95,7 @@ def test_exporta_painel_e_pacote_base_so_para_recorte_longo(painel, tmp_path):
     assert painel.exportar_painel(dados, ind, date(2026, 9, 1), df, crua, pasta, date(2025, 1, 1)) is None
     assert not pasta.exists()
     assert painel.exportar_painel(dados, ind, date(2025, 1, 1), df, crua, pasta, date(2025, 1, 1)) == pasta
-    base = pd.read_csv(pasta / 'base_limpa.csv', sep=';', encoding='utf-8-sig')
-    assert len(base) == 25 and set(base['Mantida']) <= {'SIM', 'NÃO'}
+    assert not list(pasta.glob('*.csv'))  # sem os CSV do Power BI
     j = json.loads((pasta / 'painel.json').read_text(encoding='utf-8'))
     assert j['periodo']['inicio'].startswith('2025-03') and j['resumo']['linhas'] == 25
     assert j['qualidade']['universo'] == {'linhasCruas': 2, 'entraram': 1,
@@ -110,4 +109,19 @@ def test_exporta_painel_e_pacote_base_so_para_recorte_longo(painel, tmp_path):
         assert 'Quarentena do motor;ACORDO AMBÍGUO' in retiradas
         assert 'Limpeza estatística;' in retiradas
         assert z.read('base_crua.csv').decode('utf-8-sig').splitlines()[1].startswith('Retirada: ')
+        assert 'Situação' in z.read('base_tratada.csv').decode('utf-8-sig').splitlines()[0]
     assert not list(pasta.glob('*.tmp'))
+
+
+def test_abaixo_do_acordo_conta_como_conforme_e_entra_pelo_preco_do_acordo(painel):
+    linhas = [linha(date(2026, 10, 1 + i), 100, os_=i) for i in range(5)]
+    linhas.append(linha(date(2026, 10, 7), 50, status='ABAIXO DO ACORDO', os_=9))   # par lançado como unidade
+    linhas.append(linha(date(2026, 8, 7), 50, status='ABAIXO DO ACORDO', os_=8))    # antes do controle: fica como está
+    dados = painel.preparar(pd.DataFrame(linhas))
+    por_os = dados.set_index('OS')
+    assert por_os.loc[9, 'Preco efetivo'] == 100 and por_os.loc[9, 'Situação'] == 'CONFORME (abaixo do acordo)'
+    assert por_os.loc[8, 'Preco efetivo'] == 50 and por_os.loc[8, 'Situação'] == 'ABAIXO DO ACORDO'
+    _, ind = painel.calcular(pd.DataFrame(linhas))
+    assert ind['Acordos']['Conformidade (não acima)'].iloc[-1] == 1.0
+    j = painel.dados_portal(*painel.calcular(pd.DataFrame(linhas)))
+    assert j['abaixo']['linhas'] == 1 and j['abaixo']['suspeitaUnidade'] == 1 and j['abaixo']['valor'] == 50

@@ -40,9 +40,9 @@ def main():
     n = baixar_periodo.baixar()
     if n == 0:
         print('\nEncerrado sem relatórios (nenhum dado no período).')
-        # Nenhum dia no Qlik num reprocessamento e anormal: falha, sem apagar nada.
-        if os.environ.get('SUPPLY_VISION_SOMENTE_ANALISE') == '1':
-            print('ERRO: o Qlik não devolveu nenhum dia; a Análise não foi atualizada.')
+        # Nenhum dia no Qlik na atualização automática é anormal: falha, sem apagar nada.
+        if os.environ.get('SUPPLY_VISION_SOMENTE_PAINEL') == '1':
+            print('ERRO: o Qlik não devolveu nenhum dia; o Painel não foi atualizado.')
             sys.exit(1)
         return
 

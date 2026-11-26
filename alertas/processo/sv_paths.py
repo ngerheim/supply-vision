@@ -107,5 +107,11 @@ CORTE_VIGENCIA_ACORDOS = _data_de("CORTE_VIGENCIA_ACORDOS", "2026-09-18")
 # recorte que comece ate PAINEL_INICIO (recorte curto nao encolhe o painel).
 PAINEL_DIR = OPERACAO / "painel"
 PAINEL_INICIO = _data_de("PAINEL_INICIO", "2025-01-01")
+# Histórico local do recorte: meses fechados (fim antes de hoje - JANELA) vêm
+# do disco; só o resto é baixado do Qlik. Cada mês guardado vale VALIDADE dias
+# e depois é baixado de novo, pegando OS antigas que o Qlik tenha alterado.
+HISTORICO_DIR = DADOS_DIR / "historico"
+HISTORICO_JANELA_DIAS = int(AMBIENTE.get("HISTORICO_JANELA_DIAS", "").strip() or 15)
+HISTORICO_VALIDADE_DIAS = int(AMBIENTE.get("HISTORICO_VALIDADE_DIAS", "").strip() or 7)
 # Expiracao da chave de API do Qlik, usada so para avisar com antecedencia.
 CHAVE_QLIK_EXPIRA = _data_de("CHAVE_QLIK_EXPIRA", "2027-06-23")

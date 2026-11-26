@@ -59,21 +59,24 @@ export function comandoRelatorio(job) {
     ...(pedido.action === 'paralelo' ? ['--sem-envio'] : []),
   ];
 }
-// Reprocessamento diario da Analise: nos horarios de operacao.env, refaz os
-// ultimos N dias com os acordos, cadastros e De/Para atuais. Entra na fila
-// como qualquer recorte (um por vez, atras do que ja estiver na fila) e so
-// atualiza o Portal, sem planilha. Horario perdido por mais de 3 h e pulado.
+// Atualizacao diaria do Painel: nos horarios de operacao.env (padrao 21:30,
+// depois da ultima rodada de alertas e do backup), refaz o periodo do painel
+// com os acordos, cadastros e De/Para atuais. Entra na fila como qualquer
+// recorte e so grava os arquivos da aba Painel, sem planilha. Os meses
+// fechados vem do historico local, entao a rodada e curta. Horario perdido
+// por mais de 3 h e pulado.
 export function lerAgendaReprocessamento(config) {
-  const horarios = String(config.ANALISE_REPROCESSAMENTO_HORARIOS ?? '').split(',').map(h => h.trim()).filter(Boolean);
-  for (const h of horarios) if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(h)) throw new Error(`Horario invalido em ANALISE_REPROCESSAMENTO_HORARIOS: ${h}`);
-  const dias = Number(config.ANALISE_REPROCESSAMENTO_DIAS || 400);
-  if (!Number.isInteger(dias) || dias < 1 || dias > 1100) throw new Error('ANALISE_REPROCESSAMENTO_DIAS deve ser um numero de 1 a 1100.');
-  return { horarios: [...new Set(horarios)].sort(), dias };
+  const texto = config.PAINEL_ATUALIZACAO_HORARIOS ?? '21:30';
+  const horarios = String(texto).split(',').map(h => h.trim()).filter(Boolean);
+  for (const h of horarios) if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(h)) throw new Error(`Horario invalido em PAINEL_ATUALIZACAO_HORARIOS: ${h}`);
+  const inicio = String(config.PAINEL_INICIO || '2025-01-01').trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(inicio)) throw new Error('PAINEL_INICIO deve estar no formato AAAA-MM-DD.');
+  return { horarios: [...new Set(horarios)].sort(), inicio };
 }
 const doisDigitos = (n) => String(n).padStart(2, '0');
 const dataLocal = (d) => `${d.getFullYear()}-${doisDigitos(d.getMonth() + 1)}-${doisDigitos(d.getDate())}`;
 export function chaveReprocessamento(dia, hora) {
-  const h = createHash('sha256').update(`reprocessamento-analise:${dia}:${hora}`).digest('hex');
+  const h = createHash('sha256').update(`atualizacao-painel:${dia}:${hora}`).digest('hex');
   return `${h.slice(0, 8)}-${h.slice(8, 12)}-4${h.slice(13, 16)}-8${h.slice(17, 20)}-${h.slice(20, 32)}`;
 }
 export function agendarReprocessamento(db, agenda, agora = new Date()) {
@@ -89,14 +92,13 @@ export function agendarReprocessamento(db, agenda, agora = new Date()) {
   // registra que o pedido foi automatico.
   const admin = db.prepare("SELECT id FROM users WHERE role='admin' AND active=1 ORDER BY created_at, id LIMIT 1").get();
   if (!admin) return null;
-  const inicio = new Date(agora.getFullYear(), agora.getMonth(), agora.getDate() - (agenda.dias - 1));
   const id = `rpt_${crypto.randomUUID().replaceAll('-', '')}`, ts = agora.toISOString();
   db.exec('BEGIN IMMEDIATE');
   try {
     const r = db.prepare("INSERT OR IGNORE INTO report_jobs(id,request_key,action,from_date,to_date,created_by,created_at) VALUES(?,?,'reprocessamento',?,?,?,?)")
-      .run(id, chave, dataLocal(inicio), dia, admin.id, ts);
+      .run(id, chave, agenda.inicio, dia, admin.id, ts);
     if (r.changes) db.prepare("INSERT INTO audit_logs(id,user_id,action,entity,entity_id,details,created_at) VALUES(?,?,'CREATE','report_job',?,?,?)")
-      .run(`aud_${crypto.randomUUID()}`, admin.id, id, `Reprocessamento automático da Análise (${hora}): ${dataLocal(inicio)} a ${dia}`, ts);
+      .run(`aud_${crypto.randomUUID()}`, admin.id, id, `Atualização automática do Painel (${hora}): ${agenda.inicio} a ${dia}`, ts);
     db.exec('COMMIT');
     return r.changes ? id : null;
   } catch (erro) {
@@ -313,7 +315,7 @@ function executarPython(db, job, segredo) {
         SUPPLY_VISION_PRIVADO: privado,
         SUPPLY_VISION_RUN_ID: identificadorExecucao(job.id),
         SUPPLY_VISION_SEM_ENVIO: job.action === 'paralelo' ? '1' : '0',
-        SUPPLY_VISION_SOMENTE_ANALISE: job.action === 'reprocessamento' ? '1' : '0',
+        SUPPLY_VISION_SOMENTE_PAINEL: job.action === 'reprocessamento' ? '1' : '0',
         PYTHONUTF8: '1',
         PYTHONUNBUFFERED: '1',
       },
@@ -453,9 +455,9 @@ async function principal() {
         .map((l) => l.trim())
         .filter((l) => l && !l.startsWith('#'))
     : [];
-  let agendaAnalise = { horarios: [], dias: 0 };
+  let agendaPainel = { horarios: [], inicio: '' };
   try {
-    agendaAnalise = lerAgendaReprocessamento(lerArquivo(path.join(privado, 'comum', 'operacao.env')));
+    agendaPainel = lerAgendaReprocessamento(lerArquivo(path.join(privado, 'comum', 'operacao.env')));
   } catch (erro) {
     console.error(`Reprocessamento da Análise desligado: ${erro.message}`);
   }
@@ -524,10 +526,10 @@ async function principal() {
         ultimaLimpeza = Date.now();
         if (removidos) console.log(`${removidos} arquivo(s) histórico(s) expirado(s) excluído(s).`);
       }
-      if (agendaAnalise.horarios.length && Date.now() - ultimaAgenda >= 60_000 && !validacaoAtiva(db)) {
+      if (agendaPainel.horarios.length && Date.now() - ultimaAgenda >= 60_000 && !validacaoAtiva(db)) {
         ultimaAgenda = Date.now();
-        const agendado = agendarReprocessamento(db, agendaAnalise);
-        if (agendado) console.log(`Reprocessamento da Análise na fila (${agendado}).`);
+        const agendado = agendarReprocessamento(db, agendaPainel);
+        if (agendado) console.log(`Atualização do Painel na fila (${agendado}).`);
       }
     } catch (erro) {
       console.error('Disponibilidade/limpeza dos relatórios:', erro.message);

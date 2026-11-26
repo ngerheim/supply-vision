@@ -72,16 +72,6 @@ void test('acordo com varios CNPJs: cadastro, Alertas, busca, abrangencia, exclu
   const a = criado.data.id;
   condicao(versaoDe(a), 'l1', 100); condicao(versaoDe(a), 'l2', 120);
 
-  // Reembolso: fornecedor com acordo vigente e as condicoes que ele atende
-  // (o CNPJ adicional so na Cidade A).
-  const fornecedoresReembolso = (await pedir('GET', 'reembolso/fornecedores')).data.fornecedores.map(f => f.id).sort();
-  assert.deepEqual(fornecedoresReembolso, ['f1', 'f2']);
-  const condicoesDe = async f => (await pedir('GET', `reembolso/condicoes?fornecedor=${f}`)).data.condicoes.map(c => [c.acordo, c.item, c.modelo, c.cidade, c.unidade, c.preco]);
-  assert.deepEqual(await condicoesDe('f2'), [['LF-1', 'ITEM FICTICIO', 'MODELO FICTICIO', 'Cidade A', 'UNFICT', 100]]);
-  assert.equal((await condicoesDe('f1')).length, 2);
-  assert.deepEqual(await condicoesDe('f3'), []);
-  assert.equal((await pedir('GET', 'reembolso/condicoes')).status, 400);
-
   // Alertas: a linha de cada condicao sai para cada CNPJ que atende a cidade.
   const pedidoInterno = new NextRequest('http://fixture/api/internal/agreements', { headers: { authorization: 'Bearer token-ficticio-cnpjs', 'x-portal-build': PORTAL_BUILD } });
   const internas = await (await rota.GET(pedidoInterno)).json();

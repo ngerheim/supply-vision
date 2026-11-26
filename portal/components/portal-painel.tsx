@@ -80,8 +80,8 @@ function Faisca({ valores }: { valores: number[] }) {
 type Serie = { nome: string; cor: string; valores: (number | null)[] };
 // Gráfico de linhas em SVG puro: eixo Y com 3 marcas, rótulos de mês
 // espaçados, linha de referência opcional e dica no ponto mais próximo.
-function GraficoLinha({ meses, series, formatar, referencia, altura = 220 }: {
-  meses: string[]; series: Serie[]; formatar: (v: number) => string; referencia?: { valor: number; rotulo: string }; altura?: number;
+function GraficoLinha({ meses, series, formatar, referencia, parcial, altura = 220 }: {
+  meses: string[]; series: Serie[]; formatar: (v: number) => string; referencia?: { valor: number; rotulo: string }; parcial?: string | null; altura?: number;
 }) {
   const [foco, setFoco] = useState<number | null>(null);
   const caixa = useRef<SVGSVGElement>(null);
@@ -117,7 +117,6 @@ function GraficoLinha({ meses, series, formatar, referencia, altura = 220 }: {
         {referencia && (
           <g>
             <line x1={m.e} x2={L - m.d} y1={y(referencia.valor)} y2={y(referencia.valor)} stroke="var(--ambar)" strokeDasharray="4 4" />
-            <text x={L - m.d} y={y(referencia.valor) - 4} textAnchor="end" className="fill-[var(--analise)] text-[10px]">{referencia.rotulo}</text>
           </g>
         )}
         {meses.map((mm, i) => (i % passo === 0 || (i === meses.length - 1 && i % passo >= passo / 2)) && (
@@ -126,32 +125,39 @@ function GraficoLinha({ meses, series, formatar, referencia, altura = 220 }: {
         {series.map(s => {
           const trechos: string[] = [];
           let atual = '';
-          s.valores.forEach((v, i) => {
+          // Mês ainda em andamento: o último trecho sai tracejado.
+          const ultimo = meses.length - 1;
+          const tracejar = !!parcial && meses[ultimo] === parcial && ultimo > 0 && s.valores[ultimo] !== null && s.valores[ultimo - 1] !== null;
+          const valores = tracejar ? s.valores.slice(0, ultimo) : s.valores;
+          valores.forEach((v, i) => {
             if (v === null) { if (atual) trechos.push(atual); atual = ''; return; }
             atual += `${atual ? 'L' : 'M'}${x(i)},${y(v)}`;
           });
           if (atual) trechos.push(atual);
-          return trechos.map(d => <path key={s.nome + d} d={d} fill="none" stroke={s.cor} strokeWidth="2.25" strokeLinejoin="round" pathLength={1} className="painel-traco" />);
+          return [...trechos.map(d => <path key={s.nome + d} d={d} fill="none" stroke={s.cor} strokeWidth="2.25" strokeLinejoin="round" pathLength={1} className="painel-traco" />),
+            tracejar && <line key={`${s.nome}-parcial`} x1={x(ultimo - 1)} y1={y(s.valores[ultimo - 1] as number)} x2={x(ultimo)} y2={y(s.valores[ultimo] as number)} stroke={s.cor} strokeWidth="2" strokeDasharray="4 3" />];
         })}
         {foco !== null && <line x1={x(foco)} x2={x(foco)} y1={m.t} y2={A - m.b} stroke="var(--borda)" />}
         {foco !== null && series.map(s => s.valores[foco] !== null && <circle key={s.nome} cx={x(foco)} cy={y(s.valores[foco] as number)} r="3.5" fill={s.cor} />)}
       </svg>
       {foco !== null && (
         <div className="pointer-events-none absolute top-1 rounded border bg-card px-2 py-1 text-xs shadow-sm" style={{ left: `${Math.min(80, (x(foco) / L) * 100)}%` }}>
-          <div className="font-medium">{mes(meses[foco])}</div>
+          <div className="font-medium">{mes(meses[foco])}{meses[foco] === parcial ? ' (parcial)' : ''}</div>
           {series.map(s => <div key={s.nome} className="flex items-center gap-1.5 tabular-nums"><span className="size-2 rounded-full" style={{ background: s.cor }} />{s.nome}: {s.valores[foco] === null ? '—' : formatar(s.valores[foco] as number)}</div>)}
         </div>
       )}
-      {series.length > 1 && (
-        <div className="mt-1 flex gap-4 text-xs text-muted-foreground">
-          {series.map(s => <span key={s.nome} className="flex items-center gap-1.5"><span className="h-0.5 w-4" style={{ background: s.cor }} />{s.nome}</span>)}
+      {(series.length > 1 || referencia || (parcial && meses.at(-1) === parcial)) && (
+        <div className="mt-1 flex flex-wrap gap-4 text-xs text-muted-foreground">
+          {series.length > 1 && series.map(s => <span key={s.nome} className="flex items-center gap-1.5"><span className="h-0.5 w-4" style={{ background: s.cor }} />{s.nome}</span>)}
+          {referencia && <span className="flex items-center gap-1.5"><span className="w-4 border-t-2 border-dashed border-[var(--ambar)]" />{referencia.rotulo}</span>}
+          {parcial && meses.at(-1) === parcial && <span className="flex items-center gap-1.5"><span className="w-4 border-t-2 border-dashed border-[var(--aco)]" />{mes(parcial)} parcial</span>}
         </div>
       )}
     </div>
   );
 }
 
-function Barras({ itens, formatar }: { itens: { nome: string; valor: number }[]; formatar: (v: number) => string }) {
+function Barras({ itens, formatar, rotulo = '10rem' }: { itens: { nome: string; valor: number }[]; formatar: (v: number) => string; rotulo?: string }) {
   const [pronto, setPronto] = useState(reduzirMovimento());
   useEffect(() => { const t = setTimeout(() => setPronto(true), 60); return () => clearTimeout(t); }, []);
   const max = Math.max(...itens.map(i => i.valor), 1);
@@ -159,7 +165,7 @@ function Barras({ itens, formatar }: { itens: { nome: string; valor: number }[];
   return (
     <ul className="space-y-1.5">
       {itens.map(i => (
-        <li key={i.nome} className="grid grid-cols-[minmax(0,10rem)_1fr_auto] items-center gap-2 text-xs">
+        <li key={i.nome} className="grid items-center gap-2 text-xs" style={{ gridTemplateColumns: `minmax(0,${rotulo}) 1fr auto` }}>
           <span className="truncate" title={i.nome}>{i.nome}</span>
           <span className="h-2 rounded-sm bg-muted"><span className="block h-2 rounded-sm bg-primary transition-[width] duration-700 ease-out" style={{ width: pronto ? `${Math.max(2, (i.valor / max) * 100)}%` : '0%' }} /></span>
           <span className="tabular-nums text-muted-foreground">{formatar(i.valor)}</span>
@@ -256,10 +262,10 @@ export function Painel() {
 
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6">
           <Indicador rotulo="Índice de preço" valor={r.indice ?? null} formatar={v => v.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
-            detalhe={r.indice === null || r.indice === undefined ? null : r.indice < 100 ? `${pct(1 - r.indice / 100)} abaixo do 1º ano` : `${pct(r.indice / 100 - 1)} acima do 1º ano`}
+            detalhe={r.indice === null || r.indice === undefined ? null : r.indice < 100 ? `${pct(1 - r.indice / 100)} abaixo de ${d.anoBase ?? 2025}` : `${pct(r.indice / 100 - 1)} acima de ${d.anoBase ?? 2025}`}
             dica={metodo['Índice de preço']} serie={indice.map(i => i.valor)} />
           <Indicador rotulo="Custo evitado (reajuste)" valor={reaj?.custoEvitado ?? null} formatar={moedaCurta} atraso={60}
-            detalhe={reaj ? `com acordo ${sinal(reaj.comAcordo)}${pct(reaj.comAcordo)} · sem ${sinal(reaj.semAcordo)}${pct(reaj.semAcordo)}` : 'precisa de dois anos'} dica={metodo['Reajuste contido']} />
+            detalhe={reaj ? `oficinas com acordo ${sinal(reaj.comAcordo)}${pct(reaj.comAcordo)} · sem ${sinal(reaj.semAcordo)}${pct(reaj.semAcordo)}` : 'precisa de dois anos'} dica={metodo['Reajuste contido']} />
           <Indicador rotulo="Gasto com acordo" valor={r.pctAcordo ?? null} formatar={v => pct(v)} atraso={120}
             detalhe="desde o controle" dica={metodo['Acordos']} serie={acordos.map(a => a.pctAcordo)} />
           <Indicador rotulo="Conformidade" valor={r.conformidade ?? null} formatar={v => pct(v)} atraso={180}
@@ -273,10 +279,10 @@ export function Painel() {
         <div className="grid gap-3 xl:grid-cols-2">
           <Secao titulo="Índice de preço" dica={metodo['Índice de preço']}>
             <GraficoLinha meses={indice.map(i => i.mes)} series={[{ nome: 'Índice', cor: 'var(--marinho)', valores: indice.map(i => i.valor) }]}
-              formatar={v => v.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} referencia={{ valor: 100, rotulo: '100 = 1º ano' }} />
+              formatar={v => v.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} referencia={{ valor: 100, rotulo: `100 = ${d.anoBase ?? 2025}` }} parcial={d.mesParcial} />
           </Secao>
           <Secao titulo="Acordos" dica={metodo['Acordos']}>
-            <GraficoLinha meses={acordos.map(a => a.mes)} formatar={v => pct(v, 0)}
+            <GraficoLinha meses={acordos.map(a => a.mes)} formatar={v => pct(v, 0)} parcial={d.mesParcial}
               series={[{ nome: 'Conformidade', cor: 'var(--marinho)', valores: acordos.map(a => a.conformidade) },
                 { nome: 'Gasto com acordo', cor: 'var(--link)', valores: acordos.map(a => a.pctAcordo) }]} />
           </Secao>
@@ -305,7 +311,7 @@ export function Painel() {
             <div>
               {item && <p className="mb-1 text-xs text-muted-foreground"><span className="font-medium text-foreground">{item.item}</span> · {item.modelo} · mediana por mês</p>}
               {item && <GraficoLinha key={`${item.item}|${item.modelo}`} meses={item.serie.map((s: AnyRow) => s.mes)} formatar={v => moeda(v)} altura={200}
-                series={[{ nome: 'Mediana', cor: 'var(--marinho)', valores: item.serie.map((s: AnyRow) => s.valor) }]} />}
+                parcial={d.mesParcial} series={[{ nome: 'Mediana', cor: 'var(--marinho)', valores: item.serie.map((s: AnyRow) => s.valor) }]} />}
             </div>
           </div>
         </Secao>
@@ -321,6 +327,20 @@ export function Painel() {
             <Barras itens={(d.fornecedoresAcima ?? []).map((f: AnyRow) => ({ nome: `${f.fornecedor} · ${f.cidade}`, valor: f.valor }))} formatar={moedaCurta} />
           </Secao>
         </div>
+
+        {d.abaixo && (
+          <Secao titulo="Abaixo do acordo" dica={metodo['Abaixo do acordo']}>
+            <div className="grid gap-4 xl:grid-cols-[minmax(0,18rem)_minmax(0,1fr)]">
+              <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
+                <dt className="text-muted-foreground">Compras abaixo</dt><dd className="text-right tabular-nums">{inteiro(d.abaixo.linhas)} ({pct(d.abaixo.pctComAcordo)} das com acordo)</dd>
+                <dt className="text-muted-foreground">Abaixo do acordo</dt><dd className="text-right tabular-nums">{moedaCurta(d.abaixo.valor)}</dd>
+                <dt className="text-muted-foreground">Prováveis pares lançados como unidade</dt><dd className="text-right tabular-nums">{inteiro(d.abaixo.suspeitaUnidade)} · {moedaCurta(d.abaixo.valorSuspeitaUnidade)}</dd>
+                <dd className="col-span-2 pt-1 text-muted-foreground">Contam como conformes e não entram como economia.</dd>
+              </dl>
+              <Barras itens={d.abaixo.itens ?? []} formatar={moedaCurta} rotulo="18rem" />
+            </div>
+          </Secao>
+        )}
 
         <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
           <Secao titulo="Confiabilidade dos dados" dica={metodo['Qualidade dos dados']}>

@@ -314,12 +314,13 @@ void test('parada do runner encerra arvore inteira e aguarda confirmacao', async
   await assert.rejects(encerrarArvore({ pid: 123, exitCode: null }, (...args) => args[3](new Error('falha'))), /falha/);
 });
 
-void test('reprocessamento diario da Analise: agenda valida, uma vez por horario e so ate 3 h depois', async () => {
+void test('atualizacao diaria do Painel: agenda valida, uma vez por horario e so ate 3 h depois', async () => {
   const { lerAgendaReprocessamento, agendarReprocessamento, chaveReprocessamento } = await import('../scripts/processar-relatorios.mjs');
-  assert.throws(() => lerAgendaReprocessamento({ ANALISE_REPROCESSAMENTO_HORARIOS: '6:30' }));
-  assert.throws(() => lerAgendaReprocessamento({ ANALISE_REPROCESSAMENTO_HORARIOS: '06:30', ANALISE_REPROCESSAMENTO_DIAS: '0' }));
-  assert.deepEqual(lerAgendaReprocessamento({}), { horarios: [], dias: 400 });
-  const agenda = lerAgendaReprocessamento({ ANALISE_REPROCESSAMENTO_HORARIOS: '19:30, 06:30', ANALISE_REPROCESSAMENTO_DIAS: '30' });
+  assert.throws(() => lerAgendaReprocessamento({ PAINEL_ATUALIZACAO_HORARIOS: '6:30' }));
+  assert.throws(() => lerAgendaReprocessamento({ PAINEL_INICIO: '01/01/2025' }));
+  assert.deepEqual(lerAgendaReprocessamento({}), { horarios: ['21:30'], inicio: '2025-01-01' });
+  assert.deepEqual(lerAgendaReprocessamento({ PAINEL_ATUALIZACAO_HORARIOS: '' }).horarios, []);
+  const agenda = lerAgendaReprocessamento({ PAINEL_ATUALIZACAO_HORARIOS: '19:30, 06:30' });
   assert.deepEqual(agenda.horarios, ['06:30', '19:30']);
   assert.match(chaveReprocessamento('2026-11-03', '06:30'), /^[a-f0-9-]{36}$/);
   const db = new DatabaseSync(':memory:');
@@ -331,9 +332,9 @@ void test('reprocessamento diario da Analise: agenda valida, uma vez por horario
   assert.equal(agendarReprocessamento(db, agenda, new Date(2026, 10, 3, 7, 0)), null);
   assert.equal(agendarReprocessamento(db, agenda, new Date(2026, 10, 3, 10, 0)), null); // mais de 3 h: pulado
   const job = db.prepare('SELECT * FROM report_jobs WHERE id=?').get(id);
-  assert.deepEqual([job.action, job.from_date, job.to_date, job.created_by, job.status], ['reprocessamento', '2026-10-05', '2026-11-03', 'admin1', 'queued']);
-  assert.deepEqual(comandoRelatorio(job), ['panorama/executar.py', '--inicio', '05/10/2026', '--fim', '03/11/2026']);
-  assert.match(db.prepare("SELECT details FROM audit_logs").get().details, /Reprocessamento automático da Análise \(06:30\)/);
+  assert.deepEqual([job.action, job.from_date, job.to_date, job.created_by, job.status], ['reprocessamento', '2025-01-01', '2026-11-03', 'admin1', 'queued']);
+  assert.deepEqual(comandoRelatorio(job), ['panorama/executar.py', '--inicio', '01/01/2025', '--fim', '03/11/2026']);
+  assert.match(db.prepare("SELECT details FROM audit_logs").get().details, /Atualização automática do Painel \(06:30\)/);
   assert.ok(agendarReprocessamento(db, agenda, new Date(2026, 10, 3, 19, 45)));
   db.close();
 });

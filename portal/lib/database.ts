@@ -7,11 +7,9 @@ import { MIGRAR_FILA_SOLICITACOES } from './fila-email-schema.ts';
 import { bancoSqliteLocal } from './sqlite-local.ts';
 import { SESSAO_INATIVIDADE_MS } from './politica-sessao.ts';
 import { lerPermissoes } from './permissoes.ts';
-import { SCHEMA_ANALISE, SCHEMA_ANALISE_ACOES } from './analise.ts';
+import { SCHEMA_ANALISE, SCHEMA_ANALISE_ACOES, SCHEMA_REEMBOLSO, SCHEMA_REEMBOLSO_HISTORICO } from './esquemas-legados.ts';
 import { SCHEMA_ALERTAS } from './alertas-rodadas.ts';
 import { SCHEMA_REDE } from './rede.ts';
-import { SCHEMA_REEMBOLSO } from './reembolso.ts';
-import { SCHEMA_REEMBOLSO_HISTORICO } from './reembolso-historico.ts';
 
 export { SESSAO_INATIVIDADE_MS } from './politica-sessao.ts';
 import { CRIAR_CONTADOR_CHAMADOS_SQL, MIGRAR_CONTADOR_CHAMADOS_SQL, migrarBuscaChamados, migrarIndicesListasGlobais } from './operacao-dados.ts';

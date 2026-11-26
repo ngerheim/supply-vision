@@ -35,6 +35,7 @@ MIN_REFERENCIA = 3
 TOP_ITENS = 20
 CORTE_VIGENCIA = pd.Timestamp(sv_paths.CORTE_VIGENCIA_ACORDOS)
 CHAVE_ITEM = ["Item", "Modelo"]
+PRECO = "Preco efetivo"
 
 
 # ── Camada 2: limpeza ─────────────────────────────────────────────────────
@@ -49,6 +50,14 @@ def preparar(df):
                    "Dif. p/ Menor Acordo", "Preco Acordo"):
         if coluna in dados.columns:
             dados[coluna] = pd.to_numeric(dados[coluna], errors="coerce")
+    # Abaixo do acordo (desde o controle de vigência) é quase sempre uma
+    # particularidade (desconto pontual, marca, par lançado como unidade): conta
+    # como conforme e, nos cálculos de preço e economia, entra pelo preço do
+    # acordo, sem virar mérito de Suprimentos. O gasto continua o pago.
+    acordo = dados["Preco Acordo"] if "Preco Acordo" in dados else pd.Series(np.nan, index=dados.index)
+    abaixo = (dados["Status"] == "ABAIXO DO ACORDO") & (dados["Data"] >= CORTE_VIGENCIA) & (acordo > 0)
+    dados["Preco efetivo"] = dados["Preco OS"].where(~abaixo, acordo)
+    dados["Situação"] = dados["Status"].where(~abaixo, "CONFORME (abaixo do acordo)")
     return dados
 
 
@@ -115,6 +124,11 @@ def mantidas(dados):
 
 # ── Camada 3: indicadores ─────────────────────────────────────────────────
 
+def _ano_base():
+    """Ano que vale 100 no índice (o do início do painel, 2025 por padrão)."""
+    return getattr(sv_paths, "PAINEL_INICIO", pd.Timestamp("2025-01-01")).year
+
+
 def desde_corte(df):
     """Indicadores que dependem de acordo só contam desde o controle de vigência:
     antes dele a carteira atual era aplicada retroativamente."""
@@ -137,13 +151,15 @@ def indice_preco(limpo):
     """Cesta fixa (quantidade do período) a preço mediano do mês vs. do 1º ano."""
     if limpo.empty:
         return pd.DataFrame(columns=["Mês", "Índice", "Cobertura do gasto"])
-    inicio = limpo["Data"].min()
-    base_periodo = limpo[limpo["Data"] < inicio + pd.DateOffset(years=1)]
-    base = base_periodo.groupby(CHAVE_ITEM)["Preco OS"].median().rename("base")
+    ano_base = _ano_base()
+    base_periodo = limpo[limpo["Data"].dt.year == ano_base]
+    if base_periodo.empty:
+        base_periodo = limpo[limpo["Data"] < limpo["Data"].min() + pd.DateOffset(years=1)]
+    base = base_periodo.groupby(CHAVE_ITEM)[PRECO].median().rename("base")
     pesos = limpo.groupby(CHAVE_ITEM)["Qtd"].sum().rename("q")
     linhas = []
     for mes, grupo in limpo.groupby(_mes(limpo["Data"])):
-        atual = grupo.groupby(CHAVE_ITEM)["Preco OS"].median().rename("atual")
+        atual = grupo.groupby(CHAVE_ITEM)[PRECO].median().rename("atual")
         cesta = pd.concat([atual, base, pesos], axis=1, join="inner").dropna()
         if cesta.empty:
             continue
@@ -159,7 +175,7 @@ def medianas_top(limpo):
     top = limpo.groupby(CHAVE_ITEM)["Preco Total OS"].sum().nlargest(TOP_ITENS).index
     sel = limpo[limpo.set_index(CHAVE_ITEM).index.isin(top)]
     tabela = sel.pivot_table(index=CHAVE_ITEM, columns=_mes(sel["Data"]).astype(str),
-                             values="Preco OS", aggfunc="median")
+                             values=PRECO, aggfunc="median")
     if tabela.empty:
         return tabela.reset_index()
     primeiro = tabela.apply(lambda linha: linha.dropna().iloc[0], axis=1)
@@ -179,7 +195,7 @@ def custo_evitado(limpo):
     sem = df[df["Com acordo"] == "NÃO"].groupby(chave)["Preco OS"].agg(["median", "size"])
     sem = sem[sem["size"] >= MIN_REFERENCIA]["median"].rename("mercado")
     com = df[df["Com acordo"] == "SIM"].join(sem, on=chave, how="inner")
-    com["Custo evitado"] = (com["mercado"] - com["Preco OS"]) * com["Qtd"]
+    com["Custo evitado"] = (com["mercado"] - com[PRECO]) * com["Qtd"]
     resumo = com.groupby("_mes").agg(**{
         "Gasto com acordo comparável": ("Preco Total OS", "sum"),
         "Custo evitado": ("Custo evitado", "sum"),
@@ -361,12 +377,13 @@ def calcular(df, df_acordo=None):
 # ── Saída ──────────────────────────────────────────────────────────────────
 
 NOTAS = {
-    "Reajuste contido": "Variação da mediana do 1º para o último ano do recorte na mesma oficina, item e modelo, com e sem acordo, ponderada pelo gasto do último ano; variações implausíveis (abaixo de −75% ou acima de +300%) ficam de fora. Custo evitado = gasto com acordo × diferença entre os dois reajustes.",
+    "Reajuste contido": "Variação da mediana do 1º para o último ano do recorte na mesma oficina, item e modelo, separando as oficinas que hoje têm acordo das que não têm, ponderada pelo gasto do último ano; variações implausíveis (abaixo de −75% ou acima de +300%) ficam de fora. Custo evitado = gasto com acordo × diferença entre os dois reajustes.",
     "Resumo": "Último mês do recorte pode estar incompleto. Indicadores de acordo contam desde o controle de vigência.",
-    "Índice de preço": "Mesma cesta de itens (quantidade do período) a preço mediano do mês, dividido pelo preço mediano do 1º ano do recorte.",
+    "Índice de preço": "Mesma cesta de itens (quantidade do período) a preço mediano do mês, dividido pelo preço mediano de 2025 (= 100). Compras abaixo do acordo desde o controle de vigência entram pelo preço do acordo.",
     "Medianas top 20": "Mediana do preço unitário por mês dos 20 itens e modelos de maior gasto.",
     "Custo evitado": "Desde o controle de vigência. Para cada compra com acordo: (mediana das compras sem acordo na mesma cidade, item e modelo − preço pago) × quantidade. Só onde há 3+ compras sem acordo de referência. Negativo = acordo acima do mercado local.",
-    "Acordos": "Desde o controle de vigência. Conformidade = linhas com acordo que não ficaram acima do preço acordado.",
+    "Acordos": "Desde o controle de vigência (antes dele não se sabe quais acordos valiam). Conformidade = compras com acordo que não ficaram acima do preço acordado; as abaixo contam como conformes.",
+    "Abaixo do acordo": "Desde o controle de vigência. Compras com preço menor que o do acordo: quase sempre particularidade (desconto pontual, marca, par lançado como unidade). Contam como conformes e, no índice, nas medianas e no custo evitado, entram pelo preço do acordo, sem virar economia. Perto de −50% = provável par lançado como unidade.",
     "Direcionamento cidade": "Desde o controle de vigência. Compras em oficina sem acordo onde havia acordo para o item na cidade; perda = diferença para o menor acordo.",
     "Direcionamento agendador": "Mesma conta, por quem abriu a OS.",
     "Fornecedores fora da curva": "Últimos 12 meses. Mediana do preço do fornecedor dividida pela mediana do item e modelo na UF. Só fornecedores com 5+ OS.",
@@ -438,16 +455,8 @@ COLUNAS_BASE = [
 ]
 
 
-def _csv_atomico(tabela, destino):
-    """Grava num temporário e troca de uma vez: o Power BI nunca lê meio arquivo."""
-    temporario = destino.with_suffix(destino.suffix + ".tmp")
-    tabela.to_csv(temporario, sep=";", decimal=".", index=False, encoding="utf-8-sig",
-                  date_format="%Y-%m-%d")
-    os.replace(temporario, destino)
-
-
 def exportar_painel(dados, ind, inicio, df_total=None, base_crua=None, pasta=None, inicio_minimo=None):
-    """Indicadores (JSON da aba Painel e CSV do Power BI) e o pacote "Baixar base".
+    """Indicadores da aba Painel (JSON) e o pacote "Baixar base".
 
     Só recorte que comece até o início mínimo atualiza a pasta: um recorte
     curto pedido no dia a dia não pode encolher o painel do diretor."""
@@ -457,37 +466,10 @@ def exportar_painel(dados, ind, inicio, df_total=None, base_crua=None, pasta=Non
         print(f"  Painel: recorte começa depois de {inicio_minimo:%d/%m/%Y}; arquivos mantidos.")
         return None
     pasta.mkdir(parents=True, exist_ok=True)
-    base = dados[[c for c in COLUNAS_BASE if c in dados.columns]].copy()
-    base["Mantida"] = np.where(dados[MOTIVO_COLUNA] == "", "SIM", "NÃO")
-    base["Desde controle de vigência"] = np.where(dados["Data"] >= CORTE_VIGENCIA, "SIM", "NÃO")
-    _csv_atomico(base, pasta / "base_limpa.csv")
-    nomes = {
-        "Índice de preço": "indice_preco", "Custo evitado": "custo_evitado", "Acordos": "acordos_mensal",
-        "Direcionamento cidade": "direcionamento_cidade", "Direcionamento agendador": "direcionamento_agendador",
-        "Fornecedores fora da curva": "fornecedores_fora_curva", "Itens sem acordo": "itens_sem_acordo",
-        "Volume e mix": "volume_mix", "Novos fornecedores": "novos_fornecedores",
-        "Saúde da carteira": "saude_carteira", "Qualidade dos dados": "qualidade_dados",
-    }
-    for nome, arquivo in nomes.items():
-        if nome in ind:
-            _csv_atomico(ind[nome], pasta / f"{arquivo}.csv")
-    top = ind.get("Medianas top 20")
-    if top is not None and not top.empty:
-        meses = [c for c in top.columns if str(c)[:2] == "20"]
-        longo = top.melt(id_vars=CHAVE_ITEM, value_vars=meses, var_name="Mês", value_name="Mediana").dropna()
-        _csv_atomico(longo, pasta / "medianas_top20.csv")
-    datas = dados["Data"].dropna()
-    meta = pd.DataFrame([
-        {"Campo": "Início do recorte", "Valor": f"{datas.min():%Y-%m-%d}"},
-        {"Campo": "Fim do recorte", "Valor": f"{datas.max():%Y-%m-%d}"},
-        {"Campo": "Gerado em", "Valor": datetime.now().strftime("%Y-%m-%d %H:%M")},
-        {"Campo": "Controle de vigência desde", "Valor": f"{CORTE_VIGENCIA:%Y-%m-%d}"},
-        {"Campo": "Linhas na base", "Valor": str(len(dados))},
-        {"Campo": "Linhas mantidas", "Valor": str(int((dados[MOTIVO_COLUNA] == "").sum()))},
-    ] + [{"Campo": f"Método: {k}", "Valor": v} for k, v in NOTAS.items()])
-    _csv_atomico(meta, pasta / "metadados.csv")
-    _json_atomico(dados_portal(dados, ind, df_total, base_crua), pasta / "painel.json")
+    # Pacote antes dos números: se ele falhar, a tela continua mostrando a
+    # geração anterior inteira, e não números novos com a base velha.
     _pacote_base(dados, df_total, base_crua, pasta / "painel_base.zip")
+    _json_atomico(dados_portal(dados, ind, df_total, base_crua), pasta / "painel.json")
     print(f"  Painel: arquivos atualizados em {pasta}")
     return pasta
 
@@ -524,7 +506,7 @@ def reajuste_contido(limpo):
         return None
     a0, a1 = int(anos[0]), int(anos[-1])
     chave = ["CNPJ", "Item", "Modelo"]
-    med = limpo[limpo["Data"].dt.year.isin([a0, a1])].groupby(chave + [limpo["Data"].dt.year.rename("ano")])["Preco OS"].median().unstack()
+    med = limpo[limpo["Data"].dt.year.isin([a0, a1])].groupby(chave + [limpo["Data"].dt.year.rename("ano")])[PRECO].median().unstack()
     if a0 not in med or a1 not in med:
         return None
     med = med[[a0, a1]].dropna()
@@ -547,7 +529,7 @@ def reajuste_contido(limpo):
             "gastoComAcordo": _num(gasto_com, 2), "custoEvitado": _num(evitado, 2)}
 
 
-METODO_PORTAL = ("Índice de preço", "Reajuste contido", "Medianas top 20", "Acordos", "Direcionamento cidade",
+METODO_PORTAL = ("Índice de preço", "Reajuste contido", "Medianas top 20", "Acordos", "Abaixo do acordo", "Direcionamento cidade",
                  "Direcionamento agendador", "Qualidade dos dados", "Saúde da carteira")
 
 
@@ -570,9 +552,9 @@ def dados_portal(dados, ind, df_total=None, base_crua=None):
     for (item, modelo), gasto in top.items():
         g = limpo[(limpo["Item"] == item) & (limpo["Modelo"] == modelo)]
         gm = mes[g.index]
-        ini = g[gm.isin(meses_ini)]["Preco OS"].median()
-        fim_ = g[gm.isin(meses_fim)]["Preco OS"].median()
-        serie = g.groupby(gm.dt.strftime("%Y-%m"))["Preco OS"].median()
+        ini = g[gm.isin(meses_ini)][PRECO].median()
+        fim_ = g[gm.isin(meses_fim)][PRECO].median()
+        serie = g.groupby(gm.dt.strftime("%Y-%m"))[PRECO].median()
         itens.append({"item": item, "modelo": modelo, "gasto": _num(gasto, 2), "inicio": _num(ini, 2),
                       "fim": _num(fim_, 2), "variacao": _num(fim_ / ini - 1) if ini and fim_ == fim_ else None,
                       "serie": [{"mes": m, "valor": _num(v, 2)} for m, v in serie.items()]})
@@ -596,11 +578,24 @@ def dados_portal(dados, ind, df_total=None, base_crua=None):
         universo = {"linhasCruas": int(len(base_crua)), "entraram": int((m == "").sum()),
                     "filtros": [{"motivo": MOTIVOS_FILTRO.get(k, k), "linhas": int(v)} for k, v in m[m != ""].value_counts().items()]}
     saude = ind.get("Saúde da carteira")
+    ab = corte[(corte["Status"] == "ABAIXO DO ACORDO") & (corte["Preco Acordo"] > 0)]
+    razao = ab["Preco OS"] / ab["Preco Acordo"]
+    unidade = ab[razao.between(0.48, 0.52)]
+    valor_ab = ((ab["Preco Acordo"] - ab["Preco OS"]) * ab["Qtd"]).clip(lower=0)
+    itens_ab = ab.assign(_v=valor_ab).groupby(CHAVE_ITEM).agg(linhas=("OS", "size"), valor=("_v", "sum")).nlargest(10, "valor")
+    abaixo = {"linhas": int(len(ab)), "pctComAcordo": _num(len(ab) / len(com)) if len(com) else None,
+              "valor": _num(valor_ab.sum(), 2), "suspeitaUnidade": int(len(unidade)),
+              "valorSuspeitaUnidade": _num(valor_ab[unidade.index].sum(), 2),
+              "itens": [{"nome": f"{i} · {m}", "linhas": int(r["linhas"]), "valor": _num(r["valor"], 2)} for (i, m), r in itens_ab.iterrows()]}
+    ultimo_dia = fim + pd.offsets.MonthEnd(0)
     return {
         "versao": 1,
         "geradoEm": datetime.now().strftime("%Y-%m-%d %H:%M"),
         "periodo": {"inicio": f"{inicio:%Y-%m-%d}", "fim": f"{fim:%Y-%m-%d}"},
         "controleDesde": f"{CORTE_VIGENCIA:%Y-%m-%d}",
+        "anoBase": int(_ano_base()),
+        "mesParcial": f"{fim:%Y-%m}" if fim.normalize() < ultimo_dia.normalize() else None,
+        "abaixo": abaixo,
         "resumo": {
             "indice": _num(indice["Índice"].iloc[-1], 1) if len(indice) else None,
             "indiceMes": indice["Mês"].iloc[-1] if len(indice) else None,
@@ -645,6 +640,15 @@ Arquivos separados por ponto e vírgula, codificação UTF-8. Período: {inicio}
 """
 
 
+def _valor_total(cru):
+    """A base do recorte guarda só as colunas usadas; sem "Valor Total", o
+    total é preço unitário × quantidade."""
+    if "Valor Total" in cru:
+        return cru["Valor Total"]
+    qtd = pd.to_numeric(cru["OS Quantidade"].astype(str).str.replace(",", "."), errors="coerce")
+    return (pd.to_numeric(cru["Valor Unitario"], errors="coerce") * qtd).round(2)
+
+
 def _pacote_base(dados, df_total, base_crua, destino):
     """Zip do botão "Baixar base": crua, tratada, retiradas (com motivo) e leia-me."""
     colunas = ["Etapa", "Motivo", "Data", "OS", "Fornecedor", "Cidade", "Modelo", "Descrição ou item", "Qtd",
@@ -656,7 +660,7 @@ def _pacote_base(dados, df_total, base_crua, destino):
             "Etapa": "Filtro do Universo", "Motivo": cru["_motivo_universo"].map(lambda m: MOTIVOS_FILTRO.get(m, m)),
             "Data": cru["Data Abertura"], "OS": cru["Codigo OS"], "Fornecedor": cru["Fornecedor"],
             "Cidade": cru["Forncedor por Cidade"], "Modelo": cru["Modelo"], "Descrição ou item": cru["Descrição"],
-            "Qtd": cru["OS Quantidade"], "Preço unitário": cru["Valor Unitario"], "Valor total": cru["Valor Total"]}))
+            "Qtd": cru["OS Quantidade"], "Preço unitário": cru["Valor Unitario"], "Valor total": _valor_total(cru)}))
     def do_motor(df, etapa, motivo):
         return pd.DataFrame({"Etapa": etapa, "Motivo": motivo, "Data": df.get("Data"), "OS": df.get("OS"),
                              "Fornecedor": df.get("Fornecedor"), "Cidade": df.get("Cidade"), "Modelo": df.get("Modelo"),
@@ -670,7 +674,7 @@ def _pacote_base(dados, df_total, base_crua, destino):
     if len(limpas):
         partes.append(do_motor(limpas, "Limpeza estatística", limpas[MOTIVO_COLUNA]))
     retiradas = pd.concat(partes, ignore_index=True) if partes else pd.DataFrame(columns=colunas)
-    tratada = mantidas(dados)[[c for c in COLUNAS_BASE if c in dados.columns and c != MOTIVO_COLUNA]]
+    tratada = mantidas(dados)[[c for c in COLUNAS_BASE + ["Situação", "Preco efetivo"] if c in dados.columns and c != MOTIVO_COLUNA]]
     datas = dados["Data"].dropna()
     texto = LEIA_ME.format(inicio=f"{datas.min():%d/%m/%Y}", fim=f"{datas.max():%d/%m/%Y}",
                            gerado=datetime.now().strftime("%d/%m/%Y %H:%M"))
@@ -686,6 +690,15 @@ def _pacote_base(dados, df_total, base_crua, destino):
         z.writestr("retiradas.csv", "\ufeff" + retiradas[colunas].to_csv(**opcoes))
         z.writestr("LEIA-ME.txt", texto)
     os.replace(temporario, destino)
+
+
+def atualizar_painel(df, df_acordo, inicio):
+    """Atualização automática: só os arquivos da aba Painel, sem planilhas."""
+    dados, ind = calcular(df, df_acordo)
+    if dados.empty:
+        return False
+    import leitura_dados
+    return exportar_painel(dados, ind, inicio, df, getattr(leitura_dados, "ULTIMA_BASE_CRUA", None)) is not None
 
 
 def gerar_painel(df, path, df_acordo=None, inicio=None):
