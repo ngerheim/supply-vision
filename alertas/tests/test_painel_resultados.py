@@ -80,16 +80,34 @@ def test_sem_linhas_elegiveis_nao_gera(painel, tmp_path):
     assert not (tmp_path / 'x.xlsx').exists()
 
 
-def test_exporta_csv_do_powerbi_so_para_recorte_longo(painel, tmp_path):
-    linhas = [linha(date(2026, 9, 20 + i % 5), 100 + i, os_=i) for i in range(15)]
-    dados, ind = painel.calcular(pd.DataFrame(linhas))
-    pasta = tmp_path / 'powerbi'
-    assert painel.exportar_powerbi(dados, ind, date(2026, 9, 1), pasta, date(2025, 1, 1)) is None
+def test_exporta_painel_e_pacote_base_so_para_recorte_longo(painel, tmp_path):
+    import json, zipfile
+    linhas = [linha(date(2025, 3, 2 + i % 5), 100 + i, os_=i) for i in range(12)]
+    linhas += [linha(date(2026, 10, 1 + i % 5), 110 + i, os_=50 + i) for i in range(12)]
+    linhas += [linha(date(2026, 10, 3), 900, os_=99), linha(date(2026, 10, 4), 100, status='ACORDO AMBÍGUO', os_=98)]
+    df = pd.DataFrame(linhas)
+    dados, ind = painel.calcular(df)
+    crua = pd.DataFrame({'Data Abertura': ['01/03/2025', '02/03/2025'], 'Codigo OS': ['1', '2'], 'Fornecedor': ['A', 'B'],
+                         'Forncedor por Cidade': ['X', 'Y'], 'Modelo': ['M', 'M'], 'Descrição': ['IPVA', 'FILTRO'],
+                         'OS Quantidade': ['1', '1'], 'Valor Unitario': [10.0, 20.0], 'Valor Total': ['10', '20'],
+                         '_desc_norm': ['IPVA', 'FILTRO'], '_motivo_universo': ['Item excluído', '']})
+    pasta = tmp_path / 'painel'
+    assert painel.exportar_painel(dados, ind, date(2026, 9, 1), df, crua, pasta, date(2025, 1, 1)) is None
     assert not pasta.exists()
-    assert painel.exportar_powerbi(dados, ind, date(2025, 1, 1), pasta, date(2025, 1, 1)) == pasta
+    assert painel.exportar_painel(dados, ind, date(2025, 1, 1), df, crua, pasta, date(2025, 1, 1)) == pasta
     base = pd.read_csv(pasta / 'base_limpa.csv', sep=';', encoding='utf-8-sig')
-    assert len(base) == 15 and set(base['Mantida']) <= {'SIM', 'NÃO'}
-    assert base['Data'].iloc[0].startswith('2026-09-')
-    assert {'indice_preco.csv', 'acordos_mensal.csv', 'metadados.csv', 'qualidade_dados.csv'} <= {
-        p.name for p in pasta.iterdir()}
+    assert len(base) == 25 and set(base['Mantida']) <= {'SIM', 'NÃO'}
+    j = json.loads((pasta / 'painel.json').read_text(encoding='utf-8'))
+    assert j['periodo']['inicio'].startswith('2025-03') and j['resumo']['linhas'] == 25
+    assert j['qualidade']['universo'] == {'linhasCruas': 2, 'entraram': 1,
+        'filtros': [{'motivo': 'Descrição fora do escopo (filtro de descrições)', 'linhas': 1}]}
+    assert j['qualidade']['quarentena'] == [{'motivo': 'ACORDO AMBÍGUO', 'linhas': 1}]
+    assert j['itens'][0]['serie'] and j['metodo']
+    with zipfile.ZipFile(pasta / 'painel_base.zip') as z:
+        assert sorted(z.namelist()) == ['LEIA-ME.txt', 'base_crua.csv', 'base_tratada.csv', 'retiradas.csv']
+        retiradas = z.read('retiradas.csv').decode('utf-8-sig')
+        assert 'Filtro do Universo;Descrição fora do escopo' in retiradas
+        assert 'Quarentena do motor;ACORDO AMBÍGUO' in retiradas
+        assert 'Limpeza estatística;' in retiradas
+        assert z.read('base_crua.csv').decode('utf-8-sig').splitlines()[1].startswith('Retirada: ')
     assert not list(pasta.glob('*.tmp'))

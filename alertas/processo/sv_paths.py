@@ -102,11 +102,10 @@ def _data_de(chave, padrao):
 # A partir desta data, situacao e intervalo de vigencia dos acordos passam a
 # ser respeitados no cruzamento. Antes dela, vale a tabela vigente atual.
 CORTE_VIGENCIA_ACORDOS = _data_de("CORTE_VIGENCIA_ACORDOS", "2026-09-18")
-# Painel no Power BI: pasta fixa com a base limpa e os indicadores em CSV,
-# sobrescrita a cada recorte que comece ate POWERBI_INICIO (recorte curto nao
-# encolhe o painel do diretor). Apontar POWERBI_DIR para uma pasta
-# sincronizada (OneDrive/SharePoint) dispensa gateway no Power BI Service.
-POWERBI_DIR = Path(AMBIENTE.get("POWERBI_DIR", "").strip() or (OPERACAO / "powerbi"))
-POWERBI_INICIO = _data_de("POWERBI_INICIO", "2025-01-01")
+# Painel de resultados (aba Painel do Portal e Power BI): pasta fixa com os
+# indicadores, a base limpa e o pacote "Baixar base", sobrescrita a cada
+# recorte que comece ate PAINEL_INICIO (recorte curto nao encolhe o painel).
+PAINEL_DIR = OPERACAO / "painel"
+PAINEL_INICIO = _data_de("PAINEL_INICIO", "2025-01-01")
 # Expiracao da chave de API do Qlik, usada so para avisar com antecedencia.
 CHAVE_QLIK_EXPIRA = _data_de("CHAVE_QLIK_EXPIRA", "2027-06-23")

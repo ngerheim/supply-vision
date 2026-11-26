@@ -35,33 +35,59 @@ def _validar_colunas(df, obrigatorias, origem):
 
 
 
-def carregar_base(path):
+# Filtros do Universo, na ordem em que valem: a linha leva o motivo do primeiro
+# que a pega (o mesmo resultado de aplicar um depois do outro).
+FILTROS_UNIVERSO = ("Grupo Despesa", "Modelo excluído", "Fornecedor excluído", "Sem CNPJ",
+                    "Item excluído", "Sem valor")
+# Base crua do último carregamento com o motivo de cada linha; o painel usa
+# para o "Baixar base" sem ler o arquivo de novo.
+ULTIMA_BASE_CRUA = None
+
+
+def ler_base_crua(path):
     df = pd.read_excel(path, dtype=str).rename(columns=lambda c: c.strip())
     _validar_colunas(df, contrato_base.COLUNAS, "base.xlsx (Qlik)")
     df["_desc_norm"]   = df["Descrição"].apply(_norm)
     df["_cidade_norm"] = df["Forncedor por Cidade"].apply(_norm)
     df["_fornec_norm"] = df["Fornecedor CNPJ"].apply(_normcnpj)
     df["Valor Unitario"] = pd.to_numeric(df["Valor Unitario"], errors="coerce")
+    return df
 
-    def _filtra(df, mask, motivo):
-        n0 = len(df); df = df[~mask].reset_index(drop=True)
-        n = n0 - len(df)
-        if n: print(f"  Filtro {motivo}: {n:,} linhas removidas ({n0:,} → {len(df):,})")
-        return df
 
+def motivos_universo(df):
+    """Motivo de exclusão de cada linha ("" = entra no Universo)."""
     # Listas de exclusão comparadas na forma normalizada dos dois lados, como
     # ITENS: acento, caixa ou espaço a mais não podem deixar a linha passar.
     def _excluir(coluna, lista):
         alvo = {_norm(i) for i in lista} - {""}
         return df[coluna].apply(_norm).isin(alvo)
 
-    df = _filtra(df, _excluir("Grupo Despesa", GRUPOS_EXCLUIR),         "Grupo Despesa")
-    df = _filtra(df, _excluir("Modelo", MODELOS_EXCLUIR),               "Modelo excluído")
-    df = _filtra(df, _excluir("Fornecedor", FORNECEDORES_EXCLUIR),      "Fornecedor excluído")
-    df = _filtra(df, df["_fornec_norm"] == "",                          "Sem CNPJ")
-    df = _filtra(df, df["_desc_norm"].isin({_norm(i) for i in ITENS_EXCLUIR}), "Item excluído")
-    df = _filtra(df, (df["Valor Unitario"] == 0), "Sem valor")
-    return df
+    mascaras = (
+        _excluir("Grupo Despesa", GRUPOS_EXCLUIR),
+        _excluir("Modelo", MODELOS_EXCLUIR),
+        _excluir("Fornecedor", FORNECEDORES_EXCLUIR),
+        df["_fornec_norm"] == "",
+        df["_desc_norm"].isin({_norm(i) for i in ITENS_EXCLUIR}),
+        df["Valor Unitario"] == 0,
+    )
+    motivo = pd.Series("", index=df.index, dtype=object)
+    for nome, mascara in zip(FILTROS_UNIVERSO, mascaras):
+        motivo[(motivo == "") & mascara.to_numpy()] = nome
+    return motivo
+
+
+def carregar_base(path):
+    global ULTIMA_BASE_CRUA
+    df = ler_base_crua(path)
+    motivo = motivos_universo(df)
+    restantes = len(df)
+    for nome in FILTROS_UNIVERSO:
+        n = int((motivo == nome).sum())
+        if n:
+            print(f"  Filtro {nome}: {n:,} linhas removidas ({restantes:,} → {restantes - n:,})")
+            restantes -= n
+    ULTIMA_BASE_CRUA = df.assign(_motivo_universo=motivo)
+    return df[motivo == ""].reset_index(drop=True)
 
 
 
