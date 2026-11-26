@@ -12,16 +12,13 @@ import {
   Database,
   Handshake,
   MapPinned,
-  Calculator,
   LogOut,
   MessageSquare,
   PackageSearch,
   PanelLeftClose,
   PanelLeftOpen,
   Settings,
-  ChartColumn,
   Gauge,
-  TriangleAlert,
   Boxes,
   Wrench,
 } from "lucide-react";
@@ -33,15 +30,12 @@ const { version } = packageInfo;
 const navItems: Record<Aba, { label: string; icon: typeof PackageSearch }> = {
   buscar: { label: "Buscar", icon: PackageSearch },
   rede: { label: "Rede", icon: MapPinned },
-  reembolso: { label: "Reembolso", icon: Calculator },
   manutencao: { label: "Manutenção", icon: Wrench },
   chamados: { label: "Chamados", icon: MessageSquare },
   estoque: { label: "Estoque", icon: Boxes },
   acordos: { label: "Acordos", icon: Handshake },
   cadastros: { label: "Cadastros", icon: Database },
   painel: { label: "Painel", icon: Gauge },
-  analise: { label: "Análise", icon: ChartColumn },
-  alertas: { label: "Alertas", icon: TriangleAlert },
   administracao: { label: "Administração", icon: Settings },
 };
 export function Sidebar({

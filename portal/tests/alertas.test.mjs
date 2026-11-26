@@ -96,7 +96,7 @@ void test('alertas: rodada pelo token, aviso so aos destinatarios e uma vez por 
   assert.equal(avisos('editor'), 1);
   assert.equal(avisos(admin), 0);
   assert.equal(sql.prepare("SELECT COUNT(*) n FROM alertas_rodadas WHERE id='alr_velha'").get().n, 0);
-  assert.match(sql.prepare("SELECT link FROM notificacoes_usuario WHERE user_id='editor'").get().link, /^\/\?aba=alertas&sub=rodadas&rodada=alr_/);
+  assert.match(sql.prepare("SELECT link FROM notificacoes_usuario WHERE user_id='editor'").get().link, /^\/\?aba=administracao&sub=rodadas&rodada=alr_/);
 
   // Mesmo horario de novo: troca o conteudo, sem duplicar nem avisar de novo.
   const segunda = await publicar(rodada({ linhas: [linha({})] }));

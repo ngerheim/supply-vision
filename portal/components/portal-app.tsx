@@ -25,12 +25,9 @@ import { Tickets } from './portal-tickets';
 import { ChangeHistory } from './portal-history';
 import { Permissoes } from './portal-permissoes';
 import { Contratos } from './portal-contratos';
-import { Analise } from './portal-analise';
 import { Painel } from './portal-painel';
-import { PaginaAcoesAnalise } from './portal-analise-pagina-acoes';
 import { Alertas, DestinatariosAlertas } from './portal-alertas';
 import { Rede, RedeDesconsiderados } from './portal-rede';
-import { Reembolso } from './portal-reembolso';
 import { Administration } from './portal-users';
 import { Mappings } from './portal-mappings';
 import { CabecalhoProvider } from './page-header';
@@ -167,8 +164,6 @@ function PortalSession({ message, endSession }: { message: string; endSession: (
       {((verAcordos&&nav==='agreements')||(!verAcordos&&nav==='search'&&agreementId))&&(agreementId?<AgreementDetail busy={busy} revision={data} id={agreementId} canWrite={canWrite} canDelete={pode(user, 'acordo:excluir')} onDelete={removerAcordo} onBack={()=>setAgreementId(null)} onEdit={(a:AnyRow)=>setAgreementModal({...a,expectedRevision:a.revision})} onItem={(i:AnyRow)=>setItemModal({...i,agreementId,expectedRevision:i.revision})} onImport={()=>{navigate('imports');setImportAgreement(agreementId)}} run={run}/>:<Agreements data={data} catalogs={catalogs} canWrite={canWrite} onOpen={setAgreementId} onNew={()=>setAgreementModal({locationIds:[],status:'active',startDate:dataDeNegocio()})}/>)}
       {podeAcessarAba(user,'rede')&&nav==='rede'&&<Rede podeGerenciar={pode(user, 'rede:gerenciar')} busy={busy} run={run}/>}
       {pode(user, 'rede:gerenciar')&&nav==='rede-exclusoes'&&<RedeDesconsiderados busy={busy} run={run}/>}
-      {/* Um unico elemento para as quatro subabas: a calculadora nao perde o que foi digitado ao trocar de subaba. */}
-      {nav.startsWith('reembolso')&&podeAcessarAba(user,nav)&&<Reembolso nav={nav} busy={busy} run={run}/>}
       {nav==='maintenance'&&<Maintenance url={String(data.manutencao||'')}/>}
       {pode(user, 'aba:suppliers')&&nav==='suppliers'&&(pode(user, 'fornecedor:gerenciar')
         ?<CatalogPage type="suppliers" rows={catalogs.suppliers} onAdd={()=>setCatalogModal({type:'suppliers'})} onEdit={(row:AnyRow)=>setCatalogModal({type:'suppliers',...row,expectedRevision:row.revision})} onDelete={(row:AnyRow)=>removeCatalog('suppliers',row)}/>
@@ -187,8 +182,6 @@ function PortalSession({ message, endSession }: { message: string; endSession: (
       {podeAcessarAba(user,'estoque-entradas')&&nav==='estoque-entradas'&&<EntradaEstoque/>}
       {pode(user, 'aba:history')&&nav==='history'&&<ChangeHistory users={userList}/>}
       {pode(user, 'aba:painel')&&nav==='painel'&&<Painel/>}
-      {pode(user, 'aba:analise')&&nav==='analise'&&<Analise verAcoes={()=>navigate('analise-acoes')}/>}
-      {pode(user, 'aba:analise')&&nav==='analise-acoes'&&<PaginaAcoesAnalise/>}
       {pode(user, 'aba:alertas')&&nav==='alertas'&&<Alertas key={`${rodadaLink}:${rodadaLinkVersion}`} inicial={rodadaLink}/>}
       {pode(user, 'alertas:destinatarios')&&nav==='alertas-destinatarios'&&<DestinatariosAlertas busy={busy} run={run}/>}
       {pode(user, 'aba:admin')&&nav==='admin'&&<Administration user={user} busy={busy} run={run}/>}

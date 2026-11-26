@@ -26,15 +26,12 @@ export function CabecalhoProvider({
 const titulos = {
   buscar: "Buscar preços",
   rede: "Rede",
-  reembolso: "Reembolso",
   manutencao: "Manutenção",
   chamados: "Chamados",
   estoque: "Estoque",
   acordos: "Acordos",
   cadastros: "Cadastros",
   painel: "Painel",
-  analise: "Análise",
-  alertas: "Alertas",
   administracao: "Administração",
 };
 
