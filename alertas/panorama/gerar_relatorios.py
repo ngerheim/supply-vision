@@ -14,7 +14,6 @@ Saída em privado/alertas/relatorios/historicos, nomeada com o período e execu�
 """
 
 import os, secrets, sys, pathlib
-import pandas as pd
 from datetime import datetime
 
 sys.dont_write_bytecode = True
@@ -74,16 +73,6 @@ def _verificar_base():
         sys.exit(1)
 
 
-def _publicar_analise(df, d0, d1):
-    """Publica o periodo inteiro na Analise. No reprocessamento dedicado, falha
-    vira erro do processo: a fila nao pode mostrar como concluido."""
-    from envio_analise import enviar_comparacao
-    enviados, falhas = enviar_comparacao(df, periodo=(d0, d1))
-    if os.environ.get('SUPPLY_VISION_SOMENTE_ANALISE') == '1' and (falhas or not enviados):
-        print(f'ERRO: reprocessamento da Análise incompleto ({enviados} dia(s) enviado(s), {falhas} falha(s)).')
-        sys.exit(1)
-
-
 def gerar():
     """Processa a base do recorte e gera um relatório consolidado."""
     _verificar_base()
@@ -97,8 +86,6 @@ def gerar():
     if df_base.empty:
         print('AVISO: Nenhuma linha sobrou após os filtros (SEM_DADOS_FILTRO).')
         print('       Nenhum relatório gerado.')
-        # Base integra, so que vazia depois dos filtros: a Analise tambem esvazia.
-        _publicar_analise(pd.DataFrame(), d0, d1)
         return False
 
     df_acordo = rodar.carregar_acordos_portal()
@@ -107,11 +94,13 @@ def gerar():
     print('Processando...')
     df    = rodar.processar(df_base, df_acordo)
     rodar.imprimir_resumo(rodar.resumir_status(df))
-    # O recorte também preenche a Análise do Portal (histórico).
-    _publicar_analise(df, d0, d1)
-    # Reprocessamento diário da Análise: só atualiza o Portal, sem planilha.
-    if os.environ.get('SUPPLY_VISION_SOMENTE_ANALISE') == '1':
-        print('\nReprocessamento da Análise concluído (sem planilha).')
+    # Atualização automática do Painel: só os arquivos da aba, sem planilhas.
+    if os.environ.get('SUPPLY_VISION_SOMENTE_PAINEL') == '1':
+        import painel_resultados
+        if not painel_resultados.atualizar_painel(df, df_acordo, d0):
+            print('ERRO: a aba Painel não foi atualizada.')
+            sys.exit(1)
+        print('\nAtualização do Painel concluída (sem planilha).')
         return False
 
     stamp = os.environ.get('SUPPLY_VISION_RUN_ID') or \

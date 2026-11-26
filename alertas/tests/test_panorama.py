@@ -1,7 +1,7 @@
 import importlib.util
 import sys
 import types
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 import pandas as pd
@@ -66,6 +66,9 @@ def historico(monkeypatch, tmp_path):
     monkeypatch.setattr(sys, 'argv', ['panorama.py', '--inicio', '28/02/2024', '--fim', '01/03/2024'])
     import sv_paths
     monkeypatch.setattr(sv_paths, 'DADOS_DIR', tmp_path)
+    monkeypatch.setattr(sv_paths, 'HISTORICO_DIR', tmp_path / 'historico', raising=False)
+    monkeypatch.setattr(sv_paths, 'HISTORICO_JANELA_DIAS', 15, raising=False)
+    monkeypatch.setattr(sv_paths, 'HISTORICO_VALIDADE_DIAS', 7, raising=False)
     monkeypatch.setattr(sv_paths, 'RELATORIOS_HISTORICOS', tmp_path / 'historicos')
     # _verificar_base nao depende das regras de negocio, cobertas em test_regras.
     monkeypatch.setitem(sys.modules, 'rodar', types.ModuleType('rodar'))
@@ -150,34 +153,27 @@ def test_metadado_legado_sem_hash_continua_aceito_se_periodo_confere(historico):
     assert gerar._verificar_base() is None
 
 
-def test_reprocessamento_da_analise_nao_gera_planilha(historico, monkeypatch, tmp_path):
+def test_atualizacao_do_painel_nao_gera_planilha(historico, monkeypatch, tmp_path):
     baixar, gerar = historico
     base_atomica.salvar_base(pd.DataFrame([linha_base()]), Path(baixar.SAIDA), Path(baixar.META), 'PERIODO=28/02/2024;01/03/2024\n')
     df = pd.DataFrame([{'Status': 'CONFORME'}])
-    enviados = []
     for nome, funcao in {'carregar_base': lambda *a: df, 'carregar_acordos_portal': lambda: df, 'processar': lambda a, b: df,
                          'resumir_status': lambda d: {}, 'imprimir_resumo': lambda r: None,
                          'preparar_recorte_historico': lambda d: pytest.fail('Nao deve montar planilha')}.items():
         monkeypatch.setattr(gerar.rodar, nome, funcao, raising=False)
-    falso = types.ModuleType('envio_analise')
-    resultado = [(3, 0)]
-    falso.enviar_comparacao = lambda d, periodo=None: enviados.append((len(d), periodo)) or resultado[0]
-    monkeypatch.setitem(sys.modules, 'envio_analise', falso)
-    monkeypatch.setenv('SUPPLY_VISION_SOMENTE_ANALISE', '1')
+    chamadas, resultado = [], [True]
+    falso = types.ModuleType('painel_resultados')
+    falso.atualizar_painel = lambda d, a, inicio: chamadas.append(inicio) or resultado[0]
+    monkeypatch.setitem(sys.modules, 'painel_resultados', falso)
+    monkeypatch.setenv('SUPPLY_VISION_SOMENTE_PAINEL', '1')
     assert gerar.gerar() is False
-    assert enviados == [(1, (date(2024, 2, 28), date(2024, 3, 1)))]
+    assert chamadas == [date(2024, 2, 28)]
     assert not (tmp_path / 'historicos').exists()
-    # Falha no envio: o processo termina com erro, e a fila nao mostra concluido.
-    resultado[0] = (0, 3)
+    # Painel não gravado: o processo termina com erro, e a fila não mostra concluído.
+    resultado[0] = False
     with pytest.raises(SystemExit) as erro:
         gerar.gerar()
     assert erro.value.code == 1
-    # Base vazia depois dos filtros: a Analise do periodo tambem esvazia.
-    resultado[0] = (3, 0)
-    monkeypatch.setattr(gerar.rodar, 'carregar_base', lambda *a: pd.DataFrame(), raising=False)
-    enviados.clear()
-    assert gerar.gerar() is False
-    assert enviados == [(0, (date(2024, 2, 28), date(2024, 3, 1)))]
 
 
 def test_periodo_longo_em_blocos_e_data_fora_recusada(historico, monkeypatch):
@@ -214,3 +210,28 @@ def test_falha_no_painel_nao_derruba_o_recorte(historico, monkeypatch, capsys):
     assert gerar._gerar_painel(pd.DataFrame(), None, '20240228-20240301', 'x') is None
     saida = capsys.readouterr().out
     assert 'painel não gerado' in saida and 'PAINEL_RESULTADOS=' not in saida
+
+
+def test_historico_local_reaproveita_mes_fechado_e_baixa_so_o_resto(historico, monkeypatch):
+    baixar, _ = historico
+    monkeypatch.setattr(baixar, 'dias_do_recorte', lambda: [date(2024, 1, 30), date(2024, 1, 31), date(2024, 2, 1)])
+    pedidos = []
+    class Sessao:
+        def __init__(self, *args): pass
+        def __enter__(self): return self
+        def __exit__(self, *args): pass
+        def abrir_objeto(self, obj): return 7, OBRIGATORIAS, len(OBRIGATORIAS)
+        def selecionar_datas(self, campo, dias):
+            pedidos.append(list(dias))
+            return len(dias)
+        def ler(self, *args, **kwargs):
+            return [list({**linha_base(), 'Data Abertura': f'{d:%d/%m/%Y}'}.values()) for d in pedidos[-1]]
+    monkeypatch.setattr(baixar.qlik, 'Sessao', Sessao)
+    # Mês de janeiro inteiro baixado antes: guardado como fechado.
+    jan = pd.DataFrame([{**linha_base(), 'Data Abertura': '30/01/2024'}, {**linha_base(), 'Data Abertura': '31/01/2024'}])
+    baixar._guardar_meses(jan, [date(2024, 1, 1) + timedelta(days=i) for i in range(31)])
+    assert (Path(baixar.sv_paths.HISTORICO_DIR) / "2024-01.csv.gz").exists()
+    assert baixar.baixar() == 3
+    assert pedidos == [[date(2024, 2, 1)]]  # janeiro veio do disco
+    # Mês baixado só em parte não vai para o histórico.
+    assert not (Path(baixar.sv_paths.HISTORICO_DIR) / "2024-02.csv.gz").exists()
