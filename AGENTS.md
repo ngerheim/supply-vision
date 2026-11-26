@@ -27,7 +27,6 @@ Guidance for coding agents working in this repository. Code and tests define the
 | `alertas/processo/{contrato_base,contrato_comparacao,regras_comparacao,vigencia_acordos,qualidade_acordos}.py` | Source extraction, rules, validity periods, data-quality issues |
 | `alertas/processo/{resumo_comparacao,planilhas_comparacao,limpeza}.py`, `alertas/panorama/` | Outputs, retention, send-free views |
 | `alertas/processo/baixar_fornecedores.py`, `portal/lib/rede{,-api}.ts`, `portal/lib/municipios-ibge.ts` | Rede tab: daily ERP supplier copy from Qlik (status A only, once a day after the alert), distance by IBGE coordinates, admin exclusions |
-| `alertas/processo/consultar_os_placa.py`, `portal/lib/reembolso{,-api,-historico,-qlik}.ts` | Reembolso tab: calculator, clients/rates/MTBF tables imported from the old HTML; per-plate OS history queried from the alert's Qlik object on demand (Portal keeps the Alertas Python open with the Qlik session, 6 h cache) fills client, model and rate and suggests the last replacement; exclusion filters by column in Reembolso › Histórico de OS apply to every answer |
 | `scripts/verificar-infra-publica.mjs`, `portal/tests/`, `alertas/tests/`, `scripts/testar-*.ps1`, `.github/workflows/ci.yml` | Public-data detector, tests, CI |
 
 Abbreviated paths in a cell share the directory of the first file.
@@ -95,3 +94,5 @@ Abbreviated paths in a cell share the directory of the first file.
 ## Purge and build header
 - With `EXPURGO_HABILITADO=1`, the purge counts candidates before the backup; with none it logs "nada a expurgar" and takes no backup. Deletions require a confirmed network backup. It clears `consultas_cnpj` after 7 days and `notificacoes_usuario`: read notifications expire after 90 days and unread ones after 365 days (`EXPURGO_NOTIFICACOES_NAO_LIDAS_DIAS`). `audit_logs` and `ticket_events` are never purged.
 - Every API response (errors and unauthenticated ones included) carries `x-portal-build` with version and commit; accepted because the repository is public. Requests without the header (scripts) are accepted; a write with a different build gets `409 build_desatualizado`.
+
+Portal navigation: alert runs and their recipient settings live under Administração. Existing alert links remain valid. The scheduled comparison, supplier refresh and Painel still depend on Alertas.

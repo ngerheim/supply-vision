@@ -8,7 +8,7 @@ import { classificar, escopo } from '../../scripts/ci/escopo-pr.mjs';
 
 void test('via rapida so para telas, rotas, regras e testes', () => {
   for (const arquivos of [
-    ['portal/components/portal-analise.tsx'], ['portal/lib/acordos-api.ts', 'portal/tests/acordos-opcoes.test.mjs'],
+    ['portal/components/portal-painel.tsx'], ['portal/lib/acordos-api.ts', 'portal/tests/acordos-opcoes.test.mjs'],
     ['portal/app/api/[...path]/route.ts'], ['alertas/processo/regras_comparacao.py', 'alertas/tests/test_regras.py'], ['AGENTS.md'], [],
   ]) assert.equal(classificar(arquivos).mecanismo, false, arquivos.join());
   for (const arquivos of [

@@ -14,16 +14,15 @@ const rotas: Array<[Nav, string, string | null]> = [
   ['agreements','acordos','acordos'], ['imports','acordos','importacoes'],
   ['suppliers','cadastros','fornecedores'], ['catalogs','cadastros','catalogos'], ['mappings','cadastros','de-para'],
   ['reports','administracao','relatorios'], ['history','administracao','historico'], ['emails','administracao','emails'], ['admin','administracao','usuarios'],
-  ['painel','painel',null], ['analise','analise','painel'], ['analise-acoes','analise','acoes'],
-  ['alertas','alertas','rodadas'], ['alertas-destinatarios','alertas','destinatarios'],
+  ['painel','painel',null],
+  ['alertas','administracao','rodadas'], ['alertas-destinatarios','administracao','destinatarios'],
   ['rede','rede','disponiveis'], ['rede-exclusoes','rede','desconsiderados'],
-  ['reembolso','reembolso','calculadora'], ['reembolso-salvos','reembolso','salvos'], ['reembolso-tabelas','reembolso','tabelas'], ['reembolso-historico','reembolso','historico'], ['reembolso-config','reembolso','configuracao'],
 ];
-void test('todas as 33 chaves e doze abas fazem ida e volta com slugs estaveis', () => {
-  assert.equal(ABAS_NAVEGACAO.length,12);
+void test('as rotas do portal fazem ida e volta com slugs estaveis', () => {
+  assert.equal(ABAS_NAVEGACAO.length,9);
   assert.deepEqual(ABAS_NAVEGACAO.find(a => a.aba === 'chamados')?.subabas.map(s => s.label), ['Acordos','Cadastros','Baixa','Pagamentos']);
   assert.deepEqual(GRUPOS_NAVEGACAO.map(g => [g.nome,[...g.abas]]),[
-    ['Consulta',['buscar','rede','reembolso','manutencao','chamados','estoque']],['Suprimentos',['painel','acordos','cadastros','analise','alertas']],['Administração',['administracao']],
+    ['Consulta',['buscar','rede','manutencao','chamados','estoque']],['Suprimentos',['painel','acordos','cadastros']],['Administração',['administracao']],
   ]);
   for (const [chave,aba,subaba] of rotas) {
     const query = `?aba=${aba}${subaba ? `&sub=${subaba}` : ''}`;
@@ -45,15 +44,15 @@ void test('enderecos desconhecidos voltam para buscar sem erro', () => {
   }
 });
 const visibilidade = {
-  viewer: [['buscar',['search']],['rede',['rede']],['reembolso',['reembolso','reembolso-salvos','reembolso-tabelas']],['manutencao',['maintenance']],['chamados',['solicitacoes','baixas','pagamentos']],['estoque',['estoque-saldo','estoque-entradas']]],
-  editor: [['buscar',['search']],['rede',['rede']],['reembolso',['reembolso','reembolso-salvos','reembolso-tabelas','reembolso-historico','reembolso-config']],['manutencao',['maintenance']],['chamados',['tickets','solicitacoes','baixas','pagamentos']],['estoque',['estoque-saldo','estoque-entradas']],['painel',['painel']],['acordos',['agreements','imports','contratos']],['cadastros',['suppliers','catalogs','mappings']],['analise',['analise','analise-acoes']],['alertas',['alertas']]],
-  admin: [['buscar',['search']],['rede',['rede','rede-exclusoes']],['reembolso',['reembolso','reembolso-salvos','reembolso-tabelas','reembolso-historico','reembolso-config']],['manutencao',['maintenance']],['chamados',['tickets','solicitacoes','baixas','pagamentos']],['estoque',['estoque-saldo','estoque-entradas']],['painel',['painel']],['acordos',['agreements','imports','contratos']],['cadastros',['suppliers','catalogs','mappings','categorias','estoques']],['analise',['analise','analise-acoes']],['alertas',['alertas','alertas-destinatarios']],['administracao',['reports','history','emails','admin','permissoes']]],
+  viewer: [['buscar',['search']],['rede',['rede']],['manutencao',['maintenance']],['chamados',['solicitacoes','baixas','pagamentos']],['estoque',['estoque-saldo','estoque-entradas']]],
+  editor: [['buscar',['search']],['rede',['rede']],['manutencao',['maintenance']],['chamados',['tickets','solicitacoes','baixas','pagamentos']],['estoque',['estoque-saldo','estoque-entradas']],['painel',['painel']],['acordos',['agreements','imports','contratos']],['cadastros',['suppliers','catalogs','mappings']],['administracao',['alertas']]],
+  admin: [['buscar',['search']],['rede',['rede','rede-exclusoes']],['manutencao',['maintenance']],['chamados',['tickets','solicitacoes','baixas','pagamentos']],['estoque',['estoque-saldo','estoque-entradas']],['painel',['painel']],['acordos',['agreements','imports','contratos']],['cadastros',['suppliers','catalogs','mappings','categorias','estoques']],['administracao',['reports','history','emails','admin','alertas','alertas-destinatarios','permissoes']]],
 };
 for (const role of ['viewer','editor','admin'] as const) {
   void test(`${role}: abas e subabas permitidas; acesso por endereco nao amplia permissoes`, () => {
     const grupos = gruposVisiveis({role});
     assert.deepEqual(grupos.flatMap(g => g.abas.map(aba => [aba.aba,aba.subabas.map(s => s.chave)])),visibilidade[role]);
-    assert.deepEqual(grupos.map(g => g.nome),role === 'viewer' ? ['Consulta'] : role === 'editor' ? ['Consulta','Suprimentos'] : ['Consulta','Suprimentos','Administração']);
+    assert.deepEqual(grupos.map(g => g.nome),role === 'viewer' ? ['Consulta'] : ['Consulta','Suprimentos','Administração']);
     const permitidas = new Set(grupos.flatMap(g => g.abas.flatMap(aba => aba.subabas.map(s => s.chave))));
     for (const [chave] of rotas) {
       const resolvido = resolverEndereco({role},enderecoParaBusca(enderecoDaChave(chave)));
@@ -116,4 +115,10 @@ void test('pushState, voltar, avancar e recarga resolvem as mesmas telas; parada
   assert.equal(janela.location.search,'?aba=chamados&sub=parcerias&chamado=ID%2F1');
   controlador.navegar('search');assert.equal(janela.location.search,'?aba=buscar','Trocar de aba remove chamado antigo');
   controlador.parar();const quantidade=vistas.length;janela.mover(-1);assert.equal(vistas.length,quantidade);
+});
+
+void test('links antigos de rodadas preservam as permissões', () => {
+  const url = '?aba=alertas&sub=rodadas&rodada=exemplo';
+  assert.equal(resolverEndereco({role:'editor'}, url).nav, 'alertas');
+  assert.equal(resolverEndereco({role:'viewer'}, url).aviso, AVISO_AREA_RESTRITA);
 });

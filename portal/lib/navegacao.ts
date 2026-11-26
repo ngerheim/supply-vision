@@ -7,13 +7,6 @@ export const ABAS_NAVEGACAO = [
     { chave: 'rede', slug: 'disponiveis', label: 'Disponíveis' },
     { chave: 'rede-exclusoes', slug: 'desconsiderados', label: 'Desconsiderados' },
   ] },
-  { aba: 'reembolso', label: 'Reembolso', subabas: [
-    { chave: 'reembolso', slug: 'calculadora', label: 'Calculadora' },
-    { chave: 'reembolso-salvos', slug: 'salvos', label: 'Salvos' },
-    { chave: 'reembolso-tabelas', slug: 'tabelas', label: 'Tabelas MTBF' },
-    { chave: 'reembolso-historico', slug: 'historico', label: 'Histórico de OS' },
-    { chave: 'reembolso-config', slug: 'configuracao', label: 'Configuração' },
-  ] },
   { aba: 'manutencao', label: 'Manutenção', subabas: [{ chave: 'maintenance', slug: null, label: 'Manutenção' }] },
   { aba: 'chamados', label: 'Chamados', subabas: [
     { chave: 'tickets', slug: 'parcerias', label: 'Acordos' },
@@ -38,19 +31,13 @@ export const ABAS_NAVEGACAO = [
     { chave: 'estoques', slug: 'estoques', label: 'Estoques' },
   ] },
   { aba: 'painel', label: 'Painel', subabas: [{ chave: 'painel', slug: null, label: 'Painel' }] },
-  { aba: 'analise', label: 'Análise', subabas: [
-    { chave: 'analise', slug: 'painel', label: 'Painel' },
-    { chave: 'analise-acoes', slug: 'acoes', label: 'Próximas ações' },
-  ] },
-  { aba: 'alertas', label: 'Alertas', subabas: [
-    { chave: 'alertas', slug: 'rodadas', label: 'Rodadas' },
-    { chave: 'alertas-destinatarios', slug: 'destinatarios', label: 'Destinatários' },
-  ] },
   { aba: 'administracao', label: 'Administração', subabas: [
     { chave: 'reports', slug: 'relatorios', label: 'Relatórios' },
     { chave: 'history', slug: 'historico', label: 'Histórico' },
     { chave: 'emails', slug: 'emails', label: 'E-mails' },
     { chave: 'admin', slug: 'usuarios', label: 'Usuários' },
+    { chave: 'alertas', slug: 'rodadas', label: 'Rodadas' },
+    { chave: 'alertas-destinatarios', slug: 'destinatarios', label: 'Destinatários de alertas' },
     { chave: 'permissoes', slug: 'permissoes', label: 'Permissões' },
   ] },
 ] as const;
@@ -60,16 +47,15 @@ export type DefinicaoSubaba = DefinicaoAba['subabas'][number];
 export type Nav = DefinicaoSubaba['chave'];
 export type EnderecoNavegacao = { aba: Aba; subaba: DefinicaoSubaba['slug'] };
 export const GRUPOS_NAVEGACAO = [
-  { nome: 'Consulta', abas: ['buscar', 'rede', 'reembolso', 'manutencao', 'chamados', 'estoque'] },
-  { nome: 'Suprimentos', abas: ['painel', 'acordos', 'cadastros', 'analise', 'alertas'] },
+  { nome: 'Consulta', abas: ['buscar', 'rede', 'manutencao', 'chamados', 'estoque'] },
+  { nome: 'Suprimentos', abas: ['painel', 'acordos', 'cadastros'] },
   { nome: 'Administração', abas: ['administracao'] },
 ] as const;
 export const AVISO_AREA_RESTRITA = 'Seu perfil não tem acesso a esta área.';
 export const AVISO_CHAMADO_RESTRITO = 'Seu perfil permite consultar preços e acordos. O acesso a chamados é restrito.';
 const BUSCAR: EnderecoNavegacao = { aba: 'buscar', subaba: null };
 
-const ACAO_ABA: Partial<Record<Nav, Acao>> = { 'estoque-saldo': 'aba:estoque', 'estoque-entradas': 'aba:estoque', contratos: 'acordo:consultar-completo', 'alertas-destinatarios': 'alertas:destinatarios', 'analise-acoes': 'aba:analise', 'rede-exclusoes': 'rede:gerenciar',
-  'reembolso-salvos': 'aba:reembolso', 'reembolso-tabelas': 'aba:reembolso', 'reembolso-config': 'reembolso:configurar', 'reembolso-historico': 'reembolso:configurar' };
+const ACAO_ABA: Partial<Record<Nav, Acao>> = { 'estoque-saldo': 'aba:estoque', 'estoque-entradas': 'aba:estoque', contratos: 'acordo:consultar-completo', 'alertas-destinatarios': 'alertas:destinatarios', 'rede-exclusoes': 'rede:gerenciar' };
 export function podeAcessarAba(usuario: UsuarioPermissao, chave: Nav): boolean {
   return pode(usuario, ACAO_ABA[chave] ?? (`aba:${chave}` as Acao));
 
@@ -94,6 +80,10 @@ export function gruposVisiveis(usuario: UsuarioPermissao) {
 
 export function lerEndereco(busca: string): EnderecoNavegacao {
   const params = new URLSearchParams(busca);
+  if (params.get('aba') === 'alertas') {
+    const sub = params.get('sub') ?? 'rodadas';
+    if (sub === 'rodadas' || sub === 'destinatarios') return { aba: 'administracao', subaba: sub };
+  }
   const aba = ABAS_NAVEGACAO.find(item => item.aba === params.get('aba'));
   if (!aba) return { ...BUSCAR };
   const subaba = params.get('sub');

@@ -56,7 +56,7 @@ export function alertasApi(contexto: ContextoApi) {
     }
     let avisados = 0;
     if (!existente) {
-      const link = `/?aba=alertas&sub=rodadas&rodada=${rodadaId}`, texto = textoAviso(rodada.contexto, rodada.datas, rodada.linhas.length);
+      const link = `/?aba=administracao&sub=rodadas&rodada=${rodadaId}`, texto = textoAviso(rodada.contexto, rodada.datas, rodada.linhas.length);
       for (const p of (await pessoas()).filter(p => p.recebe && pode({ ...p, active: 1 }, 'aba:alertas'))) {
         statements.push(prepararNotificacaoUsuario({ destinatario: p.id, tipo: 'alerta', texto, link, timestamp: ts }));
         avisados++;
