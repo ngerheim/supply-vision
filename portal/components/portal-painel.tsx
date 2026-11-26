@@ -91,7 +91,18 @@ function GraficoLinha({ meses, series, formatar, referencia, parcial, altura = 2
 }) {
   const [foco, setFoco] = useState<number | null>(null);
   const caixa = useRef<SVGSVGElement>(null);
-  const L = largura, A = altura, m = { e: 56, d: rotulosFinais ? 150 : 12, t: 12, b: 26 };
+  const moldura = useRef<HTMLDivElement>(null);
+  // O desenho acompanha a largura real do bloco: assim o texto dos eixos fica
+  // no tamanho escrito, sem crescer junto com o gráfico na tela grande.
+  const [larg, setLarg] = useState(largura);
+  useEffect(() => {
+    const el = moldura.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const obs = new ResizeObserver(([e]) => setLarg(Math.max(320, Math.round(e.contentRect.width))));
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, []);
+  const L = larg, A = altura, m = { e: 56, d: rotulosFinais ? 150 : 12, t: 12, b: 26 };
   const todos = series.flatMap(s => s.valores).filter((v): v is number => v !== null);
   if (referencia) todos.push(referencia.valor);
   if (!meses.length || !todos.length) return <p className="py-10 text-center text-sm text-muted-foreground">Sem dados no período.</p>;
@@ -111,7 +122,7 @@ function GraficoLinha({ meses, series, formatar, referencia, parcial, altura = 2
     setFoco(melhor);
   };
   return (
-    <div className="relative">
+    <div ref={moldura} className="relative">
       {/* oxlint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- passar o mouse só mostra a dica; os valores também estão nas tabelas e no arquivo da base */}
       <svg ref={caixa} viewBox={`0 0 ${L} ${A}`} className="w-full" aria-hidden onMouseMove={mover} onMouseLeave={() => setFoco(null)}>
         {marcas.map(v => (
@@ -145,7 +156,14 @@ function GraficoLinha({ meses, series, formatar, referencia, parcial, altura = 2
         })}
         {rotulosFinais && series.map(s => {
           const i = s.valores.findLastIndex(v => v !== null);
-          return i >= 0 && <text key={`${s.nome}-fim`} x={x(i) + 8} y={y(s.valores[i] as number) + 4} className="text-[12px] font-medium" fill={s.cor}>{s.nome} {formatar(s.valores[i] as number)}</text>;
+          if (i < 0) return null;
+          const yy = y(s.valores[i] as number);
+          return (
+            <text key={`${s.nome}-fim`} x={x(i) + 8} y={yy + 4} className="text-[13px] font-semibold" fill={s.cor}>
+              {s.nome} {formatar(s.valores[i] as number)}
+              {meses[i] === parcial && <tspan x={x(i) + 8} dy="15" className="text-[11px] font-normal">{mes(parcial)} parcial</tspan>}
+            </text>
+          );
         })}
         {foco !== null && <line x1={x(foco)} x2={x(foco)} y1={m.t} y2={A - m.b} stroke="var(--borda)" />}
         {foco !== null && series.map(s => s.valores[foco] !== null && <circle key={s.nome} cx={x(foco)} cy={y(s.valores[foco] as number)} r="3.5" fill={s.cor} />)}
@@ -156,11 +174,11 @@ function GraficoLinha({ meses, series, formatar, referencia, parcial, altura = 2
           {series.map(s => <div key={s.nome} className="flex items-center gap-1.5 tabular-nums"><span className="size-2 rounded-full" style={{ background: s.cor }} />{s.nome}: {s.valores[foco] === null ? '—' : formatar(s.valores[foco] as number)}</div>)}
         </div>
       )}
-      {((series.length > 1 && !rotulosFinais) || referencia || (parcial && meses.at(-1) === parcial)) && (
-        <div className="mt-1 flex flex-wrap gap-4 text-xs text-muted-foreground">
+      {((series.length > 1 && !rotulosFinais) || referencia || (parcial && meses.at(-1) === parcial && !rotulosFinais)) && (
+        <div className="mt-1 flex flex-wrap gap-4 text-[13px] text-muted-foreground">
           {series.length > 1 && !rotulosFinais && series.map(s => <span key={s.nome} className="flex items-center gap-1.5"><span className="h-0.5 w-4" style={{ background: s.cor }} />{s.nome}</span>)}
           {referencia && <span className="flex items-center gap-1.5"><span className="w-4 border-t-2 border-dashed border-[var(--ambar)]" />{referencia.rotulo}</span>}
-          {parcial && meses.at(-1) === parcial && <span className="flex items-center gap-1.5"><span className="w-4 border-t-2 border-dashed border-[var(--aco)]" />{mes(parcial)} parcial</span>}
+          {parcial && meses.at(-1) === parcial && !rotulosFinais && <span className="flex items-center gap-1.5"><span className="w-4 border-t-2 border-dashed border-[var(--aco)]" />{mes(parcial)} parcial</span>}
         </div>
       )}
     </div>
@@ -181,7 +199,7 @@ function Barras({ itens, formatar, rotulo = '12rem', embacar = false, barraMax }
       <ul className="space-y-2.5">
         {visiveis.map((i, n) => (
           <li key={i.nome} className="grid items-center gap-3 text-[13px]" style={{ gridTemplateColumns: `minmax(0,${rotulo}) minmax(0,${barraMax ?? '1fr'}) auto` }}>
-            <span className={`truncate ${embacar ? 'select-none blur-[5px]' : ''}`} title={embacar ? undefined : i.nome} aria-label={embacar ? `Posição ${n + 1}` : undefined}>{i.nome}</span>
+            <span className={`truncate ${embacar ? 'text-muted-foreground' : ''}`} title={embacar ? undefined : i.nome}>{embacar ? `${n + 1}º lugar` : i.nome}</span>
             <span className="h-2.5 rounded-sm bg-muted"><span className="block h-2.5 rounded-sm bg-primary transition-[width] duration-700 ease-out" style={{ width: pronto ? `${Math.max(2, (i.valor / max) * 100)}%` : '0%' }} /></span>
             <span className="tabular-nums text-muted-foreground">{formatar(i.valor)}</span>
           </li>
@@ -200,7 +218,7 @@ function Secao({ titulo, dica, children, acoes, className = '' }: { titulo: stri
   return (
     <section className={`painel-surgir min-w-0 rounded border bg-card p-4 ${className}`}>
       <div className="mb-3 flex items-center justify-between gap-2">
-        <h2 className="flex items-center gap-1.5 text-sm font-semibold">{titulo}<Dica texto={dica} /></h2>
+        <h2 className="flex items-center gap-1.5 text-[15px] font-semibold">{titulo}<Dica texto={dica} /></h2>
         {acoes}
       </div>
       {children}
@@ -305,7 +323,7 @@ export function Painel() {
         <div className="grid gap-3 xl:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)]">
           <Secao titulo="Índice de preço" dica={metodo['Índice de preço']}>
             <GraficoLinha meses={indice.map(i => i.mes)} series={[{ nome: 'Índice', cor: 'var(--marinho)', valores: indice.map(i => i.valor) }]}
-              formatar={v => v.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} referencia={{ valor: 100, rotulo: `100 = ${d.anoBase ?? 2025}` }} parcial={d.mesParcial} />
+              formatar={v => v.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} referencia={{ valor: 100, rotulo: `100 = ${d.anoBase ?? 2025}` }} parcial={d.mesParcial} altura={300} />
           </Secao>
           <Secao titulo="Acordos" dica={metodo['Acordos']}>
             <GraficoLinha meses={acordos.map(a => a.mes)} formatar={v => pct(v, 0)} parcial={d.mesParcial} rotulosFinais altura={300} largura={460}
@@ -335,7 +353,7 @@ export function Painel() {
               </table>
             </div>
             <div>
-              {item && <p className="mb-1 text-xs text-muted-foreground"><span className="font-medium text-foreground">{item.item}</span> · {item.modelo} · mediana por mês</p>}
+              {item && <p className="mb-2 text-[13px] text-muted-foreground"><span className="text-[15px] font-semibold text-foreground">{item.item}</span> · {item.modelo} · mediana por mês</p>}
               {item && <GraficoLinha key={`${item.item}|${item.modelo}`} meses={item.serie.map((s: AnyRow) => s.mes)} formatar={v => moeda(v)} altura={200}
                 parcial={d.mesParcial} series={[{ nome: 'Mediana', cor: 'var(--marinho)', valores: item.serie.map((s: AnyRow) => s.valor) }]} />}
             </div>
@@ -355,54 +373,54 @@ export function Painel() {
           </Secao>
         </div>
 
-        {d.abaixo && (
-          <Secao titulo="Abaixo do acordo" dica={metodo['Abaixo do acordo']}>
-            <div className="grid gap-4 xl:grid-cols-[minmax(0,18rem)_minmax(0,1fr)]">
-              <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
-                <dt className="text-muted-foreground">Compras abaixo</dt><dd className="text-right tabular-nums">{inteiro(d.abaixo.linhas)} ({pct(d.abaixo.pctComAcordo)} das com acordo)</dd>
-                <dt className="text-muted-foreground">Abaixo do acordo</dt><dd className="text-right tabular-nums">{moedaCurta(d.abaixo.valor)}</dd>
-                <dt className="text-muted-foreground">Prováveis pares lançados como unidade</dt><dd className="text-right tabular-nums">{inteiro(d.abaixo.suspeitaUnidade)} · {moedaCurta(d.abaixo.valorSuspeitaUnidade)}</dd>
-                <dd className="col-span-2 pt-1 text-muted-foreground">Contam como conformes e não entram como economia.</dd>
-              </dl>
-              <Barras itens={d.abaixo.itens ?? []} formatar={moedaCurta} rotulo="18rem" barraMax="22rem" />
-            </div>
-          </Secao>
-        )}
-
         <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
           <Secao titulo="Confiabilidade dos dados" dica={metodo['Qualidade dos dados']}>
             <div className="space-y-2">
               {funil.map(f => (
-                <div key={f.rotulo} className="text-xs">
+                <div key={f.rotulo} className="text-[13px]">
                   <div className="mb-0.5 flex justify-between"><span>{f.rotulo}</span><span className="tabular-nums text-muted-foreground">{inteiro(f.valor)}</span></div>
                   <div className="h-3 rounded-sm bg-muted"><div className="h-3 rounded-sm bg-primary" style={{ width: `${Math.max(1, (f.valor / topo) * 100)}%` }} /></div>
                 </div>
               ))}
-              <p className="pt-1 text-xs text-muted-foreground">{pct(r.pctMantidas)} das linhas do escopo entraram nas contas; {inteiro(r.descartadas)} saíram como erro de lançamento.</p>
-              <ul className="space-y-0.5 border-t pt-2 text-xs">
+              <p className="pt-1 text-[13px] text-muted-foreground">{pct(r.pctMantidas)} das linhas do escopo entraram nas contas; {inteiro(r.descartadas)} saíram como erro de lançamento.</p>
+              <ul className="space-y-0.5 border-t pt-2 text-[13px]">
                 {(universo?.filtros ?? []).map((f: AnyRow) => <li key={f.motivo} className="flex justify-between"><span>Fora do escopo: {f.motivo}</span><span className="tabular-nums text-muted-foreground">{inteiro(f.linhas)}</span></li>)}
                 {(qual.motivos ?? []).map((f: AnyRow) => <li key={f.motivo} className="flex justify-between"><span>Limpeza: {f.motivo}</span><span className="tabular-nums text-muted-foreground">{inteiro(f.linhas)}</span></li>)}
                 {(qual.quarentena ?? []).map((f: AnyRow) => <li key={f.motivo} className="flex justify-between"><span>Sem comparação: {f.motivo}</span><span className="tabular-nums text-muted-foreground">{inteiro(f.linhas)}</span></li>)}
               </ul>
             </div>
           </Secao>
-          <Secao titulo="Como cada número é calculado">
-            <div className="max-h-[22rem] space-y-1 overflow-auto text-xs">
-              {(d.metodo ?? []).map((m: AnyRow) => (
-                <details key={m.indicador} className="rounded border px-2 py-1">
-                  <summary className="cursor-pointer font-medium">{m.indicador}</summary>
-                  <p className="pt-1 leading-snug text-muted-foreground">{m.texto}</p>
-                </details>
-              ))}
-              {(d.saude ?? []).length > 0 && (
-                <div className="rounded border px-2 py-1">
-                  <p className="font-medium">Carteira de acordos</p>
-                  {(d.saude as AnyRow[]).map(s => <p key={s.indicador} className="flex justify-between text-muted-foreground"><span>{s.indicador}</span><span className="tabular-nums">{String(s.indicador).startsWith('%') ? pct(s.valor) : inteiro(s.valor)}</span></p>)}
-                </div>
-              )}
-            </div>
-          </Secao>
+          {d.abaixo && (
+            <Secao titulo="Abaixo do acordo" dica={metodo['Abaixo do acordo']}>
+              <div className="space-y-4">
+                <dl className="grid grid-cols-[1fr_auto] gap-x-4 gap-y-1.5 text-[13px]">
+                  <dt className="text-muted-foreground">Compras abaixo</dt><dd className="text-right tabular-nums">{inteiro(d.abaixo.linhas)} ({pct(d.abaixo.pctComAcordo)} das com acordo)</dd>
+                  <dt className="text-muted-foreground">Abaixo do acordo</dt><dd className="text-right tabular-nums">{moedaCurta(d.abaixo.valor)}</dd>
+                  <dt className="text-muted-foreground">Prováveis pares lançados como unidade</dt><dd className="text-right tabular-nums">{inteiro(d.abaixo.suspeitaUnidade)} · {moedaCurta(d.abaixo.valorSuspeitaUnidade)}</dd>
+                  <dd className="col-span-2 pt-1 text-muted-foreground">Contam como conformes e não entram como economia.</dd>
+                </dl>
+                <Barras itens={d.abaixo.itens ?? []} formatar={moedaCurta} rotulo="18rem" />
+              </div>
+            </Secao>
+          )}
         </div>
+          <details className="painel-surgir rounded border bg-card p-4">
+          <summary className="cursor-pointer text-[15px] font-semibold">Como cada número é calculado</summary>
+          <div className="mt-3 grid gap-1 text-[13px] lg:grid-cols-2">
+            {(d.metodo ?? []).map((m: AnyRow) => (
+              <details key={m.indicador} className="rounded border px-2 py-1">
+                <summary className="cursor-pointer font-medium">{m.indicador}</summary>
+                <p className="pt-1 leading-snug text-muted-foreground">{m.texto}</p>
+              </details>
+            ))}
+            {(d.saude ?? []).length > 0 && (
+              <div className="rounded border px-2 py-1">
+                <p className="font-medium">Carteira de acordos</p>
+                {(d.saude as AnyRow[]).map(s => <p key={s.indicador} className="flex justify-between text-muted-foreground"><span>{s.indicador}</span><span className="tabular-nums">{String(s.indicador).startsWith('%') ? pct(s.valor) : inteiro(s.valor)}</span></p>)}
+              </div>
+            )}
+          </div>
+        </details>
       </div>
     </>
   );
